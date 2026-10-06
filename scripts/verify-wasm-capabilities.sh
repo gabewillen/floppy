@@ -113,7 +113,7 @@ case "$proof_dir" in
 esac
 manifest="$proof_dir/manifest.tsv"
 manifest_tmp="$proof_dir/manifest.tsv.tmp"
-all_components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_service_example scxml_service_files scxml_extension_example scxml_script_example scxml_validator scxml_reporter_rustc scxml_reporter_sarif scxml_compiler scxml_machine scxml_snapshot_codec'
+all_components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_service_example scxml_service_files scxml_extension_example scxml_script_example scxml_validator scxml_reporter_rustc scxml_reporter_sarif scxml_compiler scxml_machine scxml_snapshot_codec scx'
 if [ "$#" -eq 0 ]; then
     components=$all_components
 else
@@ -176,6 +176,9 @@ expected_imports() {
         # session-snapshot-host.
         scxml_extension_example) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' 'stateforward:scxml/execution-host@0.2.0' 'stateforward:scxml/outbound-http@0.2.0' 'stateforward:scxml/session-snapshot-host@0.2.0' ;;
         scxml_script_example) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' ;;
+        # <scx:validate> reads its source through the data model and assigns
+        # the report there; no execution-host, outbound-http, or snapshot.
+        scx) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' ;;
         scxml_reporter_rustc|scxml_reporter_sarif) printf '%s\n' 'stateforward:scxml-reporter/telemetry@0.2.0' 'stateforward:scxml-reporter/types@0.2.0' ;;
         scxml_validator) printf '%s\n' 'stateforward:scxml-validator/telemetry@0.2.0' 'stateforward:scxml-validator/expression-syntax@0.2.0' 'stateforward:scxml-validator/types@0.2.0' ;;
         scxml_compiler) printf '%s\n' 'stateforward:scxml-compiler/telemetry@0.2.0' 'stateforward:scxml-compiler/types@0.2.0' ;;
@@ -326,11 +329,12 @@ for component in $components; do
         wasm-tools compose "$raw" -d "$seed" -o "$seeded" 2>/dev/null
         virt_input=$seeded
     fi
-    if [ "$component" = scxml_validator ] || [ "$component" = scxml_compiler ]; then
+    if [ "$component" = scxml_validator ] || [ "$component" = scxml_compiler ] || [ "$component" = scx ]; then
         # The bundled XML Schema backend keys its tables with ahash, which
         # reads wasi:random/random once for its seeds, and std's RandomState
         # (the `event` vocabulary's boon schema checks, for one) reads
-        # insecure-seed; the compiler links the same validator. wasi-virt
+        # insecure-seed; the compiler and the scx namespace link the same
+        # validator. wasi-virt
         # denies randomness, so compose the pinned deterministic provider
         # first (see the .wat header).
         random="$proof_dir/wasi-random-validator.wasm"

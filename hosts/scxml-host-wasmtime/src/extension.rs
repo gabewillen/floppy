@@ -132,7 +132,7 @@ use extension_bindings::stateforward::scxml::{
 ///
 /// Rationale for one billion: an element may link a whole validator, and
 /// one call then compiles the bundled W3C SCXML 1.0 XSD set before it
-/// validates anything. Measured with nemobot's `<sx:validate>` (the scxml.rs
+/// validates anything. Measured with `<scx:validate>` (`namespaces/scx`: the scxml.rs
 /// validator in one component, release build, `wasm32-wasip2`), one call
 /// takes about 166 million instructions for a two-state document, 191
 /// million for a 40-state document, and 214 million for a 1.2 KiB

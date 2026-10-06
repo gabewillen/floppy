@@ -88,5 +88,9 @@ required-features = ["wasmtime"]
 name = "repository_services"
 required-features = ["wasmtime"]
 
+[[test]]
+name = "scx_namespace"
+required-features = ["wasmtime"]
+
 [lints]
 workspace = true

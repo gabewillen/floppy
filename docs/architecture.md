@@ -102,6 +102,11 @@ Executable product semantics are Wasm components:
   (`https://stateforward.org/scxml/example`, with its XSD and package
   manifest in `components/scxml-extension-example/package`) with one element per extension
   component capability (`raise`, `send`, `fail`, `spin`);
+- `namespaces/scx`: the `scx` extension namespace
+  (`https://github.com/stateforward/scxml.rs/namespaces/scx`, tagless and
+  versioned with the toolchain): `<scx:validate>` runs the validator as
+  executable content; `scx` embeds its package and component (see
+  [namespaces/scx/README.md](../namespaces/scx/README.md));
 - `namespaces/env`: the host's `env` attribute vocabulary
   (`https://github.com/stateforward/scxml.rs/namespaces/env`, unversioned and
   never fetched), documented with a schema for tools; not a package (see

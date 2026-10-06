@@ -10,7 +10,7 @@ use crate::{ArtifactError, HostError, component_size_admitted};
 const MAX_MANIFEST_BYTES: usize = 64 * 1024;
 const MAX_MANIFEST_PATH_BYTES: usize = 4 * 1024;
 const MANIFEST_HEADER_LINES: usize = 6;
-const MAX_ARTIFACTS: usize = 15;
+const MAX_ARTIFACTS: usize = 16;
 
 /// Closed component identities accepted from the deterministic artifact manifest.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -49,6 +49,11 @@ pub enum ArtifactKind {
     /// host links the crate natively and never instantiates it; the kind is
     /// known so a release manifest that lists it authenticates.
     SnapshotCodec,
+    /// The `scx` namespace's extension component (`namespaces/scx`,
+    /// `<scx:validate>`), which `scx` embeds and binds by its SHA-256
+    /// ([`authenticate_extension_component`]); the kind is known so a release
+    /// manifest that lists it authenticates.
+    Scx,
     /// A caller's extension component
     /// (`stateforward:scxml/executable-content-extension`), authenticated by
     /// its exact SHA-256 through [`authenticate_extension_component`]. Never
@@ -82,6 +87,7 @@ impl ArtifactKind {
             Self::Compiler => "compiler",
             Self::Machine => "machine",
             Self::SnapshotCodec => "session snapshot codec",
+            Self::Scx => "scx namespace",
             Self::ExtensionComponent => "extension component",
             Self::ServiceComponent => "invoked-service component",
         }
@@ -110,6 +116,7 @@ impl ArtifactKind {
             Self::Compiler => "scxml_compiler",
             Self::Machine => "scxml_machine",
             Self::SnapshotCodec => "scxml_snapshot_codec",
+            Self::Scx => "scx",
             // Never parsed from a manifest (see `parse`): a caller's extension
             // component is authenticated by its own digest.
             Self::ExtensionComponent => "scxml_extension",
@@ -135,6 +142,7 @@ impl ArtifactKind {
             "scxml_compiler" => Some(Self::Compiler),
             "scxml_machine" => Some(Self::Machine),
             "scxml_snapshot_codec" => Some(Self::SnapshotCodec),
+            "scx" => Some(Self::Scx),
             _ => None,
         }
     }
@@ -653,6 +661,7 @@ mod tests {
         ArtifactKind::Compiler,
         ArtifactKind::Machine,
         ArtifactKind::SnapshotCodec,
+        ArtifactKind::Scx,
     ];
 
     /// The release manifest shape `verify-wasm-capabilities.sh` writes, one
@@ -711,15 +720,19 @@ mod tests {
     }
 
     #[test]
-    fn the_codec_is_optional_and_ordered_after_the_machine() {
-        let without = manifest(&ALL[..MAX_ARTIFACTS - 1]);
+    fn the_codec_and_scx_are_optional_and_ordered_after_the_machine() {
+        let without = manifest(&ALL[..MAX_ARTIFACTS - 2]);
         authenticate(&without, ArtifactKind::Machine).expect("the codec is optional");
         assert!(matches!(
             authenticate(&without, ArtifactKind::SnapshotCodec),
             Err(HostError::Artifact(ArtifactError::ArtifactIdentity))
         ));
+        assert!(matches!(
+            authenticate(&without, ArtifactKind::Scx),
+            Err(HostError::Artifact(ArtifactError::ArtifactIdentity))
+        ));
         let mut misordered = ALL;
-        misordered.swap(MAX_ARTIFACTS - 2, MAX_ARTIFACTS - 1);
+        misordered.swap(MAX_ARTIFACTS - 3, MAX_ARTIFACTS - 2);
         assert!(matches!(
             authenticate(&manifest(&misordered), ArtifactKind::Clock),
             Err(HostError::Artifact(ArtifactError::ManifestMalformed))

@@ -41,6 +41,13 @@ for dir in "$workspace"/namespaces/*/; do
         fi
         continue
     fi
+    # namespaces/scx ships inside scx (it embeds the package and component),
+    # so its URI is the tagless https://github.com/stateforward/scxml.rs/namespaces/scx,
+    # versioned with the toolchain like the env and event vocabularies; it
+    # carries no release tag and is skipped.
+    if [ "$(field namespace-uri "$manifest")" = "$repository/namespaces/$name" ]; then
+        continue
+    fi
     expected="$repository/namespaces/$name@$tag"
     uri=$(field namespace-uri "$manifest")
     test "$uri" = "$expected" || {

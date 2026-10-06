@@ -54,6 +54,15 @@ hard cutover.
 
 ### Added
 
+- The `scx` extension namespace (`namespaces/scx`,
+  `https://github.com/stateforward/scxml.rs/namespaces/scx`, tagless and
+  versioned with the toolchain): `<scx:validate>` runs the validator on a
+  document held as text and assigns the canonical report, optionally with
+  the machine-applicable fixes applied. It moved from nemobot's `scxml`
+  namespace (`<sx:validate>`). `scx` embeds its package and its component
+  (`ArtifactKind::Scx`, listed in the release manifest), so a document uses
+  it with no flag or fetch; `scripts/verify-wasm-capabilities.sh` builds and
+  checks it, and the namespace version scripts skip it.
 - `scx` embeds the authenticated release session components: its build
   (`crates/scxml-cli/build.rs`, the default `wasmtime` feature) reads the
   `scripts/verify-wasm-capabilities.sh` release (`target/wasm-artifacts/release`
@@ -66,7 +75,7 @@ hard cutover.
 - `DEFAULT_EXTENSION_CALL_FUEL` is one billion instructions (it was 100
   million): one call of an element that links the whole validator compiles
   the bundled W3C SCXML 1.0 XSD set (measured 166 to 214 million
-  instructions per `<sx:validate>` call in nemobot, about 85% of it the
+  instructions per `<scx:validate>` call, about 85% of it the
   schema compilation, which `xsd-schema` cannot cache across documents).
 - Invoked services (SCXML 6.4): an `<invoke>` whose type is neither absent
   nor the SCXML type runs in a `stateforward:scxml/invoked-service` Wasm

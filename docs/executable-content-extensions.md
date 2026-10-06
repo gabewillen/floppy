@@ -419,6 +419,20 @@ and a component it authenticated); the host checks it like a binding, binds it
 for every later session, and fails the session start closed on any error. The
 host performs no acquisition itself.
 
+## The embedded `scx` namespace
+
+`scx` ships one extension namespace of its own,
+[`scx`](../namespaces/scx/README.md)
+(`https://github.com/stateforward/scxml.rs/namespaces/scx`): `<scx:validate>`
+runs the validator on a document held as text. The binary embeds its
+manifest, schema, and component (authenticated by the SHA-256 its release
+manifest lists, checked when `scx` is built), so `validate`, `compile`,
+`snapshot run`, and `run` bind it whenever a document uses the namespace and
+no `--extension-package` binds the URI; nothing is fetched. Its URI carries
+no tag: it is versioned with the toolchain, like the `env` and `event`
+vocabularies. The consent listing names it as `package <version> built into
+scx`.
+
 ## Loading an element from a repository
 
 (An invoked service's type URI can name its package the same way, under a

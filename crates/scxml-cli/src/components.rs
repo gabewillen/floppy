@@ -40,7 +40,7 @@ pub enum ComponentArgs {
 
 /// The release `scx` embeds (`build.rs`).
 #[cfg(feature = "wasmtime")]
-mod embedded {
+pub(crate) mod embedded {
     include!(concat!(env!("OUT_DIR"), "/embedded_release.rs"));
 
     /// The embedded bytes of the artifact file `name`.

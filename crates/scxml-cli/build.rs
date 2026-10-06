@@ -1,10 +1,12 @@
-//! Embeds the authenticated release session components in `scx` (the
+//! Embeds the authenticated release session components, and the `scx`
+//! namespace's extension component (`namespaces/scx`), in `scx` (the
 //! `wasmtime` feature).
 //!
 //! The release directory is the one `scripts/verify-wasm-capabilities.sh`
 //! writes: `SCXML_WASM_ARTIFACTS_DIR` when set, else the script's default,
-//! `target/wasm-artifacts/release` under the workspace. Its `manifest.tsv`
-//! and the eight session components a session host links are read, each
+//! `target/wasm-artifacts/release` under the workspace. Its `manifest.tsv`,
+//! the eight session components a session host links, and the `scx`
+//! extension component are read, each
 //! component's SHA-256 and size are checked against its manifest line, and
 //! the verified bytes are copied into `OUT_DIR`, where `src/components.rs`
 //! includes them (`include_bytes!`) with the manifest's SHA-256 as the trust
@@ -28,6 +30,10 @@ const SESSION_COMPONENTS: [&str; 8] = [
     "scxml_ioprocessor_basichttp",
     "scxml_clock",
 ];
+
+/// The extension components `scx` embeds, by manifest name: the `scx`
+/// namespace (`namespaces/scx`).
+const EXTENSION_COMPONENTS: [&str; 1] = ["scx"];
 
 /// How to produce the release directory.
 const HELP: &str = "build the release session components first: `sh scripts/verify-wasm-capabilities.sh` \
@@ -69,7 +75,8 @@ fn embed() -> Result<(), String> {
         .map_err(|error| format!("cannot create `{}`: {error}", embedded.display()))?;
     let mut source = String::new();
     let mut artifacts = String::new();
-    for name in SESSION_COMPONENTS {
+    let mut extension_digest = String::new();
+    for name in SESSION_COMPONENTS.into_iter().chain(EXTENSION_COMPONENTS) {
         let mut lines = text.lines().filter_map(|line| {
             let fields: Vec<&str> = line.split('\t').collect();
             (fields.first() == Some(&"artifact") && fields.get(1) == Some(&name)).then_some(fields)
@@ -104,6 +111,10 @@ fn embed() -> Result<(), String> {
             ));
         }
         write(&embedded.join(file), &bytes)?;
+        if EXTENSION_COMPONENTS.contains(&name) {
+            extension_digest = actual;
+            continue;
+        }
         writeln!(
             artifacts,
             "    ({file:?}, include_bytes!(concat!(env!(\"OUT_DIR\"), \"/release/{file}\"))),"
@@ -118,7 +129,11 @@ fn embed() -> Result<(), String> {
          /// The SHA-256 of [`MANIFEST`], the embedded release's trust anchor.\n\
          pub(crate) const MANIFEST_SHA256: &str = {:?};\n\
          /// The embedded session components, by artifact file name.\n\
-         pub(crate) const ARTIFACTS: &[(&str, &[u8])] = &[\n{artifacts}];",
+         pub(crate) const ARTIFACTS: &[(&str, &[u8])] = &[\n{artifacts}];\n\
+         /// The embedded `scx` namespace's extension component (`namespaces/scx`).\n\
+         pub(crate) const SCX_COMPONENT: &[u8] = include_bytes!(concat!(env!(\"OUT_DIR\"), \"/release/scx.virtualized.wasm\"));\n\
+         /// The SHA-256 of [`SCX_COMPONENT`], checked against the release manifest.\n\
+         pub(crate) const SCX_COMPONENT_SHA256: &str = {extension_digest:?};",
         hex(&Sha256::digest(&manifest))
     )
     .map_err(|error| error.to_string())?;

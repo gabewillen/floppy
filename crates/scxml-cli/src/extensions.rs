@@ -70,6 +70,11 @@ const MAX_MANIFEST_BYTES: u64 = crate::repository::MAX_MANIFEST_BYTES;
 pub(crate) enum PackageOrigin {
     /// An `--extension-package` manifest file.
     Manifest(PathBuf),
+    /// The `scx` namespace (`namespaces/scx`), which `scx` embeds: its
+    /// manifest and schema compiled in, its component (under the `wasmtime`
+    /// feature) authenticated by the SHA-256 `build.rs` checked against the
+    /// release manifest.
+    Embedded,
     /// A repository namespace (the extension cache or its repository), at the
     /// commit its release tag pinned.
     Repository {
@@ -91,13 +96,49 @@ pub(crate) struct Package {
     pub(crate) schema: SchemaSource,
 }
 
+/// The exact URI of the `scx` namespace (`namespaces/scx`), which `scx`
+/// embeds: tagless, like the `env` and `event` vocabularies, because it is
+/// versioned with the toolchain.
+pub(crate) const SCX_NAMESPACE_URI: &str =
+    "https://github.com/stateforward/scxml.rs/namespaces/scx";
+
 impl Package {
+    /// The embedded `scx` package: its compiled-in manifest, verified against
+    /// its compiled-in schema like any `--extension-package`.
+    ///
+    /// # Errors
+    ///
+    /// A manifest or schema that does not verify (a build defect).
+    pub(crate) fn embedded() -> Result<Self, String> {
+        let manifest = ExtensionPackageManifest::from_json(include_bytes!(
+            "../../../namespaces/scx/package/scx.extension.json"
+        ))
+        .map_err(|error| format!("the embedded scx package is malformed: {error}"))?;
+        let schema = SchemaSource::new(
+            manifest.schema_artifact.clone(),
+            include_bytes!("../../../namespaces/scx/package/scx.xsd").to_vec(),
+        );
+        manifest
+            .verify_schema(&schema)
+            .map_err(|error| format!("the embedded scx package does not verify: {error}"))?;
+        if manifest.namespace_uri != SCX_NAMESPACE_URI {
+            return Err("the embedded scx package binds another namespace".into());
+        }
+        Ok(Self {
+            origin: PackageOrigin::Embedded,
+            manifest,
+            schema,
+        })
+    }
+
     /// The package as messages name it: the manifest path, or the
     /// repository namespace's URI.
     pub(crate) fn label(&self) -> String {
         match &self.origin {
             PackageOrigin::Manifest(path) => path.display().to_string(),
-            PackageOrigin::Repository { .. } => self.manifest.namespace_uri.clone(),
+            PackageOrigin::Repository { .. } | PackageOrigin::Embedded => {
+                self.manifest.namespace_uri.clone()
+            }
         }
     }
 
@@ -113,6 +154,9 @@ impl Package {
             ),
             PackageOrigin::Repository { .. } => {
                 Err("a repository namespace's extension component comes from its release".into())
+            }
+            PackageOrigin::Embedded => {
+                Err("the scx namespace's extension component is embedded".into())
             }
         }
     }
@@ -218,8 +262,18 @@ impl Packages {
         schema_flags: &[(String, PathBuf)],
         repository: &RepositoryFlags,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let explicit = load(manifests, schema_flags)?;
+        let mut explicit = load(manifests, schema_flags)?;
         let used = crate::repository::used_namespaces(source);
+        // The scx namespace ships with scx: a document that uses it binds the
+        // embedded package unless a flag binds the URI.
+        if used.iter().any(|uri| uri == SCX_NAMESPACE_URI)
+            && !explicit
+                .iter()
+                .any(|package| package.manifest.namespace_uri == SCX_NAMESPACE_URI)
+            && !schema_flags.iter().any(|(uri, _)| uri == SCX_NAMESPACE_URI)
+        {
+            explicit.push(Package::embedded()?);
+        }
         let bound: Vec<String> = explicit
             .iter()
             .map(|package| package.manifest.namespace_uri.clone())
@@ -286,6 +340,9 @@ impl Packages {
                     "release {tag} (commit {commit}), package {}",
                     manifest.package_version
                 ),
+                PackageOrigin::Embedded => {
+                    format!("package {} built into scx", manifest.package_version)
+                }
             };
             let origins = if manifest.http_origins.is_empty() {
                 "none".to_owned()
@@ -704,11 +761,10 @@ impl RunFlags {
                 "`{uri}` is not the namespace of any --extension-package\n  = help: --extension-component and --extension-component-sha256 name a bound namespace URI exactly"
             ));
         }
-        if let Some(package) = packages
-            .explicit
-            .iter()
-            .find(|package| !self.digests.contains_key(&package.manifest.namespace_uri))
-        {
+        if let Some(package) = packages.explicit.iter().find(|package| {
+            package.origin != PackageOrigin::Embedded
+                && !self.digests.contains_key(&package.manifest.namespace_uri)
+        }) {
             return Err(format!(
                 "extension package `{}` needs --extension-component-sha256 {}=HEX\n  = help: the SHA-256 of the extension component is the trust anchor snapshot run executes it under",
                 package.label(),
@@ -733,6 +789,9 @@ impl RunFlags {
     /// component.
     #[cfg(feature = "wasmtime")]
     pub(crate) fn extension_component_sha256(&self, package: &Package) -> Option<&str> {
+        if package.origin == PackageOrigin::Embedded {
+            return Some(crate::components::embedded::SCX_COMPONENT_SHA256);
+        }
         self.digests
             .get(&package.manifest.namespace_uri)
             .map(String::as_str)

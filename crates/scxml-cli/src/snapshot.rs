@@ -1183,6 +1183,17 @@ pub(crate) mod host {
             ));
         }
         for package in &packages.explicit {
+            if package.origin == crate::extensions::PackageOrigin::Embedded {
+                let component = authenticate_extension_component(
+                    crate::components::embedded::SCX_COMPONENT,
+                    TrustedComponentDigest::from_hex(
+                        crate::components::embedded::SCX_COMPONENT_SHA256,
+                    )?,
+                )
+                .map_err(|error| format!("the embedded scx component is rejected: {error}"))?;
+                extensions = extensions.bind(package.host_package(), &component)?;
+                continue;
+            }
             let path = flags.extension_component_path(package)?;
             let limit = u64::try_from(scxml_host_wasmtime::MAX_AUTHENTICATED_COMPONENT_BYTES)?;
             let bytes = crate::extensions::read_bounded(&path, limit).map_err(|error| {
