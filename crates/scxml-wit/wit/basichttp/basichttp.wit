@@ -1,0 +1,279 @@
+/// SCXML BasicHTTP Event I/O Processor (SCXML 1.0 appendix C.2) and the
+/// narrow HTTP transport capability it imports.
+///
+/// The processor owns every BasicHTTP decision: request encoding, response
+/// interpretation, inbound message validation and decoding, and the status
+/// code answered for each delivery outcome. It performs no ambient I/O: the
+/// only way a request leaves the component is the imported `http-transport`
+/// capability, which the embedder supplies (a real HTTP client, or an
+/// in-process loopback in deterministic tests). No `wasi:sockets` or
+/// `wasi:http` access is imported.
+///
+/// Conventions: every string is UTF-8 and every byte bound counts UTF-8
+/// bytes; callers own every argument; a failed call has no side effect
+/// except where documented. Bounds are enforced by the bundled provider.
+package stateforward:scxml-basichttp@0.2.0;
+
+/// Shared value types.
+interface types {
+  /// Whether W3C baggage crosses the boundary it is attached to.
+  enum baggage-policy { drop, propagate }
+
+  /// W3C Trace Context carrier; validated, never alters semantics.
+  record trace-context {
+    /// Canonical version-00 W3C `traceparent`: exactly 55 bytes.
+    traceparent: string,
+    /// W3C `tracestate`: at most 512 bytes and 32 list members.
+    tracestate: option<string>,
+    /// W3C baggage: at most 8192 bytes and 64 list members.
+    baggage: option<string>,
+    baggage-policy: baggage-policy,
+  }
+
+  /// Closed error schema version; unknown discriminants fail canonical ABI decoding.
+  enum error-version { v1 }
+
+  /// Closed send failure classification. The sending SCXML session maps
+  /// each code to exactly one outcome.
+  enum error-code {
+    /// The request is malformed or violates a precondition (an invalid
+    /// target URI, parameter name, or value, or `<content>` combined with
+    /// parameters). The sending session raises `error.execution`.
+    invalid-input,
+    /// The encoded request exceeds a byte or count bound. The sending
+    /// session raises `error.execution`.
+    payload-too-large,
+    /// The message could not be delivered: no target was given, the
+    /// transport failed, or the recipient answered with a non-2xx status.
+    /// The sending session raises `error.communication` (SCXML C.2). When
+    /// the transport was already called, `unavailable` does not mean the
+    /// recipient never saw the message; see `basichttp-api.send`.
+    unavailable,
+  }
+
+  /// A closed send failure. Detail is optional, at most 160 bytes, and
+  /// contains only static safe text; payloads and URIs are never reflected.
+  record component-error {
+    version: error-version,
+    code: error-code,
+    detail: option<string>,
+  }
+
+  /// Portable data-model value (the same shape as `stateforward:scxml`
+  /// `data-value`).
+  variant data-value {
+    /// No value was supplied.
+    absent,
+    /// ECMAScript `undefined`.
+    undefined,
+    /// Data-model null.
+    null,
+    /// Boolean value.
+    boolean(bool),
+    /// Finite number; NaN and infinities are rejected with `invalid-input`.
+    number(f64),
+    /// String value.
+    text(string),
+    /// Canonical JSON array text.
+    json-array(string),
+    /// Canonical JSON object text with recursively sorted keys.
+    json-object(string),
+    /// XML payload preserved as UTF-8 source text.
+    xml(string),
+  }
+
+  /// One HTTP header field. Names are compared ASCII case-insensitively.
+  /// Bounds: name 1..=256 bytes of RFC 9110 token characters; value at
+  /// most 8192 bytes with no CR, LF, or NUL.
+  record http-header {
+    name: string,
+    value: string,
+  }
+
+  /// One HTTP request. Bounds: `method` 1..=16 bytes of token characters;
+  /// `uri` 1..=16384 bytes with no whitespace or control characters; at
+  /// most 64 headers; `body` at most 65536 bytes.
+  record http-request {
+    method: string,
+    uri: string,
+    headers: list<http-header>,
+    body: list<u8>,
+  }
+
+  /// One HTTP response. Bounds: `status` 100..=599; at most 64 headers;
+  /// `body` at most 65536 bytes.
+  record http-response {
+    status: u16,
+    headers: list<http-header>,
+    body: list<u8>,
+  }
+
+  /// One HTTP POST parameter produced by `namelist` or `<param>`.
+  record param {
+    /// Parameter name: 1..=1024 bytes.
+    name: string,
+    /// Parameter value; `absent` and `undefined` are rejected.
+    value: data-value,
+  }
+
+  /// One evaluated `<send>` addressed to the BasicHTTP processor. The host
+  /// evaluates every expression; the processor never sees one.
+  record outbound-send {
+    /// Evaluated `event`/`eventexpr`; sent as the `_scxmleventname` POST
+    /// parameter when present (at most 1024 bytes).
+    event-name: option<string>,
+    /// Evaluated `target`/`targetexpr`: an absolute `http` or `https` URI
+    /// (at most 16384 bytes). Absence fails with `unavailable`.
+    target: option<string>,
+    /// `namelist` entries then `<param>` children, in document order (at
+    /// most 256).
+    params: list<param>,
+    /// Evaluated `<content>`; mutually exclusive with `params`.
+    content: option<data-value>,
+    /// Optional trace carrier; never changes semantics.
+    trace-context: option<trace-context>,
+  }
+
+  /// Why an inbound HTTP message was not turned into an event.
+  enum rejection {
+    /// Malformed request line, header, body encoding, or event name.
+    invalid-message,
+    /// The request method is not `POST` (SCXML C.2).
+    method-not-allowed,
+    /// The request or its raw event text exceeds a byte or count bound.
+    payload-too-large,
+  }
+
+  /// One validated inbound message, ready to become an external SCXML event
+  /// whose `origintype` is `http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor`.
+  record received {
+    /// The first `_scxmleventname` form parameter, else the first
+    /// `_scxmleventname` header, else `HTTP.POST` (SCXML C.2).
+    name: string,
+    /// Every form parameter other than `_scxmleventname` as a canonical
+    /// JSON object of strings (a repeated name becomes an array of strings
+    /// in message order). Other content (a bare form segment, or a non-form
+    /// body) by SCXML B.2.8.1: a JSON (`application/json`, `+json`) or XML
+    /// (`application/xml`, `text/xml`, `+xml`) `Content-Type` is tried first
+    /// ("SHOULD try to format the data according to those indications"),
+    /// then well-formed JSON is its value ("it MUST create the corresponding
+    /// ECMAScript object(s)"), then a well-formed XML document is `xml`, else
+    /// space-normalized `text` ("MUST treat the content as a space-normalized
+    /// string literal"; XML white space, as `XPath` 1.0 `normalize-space()`);
+    /// `absent` for an empty message.
+    data: data-value,
+    /// The message as received: request line, headers, blank line, body
+    /// (at most 65536 bytes).
+    raw: string,
+  }
+
+  /// Result of offering one inbound message to its target session.
+  variant delivery {
+    /// The event was added to the session's external queue: 200.
+    enqueued,
+    /// `receive` rejected the message: 400, 405 (with `Allow: POST`), or 413.
+    rejected(rejection),
+    /// No live session answers the request URI: 404.
+    unknown-session,
+    /// The session cannot take the message now: 503. The bundled browser
+    /// host answers this while the target session is in the middle of a
+    /// call; the bundled Wasmtime host queues every message and never
+    /// answers it.
+    queue-full,
+  }
+}
+
+/// Guest telemetry facade; every value is a closed, bounded label or a
+/// numeric measurement. URIs, names, and payloads never cross it.
+interface telemetry {
+  use types.{trace-context};
+  /// Closed operation label.
+  enum operation { type-uri, send, receive, respond }
+  /// Closed outcome label: `rejected` for caller or input failures, `failed`
+  /// for delivery failures.
+  enum outcome { ok, rejected, failed }
+  /// Closed span-event label.
+  enum signal-event { type-uri-returned, send-accepted, send-rejected, message-accepted, message-rejected, response-produced }
+  /// Closed numeric measurement kinds: request or message body bytes.
+  enum measurement-kind { body-bytes }
+  /// One numeric sample; `value` is a measurement, never a label.
+  record measurement {
+    kind: measurement-kind,
+    value: u64,
+  }
+  /// Records an outcome and at most one numeric sample.
+  observe: func(operation: operation, outcome: outcome, measurement: option<measurement>, context: option<trace-context>);
+  /// Records a closed event without a metric sample.
+  event: func(operation: operation, event: signal-event, context: option<trace-context>);
+}
+
+/// The narrow outbound HTTP capability the embedder supplies. It carries one
+/// request and returns the recipient's response; it never resolves
+/// addresses for the processor or interprets SCXML.
+interface http-transport {
+  use types.{http-request, http-response};
+  /// Performs one request synchronously.
+  ///
+  /// Preconditions: `request` respects the `http-request` bounds.
+  /// Postconditions: `ok` carries the response the recipient returned,
+  /// whatever its status; the processor rejects a response outside the
+  /// `http-response` bounds as a delivery failure.
+  /// Errors: `err` means no response was obtained (unreachable address,
+  /// refused connection, or transport failure). The processor reports it
+  /// as `unavailable`.
+  post: func(request: http-request) -> result<http-response>;
+}
+
+/// The BasicHTTP Event I/O Processor.
+interface basichttp-api {
+  use types.{outbound-send, component-error, http-request, http-response, received, rejection, delivery};
+
+  /// Returns `http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor`.
+  type-uri: func() -> string;
+  /// Short aliases documents may use for this processor's type, in
+  /// `_ioprocessors` order (bundled provider: `["basichttp"]`). Pure; emits
+  /// no telemetry.
+  aliases: func() -> list<string>;
+  /// Encodes one send as an HTTP POST and performs it through
+  /// `http-transport` (SCXML C.2): `_scxmleventname` first when an event
+  /// name is present, then every parameter in order, as
+  /// `application/x-www-form-urlencoded`; `<content>` becomes the
+  /// percent-encoded body. Succeeds only on a 2xx response.
+  ///
+  /// Delivery is at most once: each call invokes `http-transport.post` at
+  /// most once and never retries. `ok` means the recipient answered 2xx.
+  /// After the transport was called, a failure does not prove the message
+  /// was not processed: a non-2xx answer comes from a recipient that
+  /// received the request and may have acted on it, and a transport `err`
+  /// may follow a request the recipient already received. Callers that
+  /// resend after `unavailable` accept possible duplicate delivery.
+  ///
+  /// A delayed send is posted by this call only when its delay elapsed
+  /// (SCXML 6.2); the processor holds no timer.
+  ///
+  /// Errors: see `error-code`. Nothing is sent when validation fails
+  /// (`invalid-input`, `payload-too-large`, or a missing target).
+  send: func(request: outbound-send) -> result<_, component-error>;
+  /// Validates and encodes one send exactly as `send` does, without
+  /// posting it: the `invalid-input` and `payload-too-large` failures `send`
+  /// would report before calling the transport. A missing target is not
+  /// checked (it is a delivery failure `send` reports as `unavailable`
+  /// when the message is dispatched). The host checks a delayed send before
+  /// scheduling it, so those failures surface at the `<send>` (SCXML 6.2:
+  /// "The Processor MUST evaluate all arguments to <send> when the <send>
+  /// element is evaluated, and not when the message is actually
+  /// dispatched."). Pure; emits no telemetry.
+  check: func(request: outbound-send) -> result<_, component-error>;
+  /// Validates and decodes one inbound message addressed to a session's
+  /// BasicHTTP location. Pure: nothing is enqueued.
+  receive: func(request: http-request) -> result<received, rejection>;
+  /// The response to return for one delivery outcome. Pure and total.
+  respond: func(outcome: delivery) -> http-response;
+}
+
+/// The BasicHTTP processor component.
+world basichttp {
+  import telemetry;
+  import http-transport;
+  export basichttp-api;
+}

@@ -1,0 +1,10 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="total" expr="0"/></datamodel>
+  <state id="a">
+    <onentry>
+      <assign location="total" expr="1">2</assign>
+    </onentry>
+    <transition event="go" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

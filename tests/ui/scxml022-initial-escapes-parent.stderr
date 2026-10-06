@@ -1,0 +1,15 @@
+error[SCXML022]: initial transition target `q` is not a descendant of its parent
+  --> tests/ui/scxml022-initial-escapes-parent.scxml:4:27
+   |
+ 4 |       <transition target="q"/>
+   |                           ^ target is outside the permitted subtree
+...
+10 |   <final id="q"/>
+   |              - target declared here
+   |
+   = note: default entry must stay inside the compound state being entered
+   = help: target a descendant state owned by the containing compound state
+   = spec: SCXML 1.0 §3.6 <initial>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML022`.

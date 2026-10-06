@@ -1,0 +1,13 @@
+snapshot diff: 0001.snapshot.json → 0003.snapshot.json
+ = clock: 0ms -> 100ms
+ = skipped: data_model, queues, previews
+
+session root
+  --> status: running -> finished
+   = configuration:
+       - waiting
+       + done
+   = pending sends:
+       - tick
+   = transitions:
+       - waiting[0]

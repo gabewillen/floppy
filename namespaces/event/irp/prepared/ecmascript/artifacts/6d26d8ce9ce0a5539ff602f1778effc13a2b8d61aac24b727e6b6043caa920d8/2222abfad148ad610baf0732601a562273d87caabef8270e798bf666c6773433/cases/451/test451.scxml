@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- event-6: an invalid pattern is rejected. The document must be rejected; it never runs. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" initial="s0" version="1.0" datamodel="ecmascript">
+<state id="s0">
+  <onentry>
+    <raise event="x" event:schema="{&#34;type&#34;: &#34;string&#34;, &#34;pattern&#34;: &#34;(&#34;}"/>
+  </onentry>
+  <transition target="pass"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

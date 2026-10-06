@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!-- event-5: 2020-12, 2019-09, and draft-07 schemas are accepted, with or without the trailing #. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event">
+<state id="s0">
+  <onentry>
+    <raise event="a" event:schema='{"$schema": "https://json-schema.org/draft/2020-12/schema#", "type": "object"}'/>
+    <raise event="b" event:schema='{"$schema": "https://json-schema.org/draft/2019-09/schema", "type": "object"}'/>
+    <raise event="c" event:schema='{"$schema": "http://json-schema.org/draft-07/schema#", "type": "object"}'/>
+    <raise event="d" event:schema='{"$schema": "http://json-schema.org/draft-07/schema", "type": "object"}'/>
+  </onentry>
+  <transition event="a" target="s1"/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<state id="s1">
+  <transition event="b" target="s2"/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<state id="s2">
+  <transition event="c" target="s3"/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<state id="s3">
+  <transition event="d" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

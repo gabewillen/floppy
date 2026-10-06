@@ -1,0 +1,19 @@
+warning[SCXML038]: xpath syntax error in `expr`: the string literal ends early at this `'`
+ --> tests/ui/scxml038-xpath-apostrophe.scxml:8:28
+  |
+8 |     <onentry><log expr="'it's done'"/></onentry>
+  |                         ----------- while parsing this `expr`
+  |                            ^ syntax error
+  |
+  = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+  = help: XPath 1.0 string literals have no escape sequences: delimit a string that contains `'` with `"` (written `&quot;` inside an attribute delimited by `"`), or build it with `concat()`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML CR 2014 §C.3 The XPath Data Model
+help: delimit the string with `"`
+  |
+8 |     <onentry><log expr="&quot;it's done&quot;"/></onentry>
+  |                         ~~~~~~~~~~~~~~~~~~~~~
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
+validated tests/ui/scxml038-xpath-apostrophe.scxml

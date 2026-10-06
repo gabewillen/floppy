@@ -1,0 +1,18 @@
+error[SCXML050]: `<script>` cannot have both a `src` attribute and inline content
+ --> tests/ui/scxml050-script-src-and-content.scxml:4:15
+  |
+4 |       <script src="lib.wasm">input = 1;</script>
+  |               ^^^^^^^^^^^^^^ ---------- inline content here
+  |               |
+  |               external script source
+  |
+  = note: SCXML 1.0 §5.8: `<script>` takes either a `src` URI or inline script content, never both
+  = help: keep the external `src` and delete the inline content, or delete `src` and keep the inline script
+  = spec: SCXML 1.0 §5.8 <script>
+help: remove the `src` attribute and keep the inline script
+  |
+4 -       <script src="lib.wasm">input = 1;</script>
+4 +       <script>input = 1;</script>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML050`.

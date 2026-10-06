@@ -1,0 +1,22 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" initial="idle">
+  <datamodel>
+    <data id="refundSchema" expr="({type: 'object'})"/>
+  </datamodel>
+  <state id="idle">
+    <onentry>
+      <raise event="ready" event:schema='{"type": "null"}'/>
+      <send event="tick" delay="1s" event:schema="event-schemas/order.json#/$defs/Item"/>
+    </onentry>
+    <transition event="order" target="done" event:schema="event-schemas/order.json#/$defs/Order"/>
+    <transition event="refund" target="done" event:schemaexpr="refundSchema"/>
+    <transition event="ready" event:schema="true"/>
+    <transition event="tick" event:schema="event-schemas/order.json"/>
+  </state>
+  <final id="done">
+    <donedata event:schema='{"type": "object", "properties": {"id": {"type": "string"}}}'>
+      <param name="id" expr="'o-1'"/>
+    </donedata>
+  </final>
+</scxml>

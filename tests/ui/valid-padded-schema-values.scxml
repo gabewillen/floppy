@@ -1,0 +1,13 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version=" 1.0 " datamodel=" ecmascript " initial=" idle ">
+  <datamodel>
+    <data id=" count " expr="0"/>
+  </datamodel>
+  <state id=" idle ">
+    <onentry>
+      <send event=" tick " id=" timer " delay="1s"/>
+      <cancel sendid=" timer "/>
+    </onentry>
+    <transition event=" go  stop " cond="In('idle') &amp;&amp; count === 0" target=" done " type=" internal "/>
+  </state>
+  <final id=" done "/>
+</scxml>

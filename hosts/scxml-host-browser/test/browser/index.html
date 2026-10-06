@@ -1,0 +1,309 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>scxml-host-browser e2e</title>
+<!--
+  Loaded by test/browser.test.mjs in headless Chromium. Uses the default
+  fetch/compileStreaming loader over the served dist/ exactly as a page
+  would, runs the shared fixture trace, and reports through window.__result.
+-->
+<!--
+  The page resolves the bare `@opentelemetry/api` specifier with an import
+  map, as any page (or bundler) does for this package's one runtime
+  dependency. No SDK is registered, so every host signal is a no-op here.
+-->
+<script type="importmap">
+  { "imports": { "@opentelemetry/api": "/node_modules/@opentelemetry/api/build/esm/index.js" } }
+</script>
+<script type="module">
+  import {
+    CapabilityError,
+    ScxmlHostError,
+    ScxmlSessionError,
+    createCompiler,
+    createEcmaScriptDataModel,
+    createSession,
+    createXPathDataModel,
+  } from '../../src/index.js';
+  import { runFixtureTrace } from '../trace-harness.js';
+
+  // Bound on each wait for an `event-loop` delivery. The documents below use
+  // 20 ms delays; this is far longer, and far shorter than the runner's 60 s
+  // page budget, so a lost delivery fails with its own message.
+  const TIMER_OUTCOME_TIMEOUT_MS = 10_000;
+
+  // Resolves with the first outcome the host reports to `onTimer`, or
+  // rejects once `TIMER_OUTCOME_TIMEOUT_MS` passes with none. Event-driven:
+  // the host's callback settles the promise; the one timer is the deadline.
+  function firstTimerOutcome(label) {
+    let onTimer;
+    const outcome = new Promise((resolve, reject) => {
+      const deadline = setTimeout(
+        () => reject(new Error(`${label}: no onTimer outcome within ${TIMER_OUTCOME_TIMEOUT_MS} ms`)),
+        TIMER_OUTCOME_TIMEOUT_MS,
+      );
+      onTimer = (delivered) => {
+        clearTimeout(deadline);
+        resolve(delivered);
+      };
+    });
+    return { onTimer, outcome };
+  }
+
+  async function main() {
+    const fixture = await (await fetch('/fixture/trace.json')).json();
+    const ir = new Uint8Array(await (await fetch('/fixture/ir.json')).arrayBuffer());
+    const trace = await runFixtureTrace({ ir, fixture });
+
+    const future = JSON.parse(new TextDecoder().decode(ir));
+    future.version += 1;
+    let hostile;
+    try {
+      await createSession({ ir: new TextEncoder().encode(JSON.stringify(future)) });
+      hostile = 'accepted';
+    } catch (error) {
+      hostile = error instanceof ScxmlSessionError ? error.code : `untyped: ${error}`;
+    }
+    // Nested loops multiply Boa's per-frame loop limit to about 1e10
+    // iterations; the metered component must stop on its fuel budget.
+    const model = await createEcmaScriptDataModel();
+    model.initialize([], {
+      sessionId: 'hostile',
+      machineName: 'hostile',
+      ioProcessors: { tag: 'json-object', val: '{}' },
+    });
+    const started = performance.now();
+    let nestedLoop;
+    try {
+      model.execute(
+        'function f(){for(var i=0;i<99999;i++){}} for(var j=0;j<99999;j++) f();',
+        undefined,
+      );
+      nestedLoop = { code: 'completed' };
+    } catch (error) {
+      nestedLoop = { code: error instanceof CapabilityError ? error.code : `untyped: ${error}` };
+    }
+    nestedLoop.elapsed = performance.now() - started;
+
+    // One host call, one budget: ten <foreach> loops over 200 items, each
+    // running a heavy <script>, in one <onentry> (the Wasmtime host's
+    // `nested_data_model_work_is_charged_to_the_machine_call_budget`
+    // document). Every data-model call is charged to `start`'s default
+    // budget, which runs out inside it.
+    const sharedCompiler = await createCompiler();
+    const burn = 'function burn(){var x=0;for(var i=0;i&lt;99000;i++){x+=i}return x}';
+    // `<\/script>`: a literal end tag would close this page's own script.
+    const loops = '<foreach array="arr" item="it"><script>for(var j=0;j&lt;5;j++){acc+=burn()}<\/script></foreach>'.repeat(10);
+    const { ir: heavyIr } = await sharedCompiler.compile(
+      `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">` +
+        `<datamodel><data id="arr" expr="(function(){var r=[];for(var i=0;i&lt;200;i++)r.push(i);return r})()"/>` +
+        `<data id="acc" expr="0"/></datamodel><script>${burn}<\/script>` +
+        `<state id="a"><onentry>${loops}</onentry></state></scxml>`,
+    );
+    const heavy = await createSession({ ir: heavyIr, dataModel: await createEcmaScriptDataModel() });
+    const sharedStarted = performance.now();
+    let sharedBudget;
+    try {
+      sharedBudget = { code: heavy.start().status };
+    } catch (error) {
+      sharedBudget = { code: error instanceof ScxmlHostError ? error.code : `untyped: ${error}` };
+    }
+    sharedBudget.elapsed = performance.now() - sharedStarted;
+    heavy.dispose();
+
+    // An XPath data-model document whose delayed send the page's own event
+    // loop delivers (the default `event-loop` timers), compiled in-page.
+    const compiler = await createCompiler();
+    const { ir: delayedIr } = await compiler.compile(
+      `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" initial="a">
+         <datamodel><data id="n" expr="1"/></datamodel>
+         <state id="a">
+           <onentry><send event="late" delay="20ms"/></onentry>
+           <transition event="late" cond="$n = 1" target="b"/>
+         </state>
+         <state id="b"><onentry><log label="Outcome" expr="'pass'"/></onentry></state>
+       </scxml>`,
+    );
+    const logs = [];
+    const timer = firstTimerOutcome('delayed send');
+    const session = await createSession({
+      ir: delayedIr,
+      dataModel: await createXPathDataModel(),
+      capabilities: { log: ({ label, text }) => logs.push(`${label}: ${text}`) },
+      onTimer: timer.onTimer,
+    });
+    const delayedStarted = performance.now();
+    const initial = session.start().activeConfiguration;
+    const timerOutcome = await timer.outcome;
+    const eventLoop = {
+      initial,
+      delivered: timerOutcome.results?.map((step) => step.activeConfiguration),
+      error: timerOutcome.error === undefined ? undefined : String(timerOutcome.error),
+      elapsed: performance.now() - delayedStarted,
+      logs,
+    };
+    session.dispose();
+
+    // `<invoke>` with child IR the page pre-lowered: the host builds the
+    // child synchronously on the page's main thread, and the event loop
+    // delivers the child's delayed send, its event to the parent, and
+    // `done.invoke`.
+    const child = `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="c">
+        <state id="c">
+          <onentry><send event="later" delay="20ms"/></onentry>
+          <transition event="later" target="end"><send target="#_parent" event="fromChild"/></transition>
+        </state>
+        <final id="end"/>
+      </scxml>`;
+    const { ir: childIr } = await compiler.compile(child, { sourceName: 'child.scxml' });
+    const { ir: parentIr } = await compiler.compile(
+      `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="outer">
+         <state id="outer" initial="waiting">
+           <invoke id="kid" src="file:child.scxml"/>
+           <state id="waiting"><transition event="fromChild" target="heard"/></state>
+           <state id="heard"><transition event="done.invoke.kid" target="done"/></state>
+         </state>
+         <final id="done"/>
+       </scxml>`,
+    );
+    const invokeTimer = firstTimerOutcome('invoke');
+    const parent = await createSession({
+      ir: parentIr,
+      dataModel: await createEcmaScriptDataModel(),
+      capabilities: {
+        loadDocument: () => child,
+        compileInvocation: (_sourceName, source) => {
+          if (source !== child) throw new CapabilityError('invalid-input');
+          return childIr;
+        },
+      },
+      onTimer: invokeTimer.onTimer,
+    });
+    const invokeInitial = parent.start().activeConfiguration;
+    const invokeOutcome = await invokeTimer.outcome;
+    const invocation = {
+      initial: invokeInitial,
+      delivered: invokeOutcome.results?.map((step) => step.activeConfiguration),
+      error: invokeOutcome.error === undefined ? undefined : String(invokeOutcome.error),
+      status: parent.status(),
+    };
+    parent.dispose();
+
+    // Agent-written `<invoke>` the page does nothing for: the host compiles
+    // the inline child itself (pre-warmed in createSession), and the event
+    // loop delivers the child's delayed send, its event, and `done.invoke`.
+    const { ir: autoIr } = await compiler.compile(
+      `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="outer">
+         <state id="outer" initial="waiting">
+           <invoke id="kid"><content>${child}</content></invoke>
+           <state id="waiting"><transition event="fromChild" target="heard"/></state>
+           <state id="heard"><transition event="done.invoke.kid" target="done"/></state>
+         </state>
+         <final id="done"/>
+       </scxml>`,
+    );
+    const autoTimer = firstTimerOutcome('auto-invoke');
+    const auto = await createSession({
+      ir: autoIr,
+      dataModel: await createEcmaScriptDataModel(),
+      onTimer: autoTimer.onTimer,
+    });
+    const autoInitial = auto.start().activeConfiguration;
+    const autoOutcome = await autoTimer.outcome;
+    const autoInvocation = {
+      initial: autoInitial,
+      delivered: autoOutcome.results?.map((step) => step.activeConfiguration),
+      error: autoOutcome.error === undefined ? undefined : String(autoOutcome.error),
+      status: auto.status(),
+    };
+    auto.dispose();
+
+    // URL resources: the page allowlists one same-origin document, which the
+    // host prefetches with the page's own `fetch` before the machine runs;
+    // the other URL is denied and never fetched (error.execution).
+    const allowedUrl = new URL('resource-data.json', location.href).href;
+    const deniedUrl = 'https://denied.invalid/other.json';
+    const { ir: resourceIr } = await compiler.compile(
+      `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+         <datamodel><data id="doc" src="${allowedUrl}"/><data id="other" src="${deniedUrl}"/></datamodel>
+         <state id="a">
+           <transition cond="doc.a === 1" target="loaded"/>
+           <transition event="error.execution" target="failed"/>
+         </state>
+         <final id="loaded"/>
+         <final id="failed"/>
+       </scxml>`,
+    );
+    const fetched = [];
+    const resourceSession = await createSession({
+      ir: resourceIr,
+      dataModel: await createEcmaScriptDataModel(),
+      resources: {
+        allow: (url) => url === allowedUrl,
+        resolve: async (url) => {
+          fetched.push(url);
+          const response = await fetch(url);
+          if (!response.ok) throw new CapabilityError('unavailable');
+          return response.text();
+        },
+      },
+      timers: 'manual',
+    });
+    const resources = { fetched, initial: resourceSession.start().activeConfiguration };
+    resourceSession.dispose();
+
+    // BasicHTTP over the default fetch to this server's recording endpoints.
+    // A cookie is set to prove the default send omits credentials.
+    document.cookie = 'session=secret; path=/';
+    const origin = window.location.origin;
+    const allowed = new Set([`${origin}/basichttp/inbox`, `${origin}/basichttp/fail`]);
+    const { ir: httpIr } = await compiler.compile(
+      `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+         <state id="a">
+           <onentry>
+             <send event="hello" type="basichttp" target="${origin}/basichttp/inbox"><param name="k" expr="'v w'"/></send>
+             <send event="bad" type="basichttp" target="${origin}/basichttp/fail"/>
+           </onentry>
+           <transition event="error.communication" target="b"><log label="late" expr="_event.type"/></transition>
+         </state>
+         <state id="b">
+           <onentry><send event="denied" type="basichttp" target="${origin}/basichttp/denied"/></onentry>
+           <transition event="error.communication" target="c"><log label="denied" expr="_event.type"/></transition>
+         </state>
+         <state id="c">
+           <transition event="inbound" target="d"><log label="inbound" expr="JSON.stringify(_event.data)"/></transition>
+         </state>
+         <state id="d"/>
+       </scxml>`,
+    );
+    const httpLogs = [];
+    const httpTimer = firstTimerOutcome('basichttp');
+    const httpSession = await createSession({
+      ir: httpIr,
+      dataModel: await createEcmaScriptDataModel(),
+      capabilities: { log: ({ label, text }) => httpLogs.push(`${label}: ${text}`) },
+      http: { allow: (url) => allowed.has(url), location: `${origin}/basichttp/self` },
+      onTimer: httpTimer.onTimer,
+    });
+    const httpInitial = httpSession.start().activeConfiguration;
+    const httpOutcome = await httpTimer.outcome;
+    const response = httpSession.receiveHttp({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: '_scxmleventname=inbound&x=1',
+    });
+    const basichttp = {
+      initial: httpInitial,
+      late: httpOutcome.results?.map((step) => step.activeConfiguration),
+      error: httpOutcome.error === undefined ? undefined : String(httpOutcome.error),
+      inbound: { status: response.status, configuration: httpSession.configuration() },
+      logs: httpLogs,
+    };
+    httpSession.dispose();
+    return { trace, hostile, nestedLoop, sharedBudget, eventLoop, invocation, autoInvocation, resources, basichttp, userAgent: navigator.userAgent };
+  }
+
+  main().then(
+    (value) => { window.__result = { ok: true, value }; },
+    (error) => { window.__result = { ok: false, error: String(error?.stack ?? error) }; },
+  );
+</script>

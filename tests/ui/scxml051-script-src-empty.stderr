@@ -1,0 +1,12 @@
+error[SCXML051]: `<script src>` does not name a fetchable script
+ --> tests/ui/scxml051-script-src-empty.scxml:4:20
+  |
+4 |       <script src=" "/>
+  |                    ^ empty, oversized, or control-character URI
+  |
+  = note: SCXML 1.0 §5.8: if the script specified by `src` cannot be downloaded at document load time, the document is rejected
+  = help: set `src` to the URI of a Wasm script component or a script in the data model's language (non-empty, without control characters, at most 16384 bytes), or remove `src` and inline the script
+  = spec: SCXML 1.0 §5.8 <script>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML051`.

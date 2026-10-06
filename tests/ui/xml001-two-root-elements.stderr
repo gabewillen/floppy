@@ -1,0 +1,15 @@
+error[XML001]: second root element `<scxml>`
+ --> tests/ui/xml001-two-root-elements.scxml:4:2
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+  |  ----- the document's root `<scxml>` starts here
+...
+4 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"/>
+  |  ^^^^^ second top-level element
+  |
+  = note: an XML document has exactly one root element; everything else must be nested inside it
+  = help: remove this element or move it inside `<scxml>`; to define another state machine, put it in its own file (and start it with `<invoke>` if needed)
+  = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

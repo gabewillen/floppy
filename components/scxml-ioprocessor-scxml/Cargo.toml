@@ -1,0 +1,27 @@
+[package]
+name = "scxml-ioprocessor-scxml"
+description = "SCXML Event I/O Processor Wasm component with bounded delayed-send scheduling"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+scxml-telemetry.workspace = true
+scxml-types.workspace = true
+wit-bindgen.workspace = true
+
+[dev-dependencies]
+scxml-clock.workspace = true
+
+[lints]
+workspace = true

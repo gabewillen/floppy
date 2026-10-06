@@ -1,0 +1,4 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="sid"/></datamodel>
+  <state id="a"><onentry><send event="t" id="s1" idlocation="sid" delay="1s"/><cancel sendid="s1" sendidexpr="sid"/></onentry><transition event="t" target="f"/></state><final id="f"/>
+</scxml>

@@ -1,0 +1,14 @@
+warning[SCXML039]: `location` is not an assignable ecmascript location: expected a variable name or property access
+ --> tests/ui/scxml039-location-not-assignable.scxml:7:25
+  |
+7 |       <assign location="count + 1" expr="2"/>
+  |                         ^^^^^^^^^ not a location
+  |
+  = note: a location expression must name a place in the data model that can be assigned, such as a variable name or a property access like `a.b` or `a[0]`
+  = help: use a declared variable name or a member expression
+  = spec: SCXML 1.0 §5.9.2 Location Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML039`.
+validated tests/ui/scxml039-location-not-assignable.scxml

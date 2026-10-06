@@ -1,0 +1,23 @@
+error[SCXML037]: the null data model does not support `<assign>`
+ --> tests/ui/scxml037-null-assign.scxml:3:15
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idle" datamodel="null">
+  |                                                                                        ---- the null data model is selected here
+2 |   <state id="idle">
+3 |     <onentry><assign location="count" expr="0"/></onentry>
+  |               ^^^^^^ not supported in the null data model
+  |
+  = note: SCXML 1.0 §B.1.7: the `<foreach>` element and the elements of section 5 (`<datamodel>`, `<data>`, `<assign>`, `<donedata>`, `<content>`, `<param>`, `<script>`) are not supported in the null data model
+  = help: remove the `<assign>`, or select a data model that supports it, such as `datamodel="ecmascript"`
+  = spec: SCXML 1.0 §B.1 The Null Data Model
+help: remove the `<assign>` element
+  |
+3 -     <onentry><assign location="count" expr="0"/></onentry>
+3 +     <onentry></onentry>
+help: select the ECMAScript data model
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idle" datamodel="ecmascript">
+  |                                                                                        ~~~~~~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML037`.

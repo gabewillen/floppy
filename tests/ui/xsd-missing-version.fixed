@@ -1,0 +1,4 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       initial="a" version="1.0">
+  <final id="a"/>
+</scxml>

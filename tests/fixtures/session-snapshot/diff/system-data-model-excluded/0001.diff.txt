@@ -1,0 +1,7 @@
+snapshot diff: 0000.snapshot.json → 0001.snapshot.json
+ = skipped: system, data_model
+
+session root/kid
+  --> status: unchanged
+   = queues:
+       + external: `ping` (external)

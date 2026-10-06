@@ -1,0 +1,26 @@
+[package]
+name = "scxml-service-files"
+description = "Example invoked-service Wasm component that declares wasi:filesystem: it reads and writes files in its granted mount"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wit-bindgen.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+
+[lints]
+workspace = true

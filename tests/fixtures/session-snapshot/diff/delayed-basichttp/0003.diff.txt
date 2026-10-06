@@ -1,0 +1,12 @@
+snapshot diff: 0002.snapshot.json → 0003.snapshot.json
+ = clock: 50ms -> 100ms
+
+session root
+  --> status: running -> finished
+   = configuration:
+       - ticked
+       + failed
+   = pending sends:
+       - post
+   = transitions:
+       - ticked[0]

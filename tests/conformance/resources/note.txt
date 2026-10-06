@@ -1,0 +1,1 @@
+Manual fixture resource; the IR runner verifies availability but does not interpret it.

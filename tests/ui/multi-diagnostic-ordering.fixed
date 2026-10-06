@@ -1,0 +1,11 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:c="urn:example:custom"
+       initial="missing" version="1.0">
+  <state id="ready">
+    <transition event="finish abort" target="don"/>
+    <c:mark value="not-an-integer"/>
+    <log expr="'misplaced'"/>
+  </state>
+  <state id="ready"/>
+  <final id="done"/>
+</scxml>

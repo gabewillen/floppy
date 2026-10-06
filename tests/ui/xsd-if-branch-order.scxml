@@ -1,0 +1,5 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="x" expr="1"/></datamodel>
+  <state id="a"><onentry><if cond="x == 1"><log expr="'one'"/><else/><log expr="'other'"/><elseif cond="x == 2"/><log expr="'two'"/></if></onentry>
+  <transition event="go" target="f"/></state><final id="f"/>
+</scxml>

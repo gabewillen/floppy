@@ -1,0 +1,426 @@
+# scxml
+
+A Rust implementation of W3C [SCXML 1.0](https://www.w3.org/TR/scxml/)
+(State Chart XML) built on the WebAssembly Component Model. A compiler
+validates SCXML and lowers it into a portable, deterministic Machine IR; one
+generic machine component runs that IR inside Wasm. Native and browser hosts
+link capability components (data models, Event I/O Processors, clock,
+telemetry) and drive the session; they never interpret SCXML themselves.
+
+- **Conformant.** Every applicable case of the official W3C SCXML 1.0
+  Implementation Report Plan (IRP) test suite passes, for both the ECMAScript
+  and the XPath data model.
+- **One engine everywhere.** The same Wasm components run under Wasmtime
+  (CLI and Rust embedders) and in the browser.
+- **Built for tools and agents.** rustc-grade validator diagnostics with
+  JSON and SARIF output, live sessions with record and replay, and canonical
+  JSON session snapshots with a diff.
+
+## Status
+
+Version `0.2.0`, pre-1.0. The WIT packages, Machine IR, and report and
+snapshot formats are versioned, and they may change between minor versions: a
+breaking change bumps the affected WIT package's minor version or data-format
+version, together with the workspace minor version; additive and compatible
+changes bump the patch version. Pin exact versions. See [Versions](#versions).
+
+No crate is published to crates.io yet. The project is distributed as source
+and as Wasm components built from this workspace.
+
+### Conformance
+
+The [IRP](https://www.w3.org/Voice/2013/scxml-irp/) is the W3C's official
+SCXML 1.0 test suite. Against its 2015-03-10 corpus, every applicable case
+passes:
+
+| Data model | Passed / applicable | Mandatory | Optional | Under errata | Not applicable |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ECMAScript | 201 / 201 | 167 / 167 | 34 / 34 | 0 | 1 |
+| XPath | 178 / 178 | 163 / 163 | 15 / 15 | 5 | 24 |
+
+- No case is `Failed`, `Unsupported`, `Invalid`, or `HarnessError`, and
+  nothing is skipped. The manual cases that cannot log an `Outcome` (178,
+  230, 250, 301, 307, 415, and 513; 301 only for ECMAScript) are decided by
+  a documented
+  manual-equivalent oracle that checks exactly what the W3C instruction asks
+  a human to verify.
+- `NotApplicable` cases are those whose documents fix another data model or
+  need scripting, so the prepared corpus never exercises its own data model:
+  ECMAScript 436 (`datamodel="null"`); XPath 301-304 (scripting only), 436,
+  and the 19 ECMAScript-profile cases.
+- XPath cases 241, 244, 307, 520, and 534 have defective upstream inputs and
+  run from documented, digest-bound corrections
+  ([conformance.md](docs/conformance.md#irp-errata-and-not-applicable-cases)).
+- The XPath data model is measured against the SCXML 1.0 Candidate
+  Recommendation of 2014-03-13 (Appendix C.3), because the final
+  Recommendation dropped it.
+- Every case runs through the shipped Wasm components (machine, data models,
+  Event I/O Processors, clock, and compiler) under the Wasmtime host, and each
+  run reproduces the checked-in baseline case for case. The browser host is
+  held to the same baselines for the cases its parity test runs.
+
+The baselines (runner `0.2.0`, Machine IR schema `5`) are checked in under
+[`tests/conformance/w3c-irp/baselines`](tests/conformance/w3c-irp/baselines)
+and bind these digests:
+
+| Evidence | ECMAScript | XPath |
+| --- | --- | --- |
+| corpus digest | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` |
+| errata SHA-256 | `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f` | `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a` |
+| producer report digest | `1975a1a0467b6e0a4a80befe2a5b9902169e85c018a4d22768534dd27a54d682` | `c07da9831092692099d7c46696945feab67fe99044ca7cec9df8356db56276e1` |
+| canonical artifact SHA-256 | `6c8be254619f14afc8193355259c8759f15d4bf2016a46dbd4e0a36be2a6eeee` | `3451259154ec3784b5c229fafcbeef77c70418b0fea088be6fd2136933d6d8a7` |
+
+Each repository namespace also has its own implementation report plan in
+the same format, run through the same pipeline and reported separately
+(never counted with the W3C IRP;
+[conformance.md](docs/conformance.md#namespace-suites)):
+
+| Namespace suite | Assertions | Tests | ECMAScript | XPath |
+| --- | ---: | ---: | ---: | ---: |
+| [`openai`](namespaces/openai/irp/README.md) | 15 | 64 | 64 / 64 | 64 / 64 |
+| [`env`](namespaces/env/irp/README.md) | 7 | 20 | 20 / 20 | 20 / 20 |
+| [`event`](namespaces/event/irp/README.md) | 9 | 29 | 29 / 29 | 29 / 29 |
+
+[docs/conformance.md](docs/conformance.md) describes the pipeline, the
+oracles, and how to reproduce the baselines;
+[docs/spec-errata.md](docs/spec-errata.md) lists where the IRP and the SCXML
+1.0 text disagree and what this implementation does.
+
+## Quickstart
+
+The Rust toolchain (1.98 with `rustfmt`, `clippy`, and the `wasm32-wasip2`
+target) is pinned by [`rust-toolchain.toml`](rust-toolchain.toml) and
+installed by `rustup` on first use. Building the Wasm components also needs
+`wasm-tools 1.240.0` and `wasi-virt` at a pinned revision:
+
+```console
+cargo install --locked wasm-tools@1.240.0
+cargo install --locked --git https://github.com/bytecodealliance/WASI-Virt --rev 448f6df8f688cee5d6995e96b1ffc31f9bf00742 wasi-virt
+```
+
+Validate and compile a small document. Validation runs XML well-formedness,
+the bundled official W3C SCXML 1.0 XSD, and the semantic rules:
+
+```console
+mkdir -p target
+cat > target/hello.scxml <<'EOF'
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="ready">
+  <state id="ready"><transition event="finish" target="done"/></state>
+  <final id="done"/>
+</scxml>
+EOF
+cargo run -p scxml-cli -- validate target/hello.scxml
+cargo run -p scxml-cli -- compile target/hello.scxml --output target/hello.scxml-ir.json
+```
+
+Build and verify the release components, and take the digest of their
+manifest (`sha256sum`, or `shasum` where it is missing):
+
+```console
+RELEASE="$PWD/target/wasm-artifacts/quickstart"
+sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
+  scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
+  scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_extension_example \
+  scxml_extension_openai scxml_compiler scxml_machine
+MANIFEST_SHA256=$( (sha256sum "$RELEASE/manifest.tsv" 2>/dev/null \
+  || shasum -a 256 "$RELEASE/manifest.tsv") | cut -d ' ' -f 1)
+```
+
+Commands that execute a document need the CLI built with the `wasmtime`
+feature; the `scxml` shell function below runs it. Run the document as a live
+session: events go in as newline-delimited JSON, and one JSON record per line
+comes out. `--record` writes a log that `--replay` reproduces record for
+record:
+
+```console
+scxml() { cargo run --release --locked -p scxml-cli --features wasmtime -- "$@"; }
+printf '%s\n' '{"name":"finish"}' | scxml run target/hello.scxml \
+  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+  --record target/hello.live.ndjson
+scxml run target/hello.scxml \
+  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+  --replay target/hello.live.ndjson
+```
+
+Take a session snapshot at every checkpoint and diff the first and last
+(`snapshot diff` exits 1 when the documents differ, as these do):
+
+```console
+scxml snapshot run target/hello.scxml \
+  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+  --event finish --every --output-dir target/hello-snapshots
+scxml snapshot diff target/hello-snapshots/0000.snapshot.json target/hello-snapshots/0002.snapshot.json
+```
+
+Run the checked-in W3C IRP corpus (offline) through the same components and
+compare it with the checked-in baseline:
+
+```console
+scxml conformance run \
+  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+  --corpus tests/conformance/w3c-irp/prepared/ecmascript \
+  --canonical-baseline tests/conformance/w3c-irp/baselines/ecmascript.scxml-report.json
+```
+
+Use `prepared/xpath` and `xpath.scxml-report.json` for the XPath corpus.
+[docs/cli.md](docs/cli.md) covers every command and flag, and
+[CONTRIBUTING.md](CONTRIBUTING.md) lists the full proof matrix CI runs.
+
+## How it works
+
+```text
+SCXML document (+ extension package manifests and schemas)
+        │  validator component: XML, XSD 1.0, semantic rules
+        ▼
+compiler component ──► Machine IR (portable JSON data, not code)
+        │
+        ├─ runtime mode: the host serves the IR to the generic machine
+        └─ packaged mode: the IR is composed into a machine component
+        ▼
+machine component (the SCXML engine)
+        │  imports narrow capabilities
+        ▼
+data model · Event I/O Processors · clock · invoked sessions · extensions
+        (each a Wasm component, linked by a thin Wasmtime or browser host)
+```
+
+The compiler never runs a native process and never generates code, so it
+runs unchanged inside Wasm, including in a browser. It emits Machine IR: plain
+data with a deterministic recipe. In runtime mode, a host hands that IR to the
+one generic machine component; this is the only mode browsers use. In
+packaged mode, the packager composes the IR into a data-only provider and the
+pinned machine component, producing one self-contained component for
+ahead-of-time hosts.
+
+The machine component contains the engine. It runs each external event to a
+stable configuration, macrostep by macrostep, and reaches everything else
+through imported capabilities: the data model the document names
+(ECMAScript by default, through the Boa 0.22 interpreter; XPath 1.0; or
+null), the SCXML and BasicHTTP Event I/O Processors, a deterministic logical
+clock for delayed `<send>`, invoked sessions, and executable content
+extensions. Every component is deny-by-default: it imports only the WIT
+interfaces it needs and no ambient file system, network, clock, or
+randomness.
+
+Two hosts link the components. The Wasmtime host
+([`hosts/scxml-host-wasmtime`](hosts/scxml-host-wasmtime)) authenticates each
+component against a SHA-256 release manifest, bounds every call with fuel,
+and runs invoked sessions on one cooperative scheduler; the CLI uses it. The
+browser host ([`hosts/scxml-host-browser`](hosts/scxml-host-browser)) runs the
+same components, transpiled once by jco into ES modules over core Wasm. Neither host selects transitions
+or interprets SCXML. [docs/architecture.md](docs/architecture.md) describes
+each component, its WIT contract, and the hosts in detail.
+
+## Features
+
+**Validator diagnostics and reporters.** Diagnostics carry stable codes,
+exact byte spans, notes, help, specification references, and rustc-style
+fixes with applicability. `scxml-cli validate` renders them like rustc, or
+emits the canonical JSON report or SARIF 2.1.0 for editors and agent repair
+loops; `scxml-cli --explain CODE` explains any code. See
+[validator-rules.md](docs/validator-rules.md) and
+[cli.md](docs/cli.md#validator-diagnostics-and-reporters).
+
+**Live sessions with record and replay.** `scxml-cli run` keeps one session
+(and every session it invokes) open, processes each input event to a stable
+configuration, and fires delayed sends at their wall-clock deadline. A
+recorded run replays record for record on a logical clock. Rust embedders get the
+same through `SessionHost::open`. See [live-session.md](docs/live-session.md).
+
+**Session snapshots.** A canonical JSON document shows a session and its
+invoked sessions at a checkpoint: configuration, data model, queues, pending
+sends, and the transitions an event could take. Snapshots are read-only;
+`snapshot show`, `check`, and `diff` render, check, and compare them. See
+[session-snapshot.md](docs/session-snapshot.md).
+
+**BasicHTTP.** The BasicHTTP Event I/O Processor (SCXML Appendix C.2) runs
+over an in-process loopback in batch runs, and over the network in live
+sessions: `--http-listen` serves each session's location and `--http-allow`
+admits outbound origins (deny-all by default). See
+[cli.md](docs/cli.md#basichttp-over-the-network).
+
+**Browser host.** An ES module package that runs the generic machine, the
+compiler, the three data models, both Event I/O Processors, and the clock in
+the page, with fuel-metered calls, an allowlist for URLs and BasicHTTP, and
+OpenTelemetry through the JS API. See the
+[browser host README](hosts/scxml-host-browser/README.md).
+
+**Wasm script components.** `<script src="x.wasm"/>` runs a Wasm component
+that reads and assigns the session's data model. Scripts are pinned by
+SHA-256 at compile time or resolved at run time under a digest allowlist. See
+[wasm-scripts.md](docs/wasm-scripts.md).
+
+**Executable content extensions.** An extension namespace (SCXML §4.10) is a
+package: an XSD for structure plus a Wasm extension component that runs the
+elements. A namespace URI that names a GitHub repository at a release tag is
+loaded from that release, verified, cached, and pinned, so a document needs no
+flag to use it. Extension components never see secrets: an element names an
+`env` slot, the run supplies values with `--env` and `--env-file`, and the
+component receives only an opaque reference, which the host substitutes into
+its outbound requests to the origins the package declares or a base URL the
+run supplies.
+See [executable-content-extensions.md](docs/executable-content-extensions.md),
+the [`env` vocabulary](namespaces/env/README.md), and the
+[openai package](namespaces/openai/README.md).
+
+**Event data schemas.** `event:schema` on a `<transition>`, `<send>`,
+`<raise>`, or `<donedata>` describes the event data it handles or creates
+with a JSON Schema, inline or from a file next to the document (with a JSON
+Pointer); `event:schemaexpr` gives it as a data-model expression. The
+compiler checks each schema against its dialect's metaschema (2020-12,
+2019-09, or draft-07) and embeds it with its SHA-256 in the Machine IR, and
+session snapshots show it on each transition. The schemas are metadata only:
+they never change how a document runs. See the
+[`event` vocabulary](namespaces/event/README.md).
+
+**Observability.** Spans and measurements go through OpenTelemetry at
+component and host boundaries only, with closed label sets, so cardinality
+stays bounded; trace context propagates through events. See
+[observability.md](docs/observability.md).
+
+## Versions
+
+Workspace version `0.2.0` ships the `@0.2.0` WIT packages, Machine IR `5`,
+`scxml.report/v3` (conformance payload `9`), the session snapshot document
+`scxml.session-snapshot/v2` (diff `scxml.session-snapshot-diff/v2`),
+delayed-send wire record `8`, the `scxml.live-log/v1` live-session log, the
+`stateforward.scxml.extension-package/v2` extension package manifest, and the
+`stateforward.scxml.extension-cache/v1` extension cache index entry, and the
+`stateforward.scxml.service-cache/v1` service cache index entry. Every
+contract whose shape changed since `v0.1.0` has a new version:
+
+| Contract | `0.1.0` | `0.2.0` |
+| --- | --- | --- |
+| WIT packages | `@0.1.0` | `@0.2.0` |
+| Machine IR | `4` | `5` |
+| Canonical report envelope | `scxml.report/v2` | `scxml.report/v3` |
+| Conformance report payload | `8` | `9` |
+| Session snapshot document | `scxml.session-snapshot/v1` | `scxml.session-snapshot/v2` |
+| Session snapshot diff document | `scxml.session-snapshot-diff/v1` | `scxml.session-snapshot-diff/v2` |
+| Delayed-send wire record | `7` | `8` |
+| Prepared conformance corpus manifest | `5` | `6` |
+| IRP errata file | `1` | `1` |
+| Manual-equivalent oracle table | `2` | `4` |
+| Live-session log | none | `scxml.live-log/v1` |
+| Extension package manifest | none | `stateforward.scxml.extension-package/v2` |
+| Extension cache index entry | none | `stateforward.scxml.extension-cache/v1` |
+| Service cache index entry | none | `stateforward.scxml.service-cache/v1` |
+| Rust crates and the browser package | `0.1.0` | `0.2.0` |
+
+A released version never changes in place. Because the project is pre-1.0,
+replacements are hard cutovers with no deprecation period. The authoritative
+policy is the "Versioning policy" section of
+[`crates/scxml-wit/src/lib.rs`](crates/scxml-wit/src/lib.rs).
+
+## Documentation
+
+| Document | Covers |
+| --- | --- |
+| [Architecture](docs/architecture.md) | the pipeline, every component and WIT package, data models, validation and extension packages, hosts |
+| [Command-line interface](docs/cli.md) | every `scxml-cli` command with examples, flags, and exit statuses |
+| [Conformance](docs/conformance.md) | the official IRP pipeline, preparation, oracles, baselines, and digests |
+| [Validator rules](docs/validator-rules.md) | every diagnostic code and its specification basis |
+| [Live sessions](docs/live-session.md) | `scxml-cli run`, its JSON protocol, record and replay, BasicHTTP networking, the host API |
+| [Session snapshots](docs/session-snapshot.md) | the snapshot and diff documents and the `snapshot` commands |
+| [Executable content extensions](docs/executable-content-extensions.md) | writing an extension component, `env` slots, loading an element from a repository |
+| [`event` vocabulary](namespaces/event/README.md) | JSON Schemas for event data (`event:schema`, `event:schemaexpr`): resolution, references, snapshots, and validator codes |
+| [Wasm script components](docs/wasm-scripts.md) | `<script src>` backed by a Wasm component |
+| [Implementation-defined choices and limits](docs/limits.md) | where SCXML leaves a choice to the platform, fuel, and resource bounds |
+| [Observability](docs/observability.md) | OpenTelemetry spans, measurements, and cardinality |
+| [Specification errata](docs/spec-errata.md) | where the IRP and the SCXML 1.0 text disagree |
+| [Status and limitations](docs/limitations.md) | what is covered, with evidence, and the known gaps |
+| [Browser host](hosts/scxml-host-browser/README.md) | the browser package, its options, fuel, and tests |
+| [Contributing](CONTRIBUTING.md) | workflow and the proof commands CI runs |
+
+Repository layout: [`crates/`](crates) holds the Rust libraries and the CLI,
+[`components/`](components) the Wasm components,
+[`hosts/`](hosts) the Wasmtime and browser hosts,
+[`namespaces/`](namespaces) the repository namespaces (executable content
+extension packages and the host's `env` and `event` attribute
+vocabularies), and
+[`tests/conformance/w3c-irp`](tests/conformance/w3c-irp) the vendored W3C IRP
+corpus and baselines.
+
+## Current limitations
+
+The full list, with evidence, is in
+[docs/limitations.md](docs/limitations.md). In short:
+
+- No Event I/O Processor other than SCXML and BasicHTTP exists; a `<send>`
+  of any other type raises `error.execution`.
+- Five XPath IRP cases (241, 244, 307, 520, 534) pass only under documented
+  upstream errata; 24 XPath cases and ECMAScript case 436 are `NotApplicable`
+  because they never exercise the corpus's data model (see
+  [Conformance](#conformance)).
+- The IRP results are measured through the shipped components under the
+  Wasmtime host, the only conformance execution path.
+- Boa 0.22 has no allocation hook or interrupt, so ECMAScript evaluation is
+  bounded structurally, with Wasm memory and fuel as the outer bound (only
+  process limits in native builds).
+- There is no save or restore of session state, in process or durable;
+  SCXML defines no persistence.
+- The compiler component's packaging path is not exercised under Wasmtime.
+- The minimal proof hosts answer `raise`, `send`, `cancel`, and extension
+  calls with `unavailable` (the machine's own `<raise>` is engine-internal);
+  the Wasmtime session host, which the CLI uses, implements them.
+- The browser host loads URLs only through the page (its allowlisted
+  `resources` option or `loadDocument`; a runtime `srcexpr` URL through
+  `resources` only in a cross-origin-isolated `async: 'auto'` worker
+  session), its async sessions do not take the `http` option, and it runs no
+  extension components.
+- Invoked services (`<invoke type>` other than SCXML) run only under the
+  Wasmtime session host, bound by exact type URI (`--service-package`); they
+  get no `env` slot references yet, a session holding one cannot be
+  snapshotted, and the browser host binds none (it fails closed). Declared
+  WASI permissions are linked (when granted) into service components only:
+  an extension package that declares one is refused, and `wasi:cli`,
+  `wasi:http`, and UDP are not grantable.
+- Repository namespaces are GitHub repositories only.
+- An `event:schema` references only files relative to the document; child
+  documents compiled when invoked and the browser host get no schema files.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for how to report vulnerabilities privately.
+This project parses untrusted SCXML, XML, XSD, Machine IR, and Wasm
+inputs, fetches repository namespaces, and confines the values a run holds to
+references; reports about bypasses of the documented bounds, of repository
+element verification, or of the isolation between elements are in scope.
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE)), or
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option. Unless you explicitly state otherwise, any contribution
+intentionally submitted for inclusion in this project, as defined in the
+Apache-2.0 license, is dual licensed as above without any additional terms or
+conditions.
+
+The vendored W3C SCXML Implementation Report corpus and templates under
+[`tests/conformance/w3c-irp`](tests/conformance/w3c-irp) are third-party
+material distributed under the W3C terms recorded in
+[`tests/conformance/w3c-irp/LICENSE.md`](tests/conformance/w3c-irp/LICENSE.md).
+The `scxml-conformance` crate compiles in the W3C manual instructions its
+manual-equivalent oracle quotes verbatim (and its tests embed upstream IRP
+files), so its Cargo license metadata records
+`(Apache-2.0 OR MIT) AND LicenseRef-W3C-Test-Suite`, and `deny.toml` allows
+that reference for that crate only.
+
+The vendored official W3C SCXML 1.0 XML Schema set under
+[`crates/scxml-validator-xsd/schemas/w3c-scxml-1.0`](crates/scxml-validator-xsd/schemas/w3c-scxml-1.0)
+is compiled into `scxml-validator-xsd`'s `BundledSchemaResolver`, and so into
+the validator Wasm component (`scxml_validator.wasm`) and the `scxml-cli`
+binary, which both use that resolver. The compiler component does not embed
+it: it validates only against schemas its caller supplies. The schema set
+is third-party material under the W3C notice reproduced in
+[`crates/scxml-validator-xsd/schemas/w3c-scxml-1.0/NOTICE.md`](crates/scxml-validator-xsd/schemas/w3c-scxml-1.0/NOTICE.md),
+which must accompany every copy. It is not covered by the Apache-2.0 OR MIT
+grant above. The `scxml-validator-xsd` crate's Cargo license metadata records
+it as `(Apache-2.0 OR MIT) AND LicenseRef-W3C-SCXML-Schema`, and `deny.toml`
+allows that reference for that crate only.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the proof matrix and
+[CHANGELOG.md](CHANGELOG.md) for release notes.

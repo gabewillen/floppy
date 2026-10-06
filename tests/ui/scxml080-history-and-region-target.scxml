@@ -1,0 +1,12 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="o">
+  <state id="o">
+    <transition event="go" target="h b1"/>
+    <transition event="out" target="o"/>
+  </state>
+  <parallel id="p">
+    <history id="h"><transition target="a"/></history>
+    <state id="a"><state id="a1"/></state>
+    <state id="b"><state id="b0"/><state id="b1"/></state>
+    <transition event="out" target="o"/>
+  </parallel>
+</scxml>

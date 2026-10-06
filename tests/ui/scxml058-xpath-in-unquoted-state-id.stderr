@@ -1,0 +1,18 @@
+warning[SCXML058]: `In(b)` passes `b` unquoted, not the state ID `'b'`
+ --> tests/ui/scxml058-xpath-in-unquoted-state-id.scxml:8:37
+  |
+8 |     <transition event="go" cond="In(b)" target="b"/>
+  |                                  ----- in this `cond` on `<transition>`
+  |                                     ^ not a string
+  |
+  = note: in XPath, `b` is a relative path from `<datamodel>` that selects no node, so `In()` receives the empty string; `In()` takes the state ID as a string
+  = help: quote the state ID: `In('b')`
+  = spec: SCXML 1.0 §5.9.1 Conditional Expressions
+help: quote the state ID `'b'`
+  |
+8 |     <transition event="go" cond="In('b')" target="b"/>
+  |                                     ~~~
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML058`.
+validated tests/ui/scxml058-xpath-in-unquoted-state-id.scxml

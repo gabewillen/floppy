@@ -1,0 +1,8 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" initial="a">
+  <datamodel><data id="name" expr="'Ada'"/></datamodel>
+  <final id="a">
+    <onentry>
+      <log expr="concat('Hello, ' $name)"/>
+    </onentry>
+  </final>
+</scxml>

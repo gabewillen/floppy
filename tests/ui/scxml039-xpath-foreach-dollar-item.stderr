@@ -1,0 +1,35 @@
+warning[SCXML039]: `<foreach item>` names the variable `it`, which is written without `$`
+ --> tests/ui/scxml039-xpath-foreach-dollar-item.scxml:5:38
+  |
+5 |       <foreach array="$list/a" item="$it" index="$i">
+  |                                      ^ `$` is not part of the name
+  |                                      --- in this `item`
+  |
+  = note: `<foreach>` binds each item (and its position) to the variable named by `item`, declaring it when needed, and expressions then read it as `$it`; `item="$it"` is instead a location that assigns to an existing variable `$it`, and none is declared, so the loop raises `error.execution`
+  = help: write the variable name without `$`: `item="it"`
+  = spec: SCXML 1.0 §4.6 <foreach>
+  = spec: SCXML CR 2014 §C.3.10 <foreach>
+help: remove the `$`
+  |
+5 -       <foreach array="$list/a" item="$it" index="$i">
+5 +       <foreach array="$list/a" item="it" index="$i">
+
+warning[SCXML039]: `<foreach index>` names the variable `i`, which is written without `$`
+ --> tests/ui/scxml039-xpath-foreach-dollar-item.scxml:5:50
+  |
+5 |       <foreach array="$list/a" item="$it" index="$i">
+  |                                                  ^ `$` is not part of the name
+  |                                                  -- in this `index`
+  |
+  = note: `<foreach>` binds each item (and its position) to the variable named by `index`, declaring it when needed, and expressions then read it as `$i`; `index="$i"` is instead a location that assigns to an existing variable `$i`, and none is declared, so the loop raises `error.execution`
+  = help: write the variable name without `$`: `index="i"`
+  = spec: SCXML 1.0 §4.6 <foreach>
+  = spec: SCXML CR 2014 §C.3.10 <foreach>
+help: remove the `$`
+  |
+5 -       <foreach array="$list/a" item="$it" index="$i">
+5 +       <foreach array="$list/a" item="$it" index="i">
+
+diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML039`.
+validated tests/ui/scxml039-xpath-foreach-dollar-item.scxml

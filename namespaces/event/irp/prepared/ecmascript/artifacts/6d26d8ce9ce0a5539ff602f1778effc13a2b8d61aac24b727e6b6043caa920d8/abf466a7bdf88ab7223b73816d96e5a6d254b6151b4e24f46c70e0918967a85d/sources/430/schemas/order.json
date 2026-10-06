@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Order": {
+      "type": "object",
+      "required": ["id", "items"],
+      "properties": {
+        "id": {"type": "string"},
+        "items": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Item"}}
+      }
+    },
+    "Item": {
+      "type": "object",
+      "required": ["sku", "quantity"],
+      "properties": {
+        "sku": {"type": "string"},
+        "quantity": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

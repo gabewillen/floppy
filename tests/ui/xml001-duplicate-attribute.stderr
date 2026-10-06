@@ -1,0 +1,18 @@
+error[XML001]: duplicate attribute `target`
+ --> tests/ui/xml001-duplicate-attribute.scxml:2:51
+  |
+2 |   <state id="a"><transition event="go" target="f" target="a"/></state><final id="f"/>
+  |                                        ------     ^^^^^^^^^^ `target` is repeated here
+  |                                        |
+  |                                        `target` is first specified here
+  |
+  = note: each attribute may appear at most once in a start tag; a parser cannot choose between two values
+  = help: keep one `target` attribute; a transition to several states lists their IDs in one value, separated by spaces (`target="a b"`)
+  = spec: XML 1.0 (Fifth Edition) §3.1 Start-Tags (WFC: Unique Att Spec)
+help: remove the repeated `target` attribute
+  |
+2 -   <state id="a"><transition event="go" target="f" target="a"/></state><final id="f"/>
+2 +   <state id="a"><transition event="go" target="f"/></state><final id="f"/>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

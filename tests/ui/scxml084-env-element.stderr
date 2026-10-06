@@ -1,0 +1,12 @@
+error[SCXML084]: `<env:get>` is an element in the `env` namespace, which has none
+ --> tests/ui/scxml084-env-element.scxml:9:8
+  |
+9 |       <env:get name="API_TOKEN" location="key"/>
+  |        ^^^^^^^ not an executable-content extension
+  |
+  = note: `https://github.com/stateforward/scxml.rs/namespaces/env` is an attribute vocabulary only: an extension element's `env:<slot>="NAME"` attribute names the variable whose value the host binds to that slot
+  = help: remove the element, and put an `env:<slot>` attribute on the extension element that needs the value
+  = spec: SCXML 1.0 §4.10 Extensibility of Executable Content
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML084`.

@@ -1,0 +1,436 @@
+{
+  "data-model-calls": [
+    {
+      "configuration": [
+        "work"
+      ],
+      "event": null,
+      "expression": "'work'",
+      "op": "evaluate-log",
+      "result": {
+        "ok": "work"
+      }
+    },
+    {
+      "configuration": [
+        "work",
+        "busy"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "external",
+        "invoke-id": null,
+        "name": "begin",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "'busy:' + (In('idle') ? 'stale' : 'fresh')",
+      "op": "evaluate-log",
+      "result": {
+        "ok": "busy:fresh"
+      }
+    },
+    {
+      "configuration": [
+        "work",
+        "busy",
+        "left",
+        "l1",
+        "right",
+        "r1"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "external",
+        "invoke-id": null,
+        "name": "step",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "In('l1')",
+      "op": "evaluate-condition",
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "configuration": [
+        "work",
+        "busy",
+        "left",
+        "right",
+        "l2"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "external",
+        "invoke-id": null,
+        "name": "step",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "'l' + (1 + 1)",
+      "op": "evaluate-log",
+      "result": {
+        "ok": "l2"
+      }
+    },
+    {
+      "configuration": [
+        "work",
+        "busy",
+        "left",
+        "l2",
+        "right",
+        "r2"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "internal",
+        "invoke-id": null,
+        "name": "settled",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "In('l2') && In('r2')",
+      "op": "evaluate-condition",
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "configuration": [
+        "work",
+        "busy",
+        "left",
+        "l2",
+        "right",
+        "r2"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "internal",
+        "invoke-id": null,
+        "name": "settled",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "In('l2') && In('r2')",
+      "op": "evaluate-condition",
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "configuration": [
+        "work",
+        "busy",
+        "left",
+        "l2",
+        "right",
+        "r2"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "internal",
+        "invoke-id": null,
+        "name": "settled",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "'both regions advanced'",
+      "op": "evaluate-log",
+      "result": {
+        "ok": "both regions advanced"
+      }
+    },
+    {
+      "configuration": [
+        "paused"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "external",
+        "invoke-id": null,
+        "name": "pause",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "'history recorded'",
+      "op": "evaluate-log",
+      "result": {
+        "ok": "history recorded"
+      }
+    },
+    {
+      "configuration": [
+        "work"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "external",
+        "invoke-id": null,
+        "name": "resume",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "'work'",
+      "op": "evaluate-log",
+      "result": {
+        "ok": "work"
+      }
+    },
+    {
+      "configuration": [
+        "work",
+        "busy"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "external",
+        "invoke-id": null,
+        "name": "resume",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "'busy:' + (In('idle') ? 'stale' : 'fresh')",
+      "op": "evaluate-log",
+      "result": {
+        "ok": "busy:fresh"
+      }
+    },
+    {
+      "configuration": [
+        "work",
+        "busy",
+        "left",
+        "l2"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "external",
+        "invoke-id": null,
+        "name": "resume",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "'l' + (1 + 1)",
+      "op": "evaluate-log",
+      "result": {
+        "ok": "l2"
+      }
+    },
+    {
+      "configuration": [
+        "work",
+        "busy",
+        "left",
+        "l2",
+        "right",
+        "r2"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "internal",
+        "invoke-id": null,
+        "name": "settled",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "In('l2') && In('r2')",
+      "op": "evaluate-condition",
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "configuration": [
+        "work",
+        "busy",
+        "left",
+        "l2",
+        "right",
+        "r2"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "internal",
+        "invoke-id": null,
+        "name": "settled",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "In('l2') && In('r2')",
+      "op": "evaluate-condition",
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "configuration": [
+        "work",
+        "busy",
+        "left",
+        "l2",
+        "right",
+        "r2"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "internal",
+        "invoke-id": null,
+        "name": "settled",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "'both regions advanced'",
+      "op": "evaluate-log",
+      "result": {
+        "ok": "both regions advanced"
+      }
+    },
+    {
+      "configuration": [
+        "done"
+      ],
+      "event": {
+        "data": {
+          "tag": "absent"
+        },
+        "event-type": "external",
+        "invoke-id": null,
+        "name": "finish",
+        "origin": null,
+        "origin-type": null,
+        "send-id": null
+      },
+      "expression": "String(true)",
+      "op": "evaluate-log",
+      "result": {
+        "ok": "true"
+      }
+    }
+  ],
+  "events": [
+    "begin",
+    "step",
+    "pause",
+    "resume",
+    "unknown",
+    "finish"
+  ],
+  "ir-sha256": "0d54c619ca88cc9fe10cccec35f1d1d3cd112eac3e1975ed4a5d01d4979eb3b4",
+  "results": [
+    {
+      "configuration": [
+        "idle"
+      ],
+      "logs": [
+        "enter: work"
+      ],
+      "status": "running"
+    },
+    {
+      "configuration": [
+        "l1",
+        "r1"
+      ],
+      "logs": [
+        "enter: busy:fresh"
+      ],
+      "status": "running"
+    },
+    {
+      "configuration": [
+        "l2",
+        "r2"
+      ],
+      "logs": [
+        "left: l2",
+        "settled: both regions advanced"
+      ],
+      "status": "running"
+    },
+    {
+      "configuration": [
+        "paused"
+      ],
+      "logs": [
+        "paused: history recorded"
+      ],
+      "status": "running"
+    },
+    {
+      "configuration": [
+        "l2",
+        "r2"
+      ],
+      "logs": [
+        "enter: work",
+        "enter: busy:fresh",
+        "left: l2",
+        "settled: both regions advanced"
+      ],
+      "status": "running"
+    },
+    {
+      "configuration": [
+        "l2",
+        "r2"
+      ],
+      "logs": [],
+      "status": "running"
+    },
+    {
+      "configuration": [
+        "done"
+      ],
+      "logs": [
+        "done: true"
+      ],
+      "status": "finished"
+    }
+  ],
+  "schema": "stateforward.machine-trace/v1",
+  "session-id": "machine-session",
+  "source": "tests/fixtures/representative-machine.scxml"
+}

@@ -1,0 +1,22 @@
+[package]
+name = "scxml-script-example"
+description = "Example Wasm script component for SCXML <script src> (reads and assigns data-model locations)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wit-bindgen.workspace = true
+
+[lints]
+workspace = true

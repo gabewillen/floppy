@@ -1,0 +1,8 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" initial="a">
+  <datamodel><data id="retries" expr="3"/></datamodel>
+  <final id="a">
+    <onentry>
+      <assign location="$retries" expr="$retries-1"/>
+    </onentry>
+  </final>
+</scxml>

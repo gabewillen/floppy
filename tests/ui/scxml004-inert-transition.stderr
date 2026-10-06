@@ -1,0 +1,16 @@
+error[SCXML004]: transition must have at least one of `event`, `cond`, or `target`
+ --> tests/ui/scxml004-inert-transition.scxml:3:6
+  |
+3 |     <transition/>
+  |      ^^^^^^^^^^ transition has no trigger, guard, or target
+  |
+  = note: SCXML 1.0 §3.5.2: "A conformant SCXML document MUST specify at least one of 'event', 'cond' or 'target'." Executable content alone does not count: such a transition is enabled in every microstep and never changes the configuration, so the macrostep would never complete
+  = help: add the event that triggers it, a condition, or the target state
+  = spec: SCXML 1.0 §3.5 <transition>
+help: add the event that triggers the transition
+  |
+3 |     <transition event="…"/>
+  |                ++++++++++
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML004`.

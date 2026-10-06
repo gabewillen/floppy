@@ -1,0 +1,12 @@
+error[XSD-cvc-datatype-valid]: invalid value `not-an-integer` for attribute `value` on `<c:mark>`
+ --> tests/ui/xsd-custom-datatype.scxml:6:29
+  |
+6 |     <onentry><c:mark value="not-an-integer"/></onentry>
+  |                             ^^^^^^^^^^^^^^ Invalid int value 'not-an-integer': invalid digit found in string
+  |
+  = note: the schema registered for `urn:example:custom` rejects this under XML Schema constraint `cvc-datatype-valid`
+  = help: use a value in the datatype's lexical form
+  = spec: XML Schema 1.0 Part 2 §4.1.4 Datatype Valid (`cvc-datatype-valid`)
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XSD-cvc-datatype-valid`.

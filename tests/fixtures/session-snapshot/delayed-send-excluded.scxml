@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The delayed-send machine snapshotted with sections excluded and trace
+     carriers preserved. Checkpoints: 0 after start, 1 after "go", 2 at the
+     first drain iteration, 3 at the end. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="delayed-send-excluded" initial="idle">
+  <datamodel>
+    <data id="count" expr="0"/>
+  </datamodel>
+  <state id="idle">
+    <transition event="go" target="waiting">
+      <assign location="count" expr="count + 1"/>
+    </transition>
+  </state>
+  <state id="waiting">
+    <onentry>
+      <send id="tick" event="tick" delay="100ms"/>
+    </onentry>
+    <transition event="tick" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

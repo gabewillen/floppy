@@ -1,0 +1,19 @@
+warning[SCXML038]: xpath syntax error in `cond`: `not` is a function in XPath, not an operator
+ --> tests/ui/scxml038-xpath-not-without-parentheses.scxml:8:34
+  |
+8 |     <transition event="go" cond="not $done" target="b"/>
+  |                                  ^^^ syntax error
+  |                                  --------- while parsing this `cond`
+  |
+  = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+  = help: call it with parentheses, for example `not($done)`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML CR 2014 §C.3 The XPath Data Model
+help: call `not()` with parentheses
+  |
+8 |     <transition event="go" cond="not($done)" target="b"/>
+  |                                  ~~~~     +
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
+validated tests/ui/scxml038-xpath-not-without-parentheses.scxml

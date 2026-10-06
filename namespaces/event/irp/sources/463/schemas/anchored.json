@@ -1,0 +1,8 @@
+{
+  "$defs": {
+    "Anchored": {
+      "$anchor": "anchored",
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="a">
+  <state id="a">
+    <onentry>
+      <script>counter = 1</script>
+    </onentry>
+    <transition event="go" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

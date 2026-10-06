@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- openai-7: a result without a message raises error.execution. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env">
+<datamodel>
+  <data conf:id="1"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <openai:generate env:apikey="IRP_OPENAI_KEY" model="irp-no-message" prompt="r" conf:location="1"/>
+  </onentry>
+  <transition event="error.execution" target="s1"/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<state id="s1">
+  <onentry>
+    <openai:generate env:apikey="IRP_OPENAI_KEY" model="irp-echo-requests" prompt="count" conf:location="1"/>
+  </onentry>
+  <transition conf:idQuoteVal="1=1" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

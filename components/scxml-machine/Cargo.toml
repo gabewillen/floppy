@@ -1,0 +1,29 @@
+[package]
+name = "scxml-machine"
+description = "Generic SCXML machine guest: the engine plus Machine IR loaded through ir-source"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+scxml-compiler-core.workspace = true
+scxml-engine.workspace = true
+scxml-telemetry.workspace = true
+scxml-types.workspace = true
+wit-bindgen.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

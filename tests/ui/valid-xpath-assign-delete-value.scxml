@@ -1,0 +1,13 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" initial="a">
+  <datamodel>
+    <data id="cart"><items><item/><item/></items></data>
+  </datamodel>
+  <state id="a">
+    <onentry>
+      <assign location="$cart/items/item[1]" type="delete" expr="'ignored'"/>
+      <assign location="$cart/items/item" type="delete"><ignored/></assign>
+    </onentry>
+    <transition event="go" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

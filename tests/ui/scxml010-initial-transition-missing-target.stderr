@@ -1,0 +1,16 @@
+error[SCXML010]: initial transition requires a `target`
+ --> tests/ui/scxml010-initial-transition-missing-target.scxml:4:8
+  |
+4 |       <transition/>
+  |        ^^^^^^^^^^ missing target
+  |
+  = note: default entry is unconditional: SCXML 3.6.2 says the initial transition "MUST NOT contain 'cond' or 'event' attributes" and must name a target
+  = help: add a target state owned by the containing state
+  = spec: SCXML 1.0 §3.6 <initial>
+help: add the default `target`
+  |
+4 |       <transition target="…"/>
+  |                  +++++++++++
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML010`.

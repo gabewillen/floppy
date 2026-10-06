@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- event-8: schemaexpr on each element is never evaluated. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" initial="s0" version="1.0" datamodel="xpath">
+<state id="s0" initial="s01">
+  <onentry>
+    <raise event="raised" event:schemaexpr="irpfn()"/>
+    <send event="sent" event:schemaexpr="irpfn()"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition event="raised" target="s1" event:schemaexpr="irpfn()"/>
+  <transition event="*" target="fail"/>
+  <state id="s01"/>
+</state>
+<state id="s1">
+  <transition event="error.execution" target="fail"/>
+  <transition event="sent" target="s2" event:schemaexpr="irpfn()"/>
+  <transition event="*" target="fail"/>
+</state>
+<state id="s2" initial="s21">
+  <state id="s21">
+    <transition target="s2final"/>
+  </state>
+  <final id="s2final">
+    <donedata event:schemaexpr="irpfn()"/>
+  </final>
+  <transition event="error.execution" target="fail"/>
+  <transition event="done.state.s2" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

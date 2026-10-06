@@ -1,0 +1,16 @@
+error[XML004]: invalid character reference `&#7;`
+ --> tests/ui/xml004-invalid-character-reference.scxml:3:30
+  |
+3 |     <onentry><log label="bell&#7;"/></onentry>
+  |                              ^^^^ code point is outside the XML Char range
+  |
+  = note: XML 1.0 `Char` excludes NUL, C0 controls other than tab, newline, and carriage return, the surrogates U+D800–U+DFFF, and U+FFFE/U+FFFF
+  = help: use `&#NNNN;` (decimal) or `&#xHHHH;` (lowercase `x`, hexadecimal) naming a legal XML character, or remove the reference
+  = spec: XML 1.0 (Fifth Edition) §4.1 Character and Entity References
+help: remove the invalid character reference
+  |
+3 -     <onentry><log label="bell&#7;"/></onentry>
+3 +     <onentry><log label="bell"/></onentry>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML004`.

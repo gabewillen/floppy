@@ -1,0 +1,73 @@
+warning[SCXML066]: `cond` on `<if>` is empty
+ --> tests/ui/scxml066-empty-required-attributes.scxml:5:11
+  |
+5 |       <if cond="">
+  |           ^^^^^^^ `cond` must name the condition of this branch
+  |
+  = note: `cond` is required on `<if>`; an empty value is no expression at all, so every time it runs it raises `error.execution` (SCXML 1.0 §5.9.4: the processor "MAY wait and place 'error.execution' in the internal event queue at runtime when the expressions are evaluated")
+  = help: write the condition this `<if>` tests; a last branch that always runs is written as `<else/>`
+  = spec: SCXML 1.0 §3.12 <if>
+help: fill in `cond`
+  |
+5 |       <if cond="…">
+  |                 +
+
+warning[SCXML066]: `cond` on `<elseif>` is empty
+ --> tests/ui/scxml066-empty-required-attributes.scxml:7:15
+  |
+7 |       <elseif cond=""/>
+  |               ^^^^^^^ `cond` must name the condition of this branch
+  |
+  = note: `cond` is required on `<elseif>`; an empty value is no expression at all, so every time it runs it raises `error.execution` (SCXML 1.0 §5.9.4: the processor "MAY wait and place 'error.execution' in the internal event queue at runtime when the expressions are evaluated")
+  = help: write the condition this `<elseif>` tests; a last branch that always runs is written as `<else/>`
+  = spec: SCXML 1.0 §3.12 <if>
+help: fill in `cond`
+  |
+7 |       <elseif cond="…"/>
+  |                     +
+
+warning[SCXML066]: `array` on `<foreach>` is empty
+  --> tests/ui/scxml066-empty-required-attributes.scxml:10:16
+   |
+10 |       <foreach array="" item="">
+   |                ^^^^^^^^ `array` must name the collection to iterate
+   |
+   = note: `array` is required on `<foreach>`; an empty value is no expression at all, so every time it runs it raises `error.execution` (SCXML 1.0 §5.9.4: the processor "MAY wait and place 'error.execution' in the internal event queue at runtime when the expressions are evaluated")
+   = help: write the collection to iterate in `array`
+   = spec: SCXML 1.0 §4.6 <foreach>
+help: fill in `array`
+   |
+10 |       <foreach array="…" item="">
+   |                       +
+
+warning[SCXML066]: `item` on `<foreach>` is empty
+  --> tests/ui/scxml066-empty-required-attributes.scxml:10:25
+   |
+10 |       <foreach array="" item="">
+   |                         ^^^^^^^ `item` must name the loop variable
+   |
+   = note: `item` is required on `<foreach>`; an empty value is no expression at all, so every time it runs it raises `error.execution` (SCXML 1.0 §5.9.4: the processor "MAY wait and place 'error.execution' in the internal event queue at runtime when the expressions are evaluated")
+   = help: write the loop variable in `item`
+   = spec: SCXML 1.0 §4.6 <foreach>
+help: fill in `item`
+   |
+10 |       <foreach array="" item="…">
+   |                               +
+
+warning[SCXML066]: `location` on `<assign>` is empty
+  --> tests/ui/scxml066-empty-required-attributes.scxml:13:15
+   |
+13 |       <assign location="" expr="1"/>
+   |               ^^^^^^^^^^^ `location` must name the location to assign
+   |
+   = note: `location` is required on `<assign>`; an empty value is no expression at all, so every time it runs it raises `error.execution` (SCXML 1.0 §5.9.4: the processor "MAY wait and place 'error.execution' in the internal event queue at runtime when the expressions are evaluated")
+   = help: write the location to assign in `location`
+   = spec: SCXML 1.0 §5.4 <assign>
+help: fill in `location`
+   |
+13 |       <assign location="…" expr="1"/>
+   |                         +
+
+diagnostic summary: 0 error(s), 5 warning(s), 0 note(s), 5 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML066`.
+validated tests/ui/scxml066-empty-required-attributes.scxml

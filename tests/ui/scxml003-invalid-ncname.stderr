@@ -1,0 +1,45 @@
+error[SCXML006]: initial state `waiting` does not exist
+ --> tests/ui/scxml003-invalid-ncname.scxml:1:71
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="waiting room">
+  |                                                                       ^^^^^^^ one piece of the reference `waiting room`
+2 |   <state id="waiting room">
+  |              ------------ declared here as a single ID containing whitespace
+  |
+  = note: ID references are whitespace-separated lists, so `waiting room` is read as separate IDs; the root cause is the invalid ID declaration (SCXML003)
+  = help: rename the declaration to a valid NCName and update this reference; the SCXML003 suggestion does both
+  = spec: SCXML 1.0 §3.14 IDs
+
+error[SCXML006]: initial state `room` does not exist
+ --> tests/ui/scxml003-invalid-ncname.scxml:1:79
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="waiting room">
+  |                                                                               ^^^^ one piece of the reference `waiting room`
+2 |   <state id="waiting room">
+  |              ------------ declared here as a single ID containing whitespace
+  |
+  = note: ID references are whitespace-separated lists, so `waiting room` is read as separate IDs; the root cause is the invalid ID declaration (SCXML003)
+  = help: rename the declaration to a valid NCName and update this reference; the SCXML003 suggestion does both
+  = spec: SCXML 1.0 §3.14 IDs
+
+error[SCXML003]: identifier `waiting room` is not an XML NCName
+ --> tests/ui/scxml003-invalid-ncname.scxml:2:14
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="waiting room">
+  |                                                                       ------------ referenced here
+2 |   <state id="waiting room">
+  |              ^^^^^^^^^^^^ invalid NCName
+  |
+  = note: SCXML IDs are XML IDs: they must start with a letter or `_` and contain only NCName characters (no spaces or colons), so references can be tokenized unambiguously. An `id` is `xsd:ID`, whose white space collapses (XML Schema 1.1 Part 2 §4.3.6), so leading and trailing white space is not part of it: `id=" s "` declares `s`
+  = help: start with a letter or underscore and use only NCName characters; colons are not allowed
+  = spec: SCXML 1.0 §3.14 IDs
+help: rename to the valid NCName `waiting_room` and update its reference
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="waiting_room">
+  |                                                                       ~~~~~~~~~~~~
+2 |   <state id="waiting_room">
+  |              ~~~~~~~~~~~~
+
+diagnostic summary: 3 error(s), 0 warning(s), 0 note(s), 3 total
+Some diagnostics have detailed explanations: SCXML003, SCXML006.
+For more information about a diagnostic, try `scxml-cli --explain SCXML003`.

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Representative Wasm script machine (SCXML 1.0 section 5.8
+  `<script src>`). `example.wasm` is the `scxml-script-example` component:
+  each run reads the data-model location `input` and assigns twice its value
+  to `doubled` through `data-model-host`, which the host links to this
+  session's ECMAScript data model. The Wasmtime host tests run it with the
+  script pinned at compile time (lowered IR and packaged component-wasm with
+  a bundled script) and resolved at run time through the host's
+  script-loader, and compare the logged trace in every mode.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="run" name="scripted">
+  <script>var input = 21; var doubled = 0;</script>
+  <state id="run">
+    <onentry>
+      <script src="example.wasm"/>
+      <log label="doubled" expr="String(doubled)"/>
+    </onentry>
+    <transition event="bump">
+      <script>input = doubled;</script>
+      <script src="example.wasm"/>
+      <log label="doubled" expr="String(doubled)"/>
+    </transition>
+    <transition event="bad">
+      <script>input = 'not a number';</script>
+      <script src="example.wasm"/>
+      <log label="unreachable" expr="'after failed script'"/>
+    </transition>
+    <transition event="error.execution">
+      <log label="error" expr="_event.name"/>
+    </transition>
+    <transition event="finish" target="done"/>
+  </state>
+  <final id="done">
+    <onentry><log label="final" expr="String(doubled)"/></onentry>
+  </final>
+</scxml>

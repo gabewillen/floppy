@@ -1,0 +1,1051 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:stateforward:scxml:session-snapshot:v2",
+  "title": "scxml.session-snapshot/v2",
+  "description": "Read-only SCXML session snapshot document. The decoder is authoritative: key order, canonical encoding, the sha256 digest, byte bounds, and cross-field consistency are not expressible here.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": "scxml.session-snapshot/v2"
+    },
+    "sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "options": {
+      "$ref": "#/$defs/options"
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/componentIdentity"
+          },
+          "maxItems": 6,
+          "uniqueItems": true
+        },
+        "clock": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "now_ms": {
+              "$ref": "#/$defs/uint"
+            }
+          },
+          "required": [
+            "now_ms"
+          ]
+        },
+        "root": {
+          "$ref": "#/$defs/session"
+        }
+      },
+      "required": [
+        "components",
+        "clock",
+        "root"
+      ]
+    }
+  },
+  "required": [
+    "version",
+    "sha256",
+    "options",
+    "snapshot"
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "uint": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "u32": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "number": {
+      "type": "string",
+      "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "valueText": {
+      "type": "string",
+      "maxLength": 65536
+    },
+    "section": {
+      "enum": [
+        "system",
+        "data_model",
+        "queues",
+        "pending_sends",
+        "transitions",
+        "previews",
+        "invocations"
+      ]
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exclude": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/section"
+          },
+          "uniqueItems": true
+        },
+        "trace_context": {
+          "enum": [
+            "strip",
+            "preserve"
+          ]
+        },
+        "point": {
+          "enum": [
+            "executable-content"
+          ]
+        }
+      },
+      "required": [
+        "exclude",
+        "trace_context"
+      ]
+    },
+    "componentIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": [
+            "clock",
+            "data-model-ecmascript",
+            "data-model-null",
+            "data-model-xpath",
+            "io-processor-scxml",
+            "machine"
+          ]
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "role",
+        "sha256"
+      ]
+    },
+    "value": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "absent"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "undefined"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "null"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "boolean"
+            },
+            "value": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "number"
+            },
+            "value": {
+              "$ref": "#/$defs/number"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "text"
+            },
+            "value": {
+              "$ref": "#/$defs/valueText"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "json-array"
+            },
+            "value": {
+              "$ref": "#/$defs/valueText"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "json-object"
+            },
+            "value": {
+              "$ref": "#/$defs/valueText"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "xml"
+            },
+            "value": {
+              "$ref": "#/$defs/valueText"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        }
+      ]
+    },
+    "variableValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/value"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "text"
+            },
+            "typeof": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 65536
+            }
+          },
+          "required": [
+            "type",
+            "typeof",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "oversized"
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 65537,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "type",
+            "bytes"
+          ]
+        }
+      ]
+    },
+    "traceContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "traceparent": {
+          "type": "string",
+          "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+        },
+        "tracestate": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "baggage": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "baggage_policy": {
+          "enum": [
+            "drop",
+            "propagate"
+          ]
+        }
+      },
+      "required": [
+        "traceparent",
+        "baggage_policy"
+      ]
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "type": {
+          "enum": [
+            "internal",
+            "external",
+            "platform"
+          ]
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 16384
+        },
+        "origintype": {
+          "type": "string",
+          "maxLength": 16384
+        },
+        "sendid": {
+          "type": "string",
+          "maxLength": 16384
+        },
+        "invokeid": {
+          "type": "string",
+          "maxLength": 16384
+        },
+        "data": {
+          "$ref": "#/$defs/value"
+        },
+        "raw": {
+          "type": "string",
+          "maxLength": 65536
+        },
+        "trace_context": {
+          "$ref": "#/$defs/traceContext"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "data"
+      ]
+    },
+    "queues": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "internal": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event"
+          },
+          "maxItems": 10000
+        },
+        "external": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event"
+          },
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "internal",
+        "external"
+      ]
+    },
+    "pendingSend": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sendid": {
+          "$ref": "#/$defs/id"
+        },
+        "event": {
+          "$ref": "#/$defs/event"
+        },
+        "basichttp": {
+          "$ref": "#/$defs/basichttpMessage"
+        },
+        "target": {
+          "type": "string",
+          "maxLength": 16384
+        },
+        "type": {
+          "type": "string",
+          "maxLength": 16384
+        },
+        "delay_ms": {
+          "$ref": "#/$defs/uint"
+        },
+        "deadline_ms": {
+          "$ref": "#/$defs/uint"
+        }
+      },
+      "required": [
+        "sendid",
+        "delay_ms",
+        "deadline_ms"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "event"
+          ]
+        },
+        {
+          "required": [
+            "basichttp"
+          ]
+        }
+      ]
+    },
+    "basichttpMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "params": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "value": {
+                "$ref": "#/$defs/value"
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ]
+          }
+        },
+        "content": {
+          "$ref": "#/$defs/value"
+        },
+        "trace_context": {
+          "$ref": "#/$defs/traceContext"
+        }
+      },
+      "required": [
+        "params"
+      ]
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/name"
+        },
+        "index": {
+          "$ref": "#/$defs/u32"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "minItems": 1,
+          "maxItems": 10000
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          },
+          "maxItems": 10000
+        },
+        "type": {
+          "enum": [
+            "external",
+            "internal"
+          ]
+        },
+        "cond": {
+          "type": "string",
+          "maxLength": 16384
+        },
+        "has_cond": {
+          "type": "boolean"
+        },
+        "domain": {
+          "$ref": "#/$defs/name"
+        },
+        "exit": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          },
+          "maxItems": 10000
+        },
+        "entry": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          },
+          "maxItems": 10000
+        },
+        "event_schema": {
+          "$ref": "#/$defs/eventSchema"
+        }
+      },
+      "required": [
+        "source",
+        "index",
+        "events",
+        "targets",
+        "type",
+        "has_cond"
+      ]
+    },
+    "eventSchema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "schema"
+            },
+            "schema": {
+              "type": "string",
+              "maxLength": 1048576
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "kind",
+            "schema",
+            "sha256"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "schemaexpr"
+            },
+            "expr": {
+              "type": "string",
+              "maxLength": 1048576
+            }
+          },
+          "required": [
+            "kind",
+            "expr"
+          ]
+        }
+      ]
+    },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/transition"
+      },
+      "maxItems": 10000
+    },
+    "historyValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/name"
+        },
+        "value": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          },
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "state",
+        "value"
+      ]
+    },
+    "variable": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "value": {
+          "$ref": "#/$defs/variableValue"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ]
+    },
+    "system": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sessionid": {
+          "$ref": "#/$defs/name"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "ioprocessors": {
+          "$ref": "#/$defs/value"
+        }
+      },
+      "required": [
+        "sessionid",
+        "ioprocessors"
+      ]
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "$ref": "#/$defs/name"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "datamodel_name": {
+          "enum": [
+            "ecmascript",
+            "xpath",
+            "null"
+          ]
+        },
+        "ir": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "$ref": "#/$defs/u32"
+            },
+            "sha256": {
+              "$ref": "#/$defs/digest"
+            }
+          },
+          "required": [
+            "version",
+            "sha256"
+          ]
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "running",
+            "finished"
+          ]
+        },
+        "invoked_by": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "parent_session_id": {
+              "$ref": "#/$defs/name"
+            },
+            "invoke_id": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "required": [
+            "parent_session_id",
+            "invoke_id"
+          ]
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "atomic": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/name"
+              },
+              "maxItems": 10000
+            },
+            "full": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/name"
+              },
+              "maxItems": 10000
+            }
+          },
+          "required": [
+            "atomic",
+            "full"
+          ]
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/historyValue"
+          },
+          "maxItems": 10000
+        },
+        "bound_states": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          },
+          "uniqueItems": true,
+          "maxItems": 10000
+        },
+        "counters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "send": {
+              "$ref": "#/$defs/uint"
+            },
+            "invoke": {
+              "$ref": "#/$defs/uint"
+            }
+          },
+          "required": [
+            "send",
+            "invoke"
+          ]
+        },
+        "system": {
+          "$ref": "#/$defs/system"
+        },
+        "data_model": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/variable"
+          },
+          "maxItems": 256
+        },
+        "queues": {
+          "$ref": "#/$defs/queues"
+        },
+        "pending_sends": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pendingSend"
+          },
+          "maxItems": 1024
+        },
+        "transitions": {
+          "$ref": "#/$defs/transitions"
+        },
+        "invocations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/invocation"
+          },
+          "maxItems": 255
+        }
+      },
+      "required": [
+        "session_id",
+        "ir",
+        "status",
+        "configuration",
+        "history",
+        "bound_states",
+        "counters"
+      ]
+    },
+    "invokedSession": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "$ref": "#/$defs/name"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "datamodel_name": {
+          "enum": [
+            "ecmascript",
+            "xpath",
+            "null"
+          ]
+        },
+        "ir": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "$ref": "#/$defs/u32"
+            },
+            "sha256": {
+              "$ref": "#/$defs/digest"
+            }
+          },
+          "required": [
+            "version",
+            "sha256"
+          ]
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "running",
+            "finished"
+          ]
+        },
+        "invoked_by": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "parent_session_id": {
+              "$ref": "#/$defs/name"
+            },
+            "invoke_id": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "required": [
+            "parent_session_id",
+            "invoke_id"
+          ]
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "atomic": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/name"
+              },
+              "maxItems": 10000
+            },
+            "full": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/name"
+              },
+              "maxItems": 10000
+            }
+          },
+          "required": [
+            "atomic",
+            "full"
+          ]
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/historyValue"
+          },
+          "maxItems": 10000
+        },
+        "bound_states": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          },
+          "uniqueItems": true,
+          "maxItems": 10000
+        },
+        "counters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "send": {
+              "$ref": "#/$defs/uint"
+            },
+            "invoke": {
+              "$ref": "#/$defs/uint"
+            }
+          },
+          "required": [
+            "send",
+            "invoke"
+          ]
+        },
+        "system": {
+          "$ref": "#/$defs/system"
+        },
+        "data_model": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/variable"
+          },
+          "maxItems": 256
+        },
+        "queues": {
+          "$ref": "#/$defs/queues"
+        },
+        "pending_sends": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pendingSend"
+          },
+          "maxItems": 1024
+        },
+        "transitions": {
+          "$ref": "#/$defs/transitions"
+        },
+        "invocations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/invocation"
+          },
+          "maxItems": 255
+        }
+      },
+      "required": [
+        "session_id",
+        "name",
+        "ir",
+        "status",
+        "configuration",
+        "history",
+        "bound_states",
+        "counters",
+        "invoked_by"
+      ]
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "invoke_id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "state": {
+          "$ref": "#/$defs/name"
+        },
+        "index": {
+          "$ref": "#/$defs/u32"
+        },
+        "autoforward": {
+          "type": "boolean"
+        },
+        "finished": {
+          "type": "boolean"
+        },
+        "session": {
+          "$ref": "#/$defs/invokedSession"
+        }
+      },
+      "required": [
+        "invoke_id",
+        "type",
+        "state",
+        "index",
+        "autoforward",
+        "finished",
+        "session"
+      ]
+    }
+  }
+}

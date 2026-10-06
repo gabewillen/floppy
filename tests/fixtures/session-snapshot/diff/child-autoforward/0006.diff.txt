@@ -1,0 +1,17 @@
+snapshot diff: 0005.snapshot.json → 0006.snapshot.json
+
+session root
+  --> status: unchanged
+   = invocations:
+       ~ kid: http://www.w3.org/TR/scxml/ at s[0] autoforward -> http://www.w3.org/TR/scxml/ at s[0] autoforward finished
+
+session root/kid
+  --> status: running -> finished
+   = configuration:
+       - c
+       + fin
+   = queues:
+       - external: 1 consumed
+   = transitions:
+       - c[0]
+       - c[1]

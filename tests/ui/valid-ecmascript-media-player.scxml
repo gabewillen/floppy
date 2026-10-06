@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="boot" name="player">
+  <datamodel>
+    <data id="volume" expr="50"/>
+    <data id="playlist" expr="[]"/>
+    <data id="cursor" expr="0"/>
+    <data id="cfg" src="data:application/json,%7B%22autoplay%22%3Atrue%7D"/>
+    <data id="stats">{ "plays": 0, "errors": [] }</data>
+  </datamodel>
+  <script><![CDATA[
+    function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+    var seen = new Set();
+  ]]></script>
+  <state id="boot">
+    <invoke id="loader" type="http://www.w3.org/TR/scxml/" autoforward="false">
+      <param name="n" expr="3"/>
+      <content>
+        <scxml version="1.0" datamodel="ecmascript" initial="load">
+          <datamodel><data id="n"/></datamodel>
+          <state id="load">
+            <onentry><send target="#_parent" event="loaded"><param name="items" expr="Array.from({length: n}, (_, i) =&gt; 'track' + i)"/></send></onentry>
+            <transition target="end"/>
+          </state>
+          <final id="end"/>
+        </scxml>
+      </content>
+      <finalize><assign location="playlist" expr="_event.data.items"/></finalize>
+    </invoke>
+    <transition event="loaded" target="active"/>
+    <transition event="error.*" target="broken"/>
+  </state>
+  <parallel id="active">
+    <state id="transport" initial="stopped">
+      <state id="stopped">
+        <transition event="play" cond="playlist.length &gt; 0 &amp;&amp; cursor &lt; playlist.length" target="playing"/>
+      </state>
+      <state id="playing">
+        <onentry><script>stats.plays++; seen.add(playlist[cursor]);</script></onentry>
+        <transition event="pause" target="paused"/>
+        <transition event="stop" target="stopped"/>
+        <transition event="track.end" cond="cursor + 1 &lt; playlist.length" target="playing">
+          <assign location="cursor" expr="cursor + 1"/>
+        </transition>
+        <transition event="track.end" target="stopped"><assign location="cursor" expr="0"/></transition>
+      </state>
+      <state id="paused">
+        <transition event="play" target="playing"/>
+        <transition event="stop" target="stopped"/>
+      </state>
+    </state>
+    <state id="audio" initial="normal">
+      <state id="normal">
+        <transition event="volume.set" type="internal">
+          <assign location="volume" expr="clamp(Number(_event.data), 0, 100)"/>
+          <if cond="volume === 0"><raise event="mute"/></if>
+        </transition>
+        <transition event="mute" target="muted"/>
+      </state>
+      <state id="muted">
+        <transition event="unmute volume.set" target="normal"/>
+      </state>
+    </state>
+    <transition event="shutdown" target="off"/>
+  </parallel>
+  <state id="broken">
+    <onentry><log label="error" expr="JSON.stringify(_event)"/></onentry>
+    <transition event="reset" target="boot"/>
+  </state>
+  <final id="off"/>
+</scxml>

@@ -1,0 +1,19 @@
+warning[SCXML038]: ecmascript syntax error in `cond`: `and` is not an ECMAScript operator
+ --> tests/ui/scxml038-word-operator.scxml:2:70
+  |
+2 |   <state id="a"><transition event="go" cond="_event.data.ok === true and x" target="f"/></state><final id="f"/>
+  |                                              ----------------------------- while parsing this `cond`
+  |                                                                      ^^^ syntax error
+  |
+  = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+  = help: write `&&` (escaped as `&amp;&amp;` inside an XML attribute)
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: use `&&`
+  |
+2 |   <state id="a"><transition event="go" cond="_event.data.ok === true &amp;&amp; x" target="f"/></state><final id="f"/>
+  |                                                                      ~~~~~~~~~~
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
+validated tests/ui/scxml038-word-operator.scxml

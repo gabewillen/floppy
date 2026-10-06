@@ -1,0 +1,16 @@
+error[XML001]: `--` inside a comment
+ --> tests/ui/xml001-comment-double-hyphen.scxml:2:12
+  |
+2 |   <!-- bad -- comment -->
+  |            ^^ `--` is not allowed inside a comment
+  |
+  = note: XML reserves `--` inside comments (for SGML compatibility), so a comment cannot contain it or end with `--->`
+  = help: use a single `-` inside comments, and leave a space before the closing `-->`
+  = spec: XML 1.0 (Fifth Edition) §2.5 Comments
+help: collapse repeated hyphens in the comment
+  |
+2 |   <!-- bad - comment -->
+  |       ~~~~~~~~~~~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

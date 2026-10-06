@@ -1,0 +1,10 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
+  <datamodel>
+    <data id="价格" expr="1"/>
+    <data id="é" expr="2"/>
+  </datamodel>
+  <state id="s">
+    <transition event="e" cond="价格 &gt; 0 &amp;&amp; é &gt; 1" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

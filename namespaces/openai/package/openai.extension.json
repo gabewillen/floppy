@@ -1,0 +1,12 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0",
+  "package-version": "0.2.0",
+  "extension-artifact": "scxml_extension_openai.virtualized.wasm",
+  "schema-artifact": "openai.xsd",
+  "schema-sha256": "8117595b5835a700ac025ecde686d6384c9de0d0de01ed44319c3e61e311dd06",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0",
+  "http-origins": ["https://api.openai.com"],
+  "env-slots": ["apikey", "baseurl"]
+}

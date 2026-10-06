@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A delayed BasicHTTP send (SCXML C.2) held on the session clock until its
+     delay elapses (SCXML 6.2), next to a delayed SCXML send. Checkpoints:
+     0 after start (both sends pending: the BasicHTTP one with its message as
+     evaluated at the <send>, the SCXML one with its event), 1 at the first
+     drain iteration (Wasmtime-only), 2 after "tick" at 50ms with the POST
+     still pending (Wasmtime-only), 3 at the end: the POST at 100ms could not
+     be dispatched (no session answers its target), so error.communication
+     carrying the send id reached "failed". -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="delayed-basichttp" initial="waiting">
+  <datamodel>
+    <data id="n" expr="7"/>
+  </datamodel>
+  <state id="waiting">
+    <onentry>
+      <send id="post" type="http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor" target="http://127.0.0.1:9/in" event="notify" delay="100ms" namelist="n"/>
+      <send id="tick" event="tick" delay="50ms"/>
+    </onentry>
+    <transition event="tick" target="ticked"/>
+  </state>
+  <state id="ticked">
+    <transition event="error.communication" cond="_event.sendid === 'post'" target="failed"/>
+  </state>
+  <final id="failed"/>
+</scxml>

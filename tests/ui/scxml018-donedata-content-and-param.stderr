@@ -1,0 +1,20 @@
+error[SCXML018]: donedata cannot contain both `content` and `param` children
+ --> tests/ui/scxml018-donedata-content-and-param.scxml:4:8
+  |
+4 |       <content expr="1"/>
+  |        ^^^^^^^ mutually exclusive child
+5 |       <param name="p" expr="2"/>
+  |        ----- conflicting child
+  |
+  = note: done data is either one `<content>` value or a set of `<param>` name/value pairs
+  = help: return either one content value or parameter children: remove the `<content>` to return the parameters, or the `<param>` children to return the content
+  = spec: SCXML 1.0 §5.5 <donedata>
+help: remove the `<content>` element
+  |
+4 -       <content expr="1"/>
+help: remove the `<param>` element
+  |
+5 -       <param name="p" expr="2"/>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML018`.

@@ -1,0 +1,3 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:example:custom" xmlns:c="urn:example:custom" elementFormDefault="qualified">
+  <xs:element name="mark" type="c:missingType"/>
+</xs:schema>

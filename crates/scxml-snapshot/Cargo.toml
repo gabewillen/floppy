@@ -1,0 +1,27 @@
+[package]
+name = "scxml-snapshot"
+description = "Canonical read-only SCXML session snapshot document scxml.session-snapshot/v2: model, codec, diff, and JSON Schemas"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde_path_to_error.workspace = true
+sha2.workspace = true
+scxml-reporting.workspace = true
+scxml-types.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

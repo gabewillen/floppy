@@ -1,0 +1,16 @@
+error[SCXML068]: this compiler cannot lower `<x:note>` from namespace `urn:example:ext` inside `<state>`
+ --> tests/ui/scxml068-foreign-element.scxml:4:6
+  |
+3 |   <state id="a">
+  |    ----- this compiler lowers only SCXML children of `<state>`
+4 |     <x:note>reviewed</x:note>
+  |      ^^^^^^ element from another namespace
+  |
+  = note: this is a limit of this toolchain, not an SCXML rule: SCXML 1.0 allows elements from other namespaces in its content models (the W3C schema's `##other` wildcards), but the compiler lowers them only as executable content (custom actions in `<onentry>`, `<onexit>`, `<transition>`, `<finalize>`, `<if>`, or `<foreach>`) and rejects them anywhere else rather than drop them silently
+  = help: to compile the document with this toolchain, move the element into executable content, or remove it
+help: remove `<x:note>`
+  |
+4 -     <x:note>reviewed</x:note>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML068`.

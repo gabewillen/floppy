@@ -1,0 +1,186 @@
+/// SCXML validator component: the primary authoring interface. Produces
+/// bounded, deterministic `scxml.report/v3` diagnostics; never executes
+/// extension components.
+package stateforward:scxml-validator@0.2.0;
+
+/// Guest telemetry facade; closed labels only, never payloads.
+interface telemetry {
+  /// W3C trace carrier. It only parents telemetry spans and never alters
+  /// output; in requests, present fields count as request metadata.
+  record trace-context { traceparent: option<string>, tracestate: option<string> }
+  /// Closed module label.
+  enum module { validator }
+  /// Closed operation label.
+  enum operation { validate }
+  /// Closed span-event label.
+  enum signal-event { input-rejected, artifact-produced }
+  /// Closed failure-category label.
+  enum error-category { invalid-input, validation, report }
+  /// Opens one host-owned span under `parent` and returns its id plus the
+  /// child carrier. Id 0 means telemetry is unavailable; the guest continues
+  /// unchanged. Each id is ended exactly once.
+  start: func(module: module, operation: operation, parent: option<trace-context>) -> tuple<u64, option<trace-context>>;
+  /// Records one closed event on an open span; unknown ids are ignored.
+  event: func(span: u64, event: signal-event);
+  /// Closes a span, marking it failed with `error` when present.
+  end: func(span: u64, error: option<error-category>);
+}
+
+/// Request, result, and error types.
+interface types {
+  use telemetry.{trace-context};
+  /// Closed error schema version; unknown discriminants fail canonical ABI decoding.
+  enum error-version { v1 }
+  /// Bounded failure classification with no caller-controlled payload.
+  enum error-code {
+    /// The request violated a documented bound or uniqueness rule.
+    invalid-request,
+    /// The canonical report could not be encoded within its bounds.
+    canonical-report-failed,
+  }
+  /// Closed, payload-free failure.
+  record component-error { version: error-version, code: error-code }
+  /// XSD validation policy: `strict` rejects unknown or unschematized
+  /// extension namespaces, `lax` validates what has a schema, `off` skips XSD.
+  enum schema-policy { strict, lax, off }
+  /// One XSD bound to one exact namespace URI. When no resource binds the
+  /// SCXML namespace `http://www.w3.org/2005/07/scxml`, the validator applies
+  /// its bundled, unmodified official W3C SCXML 1.0 schema set.
+  record schema-resource { namespace-uri: string, system-id: string, bytes: list<u8> }
+  /// extension package manifest (exact URI, extension artifact,
+  /// schema artifact and lowercase hex SHA-256, WIT world and version).
+  record extension-package {
+    namespace-uri: string,
+    package-version: string,
+    extension-artifact: string,
+    schema-artifact: string,
+    schema-sha256: string,
+    wit-world: string,
+    wit-version: string,
+    /// The `env` slots its elements accept (`env:<slot>` attributes).
+    env-slots: list<string>,
+    /// The origins or URL prefixes its extension component's requests reach.
+    http-origins: list<string>,
+  }
+  /// Exact bytes of one JSON Schema file an `event:schema` attribute
+  /// references (the `event` attribute vocabulary,
+  /// `https://github.com/stateforward/scxml.rs/namespaces/event`). The
+  /// caller reads each file relative to the document; nothing is fetched.
+  record event-schema-resource {
+    /// The reference's resource part exactly as authored: the attribute
+    /// value before `#`, trimmed of XML white space (byte comparison).
+    uri: string,
+    /// The file's exact bytes.
+    bytes: list<u8>,
+  }
+  /// Request bounds (checked before any parsing; violations fail with
+  /// `invalid-request` and produce no report): `source` at most 16777216
+  /// bytes; at most 64 `schemas` and 64 `packages`; each schema's `bytes` at
+  /// most 4194304 bytes and all schemas at most 16777216 bytes together; every
+  /// metadata string (`source-name`, schema `namespace-uri` and `system-id`,
+  /// every package field, and present trace-context fields) non-empty and at
+  /// most 4096 bytes, and at most 1048576 metadata bytes together; the whole
+  /// request at most 33554432 bytes. Schema namespace URIs and package
+  /// namespace URIs must each be unique (exact byte comparison). `event-schemas` holds at most 64 resources and 16777216 bytes together
+  /// (each resource's `bytes` at most 4194304 bytes, its `uri` non-empty and
+  /// at most 16384 bytes, URIs unique by exact byte comparison); its bytes
+  /// are bounded separately and do not count toward the whole-request bound.
+  /// A reference with no resource is an `SCXML088` diagnostic in the report.
+  record validation-request {
+    source-name: string,
+    source: string,
+    policy: schema-policy,
+    schemas: list<schema-resource>,
+    packages: list<extension-package>,
+    event-schemas: list<event-schema-resource>,
+    trace-context: option<trace-context>,
+  }
+}
+
+/// Explicit parse-only expression syntax capability.
+///
+/// The validator asks `supported-data-model` once per request. `none` means no
+/// checker is linked: only data-model-neutral rules run and no expression is
+/// guessed at. Otherwise the validator sends each `cond`, value, location, and
+/// `<script>` fragment of documents whose `datamodel` attribute equals the
+/// returned name exactly (other recognized data models get the `SCXML045`
+/// note that their expressions were not checked). Composition: link an
+/// adapter over one data-model component's
+/// `stateforward:scxml/data-model-api.check-syntax` (the bundled ECMAScript
+/// and XPath components implement it; the Wasmtime host's
+/// `ComponentValidator` is that adapter, answering `none` for the null
+/// data model, which has no expression syntax), or a host stub that returns
+/// `none` to keep validation usable without a data model.
+interface expression-syntax {
+  /// Syntactic category of one fragment.
+  enum syntax-kind { condition, value, location, script }
+  /// One syntax problem. `start <= end` are UTF-8 byte offsets on character
+  /// boundaries into the checked source; `message` is at most 512 bytes.
+  record syntax-issue { start: u32, end: u32, message: string }
+  /// Why a fragment was declined. A checker declines only what its data
+  /// model also rejects at evaluation (`too-large`: over the byte bound;
+  /// `too-complex`: over a parser nesting or size bound, never reported as
+  /// a syntax issue), so validators report every decline as the `SCXML040`
+  /// error.
+  enum declined { too-large, too-complex, unavailable }
+  /// What one fragment passed to `check-effects` is in its document.
+  enum effect-role { condition, log, script, data, value, location }
+  /// One fragment; `name` is present exactly for `data` (its `id`).
+  record effect-fragment { role: effect-role, name: option<string>, source: string }
+  /// Whether the document loads any `<script src>`, whose source a
+  /// parse-only analysis cannot read: `absent` (every script is inline) or
+  /// `present`.
+  enum external-scripts { absent, present }
+  /// What a finding, or the effect it is caused by, does.
+  enum effect-kind {
+    assignment, update, deletion, mutating-call, random, function-call,
+    unknown-call, dynamic-code, implicit-call, unknown-write, dynamic-scope,
+    unseen-script, too-complex, system-variable-write,
+  }
+  /// A byte range of fragment `fragment` (`start <= end`, UTF-8 offsets on
+  /// character boundaries).
+  record effect-span { fragment: u32, start: u32, end: u32 }
+  /// Where a call's effect happens.
+  record effect-cause { kind: effect-kind, span: effect-span, subject: string, function: string }
+  /// One effect of a `condition` or `log` fragment, or a
+  /// `system-variable-write` of any fragment; `certain` false means
+  /// undecidable. Strings are at most 256 bytes.
+  record effect-finding {
+    certain: bool,
+    kind: effect-kind,
+    span: effect-span,
+    subject: string,
+    cause: option<effect-cause>,
+    operator: option<effect-span>,
+  }
+  /// Exact `datamodel` value this checker understands, or `none`.
+  supported-data-model: func() -> option<string>;
+  /// Parses one fragment without evaluating it. Returns an empty list when
+  /// the fragment is valid, otherwise at most 4 issues.
+  check-syntax: func(kind: syntax-kind, source: string) -> result<list<syntax-issue>, declined>;
+  /// Analyzes the side effects of one document's `cond` and `<log expr>`
+  /// fragments without evaluating anything (`data-model-api.check-effects`;
+  /// a data model whose expressions have no side effects returns an empty
+  /// list). At most 16384 fragments and 4194304 source bytes; at most 4
+  /// findings per fragment, sorted.
+  check-effects: func(fragments: list<effect-fragment>, scripts: external-scripts) -> result<list<effect-finding>, declined>;
+}
+
+/// Exported validator entry point.
+interface validator-api {
+  use types.{component-error, validation-request};
+  /// Consumes the request and returns owned canonical `scxml.report/v3`
+  /// bytes (kind `validator`). Invalid SCXML is not an error: it yields a
+  /// report whose diagnostics describe it. Byte-deterministic for identical
+  /// requests. Errors: `invalid-request` for a request outside the bounds on
+  /// `validation-request`; `canonical-report-failed` when the report cannot be
+  /// encoded. No partial output is returned on failure.
+  validate: func(request: validation-request) -> result<list<u8>, component-error>;
+}
+
+/// The validator component.
+world validator {
+  import telemetry;
+  import expression-syntax;
+  export validator-api;
+}

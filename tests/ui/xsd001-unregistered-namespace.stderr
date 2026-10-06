@@ -1,0 +1,15 @@
+error[XSD001]: cannot resolve an XML Schema for namespace `urn:example:acme`
+ --> tests/ui/xsd001-unregistered-namespace.scxml:2:20
+  |
+2 |        xmlns:acme="urn:example:acme"
+  |                    ^^^^^^^^^^^^^^^^ no schema is registered for it
+...
+5 |     <onentry><acme:beep volume="3"/></onentry>
+  |               --------- first use of this namespace
+  |
+  = note: schema lookup uses the exact namespace URI; the SCXML namespace uses the bundled W3C SCXML 1.0 schema by default, and every other namespace used under the strict policy needs an explicitly registered schema
+  = help: register a schema with `--schema urn:example:acme=PATH.xsd`, or validate with `--policy lax` to skip namespaces without a schema
+  = spec: SCXML 1.0 §4.10 Extensibility of Executable Content
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XSD001`.

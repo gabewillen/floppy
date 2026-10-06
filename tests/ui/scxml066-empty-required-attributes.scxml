@@ -1,0 +1,18 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="items" expr="[1, 2]"/><data id="total" expr="0"/></datamodel>
+  <state id="a">
+    <onentry>
+      <if cond="">
+        <log expr="'yes'"/>
+      <elseif cond=""/>
+        <log expr="'maybe'"/>
+      </if>
+      <foreach array="" item="">
+        <log expr="'each'"/>
+      </foreach>
+      <assign location="" expr="1"/>
+    </onentry>
+    <transition event="go" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

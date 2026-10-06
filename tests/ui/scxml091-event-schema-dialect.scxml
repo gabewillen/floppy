@@ -1,0 +1,9 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" initial="idle">
+  <state id="idle">
+    <transition event="order" target="done"
+                event:schema='{"$schema": "http://json-schema.org/draft-04/schema#", "type": "object"}'/>
+  </state>
+  <final id="done"/>
+</scxml>

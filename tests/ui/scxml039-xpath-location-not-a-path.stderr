@@ -1,0 +1,14 @@
+warning[SCXML039]: `location` is not an assignable xpath location: `3` selects no node, so nothing can be assigned to it
+ --> tests/ui/scxml039-xpath-location-not-a-path.scxml:8:47
+  |
+8 |     <transition event="inc"><assign location="3" expr="1"/></transition>
+  |                                               ^ not a location
+  |
+  = note: an XPath location must select existing nodes: a declared variable `$name` or a path below it such as `$name/child` or `$name/@attribute`; `a.b` is one variable name that contains a dot, and `a[0]` is a predicate, not an index
+  = help: write a `$`-rooted path to a declared `<data>` variable, such as `$count` or `$order/item/@qty`
+  = spec: SCXML 1.0 §5.9.2 Location Expressions
+  = spec: SCXML CR 2014 §C.3 The XPath Data Model
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML039`.
+validated tests/ui/scxml039-xpath-location-not-a-path.scxml

@@ -1,0 +1,11 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="p">
+  <state id="p">
+    <initial>
+      <transition event="boot" cond="true" target="c"/>
+    </initial>
+    <state id="c">
+      <transition event="go" target="d"/>
+    </state>
+    <final id="d"/>
+  </state>
+</scxml>

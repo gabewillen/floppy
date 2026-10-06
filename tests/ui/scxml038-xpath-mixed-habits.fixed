@@ -1,0 +1,14 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" initial="a">
+  <datamodel>
+    <data id="a1" expr="5"/>
+    <data id="count" expr="0"/>
+    <data id="done" expr="false()"/>
+  </datamodel>
+  <state id="a">
+    <transition event="range" cond="$a1 &gt; 1 and $a1 &lt; 9 or $a1 = 0" target="b"/>
+    <transition event="first" cond="$count = 1 and true()" target="b"/>
+    <transition event="loud" cond="$count = 1 and $a1 != 2" target="b"/>
+    <transition event="odd" cond="$a1 mod 2 = 1 and !$done" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

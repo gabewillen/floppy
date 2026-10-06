@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Two delayed sends with the same deadline (a tie broken by schedule
+     order), an ECMAScript variable changed by <assign>, and a run that
+     finishes when the second send is delivered. Checkpoints: 0 after start,
+     1 after "go", 2 at the first drain iteration (both sends still pending
+     at the tied deadline; Wasmtime-only, inside the drain), 3 at the end
+     (root finished at virtual time 100). -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="delayed-send" initial="idle">
+  <datamodel>
+    <data id="count" expr="0"/>
+    <data id="label" expr="'ready'"/>
+  </datamodel>
+  <state id="idle">
+    <transition event="go" target="waiting">
+      <assign location="count" expr="count + 1"/>
+    </transition>
+  </state>
+  <state id="waiting">
+    <onentry>
+      <send id="tick" event="tick" delay="100ms"/>
+      <send event="tock" delay="100ms"/>
+    </onentry>
+    <transition event="tick" target="ticked" cond="count &gt; 0"/>
+    <transition event="cancel.*" type="internal">
+      <cancel sendid="tick"/>
+    </transition>
+  </state>
+  <state id="ticked">
+    <transition event="tock" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

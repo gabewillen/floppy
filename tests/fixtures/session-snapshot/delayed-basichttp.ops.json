@@ -1,0 +1,1 @@
+{"options":{"exclude":[],"trace_context":"strip"},"ops":[{"op":"start"},{"op":"snapshot","checkpoint":0},{"op":"advance","ms":100},{"op":"snapshot","checkpoint":1,"hosts":"wasmtime"},{"op":"snapshot","checkpoint":2,"hosts":"wasmtime"},{"op":"snapshot","checkpoint":3}]}

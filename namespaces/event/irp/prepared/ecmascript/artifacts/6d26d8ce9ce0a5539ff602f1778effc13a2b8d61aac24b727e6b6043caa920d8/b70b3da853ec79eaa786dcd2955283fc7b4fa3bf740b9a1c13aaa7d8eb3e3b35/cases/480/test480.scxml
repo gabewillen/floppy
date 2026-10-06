@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- event-9: data a schema does not describe is delivered unchanged. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" initial="s0" version="1.0" datamodel="ecmascript">
+<state id="s0">
+  <onentry>
+    <send event="a" event:schema="{&#34;type&#34;: &#34;object&#34;, &#34;required&#34;: [&#34;count&#34;], &#34;additionalProperties&#34;: false}">
+      <param name="Var1" expr="1"/>
+    </send>
+  </onentry>
+  <transition event="a" cond="_event.data['Var1']==1" target="s1" event:schema="{&#34;type&#34;: &#34;object&#34;, &#34;required&#34;: [&#34;count&#34;], &#34;additionalProperties&#34;: false}"/>
+  <transition event="*" target="fail"/>
+</state>
+<state id="s1">
+  <onentry>
+    <raise event="b" event:schema="false"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition event="b" target="pass" event:schema="false"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

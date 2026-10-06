@@ -1,0 +1,16 @@
+error[SCXML001]: root element must be `scxml` in the W3C SCXML namespace
+ --> tests/ui/scxml001-missing-namespace.scxml:1:2
+  |
+1 | <scxml version="1.0" initial="a">
+  |  ^^^^^ `<scxml>` has no namespace
+  |
+  = note: SCXML processors identify documents by the exact expanded name {http://www.w3.org/2005/07/scxml}scxml; a missing, misspelled, or slash-terminated namespace is a different vocabulary
+  = help: declare the SCXML namespace: `<scxml xmlns="http://www.w3.org/2005/07/scxml">`
+  = spec: SCXML 1.0 §3.2 <scxml>
+help: declare the SCXML namespace
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+  |       ++++++++++++++++++++++++++++++++++++++++
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML001`.

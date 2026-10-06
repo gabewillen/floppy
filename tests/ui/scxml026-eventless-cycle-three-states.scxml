@@ -1,0 +1,5 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+  <state id="a"><transition target="b"/></state>
+  <state id="b"><transition target="c"/></state>
+  <state id="c"><transition target="a"/></state>
+</scxml>

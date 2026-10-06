@@ -1,0 +1,18 @@
+warning[SCXML039]: `<foreach item>` must be a variable name, but `1st` starts with a digit
+ --> tests/ui/scxml039-xpath-foreach-item-digit.scxml:4:49
+  |
+4 |     <onentry><foreach array="$items/item" item="1st"><assign location="$n" expr="$n + 1"/></foreach></onentry>
+  |                                                 ^^^ not a variable name
+  |
+  = note: `<foreach>` assigns each array element (`item`) and its position (`index`) to a variable with this name, creating it when it is not declared; the name must be a legal identifier of the `xpath` data model
+  = help: use an XPath variable name: an NCName that starts with a letter or `_`, without `$` (`<foreach>` binds the variable, and expressions then refer to it as `$name`)
+  = spec: SCXML 1.0 §4.6 <foreach>
+  = spec: SCXML CR 2014 §C.3 The XPath Data Model
+help: prefix the name with `_`: `_1st`
+  |
+4 |     <onentry><foreach array="$items/item" item="_1st"><assign location="$n" expr="$n + 1"/></foreach></onentry>
+  |                                                 ~~~~
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML039`.
+validated tests/ui/scxml039-xpath-foreach-item-digit.scxml

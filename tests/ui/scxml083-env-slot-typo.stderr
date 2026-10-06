@@ -1,0 +1,21 @@
+element `https://stateforward.org/scxml/example`
+  = version: package 0.2.0 from --extension-package components/scxml-extension-example/package/example.extension.json
+  = outbound HTTP: none
+  = env slots: tokn <- API_TOKEN
+  = WASI: none
+error[SCXML083]: `<example:fetch>` has no `env` slot `tokn`
+  --> tests/ui/scxml083-env-slot-typo.scxml:11:76
+   |
+11 |       <example:fetch url="https://api.example/v1/items" location="outcome" env:tokn="API_TOKEN"/>
+   |                                                                            ^^^^^^^^^^^^^^^^^^^^ not a slot its package declares
+   |
+   = note: the package of `https://stateforward.org/scxml/example` declares the slots `url`, `token`
+   = help: did you mean `token`?
+   = spec: SCXML 1.0 §4.10 Extensibility of Executable Content
+help: bind the declared slot `token`
+   |
+11 |       <example:fetch url="https://api.example/v1/items" location="outcome" env:token="API_TOKEN"/>
+   |                                                                                ~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML083`.

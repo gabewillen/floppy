@@ -1,0 +1,15 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" initial="a">
+  <datamodel>
+    <data id="cart"><items/></data>
+    <data id="total" expr="0"/>
+  </datamodel>
+  <state id="a">
+    <onentry>
+      <assign location="$cart/items" type="addattribute" expr="'x'"/>
+      <assign location="$cart/items" attr="count" expr="1"/>
+      <assign location="$total"/>
+    </onentry>
+    <transition event="go" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

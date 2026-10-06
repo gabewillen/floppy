@@ -1,0 +1,10 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:c="urn:example:custom"
+       version="1.0"
+       initial="ready">
+  <state id="ready">
+    <transition event="finish" target="done"/>
+    <c:mark value="42"/>
+  </state>
+  <final id="done"/>
+</scxml>

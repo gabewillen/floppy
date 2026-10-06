@@ -1,0 +1,16 @@
+error[XML003]: undefined entity reference `&D;`
+ --> tests/ui/xml003-unknown-entity.scxml:3:27
+  |
+3 |     <onentry><log label="R&D;"/></onentry>
+  |                           ^^^ not a predefined or declared entity
+  |
+  = note: XML predefines only `&lt;`, `&gt;`, `&amp;`, `&apos;`, and `&quot;`; any other entity must be declared in the document's internal DTD subset
+  = help: if a literal ampersand was intended, escape it as `&amp;`; otherwise use a numeric character reference such as `&#169;`
+  = spec: XML 1.0 (Fifth Edition) §4.6 Predefined Entities
+help: escape the ampersand
+  |
+3 |     <onentry><log label="R&amp;D;"/></onentry>
+  |                           ~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML003`.

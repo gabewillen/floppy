@@ -1,0 +1,15 @@
+error[SCXML002]: duplicate identifier `a`
+ --> tests/ui/scxml002-duplicate-state-no-liveness-cascade.scxml:4:14
+  |
+2 |   <state id="a"><transition event="go" target="b"/></state>
+  |              - first declared here
+3 |   <final id="b"/>
+4 |   <state id="a"/>
+  |              ^ duplicate declaration
+  |
+  = note: transition targets, `initial` references, and history defaults resolve by ID; duplicates make every reference ambiguous
+  = help: choose a unique identifier and update every reference to it
+  = spec: SCXML 1.0 §3.14 IDs
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML002`.

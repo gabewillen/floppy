@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s">
+  <datamodel>
+    <data id="d">
+      <final xmlns="http://www.w3.org/2005/07/scxml" id="q">&#x1680;</final>
+    </data>
+  </datamodel>
+  <state id="s">
+    <transition event="go" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

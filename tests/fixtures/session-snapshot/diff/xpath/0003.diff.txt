@@ -1,0 +1,2 @@
+snapshot diff: 0001.snapshot.json → 0003.snapshot.json
+ = identical: no difference

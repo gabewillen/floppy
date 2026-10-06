@@ -1,0 +1,16 @@
+error[XML001]: `<else if …>` is not SCXML: a conditional branch is the single element `<elseif>`
+ --> tests/ui/xml001-else-if.scxml:7:8
+  |
+7 |       <else if cond="x === 2"/>
+  |        ^^^^^^^ write `elseif` as one word
+  |
+  = note: SCXML documents must be well-formed XML 1.0 with namespaces; no later validation runs until parsing succeeds
+  = help: write `<elseif cond="…"/>`; `<else/>` takes no condition
+  = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
+help: use `<elseif>`
+  |
+7 |       <elseif cond="x === 2"/>
+  |        ~~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

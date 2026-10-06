@@ -1,0 +1,9 @@
+snapshot diff: 0000.snapshot.json → 0001.snapshot.json
+
+session root
+  --> status: unchanged
+   = configuration:
+       - s
+       + t
+   = transitions:
+       - s[0]

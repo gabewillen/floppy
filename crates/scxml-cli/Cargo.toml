@@ -1,0 +1,83 @@
+[package]
+name = "scxml-cli"
+description = "Thin CLI for SCXML validation and portable machine artifact planning"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# Links the Wasmtime component host so `conformance run` can execute
+# (components-only execution), and `run` the BasicHTTP network of live
+# sessions (`--http-allow`, `--http-listen`).
+wasmtime = [
+    "scxml-conformance/wasmtime",
+    "dep:scxml-host-wasmtime",
+    "scxml-host-wasmtime/http",
+    "dep:signal-hook",
+    "dep:rustls",
+    "dep:ureq",
+]
+
+[dependencies]
+scxml-compiler-core.workspace = true
+scxml-conformance.workspace = true
+scxml-data-model-ecmascript.workspace = true
+scxml-data-model-xpath.workspace = true
+scxml-host-wasmtime = { workspace = true, optional = true }
+scxml-packager.workspace = true
+scxml-reporting.workspace = true
+scxml-script.workspace = true
+scxml-snapshot.workspace = true
+scxml-syntax.workspace = true
+scxml-telemetry.workspace = true
+scxml-validator-core.workspace = true
+scxml-validator-xsd.workspace = true
+scxml-types.workspace = true
+scxml-event-schema.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+url.workspace = true
+# Repository namespaces (src/repository.rs): the bounded GitHub acquisition
+# client, linked with the `wasmtime` feature exactly as the host's `http`
+# feature links it: rustls on the ring provider, verified against the
+# operating system's trust store, no cookies, proxies, or bundled roots.
+rustls = { workspace = true, optional = true }
+ureq = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+signal-hook = { workspace = true, optional = true }
+
+[[test]]
+name = "snapshot_run"
+required-features = ["wasmtime"]
+
+[[test]]
+name = "extension_packages"
+required-features = ["wasmtime"]
+
+[[test]]
+name = "live_run"
+required-features = ["wasmtime"]
+
+[[test]]
+name = "openai_extension"
+required-features = ["wasmtime"]
+
+[[test]]
+name = "repository_namespaces"
+required-features = ["wasmtime"]
+
+[[test]]
+name = "repository_services"
+required-features = ["wasmtime"]
+
+[lints]
+workspace = true

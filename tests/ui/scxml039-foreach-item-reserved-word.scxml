@@ -1,0 +1,8 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="names" expr="['a', 'b']"/></datamodel>
+  <final id="a">
+    <onentry>
+      <foreach array="names" item="class" index="i"><log expr="i"/></foreach>
+    </onentry>
+  </final>
+</scxml>

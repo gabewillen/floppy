@@ -1,0 +1,8 @@
+<?ui-args --service-package tests/ui/service-events/reply.service.json?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="waiting">
+  <state id="waiting">
+    <invoke type="urn:example:reply" id="reply"/>
+    <transition event="reply.ready" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

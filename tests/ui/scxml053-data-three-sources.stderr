@@ -1,0 +1,20 @@
+error[SCXML053]: `<data>` declares more than one value source: `expr`, `src`, and the child content
+ --> tests/ui/scxml053-data-three-sources.scxml:3:27
+  |
+3 |     <data id="x" expr="1" src="file:x.json">
+  |                  -------- ^^^^^^^^^^^^^^^^^ `src` conflicts with `expr`
+  |                  |
+  |                  `expr` is declared here
+4 |       <value/>
+  |       -------- the child content is declared here too
+  |
+  = note: `<data>` gets its initial value from exactly one of `src` (a URI), `expr` (an expression), or inline child content; with several the value is ambiguous
+  = help: keep one value source and remove the other 2: for example, remove `expr` and `src`
+  = spec: SCXML 1.0 §5.3 <data>
+help: remove `expr` and `src`
+  |
+3 -     <data id="x" expr="1" src="file:x.json">
+3 +     <data id="x">
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML053`.

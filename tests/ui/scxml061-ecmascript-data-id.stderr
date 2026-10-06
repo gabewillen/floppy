@@ -1,0 +1,86 @@
+warning[SCXML061]: `retry-count` is not an ECMAScript identifier: it contains `-`
+  --> tests/ui/scxml061-ecmascript-data-id.scxml:3:15
+   |
+ 3 |     <data id="retry-count" expr="0"/>
+   |               ^^^^^^^^^^^ `-` cannot appear in an identifier
+...
+ 9 |     <transition event="fail" cond="retry-count &lt; 3" target="a">
+   |                                    ----------- `retry-count` is referenced here
+   |
+   = note: the ECMAScript data model creates this variable (SCXML 1.0 §B.2.1) as a property of the global object, reachable only as `globalThis['retry-count']`; `retry-count` in an expression is not this variable: `-` subtracts, so `retry-count` reads two variables
+   = help: to use the variable in expressions, name it with an identifier that is also an XML ID, such as `retryCount`, and rename every reference to it
+   = spec: SCXML 1.0 §5.3 <data>
+   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: rename the variable to `retryCount` here and in 4 references
+   |
+ 3 |     <data id="retryCount" expr="0"/>
+   |               ~~~~~~~~~~
+...
+ 9 |     <transition event="fail" cond="retryCount &lt; 3" target="a">
+   |                                    ~~~~~~~~~~
+10 |       <assign location="retryCount" expr="retryCount + 1"/>
+   |                         ~~~~~~~~~~        ~~~~~~~~~~
+11 |       <log label="retry" expr="'attempt ' + retryCount"/>
+   |                                             ~~~~~~~~~~
+
+warning[SCXML061]: `class` is an ECMAScript reserved word, not an identifier
+ --> tests/ui/scxml061-ecmascript-data-id.scxml:4:15
+  |
+4 |     <data id="class" expr="'gold'"/>
+  |               ^^^^^ reserved word
+  |
+  = note: the ECMAScript data model creates this variable (SCXML 1.0 §B.2.1) as a property of the global object, reachable only as `globalThis['class']`; no expression or `<assign location>` can name it directly
+  = help: to use the variable in expressions, name it with an identifier that is also an XML ID, such as `classValue`, and rename every reference to it
+  = spec: SCXML 1.0 §5.3 <data>
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: rename the variable to `classValue`
+  |
+4 |     <data id="classValue" expr="'gold'"/>
+  |               ~~~~~~~~~~
+
+warning[SCXML061]: `max.tries` is not an ECMAScript identifier: it contains `.`
+ --> tests/ui/scxml061-ecmascript-data-id.scxml:5:15
+  |
+5 |     <data id="max.tries" expr="3"/>
+  |               ^^^^^^^^^ `.` cannot appear in an identifier
+  |
+  = note: the ECMAScript data model creates this variable (SCXML 1.0 §B.2.1) as a property of the global object, reachable only as `globalThis['max.tries']`; `max.tries` in an expression is a property access, not this variable
+  = help: to use the variable in expressions, name it with an identifier that is also an XML ID, such as `maxTries`, and rename every reference to it
+  = spec: SCXML 1.0 §5.3 <data>
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: rename the variable to `maxTries`
+  |
+5 |     <data id="maxTries" expr="3"/>
+  |               ~~~~~~~~
+
+error[SCXML073]: `<data id>` `_total` begins with `_`
+ --> tests/ui/scxml061-ecmascript-data-id.scxml:6:15
+  |
+6 |     <data id="_total" expr="0"/>
+  |               ^^^^^^ reserved for system variables
+  |
+  = note: SCXML reserves names that begin with `_` for system variables such as `_event`, `_sessionid`, `_name`, and `_ioprocessors`, and a conformant document declares no data with such an id
+  = help: rename the data without the leading `_`, and update every reference to it
+  = spec: SCXML 1.0 §5.10 System Variables
+help: rename the declaration to `total`
+  |
+6 |     <data id="total" expr="0"/>
+  |               ~~~~~
+
+warning[SCXML039]: `location` is not an assignable ecmascript location: `retry-count` is not an ECMAScript variable name
+  --> tests/ui/scxml061-ecmascript-data-id.scxml:10:25
+   |
+ 3 |     <data id="retry-count" expr="0"/>
+   |               ----------- declared here with a name that is not a variable name
+...
+10 |       <assign location="retry-count" expr="retry-count + 1"/>
+   |                         ^^^^^^^^^^^ not a location
+   |
+   = note: a location expression must name a place in the data model that can be assigned, such as a variable name or a property access like `a.b` or `a[0]`
+   = help: `<data id="retry-count">` declares a variable no ECMAScript expression can name (`SCXML061`): rename it, for example to `retryCount`, in its declaration and every reference
+   = spec: SCXML 1.0 §5.9.2 Location Expressions
+   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+diagnostic summary: 1 error(s), 4 warning(s), 0 note(s), 5 total
+Some diagnostics have detailed explanations: SCXML039, SCXML061, SCXML073.
+For more information about a diagnostic, try `scxml-cli --explain SCXML039`.

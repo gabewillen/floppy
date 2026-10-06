@@ -1,0 +1,24 @@
+[package]
+name = "scxml-wasm-meter"
+description = "Build-time deterministic fuel metering of core Wasm modules for hosts without engine fuel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+scxml-telemetry.workspace = true
+wasm-encoder = { workspace = true, features = ["wasmparser"] }
+wasmparser.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+wasmtime.workspace = true

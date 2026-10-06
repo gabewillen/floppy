@@ -1,0 +1,27 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" initial="a">
+  <datamodel>
+    <data id="count" expr="0"/>
+    <data id="done" expr="false()"/>
+  </datamodel>
+  <state id="a">
+    <transition event="e1" cond="$count = 1 || $done" target="b"/>
+    <transition event="e2" cond="$count % 2 = 0" target="b"/>
+    <transition event="e3" cond="$count AND $done" target="b"/>
+    <transition event="e4" cond="fn:concat('a', 'b') = 'ab'" target="b"/>
+    <transition event="e5" cond="contains('a')" target="b"/>
+    <transition event="e6" cond="$count = 'open" target="b"/>
+    <transition event="e7" cond="$ count = 1" target="b"/>
+    <transition event="e8" cond="$count/sideways::x" target="b"/>
+    <transition event="e9" cond="$count/@" target="b"/>
+    <transition event="e10" cond="$done ? 1 : 0" target="b"/>
+    <transition event="e11" cond="$count === 3" target="b"/>
+    <transition event="e12" cond="$count = 1;" target="b"/>
+    <transition event="e13" cond="$count[1 = 1" target="b"/>
+    <transition event="e14" cond="$count &gt;" target="b"/>
+    <transition event="e15" cond="$count = 1 and not $done" target="b"/>
+    <transition event="e16" cond="cuont($count) = 1" target="b"/>
+    <transition event="e17" cond="!($done or $count = 1)" target="b"/>
+    <transition event="e18" cond="$count = 1 $done" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

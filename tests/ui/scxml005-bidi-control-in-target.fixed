@@ -1,0 +1,4 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+  <state id="a"><transition event="go" target="zz&#x202E;DER"/></state>
+  <final id="REDzz"/>
+</scxml>

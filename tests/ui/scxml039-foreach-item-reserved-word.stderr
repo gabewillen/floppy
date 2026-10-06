@@ -1,0 +1,18 @@
+warning[SCXML039]: `<foreach item>` must be a variable name, but `class` is a reserved word in ECMAScript
+ --> tests/ui/scxml039-foreach-item-reserved-word.scxml:5:36
+  |
+5 |       <foreach array="names" item="class" index="i"><log expr="i"/></foreach>
+  |                                    ^^^^^ reserved word
+  |
+  = note: `<foreach>` assigns each array element (`item`) and its position (`index`) to a variable with this name; an ECMAScript reserved word such as `class` can never name a variable
+  = help: rename the loop variable, for example `classItem`, and use that name inside the loop
+  = spec: SCXML 1.0 §4.6 <foreach>
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: rename the loop variable to `classItem`
+  |
+5 |       <foreach array="names" item="classItem" index="i"><log expr="i"/></foreach>
+  |                                    ~~~~~~~~~
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML039`.
+validated tests/ui/scxml039-foreach-item-reserved-word.scxml

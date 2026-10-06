@@ -1,0 +1,10 @@
+<?ui-args --schema urn:example:custom=tests/fixtures/extension-example.xsd?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+       xmlns:c="urn:example:custom"
+       initial="a">
+  <state id="a">
+    <onentry><c:mark value="not-an-integer"/></onentry>
+    <transition event="go" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

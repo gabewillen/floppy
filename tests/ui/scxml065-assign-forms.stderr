@@ -1,0 +1,44 @@
+error[SCXML065]: `<assign type="addattribute">` names no attribute: `attr` is missing
+ --> tests/ui/scxml065-assign-forms.scxml:8:44
+  |
+8 |       <assign location="$cart/items" type="addattribute" expr="'x'"/>
+  |                                            ^^^^^^^^^^^^ adds an attribute
+  |
+  = note: `type="addattribute"` adds an attribute to the selected element, so `attr` must name it; the value comes from `expr` or the child content
+  = help: add `attr="name"` with the attribute to add
+  = spec: SCXML CR 2014 §C.3.6 <assign>
+help: add the `attr` to set
+  |
+8 |       <assign location="$cart/items" type="addattribute" expr="'x'" attr="…"/>
+  |                                                                    +++++++++
+
+error[SCXML065]: `attr` on `<assign>` is used only with `type="addattribute"`
+ --> tests/ui/scxml065-assign-forms.scxml:9:38
+  |
+9 |       <assign location="$cart/items" attr="count" expr="1"/>
+  |                                      ^^^^^^^^^^^^ attribute name without `addattribute`
+  |
+  = note: only `type="addattribute"` adds an attribute named by `attr`; every other placement replaces or inserts nodes, so `attr` would be ignored
+  = help: remove `attr`, or set `type="addattribute"` to add that attribute
+  = spec: SCXML CR 2014 §C.3.6 <assign>
+help: remove `attr`
+  |
+9 -       <assign location="$cart/items" attr="count" expr="1"/>
+9 +       <assign location="$cart/items" expr="1"/>
+
+error[SCXML065]: `<assign>` has no value
+  --> tests/ui/scxml065-assign-forms.scxml:10:8
+   |
+10 |       <assign location="$total"/>
+   |        ^^^^^^ neither `expr` nor child content
+   |
+   = note: `<assign>` stores a value at `location`, taken from `expr` or from its child content; without either there is nothing to assign
+   = help: add `expr` with the value to assign, or give the value as child content
+   = spec: SCXML 1.0 §5.4 <assign>
+help: add the `expr` to assign
+   |
+10 |       <assign location="$total" expr="…"/>
+   |                                +++++++++
+
+diagnostic summary: 3 error(s), 0 warning(s), 0 note(s), 3 total
+For more information about this error, try `scxml-cli --explain SCXML065`.

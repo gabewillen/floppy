@@ -1,0 +1,75 @@
+[package]
+name = "scxml-conformance"
+description = "Deterministic W3C IRP conformance preparation and runner that executes cases through the shipped SCXML Wasm components"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+# The manual-equivalent oracle table (src/manual_oracle.rs) compiles in the
+# six W3C manual instructions quoted verbatim from the official IRP `.txml`
+# sources, and the crate's tests embed upstream IRP files (manifest.xml,
+# 513/test513.txt) through `include_bytes!`, so its license covers the W3C
+# SCXML IRP test-suite terms as well: the W3C Test Suite License or the W3C
+# 3-clause BSD License (2008), reproduced in
+# tests/conformance/w3c-irp/LICENSE.md. Neither text has an SPDX identifier
+# (the W3C BSD text keeps "original copyright notice" and names the W3C, so
+# it is not `BSD-3-Clause`), hence the LicenseRef.
+license = "(Apache-2.0 OR MIT) AND LicenseRef-W3C-Test-Suite"
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# The component execution path: the shipped Wasm components under the
+# Wasmtime session host (`scxml_conformance::wasm`).
+wasmtime = [
+    "dep:scxml-host-wasmtime",
+    "dep:scxml-script",
+    "dep:scxml-snapshot",
+    "scxml-host-wasmtime/wasmtime",
+]
+
+[dependencies]
+scxml-compiler-core.workspace = true
+# Session-snapshot documents gathered by the component executor's snapshot
+# collection (docs/session-snapshot.md, "Non-perturbation proof over the
+# IRP"); only the `wasm` module uses it.
+scxml-snapshot = { workspace = true, optional = true }
+scxml-host-wasmtime = { workspace = true, optional = true }
+scxml-ioprocessor-basichttp.workspace = true
+scxml-ioprocessor-scxml.workspace = true
+scxml-reporting.workspace = true
+scxml-script = { workspace = true, optional = true }
+scxml-syntax.workspace = true
+scxml-telemetry.workspace = true
+scxml-validator-core.workspace = true
+scxml-validator-xsd.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+# The published-contract drift test reads DELAYED_SEND_WIRE_VERSION and the
+# session snapshot document versions.
+scxml-snapshot.workspace = true
+scxml-types.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.1.5", default-features = false, features = ["fs", "process", "std"] }
+
+[[test]]
+name = "irp_components"
+required-features = ["wasmtime"]
+
+[[example]]
+name = "generate_irp_baselines"
+required-features = ["wasmtime"]
+# Run the example's argument-parser tests under `cargo test --features wasmtime`.
+test = true
+
+[lints]
+workspace = true

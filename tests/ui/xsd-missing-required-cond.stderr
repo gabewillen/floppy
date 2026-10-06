@@ -1,0 +1,17 @@
+error[XSD-cvc-complex-type.4]: `<if>` is missing required attribute `cond`
+ --> tests/ui/xsd-missing-required-cond.scxml:4:8
+  |
+4 |       <if><log expr="'never'"/></if>
+  |        ^^ missing `cond`
+  |
+  = note: the W3C SCXML 1.0 schema rejects this under XML Schema constraint `cvc-complex-type.4`: Required attribute 'cond' is missing
+  = help: add `cond` with a boolean condition expression in the selected data model
+  = spec: SCXML 1.0 §4.3 <if>
+  = spec: XML Schema 1.0 Part 1 §3.4.4 Element Locally Valid (Complex Type) (`cvc-complex-type.4`)
+help: add the required `cond` attribute
+  |
+4 |       <if cond="…"><log expr="'never'"/></if>
+  |          +++++++++
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.4`.

@@ -1,0 +1,5 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="parent">
+  <state id="parent" initial="child">
+    <state id="child"/>
+  </state>
+</scxml>

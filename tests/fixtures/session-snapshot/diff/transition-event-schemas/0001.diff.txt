@@ -1,0 +1,18 @@
+snapshot diff: 0000.snapshot.json → 0001.snapshot.json
+
+session root
+  --> status: unchanged
+   = configuration:
+       - idle
+       + busy
+   = data model:
+       ~ orders: 0 -> 1
+   = counters:
+       ~ send: 0 -> 1
+   = pending sends:
+       + sendid_0 `shipped` (external) origin #_scxml_session origintype http://www.w3.org/TR/scxml/#SCXMLEventProcessor data undefined deadline 1000ms
+   = transitions:
+       - idle[0]
+       - idle[1]
+       + busy[0]
+       + busy[1]

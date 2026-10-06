@@ -1,0 +1,30 @@
+error[SCXML006]: `initial` on `<scxml>` names no state
+ --> tests/ui/scxml006-empty-initial.scxml:1:62
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="">
+  |                                                              ^^^^^^^^^^ empty initial state list
+  |
+  = note: an `initial` attribute lists the states entered first; an empty list enters nothing, so the compiler rejects it (omit the attribute to enter the first child state)
+  = help: name the initial state, or remove `initial` to enter the first child state in document order
+  = spec: SCXML 1.0 §3.2 <scxml>
+help: enter `a`, the first child state
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+  |                                                                       +
+
+error[SCXML006]: `initial` on `<state>` names no state
+ --> tests/ui/scxml006-empty-initial.scxml:2:17
+  |
+2 |   <state id="a" initial=" ">
+  |                 ^^^^^^^^^^^ empty initial state list
+  |
+  = note: an `initial` attribute lists the states entered first; an empty list enters nothing, so the compiler rejects it (omit the attribute to enter the first child state)
+  = help: name the initial state, or remove `initial` to enter the first child state in document order
+  = spec: SCXML 1.0 §3.3 <state>
+help: enter `a1`, the first child state
+  |
+2 |   <state id="a" initial="a1">
+  |                          ~~
+
+diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
+For more information about this error, try `scxml-cli --explain SCXML006`.

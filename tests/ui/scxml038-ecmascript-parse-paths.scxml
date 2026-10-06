@@ -1,0 +1,14 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="x" expr="0"/><data id="o" expr="({})"/></datamodel>
+  <state id="a">
+    <transition event="e1" cond="x ? 1" target="b"/>
+    <transition event="e2" cond="x + 1 = 2" target="b"/>
+    <transition event="e3" cond="o.a.b = 3" target="b"/>
+    <transition event="e4" cond="x.1" target="b"/>
+    <transition event="e5" cond="let y = 1" target="b"/>
+    <transition event="e6" cond="function() {}" target="b"/>
+    <transition event="e7" cond="x in" target="b"/>
+    <transition event="e8" cond="'unterminated" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

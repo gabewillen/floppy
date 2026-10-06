@@ -1,0 +1,6 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="waiting room">
+  <state id="waiting room">
+    <transition event="go" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

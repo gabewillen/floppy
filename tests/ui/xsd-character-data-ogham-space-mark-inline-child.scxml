@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
+  <state id="s">
+    <invoke type="http://www.w3.org/TR/scxml/">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="c">
+          <state id="c">&#x1680;<transition event="go" target="d"/></state>
+          <final id="d"/>
+        </scxml>
+      </content>
+    </invoke>
+    <transition event="done.invoke" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

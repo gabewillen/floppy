@@ -1,0 +1,8 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <final id="a">
+    <donedata>
+      <content expr="1"/>
+      <param name="p" expr="2"/>
+    </donedata>
+  </final>
+</scxml>

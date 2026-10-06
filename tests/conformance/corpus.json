@@ -1,0 +1,299 @@
+{
+  "manifest_version": 6,
+  "suite": {
+    "id": "synthetic-conformance-harness",
+    "version": "1.0.0",
+    "kind": "synthetic-harness",
+    "source": "checked-in synthetic harness fixtures",
+    "corpus_digest": "c47f049380b678c90d8317992c9f4627cde6e8f376b711552b65ccb336bed2b2",
+    "source_digest": "ace18486c5d16bddedaeea91e404680d5104e060a1f3ab94fda057e65aa0e027",
+    "manifest_digest": "a787db664a112e6092fdd692a09f4a0b1414d54de5b7964fd167a47aaa3f428e",
+    "template_digests": {},
+    "datamodel": "mixed",
+    "provenance": "synthetic; never an official IRP result"
+  },
+  "default_command_budget": 16,
+  "cases": [
+    {
+      "id": "001",
+      "assertion_id": "synthetic-001",
+      "spec_num": "3.5",
+      "spec_id": "3.5",
+      "conformance": "mandatory",
+      "datamodel": "ecmascript",
+      "start_uri": "cases/pass-final.scxml",
+      "source": "cases/pass-final.scxml",
+      "source_digest": "7280d8019ac8dc347d0d43d6cca6207dc26067d998875f342b37b7b259420ba4",
+      "source_artifact": "cases/pass-final.scxml",
+      "output_digest": "7280d8019ac8dc347d0d43d6cca6207dc26067d998875f342b37b7b259420ba4",
+      "dependencies": [],
+      "dependency_digests": {},
+      "dependency_source_digests": {},
+      "dependency_source_artifacts": {},
+      "resources": [],
+      "resource_digests": {},
+      "tags": [
+        "smoke",
+        "transition"
+      ],
+      "description": "Synthetic harness fixture only.",
+      "features": [
+        "event-transition",
+        "final-state"
+      ],
+      "manual": false,
+      "events": [
+        "go"
+      ],
+      "expected": {
+        "kind": "final-state",
+        "state": "done"
+      }
+    },
+    {
+      "id": "002",
+      "assertion_id": "synthetic-002",
+      "spec_num": "3.5",
+      "spec_id": "3.5",
+      "conformance": "mandatory",
+      "datamodel": "ecmascript",
+      "start_uri": "cases/supported-fail.scxml",
+      "source": "cases/supported-fail.scxml",
+      "source_digest": "7280d8019ac8dc347d0d43d6cca6207dc26067d998875f342b37b7b259420ba4",
+      "source_artifact": "cases/supported-fail.scxml",
+      "output_digest": "7280d8019ac8dc347d0d43d6cca6207dc26067d998875f342b37b7b259420ba4",
+      "dependencies": [],
+      "dependency_digests": {},
+      "dependency_source_digests": {},
+      "dependency_source_artifacts": {},
+      "resources": [],
+      "resource_digests": {},
+      "tags": [
+        "oracle",
+        "transition"
+      ],
+      "description": "Synthetic harness fixture only.",
+      "features": [
+        "active-configuration"
+      ],
+      "manual": false,
+      "events": [
+        "go"
+      ],
+      "expected": {
+        "kind": "active-configuration",
+        "states": [
+          "ready"
+        ]
+      }
+    },
+    {
+      "id": "003",
+      "assertion_id": "synthetic-003",
+      "spec_num": "5.3",
+      "spec_id": "5.3",
+      "conformance": "mandatory",
+      "datamodel": "ecmascript",
+      "start_uri": "cases/unsupported-data-source.scxml",
+      "source": "cases/unsupported-data-source.scxml",
+      "source_digest": "72974827610481a6828d7981791bf4ac8eb046cd783373bd5d43628b39a76c51",
+      "source_artifact": "cases/unsupported-data-source.scxml",
+      "output_digest": "72974827610481a6828d7981791bf4ac8eb046cd783373bd5d43628b39a76c51",
+      "dependencies": [],
+      "dependency_digests": {},
+      "dependency_source_digests": {},
+      "dependency_source_artifacts": {},
+      "resources": [],
+      "resource_digests": {},
+      "tags": [
+        "unsupported",
+        "data"
+      ],
+      "description": "Synthetic harness fixture only.",
+      "features": [
+        "data-source"
+      ],
+      "manual": false,
+      "events": [
+        "go"
+      ],
+      "expected": {
+        "kind": "final-state",
+        "state": "done"
+      }
+    },
+    {
+      "id": "004",
+      "assertion_id": "synthetic-004",
+      "spec_num": "3.3",
+      "spec_id": "3.3",
+      "conformance": "mandatory",
+      "datamodel": "ecmascript",
+      "start_uri": "cases/unsupported-hierarchy.scxml",
+      "source": "cases/unsupported-hierarchy.scxml",
+      "source_digest": "d3fe17a0bf4d4768597592a121950306a531f76f0b9ef4f4fa4d16cc58e32593",
+      "source_artifact": "cases/unsupported-hierarchy.scxml",
+      "output_digest": "d3fe17a0bf4d4768597592a121950306a531f76f0b9ef4f4fa4d16cc58e32593",
+      "dependencies": [],
+      "dependency_digests": {},
+      "dependency_source_digests": {},
+      "dependency_source_artifacts": {},
+      "resources": [],
+      "resource_digests": {},
+      "tags": [
+        "unsupported",
+        "hierarchy"
+      ],
+      "description": "Synthetic harness fixture only.",
+      "features": [
+        "compound-state"
+      ],
+      "manual": false,
+      "events": [],
+      "expected": {
+        "kind": "active-configuration",
+        "states": [
+          "child"
+        ]
+      }
+    },
+    {
+      "id": "005",
+      "assertion_id": "synthetic-005",
+      "spec_num": "B",
+      "spec_id": "B",
+      "conformance": "optional",
+      "datamodel": "ecmascript",
+      "start_uri": "cases/unsupported-datamodel.scxml",
+      "source": "cases/unsupported-datamodel.scxml",
+      "source_digest": "1399c445942b68b5fdf7a293457faf2fc26ff0f9847475c075735fd0f78ce006",
+      "source_artifact": "cases/unsupported-datamodel.scxml",
+      "output_digest": "1399c445942b68b5fdf7a293457faf2fc26ff0f9847475c075735fd0f78ce006",
+      "dependencies": [],
+      "dependency_digests": {},
+      "dependency_source_digests": {},
+      "dependency_source_artifacts": {},
+      "resources": [],
+      "resource_digests": {},
+      "tags": [
+        "unsupported",
+        "datamodel"
+      ],
+      "description": "Synthetic harness fixture only.",
+      "features": [
+        "ecmascript-datamodel"
+      ],
+      "manual": false,
+      "events": [],
+      "expected": {
+        "kind": "terminal-status",
+        "status": "running"
+      }
+    },
+    {
+      "id": "006",
+      "assertion_id": "synthetic-006",
+      "spec_num": "3.5",
+      "spec_id": "3.5",
+      "conformance": "mandatory",
+      "datamodel": "ecmascript",
+      "start_uri": "cases/invalid-target.scxml",
+      "source": "cases/invalid-target.scxml",
+      "source_digest": "2f37fc15aa46e696fd4026c72db062489048b66da243dcd9f18df9903f7f0f03",
+      "source_artifact": "cases/invalid-target.scxml",
+      "output_digest": "2f37fc15aa46e696fd4026c72db062489048b66da243dcd9f18df9903f7f0f03",
+      "dependencies": [],
+      "dependency_digests": {},
+      "dependency_source_digests": {},
+      "dependency_source_artifacts": {},
+      "resources": [],
+      "resource_digests": {},
+      "tags": [
+        "invalid",
+        "validation"
+      ],
+      "description": "Synthetic harness fixture only.",
+      "features": [
+        "target-idref"
+      ],
+      "manual": false,
+      "events": [
+        "go"
+      ],
+      "expected": {
+        "kind": "final-state",
+        "state": "done"
+      }
+    },
+    {
+      "id": "007",
+      "assertion_id": "synthetic-007",
+      "spec_num": "manual-1",
+      "spec_id": "manual-1",
+      "conformance": "optional",
+      "datamodel": "ecmascript",
+      "start_uri": "cases/manual.scxml",
+      "source": "cases/manual.scxml",
+      "source_digest": "af067af28efcb6aedb6013c8b7037ad6c220e2160520fec34b0db5a43d237554",
+      "source_artifact": "cases/manual.scxml",
+      "output_digest": "af067af28efcb6aedb6013c8b7037ad6c220e2160520fec34b0db5a43d237554",
+      "dependencies": [],
+      "dependency_digests": {},
+      "dependency_source_digests": {},
+      "dependency_source_artifacts": {},
+      "resources": [
+        "resources/note.txt"
+      ],
+      "resource_digests": {
+        "resources/note.txt": "9b984a30ac74fb435ff98e7d127f9b9316314ec850b5702360f6a9c7b31f89ab"
+      },
+      "tags": [
+        "manual"
+      ],
+      "description": "Synthetic harness fixture only.",
+      "features": [
+        "manual-observation"
+      ],
+      "manual": true,
+      "events": [],
+      "expected": {
+        "kind": "terminal-status",
+        "status": "running"
+      }
+    },
+    {
+      "id": "008",
+      "assertion_id": "synthetic-008",
+      "spec_num": "3.5",
+      "spec_id": "3.5",
+      "conformance": "mandatory",
+      "datamodel": "ecmascript",
+      "start_uri": "cases/pass-running.scxml",
+      "source": "cases/pass-running.scxml",
+      "source_digest": "af067af28efcb6aedb6013c8b7037ad6c220e2160520fec34b0db5a43d237554",
+      "source_artifact": "cases/pass-running.scxml",
+      "output_digest": "af067af28efcb6aedb6013c8b7037ad6c220e2160520fec34b0db5a43d237554",
+      "dependencies": [],
+      "dependency_digests": {},
+      "dependency_source_digests": {},
+      "dependency_source_artifacts": {},
+      "resources": [],
+      "resource_digests": {},
+      "tags": [
+        "smoke",
+        "filter"
+      ],
+      "description": "Synthetic harness fixture only.",
+      "features": [
+        "terminal-status"
+      ],
+      "manual": false,
+      "events": [],
+      "expected": {
+        "kind": "terminal-status",
+        "status": "running"
+      },
+      "max_commands": 4
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" initial="a">
+  <datamodel>
+    <data id="count" expr="0"/>
+  </datamodel>
+  <state id="a">
+    <transition event="go" cond="$count &gt; = 3" target="b"/>
+    <transition event="inc">
+      <assign location="count" expr="$count + 1"/>
+    </transition>
+  </state>
+  <final id="b"/>
+</scxml>

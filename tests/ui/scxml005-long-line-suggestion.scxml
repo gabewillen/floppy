@@ -1,0 +1,4 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idle">
+  <state id="idle"><onentry><log label="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"/></onentry><transition event="start" target="runing"/><transition event="stop" target="idle"/></state>
+  <state id="running"><transition event="stop" target="idle"/></state>
+</scxml>

@@ -1,0 +1,13 @@
+warning[SCXML036]: eventless transitions loop forever without consuming an event: `a` -> `a`
+ --> tests/ui/scxml036-default-entry-loop.scxml:4:27
+  |
+4 |       <transition target="p"/>
+  |                           ^ enters `p`, which lands in `a` by default
+  |
+  = note: each step is the first eventless transition without `cond` on the active state's ancestor chain, so it is always selected; default entry through `initial` targets closes the loop
+  = help: add an `event` or `cond` to one of these transitions, or retarget one so the macrostep can reach a stable configuration
+  = spec: SCXML 1.0 §3.13 Selecting and Executing Transitions
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML036`.
+validated tests/ui/scxml036-default-entry-loop.scxml

@@ -1,0 +1,63 @@
+error[SCXML003]: identifier `1st` is not an XML NCName
+ --> tests/ui/scxml003-ecmascript-data-id-not-ncname.scxml:3:15
+  |
+3 |     <data id="1st" expr="0"/>
+  |               ^^^ invalid NCName
+  |
+  = note: SCXML IDs are XML IDs: they must start with a letter or `_` and contain only NCName characters (no spaces or colons), so references can be tokenized unambiguously. An `id` is `xsd:ID`, whose white space collapses (XML Schema 1.1 Part 2 §4.3.6), so leading and trailing white space is not part of it: `id=" s "` declares `s`
+  = help: a `<data id>` is both an XML ID and an ECMAScript variable name: use ASCII letters, digits, and `_`, starting with a letter
+  = spec: SCXML 1.0 §3.14 IDs
+help: rename the variable to `v1st` here and in 1 reference
+  |
+3 |     <data id="v1st" expr="0"/>
+  |               ~~~~
+...
+9 |       <log label="first" expr="v1st"/>
+  |                                ~~~~
+
+error[SCXML003]: identifier `max tries` is not an XML NCName
+ --> tests/ui/scxml003-ecmascript-data-id-not-ncname.scxml:4:15
+  |
+4 |     <data id="max tries" expr="3"/>
+  |               ^^^^^^^^^ invalid NCName
+  |
+  = note: SCXML IDs are XML IDs: they must start with a letter or `_` and contain only NCName characters (no spaces or colons), so references can be tokenized unambiguously. An `id` is `xsd:ID`, whose white space collapses (XML Schema 1.1 Part 2 §4.3.6), so leading and trailing white space is not part of it: `id=" s "` declares `s`
+  = help: a `<data id>` is both an XML ID and an ECMAScript variable name: use ASCII letters, digits, and `_`, starting with a letter
+  = spec: SCXML 1.0 §3.14 IDs
+help: rename the variable to `maxTries`
+  |
+4 |     <data id="maxTries" expr="3"/>
+  |               ~~~~~~~~
+
+error[SCXML003]: identifier `$price` is not an XML NCName
+ --> tests/ui/scxml003-ecmascript-data-id-not-ncname.scxml:5:15
+  |
+5 |     <data id="$price" expr="10"/>
+  |               ^^^^^^ invalid NCName
+  |
+  = note: SCXML IDs are XML IDs: they must start with a letter or `_` and contain only NCName characters (no spaces or colons), so references can be tokenized unambiguously. An `id` is `xsd:ID`, whose white space collapses (XML Schema 1.1 Part 2 §4.3.6), so leading and trailing white space is not part of it: `id=" s "` declares `s`
+  = help: a `<data id>` is both an XML ID and an ECMAScript variable name: use ASCII letters, digits, and `_`, starting with a letter
+  = spec: SCXML 1.0 §3.14 IDs
+help: rename the variable to `price` here and in 1 reference
+  |
+5 |     <data id="price" expr="10"/>
+  |               ~~~~~
+...
+8 |     <transition event="buy" cond="price &gt; 5" target="b">
+  |                                   ~~~~~
+
+warning[SCXML038]: ecmascript syntax error in `expr`: a number is immediately followed by a letter, `$`, or `_`
+ --> tests/ui/scxml003-ecmascript-data-id-not-ncname.scxml:9:33
+  |
+9 |       <log label="first" expr="1st"/>
+  |                                --- while parsing this `expr`
+  |                                 ^ syntax error
+  |
+  = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+  = help: separate the number from the name that follows it, or start the name with a letter
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+diagnostic summary: 3 error(s), 1 warning(s), 0 note(s), 4 total
+Some diagnostics have detailed explanations: SCXML003, SCXML038.
+For more information about a diagnostic, try `scxml-cli --explain SCXML003`.

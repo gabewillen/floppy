@@ -1,0 +1,16 @@
+error[XML001]: unescaped `<` in the text of `<script>`
+ --> tests/ui/xml001-script-less-than.scxml:2:29
+  |
+2 |   <script>for (var i = 0; i < 3; i++) { }</script>
+  |                             ^ `<` starts a tag here, but no element name follows it
+  |
+  = note: in character data `<` always starts markup; a comparison operator must be escaped or placed in a CDATA section
+  = help: escape the operator as `&lt;` (and `&` as `&amp;`), or wrap the whole script body in `<![CDATA[ ... ]]>` so it needs no escaping
+  = spec: XML 1.0 (Fifth Edition) §2.4 Character Data and Markup
+help: escape `<` as `&lt;`
+  |
+2 |   <script>for (var i = 0; i &lt; 3; i++) { }</script>
+  |                             ~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

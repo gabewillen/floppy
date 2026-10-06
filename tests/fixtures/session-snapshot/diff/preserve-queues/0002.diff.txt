@@ -1,0 +1,6 @@
+snapshot diff: 0001.snapshot.json → 0002.snapshot.json
+
+session root/kid
+  --> status: unchanged
+   = queues:
+       + external: `stop` (external)

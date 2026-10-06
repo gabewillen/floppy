@@ -1,0 +1,7 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="busy">
+  <state id="busy" initial="loading">
+    <transition event="cancel" target="idle"/>
+    <state id="loading"/>
+  </state>
+  <final id="idle"/>
+</scxml>

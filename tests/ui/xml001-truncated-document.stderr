@@ -1,0 +1,20 @@
+error[XML001]: the document ends before `<scxml>` is closed
+ --> tests/ui/xml001-truncated-document.scxml:5:17
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+  |  ----- `<scxml>` opens here and is never closed
+...
+5 |   <final id="b"/>
+  |                 ^ the document ends here
+  |
+  = note: SCXML documents must be well-formed XML 1.0 with namespaces; no later validation runs until parsing succeeds
+  = help: add `</scxml>` at the end of the document; if the document was cut off, restore the missing content first
+  = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
+help: add `</scxml>` at the end of the document
+  |
+5 |   <final id="b"/>
+6 | </scxml>
+  | ++++++++
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

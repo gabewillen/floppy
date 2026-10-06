@@ -1,0 +1,76 @@
+/// Reporter components render canonical producer bytes (rustc-style text or
+/// SARIF 2.1.0) without rerunning validation, compilation, or conformance.
+package stateforward:scxml-reporter@0.2.0;
+
+/// Guest telemetry facade; closed labels only, never payloads.
+interface telemetry {
+  /// W3C trace carrier. It only parents telemetry spans and never alters
+  /// rendered output.
+  record trace-context { traceparent: option<string>, tracestate: option<string> }
+  /// Closed module label.
+  enum module { reporter-rustc, reporter-sarif }
+  /// Closed operation label.
+  enum operation { render }
+  /// Closed span-event label.
+  enum signal-event { artifact-accepted, render-completed }
+  /// Closed failure-category label.
+  enum error-category { invalid-input, report }
+  /// Opens one host-owned span under `parent` and returns its id plus the
+  /// child carrier. Id 0 means telemetry is unavailable; the guest continues
+  /// unchanged. Each id is ended exactly once.
+  start: func(module: module, operation: operation, parent: option<trace-context>) -> tuple<u64, option<trace-context>>;
+  /// Records one closed event on an open span; unknown ids are ignored.
+  event: func(span: u64, event: signal-event);
+  /// Closes a span, marking it failed with `error` when present.
+  end: func(span: u64, error: option<error-category>);
+}
+
+/// Request, result, and error types.
+interface types {
+  use telemetry.{trace-context};
+  /// Closed error schema version; unknown discriminants fail canonical ABI decoding.
+  enum error-version { v1 }
+  /// Bounded failure classification with no caller-controlled payload.
+  enum error-code {
+    /// The artifact exceeded 33554432 bytes, a collection or string bound,
+    /// or the rendering would exceed 33554432 bytes.
+    artifact-too-large,
+    /// The bytes were not canonical JSON of the envelope schema, contained
+    /// an unknown field, or held an invalid span, edit, or identity.
+    invalid-artifact,
+    /// The envelope version is not `scxml.report/v3`, or a payload version
+    /// is unsupported.
+    unsupported-version,
+    /// The envelope kind is not `validator`, `compiler`, or `conformance`.
+    unsupported-kind,
+    /// Counts, statuses, digests, or package recipes disagree with the
+    /// payload they summarize.
+    inconsistent-artifact,
+    /// Rendering failed after the artifact was accepted. Reserved: the
+    /// bundled reporters report render-time bound violations as
+    /// `artifact-too-large` and produce no other render failure.
+    render-failed,
+  }
+  /// Closed, payload-free failure.
+  record component-error { version: error-version, code: error-code }
+  /// Canonical producer bytes to render.
+  record report-request { artifact: list<u8>, trace-context: option<trace-context> }
+  /// Rendered output: `text/plain; charset=utf-8` (rustc reporter) or
+  /// `application/sarif+json` (SARIF reporter).
+  record report-output { media-type: string, bytes: list<u8> }
+}
+
+/// Exported reporter entry point.
+interface reporter-api {
+  use types.{component-error, report-request, report-output};
+  /// Reads immutable canonical bytes and returns owned rendering bytes without producer recomputation.
+  /// The whole artifact is validated before rendering; output is
+  /// byte-deterministic for identical input. Errors: see `error-code`.
+  render: func(request: report-request) -> result<report-output, component-error>;
+}
+
+/// A reporter component (rustc-style or SARIF).
+world reporter {
+  import telemetry;
+  export reporter-api;
+}

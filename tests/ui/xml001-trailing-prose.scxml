@@ -1,0 +1,4 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <state id="a"><transition event="go" target="f"/></state><final id="f"/>
+</scxml>
+Here is your SCXML document! Let me know if you need changes.

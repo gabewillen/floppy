@@ -1,0 +1,13 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" initial="s">
+  <datamodel><data id="list"><a/><a/></data></datamodel>
+  <state id="s">
+    <onentry>
+      <foreach array="$list/a" item="it" index="i">
+        <log expr="$it"/>
+        <log expr="$i"/>
+      </foreach>
+    </onentry>
+    <transition event="go" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

@@ -1,0 +1,13 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+  <state id="a">
+    <initial><transition type="internal" target="a1"/></initial>
+    <history id="h"><transition type="internal" target="a1"/></history>
+    <state id="a1"><transition event="go" target="b"/></state>
+  </state>
+  <state id="b">
+    <initial><transition type="external" target="b1"/></initial>
+    <history id="hb" type="deep"><transition type="external" target="b1"/></history>
+    <state id="b1"><transition event="back" target="h"/><transition event="go" target="done"/></state>
+  </state>
+  <final id="done"/>
+</scxml>

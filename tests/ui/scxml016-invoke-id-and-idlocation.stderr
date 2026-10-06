@@ -1,0 +1,18 @@
+error[SCXML016]: invoke ID cannot use both `id` and `idlocation`
+ --> tests/ui/scxml016-invoke-id-and-idlocation.scxml:3:25
+  |
+3 |   <state id="a"><invoke id="i1" idlocation="iid" src="child.scxml"/><tra...
+  |                         ^^^^^^^ ---------------- conflicting attribute
+  |                         |
+  |                         mutually exclusive attribute
+  |
+  = note: `src`/`srcexpr`, `type`/`typeexpr`, `id`/`idlocation`, and an external source versus inline `<content>` are each mutually exclusive ways to say what to invoke and how to identify it
+  = help: keep exactly one of `id` or `idlocation`
+  = spec: SCXML 1.0 §6.4 <invoke>
+help: keep `id` and remove `idlocation`
+  |
+3 - ... id="a"><invoke id="i1" idlocation="iid" src="chi...
+3 + ... id="a"><invoke id="i1" src="child.scxml"/><trans...
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML016`.

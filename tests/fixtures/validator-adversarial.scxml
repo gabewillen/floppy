@@ -1,0 +1,15 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="réady">
+  <state id="1bad" initial="missing">
+    <initial><transition event="boot" target="outside"/></initial>
+    <state id="réady">
+      <transition event="go,now" target="doné"/>
+      <onentry>
+        <param name="payload" expr="1" location="ctx.payload"/>
+        <send event="&lt;unsafe&amp;event&gt;" eventexpr="computed"><content/></send>
+      </onentry>
+    </state>
+    <history id="recent"><transition target="réady"/></history>
+  </state>
+  <state id="outside"><transition target="outside"/></state>
+  <final id="done"/>
+</scxml>

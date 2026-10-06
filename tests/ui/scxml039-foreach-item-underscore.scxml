@@ -1,0 +1,8 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="ecmascript">
+  <datamodel><data id="arr" expr="[1,2]"/></datamodel>
+  <state id="a">
+    <onentry><foreach array="arr" item="_value" index="i"><log expr="i"/></foreach></onentry>
+    <transition event="go" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

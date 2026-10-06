@@ -1,0 +1,1 @@
+{"options":{"exclude":[],"trace_context":"strip"},"ops":[{"op":"start"},{"op":"snapshot","checkpoint":0},{"op":"send","event":"order"},{"op":"snapshot","checkpoint":1}]}

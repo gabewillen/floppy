@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The `event` attribute vocabulary (namespaces/event): an inline
+     `event:schema` and an `event:schemaexpr` on the transitions the snapshot
+     lists, and schemas on a `<raise>`, a `<send>`, and a `<donedata>`, which
+     the snapshot has no entries for. They are metadata only: the run is
+     identical without them (session_snapshot.rs
+     event_schemas_never_change_execution). Checkpoints: 0 after start, 1
+     after `order`. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="transition-event-schemas" initial="idle">
+  <datamodel>
+    <data id="orders" expr="0"/>
+  </datamodel>
+  <state id="idle">
+    <transition event="order" target="busy"
+                event:schema='{"type": "object", "required": ["id"], "properties": {"id": {"type": "string"}}}'>
+      <assign location="orders" expr="orders + 1"/>
+      <raise event="accepted" event:schema='{"type": "null"}'/>
+    </transition>
+    <transition event="cancel" target="done" event:schemaexpr="({type: 'object'})"/>
+  </state>
+  <state id="busy">
+    <onentry>
+      <log label="orders" expr="orders"/>
+      <send event="shipped" delay="1s" event:schema='{"type": "string"}'/>
+    </onentry>
+    <transition event="accepted"/>
+    <transition event="shipped" target="done" event:schema="true"/>
+  </state>
+  <final id="done">
+    <donedata event:schema='{"type": "object", "properties": {"orders": {"type": "number"}}}'>
+      <param name="orders" expr="orders"/>
+    </donedata>
+  </final>
+</scxml>

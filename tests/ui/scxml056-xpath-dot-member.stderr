@@ -1,0 +1,19 @@
+warning[SCXML056]: `$user.name` is one undeclared variable named `user.name`, not a member of `$user`
+ --> tests/ui/scxml056-xpath-dot-member.scxml:8:34
+  |
+8 |     <transition event="go" cond="$user.name = 'bob'" target="b"/>
+  |                                  ^^^^^^^^^^ undeclared variable
+  |                                  ------------------ in this `cond`
+  |
+  = note: an XPath variable exists only for a declared `<data id>` (and `<foreach item/index>` or `idlocation` names once they run) or a system variable; evaluating an undeclared one raises `error.execution`
+  = help: `.` is part of an XPath name; select the child element with a path: `$user/name`
+  = spec: SCXML 1.0 §5.10 System Variables
+  = spec: SCXML CR 2014 §C.3.1 Data Model
+help: select the child with `$user/name`
+  |
+8 |     <transition event="go" cond="$user/name = 'bob'" target="b"/>
+  |                                  ~~~~~~~~~~
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML056`.
+validated tests/ui/scxml056-xpath-dot-member.scxml

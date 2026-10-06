@@ -1,0 +1,29 @@
+error[SCXML012]: atomic state cannot declare an initial configuration
+ --> tests/ui/scxml012-atomic-initial.scxml:2:17
+  |
+2 |   <state id="a" initial="a">
+  |                 ^^^^^^^^^^^ state has no child states to initialize
+  |
+  = note: `initial` selects child states; a state without child states has nothing to initialize
+  = help: remove the initial configuration or add child states
+  = spec: SCXML 1.0 §3.3 <state>
+help: remove the `initial` attribute
+  |
+2 -   <state id="a" initial="a">
+2 +   <state id="a">
+
+error[SCXML017]: initial state `a` is not a descendant of this element
+ --> tests/ui/scxml012-atomic-initial.scxml:2:26
+  |
+2 |   <state id="a" initial="a">
+  |              -           ^ initial target escapes its containing state
+  |              |
+  |              target declared here
+  |
+  = note: a state's `initial` attribute may only name its own descendants; the root's may only name states in the document
+  = help: target a descendant state owned by this compound state or SCXML root
+  = spec: SCXML 1.0 §3.3 <state>
+
+diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
+Some diagnostics have detailed explanations: SCXML012, SCXML017.
+For more information about a diagnostic, try `scxml-cli --explain SCXML012`.

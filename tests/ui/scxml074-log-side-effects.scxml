@@ -1,0 +1,16 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel>
+    <data id="tries" expr="0"/>
+    <data id="seen" expr="[]"/>
+  </datamodel>
+  <script>function remember(v) { seen.push(v); return v; }</script>
+  <state id="a">
+    <onentry>
+      <log label="tries" expr="tries++"/>
+      <log label="seen" expr="remember('entry')"/>
+      <log label="roll" expr="Math.random()"/>
+    </onentry>
+    <transition event="go" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

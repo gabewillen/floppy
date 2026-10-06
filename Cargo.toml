@@ -1,0 +1,217 @@
+[workspace]
+members = [
+    "crates/scxml-types",
+    "crates/scxml-syntax",
+    "crates/scxml-reporting",
+    "crates/scxml-validator-core",
+    "crates/scxml-validator-xsd",
+    "crates/scxml-compiler-core",
+    "crates/scxml-engine",
+    "crates/scxml-telemetry",
+    "crates/scxml-wit",
+    "crates/scxml-conformance",
+    "crates/scxml-packager",
+    "crates/scxml-script",
+    "crates/scxml-cli",
+    "crates/scxml-wasm-meter",
+    "crates/scxml-bench",
+    "crates/scxml-xpath",
+    "crates/scxml-scheduler",
+    "crates/scxml-snapshot",
+    "crates/scxml-event-schema",
+    "hosts/scxml-host-wasmtime",
+    "components/scxml-clock",
+    "components/scxml-data-model-ecmascript",
+    "components/scxml-data-model-null",
+    "components/scxml-data-model-xpath",
+    "components/scxml-ioprocessor-scxml",
+    "components/scxml-ioprocessor-basichttp",
+    "components/scxml-service-example",
+    "components/scxml-service-files",
+    "components/scxml-extension-example",
+    "components/scxml-script-example",
+    "components/scxml-validator",
+    "components/scxml-reporter-rustc",
+    "components/scxml-reporter-sarif",
+    "components/scxml-compiler",
+    "components/scxml-machine",
+    "components/scxml-snapshot-codec",
+    "namespaces/openai",
+]
+default-members = [
+    "crates/scxml-types",
+    "crates/scxml-syntax",
+    "crates/scxml-reporting",
+    "crates/scxml-validator-core",
+    "crates/scxml-compiler-core",
+    "crates/scxml-engine",
+    "crates/scxml-telemetry",
+    "crates/scxml-wit",
+    "crates/scxml-conformance",
+    "crates/scxml-packager",
+    "crates/scxml-script",
+    "crates/scxml-xpath",
+    "crates/scxml-scheduler",
+    "crates/scxml-snapshot",
+    "crates/scxml-event-schema",
+    "components/scxml-clock",
+    "components/scxml-data-model-ecmascript",
+    "components/scxml-data-model-null",
+    "components/scxml-data-model-xpath",
+    "components/scxml-ioprocessor-scxml",
+    "components/scxml-ioprocessor-basichttp",
+    "components/scxml-service-example",
+    "components/scxml-service-files",
+    "components/scxml-extension-example",
+    "components/scxml-script-example",
+    "components/scxml-machine",
+    "namespaces/openai",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.98"
+license = "Apache-2.0 OR MIT"
+authors = ["Stateforward contributors"]
+repository = "https://github.com/stateforward/scxml.rs"
+homepage = "https://github.com/stateforward/scxml.rs"
+readme = "README.md"
+keywords = ["scxml", "statechart", "state-machine", "wasm", "component-model"]
+categories = ["wasm", "parser-implementations", "development-tools"]
+# No crate is published to crates.io in this pre-1.0 release; the project is
+# distributed as source plus WebAssembly components built from this workspace.
+publish = false
+
+[workspace.dependencies]
+opentelemetry = { version = "0.33.0", default-features = false, features = ["metrics", "trace"] }
+opentelemetry_sdk = { version = "0.33.0", default-features = false, features = ["metrics", "trace"] }
+# `parallel-compilation` spreads Cranelift over cores (session-host startup
+# drops about 7x); the on-disk `cache` and precompiled-artifact paths stay off:
+# components are only ever compiled in-process from authenticated bytes.
+# `call-hook` lets the session host charge every store one host call reaches
+# to that call's single fuel budget (hosts/scxml-host-wasmtime/src/call_budget.rs).
+wasmtime = { version = "49.0.2", default-features = false, features = ["call-hook", "component-model", "cranelift", "parallel-compilation", "runtime", "std"] }
+# `scxml-host-wasmtime` only: the WASI 0.2 host interfaces a service
+# component's package declares and the run grants (wasi:clocks, wasi:random,
+# wasi:filesystem, wasi:sockets). Only `p2` (no preview 1 or 3); the host
+# links each granted interface individually, never the whole command world.
+wasmtime-wasi = { version = "49.0.2", default-features = false, features = ["p2"] }
+# The version wasmtime's parallel compilation already uses: the session host
+# asks it whether the current thread is a pool worker (which must never wait
+# on another thread's compilation), and a test races hosts on a small pool.
+rayon = { version = "1.12.0", default-features = false }
+wit-parser = { version = "0.259.0", default-features = false, features = ["std"] }
+wit-bindgen = { version = "0.51.0", default-features = false, features = ["macros", "realloc"] }
+quick-xml = { version = "0.41.0", default-features = false }
+xsd-schema = { version = "0.2.0", default-features = false }
+serde = { version = "1.0.228", default-features = false, features = ["alloc", "derive"] }
+serde_json = { version = "1.0.145", default-features = false, features = ["std"] }
+serde_path_to_error = { version = "0.1.20", default-features = false }
+unicode-width = { version = "0.2.2", default-features = false }
+sha2 = { version = "0.10.9", default-features = false }
+# `scxml-cli run` only (Unix): SIGINT and SIGTERM reach its single-threaded
+# session loop as channel messages through a watcher thread, so the CLI keeps
+# `forbid(unsafe_code)`. `iterator` is the only feature it needs.
+signal-hook = { version = "0.3.18", default-features = false, features = ["iterator"] }
+# `scxml-host-wasmtime` `http` feature only: the BasicHTTP network client
+# of live sessions (SCXML C.2). No default features: no gzip, cookies,
+# proxies, or bundled root certificates. TLS is rustls on the ring provider,
+# verified against the operating system's trust store (platform verifier).
+ureq = { version = "3.4.2", default-features = false, features = ["rustls-no-provider", "platform-verifier"] }
+rustls = { version = "0.23.22", default-features = false, features = ["ring", "std", "tls12"] }
+# `http` feature only: WHATWG URL parsing. Every outbound BasicHTTP target
+# and allowlist entry is canonicalized with it before the allowlist check
+# (dot segments, `%2e%2e`, and backslashes resolve exactly as a browser's
+# fetch resolves them).
+url = { version = "2.5.8", default-features = false, features = ["std"] }
+# `http` feature only: the built-in BasicHTTP listener's request-head parser
+# (the one ureq's protocol layer already uses).
+httparse = { version = "1.10.1", default-features = false, features = ["std"] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+# Test-only: golden session-snapshot documents are validated against the
+# published JSON Schemas (docs/session-snapshot.md). Schemas compile from in-memory
+# serde_json values, so no resolver feature is enabled.
+jsonschema = { version = "0.57.0", default-features = false }
+# `scxml-event-schema` only: the `event` vocabulary's metaschema checks and
+# schema compilation, linked into the validator and compiler. It has no
+# features; every schema is compiled from an in-memory value and its URL
+# loader refuses every URL.
+boon = { version = "=0.6.1", default-features = false }
+boa_engine = { version = "=0.22.0", default-features = false }
+# The Unicode identifier properties Boa's lexer reads (ID_Start, ID_Continue).
+icu_properties = "~2.3.0"
+wasm-encoder = { version = "0.258.0", default-features = false, features = ["std", "component-model"] }
+wasmparser = { version = "0.258.0", default-features = false, features = ["std", "validate", "component-model", "features"] }
+wac-graph = { version = "0.11.0", default-features = false }
+# Test-only: property tests at parser and decoder trust boundaries. Pinned
+# exactly; default features (fork, timeout, persistence) are disabled.
+proptest = { version = "=1.11.0", default-features = false, features = ["std"] }
+
+scxml-types = { path = "crates/scxml-types" }
+scxml-syntax = { path = "crates/scxml-syntax" }
+scxml-reporting = { path = "crates/scxml-reporting" }
+scxml-validator-core = { path = "crates/scxml-validator-core" }
+scxml-validator-xsd = { path = "crates/scxml-validator-xsd" }
+scxml-compiler-core = { path = "crates/scxml-compiler-core" }
+scxml-engine = { path = "crates/scxml-engine" }
+scxml-telemetry = { path = "crates/scxml-telemetry" }
+scxml-wit = { path = "crates/scxml-wit" }
+scxml-conformance = { path = "crates/scxml-conformance" }
+scxml-packager = { path = "crates/scxml-packager" }
+scxml-script = { path = "crates/scxml-script" }
+scxml-xpath = { path = "crates/scxml-xpath" }
+scxml-scheduler = { path = "crates/scxml-scheduler" }
+scxml-snapshot = { path = "crates/scxml-snapshot" }
+scxml-event-schema = { path = "crates/scxml-event-schema" }
+scxml-host-wasmtime = { path = "hosts/scxml-host-wasmtime" }
+scxml-clock = { path = "components/scxml-clock" }
+scxml-data-model-ecmascript = { path = "components/scxml-data-model-ecmascript" }
+scxml-data-model-null = { path = "components/scxml-data-model-null" }
+scxml-data-model-xpath = { path = "components/scxml-data-model-xpath" }
+scxml-ioprocessor-scxml = { path = "components/scxml-ioprocessor-scxml" }
+scxml-ioprocessor-basichttp = { path = "components/scxml-ioprocessor-basichttp" }
+scxml-service-example = { path = "components/scxml-service-example" }
+scxml-service-files = { path = "components/scxml-service-files" }
+scxml-extension-example = { path = "components/scxml-extension-example" }
+
+[workspace.lints.rust]
+# `deny` rather than `forbid` so the component crates can inherit these lints:
+# on wasm32 they `allow(unsafe_code)` at the crate root solely for
+# wit-bindgen generated ABI glue (authored unsafe there is rejected by
+# scripts/verify-component-authored-unsafe.py). Every crate root still carries
+# `#![forbid(unsafe_code)]` (components: on every non-wasm32 target), which no
+# inner attribute can relax.
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+[profile.dev]
+debug = 1
+incremental = true
+
+# Dependencies (Wasmtime and Cranelift above all) are optimized in debug and
+# test builds: the host tests compile and run every component through them,
+# which unoptimized takes hours on a 4-core CI runner. Workspace crates stay
+# unoptimized, with debug assertions, overflow checks, and debug-sized stack
+# frames.
+[profile.dev.package."*"]
+debug = 0
+opt-level = 3
+
+[profile.test]
+debug = 1
+incremental = true
+
+[profile.test.package."*"]
+debug = 0
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

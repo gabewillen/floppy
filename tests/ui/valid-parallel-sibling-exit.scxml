@@ -1,0 +1,9 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p" datamodel="ecmascript">
+  <parallel id="p">
+    <state id="worker">
+      <transition event="done" target="finished"/>
+    </state>
+    <state id="spinner"/>
+  </parallel>
+  <final id="finished"/>
+</scxml>

@@ -1,0 +1,25 @@
+error[XML001]: Markdown code fence around the XML document
+ --> tests/ui/xml001-markdown-fence.scxml:1:1
+  |
+1 | ```xml
+  | ^^^^^^ a code fence is Markdown, not XML
+...
+5 | ```
+  | --- also outside the root element
+  |
+  = note: an SCXML file contains exactly one XML document: an optional `<?xml …?>` declaration, then the single root element; any other text before or after it is not well formed
+  = help: remove the Markdown code fences: save only the XML document itself
+  = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
+help: remove the Markdown code fences
+  |
+1 - ```xml
+2 - <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+3 -   <state id="a"><transition event="go" target="f"/></state><final id="f"/>
+4 - </scxml>
+5 - ```
+1 + <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+2 +   <state id="a"><transition event="go" target="f"/></state><final id="f"/>
+3 + </scxml>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

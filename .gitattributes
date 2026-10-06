@@ -1,0 +1,19 @@
+# Line endings are part of this repository's contract. Component bytes,
+# report identities, and digest checks bind the exact bytes of tracked files
+# (sources and WIT through `include_str!`, the vendored XSD and fixtures through
+# `include_bytes!`, the IRP corpora (the W3C and each namespace suite) and
+# their baselines through recorded SHA-256
+# digests), so no checkout may rewrite them, whatever `core.autocrlf` says.
+
+# Authored text: always LF in the working tree, and CRLF is normalized to LF
+# on commit so an editor that writes CRLF cannot change the stored bytes.
+* text=auto eol=lf
+
+# Byte-pinned trees: stored and checked out verbatim, never converted in
+# either direction. Their bytes are recorded upstream bytes or blessed
+# expected output, and any conversion is a digest or snapshot failure.
+crates/scxml-validator-xsd/schemas/** -text
+tests/conformance/** -text
+tests/fixtures/** -text
+tests/ui/** -text
+namespaces/*/irp/** -text

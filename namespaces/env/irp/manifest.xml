@@ -1,0 +1,92 @@
+<?xml version="1.0"?>
+<!-- The env namespace's implementation report plan: each assertion is a
+     numbered statement of namespaces/env/README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/scxml.rs/tree/main/namespaces/env/irp/sources">
+  <assert id="env-1" specnum="1" specid="#env-1">
+    <![CDATA[env:<slot>="NAME" binds the element's slot <slot> to the variable NAME; the host substitutes NAME's value.]]>
+    <test id="300" conformance="mandatory" manual="false">
+      <start uri="300/test300.txml"/>
+    </test>
+    <test id="301" conformance="mandatory" manual="false">
+      <start uri="301/test301.txml"/>
+    </test>
+    <test id="302" conformance="mandatory" manual="false">
+      <start uri="302/test302.txml"/>
+    </test>
+  </assert>
+  <assert id="env-2" specnum="2" specid="#env-2">
+    <![CDATA[env:<slot>expr="EXPR" binds the slot to the variable whose name EXPR evaluates to in the document's data model when the element executes; a value that is not a string naming a variable, or a failed evaluation, raises error.execution.]]>
+    <test id="310" conformance="mandatory" manual="false">
+      <start uri="310/test310.txml"/>
+    </test>
+    <test id="311" conformance="mandatory" manual="false">
+      <start uri="311/test311.txml"/>
+    </test>
+    <test id="312" conformance="mandatory" manual="false">
+      <start uri="312/test312.txml"/>
+    </test>
+    <test id="313" conformance="mandatory" manual="false">
+      <start uri="313/test313.txml"/>
+    </test>
+    <test id="314" conformance="mandatory" manual="false">
+      <start uri="314/test314.txml"/>
+    </test>
+    <test id="315" conformance="mandatory" manual="false">
+      <start uri="315/test315.txml"/>
+    </test>
+  </assert>
+  <assert id="env-3" specnum="3" specid="#env-3">
+    <![CDATA[An element's slots are the ones its package declares (env-slots): a slot the package does not declare, a slot bound twice (env:<slot> and env:<slot>expr), or an env:<slot> value that is not a variable name is rejected (SCXML083).]]>
+    <test id="320" conformance="mandatory" manual="false">
+      <start uri="320/test320.txml"/>
+      <reject code="SCXML083"/>
+    </test>
+    <test id="321" conformance="mandatory" manual="false">
+      <start uri="321/test321.txml"/>
+      <reject code="SCXML083"/>
+    </test>
+    <test id="322" conformance="mandatory" manual="false">
+      <start uri="322/test322.txml"/>
+      <reject code="SCXML083"/>
+    </test>
+  </assert>
+  <assert id="env-4" specnum="4" specid="#env-4">
+    <![CDATA[The vocabulary has attributes only: an element in the env namespace, or an env attribute on an element in no namespace, is rejected (SCXML084), and an env attribute on an SCXML element is rejected (SCXML068).]]>
+    <test id="330" conformance="mandatory" manual="false">
+      <start uri="330/test330.txml"/>
+      <reject code="SCXML084"/>
+    </test>
+    <test id="331" conformance="mandatory" manual="false">
+      <start uri="331/test331.txml"/>
+      <reject code="SCXML084"/>
+    </test>
+    <test id="332" conformance="mandatory" manual="false">
+      <start uri="332/test332.txml"/>
+      <reject code="SCXML068"/>
+    </test>
+  </assert>
+  <assert id="env-5" specnum="5" specid="#env-5">
+    <![CDATA[A slot whose variable the run holds no value for is absent: the element's component decides what that means (openai raises error.execution without a key and sends nothing; without a base URL it uses its default endpoint).]]>
+    <test id="340" conformance="mandatory" manual="false">
+      <start uri="340/test340.txml"/>
+    </test>
+    <test id="341" conformance="mandatory" manual="false">
+      <start uri="341/test341.txml"/>
+    </test>
+  </assert>
+  <assert id="env-6" specnum="6" specid="#env-6">
+    <![CDATA[Each execution binds the element's own slots: another element, of the same or another namespace, never receives them.]]>
+    <test id="350" conformance="mandatory" manual="false">
+      <start uri="350/test350.txml"/>
+    </test>
+  </assert>
+  <assert id="env-7" specnum="7" specid="#env-7">
+    <![CDATA[The host substitutes a value only into the element's requests admitted to an origin its package declares or one a value supplies entirely; every other request is refused before it is sent (the element raises error.execution).]]>
+    <test id="360" conformance="mandatory" manual="false">
+      <start uri="360/test360.txml"/>
+    </test>
+    <test id="361" conformance="mandatory" manual="false">
+      <start uri="361/test361.txml"/>
+    </test>
+  </assert>
+</assertions>

@@ -1,0 +1,18 @@
+error[SCXML053]: `<assign>` declares more than one value source: `expr` and the child content
+ --> tests/ui/scxml053-assign-expr-and-element-child.scxml:4:45
+  |
+4 |     <onentry><assign location="$x" expr="1"><item/></assign></onentry>
+  |                                    -------- ^^^^^^^ the child content conflicts with `expr`
+  |                                    |
+  |                                    `expr` is declared here
+  |
+  = note: `<assign>` takes the value it stores from exactly one of `expr` or inline child content; with both the value is ambiguous
+  = help: keep one value source: remove `expr`, or remove the child content
+  = spec: SCXML 1.0 §5.4 <assign>
+help: remove `expr`
+  |
+4 -     <onentry><assign location="$x" expr="1"><item/></assign></onentry>
+4 +     <onentry><assign location="$x"><item/></assign></onentry>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML053`.

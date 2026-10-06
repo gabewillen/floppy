@@ -1,0 +1,15 @@
+error[SCXML021]: deep history target `q` is not a descendant of the history's parent
+  --> tests/ui/scxml021-deep-history-outside-parent.scxml:4:27
+   |
+ 4 |       <transition target="q"/>
+   |                           ^ target is outside the permitted subtree
+...
+10 |   <final id="q"/>
+   |              - target declared here
+   |
+   = note: shallow history records only the parent's immediate children, so its default must be one of them; deep history records descendants, so its default must lie inside the history's parent
+   = help: target a state nested inside the state that contains this `<history>`
+   = spec: SCXML 1.0 §3.10 <history>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML021`.

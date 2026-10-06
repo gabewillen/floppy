@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The child-autoforward machine snapshotted with trace carriers
+     preserved: every queued event (forwarded to the child, sent to
+     #_parent, routed back) keeps its W3C carrier. child-autoforward pins
+     the same traffic under "strip". Checkpoints: 0 after start, 1-2 after
+     the two events, 3-6 at the drain iterations that move "ping",
+     "hello", "stop", and done.invoke.kid, and 7 at the end. Checkpoints
+     1-6 are Wasmtime-only (inside the drain). -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="preserve-queues" initial="s">
+  <datamodel>
+    <data id="greetings" expr="0"/>
+  </datamodel>
+  <state id="s">
+    <invoke id="kid" type="http://www.w3.org/TR/scxml/" src="child-autoforward.child.scxml" autoforward="true"/>
+    <transition event="hello">
+      <assign location="greetings" expr="greetings + 1"/>
+    </transition>
+    <transition event="done.invoke.kid" target="end"/>
+  </state>
+  <final id="end"/>
+</scxml>

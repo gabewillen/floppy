@@ -1,0 +1,7 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idle">
+  <state id="idle">
+    <transition event="go" target="left right"/>
+  </state>
+  <final id="left"/>
+  <final id="right"/>
+</scxml>

@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!DOCTYPE scxml [
+  <!ENTITY % shared "<!ENTITY greeting 'hello'>">
+  %shared;
+  <!ENTITY states "<state id='a'><transition event='go' target='b'/></state><final id='b'/>">
+  <!ATTLIST scxml xmlns CDATA #FIXED "http://www.w3.org/2005/07/scxml"
+                  version CDATA "1.0">
+]>
+<scxml datamodel="ecmascript" initial="a">
+  <datamodel>
+    <data id="text" expr="'&greeting;'"/>
+  </datamodel>
+  &states;
+</scxml>

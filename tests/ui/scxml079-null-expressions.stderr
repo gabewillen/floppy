@@ -1,0 +1,41 @@
+warning[SCXML079]: `cond` on `<transition>` is not an `In('stateID')` predicate, the only condition the null data model supports
+ --> tests/ui/scxml079-null-expressions.scxml:3:28
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="s">
+  |                                                                         ---- the null data model is selected here
+2 |   <state id="s">
+3 |     <transition event="go" cond="x &gt; 1" target="f"/>
+  |                            ^^^^^^^^^^^^^^^ `cond` requires a data model
+  |
+  = note: the null data model has no data, value expressions, location expressions, or scripts; conditions may only be `In('stateID')`, with the state ID quoted
+  = help: rewrite the condition as `In('stateID')`, or select a data model that supports it, such as `datamodel="ecmascript"`
+  = spec: SCXML 1.0 §B.1 The Null Data Model
+help: select the ECMAScript data model
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
+  |                                                                         ~~~~~~~~~~
+
+warning[SCXML079]: the null data model defines no value-expression language, but `<send>` uses `delayexpr`
+ --> tests/ui/scxml079-null-expressions.scxml:4:30
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="s">
+  |                                                                         ---- the null data model is selected here
+...
+4 |     <onentry><send event="e" delayexpr="late"/></onentry>
+  |                              ^^^^^^^^^^^^^^^^ `delayexpr` requires a data model
+  |
+  = note: the null data model has no data, value expressions, location expressions, or scripts; conditions may only be `In('stateID')`, with the state ID quoted
+  = help: remove the expression, or select a data model that supports expressions, such as `datamodel="ecmascript"`
+  = spec: SCXML 1.0 §B.1 The Null Data Model
+help: remove `delayexpr`
+  |
+4 -     <onentry><send event="e" delayexpr="late"/></onentry>
+4 +     <onentry><send event="e"/></onentry>
+help: select the ECMAScript data model
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
+  |                                                                         ~~~~~~~~~~
+
+diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML079`.
+validated tests/ui/scxml079-null-expressions.scxml

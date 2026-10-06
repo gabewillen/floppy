@@ -1,0 +1,31 @@
+[package]
+name = "scxml-reporting"
+description = "Versioned canonical SCXML diagnostic artifacts and deterministic reporters"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+hex.workspace = true
+scxml-telemetry.workspace = true
+scxml-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+unicode-width.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+scxml-syntax.workspace = true
+scxml-validator-core.workspace = true
+scxml-validator-xsd.workspace = true
+
+[lints]
+workspace = true

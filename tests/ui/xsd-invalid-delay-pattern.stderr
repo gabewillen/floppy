@@ -1,0 +1,13 @@
+error[XSD-cvc-pattern-valid]: invalid value `5 seconds` for attribute `delay` on `<send>`
+ --> tests/ui/xsd-invalid-delay-pattern.scxml:3:40
+  |
+3 |     <onentry><send event="tick" delay="5 seconds"/></onentry>
+  |                                        ^^^^^^^^^ pattern constraint violation: value '5 seconds' does not match pattern '\d*(\.\d+)?(ms|s|m|h|d)'
+  |
+  = note: the W3C SCXML 1.0 schema rejects this under XML Schema constraint `cvc-pattern-valid`
+  = help: `delay` expects a CSS2 duration such as `500ms`, `2s`, or `1.5m`
+  = spec: SCXML 1.0 §6.2 <send>
+  = spec: XML Schema 1.0 Part 2 §4.3.4.4 pattern valid (`cvc-pattern-valid`)
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XSD-cvc-pattern-valid`.

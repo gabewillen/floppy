@@ -1,0 +1,4 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript">
+  <datamodel><data id="x" expr="1"/></datamodel>
+  <state id="a"><transition event="go" cond="x &lt; 3" target="f"/></state><final id="f"/>
+</scxml>
