@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "host",
     "namespaces/scxml",
     "namespaces/generate",
     "namespaces/decision",
@@ -21,6 +22,22 @@ readme = "README.md"
 # Nothing is published to crates.io; nemobot ships as source plus the Wasm
 # components built from this workspace.
 publish = false
+
+[workspace.dependencies]
+# The same pins as scxml.rs's workspace (scxml.rs/Cargo.toml); Cargo.lock was
+# seeded from scxml.rs/Cargo.lock so shared dependencies resolve identically.
+opentelemetry = { version = "0.33.0", default-features = false, features = ["trace"] }
+serde = { version = "1.0.228", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1.0.145", default-features = false, features = ["std"] }
+sha2 = { version = "0.10.9", default-features = false }
+
+scxml-compiler-core = { path = "scxml.rs/crates/scxml-compiler-core" }
+scxml-event-schema = { path = "scxml.rs/crates/scxml-event-schema" }
+scxml-host-wasmtime = { path = "scxml.rs/hosts/scxml-host-wasmtime" }
+scxml-syntax = { path = "scxml.rs/crates/scxml-syntax" }
+scxml-types = { path = "scxml.rs/crates/scxml-types" }
+scxml-validator-core = { path = "scxml.rs/crates/scxml-validator-core" }
+scxml-validator-xsd = { path = "scxml.rs/crates/scxml-validator-xsd" }
 
 [workspace.lints.rust]
 # `deny` rather than `forbid` so the namespace component crates can inherit

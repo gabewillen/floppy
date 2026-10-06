@@ -1,0 +1,28 @@
+[package]
+name = "nemobot-host"
+description = "nemobot's embedder of the scxml.rs Wasmtime session host: config, env-file values, grants, package binding, and the live session thread"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+opentelemetry.workspace = true
+scxml-compiler-core.workspace = true
+scxml-event-schema.workspace = true
+# `wasmtime`: the Component Model session host; `http`: the outbound
+# transport admitted extension and service requests go through (each
+# package's declared origins only).
+scxml-host-wasmtime = { workspace = true, features = ["wasmtime", "http"] }
+scxml-syntax.workspace = true
+scxml-types.workspace = true
+scxml-validator-core.workspace = true
+scxml-validator-xsd.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
