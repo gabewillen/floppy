@@ -232,10 +232,29 @@ const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
 /// exactly what the embedder passes, never the host process environment.
 /// Extension components never receive them, only references
 /// ([`ExtensionComponents::with_values`]). [`ExtensionEnvironment::none`] (the
-/// default) holds nothing, so every slot is absent.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// default) holds nothing, so every slot is absent. Its `Debug` output
+/// names the variables only, never a value, so formatting it (or a type
+/// that holds it, such as [`ExtensionComponents`] or
+/// [`crate::ServiceComponents`]) never prints a secret.
+#[derive(Clone, Default, Eq, PartialEq)]
 pub struct ExtensionEnvironment {
     variables: Vec<(String, String)>,
+}
+
+impl std::fmt::Debug for ExtensionEnvironment {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ExtensionEnvironment")
+            .field(
+                "names",
+                &self
+                    .variables
+                    .iter()
+                    .map(|(name, _)| name.as_str())
+                    .collect::<Vec<_>>(),
+            )
+            .finish_non_exhaustive()
+    }
 }
 
 impl ExtensionEnvironment {
@@ -1909,6 +1928,28 @@ impl telemetry::Host for ExtensionStoreData {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn debug_output_names_variables_and_never_prints_a_value() {
+        const VALUE: &str = "sk-debug-must-not-print";
+        let values = ExtensionEnvironment::new([("OPENAI_API_KEY".to_owned(), VALUE.to_owned())])
+            .expect("a valid variable");
+        let environment = format!("{values:?}");
+        assert!(environment.contains("OPENAI_API_KEY"), "{environment}");
+        for text in [
+            environment,
+            format!(
+                "{:?}",
+                ExtensionComponents::new().with_values(values.clone())
+            ),
+            format!(
+                "{:?}",
+                crate::ServiceComponents::new().with_values(values.clone())
+            ),
+        ] {
+            assert!(!text.contains(VALUE), "a value was formatted: {text}");
+        }
+    }
 
     fn http_request(
         method: &str,
