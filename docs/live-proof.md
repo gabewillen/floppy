@@ -6,6 +6,27 @@ env file named by `NEMOBOT_LIVE_ENV_FILE`
 Each variable was granted only to its own package: `OPENAI_*` to `generate`,
 and `TYPESAFE_*` to `decision`.
 
+## 2026-10-06, the builder through `scxml-cli run`, model `gpt-6-luna`
+
+nemobot has no runtime of its own since decision D14, so this run went
+through scxml.rs's `scxml-cli run` (subtree scxml.rs `e7d2fd7a`, nemobot
+commit `5dc040cc`), exactly the builder README's command:
+`scxml-cli run @target/test-components/components.args
+@bots/builder/builder.args --clock wall --env-file <NEMOBOT_LIVE_ENV_FILE>
+bots/builder/parent.scxml`, with `OPENAI_BASE_URL` and `TYPESAFE_BASE_URL`
+defaults in the calling environment (the env file's values win). The
+`--env` scopes of `builder.args` granted `OPENAI_*` to the generate service
+and `TYPESAFE_*` to the decision service. Command:
+`NEMOBOT_LIVE_ENV_FILE=<mosfet .env> NEMOBOT_LIVE_MODEL=gpt-6-luna cargo test
+-p nemobot-tests --test builder_bot -- --ignored live_builder_through_an_env_file`.
+
+| Test | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| `builder_bot live_builder_through_an_env_file` | `gpt-6-luna` (generate service), TypeSafe `system_one` (decision triage) | pass | 1 of 3 | `builder.done` on attempt 2 of 4 after 1 failure (`validate`: `XSD-cvc-complex-type.2.4` twice and `SCXML070`), 0 machine fixes, 0 warnings, triage decision `triage.repair`; plan `traffic_light` (7 states); all four of its tests passed in simulation, each in its own invocation; the built document compiled again outside the builder (`scxml-cli compile`, no packages); 189 s |
+
+The builder's output was written to `target/builder-live/` and is not
+committed. Nothing in the tests was changed to make them pass.
+
 ## 2026-10-06, streamed and cancellable model calls, model `gpt-6-luna`
 
 The runs used nemobot commit `847e7960` (subtree scxml.rs `14c4b8e9`):
