@@ -119,6 +119,14 @@ hard cutover.
   the CLI passes `--env`/`--env-file` values and, outside `--record` and
   `--replay`, the outbound transport to services. The echo example declares
   an `endpoint` slot and GETs it on `fetch`.
+- Per-call emit bounds for invoked services: one export call emits at most
+  1024 events (`MAX_SERVICE_EMITS_PER_CALL`) of at most 4 MiB of
+  cumulative event bytes (`MAX_SERVICE_EMITTED_BYTES_PER_CALL`) on every
+  build (an amplification guard); the emit past either bound fails with
+  `capacity-exhausted` and retires the instance like any invalid emit (WIT
+  `@0.2.0`, unreleased, documents it on `invoked-service-host.emit`). A
+  service package that declares no event contract stays unchecked by
+  schema, within these bounds.
 - Repository services: a literal `<invoke type>` of exactly
   `https://github.com/<owner>/<repo>/services/<name>@<tag>` that no
   `--service-package` binds is resolved by the CLI exactly like a repository

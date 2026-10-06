@@ -176,7 +176,20 @@ Event data is checked as JSON: no data and `null` are `null`; numbers,
 strings, booleans, arrays, and objects are themselves; XML data is admitted
 only by the boolean schema `true`. Autoforwarded events are delivered
 unchecked (an autoforward is not a `<send>` and has no failure to raise).
-A service without a contract is not checked.
+A service without a contract is not schema-checked: its emits pass with any
+event name and data. The embedder consented to that by binding a package
+that declares no contract, and the emits are still bounded as below.
+
+### Emit bounds
+
+Every emitted event must be within the `types.event` bounds (96 KiB in
+all). One export call (`start`, `send`, `wake`, or `cancel`) emits at most
+1024 events (`MAX_SERVICE_EMITS_PER_CALL`) of at most 4 MiB of cumulative
+event bytes (`MAX_SERVICE_EMITTED_BYTES_PER_CALL`); the emit past either
+bound fails with `capacity-exhausted` and is invalid like a contract
+mismatch (an invalid emit during `start` fails the `<invoke>` with
+`error.execution` instead). These are amplification guards (lifting a guest
+buffer into host memory is not fuel-metered), so they apply on every build.
 
 A document's own `event:schema` attributes never take part: they stay
 metadata only, and `event_schemas_never_change_execution`

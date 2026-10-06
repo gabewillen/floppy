@@ -28,10 +28,15 @@
 //! * **Failure** — a trap (fuel exhaustion included), a failed export call
 //!   after `start`, or an invalid `emit` retires the instance: the invoking
 //!   session receives `failed` (`error.communication` with the invoke id)
-//!   and no `done.invoke`. A failed `start` fails the `<invoke>` instead.
+//!   and no `done.invoke`. A failed `start` (an invalid `emit` during
+//!   `start` included) fails the `<invoke>` instead.
 //! * **Bounds** — every export call runs under the per-call fuel cap and on
 //!   the session host's per-call budget (`call_budget`), like extension
-//!   components. `outbound-http` is deny by default and admits only the
+//!   components. Each emitted event is within the `types.event` bounds, and
+//!   one export call emits at most [`MAX_SERVICE_EMITS_PER_CALL`] events of
+//!   at most [`MAX_SERVICE_EMITTED_BYTES_PER_CALL`] cumulative bytes; the
+//!   emit past either bound is invalid (`capacity-exhausted`). These two are
+//!   amplification guards and apply on every build. `outbound-http` is deny by default and admits only the
 //!   origins the service package declares, or the origin a reference's
 //!   value supplies entirely.
 //! * **Values and references** — the embedder holds the values of the
@@ -59,7 +64,10 @@
 //!   `error.execution` (a delayed one is checked when it is sent, and again
 //!   when it falls due, when a mismatch is `error.communication`).
 //!   Autoforwarded events are delivered unchecked. A service without a
-//!   contract is not checked. A document's own `event:schema` attributes
+//!   contract is not schema-checked: its emits pass with any event name and
+//!   data, within the event and per-call bounds above (the package then
+//!   declares nothing to check against, and the embedder that bound it
+//!   consented to it). A document's own `event:schema` attributes
 //!   never take part: they stay metadata only.
 //! * **WASI** — nothing WASI is ambient: each service's linker holds exactly
 //!   the WASI interfaces its package declares and the run grants
@@ -119,6 +127,18 @@ pub const MAX_SERVICE_COMPONENTS: usize = 64;
 pub const MAX_SERVICE_EVENTS: usize = 64;
 /// Maximum bytes of one declared event name.
 const MAX_SERVICE_EVENT_NAME_BYTES: usize = 256;
+/// Maximum events one service export call may `emit`.
+///
+/// An amplification guard, so it applies on every build: lifting one guest
+/// buffer into host memory is not fuel-metered, so without it one fuel-capped
+/// call could emit the same bounded event many thousands of times and grow
+/// host memory far beyond the instance's own memory limit.
+pub const MAX_SERVICE_EMITS_PER_CALL: usize = 1_024;
+/// Maximum cumulative bytes of the events one service export call may
+/// `emit` (each event's name, identifiers, origins, data, `raw`, and trace
+/// context, as [`scxml_types::Event::validate`] counts them); an
+/// amplification guard like [`MAX_SERVICE_EMITS_PER_CALL`].
+pub const MAX_SERVICE_EMITTED_BYTES_PER_CALL: usize = 4 * 1_024 * 1_024;
 
 /// One declared event of a service's contract: its exact name and its data
 /// schema as canonical resolved JSON (`scxml_event_schema::Resolved`).
@@ -463,6 +483,8 @@ pub(crate) struct ServiceClock {
 /// One export call in progress inside a service store.
 struct ServiceCall {
     emitted: Vec<WitEvent>,
+    /// The cumulative bytes of `emitted`.
+    emitted_bytes: usize,
     /// `complete`'s data, once called.
     completion: Option<Completion>,
     /// `set-wakeup`'s last request, once called.
@@ -637,9 +659,9 @@ impl ServiceHandle {
     }
 
     /// `start`: `Ok` with the call's step when the service accepted its
-    /// start (it may already have completed or been retired by an invalid
-    /// emit), `Err` when it rejected it or trapped (the `<invoke>` fails;
-    /// the instance is retired).
+    /// start (it may already have completed), `Err` when it rejected it,
+    /// trapped, or made an invalid emit during `start` (the `<invoke>` fails
+    /// with `error.execution`; the instance is retired).
     pub(crate) fn start(
         &mut self,
         request: &ServiceInvocation,
@@ -759,6 +781,7 @@ impl ServiceHandle {
         }
         self.store.data_mut().call = Some(ServiceCall {
             emitted: Vec::new(),
+            emitted_bytes: 0,
             completion: None,
             wakeup: None,
             invalid_emit: false,
@@ -867,6 +890,61 @@ fn bind_references(
     Ok((slots, references))
 }
 
+/// The bytes one validated event counts toward
+/// [`MAX_SERVICE_EMITTED_BYTES_PER_CALL`]: the same fields
+/// [`scxml_types::Event::validate`] bounds (fixed-width data as its width).
+fn event_bytes(event: &scxml_types::Event) -> usize {
+    use scxml_types::DataValue;
+    let data = match &event.data {
+        DataValue::Absent | DataValue::Undefined | DataValue::Null => 0,
+        DataValue::Bool(_) => 1,
+        DataValue::Number(_) => 8,
+        DataValue::String(value)
+        | DataValue::JsonArray(value)
+        | DataValue::JsonObject(value)
+        | DataValue::Xml(value) => value.len(),
+    };
+    let trace = event.trace_context.as_ref().map_or(0, |context| {
+        context
+            .traceparent
+            .len()
+            .saturating_add(context.tracestate.as_ref().map_or(0, String::len))
+            .saturating_add(context.baggage.as_ref().map_or(0, String::len))
+    });
+    [
+        event.name.as_str().len(),
+        event.send_id.as_ref().map_or(0, |id| id.as_str().len()),
+        event.invoke_id.as_ref().map_or(0, |id| id.as_str().len()),
+        event.origin.as_ref().map_or(0, String::len),
+        event.origin_type.as_ref().map_or(0, String::len),
+        data,
+        event.raw.as_ref().map_or(0, String::len),
+        trace,
+    ]
+    .into_iter()
+    .fold(0, usize::saturating_add)
+}
+
+/// Admits one more emitted event of `bytes` after `count` events of
+/// `emitted_bytes` in the same export call, returning the new cumulative
+/// bytes.
+///
+/// # Errors
+///
+/// `capacity-exhausted` when the event would exceed
+/// [`MAX_SERVICE_EMITS_PER_CALL`] or [`MAX_SERVICE_EMITTED_BYTES_PER_CALL`];
+/// the caller makes the emit invalid, which retires the instance.
+fn admit_emit(count: usize, emitted_bytes: usize, bytes: usize) -> Result<usize, ComponentError> {
+    let total = emitted_bytes.saturating_add(bytes);
+    if count >= MAX_SERVICE_EMITS_PER_CALL || total > MAX_SERVICE_EMITTED_BYTES_PER_CALL {
+        return Err(component_error(
+            ErrorCode::CapacityExhausted,
+            "the export call exceeds the per-call bound on emitted events",
+        ));
+    }
+    Ok(total)
+}
+
 fn unavailable(detail: &'static str) -> ComponentError {
     component_error(ErrorCode::Unavailable, detail)
 }
@@ -913,6 +991,13 @@ impl invoked_service_host::Host for ServiceStoreData {
                         ErrorCode::InvalidInput,
                         "the event is not one the service's package declares with data its schema admits",
                     ));
+                }
+                match admit_emit(call.emitted.len(), call.emitted_bytes, event_bytes(&native)) {
+                    Ok(total) => call.emitted_bytes = total,
+                    Err(error) => {
+                        call.invalid_emit = true;
+                        return Err(error);
+                    }
                 }
                 call.emitted.push(event);
                 Ok(())
@@ -1054,5 +1139,65 @@ impl telemetry::Host for ServiceStoreData {
             context.as_ref(),
         );
         crate::component::guest_signal_recorded(&self.execution_context, &recorded);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ErrorCode, MAX_SERVICE_EMITS_PER_CALL, MAX_SERVICE_EMITTED_BYTES_PER_CALL, admit_emit,
+        event_bytes,
+    };
+
+    #[test]
+    fn emits_are_bounded_per_call_by_count_and_cumulative_bytes() {
+        assert_eq!(admit_emit(0, 0, 10).map_err(|error| error.code), Ok(10));
+        assert_eq!(
+            admit_emit(MAX_SERVICE_EMITS_PER_CALL - 1, 0, 1).map_err(|error| error.code),
+            Ok(1),
+            "the last admitted emit"
+        );
+        assert_eq!(
+            admit_emit(MAX_SERVICE_EMITS_PER_CALL, 0, 1).map_err(|error| error.code),
+            Err(ErrorCode::CapacityExhausted),
+            "one emit past the count bound"
+        );
+        assert_eq!(
+            admit_emit(1, MAX_SERVICE_EMITTED_BYTES_PER_CALL - 5, 5).map_err(|error| error.code),
+            Ok(MAX_SERVICE_EMITTED_BYTES_PER_CALL),
+            "exactly at the byte bound"
+        );
+        assert_eq!(
+            admit_emit(1, MAX_SERVICE_EMITTED_BYTES_PER_CALL - 5, 6).map_err(|error| error.code),
+            Err(ErrorCode::CapacityExhausted),
+            "one byte past the byte bound"
+        );
+        assert_eq!(
+            admit_emit(1, usize::MAX, 1).map_err(|error| error.code),
+            Err(ErrorCode::CapacityExhausted),
+            "the sum saturates instead of wrapping"
+        );
+    }
+
+    #[test]
+    fn an_emitted_event_counts_its_retained_bytes() {
+        let mut event = scxml_types::Event::external(
+            scxml_types::EventName::new("echo.reply".to_owned()).expect("a valid event name"),
+        );
+        assert_eq!(event_bytes(&event), "echo.reply".len());
+        event.data = scxml_types::DataValue::String("x".repeat(100));
+        event.origin_type = Some("urn:echo".to_owned());
+        event.raw = Some("raw".to_owned());
+        assert_eq!(
+            event_bytes(&event),
+            "echo.reply".len() + 100 + "urn:echo".len() + "raw".len()
+        );
+        event.data = scxml_types::DataValue::Number(
+            scxml_types::FiniteNumber::new(1.0).expect("a finite number"),
+        );
+        assert_eq!(
+            event_bytes(&event),
+            "echo.reply".len() + 8 + "urn:echo".len() + "raw".len()
+        );
     }
 }

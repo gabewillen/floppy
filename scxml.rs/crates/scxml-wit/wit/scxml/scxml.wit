@@ -1649,8 +1649,10 @@ interface invoked-service-host {
   /// `origin-type` with the service's type URI and `invoke-id` with its
   /// invoke id, and replaces the event type with `external`.
   /// Errors: `invalid-input` or `payload-too-large` for an event outside
-  /// the `types.event` bounds (the host retires the instance and reports
-  /// it `failed`); `unavailable` outside an export call. After the
+  /// the `types.event` bounds, and `capacity-exhausted` for an emit past
+  /// 1024 events or 4194304 cumulative event bytes in one export call (in
+  /// each case the host retires the instance and reports it `failed`);
+  /// `unavailable` outside an export call. After the
   /// invoking session began cancelling the invocation, accepted events are
   /// dropped.
   emit: func(event: event) -> result<_, component-error>;
