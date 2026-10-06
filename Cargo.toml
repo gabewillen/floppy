@@ -36,7 +36,6 @@ members = [
     "components/scxml-compiler",
     "components/scxml-machine",
     "components/scxml-snapshot-codec",
-    "namespaces/openai",
 ]
 default-members = [
     "crates/scxml-types",
@@ -65,7 +64,6 @@ default-members = [
     "components/scxml-extension-example",
     "components/scxml-script-example",
     "components/scxml-machine",
-    "namespaces/openai",
 ]
 resolver = "3"
 

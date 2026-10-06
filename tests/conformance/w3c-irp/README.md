@@ -93,7 +93,7 @@ measured results are the baselines below.
 After both prepared suites are regenerated, regenerate their canonical measured
 run evidence through the shipped components, from a release verified by
 `scripts/verify-wasm-capabilities.sh` (`$RELEASE`, `$MANIFEST_SHA256`, and
-`$OPENAI_SHA256` are built as in the `irp-components` snippet of
+`$EXTENSION_SHA256` are built as in the `irp-components` snippet of
 [CONTRIBUTING.md](../../../CONTRIBUTING.md)); the generator also regenerates
 every namespace suite's baselines
 ([docs/conformance.md](../../../docs/conformance.md#namespace-suites)):
@@ -102,7 +102,7 @@ every namespace suite's baselines
 cargo run --release --locked -p scxml-conformance --features wasmtime \
   --example generate_irp_baselines -- \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
-  --extension-component-sha256 "$OPENAI_SHA256"
+  --extension-component-sha256 "$EXTENSION_SHA256"
 ```
 
 `baselines/SHA256SUMS` binds the exact reporter-facing `scxml.report/v3` bytes.
@@ -122,8 +122,8 @@ empty filter identity, every case including manual cases run) measure:
 
 | Data model | Passed / Applicable | Under errata | Not applicable | Mandatory Passed | Not Passing | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| ECMAScript | 201 / 201 | 0 | 1 | 167 / 167 | 0 | `1975a1a0467b6e0a4a80befe2a5b9902169e85c018a4d22768534dd27a54d682` | `6c8be254619f14afc8193355259c8759f15d4bf2016a46dbd4e0a36be2a6eeee` |
-| XPath | 178 / 178 | 5 | 24 | 163 / 163 | 0 | `c07da9831092692099d7c46696945feab67fe99044ca7cec9df8356db56276e1` | `3451259154ec3784b5c229fafcbeef77c70418b0fea088be6fd2136933d6d8a7` |
+| ECMAScript | 201 / 201 | 0 | 1 | 167 / 167 | 0 | `8f5ab67d3fdcaabfb32964c1728140a83b7aed7b8d87d8923867bda15d3c26c1` | `0b54ea5b2fe782eae5b16d20188b54eb55842e9147fa0e104e80480016ec0c92` |
+| XPath | 178 / 178 | 5 | 24 | 163 / 163 | 0 | `85c6c5bd0f421a0c477818ade0f9aa5fdbf23c44124ea3a6e7f1ffce71d25a26` | `07a301af5f350c0e5040b24c3a68144e67ed996257894ee9cf554a94c351e91f` |
 
 The ECMAScript corpus digest is
 `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` and the

@@ -1681,18 +1681,18 @@ mod tests {
     #[test]
     fn repository_uris_are_exact() {
         let uri = RepositoryUri::parse(
-            "https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0",
+            "https://github.com/stateforward/scxml.rs/namespaces/example@v0.2.0",
         )
         .expect("a repository namespace URI");
         assert_eq!(uri.owner, "stateforward");
         assert_eq!(uri.repo, "scxml.rs");
-        assert_eq!(uri.name, "openai");
+        assert_eq!(uri.name, "example");
         assert_eq!(uri.tag, "v0.2.0");
-        assert_eq!(uri.manifest_name(), "openai.extension.json");
+        assert_eq!(uri.manifest_name(), "example.extension.json");
         for other in [
-            "https://github.com/stateforward/scxml.rs/namespaces/openai",
+            "https://github.com/stateforward/scxml.rs/namespaces/example",
             "https://github.com/stateforward/scxml.rs@v0.2.0",
-            "https://github.com/stateforward/scxml.rs/namespaces/openai/@v0.2.0",
+            "https://github.com/stateforward/scxml.rs/namespaces/example/@v0.2.0",
             "https://github.com/stateforward/scxml.rs/tree/main/namespaces@v1",
             // Only the `namespaces/<name>` folder: the old `elements/` folder,
             // a bare package path, and nested paths are ordinary URIs. (The
@@ -1701,23 +1701,23 @@ mod tests {
             concat!(
                 "https://github.com/stateforward/scxml.rs/",
                 "elements",
-                "/openai@v0.2.0"
+                "/example@v0.2.0"
             ),
-            "https://github.com/stateforward/scxml.rs/openai@v0.2.0",
+            "https://github.com/stateforward/scxml.rs/example@v0.2.0",
             "https://github.com/stateforward/scxml.rs/namespaces@v0.2.0",
-            "https://github.com/stateforward/scxml.rs/namespaces/openai/package@v0.2.0",
-            "https://github.com/stateforward/scxml.rs/Namespaces/openai@v0.2.0",
-            "https://github.com/stateforward/scxml.rs/namespaces//openai@v0.2.0",
+            "https://github.com/stateforward/scxml.rs/namespaces/example/package@v0.2.0",
+            "https://github.com/stateforward/scxml.rs/Namespaces/example@v0.2.0",
+            "https://github.com/stateforward/scxml.rs/namespaces//example@v0.2.0",
             "https://github.com/stateforward/scxml.rs/namespaces/../x@v1",
-            "https://github.com/stateforward/scxml.rs/namespaces/openai@",
-            "https://github.com/stateforward/scxml.rs/namespaces/openai@-v1",
-            "https://github.com/stateforward/scxml.rs/namespaces/openai@v1..2",
+            "https://github.com/stateforward/scxml.rs/namespaces/example@",
+            "https://github.com/stateforward/scxml.rs/namespaces/example@-v1",
+            "https://github.com/stateforward/scxml.rs/namespaces/example@v1..2",
             "https://github.com/stateforward/scxml.rs/namespaces/open ai@v1",
-            "https://github.com/stateforward/scxml.rs/namespaces/openai@v1?x",
-            "http://github.com/stateforward/scxml.rs/namespaces/openai@v1",
-            "HTTPS://github.com/stateforward/scxml.rs/namespaces/openai@v1",
-            "https://github.com.evil/stateforward/scxml.rs/namespaces/openai@v1",
-            "https://stateforward.org/scxml/openai",
+            "https://github.com/stateforward/scxml.rs/namespaces/example@v1?x",
+            "http://github.com/stateforward/scxml.rs/namespaces/example@v1",
+            "HTTPS://github.com/stateforward/scxml.rs/namespaces/example@v1",
+            "https://github.com.evil/stateforward/scxml.rs/namespaces/example@v1",
+            "https://stateforward.org/scxml/example",
         ] {
             assert!(RepositoryUri::parse(other).is_none(), "{other}");
         }
@@ -1797,7 +1797,7 @@ mod tests {
         );
         assert!(
             RepositoryUri::parse_service(
-                "https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0"
+                "https://github.com/stateforward/scxml.rs/namespaces/example@v0.2.0"
             )
             .is_none(),
             "a namespaces/ URI is never a repository service"

@@ -161,7 +161,7 @@ fn check_slots(
                     "an `env:<slot>` attribute names the variable whose value the host binds to the slot: `[A-Za-z_][A-Za-z0-9_]*`, at most {MAX_ENV_NAME_BYTES} bytes; the value itself never appears in a document"
                 ))
                 .with_help(format!(
-                    "name the variable (for example `env:{slot}=\"OPENAI_API_KEY\"`), or use `env:{slot}expr` for an expression"
+                    "name the variable (for example `env:{slot}=\"API_TOKEN\"`), or use `env:{slot}expr` for an expression"
                 )),
             );
         }

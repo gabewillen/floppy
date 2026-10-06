@@ -60,15 +60,15 @@ name = "snapshot_run"
 required-features = ["wasmtime"]
 
 [[test]]
+name = "env_values"
+required-features = ["wasmtime"]
+
+[[test]]
 name = "extension_packages"
 required-features = ["wasmtime"]
 
 [[test]]
 name = "live_run"
-required-features = ["wasmtime"]
-
-[[test]]
-name = "openai_extension"
 required-features = ["wasmtime"]
 
 [[test]]

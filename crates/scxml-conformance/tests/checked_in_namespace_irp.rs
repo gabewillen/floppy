@@ -23,14 +23,14 @@ const DATA_MODELS: [&str; 2] = ["ecmascript", "xpath"];
 
 /// Per suite: the test count, how many of those tests the compiler must
 /// reject, and the SHA-256 of each canonical baseline (ECMAScript, `XPath`).
-const SUITES: [(&str, usize, usize, [&str; 2]); 3] = [
+const SUITES: [(&str, usize, usize, [&str; 2]); 2] = [
     (
         "env",
         20,
         6,
         [
-            "83595f7c1b00d80bee889587f30fd13f2f43ed8098853b05585248505347df05",
-            "225dc12b65157860b462373f8fe58e7be50f271b946c288b21b2a0fcec32f5ba",
+            "a9907557d817387af51bc26165a3ec5b13985a7a31b5646edf037f5b19ba4c48",
+            "18c7156d73ad72971a828d0b21d9922844978062115e9238a649f27932aed35f",
         ],
     ),
     (
@@ -38,17 +38,8 @@ const SUITES: [(&str, usize, usize, [&str; 2]); 3] = [
         29,
         17,
         [
-            "e6bd35e02064b0d74456510708d4864d8448c9ec3af06006c127d1e8ec842ee4",
-            "be86a80c71eae366bcd62539c2d969a9e2ae034327e1dd82470b4d300b3d3feb",
-        ],
-    ),
-    (
-        "openai",
-        64,
-        0,
-        [
-            "d24f242650f060b8b78a65d8ce8e7e24c3c39f887d490649f8d290866f948a46",
-            "b34802155be5d9a7e24979c6ccd9ddb69c9e2b6e8942850cc3ddbe18ce3ef4c1",
+            "58578304db0563e57b659f56df89c0f960c9049032a6f897f2f2130fe8afbd86",
+            "f5080954e340d29639f219534c4957be4035bb54ea75771d1a7621f30d67b7c4",
         ],
     ),
 ];
@@ -239,25 +230,14 @@ fn baselines_are_digest_bound_passing_namespace_runs() {
                 .map(|(_, packages)| *packages)
                 .expect("a listed suite");
             assert_eq!(
-                identity
-                    .extensions
-                    .iter()
-                    .map(|extension| extension.namespace_uri.as_str())
-                    .collect::<Vec<_>>(),
-                packages
-                    .iter()
-                    .map(|package| format!(
-                        "https://github.com/stateforward/scxml.rs/namespaces/{package}@v0.2.0"
-                    ))
-                    .collect::<Vec<_>>(),
+                identity.extensions.len(),
+                packages.len(),
                 "{name} binds exactly its packages"
             );
             for (extension, package) in identity.extensions.iter().zip(packages) {
                 let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../namespaces")
-                    .join(package)
-                    .join("package")
-                    .join(format!("{package}.extension.json"));
+                    .join("../..")
+                    .join(package);
                 let manifest_bytes = std::fs::read(&manifest).expect("the package manifest reads");
                 assert_eq!(
                     extension.manifest_sha256,
@@ -266,6 +246,11 @@ fn baselines_are_digest_bound_passing_namespace_runs() {
                 );
                 let parsed: serde_json::Value =
                     serde_json::from_slice(&manifest_bytes).expect("the manifest is JSON");
+                assert_eq!(
+                    Some(extension.namespace_uri.as_str()),
+                    parsed["namespace-uri"].as_str(),
+                    "{name}: the identity binds the package's namespace"
+                );
                 assert_eq!(
                     Some(extension.schema_sha256.as_str()),
                     parsed["schema-sha256"].as_str(),

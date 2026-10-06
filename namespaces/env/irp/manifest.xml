@@ -66,7 +66,7 @@
     </test>
   </assert>
   <assert id="env-5" specnum="5" specid="#env-5">
-    <![CDATA[A slot whose variable the run holds no value for is absent: the element's component decides what that means (openai raises error.execution without a key and sends nothing; without a base URL it uses its default endpoint).]]>
+    <![CDATA[A slot whose variable the run holds no value for is absent: the element's component decides what that means (example:fetch sends no authorization without a token, and without a url slot it uses its url attribute, which only an origin its package declares could admit).]]>
     <test id="340" conformance="mandatory" manual="false">
       <start uri="340/test340.txml"/>
     </test>

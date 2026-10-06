@@ -745,7 +745,11 @@ impl ServiceFlags {
     /// with the run's values for the services' `env` slots (references
     /// only) and, when `outbound` is true, the outbound transport each
     /// service's admitted requests go through (none: every request is
-    /// refused).
+    /// refused). When `deferred` is also true (a live run that neither
+    /// records nor replays), services also get the deferred transport of
+    /// `outbound-http.begin`: a `ThreadedServiceHttp`, which performs each
+    /// request on a thread of its own and closes its connection when the
+    /// instance that began it is cancelled.
     ///
     /// # Errors
     ///
@@ -757,6 +761,7 @@ impl ServiceFlags {
         resolved: &Services,
         values: &[crate::extensions::HeldValue],
         outbound: bool,
+        deferred: bool,
     ) -> Result<scxml_host_wasmtime::ServiceComponents, Box<dyn std::error::Error>> {
         let packages = &resolved.packages;
         let mut services = scxml_host_wasmtime::ServiceComponents::new()
@@ -768,6 +773,18 @@ impl ServiceFlags {
                 )
                 .map_err(|error| format!("[extension-http-invalid] {error}"))?,
             ));
+            if deferred {
+                let client = scxml_host_wasmtime::ExtensionHttpClient::new(
+                    scxml_host_wasmtime::ExtensionHttpConfig::new(),
+                )
+                .map_err(|error| format!("[extension-http-invalid] {error}"))?;
+                let transport = scxml_host_wasmtime::ThreadedServiceHttp::new(
+                    client,
+                    scxml_host_wasmtime::DEFAULT_SERVICE_HTTP_IN_FLIGHT,
+                )
+                .map_err(|error| format!("[extension-http-invalid] {error}"))?;
+                services = services.with_deferred_http(std::sync::Arc::new(transport));
+            }
         }
         for package in packages {
             let uri = &package.manifest.service_uri;

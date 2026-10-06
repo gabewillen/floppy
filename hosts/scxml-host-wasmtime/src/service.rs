@@ -102,7 +102,9 @@ use crate::call_budget::CallBudget;
 use crate::component::{GuestSignal, component_error, record_guest_signal};
 use crate::extension::{ExtensionHttp, outbound_http};
 use crate::memory_growth::MeteredLimits;
-use crate::service_http::{MAX_SERVICE_PENDING_REQUESTS, ServiceHttp, ServiceResponses};
+use crate::service_http::{
+    CancelSignal, MAX_SERVICE_PENDING_REQUESTS, ServiceHttp, ServiceResponses,
+};
 use crate::session::{native_event, native_value};
 use crate::{
     ArtifactError, ArtifactKind, AuthenticatedComponent, HostError, InvalidLimit, LifecycleLease,
@@ -563,6 +565,10 @@ pub(crate) struct ServiceStoreData {
     /// This instance's deferred requests by ticket: `None` while in flight,
     /// the outcome once delivered and not yet taken.
     tickets: BTreeMap<u64, Option<Result<outbound_http::HttpResponse, ComponentError>>>,
+    /// The cancellation of each deferred request still in flight, by
+    /// ticket: cancelled when the instance abandons it (it leaves `Live` or
+    /// is dropped), so the transport stops the request.
+    in_flight: BTreeMap<u64, Arc<CancelSignal>>,
     /// The last ticket issued.
     last_ticket: u64,
     /// The time of the last call, for `now-ms` outside one.
@@ -571,6 +577,13 @@ pub(crate) struct ServiceStoreData {
     /// its plan linked).
     wasi: crate::wasi::WasiState,
     _store_lease: LifecycleLease,
+}
+
+impl Drop for ServiceStoreData {
+    /// An instance dropped with its session abandons its requests.
+    fn drop(&mut self) {
+        self.cancel_in_flight();
+    }
 }
 
 impl wasmtime_wasi::WasiView for ServiceStoreData {
@@ -676,6 +689,7 @@ impl ServiceHandle {
                     .responses
                     .map_or(0, |responses| responses.instance_id()),
                 tickets: BTreeMap::new(),
+                in_flight: BTreeMap::new(),
                 last_ticket: 0,
                 last_now_ms: 0,
                 wasi,
@@ -721,7 +735,7 @@ impl ServiceHandle {
         let (slots, references) = match bound {
             Ok(bound) => bound,
             Err(rejected) => {
-                self.lifecycle = Lifecycle::Retired;
+                self.leave(Lifecycle::Retired);
                 return Err(rejected);
             }
         };
@@ -735,8 +749,7 @@ impl ServiceHandle {
         if succeeded {
             Ok(step)
         } else {
-            self.lifecycle = Lifecycle::Retired;
-            self.wakeup = None;
+            self.leave(Lifecycle::Retired);
             Err(component_error(
                 ErrorCode::InvalidInput,
                 "the invoked service rejected its start",
@@ -776,8 +789,16 @@ impl ServiceHandle {
                 .stateforward_scxml_invoked_service_api()
                 .call_cancel(store)
         });
-        self.lifecycle = Lifecycle::Cancelled;
+        self.leave(Lifecycle::Cancelled);
+    }
+
+    /// Leaves `Live` for `lifecycle`: no wakeup is pending any more, and
+    /// every deferred request still in flight is abandoned and cancelled,
+    /// so the transport stops it.
+    fn leave(&mut self, lifecycle: Lifecycle) {
+        self.lifecycle = lifecycle;
         self.wakeup = None;
+        self.store.data_mut().cancel_in_flight();
     }
 
     /// The instance's compiled event contract, when its package declares
@@ -804,7 +825,9 @@ impl ServiceHandle {
         if self.lifecycle != Lifecycle::Live {
             return false;
         }
-        match self.store.data_mut().tickets.get_mut(&ticket) {
+        let data = self.store.data_mut();
+        data.in_flight.remove(&ticket);
+        match data.tickets.get_mut(&ticket) {
             Some(slot @ None) => {
                 *slot =
                     Some(crate::extension::settle_response(outcome).map_err(|(error, _)| error));
@@ -875,7 +898,7 @@ impl ServiceHandle {
         let Some(call) = self.store.data_mut().call.take() else {
             // Unreachable by construction (only this function sets and takes
             // the call); fail closed.
-            self.lifecycle = Lifecycle::Retired;
+            self.leave(Lifecycle::Retired);
             return (
                 false,
                 ServiceStep {
@@ -886,8 +909,7 @@ impl ServiceHandle {
         };
         let succeeded = matches!(result, Ok(Ok(()))) && !call.invalid_emit;
         if !succeeded {
-            self.lifecycle = Lifecycle::Retired;
-            self.wakeup = None;
+            self.leave(Lifecycle::Retired);
             return (
                 false,
                 ServiceStep {
@@ -903,8 +925,7 @@ impl ServiceHandle {
         }
         let outcome = match call.completion {
             Some(Completion(data)) => {
-                self.lifecycle = Lifecycle::Completed;
-                self.wakeup = None;
+                self.leave(Lifecycle::Completed);
                 ServiceOutcome::Completed(data)
             }
             None => ServiceOutcome::Running,
@@ -1068,16 +1089,24 @@ impl ServiceStoreData {
         // it: the refused request's outcome settles (as a transport failure)
         // under that ticket, and must match nothing this instance holds.
         self.last_ticket = ticket;
-        transport
-            .begin(request, responses.outcome(self.instance, ticket))
-            .map_err(|_| {
-                (
-                    component_error(ErrorCode::Unavailable, "the transport refused the request"),
-                    scxml_telemetry::ErrorCategory::Platform,
-                )
-            })?;
+        let (outcome, cancel) = responses.outcome(self.instance, ticket);
+        transport.begin(request, outcome).map_err(|_| {
+            (
+                component_error(ErrorCode::Unavailable, "the transport refused the request"),
+                scxml_telemetry::ErrorCategory::Platform,
+            )
+        })?;
         self.tickets.insert(ticket, None);
+        self.in_flight.insert(ticket, cancel);
         Ok(ticket)
+    }
+
+    /// Cancels every deferred request still in flight (the instance
+    /// abandons them).
+    fn cancel_in_flight(&mut self) {
+        for cancel in std::mem::take(&mut self.in_flight).into_values() {
+            cancel.cancel();
+        }
     }
 
     /// The open export call, unless the service already completed in it.

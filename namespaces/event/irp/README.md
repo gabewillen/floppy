@@ -16,11 +16,8 @@ reported on its own: these results are never W3C IRP results. See
 | `prepared/{ecmascript,xpath}/` | the documents specialized by the unmodified W3C templates (`tests/conformance/w3c-irp/templates`) with SaxonJ-HE 12.8 |
 | `baselines/` | the canonical `scxml.report/v3` reports of both data models and their `SHA256SUMS` |
 
-A run binds no extension package: the vocabulary is the toolchain's own. The run holds only the harness's fake values for `env` slots and
-reaches only the harness's deterministic in-process stand-in for the OpenAI
-Responses API (`crates/scxml-conformance/src/openai_service.rs`, whose
-`model` table each test document's comment relies on); nothing touches the
-network. A document passes when it logs `Outcome` `pass` and finishes in the
+A run binds no extension package: the vocabulary is the toolchain's own,
+and nothing touches the network. A document passes when it logs `Outcome` `pass` and finishes in the
 `pass` final state the templates generate, exactly as a W3C case does, or,
 for a `<reject>` test, when the canonical compiler rejects it with exactly
 the listed codes and nothing runs (the `document-rejection` oracle).
@@ -38,8 +35,8 @@ for model in ecmascript xpath; do
 done
 ```
 
-and check a run against its baseline (`$RELEASE`, `$MANIFEST_SHA256`, and
-`$OPENAI_SHA256` as in the `irp-components` snippet of
+and check a run against its baseline (`$RELEASE` and `$MANIFEST_SHA256` as
+in the `irp-components` snippet of
 [CONTRIBUTING.md](../../../CONTRIBUTING.md)):
 
 ```console
@@ -55,8 +52,8 @@ the canonical release of docs/conformance.md, empty filter identity) measure:
 
 | Data model | Passed / Applicable | Rejections | Not Passing | Corpus digest | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | --- | --- | --- |
-| ECMAScript | 29 / 29 | 17 | 0 | `466755eac36c408a41076a995cbe3e1d1257e8f7c057f939743becb740c7fe61` | `0963d44f06123fdeea788dd92694a35e91a5bd0f8969df69e706f767bef82a09` | `e6bd35e02064b0d74456510708d4864d8448c9ec3af06006c127d1e8ec842ee4` |
-| XPath | 29 / 29 | 17 | 0 | `6714a32d12b248d1a809d7a6b26b2c8f5df1b00dc77aa07bfad9945bd389b3db` | `f2501f311b97448dac5ede8023efd61c693c59e6465a3c813ea4c87d8910aae5` | `be86a80c71eae366bcd62539c2d969a9e2ae034327e1dd82470b4d300b3d3feb` |
+| ECMAScript | 29 / 29 | 17 | 0 | `466755eac36c408a41076a995cbe3e1d1257e8f7c057f939743becb740c7fe61` | `c606a9f8eff180e9ed8a6a3fb40c03a63c72c81fd5b0e8327644115af987845c` | `58578304db0563e57b659f56df89c0f960c9049032a6f897f2f2130fe8afbd86` |
+| XPath | 29 / 29 | 17 | 0 | `6714a32d12b248d1a809d7a6b26b2c8f5df1b00dc77aa07bfad9945bd389b3db` | `fe50bc90aa661337fe5b1a838a12280fb35772904cb7a75b2e070309758340db` | `f5080954e340d29639f219534c4957be4035bb54ea75771d1a7621f30d67b7c4` |
 
 The report identity lists no extension component. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
 the suite and its baselines statically, and `irp_components.rs` reproduces

@@ -824,10 +824,10 @@ pub const CODES: &[CodeDoc] = &[
     ),
     doc!(
         "SCXML083", "error", "semantic", "an `env` attribute names a slot its element does not have",
-        why: "an executable-content extension element names the variables whose values its host binds to it with `env:<slot>=\"NAME\"` (or `env:<slot>expr=\"EXPR\"`, an expression that evaluates to the name) in the `https://github.com/stateforward/scxml.rs/namespaces/env` namespace; the host gives the extension component an opaque reference for each slot, never the value. The slots an element has are the ones its package manifest declares (`env-slots`); its schema admits the namespace with a lax wildcard, so only this rule catches a misspelled slot, a slot named twice (`env:<slot>` and `env:<slot>expr`), or an `env:<slot>` value that is not a variable name (`[A-Za-z_][A-Za-z0-9_]*`). It is checked for every element whose package the validator was given. An invoked service's `<invoke>` binds the slots its service package declares the same way (`<invoke type=\"URI\" env:apikey=\"OPENAI_API_KEY\">`), checked when the validator was given that package; the host binds those references for the whole invocation",
+        why: "an executable-content extension element names the variables whose values its host binds to it with `env:<slot>=\"NAME\"` (or `env:<slot>expr=\"EXPR\"`, an expression that evaluates to the name) in the `https://github.com/stateforward/scxml.rs/namespaces/env` namespace; the host gives the extension component an opaque reference for each slot, never the value. The slots an element has are the ones its package manifest declares (`env-slots`); its schema admits the namespace with a lax wildcard, so only this rule catches a misspelled slot, a slot named twice (`env:<slot>` and `env:<slot>expr`), or an `env:<slot>` value that is not a variable name (`[A-Za-z_][A-Za-z0-9_]*`). It is checked for every element whose package the validator was given. An invoked service's `<invoke>` binds the slots its service package declares the same way (`<invoke type=\"URI\" env:endpoint=\"ECHO_URL\">`), checked when the validator was given that package; the host binds those references for the whole invocation",
         help: "bind only a slot the element's package declares, once, to a variable name",
-        bad: "<openai:generate env:apikye=\"OPENAI_API_KEY\" … />",
-        fixed: "<openai:generate env:apikey=\"OPENAI_API_KEY\" … />",
+        bad: "<example:fetch env:tokn=\"API_TOKEN\" … />",
+        fixed: "<example:fetch env:token=\"API_TOKEN\" … />",
         checked: false,
         spec: "SCXML 1.0 §4.10 Extensibility of Executable Content", url: "https://www.w3.org/TR/scxml/#extensibility",
     ),

@@ -347,24 +347,65 @@ impl ExtensionHttpClient {
     }
 }
 
+impl ExtensionHttpClient {
+    /// [`crate::ExtensionHttp::fetch`] on a connection of its own that
+    /// `cancel` closes: once the request is cancelled, a connection not yet
+    /// open is never used, and an open one is shut down, so the call stops
+    /// waiting for the response at once and answers
+    /// [`crate::ExtensionHttpFailure::Transport`]. (Resolving the host and
+    /// opening the TCP connection are not interrupted; they end within the
+    /// connect timeout, and nothing is sent after a cancel.)
+    pub(crate) fn fetch_cancellable(
+        &self,
+        request: &crate::ExtensionHttpRequest,
+        cancel: &Arc<crate::service_http::CancelSignal>,
+    ) -> Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure> {
+        if cancel.is_cancelled() {
+            return Err(crate::ExtensionHttpFailure::Transport);
+        }
+        // An agent of its own: its one connection is the one `cancel`
+        // closes, and it is never pooled for another request.
+        let agent = ureq::Agent::with_parts(
+            self.agent.config().clone(),
+            ureq::unversioned::transport::Connector::chain(
+                cancellable::Connector::new(Arc::clone(cancel)),
+                ureq::unversioned::transport::RustlsConnector::default(),
+            ),
+            ureq::unversioned::resolver::DefaultResolver::default(),
+        );
+        perform(&agent, request)
+    }
+}
+
 impl crate::ExtensionHttp for ExtensionHttpClient {
     fn fetch(
         &self,
         request: &crate::ExtensionHttpRequest,
     ) -> Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure> {
+        perform(&self.agent, request)
+    }
+}
+
+/// Performs one checked request through `agent`, reading the body within
+/// its bound.
+fn perform(
+    agent: &ureq::Agent,
+    request: &crate::ExtensionHttpRequest,
+) -> Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure> {
+    {
         let Some(url) = parse_http_url(&request.url) else {
             return Err(crate::ExtensionHttpFailure::NotAllowed);
         };
         let response = match request.method {
             crate::ExtensionHttpMethod::Get => {
-                let mut builder = self.agent.get(url.as_str());
+                let mut builder = agent.get(url.as_str());
                 for (name, value) in &request.headers {
                     builder = builder.header(name.as_str(), value.as_str());
                 }
                 builder.call()
             }
             crate::ExtensionHttpMethod::Post => {
-                let mut builder = self.agent.post(url.as_str());
+                let mut builder = agent.post(url.as_str());
                 for (name, value) in &request.headers {
                     builder = builder.header(name.as_str(), value.as_str());
                 }
@@ -385,6 +426,177 @@ impl crate::ExtensionHttp for ExtensionHttpClient {
                 _ => crate::ExtensionHttpFailure::Transport,
             })?;
         Ok(crate::ExtensionHttpResponse { status, body })
+    }
+}
+
+/// The TCP connector of [`ExtensionHttpClient::fetch_cancellable`]: it
+/// opens the request's connection like ureq's own TCP connector and
+/// registers its shutdown with the request's cancellation.
+mod cancellable {
+    use std::io::{Read, Write};
+    use std::net::{Shutdown, TcpStream};
+    use std::sync::Arc;
+
+    use ureq::unversioned::transport::{
+        Buffers, ConnectionDetails, LazyBuffers, NextTimeout, Transport,
+    };
+
+    use crate::service_http::CancelSignal;
+
+    fn cancelled() -> ureq::Error {
+        ureq::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::ConnectionAborted,
+            "the request was cancelled",
+        ))
+    }
+
+    /// Opens one TCP connection whose shutdown the cancellation owns.
+    pub(super) struct Connector {
+        cancel: Arc<CancelSignal>,
+    }
+
+    impl std::fmt::Debug for Connector {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.debug_struct("Connector").finish_non_exhaustive()
+        }
+    }
+
+    impl Connector {
+        pub(super) const fn new(cancel: Arc<CancelSignal>) -> Self {
+            Self { cancel }
+        }
+    }
+
+    impl ureq::unversioned::transport::Connector<()> for Connector {
+        type Out = Connection;
+
+        fn connect(
+            &self,
+            details: &ConnectionDetails,
+            _chained: Option<()>,
+        ) -> Result<Option<Self::Out>, ureq::Error> {
+            if self.cancel.is_cancelled() {
+                return Err(cancelled());
+            }
+            let timeout = details.timeout.not_zero().map(|after| *after);
+            let mut failure = None;
+            let mut opened = None;
+            for address in &details.addrs {
+                let attempt = match timeout {
+                    Some(timeout) => TcpStream::connect_timeout(address, timeout),
+                    None => TcpStream::connect(address),
+                };
+                match attempt {
+                    Ok(stream) => {
+                        opened = Some(stream);
+                        break;
+                    }
+                    Err(error) => failure = Some(error),
+                }
+            }
+            let Some(stream) = opened else {
+                return Err(match failure {
+                    Some(error) if error.kind() == std::io::ErrorKind::TimedOut => {
+                        ureq::Error::Timeout(ureq::Timeout::Connect)
+                    }
+                    Some(error) => ureq::Error::Io(error),
+                    None => cancelled(),
+                });
+            };
+            if details.config.no_delay() {
+                stream.set_nodelay(true)?;
+            }
+            let shutdown = stream.try_clone()?;
+            // Runs at once when the request was cancelled while connecting.
+            self.cancel.on_cancel(move || {
+                // Already closed is as good as closed.
+                let _ = shutdown.shutdown(Shutdown::Both);
+            });
+            if self.cancel.is_cancelled() {
+                return Err(cancelled());
+            }
+            Ok(Some(Connection {
+                stream,
+                buffers: LazyBuffers::new(
+                    details.config.input_buffer_size(),
+                    details.config.output_buffer_size(),
+                ),
+                read_timeout: None,
+                write_timeout: None,
+            }))
+        }
+    }
+
+    /// One cancellable TCP connection (ureq's `TcpTransport`, whose socket
+    /// the cancellation can shut down from another thread).
+    pub(super) struct Connection {
+        stream: TcpStream,
+        buffers: LazyBuffers,
+        read_timeout: Option<std::time::Duration>,
+        write_timeout: Option<std::time::Duration>,
+    }
+
+    impl std::fmt::Debug for Connection {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.debug_struct("Connection").finish_non_exhaustive()
+        }
+    }
+
+    /// `error` as ureq reports it: a would-block or timed-out read or write
+    /// is the timeout `timeout` names.
+    fn io_error(error: std::io::Error, timeout: &NextTimeout) -> ureq::Error {
+        match error.kind() {
+            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => {
+                ureq::Error::Timeout(timeout.reason)
+            }
+            _ => ureq::Error::Io(error),
+        }
+    }
+
+    impl Transport for Connection {
+        fn buffers(&mut self) -> &mut dyn Buffers {
+            &mut self.buffers
+        }
+
+        fn transmit_output(
+            &mut self,
+            amount: usize,
+            timeout: NextTimeout,
+        ) -> Result<(), ureq::Error> {
+            let next = timeout.not_zero().map(|after| *after);
+            if next != self.write_timeout {
+                self.stream.set_write_timeout(next)?;
+                self.write_timeout = next;
+            }
+            let output = self
+                .buffers
+                .output()
+                .get(..amount)
+                .ok_or_else(|| ureq::Error::Io(std::io::ErrorKind::InvalidInput.into()))?;
+            self.stream
+                .write_all(output)
+                .map_err(|error| io_error(error, &timeout))
+        }
+
+        fn await_input(&mut self, timeout: NextTimeout) -> Result<bool, ureq::Error> {
+            let next = timeout.not_zero().map(|after| *after);
+            if next != self.read_timeout {
+                self.stream.set_read_timeout(next)?;
+                self.read_timeout = next;
+            }
+            let input = self.buffers.input_append_buf();
+            let amount = self
+                .stream
+                .read(input)
+                .map_err(|error| io_error(error, &timeout))?;
+            self.buffers.input_appended(amount);
+            Ok(amount > 0)
+        }
+
+        fn is_open(&mut self) -> bool {
+            // Never pooled: the agent owning it serves one request.
+            false
+        }
     }
 }
 

@@ -102,16 +102,6 @@ Executable product semantics are Wasm components:
   (`https://stateforward.org/scxml/example`, with its XSD and package
   manifest in `components/scxml-extension-example/package`) with one element per extension
   component capability (`raise`, `send`, `fail`, `spin`);
-- `namespaces/openai`: the `openai` executable-content extension package
-  (`https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0`, a repository namespace: `<openai:generate>`, modelled on
-  agentml-go's content-generation mode), the first package under the top-level
-  `namespaces/` directory for repository namespaces; its key and
-  base URL are `env` slots (`env:apikey`, `env:baseurl`), so the component
-  holds opaque references, never the values, and it reaches an
-  OpenAI-compatible Responses API only through the host-admitted,
-  deny-by-default `stateforward:scxml/outbound-http` import, to the origin its
-  manifest declares or one the run supplies (see
-  [namespaces/openai/README.md](../namespaces/openai/README.md));
 - `namespaces/env`: the host's `env` attribute vocabulary
   (`https://github.com/stateforward/scxml.rs/namespaces/env`, unversioned and
   never fetched), documented with a schema for tools; not a package (see

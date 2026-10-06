@@ -1290,3 +1290,144 @@ fn a_recording_session_starts_no_deferred_request() {
     assert_eq!(session.configuration().expect("configuration"), ["failed"]);
     session.close().expect("the session closes");
 }
+
+/// A loopback model server that streams its answer slowly: it reads one
+/// request head, answers a chunked `text/event-stream` head, writes one SSE
+/// chunk every 20 ms until a write fails, and reports when it saw the client
+/// close the connection.
+#[cfg(feature = "http")]
+struct SlowStream {
+    port: u16,
+    requested: std::sync::mpsc::Receiver<()>,
+    disconnected: std::sync::mpsc::Receiver<std::time::Instant>,
+    server: std::thread::JoinHandle<()>,
+}
+
+#[cfg(feature = "http")]
+impl SlowStream {
+    fn start() -> Self {
+        use std::io::{Read as _, Write as _};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
+        let port = listener
+            .local_addr()
+            .expect("the listener has an address")
+            .port();
+        let (requested_tx, requested) = std::sync::mpsc::channel();
+        let (disconnected_tx, disconnected) = std::sync::mpsc::channel();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("the client connects");
+            let mut head = Vec::new();
+            let mut byte = [0_u8; 1];
+            while !head.ends_with(b"\r\n\r\n") {
+                assert_eq!(stream.read(&mut byte).expect("the head is read"), 1);
+                head.push(byte[0]);
+            }
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\n\r\n",
+                )
+                .expect("the response head is written");
+            requested_tx.send(()).expect("the test listens");
+            let mut writer = stream.try_clone().expect("the stream clones");
+            let streaming = std::thread::spawn(move || {
+                let chunk = b"data: {\"choices\":[{\"delta\":{\"content\":\"token\"}}]}\n\n";
+                let framed = [format!("{:x}\r\n", chunk.len()).as_bytes(), chunk, b"\r\n"].concat();
+                while writer.write_all(&framed).is_ok() {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+            });
+            // The client sends nothing more: the next read ends when it
+            // closes the connection.
+            let mut rest = [0_u8; 64];
+            loop {
+                match stream.read(&mut rest) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {}
+                }
+            }
+            disconnected_tx
+                .send(std::time::Instant::now())
+                .expect("the test listens");
+            // A write fails soon after the close, which ends the stream.
+            streaming.join().expect("the streaming thread ends");
+        });
+        Self {
+            port,
+            requested,
+            disconnected,
+            server,
+        }
+    }
+}
+
+#[cfg(feature = "http")]
+#[test]
+fn cancelling_the_invoking_state_closes_the_streaming_connection_and_ends_its_thread() {
+    use std::time::{Duration, Instant};
+    let server = SlowStream::start();
+    let client = scxml_host_wasmtime::ExtensionHttpClient::new(
+        scxml_host_wasmtime::ExtensionHttpConfig::new(),
+    )
+    .expect("the default client configuration is valid");
+    let transport = std::sync::Arc::new(
+        scxml_host_wasmtime::ThreadedServiceHttp::new(client, 4).expect("a valid bound"),
+    );
+    let host = host_with(
+        ServiceComponents::new()
+            .with_values(
+                scxml_host_wasmtime::ExtensionEnvironment::new([
+                    scxml_host_wasmtime::EnvVariable::new(
+                        "ENDPOINT",
+                        format!("http://127.0.0.1:{}/slow", server.port),
+                        [ECHO.to_owned()],
+                    ),
+                ])
+                .expect("valid values"),
+            )
+            .with_deferred_http(std::sync::Arc::clone(&transport) as _)
+            .bind(package(ECHO), component(ArtifactKind::ServiceExample))
+            .expect("the example service binds"),
+    );
+    let notified = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut session = open_deferred(&host, false, &notified);
+    session
+        .send(&ScriptedEvent::named("defer"))
+        .expect("defer is processed");
+    server
+        .requested
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the request reaches the server");
+    // The answer is streaming and will never end on its own.
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(transport.in_flight(), 1, "the request thread is waiting");
+    assert!(session.awaiting_service_responses());
+    // Leaving the invoking state cancels the invocation (SCXML 6.4), which
+    // closes the request's connection.
+    let cancelled = Instant::now();
+    session
+        .send(&ScriptedEvent::named("leave"))
+        .expect("leave is processed");
+    assert_eq!(session.configuration().expect("configuration"), ["away"]);
+    let disconnected = server
+        .disconnected
+        .recv_timeout(Duration::from_secs(2))
+        .expect("the server sees the connection close within 2 s");
+    assert!(disconnected.duration_since(cancelled) < Duration::from_secs(2));
+    // No request thread outlives the cancel.
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while transport.in_flight() > 0 {
+        assert!(
+            Instant::now() < deadline,
+            "the request thread ends within 2 s of the cancel"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    // Its outcome (a transport failure) reaches no one.
+    session
+        .deliver_service_responses()
+        .expect("the late outcome is dropped");
+    assert!(logs(&mut session).is_empty());
+    assert_eq!(session.configuration().expect("configuration"), ["away"]);
+    server.server.join().expect("the server ends");
+    session.close().expect("the session closes");
+}

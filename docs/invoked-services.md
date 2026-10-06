@@ -151,7 +151,13 @@ the deferred pair instead:
   once. The invoking session keeps processing events and timers, so a
   `<send delay>` timeout in the invoking state can preempt the request: when
   the state exits, the service is cancelled and its requests are abandoned
-  (their outcomes are dropped when they arrive).
+  (their outcomes are dropped when they arrive). `ThreadedServiceHttp` (the
+  deferred transport of feature `http`) also closes each abandoned request's
+  connection at once, so its thread stops waiting and ends, and a server
+  streaming its answer sees the connection close (a request still resolving
+  its host or connecting is never sent, and ends within the client's connect
+  timeout). The same holds when a service completes or is retired with a
+  request in flight, and when its session closes.
 - When the request settles, the host calls the instance's `wake` (also the
   timer's wakeup call) at the session's current time; the service reads the
   outcome with `outbound-http.take(ticket)`, which answers it once, and

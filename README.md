@@ -67,8 +67,8 @@ and bind these digests:
 | --- | --- | --- |
 | corpus digest | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` |
 | errata SHA-256 | `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f` | `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a` |
-| producer report digest | `1975a1a0467b6e0a4a80befe2a5b9902169e85c018a4d22768534dd27a54d682` | `c07da9831092692099d7c46696945feab67fe99044ca7cec9df8356db56276e1` |
-| canonical artifact SHA-256 | `6c8be254619f14afc8193355259c8759f15d4bf2016a46dbd4e0a36be2a6eeee` | `3451259154ec3784b5c229fafcbeef77c70418b0fea088be6fd2136933d6d8a7` |
+| producer report digest | `8f5ab67d3fdcaabfb32964c1728140a83b7aed7b8d87d8923867bda15d3c26c1` | `85c6c5bd0f421a0c477818ade0f9aa5fdbf23c44124ea3a6e7f1ffce71d25a26` |
+| canonical artifact SHA-256 | `0b54ea5b2fe782eae5b16d20188b54eb55842e9147fa0e104e80480016ec0c92` | `07a301af5f350c0e5040b24c3a68144e67ed996257894ee9cf554a94c351e91f` |
 
 Each repository namespace also has its own implementation report plan in
 the same format, run through the same pipeline and reported separately
@@ -77,7 +77,6 @@ the same format, run through the same pipeline and reported separately
 
 | Namespace suite | Assertions | Tests | ECMAScript | XPath |
 | --- | ---: | ---: | ---: | ---: |
-| [`openai`](namespaces/openai/irp/README.md) | 15 | 64 | 64 / 64 | 64 / 64 |
 | [`env`](namespaces/env/irp/README.md) | 7 | 20 | 20 / 20 | 20 / 20 |
 | [`event`](namespaces/event/irp/README.md) | 9 | 29 | 29 / 29 | 29 / 29 |
 
@@ -121,7 +120,7 @@ RELEASE="$PWD/target/wasm-artifacts/quickstart"
 sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
   scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
   scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_extension_example \
-  scxml_extension_openai scxml_compiler scxml_machine
+  scxml_compiler scxml_machine
 MANIFEST_SHA256=$( (sha256sum "$RELEASE/manifest.tsv" 2>/dev/null \
   || shasum -a 256 "$RELEASE/manifest.tsv") | cut -d ' ' -f 1)
 ```
@@ -261,7 +260,7 @@ its outbound requests to the origins the package declares or a base URL the
 run supplies.
 See [executable-content-extensions.md](docs/executable-content-extensions.md),
 the [`env` vocabulary](namespaces/env/README.md), and the
-[openai package](namespaces/openai/README.md).
+[example extension](components/scxml-extension-example).
 
 **Event data schemas.** `event:schema` on a `<transition>`, `<send>`,
 `<raise>`, or `<donedata>` describes the event data it handles or creates

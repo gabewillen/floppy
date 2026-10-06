@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- env-3: a value that is not a variable name is rejected. The document must be rejected; it never runs. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" xmlns:example="https://stateforward.org/scxml/example" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="Var1"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <example:fetch env:url="IRP_BASE_URL" path="/ok" env:token="not a name"/>
+  </onentry>
+  <transition target="pass"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

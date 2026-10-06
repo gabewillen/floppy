@@ -813,8 +813,8 @@ pipeline.
 
 | Data model | Corpus SHA-256 | Producer report digest | Canonical artifact SHA-256 | Passed / Applicable | Under errata | Not applicable | Failed | Unsupported | Invalid | HarnessError | Skipped |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ECMAScript | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `1975a1a0467b6e0a4a80befe2a5b9902169e85c018a4d22768534dd27a54d682` | `6c8be254619f14afc8193355259c8759f15d4bf2016a46dbd4e0a36be2a6eeee` | 201 / 201 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
-| XPath | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` | `c07da9831092692099d7c46696945feab67fe99044ca7cec9df8356db56276e1` | `3451259154ec3784b5c229fafcbeef77c70418b0fea088be6fd2136933d6d8a7` | 178 / 178 | 5 | 24 | 0 | 0 | 0 | 0 | 0 |
+| ECMAScript | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `8f5ab67d3fdcaabfb32964c1728140a83b7aed7b8d87d8923867bda15d3c26c1` | `0b54ea5b2fe782eae5b16d20188b54eb55842e9147fa0e104e80480016ec0c92` | 201 / 201 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| XPath | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` | `85c6c5bd0f421a0c477818ade0f9aa5fdbf23c44124ea3a6e7f1ffce71d25a26` | `07a301af5f350c0e5040b24c3a68144e67ed996257894ee9cf554a94c351e91f` | 178 / 178 | 5 | 24 | 0 | 0 | 0 | 0 | 0 |
 
 ECMAScript: 201 passed; mandatory 167 / 167, optional 34 / 34; 436 (null
 profile, `datamodel="null"`) is `NotApplicable`. XPath: 178
@@ -845,31 +845,29 @@ commands above, from a release verified by
 cargo run --release --locked -p scxml-conformance --features wasmtime \
   --example generate_irp_baselines -- \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
-  --extension-component-sha256 "$OPENAI_SHA256"
+  --extension-component-sha256 "$EXTENSION_SHA256"
 ```
 
 The generator regenerates every checked-in baseline: both W3C corpora and
 every namespace suite ([Namespace suites](#namespace-suites)). The
 checked-in bytes were generated from the canonical release: the eight
-components the conformance executor links and the `openai` repository
-namespace component, as the `irp-components` CI job builds them on Linux
-x86_64 (`manifest.tsv` does not list the `openai` component, so it does not
-change the manifest digest; the README quickstart adds the two extension
-components its CLI examples use, which does):
+components the conformance executor links and the example extension
+component the namespace suites bind, as the `irp-components` CI job builds
+them on Linux x86_64:
 
 ```console
 sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
   scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
   scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine \
-  scxml_extension_openai
+  scxml_extension_example
 ```
 
 That build's `manifest.tsv` has SHA-256
-`b77d3b26163013c9364608fd9487157a5bfb297a678e5166bb3768ef84de7cbc` (machine
+`b0bff8b81a00395418c0a60be518f43f3a6c0fcc241cce251aa52311f4aea26c` (machine
 component SHA-256
-`56b09e86d33fbaa042dfc831a2aaf8f12ab041774fc6aa79ca2875e5327df9f9`), and
-its `openai` component SHA-256
-`47c6d37a035e7d723c9616c3d0975c1f4ed748aee0ef80a6014fefe92c0c64a9`. Another
+`9e18f84d1bc893f97c5a31e57ebd7a436e6a3e5f4887108bc51bfd8d6dbbaf06`), and
+its example extension component SHA-256
+`264e74de399ccce880300af36c7821beaca25b13813eb606582211418d05062e`. Another
 selection, such as the default (every component), writes a different
 manifest.
 
@@ -901,15 +899,15 @@ SCXML_COMPONENTS_DIR="$PWD/ci-release" SCXML_COMPONENTS_MANIFEST_SHA256="$MANIFE
 Without CI, `scripts/build-canonical-components.sh` builds the same bytes on
 any Docker host: it runs the job's build command
 (`scripts/verify-wasm-capabilities.sh` over the eight executor components
-and the `openai` component,
+and the example extension component,
 with the reproducible release flags of `scripts/reproducible-wasm-env.sh`)
 in the official `rust:1.98.0-bookworm` image pinned by digest and forced to
 `linux/amd64` (emulated on other architectures), with the
 `rust-toolchain.toml` toolchain, `wasm-tools` `1.240.0`, and `wasi-virt` at
 the workflow's pinned revision. It snapshots the working tree into the
 container, writes the verified artifacts and `manifest.tsv` to
-`--artifacts-dir`, and prints the manifest SHA-256 and the `openai`
-component's:
+`--artifacts-dir`, and prints the manifest SHA-256 and the example
+extension component's:
 
 ```console
 sh scripts/build-canonical-components.sh --artifacts-dir "$PWD/canonical-release"
@@ -917,7 +915,7 @@ sh scripts/build-canonical-components.sh --artifacts-dir "$PWD/canonical-release
 
 Built from the source of the checked-in baselines on an arm64 macOS Docker
 host, the script produces manifest SHA-256
-`b77d3b26163013c9364608fd9487157a5bfb297a678e5166bb3768ef84de7cbc`, the
+`b0bff8b81a00395418c0a60be518f43f3a6c0fcc241cce251aa52311f4aea26c`, the
 components the baselines were generated from; the `irp-components`
 artifact of the same source must match it.
 
@@ -953,14 +951,13 @@ changes only process exit; it never removes or reclassifies gaps.
 Each repository namespace has its own implementation report plan in the W3C
 IRP format, run through exactly the same pipeline as the W3C IRP and
 reported separately (never counted with it):
-[`namespaces/openai/irp`](../namespaces/openai/irp/README.md),
-[`namespaces/env/irp`](../namespaces/env/irp/README.md), and
+[`namespaces/env/irp`](../namespaces/env/irp/README.md) and
 [`namespaces/event/irp`](../namespaces/event/irp/README.md). Each holds:
 
 - `manifest.xml`: the W3C `assertions`/`assert`/`test`/`start`/`dep`
   format, one assertion per numbered statement of the namespace's README
   (`id` and `specid` name the statement's anchor, for example
-  `#openai-3`), every test mandatory and unattended;
+  `#env-3`), every test mandatory and unattended;
 - `sources/<id>/test<id>.txml`: test documents written with the W3C `conf:`
   vocabulary (`conf:pass`, `conf:fail`, `conf:datamodel`, `conf:location`,
   and so on), and their dependencies;
@@ -982,7 +979,7 @@ commands); the W3C manifest has none, and preparing the W3C IRP fails
 closed on one. Every other case uses the W3C `Outcome` oracle unchanged.
 
 ```console
-name=openai  # or env, event
+name=env  # or event
 for model in ecmascript xpath; do
   scxml-cli conformance prepare \
     --manifest "namespaces/$name/irp/manifest.xml" \
@@ -994,8 +991,9 @@ for model in ecmascript xpath; do
 done
 ```
 
-A run binds the extension namespaces the suite uses (`openai` for the
-`openai` and `env` suites, nothing for `event`):
+A run binds the extension packages the suite uses (the example extension,
+`components/scxml-extension-example`, for the `env` suite, nothing for
+`event`):
 `--extension-package MANIFEST.json` names the package, whose
 `extension-artifact` is read from `--components DIR` and authenticated by
 `--extension-component-sha256 URI=HEX`. The runner then compiles with
@@ -1004,37 +1002,34 @@ their elements as executable content, and supplies each case's dependencies
 below its document's directory as its `event:schema` files. The run holds
 exactly the harness's fake values for `env` slots, and the extension
 components' only outbound transport is a deterministic in-process stand-in
-for the OpenAI Responses API
-(`crates/scxml-conformance/src/openai_service.rs`, part of the runner
-identity): it serves the package's declared endpoint and the base URL one
-held value supplies, answers each request from its `model` (a documented
-table of replies, echoes of the request, statuses, transport failures,
-malformed bodies, and function calls), and counts each case's requests so a
-test can prove that nothing was sent, or that a failure followed exactly
-one request. Nothing touches the network. The
+for the server `<example:fetch>` reaches
+(`crates/scxml-conformance/src/example_server.rs`, part of the runner
+identity): it serves the base URL one held value supplies, answers each
+request from its path (a documented table: whether the request carried a
+given key or none), and counts each case's requests so a test can prove
+that nothing was sent. Nothing touches the network. The
 report identity lists every bound extension package (`extensions`: its
 namespace URI, package version, and the SHA-256 of its manifest, schema,
 and component bytes).
 
 ```console
-OPENAI_URI='https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0'
-scxml-cli conformance run --corpus namespaces/openai/irp/prepared/xpath \
+EXAMPLE_URI='https://stateforward.org/scxml/example'
+scxml-cli conformance run --corpus namespaces/env/irp/prepared/xpath \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
-  --extension-package namespaces/openai/package/openai.extension.json \
-  --extension-component-sha256 "$OPENAI_URI=$OPENAI_SHA256" \
-  --canonical-baseline namespaces/openai/irp/baselines/xpath.scxml-report.json
+  --extension-package components/scxml-extension-example/package/example.extension.json \
+  --extension-component-sha256 "$EXAMPLE_URI=$EXTENSION_SHA256" \
+  --canonical-baseline namespaces/env/irp/baselines/xpath.scxml-report.json
 ```
 
 The namespaces themselves do not depend on the data model; both data
-models run, since `openai` and `env` evaluate their expression attributes
-in the document's data model and `event` must leave execution unchanged
+models run, since `env` evaluates its expression attributes in the
+document's data model and `event` must leave execution unchanged
 under each. The current baselines (same runner, engine, and release as the
-W3C baselines above; `openai` component SHA-256
-`47c6d37a035e7d723c9616c3d0975c1f4ed748aee0ef80a6014fefe92c0c64a9`):
+W3C baselines above; example extension component SHA-256
+`264e74de399ccce880300af36c7821beaca25b13813eb606582211418d05062e`):
 
 | Suite | Assertions | Tests (rejections) | ECMAScript | XPath |
 | --- | ---: | ---: | ---: | ---: |
-| `openai` | 15 | 64 (0) | 64 / 64 | 64 / 64 |
 | `env` | 7 | 20 (6) | 20 / 20 | 20 / 20 |
 | `event` | 9 | 29 (17) | 29 / 29 | 29 / 29 |
 

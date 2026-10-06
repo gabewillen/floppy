@@ -2056,14 +2056,11 @@ mod tests {
     #[test]
     fn debug_output_names_variables_and_never_prints_a_value() {
         const VALUE: &str = "sk-debug-must-not-print";
-        let values = ExtensionEnvironment::new([EnvVariable::new(
-            "OPENAI_API_KEY",
-            VALUE,
-            ["urn:x".to_owned()],
-        )])
-        .expect("a valid variable");
+        let values =
+            ExtensionEnvironment::new([EnvVariable::new("API_TOKEN", VALUE, ["urn:x".to_owned()])])
+                .expect("a valid variable");
         let environment = format!("{values:?}");
-        assert!(environment.contains("OPENAI_API_KEY"), "{environment}");
+        assert!(environment.contains("API_TOKEN"), "{environment}");
         for text in [
             environment,
             format!(

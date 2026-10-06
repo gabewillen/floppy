@@ -209,18 +209,6 @@ cargo run --release -p scxml-cli --features wasmtime -- snapshot run tests/fixtu
   --extension-component-sha256 "$EXAMPLE_URI=$EXAMPLE_SHA256"
 ```
 
-### The openai package
-
-```console
-# The openai package, built locally: its key and base URL are env slots the
-# run holds values for (--env), and it reaches the origin its manifest
-# declares or the base URL the run supplies (namespaces/openai/README.md). The
-# script runs the debug CLI built with the wasmtime feature.
-cargo build -p scxml-cli --features wasmtime
-OPENAI_API_KEY=... sh namespaces/openai/run-example.sh "$RELEASE" \
-  https://api.openai.com/v1
-```
-
 ### A live session with record and replay
 
 ```console
@@ -378,7 +366,17 @@ session start. `run` refuses `--record` and `--replay` when a bound package
 declares any WASI permission (`[record-wasi]`). A run holding a live
 service cannot be snapshotted (the snapshot is refused). A `--record` log
 binds each service's URI and component SHA-256, and `--replay` refuses a
-run whose services differ (`[replay-identity-mismatch]`).
+run whose services differ (`[replay-identity-mismatch]`). A `run` that
+neither records nor replays also gives services deferred requests
+(`outbound-http.begin`/`take`,
+[invoked-services.md](invoked-services.md#slow-requests-without-blocking-the-session)):
+each runs off the session thread through `ThreadedServiceHttp` (a 10 s
+connect and 120 s total timeout, at most 64 in flight), the session keeps
+taking input meanwhile, and the outcome is delivered by its own call (cause
+`service-response`); on `--clock logical` no delayed send fires while a
+request is in flight. Leaving the invoking state cancels the service and
+closes its request's connection at once. `snapshot run`, `--record`, and
+`--replay` refuse `begin` (`unavailable`).
 ## `run`
 
 `run` keeps one live session of a document open through the same components
@@ -432,12 +430,11 @@ CLI loads it: no flag binds it.
 
 ```xml
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0"
+       xmlns:weather="https://github.com/example-org/scxml-weather/namespaces/weather@v1.0.0"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript" initial="ask">
   …
-  <openai:generate env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL"
-                   modelexpr="model" location="reply" …/>
+  <weather:lookup env:token="WEATHER_TOKEN" location="forecast"/>
 ```
 
 The URI is exactly `https://github.com/<owner>/<repo>/namespaces/<name>@<tag>`, bound byte
@@ -461,30 +458,24 @@ session start fails before the first macrostep.
 specifies the URI, layout, trust model, cache, and bounds.
 
 ```console
-# The key in a gitignored .env file (Docker's format).
-printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY" > .env
-# First run: resolves, verifies, caches, and pins the element (v0.2.0 is the
-# first release that publishes it; until it exists this needs a mirror).
-cargo run --release -p scxml-cli --features wasmtime -- snapshot run \
-  namespaces/openai/examples/hello.scxml \
+# The token in a gitignored .env file (Docker's format).
+printf 'WEATHER_TOKEN=%s\n' "$WEATHER_TOKEN" > .env
+# First run: resolves, verifies, caches, and pins the element.
+cargo run --release -p scxml-cli --features wasmtime -- snapshot run weather.scxml \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
-  --env-file .env
+  --env-file .env \
+  --env WEATHER_TOKEN@https://github.com/example-org/scxml-weather/namespaces/weather@v1.0.0
 # Later runs need no network at all.
-cargo run --release -p scxml-cli --features wasmtime -- snapshot run \
-  namespaces/openai/examples/hello.scxml \
+cargo run --release -p scxml-cli --features wasmtime -- snapshot run weather.scxml \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
-  --env-file .env --offline
+  --env-file .env --offline \
+  --env WEATHER_TOKEN@https://github.com/example-org/scxml-weather/namespaces/weather@v1.0.0
 ```
 
-The first command prints, before it runs:
+The first command prints, before it runs, the element's namespace, its
+release tag and pinned commit, the origins its manifest declares, and the
+slots the document binds (names only, never a value).
 
-```text
-element `https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0`
-  = version: release v0.2.0 (commit <the tag's commit>), package 0.2.0
-  = outbound HTTP: https://api.openai.com
-  = env slots: apikey <- OPENAI_API_KEY, baseurl <- OPENAI_BASE_URL (no value granted: add --env OPENAI_BASE_URL@https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0)
-```
-
-Without `OPENAI_BASE_URL` the element uses `https://api.openai.com/v1`; with
-`--env OPENAI_BASE_URL@https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0=http://127.0.0.1:11434/v1` it reaches a local
-OpenAI-compatible service instead, an origin the run supplied.
+A model call is not an extension element: it is slow I/O, which belongs in
+an invoked service ([invoked-services.md](invoked-services.md)), loaded from
+a repository the same way.

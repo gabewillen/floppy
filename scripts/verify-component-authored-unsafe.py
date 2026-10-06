@@ -31,8 +31,9 @@ COMPONENT_CRATES = (
 # Executable-content extension packages under namespaces/, keyed by directory
 # name: each is an extension component crate held to the same contract. The
 # inventory counts only directories with a Cargo.toml, so a vocabulary-only
-# namespace (namespaces/env, namespaces/event) is not a crate and is not listed.
-NAMESPACE_CRATES = ("openai",)
+# namespace (namespaces/env, namespaces/event) is not a crate and is not
+# listed; none is a crate today.
+NAMESPACE_CRATES: tuple[str, ...] = ()
 
 WORKSPACE_LINTS = re.compile(r"(?m)^\[lints\]\s*\nworkspace\s*=\s*true\s*$")
 WASM_UNSAFE_ALLOWANCE = re.compile(

@@ -17,9 +17,10 @@
 #   * tools: wasm-tools 1.240.0 and wasi-virt at the pinned revision the
 #     workflow installs;
 #   * build: scripts/verify-wasm-capabilities.sh over the eight components
-#     the conformance executor links and the `openai` repository namespace
-#     component the namespace suites bind (namespaces/<name>/irp), which
-#     sources scripts/reproducible-wasm-env.sh for the release rustflags.
+#     the conformance executor links and the example extension component
+#     (components/scxml-extension-example) the namespace suites bind
+#     (namespaces/<name>/irp), which sources scripts/reproducible-wasm-env.sh
+#     for the release rustflags.
 #
 # The working tree (not just committed files; build output and VCS metadata
 # excluded) is snapshotted into the container, so the build reads the same
@@ -27,8 +28,8 @@
 # artifacts and their `manifest.tsv`; the script prints the manifest's
 # SHA-256, which is the `--components-manifest-sha256` value for the
 # conformance CLI and the baseline generator, and the SHA-256 of the
-# `openai` component (a repository namespace, so `manifest.tsv` does not
-# list it), which is their `--extension-component-sha256` value. Cargo's registry and target
+# example extension component, which is their `--extension-component-sha256`
+# value. Cargo's registry and target
 # directory persist in named Docker volumes between runs; remove them with
 # `docker volume rm scxml-canonical-cargo-registry scxml-canonical-target`.
 set -eu
@@ -41,7 +42,7 @@ tools_image='scxml-canonical-components:1'
 wasm_tools_version='1.240.0'
 wasi_virt_source='https://github.com/bytecodealliance/WASI-Virt'
 wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
-components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine scxml_extension_openai'
+components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine scxml_extension_example'
 
 usage() {
     echo "usage: build-canonical-components.sh --artifacts-dir DIR" >&2
@@ -109,5 +110,5 @@ docker run --rm --platform "$platform" \
     "
 
 manifest_sha256=$(sha256_file "$artifacts_dir/manifest.tsv")
-openai_sha256=$(sha256_file "$artifacts_dir/scxml_extension_openai.virtualized.wasm")
-printf 'canonical-components dir=%s manifest-sha256=%s openai-sha256=%s\n' "$artifacts_dir" "$manifest_sha256" "$openai_sha256"
+extension_sha256=$(sha256_file "$artifacts_dir/scxml_extension_example.virtualized.wasm")
+printf 'canonical-components dir=%s manifest-sha256=%s extension-sha256=%s\n' "$artifacts_dir" "$manifest_sha256" "$extension_sha256"

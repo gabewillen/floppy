@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- env-2: env:urlexpr binds the variable its value names. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" xmlns:example="https://stateforward.org/scxml/example" initial="s0" version="1.0" datamodel="xpath">
+<datamodel>
+  <data id="Var1"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <example:fetch env:urlexpr="'IRP_BASE_URL'" path="/authorization/none"/>
+  </onentry>
+  <transition event="example.fetched" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>
