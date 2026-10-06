@@ -11,8 +11,8 @@ reopening one needs the maintainer. All are dated 2026-10-06.
 | Kind | squashed `git subtree` |
 | Source repository | local scxml.rs (`stateforward/scxml.rs`) |
 | Source branch | `feat/invoke-services` |
-| Source commit | `fe7d555daf8beb99f69f25024d3e70fdb8bf28bb` ("Bound the events one invoked-service export call may emit by count and bytes") |
-| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d") |
+| Source commit | `dd18cd11cc04e5f693c64e2f4b76e065e45fe6a6` ("Bind invoked service components in the run log identity so a replay with a different service is refused") |
+| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d"), then `070aa258` ("Squashed 'scxml.rs/' changes from fe7d555d..dd18cd11") |
 | Update | `git subtree pull --prefix scxml.rs <scxml.rs> feat/invoke-services --squash`, after the change lands upstream |
 
 ## Decisions
@@ -39,8 +39,12 @@ reopening one needs the maintainer. All are dated 2026-10-06.
   into extension components (`ArtifactError::WasiExtensionUnsupported`:
   the extension store is not `Send`), so an extension package that declares
   a WASI permission fails closed, in scxml.rs and in `nemobot-host`. This
-  is a known limitation, not parity with the decision; the follow-up is
-  WASI linking for extension stores upstream in scxml.rs.
+  is a known limitation, not parity with the decision, and D4 stays open
+  for extensions until either WASI linking for extension stores lands
+  upstream in scxml.rs (it needs the extension store data to become `Send`,
+  or a WASI binding that does not require it) or the maintainer signs off
+  on narrowing D4 to services until then. AGENTS.md encodes the narrower
+  rule meanwhile.
 - D5 (2026-10-06, review round 1): "candidates are the enabled
   transitions" is applied by evaluating each transition's `cond` in the
   current data model (with the current `_event`) when `decision:choose`
