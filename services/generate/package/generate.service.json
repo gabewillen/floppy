@@ -1,0 +1,19 @@
+{
+  "format": "stateforward.scxml.service-package/v1",
+  "service-uri": "https://github.com/stateforward/nemobot/services/generate@v0.1.0",
+  "package-version": "0.1.0",
+  "service-artifact": "nemobot_service_generate.virtualized.wasm",
+  "schema-artifact": null,
+  "schema-sha256": null,
+  "wit-world": "stateforward:scxml/invoked-service",
+  "wit-version": "0.2.0",
+  "http-origins": ["https://api.openai.com"],
+  "env-slots": ["apikey", "baseurl"],
+  "events": {
+    "emits": [
+      {"name": "generate.failed", "schema-artifact": "events.json#/$defs/Failed", "schema-sha256": "4a81802a34aefa7dc2ae00ad12bf05d5f53f69595e4e45856b263dadb291c97d"},
+      {"name": "generate.result", "schema-artifact": "events.json#/$defs/Result", "schema-sha256": "4a81802a34aefa7dc2ae00ad12bf05d5f53f69595e4e45856b263dadb291c97d"}
+    ],
+    "accepts": []
+  }
+}

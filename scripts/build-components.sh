@@ -10,15 +10,17 @@
 #    into DIR/scxml, whose manifest.tsv SHA-256 is the config's
 #    `components.manifest-sha256`. Its CARGO_TARGET_DIR is
 #    target/scxml.rs (never the subtree's own target directory).
-# 2. Unless --session-only: every nemobot namespace component, built one
-#    cargo invocation per component (so features never unify across them)
-#    with the reproducible release flags (scripts/reproducible-wasm-env.sh),
-#    WASI virtualized by the pinned wasi-virt (twice: the bytes must be
-#    identical; a component that imports no WASI interface is used as
-#    built), validated with the pinned wasm-tools, and its imports checked
-#    against its allowlist below (no WASI interface is retained). DIR receives
-#    each `<component>.virtualized.wasm` and `components.tsv` with their sizes
-#    and SHA-256 digests (the `component-sha256` of each package in a config).
+# 2. Unless --session-only: every nemobot namespace component and invoked
+#    service component, built one cargo invocation per component (so
+#    features never unify across them) with the reproducible release flags
+#    (scripts/reproducible-wasm-env.sh), WASI virtualized by the pinned
+#    wasi-virt (twice: the bytes must be identical; a component that imports
+#    no WASI interface is used as built), validated with the pinned
+#    wasm-tools, and its imports checked against its allowlist below (no
+#    WASI interface is retained). DIR/namespaces and DIR/services receive
+#    each `<component>.virtualized.wasm` and a `components.tsv` with their
+#    sizes and SHA-256 digests (the `component-sha256` of each package in a
+#    config).
 #
 # DIR defaults to target/components. Tool identities are checked by the
 # scxml.rs script; this script checks them again before building namespaces.
@@ -29,7 +31,8 @@ expected_wasi_virt='wasi-virt 0.2.0'
 expected_wasi_virt_source='https://github.com/bytecodealliance/WASI-Virt'
 expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock'
-namespace_components='nemobot_scxml nemobot_generate nemobot_decision'
+namespace_components='nemobot_scxml nemobot_decision'
+service_components='nemobot_service_generate nemobot_service_decision'
 
 usage() {
     echo "usage: build-components.sh [--artifacts-dir DIR] [--session-only]" >&2
@@ -63,9 +66,9 @@ case "$artifacts_dir" in
 esac
 mkdir -p "$artifacts_dir"
 
-# Expected imports of each namespace component after virtualization, one per
-# line. A skeleton imports nothing; each namespace adds its exact
-# stateforward:scxml interfaces here when it implements its component.
+# Expected imports of each component after virtualization, one per line.
+# Extension components (executable content) are synchronous: none imports
+# outbound-http. Every model call is an invoked service.
 expected_imports() {
     case "$1" in
         # <sx:validate>: reads its source through the data model and assigns
@@ -76,28 +79,25 @@ expected_imports() {
                 'stateforward:scxml/telemetry@0.2.0' \
                 'stateforward:scxml/data-model-host@0.2.0'
             ;;
-        # <gen:generate>: reads its parameters through the data model,
-        # posts one admitted request, and assigns the reply there; no
-        # execution-host or snapshot.
-        nemobot_generate)
-            printf '%s\n' \
-                'stateforward:scxml/types@0.2.0' \
-                'stateforward:scxml/telemetry@0.2.0' \
-                'stateforward:scxml/data-model-host@0.2.0' \
-                'stateforward:scxml/outbound-http@0.2.0'
-            ;;
-        # <decision:rank|classify|choose>: reads its parameters through the
-        # data model, the menu and default state through the session
-        # snapshot, posts one admitted request, and assigns the result or
-        # raises the chosen event (execution-host).
+        # <decision:menu>: reads the transitions through the session
+        # snapshot, evaluates their guards through the data model, and
+        # assigns the menu there; no execution-host or outbound-http.
         nemobot_decision)
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0' \
                 'stateforward:scxml/data-model-host@0.2.0' \
-                'stateforward:scxml/execution-host@0.2.0' \
-                'stateforward:scxml/outbound-http@0.2.0' \
                 'stateforward:scxml/session-snapshot-host@0.2.0'
+            ;;
+        # The generate and decision services: emit and complete through
+        # invoked-service-host, one deferred request through outbound-http
+        # (begin/take); nothing else.
+        nemobot_service_generate|nemobot_service_decision)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'stateforward:scxml/invoked-service-host@0.2.0' \
+                'stateforward:scxml/outbound-http@0.2.0'
             ;;
         *) echo "no import allowlist for component: $1" >&2; exit 1 ;;
     esac
@@ -114,7 +114,7 @@ session_manifest_sha256=$(sha256_file "$artifacts_dir/scxml/manifest.tsv")
 printf 'session-components dir=%s manifest-sha256=%s\n' "$artifacts_dir/scxml" "$session_manifest_sha256"
 [ "$session_only" = false ] || exit 0
 
-# 2. nemobot namespace components.
+# 2. nemobot namespace and service components.
 actual_wasm_tools=$(wasm-tools --version | cut -d ' ' -f 1-2)
 test "$actual_wasm_tools" = "$expected_wasm_tools" || {
     echo "wasm-tools identity mismatch: expected $expected_wasm_tools, found $actual_wasm_tools" >&2
@@ -141,44 +141,58 @@ case "$target_root" in
     *) target_root="$workspace/$target_root" ;;
 esac
 release_dir="$target_root/wasm32-wasip2/release"
-namespaces_dir="$artifacts_dir/namespaces"
-mkdir -p "$namespaces_dir"
-run_tmp="$namespaces_dir/tmp"
+run_tmp="$artifacts_dir/tmp"
 rm -rf "$run_tmp"
-mkdir -p "$run_tmp"
+mkdir -p "$run_tmp" "$artifacts_dir/namespaces" "$artifacts_dir/services"
 # The pinned wasi-virt runs wasm-opt through a fixed temporary file name.
 TMPDIR=$run_tmp
 export TMPDIR
-manifest="$namespaces_dir/components.tsv"
-manifest_tmp="$manifest.tmp"
-trap 'rm -rf "$run_tmp"; rm -f "$manifest_tmp" "$namespaces_dir"/*.determinism-check.wasm' EXIT HUP INT TERM
+trap 'rm -rf "$run_tmp"; rm -f "$artifacts_dir"/namespaces/*.tmp "$artifacts_dir"/services/*.tmp "$artifacts_dir"/namespaces/*.determinism-check.wasm "$artifacts_dir"/services/*.determinism-check.wasm' EXIT HUP INT TERM
 
-for component in $namespace_components; do
+for component in $namespace_components $service_components; do
     package=$(printf '%s' "$component" | tr '_' '-')
     (cd "$workspace" && cargo build --locked --release --target wasm32-wasip2 -p "$package")
 done
 
-{
-    printf 'schema\tstateforward.nemobot.wasm-artifacts/v1\n'
-    printf 'profile\trelease\n'
-    printf 'target\twasm32-wasip2\n'
-    printf 'wasm-tools\t%s\n' "$expected_wasm_tools"
-    printf 'wasi-virt\t%s\n' "$expected_wasi_virt"
-} > "$manifest_tmp"
+# Virtualizes, validates, and checks every component of one kind into
+# DIR/<kind>, and writes its components.tsv.
+build_kind() {
+    kind_dir="$artifacts_dir/$1"
+    shift
+    manifest="$kind_dir/components.tsv"
+    manifest_tmp="$manifest.tmp"
+    {
+        printf 'schema\tstateforward.nemobot.wasm-artifacts/v1\n'
+        printf 'profile\trelease\n'
+        printf 'target\twasm32-wasip2\n'
+        printf 'wasm-tools\t%s\n' "$expected_wasm_tools"
+        printf 'wasi-virt\t%s\n' "$expected_wasi_virt"
+    } > "$manifest_tmp"
+    for component in "$@"; do
+        build_component "$component" "$kind_dir" "$manifest_tmp"
+    done
+    mv "$manifest_tmp" "$manifest"
+    printf '%s-components path=%s sha256=%s\n' "$(basename "$kind_dir")" "$manifest" "$(sha256_file "$manifest")"
+}
 
-for component in $namespace_components; do
+build_component() {
+    component=$1
+    kind_dir=$2
+    manifest_tmp=$3
     raw="$release_dir/$component.wasm"
-    virtualized="$namespaces_dir/$component.virtualized.wasm"
-    repeat="$namespaces_dir/$component.determinism-check.wasm"
+    virtualized="$kind_dir/$component.virtualized.wasm"
+    repeat="$kind_dir/$component.determinism-check.wasm"
     test -f "$raw" || { echo "missing release component artifact: $raw" >&2; exit 1; }
     virt_input=$raw
-    if [ "$component" = nemobot_scxml ] || [ "$component" = nemobot_generate ] || [ "$component" = nemobot_decision ]; then
+    case "$component" in
+        nemobot_scxml|nemobot_decision|nemobot_service_generate|nemobot_service_decision)
         # <sx:validate> links the scxml.rs validator, whose bundled XML
         # Schema backend seeds ahash from wasi:random/random and whose
         # `event` schema checks use std's RandomState (insecure-seed);
-        # <gen:generate> checks structured output and <decision:choose>
-        # filled event data with the same `event` schema code (boon, std's
-        # RandomState). wasi-virt denies randomness
+        # <decision:menu> compiles each offered schema, the generate service
+        # checks structured output, and the decision service checks the
+        # menu's schemas and the filled event data with the same `event`
+        # schema code (boon, std's RandomState). wasi-virt denies randomness
         # (the first schema check would trap), so compose the subtree's
         # pinned deterministic provider first, exactly as scxml.rs does for
         # its validator component (see the .wat header); the values only
@@ -188,14 +202,14 @@ for component in $namespace_components; do
         wasm-tools parse "$workspace/scxml.rs/components/scxml-validator/wasi-random.wat" -o "$random"
         wasm-tools compose "$raw" -d "$random" -o "$seeded" 2>/dev/null
         virt_input=$seeded
-    fi
+        ;;
+    esac
     if wasm-tools component wit "$virt_input" | sed -n 's/^  import \(.*\);$/\1/p' | grep -q '^wasi:'; then
         wasi-virt "$virt_input" -o "$virtualized"
         wasi-virt "$virt_input" -o "$repeat"
     else
-        # wasi-virt refuses a component with no WASI import to plug (the
-        # empty skeletons): there is nothing to virtualize, so the release
-        # bytes are the artifact.
+        # wasi-virt refuses a component with no WASI import to plug: there
+        # is nothing to virtualize, so the release bytes are the artifact.
         cp "$raw" "$virtualized"
         cp "$raw" "$repeat"
     fi
@@ -217,7 +231,7 @@ for component in $namespace_components; do
     digest=$(sha256_file "$virtualized")
     printf 'artifact\t%s\t%s.virtualized.wasm\t%s\t%s\n' "$component" "$component" "$size" "$digest" >> "$manifest_tmp"
     printf 'verified %s sha256=%s bytes=%s\n' "$component" "$digest" "$size"
-done
+}
 
-mv "$manifest_tmp" "$manifest"
-printf 'namespace-components path=%s sha256=%s\n' "$manifest" "$(sha256_file "$manifest")"
+build_kind namespaces $namespace_components
+build_kind services $service_components

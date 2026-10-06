@@ -15,7 +15,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use scxml_host_wasmtime::{
-    AuthenticatedComponent, ExtensionComponents, ExtensionHttp, ServiceComponents,
+    AuthenticatedComponent, ExtensionComponents, ServiceComponents, ServiceHttp,
     TrustedComponentDigest, WasiGrants,
 };
 use scxml_validator_core::{
@@ -300,8 +300,9 @@ impl Packages {
     /// package declares no `env` slot; [`FailureKind::Grant`] for a
     /// grant that names no bound service or no permission it declares, a
     /// declared permission the config does not grant, or a grant to an
-    /// extension package (the scxml.rs session host links no WASI interface
-    /// into extension components yet, so such a package fails closed).
+    /// extension package. Extension elements are synchronous executable
+    /// content and WASI belongs to invoked services, so an extension package
+    /// that declares a WASI permission fails closed too.
     pub fn load(config: &Config) -> Result<Self, HostFailure> {
         let span = observe(Operation::BindPackages);
         let result = Self::load_inner(config);
@@ -422,7 +423,7 @@ impl Packages {
                 .any(|extension| &extension.manifest.namespace_uri == uri)
             {
                 return Err(grant_error(format!(
-                    "a grant names the extension package `{uri}`: the scxml.rs session host links no WASI interface into extension components yet"
+                    "a grant names the extension package `{uri}`: extension elements are synchronous executable content, and WASI belongs to invoked services"
                 )));
             }
             let Some(service) = self
@@ -449,7 +450,7 @@ impl Packages {
         for extension in &self.extensions {
             if let Some(permission) = extension.manifest.wasi_permissions.first() {
                 return Err(grant_error(format!(
-                    "extension package `{}` declares {}: the scxml.rs session host links no WASI interface into extension components yet",
+                    "extension package `{}` declares {}: extension elements are synchronous executable content, and WASI belongs to invoked services",
                     extension.manifest.namespace_uri,
                     permission.describe()
                 )));
@@ -599,7 +600,9 @@ impl Packages {
             .collect()
     }
 
-    /// The extension components as the session host binds them.
+    /// The extension components as the session host binds them, with no
+    /// outbound transport: executable content is synchronous and quick, so
+    /// an extension never performs I/O (a model call is an invoked service).
     ///
     /// # Errors
     ///
@@ -608,12 +611,8 @@ impl Packages {
     pub fn extension_components(
         &self,
         values: &Values,
-        http: Option<&Arc<dyn ExtensionHttp>>,
     ) -> Result<ExtensionComponents, HostFailure> {
         let mut components = ExtensionComponents::new().with_values(self.environment(values)?);
-        if let Some(http) = http {
-            components = components.with_outbound_http(Arc::clone(http));
-        }
         for extension in &self.extensions {
             components = components
                 .bind(extension.host_package(), &extension.component)
@@ -628,7 +627,9 @@ impl Packages {
     }
 
     /// The service components as the session host binds them, with the
-    /// config's WASI grants.
+    /// config's WASI grants and `http` as their deferred transport
+    /// (`outbound-http.begin`): a service's request never blocks the
+    /// session.
     ///
     /// # Errors
     ///
@@ -638,7 +639,7 @@ impl Packages {
     pub fn service_components(
         &self,
         values: &Values,
-        http: Option<&Arc<dyn ExtensionHttp>>,
+        http: Option<&Arc<dyn ServiceHttp>>,
     ) -> Result<ServiceComponents, HostFailure> {
         let mut grants = WasiGrants::new();
         for UriGrant { uri, grant } in &self.grants {
@@ -652,7 +653,7 @@ impl Packages {
             .with_values(self.environment(values)?)
             .with_wasi_grants(grants);
         if let Some(http) = http {
-            components = components.with_outbound_http(Arc::clone(http));
+            components = components.with_deferred_http(Arc::clone(http));
         }
         for service in &self.services {
             components = components

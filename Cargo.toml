@@ -2,8 +2,9 @@
 members = [
     "host",
     "namespaces/scxml",
-    "namespaces/generate",
     "namespaces/decision",
+    "services/generate",
+    "services/decision",
 ]
 # scxml.rs is a squashed subtree with its own workspace, lockfile, and proof
 # matrix; nemobot depends on its crates by path and never absorbs it.

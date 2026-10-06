@@ -4,145 +4,40 @@ use serde_json::json;
 
 use super::*;
 
-/// A deterministic fake host: expressions evaluate from a table, snapshots
-/// come from scripted documents, assignments, raises, and requests are
-/// recorded, and the backend answers with a scripted response.
+/// A deterministic fake host: guards evaluate from a table (anything else
+/// is not a boolean), the snapshot is scripted, and assignments are
+/// recorded.
+#[derive(Default)]
 struct FakeHost {
-    values: BTreeMap<String, Value>,
-    slots: BTreeMap<String, u32>,
+    guards: BTreeMap<String, bool>,
     menu_snapshot: Option<String>,
-    state_snapshot: Option<String>,
     snapshot_requests: Vec<Vec<Section>>,
     assigned: Vec<(String, Data)>,
-    raised: Vec<(String, Data)>,
-    requests: Vec<Request>,
-    answer: Result<Response, ()>,
-    refuse_raise: bool,
+    fail_assign: bool,
 }
 
-impl Default for FakeHost {
-    fn default() -> Self {
-        Self {
-            values: BTreeMap::new(),
-            slots: BTreeMap::from([(API_KEY_SLOT.into(), 1), (BASE_URL_SLOT.into(), 2)]),
-            menu_snapshot: None,
-            state_snapshot: Some(
-                r#"{"version":"scxml.session-snapshot/v2","snapshot":{"root":{"configuration":{"atomic":["s"],"full":["s"]}}}}"#
-                    .into(),
-            ),
-            snapshot_requests: Vec::new(),
-            assigned: Vec::new(),
-            raised: Vec::new(),
-            requests: Vec::new(),
-            answer: Err(()),
-            refuse_raise: false,
-        }
-    }
-}
-
-impl FakeHost {
-    fn answering(answers: &Json) -> Self {
-        Self {
-            answer: Ok(Response {
-                status: 200,
-                body: system_one(answers),
-            }),
-            ..Self::default()
-        }
-    }
-
-    fn body(&self) -> Json {
-        assert_eq!(self.requests.len(), 1, "exactly one request");
-        serde_json::from_slice(&self.requests[0].body).expect("the body is JSON")
-    }
-
-    fn raised_json(&self) -> Vec<(String, Json)> {
-        self.raised
-            .iter()
-            .map(|(name, data)| match data {
-                Data::JsonObject(text) => (
-                    name.clone(),
-                    serde_json::from_str(text).expect("raised data is JSON"),
-                ),
-                other => panic!("raised data must be a JSON object, got {other:?}"),
-            })
-            .collect()
-    }
-}
-
-impl DecisionHost for FakeHost {
+impl MenuHost for FakeHost {
     type Error = &'static str;
 
-    fn evaluate(&mut self, expression: &str) -> Result<Result<Value, ()>, &'static str> {
-        if expression == "fatal" {
+    fn guard(&mut self, cond: &str) -> Result<GuardValue, &'static str> {
+        if cond == "fatal" {
             return Err("fatal");
         }
-        Ok(self.values.get(expression).cloned().ok_or(()))
+        Ok(self.guards.get(cond).copied())
     }
 
     fn assign(&mut self, location: &str, value: &Data) -> Result<Result<(), ()>, &'static str> {
+        if self.fail_assign {
+            return Ok(Err(()));
+        }
         self.assigned.push((location.to_owned(), value.clone()));
         Ok(Ok(()))
     }
 
-    fn slot(&mut self, slot: &str) -> Option<u32> {
-        self.slots.get(slot).copied()
-    }
-
-    fn post(&mut self, request: &Request) -> Result<Result<Response, ()>, &'static str> {
-        self.requests.push(request.clone());
-        Ok(self.answer.clone())
-    }
-
     fn snapshot(&mut self, exclude: &[Section]) -> Result<Result<String, ()>, &'static str> {
         self.snapshot_requests.push(exclude.to_vec());
-        let document = if exclude.contains(&Section::Transitions) {
-            &self.state_snapshot
-        } else {
-            &self.menu_snapshot
-        };
-        Ok(document.clone().ok_or(()))
+        Ok(self.menu_snapshot.clone().ok_or(()))
     }
-
-    fn raise(&mut self, name: &str, data: &Data) -> Result<Result<(), ()>, &'static str> {
-        if self.refuse_raise {
-            return Ok(Err(()));
-        }
-        self.raised.push((name.to_owned(), data.clone()));
-        Ok(Ok(()))
-    }
-}
-
-/// A `system_one` response body answering each question
-/// (`{name: {label: probability}}`) with its most probable label as the
-/// reported `choice`.
-fn system_one(answers: &Json) -> Vec<u8> {
-    let answers: Map<String, Json> = answers
-        .as_object()
-        .expect("answers are an object")
-        .iter()
-        .map(|(name, probabilities)| {
-            let choice = probabilities
-                .as_object()
-                .expect("probabilities are an object")
-                .iter()
-                .max_by(|left, right| {
-                    left.1
-                        .as_f64()
-                        .unwrap_or(0.0)
-                        .total_cmp(&right.1.as_f64().unwrap_or(0.0))
-                })
-                .map(|(label, _)| label.clone())
-                .expect("at least one label");
-            (
-                name.clone(),
-                json!({"type": "choice", "choice": choice, "confidence": 0.9, "probabilities": probabilities}),
-            )
-        })
-        .collect();
-    json!({"model": "jev-latest", "answers": answers, "usage": {"input_tokens": 1, "output_tokens": 1}})
-        .to_string()
-        .into_bytes()
 }
 
 /// One snapshot transition listing with an `event:schema`.
@@ -227,33 +122,11 @@ fn attr(local_name: &str, value: &str) -> Attribute {
     }
 }
 
-fn env(local_name: &str, value: &str) -> Attribute {
-    Attribute {
-        namespace_uri: Some(scxml_types::ENV_NAMESPACE_URI.into()),
-        local_name: local_name.into(),
-        value: value.into(),
-    }
-}
-
 fn execution(result: Result<Executed, Failure<&'static str>>) -> &'static str {
     match result {
         Err(Failure::Execution(detail)) => detail,
         other => panic!("expected error.execution, got {other:?}"),
     }
-}
-
-fn order_host(answers: &Json) -> FakeHost {
-    let mut host = FakeHost::answering(answers);
-    host.menu_snapshot = Some(order_snapshot());
-    host.values.insert(
-        "order".into(),
-        Value::Json(r#"{"sku":"A-1","qty":2}"#.into()),
-    );
-    host
-}
-
-fn choose_attributes() -> Vec<Attribute> {
-    vec![attr("dataexpr", "order"), env("apikey", "TYPESAFE_API_KEY")]
 }
 
 #[test]
@@ -266,7 +139,7 @@ fn the_namespace_uri_is_the_repository_path_of_its_name_at_its_tag() {
 }
 
 #[test]
-fn the_package_binds_the_exact_uri_schema_digest_slots_origin_and_abstain_contract() {
+fn the_package_binds_the_exact_uri_and_schema_and_declares_no_io() {
     let manifest = scxml_validator_core::ExtensionPackageManifest::from_json(include_bytes!(
         "../package/decision.extension.json"
     ))
@@ -276,453 +149,125 @@ fn the_package_binds_the_exact_uri_schema_digest_slots_origin_and_abstain_contra
         manifest.extension_artifact,
         "nemobot_decision.virtualized.wasm"
     );
-    assert_eq!(manifest.http_origins, ["https://api.typesafe.ai"]);
-    assert_eq!(manifest.env_slots, [API_KEY_SLOT, BASE_URL_SLOT]);
-    assert!(manifest.wasi_permissions.is_empty(), "no WASI permission");
+    // Executable content is synchronous: no origin, no slot, no WASI, and no
+    // event of its own (the decision service emits the chosen event).
+    assert!(manifest.http_origins.is_empty());
+    assert!(manifest.env_slots.is_empty());
+    assert!(manifest.wasi_permissions.is_empty());
+    assert!(manifest.events.emits.is_empty() && manifest.events.accepts.is_empty());
     manifest
         .verify_schema(&scxml_validator_core::SchemaSource::new(
             "decision.xsd",
             include_bytes!("../package/decision.xsd").to_vec(),
         ))
         .expect("the schema digest, targetNamespace, and WIT identity verify");
-    let emits: Vec<&str> = manifest
-        .events
-        .emits
-        .iter()
-        .map(|event| event.name.as_str())
-        .collect();
-    assert_eq!(emits, [ABSTAIN_EVENT]);
-    let files = BTreeMap::from([(
-        "events.json".to_owned(),
-        include_bytes!("../package/events.json").to_vec(),
-    )]);
-    let declared = manifest
-        .events
-        .resolve("extension package", &files)
-        .expect("the declared abstain schema resolves against its digest");
-    let abstain = CompiledSchema::new(&declared.emits[0].schema).expect("the schema compiles");
-    for data in [
-        json!({"reason": "no-candidates"}),
-        json!({"reason": "declined", "confidence": 0.5}),
-        json!({"reason": "below-threshold", "confidence": 0.1}),
-    ] {
-        assert!(
-            abstain.admits(&Data::JsonObject(canonical_json(&data))),
-            "every abstain the element raises satisfies the declared contract: {data}"
-        );
-    }
+}
+
+fn location(value: &str) -> Attribute {
+    attr("location", value)
 }
 
 #[test]
-fn choose_offers_the_schema_transitions_fills_grounded_data_and_raises_the_event() {
-    let answers = json!({
-        "selection": {"order.ship": 0.7, "order.cancel": 0.2, "order.hold": 0.05, "none of these": 0.05},
-        "fill.0.0": {"A-1": 1.0},
-        "fill.0.1": {"ups": 0.4, "fedex": 0.6},
-        "fill.1.0": {"customer": 0.5, "stock": 0.5},
-    });
-    let mut host = order_host(&answers);
+fn menu_writes_the_canonical_menu_of_the_enabled_schema_transitions() {
+    let mut host = FakeHost {
+        menu_snapshot: Some(order_snapshot()),
+        ..FakeHost::default()
+    };
     assert_eq!(
-        execute("choose", &choose_attributes(), &[], &mut host),
+        execute("menu", &[location("menu")], &[], &mut host),
         Ok(Executed::Handled)
     );
-    assert_eq!(
-        host.raised_json(),
-        [(
-            "order.ship".to_owned(),
-            json!({"carrier": "fedex", "sku": "A-1"})
-        )],
-        "the chosen event is raised with schema-valid grounded data"
-    );
-    assert_eq!(
-        host.snapshot_requests,
-        [
-            STATE_SNAPSHOT_EXCLUDE.to_vec(),
-            MENU_SNAPSHOT_EXCLUDE.to_vec()
-        ],
-        "the default state and the menu each read one snapshot"
-    );
-    let request = &host.requests[0];
-    assert_eq!(
-        request.url,
-        [
-            Part::Reference(2),
-            Part::Literal(TypeSafe::SYSTEM_ONE_PATH.into())
-        ],
-        "the baseurl slot's reference, then the path; no URL is compiled in"
-    );
-    assert_eq!(
-        request.headers[0],
-        (
-            "authorization".to_owned(),
-            vec![Part::Literal("Bearer ".into()), Part::Reference(1)]
-        )
-    );
-    let body = String::from_utf8(request.body.clone()).expect("UTF-8");
-    let expected = canonical_json(&json!({
-        "model": "jev-latest",
-        "questions": {
-            "selection": {
-                "type": "choice",
-                "instructions": CHOOSE_INSTRUCTIONS,
-                "criteria": {
-                    "order.ship": "Ship the order.",
-                    "order.cancel": "Cancel the order",
-                    "order.hold": null,
-                    "none of these": ABSTAIN_DESCRIPTION,
-                },
-            },
-            "fill.0.0": {
-                "type": "choice",
-                "instructions": format!("Which value fills \"sku\" for the event order.ship? {FILL_INSTRUCTIONS}"),
-                "criteria": {"A-1": null},
-            },
-            "fill.0.1": {
-                "type": "choice",
-                "instructions": format!("Which value fills \"carrier\" for the event order.ship? {FILL_INSTRUCTIONS}"),
-                "criteria": {"ups": null, "fedex": null},
-            },
-            "fill.1.0": {
-                "type": "choice",
-                "instructions": format!("Which value fills \"reason\" for the event order.cancel? {FILL_INSTRUCTIONS}"),
-                "criteria": {"customer": null, "stock": null},
-            },
-        },
-        "state": {"configuration": {"atomic": ["s"], "full": ["s"]}},
-    }));
-    assert_eq!(body, expected, "the request body is canonical JSON");
-}
-
-#[test]
-fn choose_breaks_ties_by_label_bytes_whatever_the_reported_choice() {
-    // order.cancel and order.hold tie; "order.cancel" < "order.hold". The
-    // reason members tie too; "customer" < "stock".
-    let answers = json!({
-        "selection": {"order.ship": 0.1, "order.cancel": 0.4, "order.hold": 0.4, "none of these": 0.1},
-        "fill.0.0": {"A-1": 1.0},
-        "fill.0.1": {"ups": 0.5, "fedex": 0.5},
-        "fill.1.0": {"stock": 0.5, "customer": 0.5},
-    });
-    let mut host = order_host(&answers);
-    assert_eq!(
-        execute("choose", &choose_attributes(), &[], &mut host),
-        Ok(Executed::Handled)
-    );
-    assert_eq!(
-        host.raised_json(),
-        [("order.cancel".to_owned(), json!({"reason": "customer"}))]
-    );
-}
-
-#[test]
-fn choose_raises_the_abstain_event_when_none_fits_or_below_threshold() {
-    let declined = json!({
-        "selection": {"order.ship": 0.1, "order.cancel": 0.1, "order.hold": 0.1, "none of these": 0.7},
-        "fill.0.0": {"A-1": 1.0},
-        "fill.0.1": {"ups": 1.0},
-        "fill.1.0": {"stock": 1.0},
-    });
-    let mut host = order_host(&declined);
-    assert_eq!(
-        execute("choose", &choose_attributes(), &[], &mut host),
-        Ok(Executed::Handled)
-    );
-    assert_eq!(
-        host.raised_json(),
-        [(
-            ABSTAIN_EVENT.to_owned(),
-            json!({"reason": "declined", "confidence": 0.7})
-        )]
-    );
-
-    let weak = json!({
-        "selection": {"order.ship": 0.4, "order.cancel": 0.3, "order.hold": 0.2, "none of these": 0.1},
-        "fill.0.0": {"A-1": 1.0},
-        "fill.0.1": {"ups": 1.0},
-        "fill.1.0": {"stock": 1.0},
-    });
-    let mut host = order_host(&weak);
-    let mut attributes = choose_attributes();
-    attributes.push(attr("threshold", "0.5"));
-    assert_eq!(
-        execute("choose", &attributes, &[], &mut host),
-        Ok(Executed::Handled)
-    );
-    assert_eq!(
-        host.raised_json(),
-        [(
-            ABSTAIN_EVENT.to_owned(),
-            json!({"reason": "below-threshold", "confidence": 0.4})
-        )]
-    );
-}
-
-#[test]
-fn an_empty_menu_abstains_without_a_request_or_a_key() {
-    let mut host = FakeHost::default();
-    host.slots.clear();
-    host.menu_snapshot = Some(snapshot(&[
-        without_schema(&["go"]),
-        // order.ship needs a sku nothing grounds: not offered.
-        with_schema(&["order.ship"], &ship_schema()),
+    assert_eq!(host.snapshot_requests, [MENU_SNAPSHOT_EXCLUDE.to_vec()]);
+    let expected = canonical_json(&json!([
+        {"event": "order.ship", "schema": ship_schema(), "description": "Ship the order."},
+        {"event": "order.cancel", "schema": cancel_schema(), "description": "Cancel the order"},
+        {"event": "order.hold", "schema": hold_schema()},
     ]));
     assert_eq!(
-        execute("choose", &[], &[], &mut host),
-        Ok(Executed::Handled)
-    );
-    assert_eq!(
-        host.raised_json(),
-        [(ABSTAIN_EVENT.to_owned(), json!({"reason": "no-candidates"}))]
-    );
-    assert!(
-        host.requests.is_empty(),
-        "nothing is sent for an empty menu"
-    );
-}
-
-#[test]
-fn filled_data_that_fails_the_schema_is_never_raised() {
-    let schema = json!({
-        "type": "object",
-        "properties": {"sku": {"type": "string", "pattern": "^B-"}},
-        "required": ["sku"],
-    });
-    let mut host = FakeHost::answering(&json!({
-        "selection": {"order.ship": 0.9, "none of these": 0.1},
-        "fill.0.0": {"A-1": 1.0},
-    }));
-    host.menu_snapshot = Some(snapshot(&[with_schema(&["order.ship"], &schema)]));
-    host.values
-        .insert("order".into(), Value::Json(r#"{"sku":"A-1"}"#.into()));
-    assert_eq!(
-        execution(execute("choose", &choose_attributes(), &[], &mut host)),
-        "the filled data does not satisfy the chosen event's schema; nothing was raised"
-    );
-    assert!(host.raised.is_empty());
-}
-
-#[test]
-fn an_answer_outside_the_menu_or_a_failed_request_raises_nothing() {
-    let mut host = order_host(&json!({
-        "selection": {"order.ship": 0.9, "order.refund": 0.1},
-        "fill.0.0": {"A-1": 1.0},
-        "fill.0.1": {"ups": 1.0},
-        "fill.1.0": {"stock": 1.0},
-    }));
-    assert_eq!(
-        execution(execute("choose", &choose_attributes(), &[], &mut host)),
-        "the decision response gives a probability to a label the question does not offer"
-    );
-    assert!(host.raised.is_empty());
-
-    let mut host = order_host(&json!({"selection": {"order.ship": 1.0}}));
-    assert_eq!(
-        execution(execute("choose", &choose_attributes(), &[], &mut host)),
-        "the decision response does not answer exactly the questions asked"
-    );
-
-    let mut host = order_host(&json!({}));
-    host.answer = Ok(Response {
-        status: 500,
-        body: b"{}".to_vec(),
-    });
-    assert_eq!(
-        execution(execute("choose", &choose_attributes(), &[], &mut host)),
-        "the decision service answered with a non-success status"
-    );
-    assert!(host.raised.is_empty());
-
-    let mut host = order_host(&json!({}));
-    host.answer = Err(());
-    assert_eq!(
-        execution(execute("choose", &choose_attributes(), &[], &mut host)),
-        "the decision request was refused or failed"
-    );
-}
-
-#[test]
-fn choose_without_a_key_sends_nothing() {
-    let mut host = order_host(&json!({}));
-    host.slots.clear();
-    assert_eq!(
-        execution(execute("choose", &choose_attributes(), &[], &mut host)),
-        "decision has no API key: env:apikey names no variable the run holds"
-    );
-    assert!(host.requests.is_empty());
-}
-
-/// No backend URL is compiled in: without a `baseurl` value the element
-/// fails before any request, so the key never reaches a host the component
-/// chose.
-#[test]
-fn choose_without_a_base_url_sends_nothing() {
-    let mut host = order_host(&json!({}));
-    host.slots.remove(BASE_URL_SLOT);
-    assert_eq!(
-        execution(execute("choose", &choose_attributes(), &[], &mut host)),
-        "decision has no base URL: env:baseurl names no variable the run holds"
-    );
-    assert!(host.requests.is_empty());
-}
-
-#[test]
-fn a_base_url_slot_and_a_model_reach_the_request() {
-    let mut host = FakeHost::answering(&json!({"classify": {"a": 0.25, "b": 0.75}}));
-    host.slots.insert(BASE_URL_SLOT.into(), 7);
-    let attributes = [
-        attr("location", "kind"),
-        attr("labels", " a\n b "),
-        attr("model", "jev-1"),
-        attr("statexpr", "'hello'"),
-    ];
-    host.values
-        .insert("'hello'".into(), Value::Text("hello".into()));
-    assert_eq!(
-        execute("classify", &attributes, &[], &mut host),
-        Ok(Executed::Handled)
-    );
-    assert_eq!(
-        host.requests[0].url,
-        [
-            Part::Reference(7),
-            Part::Literal(TypeSafe::SYSTEM_ONE_PATH.into())
-        ]
-    );
-    assert_eq!(host.body()["model"], "jev-1");
-    assert_eq!(host.body()["state"], "hello");
-    assert!(
-        host.snapshot_requests.is_empty(),
-        "statexpr reads no snapshot"
-    );
-    assert_eq!(
         host.assigned,
-        [(
-            "kind".to_owned(),
-            Data::JsonObject(r#"{"a":0.25,"b":0.75}"#.into())
-        )]
+        [("menu".to_owned(), Data::JsonArray(expected))]
     );
 }
 
 #[test]
-fn classify_takes_described_labels_from_labelsexpr() {
-    let mut host = FakeHost::answering(&json!({"classify": {"spam": 0.9}}));
-    host.values.insert(
-        "labels".into(),
-        Value::Json(r#"{"spam":"Unwanted mail","ham":{"kind":"wanted"},"other":null}"#.into()),
-    );
-    assert_eq!(
-        execute(
-            "classify",
-            &[attr("location", "kind"), attr("labelsexpr", "labels")],
-            &[],
-            &mut host
-        ),
-        Ok(Executed::Handled)
-    );
-    assert_eq!(
-        host.body()["questions"]["classify"]["criteria"],
-        json!({"spam": "Unwanted mail", "ham": {"kind": "wanted"}, "other": null})
-    );
-    assert_eq!(
-        host.assigned[0].1,
-        Data::JsonObject(r#"{"ham":0.0,"other":0.0,"spam":0.9}"#.into()),
-        "every label is in the distribution; unmentioned labels are 0"
-    );
-}
-
-#[test]
-fn rank_sorts_by_score_then_label_and_keeps_every_candidate() {
-    let mut host = FakeHost::answering(&json!({
-        "rank": {"pear": 0.3, "apple": 0.3, "{\"id\":7}": 0.4},
-    }));
-    host.values.insert(
-        "fruit".into(),
-        Value::Json(r#"["pear","apple",{"id":7},"fig"]"#.into()),
-    );
-    assert_eq!(
-        execute(
-            "rank",
-            &[attr("location", "ranked"), attr("candidatesexpr", "fruit")],
-            &[],
-            &mut host
-        ),
-        Ok(Executed::Handled)
-    );
-    assert_eq!(
-        host.body()["questions"]["rank"]["criteria"],
-        json!({"pear": null, "apple": null, "{\"id\":7}": {"id": 7}, "fig": null})
-    );
-    assert_eq!(
-        host.assigned,
-        [(
-            "ranked".to_owned(),
-            Data::JsonArray(
-                r#"[{"candidate":{"id":7},"score":0.4},{"candidate":"apple","score":0.3},{"candidate":"pear","score":0.3},{"candidate":"fig","score":0.0}]"#
-                    .into()
-            )
-        )]
-    );
-}
-
-#[test]
-fn rank_refuses_duplicate_or_empty_candidates() {
-    for candidates in ["[]", r#"["a","a"]"#, r#"[1,"1"]"#, r#"[""]"#] {
-        let mut host = FakeHost::default();
-        host.values
-            .insert("c".into(), Value::Json(candidates.into()));
-        assert_eq!(
-            execution(execute(
-                "rank",
-                &[attr("location", "r"), attr("candidatesexpr", "c")],
-                &[],
-                &mut host
-            )),
-            "decision:rank candidatesexpr must evaluate to a non-empty array of distinct candidates",
-            "{candidates}"
-        );
-        assert!(host.requests.is_empty());
+fn menu_leaves_out_a_transition_whose_guard_is_false() {
+    let mut snapshot: Json =
+        serde_json::from_str(&order_snapshot()).expect("the order snapshot is JSON");
+    for transition in snapshot["snapshot"]["root"]["transitions"]
+        .as_array_mut()
+        .expect("transitions")
+    {
+        if transition["events"] != json!(["order.ship"]) {
+            transition["has_cond"] = json!(true);
+            transition["cond"] = json!("closed");
+        }
     }
+    let mut host = FakeHost {
+        menu_snapshot: Some(snapshot.to_string()),
+        guards: BTreeMap::from([("closed".to_owned(), false)]),
+        ..FakeHost::default()
+    };
+    execute("menu", &[location("menu")], &[], &mut host).expect("handled");
+    let Data::JsonArray(menu) = &host.assigned[0].1 else {
+        panic!("the menu is an array");
+    };
+    let menu: Json = serde_json::from_str(menu).expect("JSON");
+    assert_eq!(menu.as_array().map(Vec::len), Some(1));
+    assert_eq!(menu[0]["event"], "order.ship");
 }
 
 #[test]
-fn malformed_elements_are_refused_before_anything_is_sent() {
-    let cases: [(&str, Vec<Attribute>, Vec<Content>); 6] = [
-        ("choose", vec![attr("bogus", "x")], vec![]),
+fn malformed_menu_elements_or_snapshots_raise_error_execution() {
+    let order = || FakeHost {
+        menu_snapshot: Some(order_snapshot()),
+        ..FakeHost::default()
+    };
+    for (attributes, content) in [
+        (vec![], vec![]),
+        (vec![location(" ")], vec![]),
+        (vec![location("menu"), attr("model", "m")], vec![]),
+        (vec![location("menu"), location("other")], vec![]),
         (
-            "choose",
-            vec![attr("model", "a"), attr("modelexpr", "b")],
+            vec![Attribute {
+                namespace_uri: Some(scxml_types::ENV_NAMESPACE_URI.into()),
+                local_name: "apikey".into(),
+                value: "K".into(),
+            }],
             vec![],
         ),
-        ("choose", vec![attr("threshold", "1.5")], vec![]),
-        ("choose", vec![], vec![Content::Start, Content::End]),
-        ("rank", vec![attr("candidatesexpr", "c")], vec![]),
-        ("classify", vec![attr("location", "l")], vec![]),
-    ];
-    for (name, attributes, content) in cases {
-        let mut host = order_host(&json!({}));
-        assert!(
-            matches!(
-                execute(name, &attributes, &content, &mut host),
-                Err(Failure::Execution(_))
-            ),
-            "{name} {attributes:?}"
-        );
-        assert!(host.requests.is_empty() && host.raised.is_empty());
+        (vec![location("menu")], vec![Content::Text("x".into())]),
+        (vec![location("menu")], vec![Content::Start, Content::End]),
+    ] {
+        let mut host = order();
+        execution(execute("menu", &attributes, &content, &mut host));
+        assert!(host.assigned.is_empty());
     }
     let mut host = FakeHost::default();
     assert_eq!(
-        execute("decide", &[], &[], &mut host),
-        Ok(Executed::NotHandled)
+        execution(execute("menu", &[location("menu")], &[], &mut host)),
+        "the host offers no session snapshot"
     );
+    let mut host = FakeHost {
+        fail_assign: true,
+        ..order()
+    };
+    execution(execute("menu", &[location("menu")], &[], &mut host));
+    let mut host = FakeHost {
+        menu_snapshot: Some(snapshot(&[guarded(
+            with_schema(&["x"], &json!({"type": "object"})),
+            "fatal",
+        )])),
+        ..FakeHost::default()
+    };
     assert_eq!(
-        execute(
-            "rank",
-            &[attr("location", "l"), attr("candidatesexpr", "fatal")],
-            &[],
-            &mut host
-        ),
-        Err(Failure::Host("fatal")),
-        "a non-recoverable host failure passes through"
+        execute("menu", &[location("menu")], &[], &mut host),
+        Err(Failure::Host("fatal"))
+    );
+    let mut host = FakeHost::default();
+    assert_eq!(
+        execute("choose", &[], &[], &mut host),
+        Ok(Executed::NotHandled),
+        "the old elements are gone"
     );
 }
 
@@ -832,209 +377,6 @@ fn the_snapshot_menu_offers_only_transitions_whose_guards_hold() {
     );
 }
 
-/// `choose` evaluates each offered transition's guard through the host.
-#[test]
-fn choose_skips_a_transition_whose_guard_is_false() {
-    let mut host = order_host(&json!({
-        "selection": {"order.ship": 0.8, "none of these": 0.2},
-    }));
-    let guarded_cancel = {
-        let mut snapshot: Json =
-            serde_json::from_str(&order_snapshot()).expect("the order snapshot is JSON");
-        let transitions = snapshot["snapshot"]["root"]["transitions"]
-            .as_array_mut()
-            .expect("transitions");
-        for transition in transitions.iter_mut() {
-            if transition["events"] != json!(["order.ship"]) {
-                transition["has_cond"] = json!(true);
-                transition["cond"] = json!("closed");
-            }
-        }
-        snapshot.to_string()
-    };
-    host.menu_snapshot = Some(guarded_cancel);
-    host.values.insert("closed".into(), Value::Bool(false));
-    let _ = execute("choose", &choose_attributes(), &[], &mut host);
-    let offered: Vec<String> = host.body()["questions"]["selection"]["criteria"]
-        .as_object()
-        .expect("the selection question")
-        .keys()
-        .cloned()
-        .collect();
-    assert!(offered.contains(&"order.ship".to_owned()), "{offered:?}");
-    assert_eq!(
-        offered.len(),
-        2,
-        "only order.ship and the abstain label: {offered:?}"
-    );
-}
-
-#[test]
-fn explicit_candidates_replace_the_snapshot_menu() {
-    let mut host = FakeHost::answering(&json!({
-        "selection": {"greet": 0.8, "none of these": 0.2},
-        "fill.0.0": {"en": 0.2, "fr": 0.8},
-    }));
-    host.values.insert(
-        "menu".into(),
-        Value::Json(
-            r#"[{"event":"greet","description":"Say hello","schema":{"type":"object","properties":{"lang":{"enum":["en","fr"]}},"required":["lang"]}}]"#
-                .into(),
-        ),
-    );
-    assert_eq!(
-        execute(
-            "choose",
-            &[attr("candidatesexpr", "menu"), env("apikey", "K")],
-            &[],
-            &mut host
-        ),
-        Ok(Executed::Handled)
-    );
-    assert_eq!(
-        host.raised_json(),
-        [("greet".to_owned(), json!({"lang": "fr"}))]
-    );
-    assert_eq!(
-        host.snapshot_requests,
-        [STATE_SNAPSHOT_EXCLUDE.to_vec()],
-        "explicit candidates read no menu snapshot"
-    );
-
-    for menu in [
-        r#"[{"event":"a b","schema":true}]"#,
-        r#"[{"event":"x","schema":true},{"event":"x","schema":true}]"#,
-        r#"[{"event":"x","schema":{"$ref":"https://example.org/s.json"}}]"#,
-        r#"[{"event":"x","schema":true,"extra":1}]"#,
-    ] {
-        assert!(
-            explicit_menu(&serde_json::from_str(menu).expect("JSON")).is_err(),
-            "{menu}"
-        );
-    }
-}
-
-#[test]
-fn a_refused_raise_is_error_execution() {
-    let mut host = order_host(&json!({
-        "selection": {"order.hold": 0.9, "none of these": 0.1},
-        "fill.0.0": {"A-1": 1.0},
-        "fill.0.1": {"ups": 1.0},
-        "fill.1.0": {"stock": 1.0},
-    }));
-    host.refuse_raise = true;
-    assert_eq!(
-        execution(execute("choose", &choose_attributes(), &[], &mut host)),
-        "decision:choose could not raise its event"
-    );
-}
-
-/// A backend that is not HTTP-shaped like `TypeSafe`: it answers every
-/// question with a uniform distribution, so every decision falls to the
-/// deterministic tie-break.
-struct Uniform;
-
-impl Backend for Uniform {
-    fn request(&self, _batch: &Batch, api_key: u32, _base_url: u32) -> Request {
-        Request {
-            url: vec![Part::Literal("http://127.0.0.1/uniform".into())],
-            headers: vec![("x-key".into(), vec![Part::Reference(api_key)])],
-            body: Vec::new(),
-        }
-    }
-
-    fn answers(&self, batch: &Batch, _body: &[u8]) -> Result<Vec<Distribution>, &'static str> {
-        Ok(batch
-            .questions
-            .iter()
-            .map(|question| Distribution {
-                probabilities: vec![0.5; question.criteria.len()],
-            })
-            .collect())
-    }
-}
-
-#[test]
-fn another_backend_plugs_in_behind_the_trait() {
-    let mut host = order_host(&json!({}));
-    host.answer = Ok(Response {
-        status: 200,
-        body: Vec::new(),
-    });
-    assert_eq!(
-        execute_with(&Uniform, "choose", &choose_attributes(), &[], &mut host),
-        Ok(Executed::Handled)
-    );
-    // "none of these" < "order.cancel" < "order.hold" < "order.ship".
-    assert_eq!(
-        host.raised_json(),
-        [(
-            ABSTAIN_EVENT.to_owned(),
-            json!({"reason": "declined", "confidence": 0.5})
-        )]
-    );
-}
-
-#[test]
-fn argmax_prefers_probability_then_the_smallest_label() {
-    let criteria: Vec<Criterion> = ["b", "a", "c"]
-        .iter()
-        .map(|label| Criterion {
-            label: (*label).into(),
-            description: Json::Null,
-        })
-        .collect();
-    let pick =
-        |probabilities: Vec<f64>| backend::argmax(&criteria, &Distribution { probabilities });
-    assert_eq!(pick(vec![0.2, 0.2, 0.6]), Some(2));
-    assert_eq!(pick(vec![0.4, 0.4, 0.2]), Some(1));
-    assert_eq!(pick(vec![0.0, 0.0, 0.0]), Some(1));
-    assert_eq!(
-        backend::argmax(
-            &[],
-            &Distribution {
-                probabilities: vec![]
-            }
-        ),
-        None
-    );
-}
-
-#[test]
-fn malformed_system_one_answers_fail_closed() {
-    let batch = Batch {
-        model: None,
-        state: json!({}),
-        questions: vec![Question {
-            name: "q".into(),
-            instructions: "i".into(),
-            criteria: vec![Criterion {
-                label: "a".into(),
-                description: Json::Null,
-            }],
-        }],
-    };
-    for body in [
-        "not json",
-        r#"{"answers":[]}"#,
-        r#"{"answers":{"q":{"type":"score","choice":"a","probabilities":{"a":1}}}}"#,
-        r#"{"answers":{"q":{"type":"choice","choice":"z","probabilities":{"a":1}}}}"#,
-        r#"{"answers":{"q":{"type":"choice","choice":"a","probabilities":{"a":1.5}}}}"#,
-        r#"{"answers":{"q":{"type":"choice","choice":"a","probabilities":{"a":1}},"r":{}}}"#,
-    ] {
-        assert!(TypeSafe.answers(&batch, body.as_bytes()).is_err(), "{body}");
-    }
-    assert_eq!(
-        TypeSafe.answers(
-            &batch,
-            br#"{"model":"m","answers":{"q":{"type":"choice","choice":"a","confidence":1,"probabilities":{"a":1}}},"usage":{}}"#
-        ),
-        Ok(vec![Distribution {
-            probabilities: vec![1.0]
-        }])
-    );
-}
-
 /// The menu of `transitions` under the active atomic states `atomic`, every
 /// guard enabled.
 fn menu_events_in(atomic: &[&str], transitions: &[Json]) -> Vec<String> {
@@ -1097,21 +439,18 @@ fn the_snapshot_menu_preempts_only_within_one_atomic_states_chain() {
 }
 
 /// The event-name bound is a wasm-only resource bound: natively a long
-/// event name is offered and accepted; on wasm one over the bound is not.
+/// event name is offered; on wasm one over the bound is not.
 #[test]
 fn the_event_name_bound_applies_to_wasm_builds_only() {
     let schema = json!({"type": "object"});
     let long = "e".repeat(257);
     let offered = menu_events_in(&["s"], &[with_schema(&[long.as_str()], &schema)]);
-    let explicit = explicit_menu(&json!([{"event": long, "schema": true}]));
     if cfg!(target_arch = "wasm32") {
         assert_eq!(MAX_EVENT_NAME_BYTES, 256);
         assert!(offered.is_empty());
-        assert!(explicit.is_err());
     } else {
         assert_eq!(MAX_EVENT_NAME_BYTES, usize::MAX);
         assert_eq!(offered, std::slice::from_ref(&long));
-        assert_eq!(explicit.map(|menu| menu.len()), Ok(1));
     }
     let at_bound = "e".repeat(256);
     assert_eq!(

@@ -1,9 +1,9 @@
 //! Decision backends: one batch of labelled choice questions about one state
 //! document, answered with one probability distribution per question.
 //!
-//! The elements build a provider-neutral [`Batch`]; a [`Backend`] turns it
+//! The service builds a provider-neutral [`Batch`]; a [`Backend`] turns it
 //! into one HTTP request and its response into [`Distribution`]s. Every
-//! decision the elements take is computed from those distributions alone
+//! decision the service takes is computed from those distributions alone
 //! ([`argmax`]: highest probability, ties broken by the label's UTF-8 bytes),
 //! so a backend contributes probabilities and nothing else. [`TypeSafe`] is
 //! the only backend today; a CLM or NVIDIA backend implements the same trait.
@@ -30,14 +30,14 @@ pub struct Question {
     pub name: String,
     /// What to decide.
     pub instructions: String,
-    /// The alternatives (labels unique), in the element's canonical order.
+    /// The alternatives (labels unique), in the request's canonical order.
     pub criteria: Vec<Criterion>,
 }
 
 /// One batch of questions about one state document.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Batch {
-    /// The model the element names, or `None` for the backend's default.
+    /// The model the request names, or `None` for the backend's default.
     pub model: Option<String>,
     /// The state document: a string, a JSON object, or a JSON array.
     pub state: Json,
@@ -116,7 +116,7 @@ pub struct TypeSafe;
 impl TypeSafe {
     /// The path appended to the base URL (the SDK's `SYSTEM_ONE_PATH`).
     pub const SYSTEM_ONE_PATH: &'static str = "/v1/systemone";
-    /// The model without a `model` attribute (the SDK's `DEFAULT_MODEL`).
+    /// The model without a `model` parameter (the SDK's `DEFAULT_MODEL`).
     pub const DEFAULT_MODEL: &'static str = "jev-latest";
 }
 

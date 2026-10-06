@@ -1,21 +1,22 @@
-//! nemobot-host integration test of the `decision` namespace: a live session
-//! binds the real `nemobot_decision` extension component, whose
-//! `<decision:choose/>` reads the session snapshot, offers the machine's
-//! three `event:schema` transitions to a deterministic fake `TypeSafe`
-//! `system_one` backend on 127.0.0.1 (nothing reaches the network), fills
-//! the chosen event's data from grounded options, validates it against the
-//! schema, and raises it; the machine's transition fires with that data.
-//! The key and base URL reach the run only through an env file the config
-//! names; the component holds slot references and the host substitutes the
-//! values into the admitted request.
+//! nemobot-host integration test of a decision: the `decision` namespace's
+//! `<decision:menu>` reads the session snapshot and writes the machine's
+//! three enabled `event:schema` transitions as the canonical menu, and the
+//! `decision` service, invoked with that menu, asks a deterministic fake
+//! `TypeSafe` `system_one` backend on 127.0.0.1 (nothing reaches the
+//! network) off the session thread, fills the chosen event's data from
+//! grounded options, validates it against the menu's schema, and emits it;
+//! the machine's transition fires with that data. The key and base URL
+//! reach the run only through an env file the config names; the component
+//! holds slot references and the host substitutes the values into the
+//! admitted request.
 //!
 //! `scripts/build-components.sh` builds and verifies the release session
-//! components and the namespace components (import allowlists included) into
-//! `target/test-decision-namespace/components`.
+//! components and the namespace and service components (import allowlists
+//! included) into `target/test-decision-service/components`.
 //!
-//! The ignored `live_choose_through_an_env_file` test makes one real call:
+//! The ignored `live_decision_through_an_env_file` test makes one real call:
 //! `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p nemobot-host --test
-//! decision_namespace -- --ignored`. It grants `TYPESAFE_API_KEY` (the file
+//! decision_service -- --ignored`. It grants `TYPESAFE_API_KEY` (the file
 //! must set it) and `TYPESAFE_BASE_URL` (the file's value, else the config's
 //! `env-defaults` `TypeSafe` URL: no backend URL is compiled into the
 //! component), and reports pass or fail and the final state reached; no
@@ -43,6 +44,7 @@ use serde_json::{Map, Value as Json, json};
 use sha2::{Digest as _, Sha256};
 
 const NAMESPACE_URI: &str = "https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0";
+const SERVICE_URI: &str = "https://github.com/stateforward/nemobot/services/decision@v0.1.0";
 /// The fake key (not a secret): the mock checks it arrives as the bearer.
 const FAKE_KEY: &str = "ts-nemobot-fake";
 
@@ -58,18 +60,18 @@ fn sha256_file(path: &Path) -> String {
 }
 
 /// The verified artifacts: the session components' directory and manifest
-/// digest, and the decision component and its digest.
+/// digest, and the decision namespace and service components.
 struct Artifacts {
     components: PathBuf,
     manifest_sha256: String,
-    component: PathBuf,
-    component_sha256: String,
+    namespace: PathBuf,
+    service: PathBuf,
 }
 
 fn artifacts() -> &'static Artifacts {
     static ARTIFACTS: OnceLock<Artifacts> = OnceLock::new();
     ARTIFACTS.get_or_init(|| {
-        let dir = workspace().join("target/test-decision-namespace/components");
+        let dir = workspace().join("target/test-decision-service/components");
         let status = Command::new("sh")
             .arg(workspace().join("scripts/build-components.sh"))
             .arg("--artifacts-dir")
@@ -79,18 +81,17 @@ fn artifacts() -> &'static Artifacts {
             .expect("the build script runs");
         assert!(status.success(), "the component proof must pass");
         let components = dir.join("scxml");
-        let component = dir.join("namespaces/nemobot_decision.virtualized.wasm");
         Artifacts {
             manifest_sha256: sha256_file(&components.join("manifest.tsv")),
-            component_sha256: sha256_file(&component),
             components,
-            component,
+            namespace: dir.join("namespaces/nemobot_decision.virtualized.wasm"),
+            service: dir.join("services/nemobot_service_decision.virtualized.wasm"),
         }
     })
 }
 
-/// A config binding the decision package, granting `env` from `env_file` to
-/// the decision namespace.
+/// A config binding the decision namespace and service, granting `env` from
+/// `env_file` to the service.
 fn config(env_file: &Path, env: &[&str]) -> Config {
     config_with_defaults(env_file, env, &json!({}))
 }
@@ -98,7 +99,8 @@ fn config(env_file: &Path, env: &[&str]) -> Config {
 /// [`config`] with non-secret `env-defaults`.
 fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &Json) -> Config {
     let artifacts = artifacts();
-    let package = workspace().join("namespaces/decision/package/decision.extension.json");
+    let namespace = workspace().join("namespaces/decision/package/decision.extension.json");
+    let service = workspace().join("services/decision/package/decision.service.json");
     let text = json!({
         "format": CONFIG_FORMAT,
         "components": {
@@ -108,13 +110,18 @@ fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &Json) -> Confi
         "env-file": env_file.display().to_string(),
         "env": env
             .iter()
-            .map(|name| json!({"name": name, "packages": [NAMESPACE_URI]}))
+            .map(|name| json!({"name": name, "packages": [SERVICE_URI]}))
             .collect::<Vec<_>>(),
         "env-defaults": defaults,
         "extensions": [{
-            "manifest": package.display().to_string(),
-            "component": artifacts.component.display().to_string(),
-            "component-sha256": artifacts.component_sha256,
+            "manifest": namespace.display().to_string(),
+            "component": artifacts.namespace.display().to_string(),
+            "component-sha256": sha256_file(&artifacts.namespace),
+        }],
+        "services": [{
+            "manifest": service.display().to_string(),
+            "component": artifacts.service.display().to_string(),
+            "component-sha256": sha256_file(&artifacts.service),
         }],
         "outbound-http": true,
     })
@@ -142,6 +149,7 @@ fn answer(target: &str, body: &[u8]) -> Option<String> {
         "/hold/v1/systemone" => "order.hold",
         "/abstain/v1/systemone" => "none of these",
         "/stray/v1/systemone" => "order.refund",
+        "/classify/v1/systemone" => "complaint",
         _ => return None,
     };
     let request: Json = serde_json::from_slice(body).ok()?;
@@ -258,7 +266,7 @@ impl Mock {
 
 /// Writes an env file holding the fake key and `base_url` for one test.
 fn env_file(test: &str, base_url: &str) -> PathBuf {
-    let dir = workspace().join("target/test-decision-namespace/env");
+    let dir = workspace().join("target/test-decision-service/env");
     std::fs::create_dir_all(&dir).expect("the env directory is creatable");
     let path = dir.join(format!("{test}.env"));
     std::fs::write(
@@ -270,10 +278,11 @@ fn env_file(test: &str, base_url: &str) -> PathBuf {
 }
 
 fn open(config: &Config, document: &str) -> SessionHandle {
-    let packages = Packages::load(config).expect("the decision package binds");
+    let packages = Packages::load(config).expect("the decision packages bind");
     let consent = packages.consent();
     assert!(
-        consent.contains(NAMESPACE_URI)
+        consent.contains(&format!("extension {NAMESPACE_URI}"))
+            && consent.contains(&format!("service {SERVICE_URI}"))
             && consent.contains("http-origins: https://api.typesafe.ai")
             && consent.contains("env-slots: apikey, baseurl"),
         "the consent listing names the package, its origin, and its slots: {consent}"
@@ -294,14 +303,14 @@ fn open(config: &Config, document: &str) -> SessionHandle {
         scxml_event_schema::Resources::new(),
         &packages,
     )
-    .expect("the document compiles with the decision package");
+    .expect("the document compiles with the decision packages");
     SessionHandle::open(
         config,
         packages,
         values,
         SessionSpec {
             compiled,
-            session_id: "decision-namespace".into(),
+            session_id: "decision-service".into(),
             clock: ClockMode::Logical,
             documents: Vec::new(),
         },
@@ -367,22 +376,28 @@ const CANCEL_SCHEMA: &str = r#"{"description":"Cancel the order.","type":"object
 const HOLD_SCHEMA: &str =
     r#"{"description":"Put the order on hold.","type":"object","additionalProperties":false}"#;
 
-/// An order machine: `<decision:choose/>` on entry to `deciding`, whose
+/// An order machine: `<decision:menu>` on entry to `deciding` and the
+/// decision service invoked there with `params` (besides the menu), whose
 /// three `event:schema` transitions log `_event.data` and finish in their
-/// own final state; `decision.abstain` and `error.execution` (no schema, so
-/// never offered) finish in `abstained` and `failed`.
-fn document(choose: &str) -> String {
+/// own final state; `decision.abstain`, `decision.failed`, and
+/// `error.execution` (no schema, so never offered) finish in `abstained`
+/// and `failed`.
+fn document(params: &str) -> String {
     format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:decision="{NAMESPACE_URI}"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" initial="deciding">
-  <datamodel><data id="order" expr="({{sku: 'A-1', qty: 2}})"/></datamodel>
+  <datamodel><data id="order" expr="({{sku: 'A-1', qty: 2}})"/><data id="menu" expr="[]"/></datamodel>
   <state id="deciding">
     <onentry>
-      {choose}
+      <decision:menu location="menu"/>
     </onentry>
+    <invoke id="decide" type="{SERVICE_URI}" env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
+      <param name="menu" expr="menu"/>
+      {params}
+    </invoke>
     <transition event="order.ship" event:schema='{SHIP_SCHEMA}' target="shipped">
       <log label="data" expr="JSON.stringify(_event.data)"/>
     </transition>
@@ -395,6 +410,9 @@ fn document(choose: &str) -> String {
     <transition event="decision.abstain" target="abstained">
       <log label="data" expr="JSON.stringify(_event.data)"/>
     </transition>
+    <transition event="decision.failed" target="failed">
+      <log label="code" expr="_event.data.code"/>
+    </transition>
     <transition event="error.execution" target="failed"/>
   </state>
   <final id="shipped"><onentry><log label="final" expr="'shipped'"/></onentry></final>
@@ -406,8 +424,7 @@ fn document(choose: &str) -> String {
     )
 }
 
-const CHOOSE: &str = r#"<decision:choose dataexpr="order"
-                        env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL"/>"#;
+const CHOOSE: &str = r#"<param name="state" expr="order"/>"#;
 
 fn run(route: &str, test: &str, env: &[&str]) -> (Vec<Egress>, Mock) {
     let mock = Mock::start();
@@ -467,9 +484,9 @@ fn choose_fires_the_chosen_schema_transition_with_schema_valid_data() {
         "the carrier is grounded in the schema's enum"
     );
     assert_eq!(
-        body["state"]["configuration"]["atomic"],
-        json!(["deciding"]),
-        "the default state is the session snapshot root"
+        body["state"],
+        json!({"qty": 2, "sku": "A-1"}),
+        "the state is the invocation's state parameter"
     );
 }
 
@@ -490,7 +507,7 @@ fn choose_fires_another_transition_when_the_backend_prefers_it() {
 }
 
 #[test]
-fn choose_raises_decision_abstain_when_none_fits() {
+fn choose_emits_decision_abstain_when_none_fits() {
     let (records, _mock) = run("abstain", "abstain", &BOTH);
     assert_eq!(
         logs(&records),
@@ -503,11 +520,11 @@ fn choose_raises_decision_abstain_when_none_fits() {
 }
 
 #[test]
-fn an_answer_outside_the_menu_raises_error_execution_and_no_event() {
+fn an_answer_outside_the_menu_emits_decision_failed_and_no_event() {
     let (records, mock) = run("stray", "stray", &BOTH);
     assert_eq!(
         logs(&records),
-        labelled(&[("final", "failed")]),
+        labelled(&[("code", "malformed"), ("final", "failed")]),
         "{records:?}"
     );
     assert_eq!(mock.received().len(), 1);
@@ -518,10 +535,43 @@ fn without_a_granted_key_nothing_is_sent() {
     let (records, mock) = run("ship", "nokey", &["TYPESAFE_BASE_URL"]);
     assert_eq!(
         logs(&records),
-        labelled(&[("final", "failed")]),
+        labelled(&[("code", "unconfigured"), ("final", "failed")]),
         "{records:?}"
     );
     assert!(mock.received().is_empty(), "no request without a key");
+}
+
+#[test]
+fn classify_emits_every_labels_probability() {
+    let mock = Mock::start();
+    let env_path = env_file("classify", &format!("{}/classify", mock.origin));
+    let config = config(&env_path, &BOTH);
+    let document = format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       version="1.0" datamodel="ecmascript" initial="classifying">
+  <state id="classifying">
+    <invoke id="classify" type="{SERVICE_URI}" env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
+      <param name="kind" expr="'classify'"/>
+      <param name="state" expr="'The order arrived damaged.'"/>
+      <param name="labels" expr="['complaint', 'praise']"/>
+    </invoke>
+    <transition event="decision.classified" target="done">
+      <log label="labels" expr="JSON.stringify(_event.data.labels)"/>
+    </transition>
+    <transition event="decision.failed" target="done"><log label="code" expr="_event.data.code"/></transition>
+  </state>
+  <final id="done"/>
+</scxml>"#
+    );
+    let handle = open(&config, &document);
+    let records = until_closed(&handle, Duration::from_secs(60));
+    assert_eq!(
+        logs(&records),
+        labelled(&[("labels", r#"{"complaint":1,"praise":0}"#)]),
+        "{records:?}"
+    );
+    assert_eq!(mock.received().len(), 1);
 }
 
 /// `TypeSafe`'s base URL (its SDK's default), the live run's config default
@@ -534,7 +584,7 @@ const TYPESAFE_BASE_URL_DEFAULT: &str = "https://api.typesafe.ai";
 /// only pass or fail and the final state's id.
 #[test]
 #[ignore = "makes one real TypeSafe call; needs NEMOBOT_LIVE_ENV_FILE"]
-fn live_choose_through_an_env_file() {
+fn live_decision_through_an_env_file() {
     let Some(path) = std::env::var_os("NEMOBOT_LIVE_ENV_FILE").map(PathBuf::from) else {
         panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets TYPESAFE_API_KEY");
     };
@@ -554,10 +604,9 @@ fn live_choose_through_an_env_file() {
             failure.kind()
         );
     }
-    let choose = r#"<decision:choose dataexpr="order"
-                        instructions="A customer paid for order A-1 and asked for fast delivery. Choose what to do with the order."
-                        env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL"/>"#;
-    let handle = open(&config, &document(choose));
+    let params = r#"<param name="state" expr="order"/>
+      <param name="instructions" expr="'A customer paid for order A-1 and asked for fast delivery. Choose what to do with the order.'"/>"#;
+    let handle = open(&config, &document(params));
     let records = until_closed(&handle, Duration::from_secs(120));
     let logs = logs(&records);
     let admitted = |schema: &str, data: &str| {

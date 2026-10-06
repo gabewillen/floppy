@@ -1,0 +1,12 @@
+{
+  "format": "stateforward.scxml.service-package/v1",
+  "service-uri": "https://github.com/stateforward/nemobot/services/decision@v0.1.0",
+  "package-version": "0.1.0",
+  "service-artifact": "nemobot_service_decision.virtualized.wasm",
+  "schema-artifact": null,
+  "schema-sha256": null,
+  "wit-world": "stateforward:scxml/invoked-service",
+  "wit-version": "0.2.0",
+  "http-origins": ["https://api.typesafe.ai"],
+  "env-slots": ["apikey", "baseurl"]
+}

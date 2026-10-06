@@ -2,15 +2,17 @@
 //! parent machine invokes the builder as a child (`<invoke type="scxml"
 //! src="builder.scxml">`), forwards it a `builder.request`, and finishes on
 //! `builder.done` or `builder.failed`. The live session binds the real
-//! `scxml`, `generate`, and `decision` extension components; `generate` and
-//! `decision` talk to one deterministic fake backend on 127.0.0.1 (Chat
-//! Completions and `TypeSafe` `system_one`; nothing reaches the network) whose
-//! canned drafts include an invalid one, so the repair loop, the
-//! machine-applicable fixes, the decision, and the simulation as an invoked
-//! child all run.
+//! `scxml` and `decision` extension components and the real `generate` and
+//! `decision` service components; the services talk to one deterministic
+//! fake backend on 127.0.0.1 (Chat Completions and `TypeSafe` `system_one`;
+//! nothing reaches the network) whose canned drafts include an invalid one,
+//! so the repair loop, the machine-applicable fixes, the decision, and the
+//! simulation as an invoked child all run. One route answers its first plan
+//! late, so a `builder.timeout` fires while that generation is in flight and
+//! cancels it.
 //!
 //! `scripts/build-components.sh` builds and verifies the release session
-//! components and the namespace components into
+//! components and the namespace and service components into
 //! `target/test-builder-bot/components`.
 //!
 //! The ignored `live_builder_through_an_env_file` test builds the same spec
@@ -71,11 +73,13 @@ fn sha256_file(path: &Path) -> String {
     format!("{:x}", Sha256::digest(&bytes))
 }
 
-/// The verified session components and the three namespace components.
+/// The verified session components and the namespace and service
+/// components.
 struct Artifacts {
     components: PathBuf,
     manifest_sha256: String,
     namespaces: PathBuf,
+    services: PathBuf,
 }
 
 fn artifacts() -> &'static Artifacts {
@@ -95,22 +99,24 @@ fn artifacts() -> &'static Artifacts {
             manifest_sha256: sha256_file(&components.join("manifest.tsv")),
             components,
             namespaces: dir.join("namespaces"),
+            services: dir.join("services"),
         }
     })
 }
 
-/// The package each variable is granted to: `OPENAI_*` to `generate`, every
-/// other (`TYPESAFE_*`) to `decision`.
+/// The package each variable is granted to: `OPENAI_*` to the generate
+/// service, every other (`TYPESAFE_*`) to the decision service.
 fn scope(name: &str) -> &'static str {
     if name.starts_with("OPENAI_") {
-        "https://github.com/stateforward/nemobot/namespaces/generate@v0.1.0"
+        "https://github.com/stateforward/nemobot/services/generate@v0.1.0"
     } else {
-        "https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0"
+        "https://github.com/stateforward/nemobot/services/decision@v0.1.0"
     }
 }
 
-/// A config binding the `scxml`, `generate`, and `decision` packages,
-/// granting `env` from `env_file`, each variable to its [`scope`].
+/// A config binding the `scxml` and `decision` namespaces and the
+/// `generate` and `decision` services, granting `env` from `env_file`, each
+/// variable to its [`scope`].
 fn config(env_file: &Path, env: &[&str]) -> Config {
     config_with_defaults(env_file, env, &json!({}))
 }
@@ -131,6 +137,19 @@ fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &Json) -> Confi
             "component-sha256": sha256_file(&component),
         })
     };
+    let service = |name: &str| {
+        let component = artifacts
+            .services
+            .join(format!("nemobot_service_{name}.virtualized.wasm"));
+        json!({
+            "manifest": workspace()
+                .join(format!("services/{name}/package/{name}.service.json"))
+                .display()
+                .to_string(),
+            "component": component.display().to_string(),
+            "component-sha256": sha256_file(&component),
+        })
+    };
     let text = json!({
         "format": CONFIG_FORMAT,
         "components": {
@@ -143,7 +162,8 @@ fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &Json) -> Confi
             .map(|name| json!({"name": name, "packages": [scope(name)]}))
             .collect::<Vec<_>>(),
         "env-defaults": defaults,
-        "extensions": [extension("scxml"), extension("generate"), extension("decision")],
+        "extensions": [extension("scxml"), extension("decision")],
+        "services": [service("generate"), service("decision")],
         "outbound-http": true,
         "extension-call-fuel": EXTENSION_CALL_FUEL,
     })
@@ -180,7 +200,7 @@ fn open(config: &Config, clock: ClockMode) -> SessionHandle {
 
 /// [`open`] with `builder` as the text of `builder.scxml`.
 fn open_builder(config: &Config, clock: ClockMode, builder: String) -> SessionHandle {
-    let packages = Packages::load(config).expect("the three packages bind");
+    let packages = Packages::load(config).expect("the four packages bind");
     let values = Values::granted(
         config
             .env_file
@@ -283,6 +303,13 @@ fn answer(records: &[Egress]) -> (String, Json) {
 
 const PLAN: &str = r#"{"name":"traffic_light","summary":"A vehicle light that cycles green, yellow, red, and serves a pedestrian button by ending green early.","states":[{"id":"green","kind":"atomic","parent":"","purpose":"Vehicles go."},{"id":"yellow","kind":"atomic","parent":"","purpose":"Vehicles prepare to stop."},{"id":"red","kind":"atomic","parent":"","purpose":"Vehicles stop; pedestrians walk."}],"events":[{"name":"pedestrian.button","direction":"input","description":"A pedestrian pressed the button."},{"name":"light.green","direction":"output","description":"The light turned green."},{"name":"light.yellow","direction":"output","description":"The light turned yellow."},{"name":"light.red","direction":"output","description":"The light turned red."},{"name":"walk.on","direction":"output","description":"Pedestrians may cross."},{"name":"light.timer","direction":"internal","description":"The phase timer expired."}],"transitions":[{"source":"green","event":"pedestrian.button","target":"yellow","description":"End green early."},{"source":"green","event":"light.timer","target":"yellow","description":"Green expired."},{"source":"yellow","event":"light.timer","target":"red","description":"Yellow expired."},{"source":"red","event":"light.timer","target":"green","description":"Red expired."}]}"#;
 
+/// The plan the slow route answers too late: the builder has cancelled
+/// that generation by then, so it never reaches the report.
+const LATE_PLAN: &str = r#"{"name":"late_plan","summary":"Answered after the timeout.","states":[],"events":[],"transitions":[]}"#;
+
+/// How long the slow route holds its first plan answer.
+const SLOW_PLAN_DELAY: Duration = Duration::from_secs(4);
+
 const BUTTON_SCHEMA: &str = r#"{"type":"object","additionalProperties":false}"#;
 
 /// The traffic light with `{green}` as its green state's transitions and
@@ -374,16 +401,16 @@ fn smuggling_draft() -> String {
     ))
 }
 
-/// A draft that hides the `generate` namespace behind a non-ASCII prefix: run
-/// as the simulation child, it would send the decision key to the generate
-/// backend's origin.
+/// A draft that hides the `decision` namespace behind a non-ASCII prefix:
+/// run as the simulation child, it would read the run's session snapshot
+/// through a package the run binds.
 fn unicode_prefix_draft() -> String {
     draft(&traffic_light(&green_separate(), "red").replace(
         "version=\"1.0\"",
-        "xmlns:\u{e9}=\"https://github.com/stateforward/nemobot/namespaces/generate@v0.1.0\" xmlns:\u{eb}=\"https://github.com/stateforward/scxml.rs/namespaces/env\" version=\"1.0\"",
+        "xmlns:\u{e9}=\"https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0\" version=\"1.0\"",
     ).replace(
         "<onexit><cancel sendid=\"red-timer\"/>",
-        "<onexit><\u{e9}:generate location=\"x\" expr=\"'hi'\" \u{eb}:apikey=\"TYPESAFE_API_KEY\" \u{eb}:baseurl=\"OPENAI_BASE_URL\"/><cancel sendid=\"red-timer\"/>",
+        "<onexit><\u{e9}:menu location=\"x\"/><cancel sendid=\"red-timer\"/>",
     ))
 }
 
@@ -526,6 +553,13 @@ fn mock_reply(
         ("/flaky/v1/chat/completions", Some("topology_plan")) => {
             (plans != 2).then(|| completion(PLAN))
         }
+        // The first plan is held (see `Mock::start`) and answered late.
+        ("/slow/v1/chat/completions", Some("topology_plan")) => {
+            Some(completion(if plans == 1 { LATE_PLAN } else { PLAN }))
+        }
+        ("/slow/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&draft(&traffic_light(&green_separate(), "red"))))
+        }
         ("/unicode/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&unicode_prefix_draft()))
         }
@@ -561,6 +595,10 @@ struct Received {
     path: String,
     authorization: Option<String>,
     body: Json,
+    /// When it arrived.
+    at: Instant,
+    /// When its answer was written.
+    answered: Arc<Mutex<Option<Instant>>>,
 }
 
 impl Received {
@@ -598,7 +636,10 @@ impl Received {
 /// through an entity); `/impostor/v1` answers the plan, then a valid draft
 /// that sends the builder's control event names; `/flaky/v1` fails the
 /// second plan (404) and otherwise answers like `/broken/v1`; `/noplan/v1`
-/// fails every plan (404). `decision` routes:
+/// fails every plan (404); `/slow/v1` holds its first plan for
+/// [`SLOW_PLAN_DELAY`] and answers [`LATE_PLAN`], then answers the plan and
+/// valid drafts. Each connection is served on its own thread, so a held
+/// answer delays nothing else. `decision` routes:
 /// `/typesafe` chooses `triage.repair`, `/redesign` `triage.redesign`.
 struct Mock {
     origin: String,
@@ -616,56 +657,9 @@ impl Mock {
         let log = Arc::clone(&received);
         std::thread::spawn(move || {
             for stream in listener.incoming() {
-                let Ok(mut stream) = stream else { continue };
-                let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
-                let mut request_line = String::new();
-                if reader.read_line(&mut request_line).is_err() {
-                    continue;
-                }
-                let mut headers = BTreeMap::new();
-                loop {
-                    let mut line = String::new();
-                    if reader.read_line(&mut line).is_err() || line == "\r\n" || line.is_empty() {
-                        break;
-                    }
-                    if let Some((name, value)) = line.trim_end().split_once(':') {
-                        headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_owned());
-                    }
-                }
-                let length = headers
-                    .get("content-length")
-                    .and_then(|value| value.parse::<usize>().ok())
-                    .unwrap_or(0);
-                let mut body = vec![0; length];
-                if reader.read_exact(&mut body).is_err() {
-                    continue;
-                }
-                let path = request_line.split(' ').nth(1).unwrap_or("").to_owned();
-                let parsed: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
-                let request = Received {
-                    path: path.clone(),
-                    authorization: headers.get("authorization").cloned(),
-                    body: parsed,
-                };
-                let (authors, plans) = {
-                    let mut log = log.lock().expect("the log lock");
-                    log.push(request.clone());
-                    let count = |schema: &str| {
-                        log.iter()
-                            .filter(|seen| seen.path == path && seen.schema_name() == Some(schema))
-                            .count()
-                    };
-                    (count("scxml_draft"), count("topology_plan"))
-                };
-                let reply = mock_reply(&path, request.schema_name(), authors, plans, &body);
-                let (status, reply) = reply.map_or(("404 Not Found", "{}".to_owned()), |reply| {
-                    ("200 OK", reply)
-                });
-                let _ = write!(
-                    stream,
-                    "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{reply}",
-                    reply.len()
-                );
+                let Ok(stream) = stream else { continue };
+                let log = Arc::clone(&log);
+                std::thread::spawn(move || serve(stream, &log));
             }
         });
         Self { origin, received }
@@ -674,6 +668,72 @@ impl Mock {
     fn received(&self) -> Vec<Received> {
         self.received.lock().expect("the log lock").clone()
     }
+}
+
+/// Serves one connection of the mock: reads one request, records it,
+/// answers it (holding the slow route's first plan), and records when.
+fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>) {
+    let Ok(clone) = stream.try_clone() else {
+        return;
+    };
+    let mut reader = BufReader::new(clone);
+    let mut request_line = String::new();
+    if reader.read_line(&mut request_line).is_err() {
+        return;
+    }
+    let mut headers = BTreeMap::new();
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line).is_err() || line == "\r\n" || line.is_empty() {
+            break;
+        }
+        if let Some((name, value)) = line.trim_end().split_once(':') {
+            headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_owned());
+        }
+    }
+    let length = headers
+        .get("content-length")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0);
+    let mut body = vec![0; length];
+    if reader.read_exact(&mut body).is_err() {
+        return;
+    }
+    let path = request_line.split(' ').nth(1).unwrap_or("").to_owned();
+    let parsed: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
+    let request = Received {
+        path: path.clone(),
+        authorization: headers.get("authorization").cloned(),
+        body: parsed,
+        at: Instant::now(),
+        answered: Arc::new(Mutex::new(None)),
+    };
+    let (authors, plans) = {
+        let mut log = log.lock().expect("the log lock");
+        log.push(request.clone());
+        let count = |schema: &str| {
+            log.iter()
+                .filter(|seen| seen.path == path && seen.schema_name() == Some(schema))
+                .count()
+        };
+        (count("scxml_draft"), count("topology_plan"))
+    };
+    if path == "/slow/v1/chat/completions"
+        && request.schema_name() == Some("topology_plan")
+        && plans == 1
+    {
+        std::thread::sleep(SLOW_PLAN_DELAY);
+    }
+    let reply = mock_reply(&path, request.schema_name(), authors, plans, &body);
+    let (status, reply) = reply.map_or(("404 Not Found", "{}".to_owned()), |reply| {
+        ("200 OK", reply)
+    });
+    let _ = write!(
+        stream,
+        "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{reply}",
+        reply.len()
+    );
+    *request.answered.lock().expect("the answered lock") = Some(Instant::now());
 }
 
 /// Writes an env file holding both fake keys and both base URLs.
@@ -967,6 +1027,60 @@ fn assert_repair_requests(received: &[Received]) {
     }
 }
 
+/// A `builder.timeout` fires while the design generation is in flight (the
+/// slow route holds its answer): it preempts the call, leaving design
+/// cancels the invocation, and the late answer reaches no one. The builder
+/// redesigns and finishes with the second plan. Runs on the wall clock.
+#[test]
+fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
+    let mock = Mock::start();
+    let config = config(&env_file("timeout", &mock, "slow", "redesign"), &ALL);
+    let handle = open(&config, ClockMode::Wall);
+    let started = Instant::now();
+    handle
+        .send(build_event(
+            &json!({"spec": SPEC, "max_attempts": 3, "generate_timeout_ms": 1000}),
+        ))
+        .expect("the session accepts the build event");
+    let records = until_closed(&handle, Duration::from_mins(3));
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "builder.done", "{done}");
+    let report = &done["report"];
+    assert_eq!(
+        report["history"][0]["diagnostics"][0]["code"], "design-timeout",
+        "{report}"
+    );
+    assert_eq!(report["history"][0]["diagnostics"][0]["kind"], "timeout");
+    // No plan yet, so the decision service is offered no repair: it
+    // redesigns.
+    assert_eq!(report["decisions"], json!(["triage.redesign"]), "{report}");
+    assert_eq!(
+        report["plan"]["name"], "traffic_light",
+        "the cancelled generation's late plan never arrives: {report}"
+    );
+    let received = mock.received();
+    let designs = chat_requests(&received, "topology_plan");
+    assert_eq!(designs.len(), 2, "the timed-out design, then the redesign");
+    let late = designs[0]
+        .answered
+        .lock()
+        .expect("the answered lock")
+        .expect("the held plan was answered");
+    assert!(
+        designs[1].at < late,
+        "the builder moved on while the first generation was still in flight"
+    );
+    assert!(
+        late.duration_since(designs[0].at) >= SLOW_PLAN_DELAY,
+        "the first plan was held past the timeout"
+    );
+    assert!(
+        designs[1].at.duration_since(started) < SLOW_PLAN_DELAY,
+        "the timeout fired before the held answer"
+    );
+}
+
 /// Without the decision key the builder falls back to its cond-based
 /// triage; drafts that never validate exhaust `max_attempts` and the builder
 /// reports `builder.failed` with the last diagnostics.
@@ -1057,8 +1171,9 @@ fn a_failed_redesign_keeps_the_previous_plan() {
     );
 }
 
-/// Without a plan, `decision:choose` is not offered `triage.repair` (its
-/// guard is false), so `builder.done` never reports a null plan.
+/// Without a plan, `decision:menu` leaves out `triage.repair` (its guard is
+/// false), so the decision service is never offered it and `builder.done`
+/// never reports a null plan.
 #[test]
 fn repair_is_not_offered_without_a_plan() {
     let mock = Mock::start();

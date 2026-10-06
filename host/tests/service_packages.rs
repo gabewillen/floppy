@@ -216,7 +216,7 @@ fn an_extension_declaring_a_wasi_permission_is_refused() {
     let message = grant_failure(&config(&[extension_declaring_wasi()], &[], &[]));
     assert!(
         message.contains("https://stateforward.org/scxml/example")
-            && message.contains("links no WASI interface into extension components"),
+            && message.contains("WASI belongs to invoked services"),
         "{message}"
     );
 }

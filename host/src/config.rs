@@ -9,18 +9,18 @@
 //!   "env-file": "../mosfet/mosfet.py/.env",
 //!   "env": [
 //!     { "name": "OPENAI_API_KEY",
-//!       "packages": ["https://github.com/stateforward/nemobot/namespaces/generate@v0.1.0"] },
+//!       "packages": ["https://github.com/stateforward/nemobot/services/generate@v0.1.0"] },
 //!     { "name": "OPENAI_BASE_URL",
-//!       "packages": ["https://github.com/stateforward/nemobot/namespaces/generate@v0.1.0"] }
+//!       "packages": ["https://github.com/stateforward/nemobot/services/generate@v0.1.0"] }
 //!   ],
 //!   "env-defaults": { "OPENAI_BASE_URL": "https://api.openai.com/v1" },
 //!   "extensions": [
-//!     { "manifest": "namespaces/generate/package/generate.extension.json",
+//!     { "manifest": "namespaces/decision/package/decision.extension.json",
 //!       "component-sha256": "<hex>" }
 //!   ],
 //!   "services": [
-//!     { "manifest": "services/memory/package/memory.service.json",
-//!       "component": "target/components/nemobot_memory.virtualized.wasm",
+//!     { "manifest": "services/generate/package/generate.service.json",
+//!       "component": "target/components/services/nemobot_service_generate.virtualized.wasm",
 //!       "component-sha256": "<hex>" }
 //!   ],
 //!   "grants": [
@@ -56,9 +56,12 @@
 //! * `grants`: the WASI grants, by exact package URI; every permission a bound
 //!   package declares must be granted and every grant must name a declared
 //!   permission (checked when the packages bind).
-//! * `outbound-http` (default `true`): whether admitted extension and service
-//!   requests reach the network (each package's declared origins, or an origin
-//!   an `env` value supplies entirely); `false` refuses every request.
+//! * `outbound-http` (default `true`): whether admitted service requests
+//!   reach the network (each package's declared origins, or an origin an
+//!   `env` value supplies entirely), always off the session thread
+//!   (`outbound-http.begin`); `false` refuses every request. Extension
+//!   components never get an outbound transport: executable content is
+//!   synchronous, and I/O belongs to invoked services.
 //! * `fuel` and `max-commands` (optional, non-zero): the store fuel of every
 //!   session call and the engine command budget of each call.
 //! * `extension-call-fuel` (optional, non-zero; scxml.rs's

@@ -4,15 +4,9 @@
   "package-version": "0.1.0",
   "extension-artifact": "nemobot_decision.virtualized.wasm",
   "schema-artifact": "decision.xsd",
-  "schema-sha256": "2b2d712fead56553608e5a84b7a66b6325a3b92d7997640121876c4e16fc34e5",
+  "schema-sha256": "24e1a79a991158a372612f0a365fe3c56da64c040ccdf042ba0ba999b0642131",
   "wit-world": "stateforward:scxml/executable-content-extension",
   "wit-version": "0.2.0",
-  "http-origins": ["https://api.typesafe.ai"],
-  "env-slots": ["apikey", "baseurl"],
-  "events": {
-    "emits": [
-      {"name": "decision.abstain", "schema-artifact": "events.json#/$defs/Abstain", "schema-sha256": "99ff9582dbc6651346ebdc2f7a05ef9e06f9b4e469d102b8482b1dfd97345095"}
-    ],
-    "accepts": []
-  }
+  "http-origins": [],
+  "env-slots": []
 }

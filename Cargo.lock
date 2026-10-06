@@ -1193,17 +1193,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nemobot-generate"
-version = "0.1.0"
-dependencies = [
- "scxml-event-schema",
- "scxml-types",
- "scxml-validator-core",
- "serde_json",
- "wit-bindgen 0.51.0",
-]
-
-[[package]]
 name = "nemobot-host"
 version = "0.1.0"
 dependencies = [
@@ -1230,6 +1219,28 @@ dependencies = [
  "scxml-types",
  "scxml-validator-core",
  "scxml-validator-xsd",
+ "serde_json",
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
+name = "nemobot-service-decision"
+version = "0.1.0"
+dependencies = [
+ "scxml-event-schema",
+ "scxml-types",
+ "scxml-validator-core",
+ "serde_json",
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
+name = "nemobot-service-generate"
+version = "0.1.0"
+dependencies = [
+ "scxml-event-schema",
+ "scxml-types",
+ "scxml-validator-core",
  "serde_json",
  "wit-bindgen 0.51.0",
 ]

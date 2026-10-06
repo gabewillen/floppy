@@ -17,7 +17,7 @@ it with events (decision D9 in [../../docs/decisions.md](../../docs/decisions.md
 
 | Event | Direction | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | to the builder | `{spec, constraints?, max_attempts?, model?}`: the specification, extra constraints (strings), the failure budget (1 to 8, default 3), the `generate` model (default `gpt-6-luna`) |
+| `builder.request` | to the builder | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?}`: the specification, extra constraints (strings), the failure budget (1 to 8, default 3), the generate service's model (default `gpt-6-luna`), and the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000) |
 | `builder.done` | to `#_parent` | `{scxml, schemas, tests, report}`: the built document, its input event schemas (`{event, schema}`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
 | `builder.failed` | to `#_parent` | `{reason, diagnostics}`: `invalid-request`, `attempts-exhausted`, or `abandoned`, with the last diagnostics (`{kind, code, message}`) |
 
@@ -43,11 +43,17 @@ intake -> design -> author -> validate -> simulate -> package -> done
                             fallback
 ```
 
-* `design`: `gen:generate` with the `topology_plan` structured-output schema.
-  A redesign sends the plan it replaces (`previous_plan`) with the
+* `design`: invokes the generate service
+  (`https://github.com/stateforward/nemobot/services/generate@v0.1.0`, a
+  fresh invoke id in `gen_id` each time) with the `topology_plan`
+  structured-output schema; its `<finalize>` takes the plan from
+  `generate.result` (or the code from `generate.failed`), and
+  `done.invoke` moves on to `author`, or to `retry_gate` without a plan. A
+  redesign sends the plan it replaces (`previous_plan`) with the
   diagnostics; a redesign whose generation failed keeps that plan for the
   next one.
-* `author`: `gen:generate` with the `scxml_draft` schema: the document (plain
+* `author`: invokes the generate service the same way with the
+  `scxml_draft` schema: the document (plain
   SCXML with inline `event:schema` on its input transitions), the input event
   schemas as JSON text, and one to eight test scripts (input events with
   delays, a settle time, the outputs expected in order, and whether the
@@ -78,22 +84,32 @@ intake -> design -> author -> validate -> simulate -> package -> done
 * `retry_gate`: every failure (generation, draft, validation, simulation,
   timeout) passes through it; it counts the failure and fails the build at
   `max_attempts`, so every loop is bounded.
-* `triage`: `decision:choose` picks among the state's enabled `event:schema`
-  transitions: `triage.repair` (guarded by `plan !== null`, so it is offered
-  only when there is a plan to repair from), `triage.redesign`, and
-  `triage.abandon`.
+* `triage`: `decision:menu` (synchronous executable content) writes the
+  state's enabled `event:schema` transitions as the canonical menu:
+  `triage.repair` (guarded by `plan !== null`, so it is on the menu only
+  when there is a plan to repair from), `triage.redesign`, and
+  `triage.abandon`. The decision service
+  (`https://github.com/stateforward/nemobot/services/decision@v0.1.0`),
+  invoked with that menu and the failure state, picks one, validates its
+  data against the menu's schema, and emits it.
 * `fallback`: the cond-based triage when the decision is unavailable (no
-  `TYPESAFE_API_KEY` granted or a backend failure: `error.execution`) or
-  abstains (`decision.abstain`): redesign without a plan, else repair.
+  `TYPESAFE_API_KEY` granted or a backend failure: `decision.failed`,
+  `error.execution`, or `error.communication`), times out
+  (`fallback:timeout`), or abstains (`decision.abstain`): redesign without
+  a plan, else repair.
 
-Time is bounded in two ways. `gen:generate` is a synchronous extension
-call inside `onentry`, so no delayed send can preempt it: each generation
-is bounded by the host's outbound HTTP timeouts (10 s to connect, 120 s
-per request) and a timed-out request is `error.execution`, a failure like
-any other. The simulation is bounded in the topology: `simulate-timeout`
-is a delayed send cancelled on exit that fires after
-`max_tests * sim_test_cap_ms` plus 60 s, longer than the longest
-simulation `validate` admits (8 tests of at most 120 s each).
+Model calls are invoked services, never executable content: each runs
+while the session keeps processing events, and every bound on time lives in
+the topology. `design` and `author` each arm `builder.timeout` after
+`generate_timeout_ms` (default 300 s; the request may lower it) and
+`triage` after `decision_timeout_ms` (60 s), tagged with the stage run
+(`stage_run`) and cancelled on exit. A timeout that fires while the call is
+in flight leaves the state, which cancels the invocation: the service is
+cancelled and its late answer reaches no one. The host's own request
+timeout (600 s) is only a backstop. The simulation is bounded the same way:
+`simulate-timeout` is a delayed send cancelled on exit that fires after
+`max_tests * sim_test_cap_ms` plus 60 s, longer than the longest simulation
+`validate` admits (8 tests of at most 120 s each).
 
 ## The draft contract
 
@@ -114,11 +130,12 @@ section is refused too.
 
 ## Bindings
 
-A session that runs the builder binds the `scxml`, `generate`, and `decision`
-namespace packages, an `extension-call-fuel` large enough for `sx:validate`
-(1 billion; see `namespaces/scxml`), and grants `OPENAI_API_KEY` and
-`OPENAI_BASE_URL` for `generate` and `TYPESAFE_API_KEY` and
-`TYPESAFE_BASE_URL` for `decision`. No backend URL is compiled into a
+A session that runs the builder binds the `scxml` and `decision` namespace
+packages and the `generate` and `decision` service packages, an
+`extension-call-fuel` large enough for `sx:validate` (1 billion; see
+`namespaces/scxml`), and grants `OPENAI_API_KEY` and `OPENAI_BASE_URL` to the
+generate service and `TYPESAFE_API_KEY` and `TYPESAFE_BASE_URL` to the
+decision service. No backend URL is compiled into a
 component, so each base URL comes from the env file or, when the file does
 not set it, from the config's non-secret `env-defaults` (for example
 `{"OPENAI_BASE_URL": "https://api.openai.com/v1"}`). Drafts are validated without
@@ -140,7 +157,10 @@ through a non-ASCII namespace prefix or an entity), a candidate's
 `sim.settle` and `sim.drive` being recorded as outputs, a cancelled
 candidate's `builder.timeout` not ending the next simulation, a failed
 invocation's `sim.drive` not driving the next test, the fallback triage
-exhausting `max_attempts`, and an invalid request. The
+exhausting `max_attempts`, an invalid request, and, on the wall clock, a
+`builder.timeout` that fires while the design generation is in flight (the
+fake backend holds its answer for 4 s): it preempts and cancels the call,
+the builder redesigns, and the late plan never reaches the report. The
 ignored `live_builder_through_an_env_file` test runs the same spec with the
 real backends; [`examples/traffic_light`](examples/traffic_light) is one such
 live build (its `report.json` records one attempt, so no triage ran), kept

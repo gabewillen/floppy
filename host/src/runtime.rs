@@ -9,6 +9,18 @@
 //! ([`ClockMode::Wall`]), or fires every pending deadline after each event on
 //! the deterministic logical clock ([`ClockMode::Logical`]).
 //!
+//! Invoked services make their slow requests (model calls) without blocking
+//! the session: the host hands each to a [`ThreadedServiceHttp`] transport,
+//! the session keeps processing events and timers, and when a request
+//! settles the transport's callback puts [`Ingress::ServiceResponse`] on the
+//! ingress channel, where the session thread delivers it
+//! (`LiveSession::deliver_service_responses`). On the logical clock a
+//! pending request holds the clock: every deadline fires only once no
+//! request is in flight (`LiveSession::run_until_idle` stops early), so a
+//! deterministic run sees each answer before any later timer. Extension
+//! components get no outbound transport at all: executable content is
+//! synchronous, and every model call is a service.
+//!
 //! The session is never recorded: a recording would need every package to
 //! declare no WASI permission ([`crate::packages::Packages::declares_wasi`]),
 //! and nemobot does not record yet.
@@ -22,8 +34,8 @@ use std::time::Duration;
 
 use scxml_host_wasmtime::{
     DocumentKind, EmbeddedDocument, ExtensionHttp, LiveClock, LiveHttp, LiveSession, LiveStatus,
-    MachineScripts, ScriptedEvent, SessionEmbedder, SessionHost, SessionHostError, SessionOpen,
-    SessionOutput, WallClock,
+    MachineScripts, ScriptedEvent, ServiceHttp, SessionEmbedder, SessionHost, SessionHostError,
+    SessionOpen, SessionOutput, ThreadedServiceHttp, WallClock,
 };
 
 use crate::compile::Compiled;
@@ -57,11 +69,20 @@ pub struct SessionSpec {
     pub documents: Vec<(String, String)>,
 }
 
+/// The total time of one service request through the outbound transport: a
+/// backstop only. A bot bounds its model calls in its topology (a
+/// `<send delay>` timeout in the invoking state cancels the invocation), so
+/// this is set well above any timeout a bot uses.
+pub const SERVICE_REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
+
 /// One input to the session thread.
 #[derive(Clone, Debug)]
 pub enum Ingress {
     /// One external event for the root session.
     Event(ScriptedEvent),
+    /// A deferred request of an invoked service settled (sent by the
+    /// session's own transport callback): deliver it.
+    ServiceResponse,
     /// Close the session.
     Close,
 }
@@ -177,20 +198,27 @@ struct Binding {
 
 impl Binding {
     fn host(&self) -> Result<SessionHost, HostFailure> {
-        let http: Option<Arc<dyn ExtensionHttp>> = if self.outbound_http {
-            let client = scxml_host_wasmtime::ExtensionHttpClient::new(
-                scxml_host_wasmtime::ExtensionHttpConfig::new(),
+        // Services only: their requests run off the session thread.
+        let http: Option<Arc<dyn ServiceHttp>> = if self.outbound_http {
+            let mut config = scxml_host_wasmtime::ExtensionHttpConfig::new();
+            config.total_timeout = SERVICE_REQUEST_TIMEOUT;
+            let client =
+                scxml_host_wasmtime::ExtensionHttpClient::new(config).map_err(|error| {
+                    session_error(format!("the outbound HTTP client is invalid: {error}"))
+                })?;
+            let client: Arc<dyn ExtensionHttp> = Arc::new(client);
+            let transport = ThreadedServiceHttp::new(
+                client,
+                scxml_host_wasmtime::DEFAULT_SERVICE_HTTP_IN_FLIGHT,
             )
-            .map_err(|error| {
-                session_error(format!("the outbound HTTP client is invalid: {error}"))
-            })?;
-            Some(Arc::new(client))
+            .map_err(|error| session_error(format!("the service transport is invalid: {error}")))?;
+            Some(Arc::new(transport))
         } else {
             None
         };
         let extensions = self
             .packages
-            .extension_components(&self.values, http.as_ref())?
+            .extension_components(&self.values)?
             .with_call_fuel(self.extension_call_fuel)
             .map_err(|error| {
                 session_error(format!("the extension call fuel is invalid: {error}"))
@@ -239,6 +267,7 @@ impl SessionHandle {
         let (ingress, ingress_receiver) = mpsc::channel();
         let (egress_sender, egress) = mpsc::channel();
         let (opened_sender, opened) = mpsc::channel();
+        let responses = ingress.clone();
         let thread = std::thread::Builder::new()
             .name("nemobot-session".into())
             .spawn(move || {
@@ -246,6 +275,7 @@ impl SessionHandle {
                     &binding,
                     &spec,
                     &ingress_receiver,
+                    &responses,
                     &egress_sender,
                     &opened_sender,
                 )
@@ -338,11 +368,12 @@ fn session_thread(
     binding: &Binding,
     spec: &SessionSpec,
     ingress: &Receiver<Ingress>,
+    responses: &Sender<Ingress>,
     egress: &Sender<Egress>,
     opened: &Sender<Result<(), HostFailure>>,
 ) -> Result<(), HostFailure> {
     let open_span = observe(Operation::SessionOpen);
-    let open = open_session(binding, spec);
+    let open = open_session(binding, spec, responses);
     open_span.finish(&open);
     let (host, mut live, configuration) = match open {
         Ok(opened_session) => opened_session,
@@ -404,8 +435,15 @@ fn session_thread(
                 Err(RecvTimeoutError::Disconnected) => None,
             },
         };
-        let Some(Ingress::Event(event)) = message else {
-            break;
+        let event = match message {
+            Some(Ingress::Event(event)) => event,
+            Some(Ingress::ServiceResponse) => {
+                if deliver_service_responses(&mut live, spec.clock, egress) {
+                    continue;
+                }
+                break;
+            }
+            Some(Ingress::Close) | None => break,
         };
         let mut span = observe(Operation::SessionStep);
         let result = live.send(&event).and_then(|step| match spec.clock {
@@ -434,11 +472,42 @@ fn session_thread(
     closed
 }
 
+/// Delivers the settled service requests, then, on the logical clock, fires
+/// what is due once nothing is in flight. Returns `false` when the caller
+/// dropped its handle (an egress send failed).
+fn deliver_service_responses(
+    live: &mut LiveSession,
+    clock: ClockMode,
+    egress: &Sender<Egress>,
+) -> bool {
+    let mut span = observe(Operation::SessionStep);
+    let result = live
+        .deliver_service_responses()
+        .and_then(|step| match clock {
+            ClockMode::Logical if live.status() == LiveStatus::Running => {
+                live.run_until_idle().map(Some)
+            }
+            _ => Ok(step),
+        });
+    match result {
+        Ok(_) => true,
+        Err(error) => {
+            span.fail(FailureKind::Session);
+            egress
+                .send(Egress::Failed {
+                    reason: error.to_string(),
+                })
+                .is_ok()
+        }
+    }
+}
+
 /// Links the host and opens the root session at its first stable
 /// configuration.
 fn open_session(
     binding: &Binding,
     spec: &SessionSpec,
+    responses: &Sender<Ingress>,
 ) -> Result<(SessionHost, LiveSession, Vec<String>), HostFailure> {
     let host = binding.host()?;
     let clock = match spec.clock {
@@ -455,7 +524,16 @@ fn open_session(
             clock,
             record: false,
             replay: None,
-            http: LiveHttp::default(),
+            http: LiveHttp {
+                on_service_response: Some(Arc::new({
+                    let responses = responses.clone();
+                    move || {
+                        // The session thread may have closed; nothing to wake.
+                        let _sent = responses.send(Ingress::ServiceResponse);
+                    }
+                })),
+                ..LiveHttp::default()
+            },
         })
         .map_err(|error| host_failure(&error))?;
     let configuration = live.configuration().map_err(|error| host_failure(&error))?;

@@ -1,60 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   XML Schema of nemobot's `decision` extension namespace (namespaces/decision).
-  It governs structure only; the extension component governs what each
+  It governs structure only; the extension component governs what the
   element does. Bind it with the prefix `decision` by convention.
 
-  Every element: statexpr (optional); instructions | instructionsexpr (at
-  most one at run time); model | modelexpr (at most one at run time); the
-  host's env slots env:apikey and env:baseurl (both required at run time),
-  or their expr forms, admitted by the ##other wildcard and checked against
-  the manifest. No content.
-
-  decision:rank      location, candidatesexpr (both required)
-  decision:classify  location (required); labels | labelsexpr (exactly one
-                     at run time)
-  decision:choose    candidatesexpr, dataexpr, threshold (all optional)
+  decision:menu  location (required): receives the canonical menu of the
+                 enabled event:schema transitions. No other attribute, no
+                 content. Choosing among them is the decision service's
+                 work (services/decision): executable content stays
+                 synchronous and quick.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           xmlns:decision="https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0"
            targetNamespace="https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0"
            elementFormDefault="qualified">
-  <xs:attributeGroup name="common">
-    <xs:attribute name="statexpr" type="xs:string"/>
-    <xs:attribute name="instructions" type="xs:string"/>
-    <xs:attribute name="instructionsexpr" type="xs:string"/>
-    <xs:attribute name="model" type="xs:string"/>
-    <xs:attribute name="modelexpr" type="xs:string"/>
-    <xs:anyAttribute namespace="##other" processContents="lax"/>
-  </xs:attributeGroup>
-  <xs:element name="rank">
+  <xs:element name="menu">
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
-      <xs:attribute name="candidatesexpr" type="xs:string" use="required"/>
-      <xs:attributeGroup ref="decision:common"/>
-    </xs:complexType>
-  </xs:element>
-  <xs:element name="classify">
-    <xs:complexType>
-      <xs:attribute name="location" type="xs:string" use="required"/>
-      <xs:attribute name="labels" type="xs:string"/>
-      <xs:attribute name="labelsexpr" type="xs:string"/>
-      <xs:attributeGroup ref="decision:common"/>
-    </xs:complexType>
-  </xs:element>
-  <xs:element name="choose">
-    <xs:complexType>
-      <xs:attribute name="candidatesexpr" type="xs:string"/>
-      <xs:attribute name="dataexpr" type="xs:string"/>
-      <xs:attribute name="threshold">
-        <xs:simpleType>
-          <xs:restriction base="xs:decimal">
-            <xs:minInclusive value="0"/>
-            <xs:maxInclusive value="1"/>
-          </xs:restriction>
-        </xs:simpleType>
-      </xs:attribute>
-      <xs:attributeGroup ref="decision:common"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

@@ -1,6 +1,6 @@
 [package]
-name = "nemobot-generate"
-description = "The `generate` namespace: provider-neutral model text and structured generation (`<gen:generate>`) as a Wasm extension component"
+name = "nemobot-service-decision"
+description = "The `decision` invoked service: choose an event from a menu (filled from grounded options and validated against its schema), rank, or classify, through a pluggable backend, as a Wasm component that never blocks the session"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,8 +14,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Canonical JSON (deterministic request bodies) and the JSON Schema checks of
-# structured output: `resolve` (metaschema, no external references) and
-# `CompiledSchema` (boon, nothing ever loaded).
+# the menu's schemas and the filled event data (`resolve` for each menu
+# schema, `CompiledSchema` to validate; boon, nothing ever loaded).
 scxml-event-schema.workspace = true
 scxml-types.workspace = true
 serde_json.workspace = true
