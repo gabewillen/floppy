@@ -138,6 +138,14 @@ triage exhausting
 ignored `live_builder_through_an_env_file` test runs the same spec with the
 real backends; [`examples/traffic_light`](examples/traffic_light) is one such
 live build (its `report.json` records one attempt, so no triage ran), kept
-because it validates and passed its own simulation. It is model output, kept as built: for example
+because it validates and passed its own simulation. It was built by the
+first builder (commit `89ec4d05`), before the round-1 review fixes (the
+draft contract, per-test invoke ids, the simulation timeouts), so its
+`report.json` has no per-test `invokeid`. Two live runs of the current
+builder (2026-10-06, `gpt-4o-mini` and `gpt-4.1`) ended in
+`builder.failed` with `attempts-exhausted`: the first on validation
+errors, the second on simulation tests whose expected outputs the drafts
+did not produce in time. No live `builder.done` of the current builder
+exists yet. It is model output, kept as built: for example
 its `onexit` handlers do not cancel the phase timers, which its tests do not
 detect.
