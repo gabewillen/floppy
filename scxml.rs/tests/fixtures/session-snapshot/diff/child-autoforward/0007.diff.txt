@@ -1,0 +1,14 @@
+snapshot diff: 0006.snapshot.json → 0007.snapshot.json
+
+session root
+  --> status: running -> finished
+   = configuration:
+       - s
+       + end
+   = invocations:
+       - kid
+   = transitions:
+       - s[0]
+       - s[1]
+
+- session root/kid

@@ -1,0 +1,26 @@
+[package]
+name = "scxml-script"
+description = "External SCXML script references: media-type dispatch, digest pinning, and Wasm script-component world checks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+hex.workspace = true
+scxml-telemetry.workspace = true
+scxml-types.workspace = true
+sha2.workspace = true
+wasmparser.workspace = true
+
+[dev-dependencies]
+wasm-encoder.workspace = true
+
+[lints]
+workspace = true

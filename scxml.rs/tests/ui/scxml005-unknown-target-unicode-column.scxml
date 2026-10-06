@@ -1,0 +1,4 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="待機" datamodel="ecmascript">
+  <state id="待機"><onentry><log label="ラベル🙂" expr="'x'"/></onentry><transition event="開始" target="実行中x"/></state>
+  <state id="実行中"><transition event="停止" target="待機"/></state>
+</scxml>

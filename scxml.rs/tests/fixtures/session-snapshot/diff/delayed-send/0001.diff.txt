@@ -1,0 +1,18 @@
+snapshot diff: 0000.snapshot.json → 0001.snapshot.json
+
+session root
+  --> status: unchanged
+   = configuration:
+       - idle
+       + waiting
+   = data model:
+       ~ count: 0 -> 1
+   = counters:
+       ~ send: 0 -> 1
+   = pending sends:
+       + tick `tick` (external) sendid tick origin #_scxml_session origintype http://www.w3.org/TR/scxml/#SCXMLEventProcessor data undefined deadline 100ms
+       + sendid_0 `tock` (external) origin #_scxml_session origintype http://www.w3.org/TR/scxml/#SCXMLEventProcessor data undefined deadline 100ms
+   = transitions:
+       - idle[0]
+       + waiting[0]
+       + waiting[1]

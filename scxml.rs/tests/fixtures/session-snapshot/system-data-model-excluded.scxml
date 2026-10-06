@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Both data-model sections excluded: "system" and "data_model". Each
+     session keeps its datamodel_name, and the data-model component keeps
+     its role in "components", on both hosts. The root holds a pending
+     delayed send and an invoked child. Checkpoints: 0 after start (the
+     send pending, the child invoked), 1 after "ping", and 6 at the end
+     (the root finished when "later" fired at virtual time 50).
+     Checkpoint 1 is Wasmtime-only: "ping" is still in flight there. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="system-data-model-excluded" initial="s">
+  <datamodel>
+    <data id="greetings" expr="0"/>
+  </datamodel>
+  <state id="s">
+    <onentry>
+      <send id="later" event="later" delay="50ms"/>
+    </onentry>
+    <invoke id="kid" type="http://www.w3.org/TR/scxml/" src="child-autoforward.child.scxml" autoforward="true"/>
+    <transition event="hello">
+      <assign location="greetings" expr="greetings + 1"/>
+    </transition>
+    <transition event="later" target="end"/>
+  </state>
+  <final id="end"/>
+</scxml>

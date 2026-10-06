@@ -1,0 +1,22 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="x" expr="1"/><data id="y" expr="2"/></datamodel>
+  <state id="a">
+    <onentry>
+      <log expr="# Retry loop"/>
+      <log expr="x @ y"/>
+      <log expr="Starting…"/>
+      <log expr="😀 hi"/>
+      <log expr="Error: failed"/>
+      <log expr="it's done"/>
+      <log expr="x.#secret"/>
+      <log expr="// counts attempts"/>
+      <log expr="`total"/>
+      <script>
+        # Update the counter
+        x = x + 1;
+      </script>
+    </onentry>
+    <transition event="go" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

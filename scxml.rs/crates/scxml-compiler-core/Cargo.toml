@@ -1,0 +1,36 @@
+[package]
+name = "scxml-compiler-core"
+description = "Portable SCXML validation, lowering, and component artifact planning"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+scxml-syntax.workspace = true
+scxml-types.workspace = true
+scxml-validator-core.workspace = true
+scxml-event-schema.workspace = true
+scxml-reporting.workspace = true
+scxml-script.workspace = true
+scxml-telemetry.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+scxml-data-model-ecmascript.workspace = true
+scxml-data-model-xpath.workspace = true
+scxml-validator-xsd.workspace = true
+wasm-encoder.workspace = true

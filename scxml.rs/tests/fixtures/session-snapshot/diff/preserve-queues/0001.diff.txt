@@ -1,0 +1,6 @@
+snapshot diff: 0000.snapshot.json → 0001.snapshot.json
+
+session root/kid
+  --> status: unchanged
+   = queues:
+       + external: `ping` (external)

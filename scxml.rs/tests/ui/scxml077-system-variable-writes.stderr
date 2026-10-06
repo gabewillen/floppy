@@ -1,0 +1,58 @@
+warning[SCXML077]: `<script>` changes the system variable `_event`
+ --> tests/ui/scxml077-system-variable-writes.scxml:6:22
+  |
+6 |       <script>delete _event; _name += '!';</script>
+  |                      ^^^^^^ `_event` is a read-only system variable
+  |
+  = note: SCXML 1.0 §5.10: "The Processor MUST cause any attempt to change the value of a system variable to fail and MUST place the error 'error.execution' on the internal event queue when such an attempt is made." The change fails at run time with `error.execution`; a non-strict `delete` or a reflective deletion through the global object returns `false` without one (a known limitation, docs/spec-errata.md). Variable names beginning with '_' are reserved for system use, and '_x' is the root of platform-specific system variables.
+  = help: copy `_event` into a `<data>` variable and change that copy, or use a name that does not begin with `_`
+  = spec: SCXML 1.0 §5.10 System Variables
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+warning[SCXML077]: `<script>` changes the system variable `_name`
+ --> tests/ui/scxml077-system-variable-writes.scxml:6:30
+  |
+6 |       <script>delete _event; _name += '!';</script>
+  |                              ^^^^^ `_name` is a read-only system variable
+  |
+  = note: SCXML 1.0 §5.10: "The Processor MUST cause any attempt to change the value of a system variable to fail and MUST place the error 'error.execution' on the internal event queue when such an attempt is made." The change fails at run time with `error.execution`; a non-strict `delete` or a reflective deletion through the global object returns `false` without one (a known limitation, docs/spec-errata.md). Variable names beginning with '_' are reserved for system use, and '_x' is the root of platform-specific system variables.
+  = help: copy `_name` into a `<data>` variable and change that copy, or use a name that does not begin with `_`
+  = spec: SCXML 1.0 §5.10 System Variables
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+warning[SCXML077]: `<script>` changes the system variable `_event`
+ --> tests/ui/scxml077-system-variable-writes.scxml:7:50
+  |
+7 |       <script>Reflect.deleteProperty(globalThis, '_event'); delete globalThis._ioprocessors;</script>
+  |                                                  ^^^^^^^^ `_event` is a read-only system variable
+  |
+  = note: SCXML 1.0 §5.10: "The Processor MUST cause any attempt to change the value of a system variable to fail and MUST place the error 'error.execution' on the internal event queue when such an attempt is made." The change fails at run time with `error.execution`; a non-strict `delete` or a reflective deletion through the global object returns `false` without one (a known limitation, docs/spec-errata.md). Variable names beginning with '_' are reserved for system use, and '_x' is the root of platform-specific system variables.
+  = help: copy `_event` into a `<data>` variable and change that copy, or use a name that does not begin with `_`
+  = spec: SCXML 1.0 §5.10 System Variables
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+warning[SCXML077]: `<script>` changes the system variable `_ioprocessors`
+ --> tests/ui/scxml077-system-variable-writes.scxml:7:79
+  |
+7 |       <script>Reflect.deleteProperty(globalThis, '_event'); delete globalThis._ioprocessors;</script>
+  |                                                                               ^^^^^^^^^^^^^ `_ioprocessors` is a read-only system variable
+  |
+  = note: SCXML 1.0 §5.10: "The Processor MUST cause any attempt to change the value of a system variable to fail and MUST place the error 'error.execution' on the internal event queue when such an attempt is made." The change fails at run time with `error.execution`; a non-strict `delete` or a reflective deletion through the global object returns `false` without one (a known limitation, docs/spec-errata.md). Variable names beginning with '_' are reserved for system use, and '_x' is the root of platform-specific system variables.
+  = help: copy `_ioprocessors` into a `<data>` variable and change that copy, or use a name that does not begin with `_`
+  = spec: SCXML 1.0 §5.10 System Variables
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+warning[SCXML077]: `expr` on `<assign>` changes the system variable `_sessionid`
+ --> tests/ui/scxml077-system-variable-writes.scxml:8:34
+  |
+8 |       <assign location="d" expr="_sessionid = 'mine'"/>
+  |                                  ^^^^^^^^^^ `_sessionid` is a read-only system variable
+  |
+  = note: SCXML 1.0 §5.10: "The Processor MUST cause any attempt to change the value of a system variable to fail and MUST place the error 'error.execution' on the internal event queue when such an attempt is made." The change fails at run time with `error.execution`; a non-strict `delete` or a reflective deletion through the global object returns `false` without one (a known limitation, docs/spec-errata.md). Variable names beginning with '_' are reserved for system use, and '_x' is the root of platform-specific system variables.
+  = help: copy `_sessionid` into a `<data>` variable and change that copy, or use a name that does not begin with `_`
+  = spec: SCXML 1.0 §5.10 System Variables
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+diagnostic summary: 0 error(s), 5 warning(s), 0 note(s), 5 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML077`.
+validated tests/ui/scxml077-system-variable-writes.scxml

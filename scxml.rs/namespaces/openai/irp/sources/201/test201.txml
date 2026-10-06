@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!-- openai-11: without location the tool choice is required. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env">
+<state id="s0">
+  <onentry>
+    <openai:generate env:apikey="IRP_OPENAI_KEY" model="irp-call-first-if-required" prompt="t"/>
+  </onentry>
+  <transition event="answer" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

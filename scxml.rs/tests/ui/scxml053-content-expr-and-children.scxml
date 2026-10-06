@@ -1,0 +1,3 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <state id="a"><onentry><send event="t"><content expr="1">literal</content></send></onentry><transition event="t" target="f"/></state><final id="f"/>
+</scxml>

@@ -1,0 +1,33 @@
+[package]
+name = "scxml-compiler"
+description = "Wasm guest exporting validation, lowering, and codegen-free machine component packaging"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+scxml-compiler-core.workspace = true
+scxml-event-schema.workspace = true
+scxml-packager.workspace = true
+scxml-reporting.workspace = true
+scxml-script.workspace = true
+scxml-telemetry.workspace = true
+scxml-validator-core.workspace = true
+scxml-validator-xsd.workspace = true
+wit-bindgen.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

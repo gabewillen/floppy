@@ -1,0 +1,16 @@
+error[XML001]: the value of `id` is never closed: `"` is missing
+ --> tests/ui/xml001-unterminated-attribute-value.scxml:2:13
+  |
+2 |   <state id="a>
+  |             ^ this `"` opens the value of `id`
+  |
+  = note: SCXML documents must be well-formed XML 1.0 with namespaces; no later validation runs until parsing succeeds
+  = help: close the value with `"`: `id="a"`
+  = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
+help: close the value of `id` with `"`
+  |
+2 |   <state id="a">
+  |               +
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- env-4: an env attribute on an SCXML element is rejected. The document must be rejected; it never runs. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0" initial="s0" version="1.0" datamodel="xpath">
+<datamodel>
+  <data id="Var1"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <log env:apikey="IRP_OPENAI_KEY" expr="'k'"/>
+  </onentry>
+  <transition target="pass"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

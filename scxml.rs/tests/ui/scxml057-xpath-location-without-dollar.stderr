@@ -1,0 +1,18 @@
+warning[SCXML057]: `count` selects a child element named `count`, not the variable `$count`
+ --> tests/ui/scxml057-xpath-location-without-dollar.scxml:8:47
+  |
+8 |     <transition event="inc"><assign location="count" expr="$count + 1"/></transition>
+  |                                               ^^^^^ relative path from `<datamodel>`
+  |
+  = note: the context node of every XPath expression is `<datamodel>`, whose children are `<data id="…">` elements and the system variables; assigning to a location that selects no node raises `error.execution`
+  = help: `<data id="count">` is bound to the variable `$count`; a bare name is a relative path from `<datamodel>`
+  = spec: SCXML CR 2014 §C.3.1 Data Model
+  = spec: SCXML CR 2014 §C.3.3 Location Expressions
+help: use `$count`
+  |
+8 |     <transition event="inc"><assign location="$count" expr="$count + 1"/></transition>
+  |                                               ~~~~~~
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML057`.
+validated tests/ui/scxml057-xpath-location-without-dollar.scxml

@@ -1,0 +1,10 @@
+version: 2
+updates:
+  # CI pins every action by full commit SHA with its release in a comment;
+  # Dependabot proposes the new SHA and comment. CONTRIBUTING.md publishes
+  # each pin, and the published_contract_docs test fails until the update
+  # PR also changes that list, so update it in the same PR.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

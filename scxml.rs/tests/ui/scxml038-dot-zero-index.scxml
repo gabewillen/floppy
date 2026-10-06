@@ -1,0 +1,12 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="list" expr="[{name: 'first'}]"/></datamodel>
+  <state id="a">
+    <onentry>
+      <log expr="list.0"/>
+      <log expr="list.0.name"/>
+      <assign location="list.0" expr="1"/>
+    </onentry>
+    <transition event="go" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

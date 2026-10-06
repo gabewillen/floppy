@@ -1,0 +1,27 @@
+error[SCXML005]: transition target `zz\u{202E}DER` does not exist
+ --> tests/ui/scxml005-bidi-control-in-target.scxml:2:48
+  |
+2 |   <state id="a"><transition event="go" target="zz\u{202E}DER"/></state>
+  |                                                ^^^^^^^^^^^^^ unknown target identifier
+  |
+  = note: a transition's `target` must be one or more IDs of states in the same SCXML document; an unresolved target makes the document non-conformant
+  = help: declare the target state or correct the target identifier
+  = spec: SCXML 1.0 §3.5 <transition>
+
+warning[SCXML062]: a Unicode bidirectional control character changes how this line is displayed
+ --> tests/ui/scxml005-bidi-control-in-target.scxml:2:50
+  |
+2 |   <state id="a"><transition event="go" target="zz\u{202E}DER"/></state>
+  |                                                  ^^^^^^^^ U+202E RIGHT-TO-LEFT OVERRIDE
+  |
+  = note: an explicit embedding, override, or isolate reorders how the text around it is displayed, so an editor or review can show a condition, ID, or script differently from what the machine executes (Trojan Source, CVE-2021-42574)
+  = help: if the character is intended, write it as a character reference such as `&#x202E;`, which XML decodes to the same character and keeps visible; otherwise remove it
+  = spec: Unicode Standard Annex #9 §2 Directional Formatting Characters
+help: write the control character as a character reference
+  |
+2 |   <state id="a"><transition event="go" target="zz&#x202E;DER"/></state>
+  |                                                  ~~~~~~~~
+
+diagnostic summary: 1 error(s), 1 warning(s), 0 note(s), 2 total
+Some diagnostics have detailed explanations: SCXML005, SCXML062.
+For more information about a diagnostic, try `scxml-cli --explain SCXML005`.

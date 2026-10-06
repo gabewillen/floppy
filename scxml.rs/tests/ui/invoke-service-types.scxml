@@ -1,0 +1,9 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
+  <state id="s">
+    <invoke type="echo"/>
+    <invoke type="https://stateforward.org/scxml/services/echo" id="svc"/>
+    <invoke type="scxml" src="child.scxml"/>
+    <transition event="done.invoke.svc" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

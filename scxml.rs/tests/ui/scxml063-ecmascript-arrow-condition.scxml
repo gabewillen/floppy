@@ -1,0 +1,10 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="total" expr="0"/><data id="list" expr="[1, 2]"/></datamodel>
+  <state id="a">
+    <transition event="go" cond="total => 1" target="b"/>
+    <transition event="go2" cond="(total) =>  total + 1" target="b"/>
+    <transition event="go3" cond="list.some(x => x &gt; 1)" target="b"/>
+    <transition event="go4" cond="(a, b) => a" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

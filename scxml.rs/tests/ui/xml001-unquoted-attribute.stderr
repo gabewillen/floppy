@@ -1,0 +1,16 @@
+error[XML001]: attribute value must be enclosed in quotes
+ --> tests/ui/xml001-unquoted-attribute.scxml:2:13
+  |
+2 |   <state id=a><transition event="go" target="b"/></state>
+  |             ^ unquoted attribute value
+  |
+  = note: SCXML documents must be well-formed XML 1.0 with namespaces; no later validation runs until parsing succeeds
+  = help: quote the value: "a"
+  = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
+help: quote the attribute value
+  |
+2 |   <state id="a"><transition event="go" target="b"/></state>
+  |             ~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

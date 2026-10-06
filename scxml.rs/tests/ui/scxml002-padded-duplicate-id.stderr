@@ -1,0 +1,15 @@
+error[SCXML002]: duplicate identifier `a`
+ --> tests/ui/scxml002-padded-duplicate-id.scxml:5:14
+  |
+2 |   <state id=" a ">
+  |               - first declared here
+...
+5 |   <final id="a&#9;"/>
+  |              ^^^^^ duplicate declaration
+  |
+  = note: transition targets, `initial` references, and history defaults resolve by ID; duplicates make every reference ambiguous
+  = help: choose a unique identifier and update every reference to it
+  = spec: SCXML 1.0 §3.14 IDs
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML002`.

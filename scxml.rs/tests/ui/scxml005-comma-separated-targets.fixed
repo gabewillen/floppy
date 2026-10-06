@@ -1,0 +1,8 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <parallel id="p">
+    <state id="r1" initial="r1a"><state id="r1a"/><state id="r1b"/></state>
+    <state id="r2" initial="r2a"><state id="r2a"/><state id="r2b"/></state>
+    <transition event="both" target="r1b r2b"/>
+  </parallel>
+  <state id="a"><transition event="start" target="p"/></state>
+</scxml>

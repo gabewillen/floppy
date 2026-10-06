@@ -1,0 +1,213 @@
+/// SCXML compiler component: validates, lowers, and packages machine artifacts.
+/// Never invokes a native toolchain and never generates code: `component-wasm`
+/// packaging composes a caller-supplied, pinned, prebuilt generic machine
+/// template with a data-only provider of the lowered IR.
+package stateforward:scxml-compiler@0.2.0;
+
+/// Guest telemetry facade; closed labels only, never payloads.
+interface telemetry {
+  /// W3C trace carrier. It only parents telemetry spans and never alters
+  /// output; in requests, present fields count as request metadata.
+  record trace-context { traceparent: option<string>, tracestate: option<string> }
+  /// Closed module label.
+  enum module { compiler }
+  /// Closed operation label.
+  enum operation { compile }
+  /// Closed span-event label.
+  enum signal-event { input-rejected, artifact-produced }
+  /// Closed failure-category label.
+  enum error-category { invalid-input, validation, lowering, report, packaging }
+  /// Opens one host-owned span under `parent` and returns its id plus the
+  /// child carrier. Id 0 means telemetry is unavailable; the guest continues
+  /// unchanged. Each id is ended exactly once.
+  start: func(module: module, operation: operation, parent: option<trace-context>) -> tuple<u64, option<trace-context>>;
+  /// Records one closed event on an open span; unknown ids are ignored.
+  event: func(span: u64, event: signal-event);
+  /// Closes a span, marking it failed with `error` when present.
+  end: func(span: u64, error: option<error-category>);
+}
+
+/// Request, result, and error types.
+interface types {
+  use telemetry.{trace-context};
+  /// Closed error schema version; unknown discriminants fail canonical ABI decoding.
+  enum error-version { v1 }
+  /// Bounded failure classification with no caller-controlled payload.
+  enum error-code {
+    /// The request violated a documented bound or uniqueness rule.
+    invalid-request,
+    /// A package manifest field was empty or over-bound, named a WIT world
+    /// other than `stateforward:scxml/executable-content-extension` or a WIT
+    /// version other than `0.2.0`, or repeated a namespace URI.
+    invalid-package,
+    /// The requested artifact phase is never produced (`core-wasm`).
+    unsupported-artifact,
+    /// The canonical report could not be encoded within its bounds.
+    canonical-report-failed,
+    /// The machine template does not hash to its pinned `sha256`, is not a
+    /// valid component, or does not import exactly the pinned machine world
+    /// (`types`, `telemetry`, `machine-capability-types`, `ir-source`) and
+    /// export exactly `machine-api` of `stateforward:scxml@0.2.0`.
+    invalid-template,
+    /// Composing the IR provider with the template failed or exceeded the
+    /// packaged component bound.
+    packaging-failed,
+  }
+  /// Closed, payload-free failure.
+  record component-error { version: error-version, code: error-code }
+  /// XSD validation policy (see the validator package).
+  enum schema-policy { strict, lax, off }
+  /// Distinct artifact phases.
+  enum artifact-kind {
+    /// Deterministic portable Machine IR data (not WebAssembly). Runtime
+    /// hosts, including browsers, feed it to the generic machine component
+    /// through `stateforward:scxml/ir-source`.
+    lowered-ir,
+    /// A standalone core WebAssembly module; never produced (requests fail
+    /// with `unsupported-artifact`).
+    core-wasm,
+    /// A validated Component Model component: the pinned generic machine
+    /// template composed with a data-only `ir-source` provider, importing
+    /// only the machine's capability interfaces. For non-browser
+    /// ahead-of-time hosts.
+    component-wasm,
+  }
+  /// Pinned prebuilt generic machine template (`stateforward:scxml/machine`).
+  record machine-template {
+    /// Exact template component bytes (at most 8388608 bytes).
+    bytes: list<u8>,
+    /// Pinned SHA-256 of `bytes`: exactly 64 lowercase hexadecimal characters.
+    sha256: string,
+  }
+  /// One XSD bound to one exact namespace URI.
+  record schema-resource { namespace-uri: string, system-id: string, bytes: list<u8> }
+  /// extension package manifest (exact URI, extension artifact,
+  /// schema artifact and lowercase hex SHA-256, WIT world and version).
+  record extension-package {
+    namespace-uri: string,
+    package-version: string,
+    extension-artifact: string,
+    schema-artifact: string,
+    schema-sha256: string,
+    wit-world: string,
+    wit-version: string,
+    /// The `env` slots its elements accept (`env:<slot>` attributes).
+    env-slots: list<string>,
+    /// The origins or URL prefixes its extension component's requests reach.
+    http-origins: list<string>,
+  }
+  /// How `<script src>` references are resolved (SCXML 1.0 section 5.8).
+  enum script-resolution {
+    /// Every `src` needs exactly one `scripts` package for its exact URI;
+    /// the compiler authenticates it (media type for the document's data
+    /// model, SHA-256, and for `application/wasm` the
+    /// `stateforward:scxml/script` world) and pins it into the Machine IR.
+    /// A missing, unused, or invalid package is a `COMP003` error in the
+    /// report, on the exact `src` attribute value. `component-wasm`
+    /// packaging bundles the pinned Wasm script components.
+    compile,
+    /// References stay unpinned; the host's runtime `script-loader`
+    /// resolves them at document load (dynamic or agent-authored SCXML,
+    /// and every browser host). Supplying `scripts` is a `COMP003` error.
+    runtime,
+  }
+  /// Exact bytes for one `<script src>` URI.
+  record script-package {
+    /// The `src` URI exactly as authored (byte comparison).
+    uri: string,
+    /// `application/wasm` or a script language of the document's data model.
+    media-type: string,
+    /// Expected SHA-256 of `bytes`: 64 lowercase hexadecimal characters.
+    sha256: string,
+    /// Exact script bytes.
+    bytes: list<u8>,
+  }
+  /// Exact bytes of one JSON Schema file an `event:schema` attribute
+  /// references (the `event` attribute vocabulary,
+  /// `https://github.com/stateforward/scxml.rs/namespaces/event`). The
+  /// caller reads each file relative to the document; nothing is fetched.
+  record event-schema-resource {
+    /// The reference's resource part exactly as authored: the attribute
+    /// value before `#`, trimmed of XML white space (byte comparison).
+    uri: string,
+    /// The file's exact bytes.
+    bytes: list<u8>,
+  }
+  /// Compilation options.
+  record compile-options { schema-policy: schema-policy, requested-artifact: artifact-kind, script-resolution: script-resolution }
+  /// Schema policy controls XSD only. Every used extension namespace still
+  /// requires one exact verified schema-resource and extension-package binding
+  /// before lowered IR or package-recipe emission; built-in SCXML/XML are
+  /// exempt. Request bounds (checked before any parsing; violations fail with
+  /// `invalid-request` and produce no report): `source` at most 16777216 bytes;
+  /// at most 64 `schemas` and 64 `packages`; each schema's `bytes` at most
+  /// 4194304 bytes and all schemas at most 16777216 bytes together; every
+  /// metadata string (`source-name`, schema `namespace-uri` and `system-id`,
+  /// every package field, and present trace-context fields) non-empty and at
+  /// most 4096 bytes, and at most 1048576 metadata bytes together; the whole
+  /// request at most 33554432 bytes. Schema namespace URIs and package
+  /// namespace URIs must each be unique (exact byte comparison). Violations in
+  /// a package's fields fail with `invalid-package` instead. `machine-template`
+  /// is required exactly when `requested-artifact` is `component-wasm` and is
+  /// otherwise rejected; its `bytes` at most 8388608 bytes and its `sha256`
+  /// exactly 64 lowercase hexadecimal characters (violations fail with
+  /// `invalid-request`). Template bytes are bounded separately and do not count
+  /// toward the whole-request bound. `scripts` holds at most 64 packages and
+  /// 16777216 bytes together (each package's `bytes` at most 4194304 bytes, its
+  /// `uri` at most 16384 bytes, its `media-type` at most 4096 bytes); script
+  /// bytes are bounded separately and do not count toward the whole-request
+  /// bound. Violations fail with `invalid-request`; per-package authentication
+  /// failures are `COMP003` report diagnostics instead. `event-schemas` holds at most 64 resources and 16777216 bytes together
+  /// (each resource's `bytes` at most 4194304 bytes, its `uri` non-empty and
+  /// at most 16384 bytes, URIs unique by exact byte comparison); its bytes
+  /// are bounded separately and do not count toward the whole-request bound.
+  /// A reference with no resource is an `SCXML088` diagnostic in the report.
+  /// Each resolved schema is embedded in the lowered Machine IR on its
+  /// element, as metadata that never changes execution.
+  record compile-request {
+    source-name: string,
+    source: string,
+    schemas: list<schema-resource>,
+    packages: list<extension-package>,
+    scripts: list<script-package>,
+    event-schemas: list<event-schema-resource>,
+    options: compile-options,
+    machine-template: option<machine-template>,
+    trace-context: option<trace-context>,
+  }
+  /// Successful compilation output.
+  record compile-result {
+    /// Sole authoritative producer decision, encoded as scxml.report/v3 bytes.
+    report-artifact: list<u8>,
+    /// Convenience payload derived from the same output (IR bytes for
+    /// `lowered-ir`, component bytes for `component-wasm`); consumers verify
+    /// its length and digest against the report.
+    artifact-bytes: option<list<u8>>,
+  }
+}
+
+/// Exported compiler entry point.
+interface compiler-api {
+  use types.{compile-request, compile-result, component-error};
+  /// Consumes the request; failures commit neither report nor artifact bytes.
+  ///
+  /// On success `report-artifact` is canonical `scxml.report/v3` (kind
+  /// `compiler`) and is the sole decision; `artifact-bytes` is present only
+  /// when the report's status is success, and its length and SHA-256 equal
+  /// the report's. Invalid SCXML is a successful call with an error report
+  /// and no artifact. Byte-deterministic for identical requests.
+  /// A `component-wasm` report's package recipe records the template
+  /// SHA-256 and the embedded IR SHA-256; every recipe lists each pinned
+  /// Wasm script component as `script-sha256:<hex>` among its linked
+  /// extension components.
+  /// Errors: `invalid-request`, `invalid-package`, `unsupported-artifact`
+  /// (checked before lowering), `invalid-template`, `packaging-failed`,
+  /// `canonical-report-failed`.
+  compile: func(request: compile-request) -> result<compile-result, component-error>;
+}
+
+/// The compiler component.
+world compiler {
+  import telemetry;
+  export compiler-api;
+}

@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!-- env-7: an origin a value supplies entirely is admitted. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env">
+<datamodel>
+  <data conf:id="1"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <openai:generate env:apikey="IRP_OPENAI_KEY" env:baseurl="IRP_BASE_URL" model="irp-reply" prompt="u" conf:location="1"/>
+  </onentry>
+  <transition conf:idQuoteVal="1=irp reply" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

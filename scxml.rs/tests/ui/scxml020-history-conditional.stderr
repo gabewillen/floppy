@@ -1,0 +1,16 @@
+error[SCXML020]: history transition must not have `cond`
+ --> tests/ui/scxml020-history-conditional.scxml:4:19
+  |
+4 |       <transition cond="true" target="c"/>
+  |                   ^^^^^^^^^^^ initialization fallback must be unconditional
+  |
+  = note: the history default is unconditional: SCXML 3.10.2 says the history transition "MUST NOT contain 'cond' or 'event' attributes" and must name a target
+  = help: remove `cond` from this transition
+  = spec: SCXML 1.0 §3.10 <history>
+help: remove `cond`
+  |
+4 -       <transition cond="true" target="c"/>
+4 +       <transition target="c"/>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML020`.

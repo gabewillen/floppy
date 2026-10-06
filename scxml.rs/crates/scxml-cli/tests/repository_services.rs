@@ -1,0 +1,500 @@
+#![allow(
+    missing_docs,
+    reason = "integration-test crate; test functions are self-describing"
+)]
+
+//! Repository services end to end through the CLI (`wasmtime` feature): a
+//! document invokes `https://github.com/stateforward/nemobot/services/echo@v0.1.0`
+//! and binds nothing, and `validate` and `snapshot run` resolve it from a
+//! mock GitHub this suite serves on 127.0.0.1 (`--github-api-base`,
+//! `--github-raw-base`, `--github-download-base`) exactly like a repository
+//! namespace: the tag through the API, the manifest and its event schema at
+//! the commit, and, when a run binds it, the release asset authenticated by
+//! the release's `SHA256SUMS`, all cached content-addressed and pinned. No
+//! test touches the real network.
+//!
+//! The release asset is the shipped echo example component. It answers its
+//! own fixed type URI, not the repository URI, so a run gets as far as the
+//! host's `type-uri` check of the bound, authenticated component and then
+//! fails closed: that check is the proof the release's bytes were bound to
+//! the repository URI.
+
+use std::collections::BTreeMap;
+use std::fs;
+use std::io::{BufRead as _, BufReader, Read as _, Write as _};
+use std::net::TcpListener;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+use std::sync::{Arc, Mutex, OnceLock};
+
+use sha2::{Digest as _, Sha256};
+
+const SERVICE_URI: &str = "https://github.com/stateforward/nemobot/services/echo@v0.1.0";
+const ASSET: &str = "scxml_service_example.virtualized.wasm";
+/// The commit the mock tag names (a lightweight tag).
+const COMMIT: &str = "89abcdef0123456789abcdef0123456789abcdef";
+const REPO: &str = "stateforward/nemobot";
+
+const COMPONENTS: &[&str] = &[
+    "scxml_clock",
+    "scxml_data_model_ecmascript",
+    "scxml_data_model_null",
+    "scxml_data_model_xpath",
+    "scxml_ioprocessor_scxml",
+    "scxml_ioprocessor_basichttp",
+    "scxml_service_example",
+    "scxml_compiler",
+    "scxml_machine",
+];
+
+fn workspace() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("the workspace root resolves")
+}
+
+struct Release {
+    dir: String,
+    manifest_sha256: String,
+    echo: Vec<u8>,
+}
+
+fn release() -> &'static Release {
+    static RELEASE: OnceLock<Release> = OnceLock::new();
+    RELEASE.get_or_init(|| {
+        let workspace = workspace();
+        let target = workspace.join("target/cli-components");
+        let dir = target.join("wasm-artifacts/repository-services");
+        let status = Command::new("sh")
+            .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+            .args(COMPONENTS)
+            .current_dir(&workspace)
+            .env("CARGO_TARGET_DIR", &target)
+            .env("SCXML_WASM_ARTIFACTS_DIR", &dir)
+            .status()
+            .expect("the capability script runs");
+        assert!(status.success(), "the release capability proof must pass");
+        let manifest = fs::read_to_string(dir.join("manifest.tsv")).expect("manifest");
+        Release {
+            dir: dir.display().to_string(),
+            manifest_sha256: format!("{:x}", Sha256::digest(manifest.as_bytes())),
+            echo: fs::read(dir.join(ASSET)).expect("the echo component"),
+        }
+    })
+}
+
+fn sha256(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+fn scratch(name: &str) -> PathBuf {
+    let directory = workspace()
+        .join("target/cli-repository-services")
+        .join(format!("{}-{name}", std::process::id()));
+    let _ = fs::remove_dir_all(&directory);
+    fs::create_dir_all(&directory).expect("scratch directory must be creatable");
+    directory
+}
+
+fn cli(args: &[String]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_scxml-cli"))
+        .args(args)
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("scxml-cli must run")
+}
+
+fn text(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+/// One mock answer: status, body, and an optional `location`.
+type Answer = (u16, Vec<u8>, Option<String>);
+/// The mock's routes by exact path.
+type Routes = Arc<Mutex<BTreeMap<String, Answer>>>;
+
+/// A mock GitHub on 127.0.0.1: exact-path routes; every request line is
+/// recorded.
+struct Server {
+    origin: String,
+    routes: Routes,
+    requests: Arc<Mutex<Vec<String>>>,
+}
+
+impl Server {
+    fn start() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("the mock binds a loopback port");
+        let origin = format!(
+            "http://{}",
+            listener.local_addr().expect("the mock has an address")
+        );
+        let routes: Routes = Arc::default();
+        let requests: Arc<Mutex<Vec<String>>> = Arc::default();
+        let (served, log) = (Arc::clone(&routes), Arc::clone(&requests));
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
+                let mut request_line = String::new();
+                if reader.read_line(&mut request_line).is_err() {
+                    continue;
+                }
+                let mut length = 0;
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).is_err() || line == "\r\n" || line.is_empty() {
+                        break;
+                    }
+                    if let Some((name, value)) = line.trim_end().split_once(':')
+                        && name.eq_ignore_ascii_case("content-length")
+                    {
+                        length = value.trim().parse().unwrap_or(0);
+                    }
+                }
+                let mut body = vec![0; length];
+                if reader.read_exact(&mut body).is_err() {
+                    continue;
+                }
+                let target = request_line.split(' ').nth(1).unwrap_or("").to_owned();
+                log.lock()
+                    .expect("the log lock")
+                    .push(request_line.trim_end().to_owned());
+                let route = served.lock().expect("the route lock").get(&target).cloned();
+                let _ = match route {
+                    Some((status, body, location)) => {
+                        let location = location
+                            .map(|location| format!("location: {location}\r\n"))
+                            .unwrap_or_default();
+                        let _ = write!(
+                            stream,
+                            "HTTP/1.1 {status} X\r\n{location}content-length: {}\r\nconnection: close\r\n\r\n",
+                            body.len()
+                        );
+                        stream.write_all(&body)
+                    }
+                    None => write!(
+                        stream,
+                        "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                    ),
+                };
+            }
+        });
+        Self {
+            origin,
+            routes,
+            requests,
+        }
+    }
+
+    fn body(&self, path: &str, body: impl Into<Vec<u8>>) {
+        self.routes
+            .lock()
+            .expect("the route lock")
+            .insert(path.to_owned(), (200, body.into(), None));
+    }
+
+    fn redirect(&self, path: &str, location: String) {
+        self.routes
+            .lock()
+            .expect("the route lock")
+            .insert(path.to_owned(), (302, Vec::new(), Some(location)));
+    }
+
+    fn requests(&self) -> Vec<String> {
+        self.requests.lock().expect("the log lock").clone()
+    }
+}
+
+fn raw_path(file: &str) -> String {
+    format!("/raw/{REPO}/{COMMIT}/services/echo/package/{file}")
+}
+
+fn download_path(asset: &str) -> String {
+    format!("/dl/{REPO}/releases/download/v0.1.0/{asset}")
+}
+
+const EVENTS: &str = r#"{"$defs":{"Tick":{"type":"integer"}}}"#;
+
+/// The repository service's manifest, naming `service_uri`.
+fn manifest(service_uri: &str) -> String {
+    format!(
+        r#"{{"format":"stateforward.scxml.service-package/v1","service-uri":"{service_uri}","package-version":"0.1.0","service-artifact":"{ASSET}","schema-artifact":null,"schema-sha256":null,"wit-world":"stateforward:scxml/invoked-service","wit-version":"0.2.0","http-origins":[],"env-slots":["endpoint"],"events":{{"emits":[{{"name":"echo.tick","schema-artifact":"events.json#/$defs/Tick","schema-sha256":"{}"}}],"accepts":[]}}}}"#,
+        sha256(EVENTS.as_bytes())
+    )
+}
+
+/// A mock GitHub serving the echo service as a release would: `v0.1.0` is a
+/// lightweight tag of [`COMMIT`], the package files sit at the commit, and
+/// the release serves the component (through a redirect) and its
+/// `SHA256SUMS`.
+fn github(manifest_text: &str) -> Server {
+    let release = release();
+    let server = Server::start();
+    server.body(
+        &format!("/api/repos/{REPO}/git/ref/tags/v0.1.0"),
+        format!(r#"{{"ref":"refs/tags/v0.1.0","object":{{"type":"commit","sha":"{COMMIT}"}}}}"#),
+    );
+    server.body(&raw_path("echo.service.json"), manifest_text.to_owned());
+    server.body(&raw_path("events.json"), EVENTS);
+    server.body(
+        &download_path("SHA256SUMS"),
+        format!("{}  {ASSET}\n", sha256(&release.echo)),
+    );
+    server.redirect(
+        &download_path(ASSET),
+        format!("{}/assets/echo", server.origin),
+    );
+    server.body("/assets/echo", release.echo.clone());
+    server
+}
+
+fn repository(server: &Server, cache: &Path) -> Vec<String> {
+    vec![
+        "--github-api-base".into(),
+        format!("{}/api", server.origin),
+        "--github-raw-base".into(),
+        format!("{}/raw", server.origin),
+        "--github-download-base".into(),
+        format!("{}/dl", server.origin),
+        "--cache-dir".into(),
+        cache.display().to_string(),
+    ]
+}
+
+/// A document invoking the repository service, written to `directory`;
+/// `tick` is the `echo.tick` transition's extra attributes.
+fn document_with(directory: &Path, tick: &str) -> String {
+    let path = directory.join("service.scxml");
+    fs::write(
+        &path,
+        format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript" initial="s"><state id="s"><invoke type="{SERVICE_URI}" id="echo"/><transition event="echo.tick" {tick}/><transition event="done.invoke.echo" target="f"/></state><final id="f"/></scxml>"#
+        ),
+    )
+    .expect("the document is written");
+    path.display().to_string()
+}
+
+/// The document with an `echo.tick` schema the package's contradicts.
+fn document(directory: &Path) -> String {
+    document_with(directory, r#"event:schema='{"type":"string"}'"#)
+}
+
+/// The document with the package's own `echo.tick` schema: it compiles.
+fn runnable(directory: &Path) -> String {
+    document_with(directory, r#"event:schema='{"type":"integer"}'"#)
+}
+
+fn validate(document: &str, extra: &[String]) -> Output {
+    let mut args = vec!["validate".to_owned(), document.to_owned()];
+    args.extend_from_slice(extra);
+    cli(&args)
+}
+
+fn snapshot_run(document: &str, output: &Path, extra: &[String]) -> Output {
+    let release = release();
+    let mut args = vec![
+        "snapshot".to_owned(),
+        "run".to_owned(),
+        document.to_owned(),
+        "--components".to_owned(),
+        release.dir.clone(),
+        "--components-manifest-sha256".to_owned(),
+        release.manifest_sha256.clone(),
+        "--output".to_owned(),
+        output.display().to_string(),
+    ];
+    args.extend_from_slice(extra);
+    cli(&args)
+}
+
+#[test]
+fn validate_resolves_the_package_at_its_commit_and_then_runs_offline() {
+    let server = github(&manifest(SERVICE_URI));
+    let directory = scratch("validate");
+    let cache = directory.join("cache");
+    let source = document(&directory);
+    let flags = repository(&server, &cache);
+    let first = validate(&source, &flags);
+    let stderr = text(&first.stderr);
+    // The package resolved (no SCXML094), lists its consent, and its event
+    // contract judges the document (SCXML095).
+    assert!(!stderr.contains("SCXML094"), "{stderr}");
+    assert!(
+        stderr.contains(&format!(
+            "service `{SERVICE_URI}`\n  = version: release v0.1.0 (commit {COMMIT}), package 0.1.0"
+        )),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("= events: emits echo.tick; accepts none"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("error[SCXML095]"), "{stderr}");
+    assert_eq!(
+        server.requests(),
+        [
+            format!("GET /api/repos/{REPO}/git/ref/tags/v0.1.0 HTTP/1.1"),
+            format!("GET {} HTTP/1.1", raw_path("echo.service.json")),
+            format!("GET {} HTTP/1.1", raw_path("events.json")),
+        ],
+        "the tag resolves to its commit, the package comes from that commit, and validation never reaches the release"
+    );
+    // The URI is pinned and its bytes cached by digest: --offline needs no
+    // network.
+    let index = cache
+        .join("index")
+        .join(format!("{}.json", sha256(SERVICE_URI.as_bytes())));
+    let entry = fs::read_to_string(&index).expect("the URI is pinned");
+    assert!(
+        entry.contains("\"format\": \"stateforward.scxml.service-cache/v1\""),
+        "{entry}"
+    );
+    assert!(
+        entry.contains(&format!("\"commit\": \"{COMMIT}\"")),
+        "{entry}"
+    );
+    assert!(
+        cache
+            .join("sha256")
+            .join(sha256(EVENTS.as_bytes()))
+            .exists()
+    );
+    let before = server.requests().len();
+    let mut offline = flags.clone();
+    offline.push("--offline".into());
+    let again = validate(&source, &offline);
+    assert_eq!(text(&again.stderr), stderr);
+    assert_eq!(server.requests().len(), before, "offline uses no network");
+}
+
+#[test]
+fn a_run_binds_the_release_component_authenticated_by_its_sha256sums() {
+    let server = github(&manifest(SERVICE_URI));
+    let directory = scratch("run");
+    let cache = directory.join("cache");
+    let source = runnable(&directory);
+    let output = directory.join("final.snapshot.json");
+    let flags = repository(&server, &cache);
+
+    let run = snapshot_run(&source, &output, &flags);
+    let stderr = text(&run.stderr);
+    // The release's bytes were authenticated and bound to the repository
+    // URI; the example component answers its own fixed type URI, so the
+    // host's check of the bound component fails the run closed.
+    assert!(!run.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("service-component-uri-mismatch"),
+        "{stderr}"
+    );
+    assert!(!output.exists());
+    let requests = server.requests();
+    assert!(
+        requests.ends_with(&[
+            format!("GET {} HTTP/1.1", download_path("SHA256SUMS")),
+            format!("GET {} HTTP/1.1", download_path(ASSET)),
+            "GET /assets/echo HTTP/1.1".to_owned(),
+        ]),
+        "{requests:?}"
+    );
+    assert!(cache.join("sha256").join(sha256(&release().echo)).exists());
+
+    // Pinned: the offline run reaches the same check from the cache alone.
+    let before = server.requests().len();
+    let mut offline = flags.clone();
+    offline.push("--offline".into());
+    let again = snapshot_run(&source, &output, &offline);
+    assert!(
+        text(&again.stderr).contains("service-component-uri-mismatch"),
+        "{}",
+        text(&again.stderr)
+    );
+    assert_eq!(server.requests().len(), before);
+
+    // A tampered cached component fails closed before anything runs.
+    let object = cache.join("sha256").join(sha256(&release().echo));
+    let mut bytes = fs::read(&object).expect("the cached component");
+    if let Some(last) = bytes.last_mut() {
+        *last ^= 1;
+    }
+    fs::write(&object, bytes).expect("tamper");
+    let tampered = snapshot_run(&source, &output, &offline);
+    assert!(
+        text(&tampered.stderr).contains("does not match its SHA-256 (it was modified)"),
+        "{}",
+        text(&tampered.stderr)
+    );
+}
+
+#[test]
+fn a_package_that_does_not_name_itself_exactly_or_an_unlisted_component_fails_closed() {
+    // The manifest names another URI.
+    let server = github(&manifest(
+        "https://github.com/stateforward/nemobot/services/echo@v0.2.0",
+    ));
+    let directory = scratch("uri");
+    let source = document(&directory);
+    let invalid = validate(&source, &repository(&server, &directory.join("cache")));
+    assert!(!invalid.status.success());
+    assert!(
+        text(&invalid.stderr).contains("its manifest binds"),
+        "{}",
+        text(&invalid.stderr)
+    );
+    assert!(!directory.join("cache/index").exists(), "nothing is pinned");
+
+    // The release does not list the component.
+    let server = github(&manifest(SERVICE_URI));
+    server.body(
+        &download_path("SHA256SUMS"),
+        format!("{}  other.wasm\n", "0".repeat(64)),
+    );
+    let directory = scratch("sums");
+    let source = runnable(&directory);
+    let run = snapshot_run(
+        &source,
+        &directory.join("final.snapshot.json"),
+        &repository(&server, &directory.join("cache")),
+    );
+    assert!(!run.status.success());
+    assert!(
+        text(&run.stderr).contains("lists no single SHA-256"),
+        "{}",
+        text(&run.stderr)
+    );
+}
+
+#[test]
+fn offline_without_the_cache_fails_closed_and_a_bound_uri_is_never_fetched() {
+    let server = github(&manifest(SERVICE_URI));
+    let directory = scratch("offline");
+    let source = document(&directory);
+    let mut flags = repository(&server, &directory.join("cache"));
+    flags.push("--offline".into());
+    let offline = validate(&source, &flags);
+    assert!(!offline.status.success());
+    assert!(
+        text(&offline.stderr).contains("repository service")
+            && text(&offline.stderr).contains("--offline forbids fetching"),
+        "{}",
+        text(&offline.stderr)
+    );
+    assert!(server.requests().is_empty());
+
+    // A `--service-package` that binds the URI wins: nothing is fetched.
+    let package = directory.join("package");
+    fs::create_dir_all(&package).expect("package directory");
+    fs::write(package.join("events.json"), EVENTS).expect("events");
+    fs::write(package.join("echo.service.json"), manifest(SERVICE_URI)).expect("manifest");
+    let mut bound = repository(&server, &directory.join("cache"));
+    bound.push("--service-package".into());
+    bound.push(package.join("echo.service.json").display().to_string());
+    let validated = validate(&source, &bound);
+    assert!(
+        text(&validated.stderr).contains("from --service-package"),
+        "{}",
+        text(&validated.stderr)
+    );
+    assert!(server.requests().is_empty());
+}

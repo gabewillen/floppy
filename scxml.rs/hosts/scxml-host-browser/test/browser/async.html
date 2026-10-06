@@ -1,0 +1,112 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>scxml-host-browser async bridge e2e</title>
+<!--
+  Loaded by test/browser.test.mjs in headless Chromium twice: once
+  cross-origin isolated (COOP same-origin + COEP require-corp, the `worker`
+  mechanism) and once without isolation (the `none` fallback). An
+  `async: 'auto'` session loads a `<data src>` document and a runtime-computed
+  `<invoke srcexpr>` child through the page's asynchronous `resources.resolve`
+  (a real fetch), and reports through window.__result.
+-->
+<script type="importmap">
+  { "imports": { "@opentelemetry/api": "/node_modules/@opentelemetry/api/build/esm/index.js" } }
+</script>
+<script type="module">
+  import { CapabilityError, createCompiler, createSession } from '../../src/index.js';
+
+  const TIMER_OUTCOME_TIMEOUT_MS = 10_000;
+  const base = new URL('./', location.href).href;
+
+  async function main() {
+    const compiler = await createCompiler();
+    const compile = async (source, sourceName) => (await compiler.compile(source, { sourceName })).ir;
+    const resolved = [];
+    // Only this page's directory is allowed; `resolve` really fetches.
+    const resources = {
+      allow: (url) => url.startsWith(base),
+      async resolve(url) {
+        resolved.push(url.slice(base.length));
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('not found');
+        return response.text();
+      },
+    };
+
+    const dataIr = await compile(
+      `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+         <datamodel><data id="doc" src="${base}async-data.json"/></datamodel>
+         <state id="a">
+           <transition event="error.execution" target="denied"/>
+           <transition cond="doc.a === 1" target="loaded"/>
+         </state>
+         <final id="denied"/>
+         <final id="loaded"/>
+       </scxml>`,
+      'data.scxml',
+    );
+    const data = await createSession({ ir: dataIr, async: 'auto', dataModel: 'ecmascript', resources });
+    const dataResult = { mechanism: data.mechanism, configuration: (await data.start()).activeConfiguration };
+    await data.dispose();
+
+    // The child URL exists only at runtime: `srcexpr` over the data model.
+    const child = await (await fetch(`${base}async-child.scxml`)).text();
+    const childIr = await compile(child, 'async-child.scxml');
+    const parentIr = await compile(
+      `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="outer">
+         <datamodel><data id="base" expr="'${base}'"/><data id="name" expr="'child'"/></datamodel>
+         <state id="outer">
+           <invoke id="kid" srcexpr="base + 'async-' + name + '.scxml'"/>
+           <transition event="done.invoke.kid" cond="_event.data.answer === 42" target="pass"/>
+           <transition event="error.execution" target="failed"/>
+         </state>
+         <final id="pass"/>
+         <final id="failed"/>
+       </scxml>`,
+      'parent.scxml',
+    );
+    let onTimer;
+    const outcome = new Promise((resolve, reject) => {
+      const deadline = setTimeout(() => reject(new Error('no onTimer outcome')), TIMER_OUTCOME_TIMEOUT_MS);
+      onTimer = (delivered) => {
+        clearTimeout(deadline);
+        resolve(delivered);
+      };
+    });
+    const parent = await createSession({
+      ir: parentIr,
+      async: 'auto',
+      dataModel: 'ecmascript',
+      resources,
+      onTimer,
+      capabilities: {
+        compileInvocation: (_sourceName, source) => {
+          if (source !== child) throw new CapabilityError('invalid-input');
+          return childIr;
+        },
+      },
+    });
+    const initial = (await parent.start()).activeConfiguration;
+    let delivered;
+    let status;
+    if (initial[0] === 'outer') {
+      // The child's delayed send runs on the session's event loop; its
+      // done.invoke finishes the parent.
+      const timer = await outcome;
+      delivered = timer.results?.map((step) => step.activeConfiguration) ?? String(timer.error);
+    }
+    status = await parent.status();
+    await parent.dispose();
+    return {
+      crossOriginIsolated: globalThis.crossOriginIsolated === true,
+      data: dataResult,
+      invocation: { mechanism: parent.mechanism, initial, delivered, status },
+      resolved,
+    };
+  }
+
+  main().then(
+    (value) => { window.__result = { ok: true, value }; },
+    (error) => { window.__result = { ok: false, error: String(error?.stack ?? error) }; },
+  );
+</script>

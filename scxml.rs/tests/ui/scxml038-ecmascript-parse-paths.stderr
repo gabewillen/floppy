@@ -1,0 +1,100 @@
+warning[SCXML038]: ecmascript syntax error in `cond`: the expression ends before it is complete
+ --> tests/ui/scxml038-ecmascript-parse-paths.scxml:4:38
+  |
+4 |     <transition event="e1" cond="x ? 1" target="b"/>
+  |                                  ----- while parsing this `cond`
+  |                                      ^ syntax error
+  |
+  = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+  = help: a `?` conditional needs both branches: `test ? whenTrue : whenFalse`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+warning[SCXML038]: ecmascript syntax error in `cond`: the left side of `=` cannot be assigned to
+ --> tests/ui/scxml038-ecmascript-parse-paths.scxml:5:40
+  |
+5 |     <transition event="e2" cond="x + 1 = 2" target="b"/>
+  |                                  --------- while parsing this `cond`
+  |                                        ^ not assignable
+  |
+  = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+  = help: `=` assigns, and only a variable or a property such as `a.b` or `a[0]` can be assigned; to compare, write `===` (or `==`)
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: compare with `===`
+  |
+5 |     <transition event="e2" cond="x + 1 === 2" target="b"/>
+  |                                        ~~~
+
+warning[SCXML076]: `cond` on `<transition>` has a side effect
+ --> tests/ui/scxml038-ecmascript-parse-paths.scxml:6:40
+  |
+6 |     <transition event="e3" cond="o.a.b = 3" target="b"/>
+  |                                        ^ `=` assigns `o.a.b` instead of comparing it
+  |
+  = note: SCXML 1.0 §5.9.1: "Conditional expressions in conformant SCXML documents SHOULD NOT have side effects." (Appendix B's "This language MUST not have side effects" contradicts official IRP test 444, `cond="++var1==2"`; see docs/spec-errata.md)
+  = help: to compare, use `===` (or `==`); to change the value, move the assignment into `<assign>` in the transition
+  = spec: SCXML 1.0 Appendix B Data Models
+  = spec: SCXML 1.0 §5.9.1 Conditional Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: compare with `===`
+  |
+6 |     <transition event="e3" cond="o.a.b === 3" target="b"/>
+  |                                        ~~~
+
+warning[SCXML038]: ecmascript syntax error in `cond`: `.1` is not a property access
+ --> tests/ui/scxml038-ecmascript-parse-paths.scxml:7:35
+  |
+7 |     <transition event="e4" cond="x.1" target="b"/>
+  |                                  --- while parsing this `cond`
+  |                                   ^^ syntax error
+  |
+  = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+  = help: a property name cannot start with a digit; index with brackets: `[1]`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: index with `[1]`
+  |
+7 |     <transition event="e4" cond="x[1]" target="b"/>
+  |                                   ~~~
+
+warning[SCXML038]: ecmascript syntax error in `cond`: `let` declares a variable, which a `cond` cannot do
+ --> tests/ui/scxml038-ecmascript-parse-paths.scxml:8:34
+  |
+8 |     <transition event="e5" cond="let y = 1" target="b"/>
+  |                                  ^^^ a declaration, not an expression
+  |                                  --------- while parsing this `cond`
+  |
+  = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+  = help: a `cond` must be an expression: declare the variable with `<data id="y" expr="…"/>` in the `<datamodel>`, or set it with `<assign location="y" expr="…"/>`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+warning[SCXML038]: ecmascript syntax error in `cond`: the expression ends before it is complete
+  --> tests/ui/scxml038-ecmascript-parse-paths.scxml:10:37
+   |
+10 |     <transition event="e7" cond="x in" target="b"/>
+   |                                  ---- while parsing this `cond`
+   |                                     ^ syntax error
+   |
+   = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+   = help: add the missing operand, closing bracket, or closing quote at the end
+   = spec: SCXML 1.0 §5.9 Expressions
+   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+warning[SCXML038]: ecmascript syntax error in `cond`: unterminated string literal
+  --> tests/ui/scxml038-ecmascript-parse-paths.scxml:11:34
+   |
+11 |     <transition event="e8" cond="'unterminated" target="b"/>
+   |                                  ^ string starts here
+   |                                  ------------- while parsing this `cond`
+   |
+   = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+   = help: close the string with a matching `'`; to include a `'` inside it, escape it as `\'`
+   = spec: SCXML 1.0 §5.9 Expressions
+   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+diagnostic summary: 0 error(s), 7 warning(s), 0 note(s), 7 total
+Some diagnostics have detailed explanations: SCXML038, SCXML076.
+For more information about a diagnostic, try `scxml-cli --explain SCXML038`.
+validated tests/ui/scxml038-ecmascript-parse-paths.scxml

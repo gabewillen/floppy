@@ -1,0 +1,52 @@
+warning[SCXML038]: ecmascript syntax error in `expr`: `.0` is not a property access
+ --> tests/ui/scxml038-dot-zero-index.scxml:5:22
+  |
+5 |       <log expr="list.0"/>
+  |                  ------ while parsing this `expr`
+  |                      ^^ syntax error
+  |
+  = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+  = help: a property name cannot start with a digit; index with brackets: `[0]`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: index with `[0]`
+  |
+5 |       <log expr="list[0]"/>
+  |                      ~~~
+
+warning[SCXML038]: ecmascript syntax error in `expr`: `.0` is not a property access
+ --> tests/ui/scxml038-dot-zero-index.scxml:6:22
+  |
+6 |       <log expr="list.0.name"/>
+  |                  ----------- while parsing this `expr`
+  |                      ^^ syntax error
+  |
+  = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+  = help: a property name cannot start with a digit; index with brackets: `[0]`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: index with `[0]`
+  |
+6 |       <log expr="list[0].name"/>
+  |                      ~~~
+
+warning[SCXML039]: `location` is not an assignable ecmascript location: `.0` is not a property access
+ --> tests/ui/scxml038-dot-zero-index.scxml:7:29
+  |
+7 |       <assign location="list.0" expr="1"/>
+  |                         ------ while parsing this `location`
+  |                             ^^ not a location
+  |
+  = note: a location expression must name a place in the data model that can be assigned, such as a variable name or a property access like `a.b` or `a[0]`
+  = help: a property name cannot start with a digit; index with brackets: `[0]`
+  = spec: SCXML 1.0 §5.9.2 Location Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: index with `[0]`
+  |
+7 |       <assign location="list[0]" expr="1"/>
+  |                             ~~~
+
+diagnostic summary: 0 error(s), 3 warning(s), 0 note(s), 3 total
+Some diagnostics have detailed explanations: SCXML038, SCXML039.
+For more information about a diagnostic, try `scxml-cli --explain SCXML038`.
+validated tests/ui/scxml038-dot-zero-index.scxml

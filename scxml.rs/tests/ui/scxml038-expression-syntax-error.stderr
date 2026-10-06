@@ -1,0 +1,15 @@
+warning[SCXML038]: ecmascript syntax error in `cond`: the expression ends before it is complete
+ --> tests/ui/scxml038-expression-syntax-error.scxml:6:42
+  |
+6 |     <transition event="go" cond="count >= " target="b"/>
+  |                                  --------- while parsing this `cond`
+  |                                          ^ syntax error
+  |
+  = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+  = help: add the missing operand, closing bracket, or closing quote at the end
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
+validated tests/ui/scxml038-expression-syntax-error.scxml

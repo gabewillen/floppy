@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An invoked child with autoforward: "ping" and "stop" are forwarded to
+     the child's mailbox, the child answers "hello" to #_parent, and its
+     completion reaches the parent as done.invoke.kid (SCXML 6.4).
+     Checkpoints: 0 after start, 1-2 after the two events (the child's
+     mailbox holds the forwarded events), 3 at the drain iteration that
+     delivers "ping" to the child, 4 at the one that routes and delivers
+     "hello" (the child's outbound holds it), 5 at the one that delivers
+     "stop" (the root autoforwards the routed "hello" back, so it queues
+     for the child too), 6 at the one that routes and delivers
+     done.invoke.kid (the child is finished and still listed), and 7 at the
+     end (root finished). Checkpoints 1-6 fall inside the Wasmtime drain,
+     so their snapshot ops are Wasmtime-only ("hosts": "wasmtime"). -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="child-autoforward" initial="s">
+  <datamodel>
+    <data id="greetings" expr="0"/>
+  </datamodel>
+  <state id="s">
+    <invoke id="kid" type="http://www.w3.org/TR/scxml/" src="child-autoforward.child.scxml" autoforward="true"/>
+    <transition event="hello">
+      <assign location="greetings" expr="greetings + 1"/>
+    </transition>
+    <transition event="done.invoke.kid" target="end"/>
+  </state>
+  <final id="end"/>
+</scxml>

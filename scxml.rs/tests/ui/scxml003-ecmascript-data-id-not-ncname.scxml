@@ -1,0 +1,13 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel>
+    <data id="1st" expr="0"/>
+    <data id="max tries" expr="3"/>
+    <data id="$price" expr="10"/>
+  </datamodel>
+  <state id="a">
+    <transition event="buy" cond="$price &gt; 5" target="b">
+      <log label="first" expr="1st"/>
+    </transition>
+  </state>
+  <final id="b"/>
+</scxml>

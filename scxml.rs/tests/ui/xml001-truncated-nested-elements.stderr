@@ -1,0 +1,21 @@
+error[XML001]: the document ends before `<state>`, `<scxml>` are closed
+ --> tests/ui/xml001-truncated-nested-elements.scxml:6:44
+  |
+5 |   <state id="running">
+  |    ----- `<state>` opens here and is never closed
+6 |     <transition event="stop" target="idle"/>
+  |                                            ^ the document ends here
+  |
+  = note: SCXML documents must be well-formed XML 1.0 with namespaces; no later validation runs until parsing succeeds
+  = help: add `</state></scxml>` at the end of the document; if the document was cut off, restore the missing content first
+  = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
+help: add `</state></scxml>` at the end of the document
+  |
+6 |     <transition event="stop" target="idle"/>
+7 | </state>
+  | ++++++++
+8 | </scxml>
+  | ++++++++
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

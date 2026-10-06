@@ -1,0 +1,18 @@
+error[SCXML055]: `<raise>` inside `<finalize>` raises an event, which `<finalize>` must not do
+ --> tests/ui/scxml055-raise-in-finalize.scxml:8:77
+  |
+8 |     <invoke type="http://www.w3.org/TR/scxml/" src="child.scxml"><finalize><raise event="x"/></finalize></invoke>
+  |                                                                   --------  ^^^^^ `<raise>` is not allowed here
+  |                                                                   |
+  |                                                                   inside this `<finalize>` of an `<invoke>`
+  |
+  = note: `<finalize>` runs while an event returned by the invoked service is being processed, before transitions are selected, to update the data model from `_event`; SCXML forbids it to raise events or invoke external actions, naming `<send>` and `<raise>` explicitly
+  = help: keep only data-model updates (`<assign>`, `<log>`, `<if>`, `<foreach>`) in `<finalize>`; to react to the returned event, move the `<raise>` into a `<transition>` that matches it
+  = spec: SCXML 1.0 §6.5 <finalize>
+help: remove the `<raise>` element
+  |
+8 -     <invoke type="http://www.w3.org/TR/scxml/" src="child.scxml"><finalize><raise event="x"/></finalize></invoke>
+8 +     <invoke type="http://www.w3.org/TR/scxml/" src="child.scxml"><finalize></finalize></invoke>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML055`.

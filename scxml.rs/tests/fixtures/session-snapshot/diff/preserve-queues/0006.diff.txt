@@ -1,0 +1,22 @@
+snapshot diff: 0004.snapshot.json → 0006.snapshot.json
+
+session root
+  --> status: unchanged
+   = data model:
+       ~ greetings: 0 -> 1
+   = queues:
+       - external: 1 consumed
+   = invocations:
+       ~ kid: http://www.w3.org/TR/scxml/ at s[0] autoforward -> http://www.w3.org/TR/scxml/ at s[0] autoforward finished
+
+session root/kid
+  --> status: running -> finished
+   = configuration:
+       - c
+       + fin
+   = queues:
+       - external: 1 consumed
+       + external: `hello` (external) invokeid kid origin #_scxml_session.1 origintype http://www.w3.org/TR/scxml/#SCXMLEventProcessor data undefined
+   = transitions:
+       - c[0]
+       - c[1]

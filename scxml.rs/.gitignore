@@ -1,0 +1,13 @@
+/target/
+**/*.wasm
+node_modules/
+*.log
+# Local --env-file values (never commit secrets).
+.env
+.DS_Store
+
+# Local editor and agent tool state.
+.claude/
+.pi/
+.commandcode/
+handoff.md

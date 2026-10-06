@@ -1,0 +1,12 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel>
+    <data id="x" expr="0"/>
+    <data id="y" expr="true"/>
+    <data id="ready" expr="false"/>
+  </datamodel>
+  <state id="a">
+    <transition event="go" cond="x &gt; 1 or x &lt; 0 and y" target="b"/>
+    <transition event="wait" cond="x == 1 and not ready" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

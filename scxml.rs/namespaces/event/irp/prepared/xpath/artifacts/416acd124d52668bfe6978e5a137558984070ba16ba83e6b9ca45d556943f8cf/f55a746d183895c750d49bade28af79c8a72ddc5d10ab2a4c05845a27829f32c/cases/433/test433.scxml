@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- event-4: a path outside the document's directory is rejected. The document must be rejected; it never runs. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" initial="s0" version="1.0" datamodel="xpath">
+<state id="s0">
+  <onentry>
+    <raise event="x" event:schema="../schemas/order.json"/>
+  </onentry>
+  <transition target="pass"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

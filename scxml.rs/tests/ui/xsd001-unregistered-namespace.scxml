@@ -1,0 +1,7 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+       xmlns:acme="urn:example:acme"
+       initial="a">
+  <final id="a">
+    <onentry><acme:beep volume="3"/></onentry>
+  </final>
+</scxml>

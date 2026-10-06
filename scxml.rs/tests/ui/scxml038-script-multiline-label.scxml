@@ -1,0 +1,10 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <final id="a">
+    <onentry>
+      <script><![CDATA[
+        var q = 1;
+        if (q < 2) { q = q +* 3; }
+      ]]></script>
+    </onentry>
+  </final>
+</scxml>

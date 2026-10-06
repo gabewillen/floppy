@@ -1,0 +1,25 @@
+[package]
+name = "scxml-event-schema"
+description = "Compile-time resolution of the `event` attribute vocabulary's JSON Schemas"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Metaschema and reference checks only. boon has no features; its URL loader
+# is replaced by one that refuses every URL, so nothing is ever retrieved.
+boon.workspace = true
+scxml-types.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+[lints]
+workspace = true

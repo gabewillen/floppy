@@ -1,0 +1,12 @@
+{
+  "format": "stateforward.scxml.service-package/v1",
+  "service-uri": "https://stateforward.org/scxml/services/echo",
+  "package-version": "0.2.0",
+  "service-artifact": "scxml_service_example.virtualized.wasm",
+  "schema-artifact": null,
+  "schema-sha256": null,
+  "wit-world": "stateforward:scxml/invoked-service",
+  "wit-version": "0.2.0",
+  "http-origins": [],
+  "env-slots": ["endpoint"]
+}

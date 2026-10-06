@@ -1,0 +1,4 @@
+<?ui-args --schema urn:example:custom=tests/ui/schemas/ambiguous.xsd?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" xmlns:c="urn:example:custom" initial="a">
+  <final id="a"><onentry><c:mark><c:a/></c:mark></onentry></final>
+</scxml>

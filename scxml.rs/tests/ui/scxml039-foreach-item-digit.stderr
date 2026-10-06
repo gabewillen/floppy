@@ -1,0 +1,18 @@
+warning[SCXML039]: `<foreach item>` must be a variable name, but `1bad` starts with a digit
+ --> tests/ui/scxml039-foreach-item-digit.scxml:4:41
+  |
+4 |     <onentry><foreach array="arr" item="1bad" index="i"><log expr="i"/></foreach></onentry>
+  |                                         ^^^^ not a variable name
+  |
+  = note: `<foreach>` assigns each array element (`item`) and its position (`index`) to a variable with this name, creating it when it is not declared; the name must be a legal identifier of the `ecmascript` data model
+  = help: use a name that starts with a letter or `$` and contains only ASCII letters, digits, `_`, and `$` (the ECMAScript data model reserves names that start with `_` for system variables)
+  = spec: SCXML 1.0 §4.6 <foreach>
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: prefix the name with `item`: `item1bad`
+  |
+4 |     <onentry><foreach array="arr" item="item1bad" index="i"><log expr="i"/></foreach></onentry>
+  |                                         ~~~~~~~~
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML039`.
+validated tests/ui/scxml039-foreach-item-digit.scxml

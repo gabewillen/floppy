@@ -1,0 +1,15 @@
+error[SCXML021]: shallow history target `g` is not an immediate child
+ --> tests/ui/scxml021-shallow-history-deep-target.scxml:4:27
+  |
+4 |       <transition target="g"/>
+  |                           ^ target is outside the permitted subtree
+...
+7 |       <state id="g">
+  |                  - target declared here
+  |
+  = note: shallow history records only the parent's immediate children, so its default must be one of them; deep history records descendants, so its default must lie inside the history's parent
+  = help: target an immediate child of the history parent, or use `type="deep"` for a deeper descendant
+  = spec: SCXML 1.0 §3.10 <history>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML021`.

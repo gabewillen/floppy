@@ -1,0 +1,15 @@
+error[XML001]: text outside the root element
+ --> tests/ui/xml001-trailing-prose.scxml:4:1
+  |
+4 | Here is your SCXML document! Let me know if you need changes.
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ only whitespace, comments, and processing instructions may appear outside the root element
+  |
+  = note: an SCXML file contains exactly one XML document: an optional `<?xml …?>` declaration, then the single root element; any other text before or after it is not well formed
+  = help: remove the text outside the root element, or turn it into an XML comment `<!-- … -->`
+  = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
+help: remove the text outside the root element
+  |
+4 - Here is your SCXML document! Let me know if you need changes.
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

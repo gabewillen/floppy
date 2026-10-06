@@ -1,0 +1,26 @@
+[package]
+name = "scxml-engine"
+description = "Deterministic SCXML execution kernel with an explicit effect boundary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+scxml-compiler-core.workspace = true
+scxml-telemetry.workspace = true
+scxml-types.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+scxml-syntax.workspace = true

@@ -1,0 +1,12 @@
+error[SCXML003]: identifier `…` is not an XML NCName
+ --> tests/ui/scxml003-ecmascript-data-id-placeholder.scxml:3:15
+  |
+3 |     <data id="…" expr="1"/>
+  |               ^ invalid NCName
+  |
+  = note: SCXML IDs are XML IDs: they must start with a letter or `_` and contain only NCName characters (no spaces or colons), so references can be tokenized unambiguously. An `id` is `xsd:ID`, whose white space collapses (XML Schema 1.1 Part 2 §4.3.6), so leading and trailing white space is not part of it: `id=" s "` declares `s`
+  = help: a `<data id>` is both an XML ID and an ECMAScript variable name: use ASCII letters, digits, and `_`, starting with a letter
+  = spec: SCXML 1.0 §3.14 IDs
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML003`.

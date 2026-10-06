@@ -1,0 +1,30 @@
+[package]
+name = "scxml-ioprocessor-basichttp"
+description = "SCXML BasicHTTP Event I/O Processor Wasm component behind an explicit HTTP transport capability"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+scxml-telemetry.workspace = true
+scxml-types.workspace = true
+scxml-xpath.workspace = true
+serde_json.workspace = true
+wit-bindgen.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+scxml-ioprocessor-scxml.workspace = true
+
+[lints]
+workspace = true

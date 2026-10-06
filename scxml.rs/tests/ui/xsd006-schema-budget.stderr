@@ -1,0 +1,12 @@
+error[XSD006]: XSD content-model expansion limit exceeded (maximum 1000000)
+ --> tests/ui/xsd006-schema-budget.scxml:2:2
+  |
+2 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" xmlns:c="urn:example:custom" initial="a">
+  |  ^^^^^
+  |
+  = note: schema size, content-model expansion, compilation, and validation work are preflighted so hostile schemas cannot exhaust the validator. Content-model expansion and compilation work grow faster than the schema, so they are bounded on every build; schema count, size, and instance validation work are bounded on wasm builds only (the shipped validator component)
+  = help: reduce large `maxOccurs` values, nested repetition, or schema size
+  = spec: XML Schema 1.0 Part 1 §3.9 Particles
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XSD006`.

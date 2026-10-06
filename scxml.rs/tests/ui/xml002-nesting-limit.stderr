@@ -1,0 +1,11 @@
+error[XML002]: XML element depth limit exceeded (maximum 256)
+   --> tests/ui/xml002-nesting-limit.scxml:257:1
+    |
+257 | <state id="s255">
+    | ^ resource budget exceeded here
+    |
+    = note: the validator bounds nesting depth and entity expansion on every build, and source size, parser events, nodes, and attributes on wasm builds only, so hostile input cannot exhaust resources; the limits are listed in docs/validator-rules.md
+    = help: split the machine into smaller documents (for example with `<invoke>`), reduce nesting, or validate with larger explicitly configured limits
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML002`.

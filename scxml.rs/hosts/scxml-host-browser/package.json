@@ -1,0 +1,47 @@
+{
+  "name": "@stateforward/scxml-host-browser",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Thin browser host for the SCXML generic machine component: runtime-IR sessions over jco-transpiled Wasm components.",
+  "type": "module",
+  "license": "Apache-2.0 OR MIT",
+  "homepage": "https://github.com/stateforward/scxml.rs/tree/main/hosts/scxml-host-browser#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stateforward/scxml.rs.git",
+    "directory": "hosts/scxml-host-browser"
+  },
+  "bugs": {
+    "url": "https://github.com/stateforward/scxml.rs/issues"
+  },
+  "engines": {
+    "node": ">=24.11.1"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "dist",
+    "LICENSE-APACHE",
+    "LICENSE-MIT"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs --artifacts ../../target/wasm-artifacts/release --meter ../../target/release/scxml-wasm-meter",
+    "prepack": "node scripts/copy-licenses.mjs",
+    "test": "node --test test/smoke.test.mjs test/contract.test.mjs test/capabilities.test.mjs test/resources.test.mjs test/basichttp.test.mjs test/irp-parity.test.mjs test/snapshot.test.mjs test/snapshot-parity.test.mjs test/async-bridge.test.mjs",
+    "test:browser": "node --test test/browser.test.mjs",
+    "typecheck": "tsc --noEmit --strict --target es2022 --module nodenext --lib es2022,dom,esnext.disposable src/index.d.ts"
+  },
+  "devDependencies": {
+    "@bytecodealliance/jco-transpile": "0.14.0",
+    "playwright-core": "1.62.0",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.1"
+  }
+}

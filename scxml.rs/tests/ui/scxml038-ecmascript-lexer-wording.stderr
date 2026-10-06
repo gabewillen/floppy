@@ -1,0 +1,159 @@
+warning[SCXML038]: ecmascript syntax error in `expr`: `#` does not start a comment or a heading in an ECMAScript expression
+ --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:5:18
+  |
+5 |       <log expr="# Retry loop"/>
+  |                  ^ not valid ECMAScript here
+  |                  ------------ while parsing this `expr`
+  |
+  = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+  = help: text in an expression must be a quoted string literal: write `'# Retry loop'`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: quote the text as a string literal
+  |
+5 |       <log expr="'# Retry loop'"/>
+  |                  ~~~~~~~~~~~~~~
+
+warning[SCXML038]: ecmascript syntax error in `expr`: `@` is not an ECMAScript operator or name character
+ --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:6:20
+  |
+6 |       <log expr="x @ y"/>
+  |                  ----- while parsing this `expr`
+  |                    ^ unexpected character
+  |
+  = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+  = help: text in an expression must be a quoted string literal: write `'x @ y'`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: quote the text as a string literal
+  |
+6 |       <log expr="'x @ y'"/>
+  |                  ~~~~~~~
+
+warning[SCXML038]: ecmascript syntax error in `expr`: `…` can appear only inside a string literal in ECMAScript
+ --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:7:26
+  |
+7 |       <log expr="Starting…"/>
+  |                  --------- while parsing this `expr`
+  |                          ^ unexpected character
+  |
+  = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+  = help: text in an expression must be a quoted string literal: write `'Starting…'`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: quote the text as a string literal
+  |
+7 |       <log expr="'Starting…'"/>
+  |                  ~~~~~~~~~~~
+
+warning[SCXML038]: ecmascript syntax error in `expr`: `😀` can appear only inside a string literal in ECMAScript
+ --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:8:18
+  |
+8 |       <log expr="😀 hi"/>
+  |                  ^^ unexpected character
+  |                  ----- while parsing this `expr`
+  |
+  = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+  = help: text in an expression must be a quoted string literal: write `'😀 hi'`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: quote the text as a string literal
+  |
+8 |       <log expr="'😀 hi'"/>
+  |                  ~~~~~~~
+
+warning[SCXML038]: ecmascript syntax error in `expr`: unexpected `:` after a complete expression
+ --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:9:23
+  |
+9 |       <log expr="Error: failed"/>
+  |                  ------------- while parsing this `expr`
+  |                       ^ syntax error
+  |
+  = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+  = help: text in an expression must be a quoted string literal: write `'Error: failed'`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: quote the text as a string literal
+  |
+9 |       <log expr="'Error: failed'"/>
+  |                  ~~~~~~~~~~~~~~~
+
+warning[SCXML038]: ecmascript syntax error in `expr`: unterminated string literal
+  --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:10:20
+   |
+10 |       <log expr="it's done"/>
+   |                  --------- while parsing this `expr`
+   |                    ^ string starts here
+   |
+   = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+   = help: close the string with a matching `'`; to include a `'` inside it, escape it as `\'`; if the whole value is text, quote all of it: write `"it's done"`
+   = spec: SCXML 1.0 §5.9 Expressions
+   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: quote the text as a string literal
+   |
+10 |       <log expr="&quot;it's done&quot;"/>
+   |                  ~~~~~~~~~~~~~~~~~~~~~
+
+warning[SCXML038]: ecmascript syntax error in `expr`: `#secret` is a private class member name, which only code inside its class can use
+  --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:11:20
+   |
+11 |       <log expr="x.#secret"/>
+   |                  --------- while parsing this `expr`
+   |                    ^^^^^^^ private name
+   |
+   = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+   = help: use a public property name: `.secret`
+   = spec: SCXML 1.0 §5.9 Expressions
+   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: use the public property `secret`
+   |
+11 -       <log expr="x.#secret"/>
+11 +       <log expr="x.secret"/>
+
+warning[SCXML038]: ecmascript syntax error in `expr`: the value is only a comment, not an expression
+  --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:12:18
+   |
+12 |       <log expr="// counts attempts"/>
+   |                  ^^ a comment, not a value
+   |                  ------------------ while parsing this `expr`
+   |
+   = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+   = help: an `expr` must produce a value: write the expression, or move the comment into a `<script>` or an XML comment `<!-- … -->`
+   = spec: SCXML 1.0 §5.9 Expressions
+   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+warning[SCXML038]: ecmascript syntax error in `expr`: unterminated template literal
+  --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:13:18
+   |
+13 |       <log expr="`total"/>
+   |                  ^ string starts here
+   |                  ------ while parsing this `expr`
+   |
+   = note: an expression that cannot be parsed raises `error.execution` whenever it is evaluated
+   = help: close the template literal with a matching backtick; to include a backtick inside it, escape it with `\`
+   = spec: SCXML 1.0 §5.9 Expressions
+   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+warning[SCXML038]: ecmascript syntax error in `<script>`: `#` does not start a comment in ECMAScript
+  --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:15:9
+   |
+14 |         <script>
+   |  _______________-
+15 | |         # Update the counter
+   | |         ^ not a comment
+16 | |         x = x + 1;
+17 | |       </script>
+   | |______- while parsing this `<script>`
+   |
+   = note: a script that cannot be parsed raises `error.execution` and aborts the rest of its executable-content block
+   = help: write the comment with `//` (a Markdown heading does not belong in a script)
+   = spec: SCXML 1.0 §5.9 Expressions
+   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: start the comment with `//`
+   |
+15 |         // Update the counter
+   |         ~~
+
+diagnostic summary: 0 error(s), 10 warning(s), 0 note(s), 10 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
+validated tests/ui/scxml038-ecmascript-lexer-wording.scxml

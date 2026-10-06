@@ -1,0 +1,1 @@
+{"options":{"exclude":["data_model","previews","queues"],"trace_context":"preserve"},"ops":[{"op":"start"},{"op":"send","event":"go"},{"op":"snapshot","checkpoint":1},{"op":"advance","ms":100},{"op":"snapshot","checkpoint":3}]}

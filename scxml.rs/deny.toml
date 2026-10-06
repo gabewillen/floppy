@@ -1,0 +1,86 @@
+[advisories]
+yanked = "deny"
+
+[licenses]
+confidence-threshold = 0.93
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "MIT",
+  "Unicode-3.0",
+  "Zlib",
+]
+# Accepted license exceptions. Each one is scoped to exactly one crate so no
+# other crate can declare the reference, and each records the owner,
+# rationale, evidence, expiry, and removal plan that AGENTS.md requires.
+#
+# scxml-validator-xsd / LicenseRef-W3C-SCXML-Schema
+#   Owner: the repository maintainers (the owners of the versioning policy in
+#     crates/scxml-wit/src/lib.rs).
+#   Rationale: the crate compiles in the vendored official W3C SCXML 1.0
+#     schema modules so default validation needs no network or caller-supplied
+#     schema; their W3C permission notice has no SPDX id.
+#   Evidence: the notice and per-file SHA-256 digests in
+#     crates/scxml-validator-xsd/schemas/w3c-scxml-1.0/NOTICE.md; the
+#     include_bytes!/include_str! sites in
+#     crates/scxml-validator-xsd/src/bundled.rs; the crate's license field in
+#     crates/scxml-validator-xsd/Cargo.toml; the README "License" section.
+#   Expiry: re-reviewed before every release, and void as soon as the crate
+#     no longer embeds W3C schema bytes or the notice gains an SPDX id.
+#   Removal plan: when the schema set is no longer compiled in (or gains an
+#     SPDX id), drop the LicenseRef from the crate's license field and delete
+#     this entry in the same change.
+#
+# scxml-conformance / LicenseRef-W3C-Test-Suite
+#   Owner: the repository maintainers.
+#   Rationale: the manual-equivalent oracles quote the W3C IRP manual
+#     instructions verbatim, and the crate and its tests embed upstream IRP
+#     files; the W3C test-suite terms have no SPDX id.
+#   Evidence: the terms in tests/conformance/w3c-irp/LICENSE.md; the quoted
+#     instructions in crates/scxml-conformance/src/manual_oracle.rs and the
+#     include_bytes! of the upstream test513.txt in
+#     crates/scxml-conformance/src/external_client.rs; the crate's license
+#     field in crates/scxml-conformance/Cargo.toml; the README "License"
+#     section.
+#   Expiry: re-reviewed before every release, and void as soon as the crate
+#     no longer embeds W3C IRP text or the terms gain an SPDX id.
+#   Removal plan: when no W3C IRP text is compiled into the crate (or the
+#     terms gain an SPDX id), drop the LicenseRef from the crate's license
+#     field and delete this entry in the same change.
+#
+# borrow-or-share / MIT-0
+#   Owner: the repository maintainers.
+#   Rationale: `boon` (through `fluent-uri`) and the test-only `jsonschema`
+#     (through `referencing` and `fluent-uri`) use borrow-or-share, which is
+#     licensed MIT-0 (MIT without the attribution condition, OSI-approved
+#     and strictly more permissive than MIT). The validator and compiler
+#     link `boon` through `scxml-event-schema` for the `event` vocabulary's
+#     metaschema checks.
+#   Evidence: borrow-or-share 0.2.4's Cargo.toml `license = "MIT-0"`; the
+#     dependency paths boon -> fluent-uri -> borrow-or-share and
+#     jsonschema -> referencing -> fluent-uri -> borrow-or-share in
+#     Cargo.lock.
+#   Expiry: re-reviewed before every release, and void as soon as no crate
+#     in the graph depends on borrow-or-share.
+#   Removal plan: when neither `boon` nor `jsonschema` pulls in
+#     borrow-or-share, delete this entry in the same change.
+exceptions = [
+  { crate = "scxml-validator-xsd", allow = ["LicenseRef-W3C-SCXML-Schema"] },
+  { crate = "scxml-conformance", allow = ["LicenseRef-W3C-Test-Suite"] },
+  { crate = "borrow-or-share", allow = ["MIT-0"] },
+]
+
+[bans]
+multiple-versions = "warn"
+# Registry dependencies must carry explicit version requirements. Internal
+# workspace path dependencies carry no version; that is accepted only because
+# every workspace member inherits `publish = false`.
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

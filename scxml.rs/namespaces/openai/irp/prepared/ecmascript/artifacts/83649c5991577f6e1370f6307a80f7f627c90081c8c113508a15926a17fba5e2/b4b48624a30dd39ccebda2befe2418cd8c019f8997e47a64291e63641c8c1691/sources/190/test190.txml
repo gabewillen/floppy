@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!-- openai-10: tool names follow the descriptors in order. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env">
+<datamodel>
+  <data conf:id="1"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <openai:generate env:apikey="IRP_OPENAI_KEY" model="irp-echo-tools" prompt="t" conf:location="1"/>
+  </onentry>
+  <transition conf:idQuoteVal="1=send_answer_yes,send_answer_no,send_foo,send_bar,send_a-b,send_a_b_c" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+  <transition event="answer.yes answer.no" target="x"/>
+  <transition event="foo.* bar." target="x"/>
+  <transition event="*" target="x"/>
+  <transition event="answer.yes" target="x"/>
+  <transition event="a-b" target="x"/>
+  <transition event="a.b.c" target="x"/>
+  <transition event="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" target="x"/>
+</state>
+<state id="x"/>
+<conf:pass/>
+<conf:fail/>
+</scxml>

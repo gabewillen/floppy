@@ -1,0 +1,16 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel>
+    <data id="retry-count" expr="0"/>
+    <data id="class" expr="'gold'"/>
+    <data id="max.tries" expr="3"/>
+    <data id="_total" expr="0"/>
+  </datamodel>
+  <state id="a">
+    <transition event="fail" cond="retry-count &lt; 3" target="a">
+      <assign location="retry-count" expr="retry-count + 1"/>
+      <log label="retry" expr="'attempt ' + retry-count"/>
+    </transition>
+    <transition event="fail" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

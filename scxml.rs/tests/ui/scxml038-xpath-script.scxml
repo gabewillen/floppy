@@ -1,0 +1,12 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" initial="a">
+  <datamodel>
+    <data id="count" expr="0"/>
+    <data id="done" expr="false()"/>
+    <data id="user"><name xmlns="">bob</name></data>
+  </datamodel>
+  <state id="a">
+    <onentry><script>count = count + 1;</script></onentry>
+    <transition event="go" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

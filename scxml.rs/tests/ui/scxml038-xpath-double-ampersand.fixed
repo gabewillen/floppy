@@ -1,0 +1,11 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" initial="a">
+  <datamodel>
+    <data id="count" expr="0"/>
+    <data id="done" expr="false()"/>
+    <data id="user"><name xmlns="">bob</name></data>
+  </datamodel>
+  <state id="a">
+    <transition event="go" cond="$count &gt; 1 and $done" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

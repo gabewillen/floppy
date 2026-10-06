@@ -1,0 +1,7 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
+  <parallel id="p" final>
+    <state id="r1"><transition event="done" target="end"/></state>
+    <state id="r2"/>
+  </parallel>
+  <final id="end"/>
+</scxml>

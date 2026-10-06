@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!DOCTYPE scxml [
+  <!ENTITY secret SYSTEM "file:///etc/passwd">
+]>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel>
+    <data id="copy">&secret;</data>
+  </datamodel>
+  <final id="a"/>
+</scxml>

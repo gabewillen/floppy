@@ -1,0 +1,9 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="items" expr="[3, 1, 2]"/></datamodel>
+  <script>function sortedFirst(list) { var copy = list.slice(); copy.sort(); return copy[0]; }</script>
+  <state id="a">
+    <onentry><log label="first" expr="sortedFirst(items)"/></onentry>
+    <transition event="go" cond="sortedFirst(items) === 1 &amp;&amp; In('a')" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

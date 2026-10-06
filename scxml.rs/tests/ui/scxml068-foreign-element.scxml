@@ -1,0 +1,8 @@
+<?ui-args --schema urn:example:ext=tests/ui/schemas/extension.xsd?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" xmlns:x="urn:example:ext" initial="a">
+  <state id="a">
+    <x:note>reviewed</x:note>
+    <transition event="go" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

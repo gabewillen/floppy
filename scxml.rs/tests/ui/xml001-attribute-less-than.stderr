@@ -1,0 +1,16 @@
+error[XML001]: unescaped `<` in the value of attribute `cond`
+ --> tests/ui/xml001-attribute-less-than.scxml:3:48
+  |
+3 |   <state id="a"><transition event="go" cond="x < 3" target="f"/></state><final id="f"/>
+  |                                                ^ a literal `<` is not allowed in an attribute value
+  |
+  = note: the parser cannot tell a literal `<` from the start of a tag, so XML forbids it in attribute values; `>` needs no escaping
+  = help: escape `<` as `&lt;` (for example `cond="x &lt; 3"`)
+  = spec: XML 1.0 (Fifth Edition) §3.1 Start-Tags (WFC: No < in Attribute Values)
+help: escape `<` as `&lt;`
+  |
+3 |   <state id="a"><transition event="go" cond="x &lt; 3" target="f"/></state><final id="f"/>
+  |                                                ~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

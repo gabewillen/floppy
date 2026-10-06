@@ -1,0 +1,26 @@
+error[SCXML013]: event descriptors are whitespace-separated, not comma-separated
+ --> tests/ui/scxml013-comma-separated-events.scxml:3:24
+  |
+3 |     <transition event="go, stop" target="b"/>
+  |                        ^^^^^^^^ comma in event descriptor list
+  |
+  = note: `event` is a whitespace-separated list of descriptors (`a`, `a.b`, `a.*`, `*`); commas and other punctuation never match
+  = help: replace commas with spaces; each descriptor is matched independently
+  = spec: SCXML 1.0 §3.12.1 Event Descriptors
+help: replace commas with spaces
+  |
+3 |     <transition event="go stop" target="b"/>
+  |                        ~~~~~~~
+
+error[SCXML013]: event descriptor `bad!event` contains an invalid character
+ --> tests/ui/scxml013-comma-separated-events.scxml:4:24
+  |
+4 |     <transition event="bad!event" target="b"/>
+  |                        ^^^^^^^^^ invalid event descriptor
+  |
+  = note: `event` is a whitespace-separated list of descriptors (`a`, `a.b`, `a.*`, `*`); commas and other punctuation never match
+  = help: use XML name-style event descriptors containing letters, digits, `_`, `-`, `:`, and `.`; `*` and `.*` are wildcard descriptors
+  = spec: SCXML 1.0 §3.12.1 Event Descriptors
+
+diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
+For more information about this error, try `scxml-cli --explain SCXML013`.

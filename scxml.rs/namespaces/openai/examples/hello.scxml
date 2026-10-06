@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The openai namespace end to end: generate one reply into `reply`, log it,
+  and finish in `answered`; any failure (no key, a refused or unreachable
+  service, a non-2xx answer, a malformed result) raises error.execution and
+  finishes in `failed`. See namespaces/openai/README.md for the command.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       version="1.0" datamodel="ecmascript" initial="ask">
+  <datamodel>
+    <data id="model" expr="'gpt-4o-mini'"/>
+    <data id="reply" expr="''"/>
+  </datamodel>
+  <state id="ask">
+    <onentry>
+      <openai:generate env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL" modelexpr="model" location="reply" max-output-tokens="64">
+        <openai:prompt>Answer in at most five words.</openai:prompt>
+        <openai:prompt>Say hello to a state machine.</openai:prompt>
+      </openai:generate>
+      <log label="reply" expr="reply"/>
+    </onentry>
+    <transition cond="reply.length > 0" target="answered"/>
+    <transition event="error.execution" target="failed"/>
+  </state>
+  <final id="answered"/>
+  <final id="failed"/>
+</scxml>

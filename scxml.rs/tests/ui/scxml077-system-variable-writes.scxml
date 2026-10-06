@@ -1,0 +1,13 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="d" expr="0"/></datamodel>
+  <script>function keep(_event) { _event = 1; return _event; }</script>
+  <state id="a">
+    <onentry>
+      <script>delete _event; _name += '!';</script>
+      <script>Reflect.deleteProperty(globalThis, '_event'); delete globalThis._ioprocessors;</script>
+      <assign location="d" expr="_sessionid = 'mine'"/>
+    </onentry>
+    <transition event="go" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

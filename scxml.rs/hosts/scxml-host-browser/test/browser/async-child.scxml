@@ -1,0 +1,8 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="c">
+  <datamodel><data id="answer" expr="42"/></datamodel>
+  <state id="c">
+    <onentry><send event="later" delay="20ms"/></onentry>
+    <transition event="later" target="end"/>
+  </state>
+  <final id="end"><donedata><param name="answer" expr="answer"/></donedata></final>
+</scxml>

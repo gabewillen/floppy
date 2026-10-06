@@ -1,0 +1,9 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <state id="a">
+    <onentry>
+      <send event="tick" target="#_internal" delay="1s"/>
+    </onentry>
+    <transition event="tick" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

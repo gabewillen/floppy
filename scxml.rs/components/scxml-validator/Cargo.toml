@@ -1,0 +1,28 @@
+[package]
+name = "scxml-validator"
+description = "Wasm guest exporting SCXML validation with supplied XSD resources"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+scxml-event-schema.workspace = true
+scxml-reporting.workspace = true
+scxml-syntax.workspace = true
+scxml-telemetry.workspace = true
+scxml-validator-core.workspace = true
+scxml-validator-xsd.workspace = true
+wit-bindgen.workspace = true
+
+[lints]
+workspace = true

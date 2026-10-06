@@ -1,0 +1,79 @@
+[package]
+name = "scxml-host-wasmtime"
+description = "Optional heavy Wasmtime Component Model host for SCXML components"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+wasmtime = [
+    "dep:rayon",
+    "dep:scxml-event-schema",
+    "dep:scxml-scheduler",
+    "dep:scxml-script",
+    "dep:scxml-snapshot",
+    "dep:scxml-types",
+    "dep:sha2",
+    "dep:url",
+    "dep:wasmtime",
+    "dep:wasmtime-wasi",
+]
+# The BasicHTTP network of live sessions (SCXML C.2): an allowlisted
+# outbound HTTP client and the built-in inbound listener. Batch runs and the
+# IRP conformance path never use it.
+http = [
+    "wasmtime",
+    "dep:httparse",
+    "dep:rustls",
+    "dep:ureq",
+]
+
+[dependencies]
+httparse = { workspace = true, optional = true }
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+rayon = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+# Package-declared event contracts of invoked services: compiled once per
+# binding, checked at the service's emit and send boundaries.
+scxml-event-schema = { workspace = true, optional = true }
+scxml-scheduler = { workspace = true, optional = true }
+scxml-script = { workspace = true, optional = true }
+scxml-snapshot = { workspace = true, optional = true }
+scxml-telemetry.workspace = true
+scxml-types = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+ureq = { workspace = true, optional = true }
+url = { workspace = true, optional = true }
+wasmtime = { workspace = true, optional = true }
+wasmtime-wasi = { workspace = true, optional = true }
+
+[dev-dependencies]
+jsonschema.workspace = true
+opentelemetry_sdk = { workspace = true, features = ["testing"] }
+rayon.workspace = true
+scxml-compiler-core.workspace = true
+scxml-data-model-ecmascript.workspace = true
+scxml-data-model-xpath.workspace = true
+scxml-engine.workspace = true
+scxml-ioprocessor-basichttp.workspace = true
+scxml-packager.workspace = true
+scxml-reporting.workspace = true
+scxml-script.workspace = true
+scxml-syntax.workspace = true
+scxml-types.workspace = true
+scxml-validator-core.workspace = true
+scxml-validator-xsd.workspace = true
+serde_json.workspace = true
+wasm-encoder.workspace = true
+
+[lints]
+workspace = true

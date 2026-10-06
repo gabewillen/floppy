@@ -1,0 +1,60 @@
+name: Bug report
+description: Something behaves differently from SCXML 1.0, the docs, or a previous commit.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report security vulnerabilities here; follow [SECURITY.md](https://github.com/stateforward/scxml.rs/security/policy).
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: The commit you tested (`git rev-parse HEAD`).
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - scxml-cli
+        - Wasmtime host (scxml-host-wasmtime)
+        - Browser host (scxml-host-browser)
+        - Validator diagnostics
+        - Compiler or Machine IR
+        - Data model component
+        - I/O processor component
+        - Extension component or package
+        - Conformance pipeline
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: The smallest SCXML document, events, command line, or code that shows the problem.
+      render: xml
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Output, diagnostics, or final configuration, verbatim.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should happen, citing the SCXML 1.0 section or W3C IRP case when one applies.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS and architecture, `rustc --version`, and for the browser host the Node.js or browser version.

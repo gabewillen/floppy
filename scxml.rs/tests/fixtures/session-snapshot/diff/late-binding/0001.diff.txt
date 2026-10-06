@@ -1,0 +1,14 @@
+snapshot diff: 0000.snapshot.json → 0001.snapshot.json
+
+session root
+  --> status: unchanged
+   = configuration:
+       - a
+       + b
+   = bound states:
+       + b
+   = data model:
+       ~ y: undefined -> 2
+   = transitions:
+       - a[0]
+       + b[0]

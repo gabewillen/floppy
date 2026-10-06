@@ -1,0 +1,29 @@
+[package]
+name = "scxml-wit"
+description = "Canonical WIT contracts and lightweight component metadata for SCXML"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+scxml-compiler-core.workspace = true
+scxml-conformance.workspace = true
+scxml-data-model-null = { path = "../../components/scxml-data-model-null" }
+scxml-data-model-xpath.workspace = true
+scxml-packager.workspace = true
+scxml-reporting.workspace = true
+scxml-script.workspace = true
+scxml-snapshot.workspace = true
+scxml-types.workspace = true
+scxml-validator-core.workspace = true
+wit-parser.workspace = true
+
+[lints]
+workspace = true

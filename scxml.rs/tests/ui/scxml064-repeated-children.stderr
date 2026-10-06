@@ -1,0 +1,79 @@
+error[SCXML064]: `<state>` has 2 `<initial>` children, but allows at most one
+ --> tests/ui/scxml064-repeated-children.scxml:4:6
+  |
+3 |     <initial><transition target="a1"/></initial>
+  |      ------- first `<initial>`
+4 |     <initial><transition target="a2"/></initial>
+  |      ^^^^^^^ second `<initial>`
+  |
+  = note: a `<state>` has at most one `<initial>`: it is the one default entry transition of the state
+  = help: keep one `<initial>`; to enter several parallel descendants, list them all as targets of its one `<transition>`
+  = spec: SCXML 1.0 §3.3 <state>
+help: remove the second `<initial>`
+  |
+4 -     <initial><transition target="a2"/></initial>
+
+error[SCXML064]: `<send>` has 2 `<content>` children, but allows at most one
+ --> tests/ui/scxml064-repeated-children.scxml:8:10
+  |
+7 |         <content>first</content>
+  |          ------- first `<content>`
+8 |         <content>second</content>
+  |          ^^^^^^^ second `<content>`
+  |
+  = note: `<send>` carries at most one `<content>`: it is the whole event payload, so a second one has no meaning
+  = help: keep the one `<content>` that is the payload; to send several values, use `<param>` children or one structured `<content>`
+  = spec: SCXML 1.0 §6.2 <send>
+help: remove the second `<content>`
+  |
+8 -         <content>second</content>
+
+error[SCXML064]: `<invoke>` has 2 `<content>` children, but allows at most one
+  --> tests/ui/scxml064-repeated-children.scxml:13:8
+   |
+12 |       <content expr="'child.scxml'"/>
+   |        ------- first `<content>`
+13 |       <content expr="'other.scxml'"/>
+   |        ^^^^^^^ second `<content>`
+   |
+   = note: `<invoke>` takes at most one inline `<content>`: it is the one document the invoked service runs
+   = help: keep the one `<content>` that is the service's document
+   = spec: SCXML 1.0 §6.4 <invoke>
+help: remove the second `<content>`
+   |
+13 -       <content expr="'other.scxml'"/>
+
+error[SCXML064]: `<invoke>` has 2 `<finalize>` children, but allows at most one
+  --> tests/ui/scxml064-repeated-children.scxml:15:8
+   |
+14 |       <finalize><log expr="'one'"/></finalize>
+   |        -------- first `<finalize>`
+15 |       <finalize><log expr="'two'"/></finalize>
+   |        ^^^^^^^^ second `<finalize>`
+   |
+   = note: `<invoke>` takes at most one `<finalize>`: it is the one block that processes each event the invoked service returns
+   = help: merge the executable content into one `<finalize>`
+   = spec: SCXML 1.0 §6.4 <invoke>
+help: remove the second `<finalize>`
+   |
+15 -       <finalize><log expr="'two'"/></finalize>
+
+warning[SCXML029]: state `a2` can never become active
+  --> tests/ui/scxml064-repeated-children.scxml:18:16
+   |
+ 3 |     <initial><transition target="a1"/></initial>
+   |      ------- `a` enters its `<initial>` target by default
+ 4 |     <initial><transition target="a2"/></initial>
+   |                                  -- targeted here, but `a` ignores this `<initial>`, so it never runs
+...
+18 |     <state id="a2"><transition event="go" target="done"/></state>
+   |                ^^ unreachable from the initial configuration
+   |
+   = note: reachability assumes every event can arrive and every `cond` can be true; no reachable transition, `initial`, or history default enters this state or any of its descendants
+   = help: target `a2` from a transition of a reachable state, make it the initial state of `a`, or remove it
+   = spec: SCXML 1.0 §3.11 Legal State Configurations and Specifications
+   = spec: SCXML 1.0 §3.13 Selecting and Executing Transitions
+
+diagnostic summary: 4 error(s), 1 warning(s), 0 note(s), 5 total
+Some diagnostics have detailed explanations: SCXML029, SCXML064.
+For more information about a diagnostic, try `scxml-cli --explain SCXML029`.

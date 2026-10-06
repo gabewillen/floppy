@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Representative machine for the generated-component proof: compound states,
+  a parallel state with two regions, deep history, an internal raise, and
+  ECMAScript conditions and log expressions (including In()). The Wasmtime
+  host tests run it as a packaged component-wasm and through runtime
+  ir-source mode, and require both to reproduce the pinned trace fixture.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="work" name="representative">
+  <state id="work" initial="idle">
+    <onentry><log label="enter" expr="'work'"/></onentry>
+    <history id="resume" type="deep"><transition target="idle"/></history>
+    <state id="idle">
+      <transition event="begin" target="busy"/>
+    </state>
+    <parallel id="busy">
+      <onentry><log label="enter" expr="'busy:' + (In('idle') ? 'stale' : 'fresh')"/></onentry>
+      <state id="left" initial="l1">
+        <state id="l1"><transition event="step" target="l2"/></state>
+        <state id="l2"><onentry><log label="left" expr="'l' + (1 + 1)"/></onentry></state>
+      </state>
+      <state id="right" initial="r1">
+        <state id="r1"><transition event="step" cond="In('l1')" target="r2"/></state>
+        <state id="r2"><onentry><raise event="settled"/></onentry></state>
+      </state>
+      <transition event="settled" cond="In('l2') &amp;&amp; In('r2')">
+        <log label="settled" expr="'both regions advanced'"/>
+      </transition>
+    </parallel>
+    <transition event="pause" target="paused"/>
+    <transition event="finish" target="done"/>
+  </state>
+  <state id="paused">
+    <onentry><log label="paused" expr="'history recorded'"/></onentry>
+    <transition event="resume" target="resume"/>
+  </state>
+  <final id="done">
+    <onentry><log label="done" expr="String(true)"/></onentry>
+  </final>
+</scxml>

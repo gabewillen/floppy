@@ -1,0 +1,19 @@
+warning[SCXML038]: ecmascript syntax error in `<script>`: unexpected `*` where an operand was expected
+ --> tests/ui/scxml038-script-multiline-label.scxml:6:29
+  |
+4 |         <script><![CDATA[
+  |  _______________-
+5 | |         var q = 1;
+6 | |         if (q < 2) { q = q +* 3; }
+  | |                             ^ syntax error
+7 | |       ]]></script>
+  | |_________- while parsing this `<script>`
+  |
+  = note: a script that cannot be parsed raises `error.execution` and aborts the rest of its executable-content block
+  = help: fix the ecmascript syntax at the marked position: `*` cannot appear there
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
+validated tests/ui/scxml038-script-multiline-label.scxml

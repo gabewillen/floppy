@@ -1,0 +1,19 @@
+error[SCXML005]: transition target `bb` does not exist
+ --> tests/ui/scxml005-typo-suppresses-unreachable-cascade.scxml:3:34
+  |
+3 |         <transition event="go" target="bb"/>
+  |                                        ^^ unknown target identifier
+4 |     </state>
+5 |     <final id="b"/>
+  |                - similarly named state
+  |
+  = note: a transition's `target` must be one or more IDs of states in the same SCXML document; an unresolved target makes the document non-conformant
+  = help: did you mean `b`?
+  = spec: SCXML 1.0 §3.5 <transition>
+help: a state with a similar name exists: `b`
+  |
+3 |         <transition event="go" target="b"/>
+  |                                        ~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML005`.

@@ -1,0 +1,18 @@
+error[XML001]: mismatched end tag: expected `</transition>`, found `</state>`
+ --> tests/ui/xml001-mismatched-end-tag.scxml:4:5
+  |
+3 |     <transition event="go" target="b">
+  |      ---------- unclosed `<transition>` starts here
+4 |   </state>
+  |     ^^^^^ `</state>` closes an outer element while `<transition>` is still open
+  |
+  = note: SCXML documents must be well-formed XML 1.0 with namespaces; no later validation runs until parsing succeeds
+  = help: `<transition>` has no content, so end its start tag with `/>`
+  = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
+help: self-close `<transition>`
+  |
+3 |     <transition event="go" target="b"/>
+  |                                      ~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

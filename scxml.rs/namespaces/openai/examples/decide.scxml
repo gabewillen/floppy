@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The openai namespace in function-calling mode: `<openai:generate>` has no
+  `location`, so the model must answer by calling one of the send functions
+  derived from the events `ask` accepts (send_answer_yes, send_answer_no,
+  send_error_execution). The system message is the session's pruned
+  read-only snapshot. The chosen event is sent exactly as `<send>` sends
+  it and moves the machine to `yes` or `no`; any failure (no key, a refused
+  or unreachable service, no or an undeclared function call) raises
+  error.execution and finishes in `failed`. See namespaces/openai/README.md
+  for the command.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       version="1.0" datamodel="ecmascript" initial="ask">
+  <datamodel>
+    <data id="model" expr="'gpt-4o-mini'"/>
+  </datamodel>
+  <state id="ask">
+    <onentry>
+      <openai:generate env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL" modelexpr="model">
+        <openai:prompt>Is the sky blue on a clear day? Answer by sending the matching event.</openai:prompt>
+      </openai:generate>
+    </onentry>
+    <transition event="answer.yes" target="yes"/>
+    <transition event="answer.no" target="no"/>
+    <transition event="error.execution" target="failed"/>
+  </state>
+  <final id="yes"/>
+  <final id="no"/>
+  <final id="failed"/>
+</scxml>

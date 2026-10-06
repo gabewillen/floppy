@@ -1,0 +1,10 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
+  <datamodel>
+    <data id="_" expr="1"/>
+    <data id="x" expr="1"/>
+  </datamodel>
+  <state id="s">
+    <transition event="e" cond="_ &gt; 0" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

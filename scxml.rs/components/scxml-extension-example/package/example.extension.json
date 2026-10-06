@@ -1,0 +1,12 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://stateforward.org/scxml/example",
+  "package-version": "0.2.0",
+  "extension-artifact": "scxml_extension_example.virtualized.wasm",
+  "schema-artifact": "example.xsd",
+  "schema-sha256": "9b00f091f1c2ccd4610e389d5a9dbdf07624f0193bb2ba82b15ccce16af70e62",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0",
+  "http-origins": [],
+  "env-slots": ["url", "token"]
+}

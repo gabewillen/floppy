@@ -1,0 +1,25 @@
+error[XML001]: chat text and Markdown fences around the SCXML document
+  --> tests/ui/xml001-chat-prose-with-scxml-tag.scxml:1:1
+   |
+ 1 | Here is the <scxml> state machine you asked for:
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ not part of the XML document
+...
+ 4 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+   |  ----- the SCXML document starts here
+...
+ 8 | ```
+   | --- also outside the document
+   |
+   = note: an SCXML file contains exactly one XML document; the `<scxml>` in the surrounding text is prose, but the parser reads it as the root element, so the real document is nested inside it and never closed
+   = help: save only the XML document: remove everything before `<scxml xmlns="http://www.w3.org/2005/07/scxml" …>` and after its `</scxml>`
+   = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
+help: keep only the SCXML document
+   |
+ 1 - Here is the <scxml> state machine you asked for:
+ 2 - 
+ 3 - ```xml
+...
+ 8 - ```
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

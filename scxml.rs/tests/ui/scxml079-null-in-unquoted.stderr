@@ -1,0 +1,37 @@
+warning[SCXML079]: `In(r2)` passes `r2` unquoted, but the null data model takes the state ID as a quoted string
+ --> tests/ui/scxml079-null-in-unquoted.scxml:3:52
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="p">
+  |                                                                         ---- the null data model is selected here
+2 |   <parallel id="p">
+3 |     <state id="r1"><transition event="go" cond="In(r2)" target="done"/></state>
+  |                                                    ^^ not a quoted string
+  |
+  = note: the null data model's only condition is `In('stateID')` with the state ID in single or double quotes; it rejects any other condition, `In(stateID)` without quotes included, so evaluating it raises `error.execution` and the condition is false
+  = help: quote the state ID: `In('r2')`
+  = spec: SCXML 1.0 §B.1 The Null Data Model
+help: quote the state ID `'r2'`
+  |
+3 |     <state id="r1"><transition event="go" cond="In('r2')" target="done"/></state>
+  |                                                    ~~~~
+
+warning[SCXML079]: `In(r3)` passes `r3` unquoted, but the null data model takes the state ID as a quoted string
+ --> tests/ui/scxml079-null-in-unquoted.scxml:4:52
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="p">
+  |                                                                         ---- the null data model is selected here
+...
+4 |     <state id="r2"><transition event="go" cond="In(r3)" target="done"/></state>
+  |                                                    ^^ not a quoted string
+  |
+  = note: the null data model's only condition is `In('stateID')` with the state ID in single or double quotes; it rejects any other condition, `In(stateID)` without quotes included, so evaluating it raises `error.execution` and the condition is false
+  = help: `r3` is not a state of this machine; did you mean `In('r1')`?
+  = spec: SCXML 1.0 §B.1 The Null Data Model
+help: use the quoted state ID `'r1'`
+  |
+4 |     <state id="r2"><transition event="go" cond="In('r1')" target="done"/></state>
+  |                                                    ~~~~
+
+diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML079`.
+validated tests/ui/scxml079-null-in-unquoted.scxml

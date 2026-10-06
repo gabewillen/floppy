@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- openai-10: a session that accepts no event offers no tool. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0" initial="s0" version="1.0" datamodel="xpath">
+<datamodel>
+  <data id="Var1"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <openai:generate env:apikey="IRP_OPENAI_KEY" model="irp-echo-tools" prompt="t" location="$Var1"/>
+  </onentry>
+  <transition cond="$Var1='none'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

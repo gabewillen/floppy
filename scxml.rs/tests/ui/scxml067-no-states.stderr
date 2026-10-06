@@ -1,0 +1,12 @@
+error[SCXML067]: `<scxml>` has no states
+ --> tests/ui/scxml067-no-states.scxml:1:2
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript">
+  |  ^^^^^ a machine needs at least one state
+  |
+  = note: a machine starts by entering its initial state, so without a `<state>`, `<parallel>`, or `<final>` child there is nothing to run
+  = help: add the machine's states, for example `<final id="done"/>`
+  = spec: SCXML 1.0 §3.2 <scxml>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML067`.

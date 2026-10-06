@@ -1,0 +1,13 @@
+snapshot diff: 0003.snapshot.json → 0006.snapshot.json
+ = clock: 0ms -> 50ms
+ = skipped: system, pending_sends, transitions, invocations
+
+session root
+  --> status: running -> finished
+   = configuration:
+       - s
+       + end
+   = data model:
+       ~ greetings: 0 -> 1
+   = queues:
+       - external: 1 consumed

@@ -1,0 +1,10 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" initial="a">
+  <datamodel><data id="list"><item xmlns="">1</item><item xmlns="">2</item></data></datamodel>
+  <state id="a">
+    <onentry>
+      <assign location="$list/item[0]" expr="5"/>
+    </onentry>
+    <transition event="go" cond="$list/item[0] = 1" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

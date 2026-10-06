@@ -1,0 +1,12 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <state id="a">
+    <onentry>
+      <script>{ let _event = 1; _event = 2; }</script>
+      <script>try { throw 1; } catch (_event) { _event = 3; }</script>
+      <script>for (let _x = 0; _x &lt; 2; _x++) {}</script>
+      <script>function f(_name) { _name = 1; return _name; }</script>
+    </onentry>
+    <transition event="go" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

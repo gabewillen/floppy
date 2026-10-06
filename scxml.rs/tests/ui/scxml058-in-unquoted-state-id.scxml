@@ -1,0 +1,11 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel>
+    <data id="count" expr="0"/>
+    <data id="done" expr="false"/>
+    <data id="user" expr="({name:'bob'})"/>
+  </datamodel>
+  <state id="a">
+    <transition event="go" cond="In(b)" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

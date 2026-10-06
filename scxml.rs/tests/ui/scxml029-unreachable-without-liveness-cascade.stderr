@@ -1,0 +1,18 @@
+warning[SCXML029]: state `island` can never become active
+ --> tests/ui/scxml029-unreachable-without-liveness-cascade.scxml:3:14
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+  |                                                                       - the <scxml> root enters `a` by default
+2 |   <state id="a"><transition event="go" target="done"/></state>
+3 |   <state id="island">
+  |              ^^^^^^ unreachable from the initial configuration
+  |
+  = note: its descendant state is unreachable as well and is not reported separately
+  = note: reachability assumes every event can arrive and every `cond` can be true; no reachable transition, `initial`, or history default enters this state or any of its descendants
+  = help: target `island` from a transition of a reachable state, make it the initial state of the <scxml> root, or remove it
+  = spec: SCXML 1.0 §3.11 Legal State Configurations and Specifications
+  = spec: SCXML 1.0 §3.13 Selecting and Executing Transitions
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML029`.
+validated tests/ui/scxml029-unreachable-without-liveness-cascade.scxml

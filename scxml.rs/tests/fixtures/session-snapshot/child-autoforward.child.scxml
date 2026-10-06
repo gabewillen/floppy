@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The child of child-autoforward.scxml (no ops file: not a fixture of
+     its own). -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="child" initial="c">
+  <datamodel>
+    <data id="pings" expr="0"/>
+  </datamodel>
+  <state id="c">
+    <transition event="ping">
+      <assign location="pings" expr="pings + 1"/>
+      <send target="#_parent" event="hello"/>
+    </transition>
+    <transition event="stop" target="fin"/>
+  </state>
+  <final id="fin"/>
+</scxml>

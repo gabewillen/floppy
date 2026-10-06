@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A deep history value recorded on exit and restored on re-entry (SCXML
+     3.10), under the null data model. Checkpoints: 0 after start, 1-3 after
+     the three events, 4 at the only drain iteration (no deadline), 5 at the
+     end. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" name="history" initial="main">
+  <state id="main" initial="a">
+    <history id="h" type="deep">
+      <transition target="a"/>
+    </history>
+    <state id="a">
+      <transition event="next" target="b"/>
+    </state>
+    <state id="b" initial="b1">
+      <state id="b1"/>
+    </state>
+    <transition event="pause" target="paused"/>
+  </state>
+  <state id="paused">
+    <transition event="resume" target="h"/>
+  </state>
+</scxml>

@@ -1,0 +1,19 @@
+error[SCXML005]: transition target `runing` does not exist
+ --> tests/ui/scxml005-unknown-target.scxml:3:39
+  |
+3 |     <transition event="start" target="runing"/>
+  |                                       ^^^^^^ unknown target identifier
+4 |   </state>
+5 |   <state id="running">
+  |              ------- similarly named state
+  |
+  = note: a transition's `target` must be one or more IDs of states in the same SCXML document; an unresolved target makes the document non-conformant
+  = help: did you mean `running`?
+  = spec: SCXML 1.0 §3.5 <transition>
+help: a state with a similar name exists: `running`
+  |
+3 |     <transition event="start" target="running"/>
+  |                                       ~~~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML005`.

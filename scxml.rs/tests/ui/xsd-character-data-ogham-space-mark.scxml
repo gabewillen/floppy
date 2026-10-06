@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="s">
+  <state id="s">
+    <onentry>&#x1680;</onentry>
+    <transition event="go" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

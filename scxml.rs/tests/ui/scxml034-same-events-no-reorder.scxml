@@ -1,0 +1,13 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idle">
+  <state id="idle">
+    <transition event="start" target="running"/>
+    <transition event="start" target="failed"/>
+    <transition event="error" target="failed"/>
+  </state>
+  <state id="running">
+    <transition target="done"/>
+    <transition target="running"/>
+  </state>
+  <final id="failed"/>
+  <final id="done"/>
+</scxml>

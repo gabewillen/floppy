@@ -1,0 +1,8 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <final id="a">
+    <donedata>
+      <param name="both" expr="1" location="x"/>
+      <param name="neither"/>
+    </donedata>
+  </final>
+</scxml>

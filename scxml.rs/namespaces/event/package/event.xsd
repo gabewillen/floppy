@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML Schema of the host's `event` attribute vocabulary (namespaces/event).
+
+  The namespace has no elements: it is an attribute vocabulary only, never
+  fetched, with no component and no release asset. `<transition>`, `<send>`,
+  `<raise>`, and `<donedata>` describe the event data they handle or create
+  with
+
+    event:schema="JSON-OR-REFERENCE"   a JSON Schema: inline JSON (first
+                                       non-white-space character `{`, or
+                                       exactly `true` or `false`), or a path
+                                       relative to the document with an
+                                       optional JSON Pointer fragment
+    event:schemaexpr="EXPR"            an expression in the document's data
+                                       model whose value is the schema
+
+  at most one of the two per element. The attributes are metadata only: they
+  never change how a document executes. The W3C SCXML schema admits them
+  (its `##other` attribute wildcards, processed laxly), and the validator
+  checks them (SCXML085-SCXML092). This file documents the vocabulary for
+  readers and tools that resolve a namespace to a schema; the validator does
+  not load it.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://github.com/stateforward/scxml.rs/namespaces/event"
+           elementFormDefault="qualified">
+  <!--
+    `event:schema`: a JSON Schema (JSON Schema 2020-12 by default; 2019-09
+    and draft-07 by `$schema`), inline or by reference. JSON, URI
+    references, and JSON Pointers are not XSD datatypes, so the value is a
+    string; the validator parses and checks it.
+  -->
+  <xs:attribute name="schema" type="xs:string"/>
+  <!--
+    `event:schemaexpr`: a value expression in the document's data model
+    whose value is the schema.
+  -->
+  <xs:attribute name="schemaexpr" type="xs:string"/>
+</xs:schema>

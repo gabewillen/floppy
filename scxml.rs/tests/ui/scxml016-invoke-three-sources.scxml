@@ -1,0 +1,7 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="ecmascript">
+  <state id="a">
+    <invoke type="scxml" src="child.scxml" srcexpr="'child.scxml'"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"><final id="f"/></scxml></content></invoke>
+    <transition event="done.invoke" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

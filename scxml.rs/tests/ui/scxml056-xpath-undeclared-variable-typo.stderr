@@ -1,0 +1,19 @@
+warning[SCXML056]: `$cuont` is not a declared XPath variable
+ --> tests/ui/scxml056-xpath-undeclared-variable-typo.scxml:8:34
+  |
+8 |     <transition event="go" cond="$cuont &gt; 3" target="b"/>
+  |                                  ^^^^^^ undeclared variable
+  |                                  ------------- in this `cond`
+  |
+  = note: an XPath variable exists only for a declared `<data id>` (and `<foreach item/index>` or `idlocation` names once they run) or a system variable; evaluating an undeclared one raises `error.execution`
+  = help: did you mean `$count`?
+  = spec: SCXML 1.0 §5.10 System Variables
+  = spec: SCXML CR 2014 §C.3.1 Data Model
+help: use the declared variable `$count`
+  |
+8 |     <transition event="go" cond="$count &gt; 3" target="b"/>
+  |                                   ~~~~~
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML056`.
+validated tests/ui/scxml056-xpath-undeclared-variable-typo.scxml

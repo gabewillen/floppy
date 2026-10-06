@@ -1,0 +1,18 @@
+error[SCXML001]: `http://www.w3.org/2005/07/scxml/` is not the SCXML namespace
+ --> tests/ui/scxml001-near-miss-namespace.scxml:1:15
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml/" version="1.0" initial="a">
+  |  -----        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ near miss of the SCXML namespace URI
+  |  |
+  |  so this root is not the W3C SCXML root
+  |
+  = note: SCXML processors identify documents by the exact expanded name {http://www.w3.org/2005/07/scxml}scxml; a missing, misspelled, or slash-terminated namespace is a different vocabulary
+  = help: the SCXML namespace is exactly `http://www.w3.org/2005/07/scxml`
+  = spec: SCXML 1.0 §3.2 <scxml>
+help: use the exact SCXML namespace URI
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+  |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML001`.

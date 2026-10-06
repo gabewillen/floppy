@@ -1,0 +1,11 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
+  <datamodel>
+    <data id="x" expr="1" src="file:x.json">
+      <value/>
+    </data>
+  </datamodel>
+  <state id="s">
+    <transition event="go" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

@@ -1,0 +1,18 @@
+warning[SCXML056]: `$retries-1` is one undeclared variable named `retries-1`, not `$retries` minus `1`
+ --> tests/ui/scxml056-xpath-hyphen-subtraction.scxml:5:41
+  |
+5 |       <assign location="$retries" expr="$retries-1"/>
+  |                                         ^^^^^^^^^^ undeclared variable
+  |
+  = note: an XPath variable exists only for a declared `<data id>` (and `<foreach item/index>` or `idlocation` names once they run) or a system variable; evaluating an undeclared one raises `error.execution`
+  = help: `-` is part of an XPath name, so `$retries-1` is one variable; put spaces around `-` to subtract: `$retries - 1`
+  = spec: SCXML 1.0 §5.10 System Variables
+  = spec: SCXML CR 2014 §C.3.1 Data Model
+help: subtract with `$retries - 1`
+  |
+5 |       <assign location="$retries" expr="$retries - 1"/>
+  |                                         ~~~~~~~~~~~~
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML056`.
+validated tests/ui/scxml056-xpath-hyphen-subtraction.scxml

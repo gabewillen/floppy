@@ -1,0 +1,17 @@
+error[SCXML032]: `<donedata>` is only allowed in `<final>`, not in `<state>`
+ --> tests/ui/scxml032-donedata-outside-final.scxml:3:6
+  |
+2 |   <state id="s">
+  |    ----- parent declared here
+3 |     <donedata/>
+  |      ^^^^^^^^ donedata outside a final state
+  |
+  = note: <donedata> supplies the payload of the done.state event raised when a <final> state is entered; nothing reads it anywhere else
+  = help: move this `<donedata>` into the `<final>` state whose completion should carry the data, or remove it
+  = spec: SCXML 1.0 §5.5 <donedata>
+help: remove this `<donedata>`
+  |
+3 -     <donedata/>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML032`.

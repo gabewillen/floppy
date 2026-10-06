@@ -1,0 +1,8 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="code" expr="'1'"/></datamodel>
+  <state id="a">
+    <transition event="go" cond="isReady()" target="f"/>
+    <transition event="eval" cond="eval(code)" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

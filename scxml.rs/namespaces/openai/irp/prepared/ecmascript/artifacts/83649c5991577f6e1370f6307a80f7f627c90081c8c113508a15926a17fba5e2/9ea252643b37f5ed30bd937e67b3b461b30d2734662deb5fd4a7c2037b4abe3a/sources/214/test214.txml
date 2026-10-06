@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- openai-12: target #_internal places the event on the internal queue. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env">
+<state id="s0">
+  <onentry>
+    <send event="external"/>
+    <openai:generate env:apikey="IRP_OPENAI_KEY" model="irp-call-first-internal" prompt="c"/>
+  </onentry>
+  <transition event="internal" target="s1"/>
+  <transition event="external" conf:targetfail=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<state id="s1">
+  <transition event="external" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

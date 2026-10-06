@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ex="urn:example:ignored" version="1.0" datamodel="xpath" initial="idle" name="orders">
+  <datamodel>
+    <data id="order"><order xmlns="" id="o-1"><item sku="A" qty="2"/><item sku="B" qty="1"/><total>30</total></order></data>
+    <data id="retries" expr="0"/>
+    <data id="maxRetries" expr="3"/>
+    <data id="lastError" expr="''"/>
+    <data id="log"/>
+  </datamodel>
+  <state id="idle">
+    <transition event="order.submit" target="validating">
+      <assign location="$order" expr="$_event/data/order"/>
+    </transition>
+  </state>
+  <state id="validating">
+    <onentry>
+      <if cond="count($order/order/item) = 0">
+        <raise event="order.invalid"/>
+      <elseif cond="number($order/order/total) &lt;= 0"/>
+        <raise event="order.invalid"/>
+      <else/>
+        <raise event="order.valid"/>
+      </if>
+    </onentry>
+    <transition event="order.valid" target="processing"/>
+    <transition event="order.invalid" target="rejected"/>
+  </state>
+  <state id="processing" initial="charging">
+    <onexit><log label="processing" expr="concat('leaving with retries=', $retries)"/></onexit>
+    <state id="charging">
+      <onentry>
+        <send event="payment.request" target="#_internal">
+          <param name="amount" expr="$order/order/total"/>
+        </send>
+        <send id="payTimeout" event="payment.timeout" delay="5s"/>
+      </onentry>
+      <onexit><cancel sendid="payTimeout"/></onexit>
+      <transition event="payment.ok" target="shipping"/>
+      <transition event="payment.failed payment.timeout" cond="$retries &lt; $maxRetries" target="charging">
+        <assign location="$retries" expr="$retries + 1"/>
+        <assign location="$lastError" expr="string($_event/name)"/>
+      </transition>
+      <transition event="payment.failed payment.timeout" target="failed" cond="false()"/>
+      <transition event="payment.*" target="failed"/>
+    </state>
+    <state id="shipping">
+      <onentry>
+        <foreach array="$order/order/item" item="it" index="idx">
+          <log label="ship" expr="concat($it/@sku, ' x', $it/@qty)"/>
+        </foreach>
+      </onentry>
+      <transition event="shipment.done" target="done"/>
+    </state>
+    <history id="hist" type="deep"><transition target="charging"/></history>
+    <transition event="pause" target="paused"/>
+  </state>
+  <state id="paused">
+    <transition event="resume" target="hist"/>
+    <transition event="cancel" cond="In('paused')" target="rejected"/>
+  </state>
+  <state id="failed"><transition event="retry" target="processing"/></state>
+  <final id="rejected"/>
+  <final id="done">
+    <donedata><param name="orderId" expr="string($order/order/@id)"/></donedata>
+  </final>
+</scxml>

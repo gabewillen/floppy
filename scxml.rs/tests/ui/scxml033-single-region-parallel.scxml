@@ -1,0 +1,8 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
+  <parallel id="p">
+    <state id="only">
+      <transition event="go" target="f"/>
+    </state>
+  </parallel>
+  <final id="f"/>
+</scxml>

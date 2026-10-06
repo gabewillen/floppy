@@ -1,0 +1,14 @@
+error[SCXML011]: state cannot use both the `initial` attribute and an `initial` child
+ --> tests/ui/scxml011-duplicate-initial-forms.scxml:2:17
+  |
+2 |   <state id="p" initial="c">
+  |                 ^^^^^^^^^^^ duplicate initial configuration
+3 |     <initial>
+  |      ------- conflicting initial child
+  |
+  = note: a compound state has exactly one default entry description; two forms conflict
+  = help: keep exactly one form of initial configuration
+  = spec: SCXML 1.0 §3.3 <state>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML011`.

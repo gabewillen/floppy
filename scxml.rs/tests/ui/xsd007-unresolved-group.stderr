@@ -1,0 +1,12 @@
+error[XSD007]: XSD model-group reference does not name a group defined in the supplied schema set
+ --> tests/ui/xsd007-unresolved-group.scxml:2:2
+  |
+2 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" xmlns:c="urn:example:custom" initial="a">
+  |  ^^^^^
+  |
+  = note: the preflight must expand every `xs:group ref` to bound work; undefined or circular groups cannot be expanded soundly
+  = help: define the referenced group in the supplied schema set and remove circular group references
+  = spec: XML Schema 1.0 Part 1 §3.7 Model Group Definitions
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XSD007`.

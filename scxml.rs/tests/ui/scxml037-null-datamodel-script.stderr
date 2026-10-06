@@ -1,0 +1,22 @@
+error[SCXML037]: the null data model does not support `<script>`
+ --> tests/ui/scxml037-null-datamodel-script.scxml:4:8
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="a">
+  |                                                                         ---- the null data model is selected here
+...
+4 |       <script>counter = 1</script>
+  |        ^^^^^^ not supported in the null data model
+  |
+  = note: SCXML 1.0 §B.1.7: the `<foreach>` element and the elements of section 5 (`<datamodel>`, `<data>`, `<assign>`, `<donedata>`, `<content>`, `<param>`, `<script>`) are not supported in the null data model
+  = help: remove the `<script>`, or select a data model that supports it, such as `datamodel="ecmascript"`
+  = spec: SCXML 1.0 §B.1 The Null Data Model
+help: remove the `<script>` element
+  |
+4 -       <script>counter = 1</script>
+help: select the ECMAScript data model
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  |                                                                         ~~~~~~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML037`.

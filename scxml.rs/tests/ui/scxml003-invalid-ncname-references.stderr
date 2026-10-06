@@ -1,0 +1,45 @@
+error[SCXML006]: initial state `1st` does not exist
+ --> tests/ui/scxml003-invalid-ncname-references.scxml:1:71
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="1st state">
+  |                                                                       ^^^ one piece of the reference `1st state`
+2 |   <state id="1st state"><transition event="go" target="done"/></state>
+  |              --------- declared here as a single ID containing whitespace
+  |
+  = note: ID references are whitespace-separated lists, so `1st state` is read as separate IDs; the root cause is the invalid ID declaration (SCXML003)
+  = help: rename the declaration to a valid NCName and update this reference; the SCXML003 suggestion does both
+  = spec: SCXML 1.0 §3.14 IDs
+
+error[SCXML006]: initial state `state` does not exist
+ --> tests/ui/scxml003-invalid-ncname-references.scxml:1:75
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="1st state">
+  |                                                                           ^^^^^ one piece of the reference `1st state`
+2 |   <state id="1st state"><transition event="go" target="done"/></state>
+  |              --------- declared here as a single ID containing whitespace
+  |
+  = note: ID references are whitespace-separated lists, so `1st state` is read as separate IDs; the root cause is the invalid ID declaration (SCXML003)
+  = help: rename the declaration to a valid NCName and update this reference; the SCXML003 suggestion does both
+  = spec: SCXML 1.0 §3.14 IDs
+
+error[SCXML003]: identifier `1st state` is not an XML NCName
+ --> tests/ui/scxml003-invalid-ncname-references.scxml:2:14
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="1st state">
+  |                                                                       --------- referenced here
+2 |   <state id="1st state"><transition event="go" target="done"/></state>
+  |              ^^^^^^^^^ invalid NCName
+  |
+  = note: SCXML IDs are XML IDs: they must start with a letter or `_` and contain only NCName characters (no spaces or colons), so references can be tokenized unambiguously. An `id` is `xsd:ID`, whose white space collapses (XML Schema 1.1 Part 2 §4.3.6), so leading and trailing white space is not part of it: `id=" s "` declares `s`
+  = help: start with a letter or underscore and use only NCName characters; colons are not allowed
+  = spec: SCXML 1.0 §3.14 IDs
+help: rename to the valid NCName `_1st_state` and update its reference
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="_1st_state">
+  |                                                                       ~~~~~~~~~~
+2 |   <state id="_1st_state"><transition event="go" target="done"/></state>
+  |              ~~~~~~~~~~
+
+diagnostic summary: 3 error(s), 0 warning(s), 0 note(s), 3 total
+Some diagnostics have detailed explanations: SCXML003, SCXML006.
+For more information about a diagnostic, try `scxml-cli --explain SCXML003`.

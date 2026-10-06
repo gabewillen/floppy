@@ -1,0 +1,24 @@
+error[SCXML031]: final state cannot contain `<transition>`
+ --> tests/ui/scxml031-final-with-children.scxml:3:6
+  |
+2 |   <final id="f">
+  |    ----- final state declared here
+3 |     <transition event="go" target="f"/>
+  |      ^^^^^^^^^^ `<transition>` is not allowed in `<final>`
+  |
+  = note: a <final> state is atomic and completes its parent when entered; it may contain only <onentry>, <onexit>, and <donedata>
+  = help: change `<final>` to `<state>` if it must react or contain children, or move this element to a non-final state
+  = spec: SCXML 1.0 §3.7 <final>
+help: change `<final>` to `<state>`
+  |
+2 |   <state id="f">
+  |    ~~~~~
+3 |     <transition event="go" target="f"/>
+4 |   </state>
+  |     ~~~~~
+help: remove this `<transition>`
+  |
+3 -     <transition event="go" target="f"/>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML031`.

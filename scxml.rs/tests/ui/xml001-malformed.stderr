@@ -1,0 +1,19 @@
+error[XML001]: mismatched end tag: expected `</state>`, found `</stat>`
+ --> tests/ui/xml001-malformed.scxml:4:5
+  |
+2 |   <state id="a">
+  |    ----- unclosed `<state>` starts here
+3 |     <transition event="go" target="b"/>
+4 |   </stat>
+  |     ^^^^ `</stat>` closes an outer element while `<state>` is still open
+  |
+  = note: SCXML documents must be well-formed XML 1.0 with namespaces; no later validation runs until parsing succeeds
+  = help: did you mean `</state>`?
+  = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
+help: rename the end tag to `</state>`
+  |
+4 |   </state>
+  |     ~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

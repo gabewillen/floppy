@@ -1,0 +1,9 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
+  <parallel id="p">
+    <state id="download" initial="fetching">
+      <state id="fetching"><transition event="fetched" target="saved"/></state>
+      <state id="saved"/>
+    </state>
+    <state id="spinner"/>
+  </parallel>
+</scxml>

@@ -1,0 +1,18 @@
+error[SCXML070]: a `<send>` to `#_internal` cannot use `delay`
+ --> tests/ui/scxml070-delayed-internal-send.scxml:4:46
+  |
+4 |       <send event="tick" target="#_internal" delay="1s"/>
+  |                          ------------------- ^^^^^^^^^^ a delay is not allowed here
+  |                          |
+  |                          the send targets the internal event queue
+  |
+  = note: an event sent to `#_internal` joins the internal event queue at once; SCXML forbids a delay on it, and the processor raises `error.execution` instead of delivering the event
+  = help: remove `delay` to raise the event now, or drop the `target` to deliver it after the delay on the session's own external queue
+  = spec: SCXML 1.0 §6.2 <send>
+help: remove `delay`
+  |
+4 -       <send event="tick" target="#_internal" delay="1s"/>
+4 +       <send event="tick" target="#_internal"/>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML070`.

@@ -1,0 +1,23 @@
+error[SCXML030]: transition targets `b` and `c` cannot be active at the same time
+ --> tests/ui/scxml030-conflicting-targets.scxml:4:40
+  |
+2 |   <state id="p" initial="a">
+  |    ----- only one child of this state can be active
+3 |     <state id="a">
+4 |       <transition event="go" target="b c"/>
+  |                                      - ^ conflicts with `b`
+  |                                      |
+  |                                      `b` is entered here
+  |
+  = note: both targets lie in different children of `p`, which is not a <parallel> and can have only one active child; a multi-target set must form a legal state configuration
+  = note: removing `b` (keeping `c`) would leave `b` unreachable: no other transition, `initial`, or history default enters it
+  = help: keep only one of these targets, or place them in different regions of a common `<parallel>` ancestor
+  = spec: SCXML 1.0 §3.11 Legal State Configurations and Specifications
+  = spec: SCXML 1.0 §3.5 <transition>
+help: remove the target `c`, keeping `b`
+  |
+4 -       <transition event="go" target="b c"/>
+4 +       <transition event="go" target="b"/>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML030`.

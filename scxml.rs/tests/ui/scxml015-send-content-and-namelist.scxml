@@ -1,0 +1,11 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <state id="a">
+    <onentry>
+      <send event="ping" namelist="x">
+        <content>payload</content>
+      </send>
+    </onentry>
+    <transition event="ping" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- U+1680 OGHAM SPACE MARK is Unicode white space but an XML NameStartChar: it is part of each name below, never a separator. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="&#x1680;a">
+  <state id="&#x1680;a">
+    <transition event="go&#x1680;on &#x1680;" target="b&#x1680;"/>
+  </state>
+  <final id="b&#x1680;"/>
+</scxml>

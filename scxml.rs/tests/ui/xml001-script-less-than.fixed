@@ -1,0 +1,4 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript">
+  <script>for (var i = 0; i &lt; 3; i++) { }</script>
+  <state id="a"><transition event="go" target="f"/></state><final id="f"/>
+</scxml>

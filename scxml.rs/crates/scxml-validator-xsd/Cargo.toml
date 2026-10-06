@@ -1,0 +1,31 @@
+[package]
+name = "scxml-validator-xsd"
+description = "Isolated pure-Rust XSD 1.0 backend for scxml-validator-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+# The eight vendored W3C SCXML 1.0 schema modules are compiled into this crate
+# through `include_bytes!` (src/bundled.rs), so its license covers their W3C
+# terms as well. Their permission notice matches none of the W3C texts SPDX
+# lists (`W3C`, `W3C-19980720`, `W3C-20150513`), hence the LicenseRef; the
+# notice is reproduced in schemas/w3c-scxml-1.0/NOTICE.md.
+license = "(Apache-2.0 OR MIT) AND LicenseRef-W3C-SCXML-Schema"
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+scxml-syntax.workspace = true
+scxml-types.workspace = true
+scxml-validator-core.workspace = true
+xsd-schema.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

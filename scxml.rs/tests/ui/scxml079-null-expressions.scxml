@@ -1,0 +1,7 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="s">
+  <state id="s">
+    <transition event="go" cond="x &gt; 1" target="f"/>
+    <onentry><send event="e" delayexpr="late"/></onentry>
+  </state>
+  <final id="f"/>
+</scxml>

@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!-- event-3: leading white space before { is allowed. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event">
+<state id="s0">
+  <onentry>
+    <raise event="a" event:schema='  {"type": "object"}'/>
+  </onentry>
+  <transition event="a" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

@@ -1,0 +1,15 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:example="https://stateforward.org/scxml/example"
+       version="1.0" datamodel="ecmascript" initial="s0">
+  <datamodel>
+    <data id="seen"/>
+  </datamodel>
+  <state id="s0">
+    <onentry>
+      <example:snapshot location="seen" exclude="data_model"/>
+      <example:raise event="example.done"/>
+    </onentry>
+    <transition event="example.done" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

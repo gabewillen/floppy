@@ -1,0 +1,19 @@
+{
+ "errata_version": 1,
+ "datamodel": "ecmascript",
+ "template_sha256": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa",
+ "errata": [],
+ "not_applicable": [
+  {
+   "case": "436",
+   "reason": "Not applicable per W3C: the W3C scopes this assertion to the null data model profile (SCXML 1.0 Appendix B.1, specid #minimal-profile), and its upstream test document fixes datamodel=\"null\", which the W3C ECMAScript template copies unchanged, so the ECMAScript specialization runs the null data model and never exercises the ECMAScript data model. The template also writes the case's outcomes as ECMAScript value expressions (<log label=\"Outcome\" expr=\"'pass'\"/>), which the null data model cannot evaluate: SCXML 1.0 B.1.4 \"There is no value expression language.\"",
+   "evidence": [
+    "upstream/manifest.xml:1101 `<assert id=\"436\"  specnum=\"B.1\" specid=\"#minimal-profile\">`",
+    "upstream/manifest.xml:1102 `When the \"datamodel\" attribute of the scxml element has the value \"null\", the In() predicate must return 'true' if and only if that state is in the current state configuration.`",
+    "upstream/sources/436/test436.txml:3 `datamodel=\"null\"`",
+    "templates/ecmascript.xsl:24-27 conf:pass -> `<log label=\"Outcome\" expr=\"'pass'\"/>`",
+    "SCXML 1.0 B.1.4 Value Expressions: `There is no value expression language.`"
+   ]
+  }
+ ]
+}

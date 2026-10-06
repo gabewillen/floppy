@@ -1,0 +1,12 @@
+error[SCXML009]: initial must contain exactly one transition
+ --> tests/ui/scxml009-initial-without-transition.scxml:3:6
+  |
+3 |     <initial/>
+  |      ^^^^^^^ found 0 transition children
+  |
+  = note: `<initial>` describes one default entry; its single transition names the default child states
+  = help: add exactly one target-only transition inside `initial`
+  = spec: SCXML 1.0 §3.6 <initial>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML009`.

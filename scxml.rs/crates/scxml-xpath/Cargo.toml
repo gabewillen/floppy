@@ -1,0 +1,22 @@
+[package]
+name = "scxml-xpath"
+description = "Bounded, deterministic XPath 1.0 evaluator and XML data tree for the SCXML XPath data model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+scxml-types.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

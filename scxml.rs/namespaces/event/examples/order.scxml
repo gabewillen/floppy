@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The `event` attribute vocabulary: the schemas describe the event data each
+  element handles or creates, and change nothing about how the machine runs
+  (see ../README.md for the commands that validate and compile it).
+
+  `compile` reads schemas/order.json relative to this file, keeps only the
+  `Order` schema (bundling the `Item` schema it references), and embeds each
+  schema as canonical JSON with its SHA-256 in the Machine IR. A session
+  snapshot lists the schema on each transition an event could trigger.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="orders" initial="waiting">
+  <datamodel>
+    <data id="order"/>
+  </datamodel>
+  <state id="waiting">
+    <!-- A file and a JSON Pointer: the `_event.data` this transition handles. -->
+    <transition event="order.placed" target="checking"
+                event:schema="schemas/order.json#/$defs/Order">
+      <assign location="order" expr="_event.data"/>
+    </transition>
+  </state>
+  <state id="checking">
+    <onentry>
+      <!-- The data this event is created with: an inline schema. -->
+      <send event="order.checked" target="#_internal"
+            event:schema='{"type": "object", "required": ["count"], "properties": {"count": {"type": "integer"}}}'>
+        <param name="count" expr="order.items.length"/>
+      </send>
+    </onentry>
+    <!-- An inline schema on a transition. -->
+    <transition event="order.checked" target="shipped"
+                event:schema='{"type": "object", "required": ["count"], "properties": {"count": {"type": "integer", "minimum": 1}}}'/>
+  </state>
+  <final id="shipped">
+    <!-- The data of the done.state.shipped event. -->
+    <donedata event:schema='{"type": "object", "required": ["id"], "properties": {"id": {"type": "string"}}}'>
+      <param name="id" expr="order.id"/>
+    </donedata>
+  </final>
+</scxml>

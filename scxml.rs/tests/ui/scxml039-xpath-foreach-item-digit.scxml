@@ -1,0 +1,8 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="xpath">
+  <datamodel><data id="items"><item/><item/></data><data id="n" expr="0"/></datamodel>
+  <state id="a">
+    <onentry><foreach array="$items/item" item="1st"><assign location="$n" expr="$n + 1"/></foreach></onentry>
+    <transition event="go" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

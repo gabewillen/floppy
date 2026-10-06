@@ -1,0 +1,6 @@
+﻿<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idel">
+  <state id="idle">
+    <transition event="go" target="dnoe"/>
+  </state>
+  <final id="done"/>
+</scxml>

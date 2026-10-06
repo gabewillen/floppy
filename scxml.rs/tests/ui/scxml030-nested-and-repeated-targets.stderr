@@ -1,0 +1,41 @@
+warning[SCXML072]: transition target `l1` is listed twice
+ --> tests/ui/scxml030-nested-and-repeated-targets.scxml:5:46
+  |
+5 |         <transition event="again" target="l1 l1"/>
+  |                                           -- ^^ listed again here
+  |                                           |
+  |                                           first listed here
+  |
+  = note: a target list names a set of states, so the repeat adds nothing: the state is entered once
+  = help: remove the repeated `l1`
+  = spec: SCXML 1.0 §3.11 Legal State Configurations and Specifications
+  = spec: SCXML 1.0 §3.5 <transition>
+help: remove the repeated `l1`
+  |
+5 -         <transition event="again" target="l1 l1"/>
+5 +         <transition event="again" target="l1"/>
+
+error[SCXML030]: transition targets `left` and `l1` are nested: `left` contains `l1`
+ --> tests/ui/scxml030-nested-and-repeated-targets.scxml:6:47
+  |
+6 |         <transition event="nest" target="left l1"/>
+  |                                          ---- ^^ nested with `left`
+  |                                          |
+  |                                          `left` is entered here
+  |
+  = note: entering `l1` already enters `left`; each target of a multi-target set must lie in a different region of a common <parallel>, so a set that names a state and one of its descendants is rejected by the compiler
+  = help: keep only one of these targets, or place them in different regions of a common `<parallel>` ancestor
+  = spec: SCXML 1.0 §3.11 Legal State Configurations and Specifications
+  = spec: SCXML 1.0 §3.5 <transition>
+help: remove the target `l1`, keeping `left`
+  |
+6 -         <transition event="nest" target="left l1"/>
+6 +         <transition event="nest" target="left"/>
+help: remove the target `left`, keeping `l1`
+  |
+6 -         <transition event="nest" target="left l1"/>
+6 +         <transition event="nest" target="l1"/>
+
+diagnostic summary: 1 error(s), 1 warning(s), 0 note(s), 2 total
+Some diagnostics have detailed explanations: SCXML030, SCXML072.
+For more information about a diagnostic, try `scxml-cli --explain SCXML030`.

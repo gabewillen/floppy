@@ -1,0 +1,152 @@
+/// Deterministic logical clock and bounded timer queue.
+///
+/// One component instance owns one clock and is its single writer. Time is a
+/// logical unsigned millisecond counter that starts at 0 and moves only
+/// through `advance`; the clock never reads a wall clock,
+/// timers, randomness, or any other ambient state. Every mutation is
+/// synchronous and transactional: a failed call leaves time, timers, and
+/// ordering unchanged.
+package stateforward:scxml-clock@0.2.0;
+
+/// Shared value types.
+interface types {
+  /// Whether W3C baggage crosses the boundary it is attached to.
+  enum baggage-policy { drop, propagate }
+
+  /// W3C Trace Context carrier; validated, never alters clock semantics.
+  record trace-context {
+    /// Canonical version-00 W3C `traceparent`: exactly 55 bytes.
+    traceparent: string,
+    /// W3C `tracestate`: at most 512 bytes and 32 list members.
+    tracestate: option<string>,
+    /// W3C baggage: at most 8192 bytes and 64 list members.
+    baggage: option<string>,
+    baggage-policy: baggage-policy,
+  }
+
+  /// Closed clock failure.
+  variant clock-error {
+    /// A timer id was empty or longer than 256 bytes.
+    invalid-id,
+    /// A zero duration was supplied where progress is required.
+    invalid-duration,
+    /// One payload exceeded 65536 bytes, or retained payloads would exceed
+    /// 4194304 bytes in aggregate.
+    payload-too-large,
+    /// A live timer already uses the id.
+    duplicate-id,
+    /// The queue already holds 1024 live timers.
+    capacity-exhausted,
+    /// Logical time, a deadline, or the insertion sequence would overflow u64.
+    overflow,
+    /// A drain limit was 0 or greater than 1024.
+    invalid-limit,
+    /// A trace carrier was malformed.
+    invalid-context,
+  }
+
+  /// Placement of one scheduled timer.
+  record scheduled {
+    /// Absolute logical deadline in milliseconds (`now` + delay).
+    deadline-ms: u64,
+    /// Monotonic insertion order that breaks equal-deadline ties.
+    sequence: u64,
+  }
+
+  /// One timer removed by `drain-due`; ownership of the payload moves to the caller.
+  record due-item {
+    /// Caller-owned timer id.
+    id: string,
+    /// Caller-owned bytes, returned unchanged.
+    payload: list<u8>,
+    /// Absolute logical deadline in milliseconds.
+    deadline-ms: u64,
+    /// Insertion order.
+    sequence: u64,
+  }
+}
+
+/// Guest telemetry facade; every value is a closed, bounded label or a
+/// numeric measurement. Ids and payloads never cross this interface.
+interface telemetry {
+  use types.{trace-context};
+  /// Closed operation label.
+  enum operation { now, schedule, cancel, drain-due, advance }
+  /// Closed outcome label.
+  enum outcome { ok, rejected }
+  /// Closed span-event label.
+  enum signal-event { scheduled, cancelled, due-drained, advanced, rejected }
+  /// Closed numeric measurement kinds: live timer count.
+  enum measurement-kind { queue-depth }
+  /// One numeric sample; `value` is a measurement, never a label.
+  record measurement {
+    kind: measurement-kind,
+    value: u64,
+  }
+  /// Records an outcome and at most one numeric sample.
+  observe: func(operation: operation, outcome: outcome, measurement: option<measurement>, context: option<trace-context>);
+  /// Records a closed event without a metric sample.
+  event: func(operation: operation, event: signal-event, context: option<trace-context>);
+}
+
+/// The clock and timer queue. Timers are ordered by (deadline, sequence), so
+/// equal deadlines drain in schedule-call order.
+interface clock-api {
+  use types.{clock-error, scheduled, due-item, trace-context};
+
+  /// Current logical time in milliseconds; infallible and side-effect free.
+  now: func() -> u64;
+  /// Absolute deadline of the earliest live timer (the next `drain-due`
+  /// candidate), or none when no timer is live. Pure; emits no telemetry.
+  next-deadline: func() -> option<u64>;
+  /// Schedules one timer at `now + delay-ms`.
+  ///
+  /// Preconditions: `id` is 1..=256 bytes and not live; `delay-ms` > 0;
+  /// `payload` is at most 65536 bytes; fewer than 1024 timers are live; and
+  /// retained payloads stay within 4194304 bytes.
+  /// Errors: `invalid-context`, `invalid-id`, `invalid-duration`,
+  /// `capacity-exhausted`, `payload-too-large`, `duplicate-id`, `overflow`.
+  schedule: func(id: string, payload: list<u8>, delay-ms: u64, context: option<trace-context>) -> result<scheduled, clock-error>;
+  /// Removes a live timer. Returns true when a timer was removed and false,
+  /// without mutation, when the id is valid but not live.
+  /// Errors: `invalid-context`, `invalid-id`.
+  cancel: func(id: string, context: option<trace-context>) -> result<bool, clock-error>;
+  /// Removes and returns, in (deadline, sequence) order, at most `max-items`
+  /// timers whose deadline is not after `now`. Removal is destructive: the
+  /// caller owns the returned items and the clock never returns them again.
+  ///
+  /// Preconditions: 1 <= `max-items` <= 1024.
+  /// Errors: `invalid-limit`.
+  drain-due: func(max-items: u32) -> result<list<due-item>, clock-error>;
+  /// Advances logical time by `delta-ms` and returns the new time. Timers
+  /// become due but are not delivered until `drain-due`.
+  ///
+  /// Preconditions: `delta-ms` > 0.
+  /// Errors: `invalid-duration`, `overflow`.
+  advance: func(delta-ms: u64) -> result<u64, clock-error>;
+  /// One live timer.
+  record timer {
+    /// Caller-owned timer id.
+    id: string,
+    /// Caller-owned bytes, unchanged.
+    payload: list<u8>,
+    /// Absolute logical deadline in milliseconds.
+    deadline-ms: u64,
+  }
+  /// Read-only image of the clock.
+  record clock-snapshot {
+    /// Current logical time in milliseconds.
+    now-ms: u64,
+    /// Live timers in (deadline, sequence) order.
+    timers: list<timer>,
+  }
+  /// Clock position and every live timer. Read-only: removes, drains, and
+  /// changes nothing; emits no telemetry of its own.
+  snapshot: func() -> clock-snapshot;
+}
+
+/// The clock component.
+world clock {
+  import telemetry;
+  export clock-api;
+}

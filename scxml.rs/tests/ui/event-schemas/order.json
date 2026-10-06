@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Order": {
+      "type": "object",
+      "required": ["id", "items"],
+      "properties": {
+        "id": {"type": "string"},
+        "items": {"type": "array", "items": {"$ref": "#/$defs/Item"}}
+      }
+    },
+    "Item": {"type": "string"}
+  }
+}

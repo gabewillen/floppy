@@ -1,0 +1,325 @@
+{
+  "errata_version": 1,
+  "datamodel": "xpath",
+  "template_sha256": "765aed3e6c280c316b73d783b4619072506ddb1f897f1e8be61b3b727446bba7",
+  "errata": [
+    {
+      "id": "xpath-241-namelist-value",
+      "case": "241",
+      "stage": "source",
+      "defect": "The child reached through namelist (state s01) tests its Var1 with conf:idVal, which the XPath template specializes to `$Var1/text() =1`. A namelist entry passes the value of the parent location `$Var1`, which in the XPath data model is the parent's datamodel <data id=\"Var1\"> element (SCXML 1.0 CR 2014-03-13 C.3.1: the processor MUST bind an XPath variable to that <data> element), and the child inserts that value as the child of its own <data> element. The value 1 is therefore at `$Var1/data/text()`, which is exactly what official case 240 checks for the identical namelist-to-child situation with conf:namelistIdVal. With conf:idVal the namelist child always reports failure while the param child (s03) reports success, so the case cannot pass for any conforming XPath processor.",
+      "evidence": [
+        "upstream/sources/241/test241.txml:20 `<invoke type=\"http://www.w3.org/TR/scxml/\" conf:namelist=\"1\">`",
+        "upstream/sources/241/test241.txml:28 `<transition conf:idVal=\"1=1\" target=\"subFinal1\">`",
+        "upstream/sources/240/test240.txml:27 `<transition conf:namelistIdVal=\"1=1\" target=\"subFinal1\">` (same namelist semantics, correct attribute)",
+        "templates/xpath.xsl:448-453 conf:namelistIdVal: `test that given var whose value was passed in via namelist has specific value` -> `$Var1/data/text()`",
+        "templates/xpath.xsl:397-401 conf:idVal -> `$Var1/text()`"
+      ],
+      "correction": "Use conf:namelistIdVal (as official case 240 does) for the namelist-fed child only; the param-fed children keep conf:idVal.",
+      "replacements": [
+        {
+          "find": "<transition conf:idVal=\"1=1\" target=\"subFinal1\">",
+          "replace": "<transition conf:namelistIdVal=\"1=1\" target=\"subFinal1\">"
+        }
+      ],
+      "upstream_output_sha256": "3e23f8bef435b2eaff8bbd846d931805ce576e366606934ff6269137cbd453f1",
+      "corrected_output_sha256": "27dee4b9104aa5330396fe3bda4cfd520ad932230f504585a8fe69f4b2c3f8ab"
+    },
+    {
+      "id": "xpath-244-namelist-value",
+      "case": "244",
+      "stage": "source",
+      "defect": "The only child of case 244 receives Var1 through namelist but tests it with conf:idVal (`$Var1/text() =1`). Under the XPath data model the namelist value is the parent's <data id=\"Var1\"> element, inserted as the child of the child's <data> element (SCXML 1.0 CR 2014-03-13 C.3.1), so the value is at `$Var1/data/text()`, which official case 240 checks with conf:namelistIdVal. As written the case reports failure for every conforming XPath processor.",
+      "evidence": [
+        "upstream/sources/244/test244.txml:18 `<invoke type=\"http://www.w3.org/TR/scxml/\" conf:namelist=\"1\">`",
+        "upstream/sources/244/test244.txml:26 `<transition conf:idVal=\"1=1\" target=\"subFinal\">`",
+        "upstream/sources/240/test240.txml:27 `<transition conf:namelistIdVal=\"1=1\" target=\"subFinal1\">` (same namelist semantics, correct attribute)",
+        "templates/xpath.xsl:448-453 conf:namelistIdVal -> `$Var1/data/text()`"
+      ],
+      "correction": "Use conf:namelistIdVal, as official case 240 does for the same namelist-fed child.",
+      "replacements": [
+        {
+          "find": "<transition conf:idVal=\"1=1\" target=\"subFinal\">",
+          "replace": "<transition conf:namelistIdVal=\"1=1\" target=\"subFinal\">"
+        }
+      ],
+      "upstream_output_sha256": "3faf35a7d55e951718b0e6b9bcafcf512cab5b5146fc8154366fba32ceede7fa",
+      "corrected_output_sha256": "6363bf68bbdde7474ba1cfb7eccd84fd9dc19c35e9343947ab93ea0e1bc1c4b3"
+    },
+    {
+      "id": "xpath-307-substructure-syntax",
+      "case": "307",
+      "stage": "template",
+      "defect": "The XPath template specializes conf:varNonexistentStruct with ECMAScript member syntax, `$Var1.bar`, which XPath 1.0 parses as a reference to an undeclared variable named `Var1.bar` rather than a non-existent substructure of the loaded Var1. Manual case 307 compares accessing a late-bound variable before load with accessing a non-existent substructure of a loaded variable; with an undeclared-variable reference in the second log the two outputs the W3C instruction asks the tester to compare measure different things.",
+      "evidence": [
+        "templates/xpath.xsl:112-115 `<!-- an expr that is the value of a non-existent substructure of a variable -->` ... `$Var<xsl:value-of select=\".\" />.bar`",
+        "templates/ecmascript.xsl:114-116 the ECMAScript template emits `Var1.bar`, the member access this syntax denotes in ECMAScript",
+        "upstream/sources/307/test307.txml:28 `<log label=\"entering s1, value of non-existent substructure of Var 1 is: \" conf:varNonexistentStruct=\"1\"/>`"
+      ],
+      "correction": "Emit the XPath form of a non-existent substructure, `$Var1/bar` (a child step of the variable's <data> element, SCXML 1.0 CR 2014-03-13 C.3.1). Not corrected: the label-only logs `no error in s0`/`No error in s1` are authored upstream as conf:expr=\"\" (upstream/sources/307/test307.txml:18 and :36) and both official templates copy that verbatim into `<log expr=\"\">`; that is the test's own convention for a log without a value, so the erratum leaves it unchanged.",
+      "replacements": [
+        {
+          "find": "<xsl:attribute name=\"expr\">$Var<xsl:value-of select=\".\" />.bar</xsl:attribute>",
+          "replace": "<xsl:attribute name=\"expr\">$Var<xsl:value-of select=\".\" />/bar</xsl:attribute>"
+        }
+      ],
+      "upstream_output_sha256": "072390759c4e5768254418a6603a60241ab77616eee06b2b6eb17cac4ca84c38",
+      "corrected_output_sha256": "e9c6acdb9a919ddd7df3c769a929fe17bb54d1bc87f5a93025e53daea83770db"
+    },
+    {
+      "id": "xpath-520-unquoted-body",
+      "case": "520",
+      "stage": "template",
+      "defect": "conf:messageBodyEquals is specialized without quoting its value, producing `contains($_event/raw, this+is+some+content)` (an XPath arithmetic expression over child steps, not the string literal) and `contains($_event/raw, this%20is%20some%20content)` (an XPath syntax error). Neither guard can test that the received body contains the sent content.",
+      "evidence": [
+        "templates/xpath.xsl:372-374 `<xsl:attribute name=\"cond\">contains($_event/raw, <xsl:value-of select=\".\"/>)</xsl:attribute>`",
+        "upstream/sources/520/test520.txml:16 `conf:messageBodyEquals=\"this+is+some+content\"`",
+        "upstream/sources/520/test520.txml:17 `conf:messageBodyEquals=\"this%20is%20some%20content\"`"
+      ],
+      "correction": "Quote the value as an XPath string literal, as every other _event/raw template in xpath.xsl does (lines 360 and 366).",
+      "replacements": [
+        {
+          "find": "<xsl:attribute name=\"cond\">contains($_event/raw, <xsl:value-of select=\".\"/>)</xsl:attribute>",
+          "replace": "<xsl:attribute name=\"cond\">contains($_event/raw, '<xsl:value-of select=\".\"/>')</xsl:attribute>"
+        }
+      ],
+      "upstream_output_sha256": "296e60dd5c8df369422a308089aa6fb4163d8ccc5ec610a94c8bee3ba064e122",
+      "corrected_output_sha256": "db4a714e132797aed97c1923a52b2de58b51d737088be857e4f0e6a2017e4693"
+    },
+    {
+      "id": "xpath-534-param-name",
+      "case": "534",
+      "stage": "template",
+      "defect": "conf:eventNamedParamHasValue matches its value with the regex `([0-9]+)(\\s+)(\\S+)`, so only numeric parameter names are recognized. The value `_scxmleventname test` has no match and the template emits `cond=\"\"`, an empty guard, so the case cannot test that the event name was sent as the _scxmleventname parameter.",
+      "evidence": [
+        "templates/xpath.xsl:364-366 `<xsl:template match=\"//@conf:eventNamedParamHasValue\">` ... `regex=\"([0-9]+)(\\s+)(\\S+)\"`",
+        "upstream/sources/534/test534.txml:14 `conf:eventNamedParamHasValue=\"_scxmleventname test\"`",
+        "templates/ecmascript.xsl:698-700 the ECMAScript template matches the same attribute with `(\\S+)(\\s+)(\\S+)`"
+      ],
+      "correction": "Match any non-blank parameter name, `(\\S+)(\\s+)(\\S+)`, as the official ECMAScript template does, yielding `contains($_event/raw, '_scxmleventname=test')`.",
+      "replacements": [
+        {
+          "find": "<xsl:template match=\"//@conf:eventNamedParamHasValue\">\n <xsl:attribute name=\"cond\"><xsl:analyze-string select=\".\" regex=\"([0-9]+)(\\s+)(\\S+)\">",
+          "replace": "<xsl:template match=\"//@conf:eventNamedParamHasValue\">\n <xsl:attribute name=\"cond\"><xsl:analyze-string select=\".\" regex=\"(\\S+)(\\s+)(\\S+)\">"
+        }
+      ],
+      "upstream_output_sha256": "7ac3fd281b9f12b1914923902416379f6d4e6728b9a765396c522673f839ab68",
+      "corrected_output_sha256": "d59d5c8421f3a9a757d80f043e2414d66caeb897636d685765601783829bf1a6"
+    }
+  ],
+  "not_applicable": [
+    {
+      "case": "301",
+      "reason": "Not applicable per W3C: the assertion is valid only for data models that support scripting, and the W3C XPath template states that scripting is not supported in XPath and implementers should not run these tests.",
+      "evidence": [
+        "upstream/manifest.xml:508 `N.B. This test is valid only for datamodels that support scripting.`",
+        "upstream/sources/301/test301.txml:4 `This test is valid only for datamodels that support scripting`",
+        "templates/xpath.xsl:631-637 `<!-- scripting is not supported in Xpath, so not sure what to put here.  Implementers should know not to bother to run these tests-->` followed by the conf:script template that emits an empty <script>"
+      ]
+    },
+    {
+      "case": "302",
+      "reason": "Not applicable per W3C: the assertion is valid only for data models that support scripting, and the W3C XPath template states that scripting is not supported in XPath and implementers should not run these tests.",
+      "evidence": [
+        "upstream/manifest.xml:515 `N.B. This test is valid only for datamodels that support scripting.`",
+        "templates/xpath.xsl:631-637 `<!-- scripting is not supported in Xpath, so not sure what to put here.  Implementers should know not to bother to run these tests-->` followed by the conf:script template that emits an empty <script>"
+      ]
+    },
+    {
+      "case": "303",
+      "reason": "Not applicable per W3C: the assertion is valid only for data models that support scripting, and the W3C XPath template states that scripting is not supported in XPath and implementers should not run these tests.",
+      "evidence": [
+        "upstream/manifest.xml:522 `N.B. This test is valid only for datamodels that support scripting.`",
+        "templates/xpath.xsl:631-637 `<!-- scripting is not supported in Xpath, so not sure what to put here.  Implementers should know not to bother to run these tests-->` followed by the conf:script template that emits an empty <script>"
+      ]
+    },
+    {
+      "case": "304",
+      "reason": "Not applicable per W3C: the assertion is valid only for data models that support scripting, and the W3C XPath template states that scripting is not supported in XPath and implementers should not run these tests.",
+      "evidence": [
+        "upstream/manifest.xml:529 `N.B. This test is valid only for datamodels that support scripting.`",
+        "templates/xpath.xsl:631-637 `<!-- scripting is not supported in Xpath, so not sure what to put here.  Implementers should know not to bother to run these tests-->` followed by the conf:script template that emits an empty <script>"
+      ]
+    },
+    {
+      "case": "436",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the null data model profile (SCXML 1.0 Appendix B.1, specid #minimal-profile), and its upstream test document fixes datamodel=\"null\", which the W3C XPath template copies unchanged, so the XPath specialization runs the null data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1101 `<assert id=\"436\"  specnum=\"B.1\" specid=\"#minimal-profile\">`",
+        "upstream/manifest.xml:1102 `When the \"datamodel\" attribute of the scxml element has the value \"null\", the In() predicate must return 'true' if and only if that state is in the current state configuration.`",
+        "upstream/sources/436/test436.txml:3 `datamodel=\"null\"`"
+      ]
+    },
+    {
+      "case": "444",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1117 `<assert id=\"444\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1118 `In the ECMAScript datamodel, for each data element in the document, the SCXML Processor must create an ECMAScript variable object whose name is the value of the id attribute of the data element.`",
+        "upstream/sources/444/test444.txml:5 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "445",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1124 `<assert id=\"445\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1125 `In the ECMAScript datamodel for each data element in the document, if the variable object associated with the element is not assigned at the time indicated by the 'binding' attribute on the scxml elem ...`",
+        "upstream/sources/445/test445.txml:5 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "446",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1178 `<assert id=\"446\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1179 `In the ECMAScript data model, if either the 'src' attribute or in-line content is provided in the data elemenet, then if the content (whether fetched or provided in-line) is JSON and the processor sup ...`",
+        "upstream/sources/446/test446.txml:6 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "448",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1131 `<assert id=\"448\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1132 `In the ECMAScript datamodel, the SCXML Processor must place all variables in a single global ECMAScript scope.`",
+        "upstream/sources/448/test448.txml:5 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "449",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1138 `<assert id=\"449\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1139 `In the ECMAScript datamodel, the SCXML Processor must convert ECMAScript expressions used in conditional expressions into their effective boolean value using the ToBoolean operator as described in Sec ...`",
+        "upstream/sources/449/test449.txml:5 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "451",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1145 `<assert id=\"451\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1146 `In the ECMAScript datamodel, the SCXML Processor must add an ECMAScript function 'In()' to the SCXML namespace that takes a stateID as its argument and returns 'true' if and only if that state is in t ...`",
+        "upstream/sources/451/test451.txml:5 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "452",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1155 `<assert id=\"452\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1156 `In the ECMAScript datamodel, the SCXML Processor must accept any ECMAScript left-hand-side expression as a location expression.`",
+        "upstream/sources/452/test452.txml:5 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "453",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1164 `<assert id=\"453\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1165 `In the ECMAScript datamodel, the SCXML Processor must accept any ECMAScript expression as a value expression.`",
+        "upstream/sources/453/test453.txml:6 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "456",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1171 `<assert id=\"456\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1172 `the SCXML Processor must accept any ECMAScript program as defined in Section 14 of [ECMASCRIPT-262] as the content of a script element.`",
+        "upstream/sources/456/test456.txml:4 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "457",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1242 `<assert id=\"457\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1243 `In the ECMAScript data model, the legal iterable collections are arrays, namely objects that satisfy instanceof(Array) in ECMAScript. The legal values for the 'item' attribute on foreach are legal ECM ...`",
+        "upstream/sources/457/test457.txml:5 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "459",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1249 `<assert id=\"459\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1250 `In the ECMAScript data model, the iteration order for the foreach element is the order of the underlying ECMAScript array, and goes from an index of 0 by increments of one to an index of array_name.le ...`",
+        "upstream/sources/459/test459.txml:6 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "460",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1258 `<assert id=\"460\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1259 `In the ECMAScript data model, since shallow copy is required for the foreach element, foreach assignment is equivalent to item = array_name[index] in ECMAScript.`",
+        "upstream/sources/460/test460.txml:4 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "557",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1186 `<assert id=\"557\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1187 `In the ECMAScript data model, if either the 'src' attribute or in-line content is provided in the data element, then if the content (whether fetched or provided in-line) is an XML document, the SCXML  ...`",
+        "upstream/sources/557/test557.txml:6 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "558",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1194 `<assert id=\"558\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1195 `In the ECMAScript datamodel, if either the 'src' attribute or in-line content is provided in the data element, and the content (whether fetched or provided in-line) is not an XML document or JSON (or  ...`",
+        "upstream/sources/558/test558.txml:6 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "560",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1203 `<assert id=\"560\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1204 `In the ECMAScript data model, if the content provided to populate _event.data can be interpeted as key-value pairs, then for each unique key, the SCXML Processor MUST create a property of _event.data  ...`",
+        "upstream/sources/560/test560.txml:6 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "561",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1219 `<assert id=\"561\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1220 `In the ECMAScript data model, if the content provided to populate _event.data can be interpreted as a valid XML document (and cannot be interpreted as key-value pairs or JSON), the Processor MUST crea ...`",
+        "upstream/sources/561/test561.txml:6 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "562",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1227 `<assert id=\"562\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1228 `In the ECMAScript data model, if the content provided to populate _event.data is neither key-value pairs nor JSON nor a valid XML document, the Processor MUST treat the content treat the content as a  ...`",
+        "upstream/sources/562/test562.txml:6 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "569",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1234 `<assert id=\"569\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1235 `For the _ioprocessors system variable in the ECMAScript datamodel the Processor MUST create an array with an object for each Event I/O processor that it supports, where the name of the object is the s ...`",
+        "upstream/sources/569/test569.txml:7 `datamodel=\"ecmascript\"`"
+      ]
+    },
+    {
+      "case": "578",
+      "reason": "Not applicable per W3C: the W3C scopes this assertion to the ECMAScript data model profile (SCXML 1.0 Appendix B.2, specid #ecma-profile), and its upstream test document fixes datamodel=\"ecmascript\", which the W3C XPath template copies unchanged, so the XPath specialization runs the ECMAScript data model and never exercises the XPath data model.",
+      "evidence": [
+        "upstream/manifest.xml:1210 `<assert id=\"578\"  specnum=\"B.2\" specid=\"#ecma-profile\">`",
+        "upstream/manifest.xml:1211 `In the ECMAScript data model, if the content provided to populate _event.data cannot be interpreted as key value pairs and can be interpeted as JSON and the processor supports JSON, then the Processor ...`",
+        "upstream/sources/578/test578.txml:6 `datamodel=\"ecmascript\"`"
+      ]
+    }
+  ]
+}

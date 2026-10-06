@@ -1,0 +1,67 @@
+warning[SCXML038]: ecmascript syntax error in `cond`: `or` is not an ECMAScript operator
+ --> tests/ui/scxml038-ecmascript-mixed-word-operators.scxml:8:43
+  |
+8 |     <transition event="go" cond="x &gt; 1 or x &lt; 0 and y" target="b"/>
+  |                                  -------------------------- while parsing this `cond`
+  |                                           ^^ syntax error
+  |
+  = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+  = help: write `||`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: use `||`
+  |
+8 |     <transition event="go" cond="x &gt; 1 || x &lt; 0 and y" target="b"/>
+  |                                           ~~
+
+warning[SCXML038]: ecmascript syntax error in `cond`: `and` is not an ECMAScript operator
+ --> tests/ui/scxml038-ecmascript-mixed-word-operators.scxml:8:55
+  |
+8 |     <transition event="go" cond="x &gt; 1 or x &lt; 0 and y" target="b"/>
+  |                                  -------------------------- while parsing this `cond`
+  |                                                       ^^^ syntax error
+  |
+  = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+  = help: write `&&` (escaped as `&amp;&amp;` inside an XML attribute)
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: use `&&`
+  |
+8 |     <transition event="go" cond="x &gt; 1 or x &lt; 0 &amp;&amp; y" target="b"/>
+  |                                                       ~~~~~~~~~~
+
+warning[SCXML038]: ecmascript syntax error in `cond`: `and` is not an ECMAScript operator
+ --> tests/ui/scxml038-ecmascript-mixed-word-operators.scxml:9:43
+  |
+9 |     <transition event="wait" cond="x == 1 and not ready" target="b"/>
+  |                                    -------------------- while parsing this `cond`
+  |                                           ^^^ syntax error
+  |
+  = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+  = help: write `&&` (escaped as `&amp;&amp;` inside an XML attribute)
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: use `&&`
+  |
+9 |     <transition event="wait" cond="x == 1 &amp;&amp; not ready" target="b"/>
+  |                                           ~~~~~~~~~~
+
+warning[SCXML038]: ecmascript syntax error in `cond`: `not` is not an ECMAScript operator
+ --> tests/ui/scxml038-ecmascript-mixed-word-operators.scxml:9:47
+  |
+9 |     <transition event="wait" cond="x == 1 and not ready" target="b"/>
+  |                                    -------------------- while parsing this `cond`
+  |                                               ^^^ syntax error
+  |
+  = note: a condition that cannot be parsed raises `error.execution` and evaluates as false, so this condition can never hold
+  = help: write `!` before the operand; `!` binds tighter than a comparison, so negate a comparison as `!(a == b)`
+  = spec: SCXML 1.0 §5.9 Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+help: use `!`
+  |
+9 |     <transition event="wait" cond="x == 1 and !ready" target="b"/>
+  |                                               ~
+
+diagnostic summary: 0 error(s), 4 warning(s), 0 note(s), 4 total
+For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
+validated tests/ui/scxml038-ecmascript-mixed-word-operators.scxml

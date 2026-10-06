@@ -1,0 +1,13 @@
+snapshot diff: 0000.snapshot.json → 0001.snapshot.json
+
+session root
+  --> status: unchanged
+   = configuration:
+       - s
+       + t
+   = data model:
+       ~ count: 0 -> 2
+       ~ box: null -> object [object Object]
+   = transitions:
+       - s[0]
+       + t[0]

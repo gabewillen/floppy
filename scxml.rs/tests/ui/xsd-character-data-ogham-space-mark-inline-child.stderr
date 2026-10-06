@@ -1,0 +1,18 @@
+error[XSD-cvc-complex-type.2.3]: `<state>` cannot contain character data
+ --> tests/ui/xsd-character-data-ogham-space-mark-inline-child.scxml:7:25
+  |
+7 |           <state id="c">&#x1680;<transition event="go" target="d"/></state>
+  |            -----        ^^^^^^^^ unexpected text
+  |            |
+  |            `<state>` has element-only content
+  |
+  = note: structural SCXML elements such as `<state>` contain only child elements; stray text is usually a misplaced value or an unclosed tag
+  = help: remove the text; put values in `<data>`, `<content>`, `<script>`, or a `<log expr="…">`
+  = spec: XML Schema 1.0 Part 1 §3.4.4 Element Locally Valid (Complex Type) (`cvc-complex-type.2.3`)
+help: remove the stray text
+  |
+7 -           <state id="c">&#x1680;<transition event="go" target="d"/></state>
+7 +           <state id="c"><transition event="go" target="d"/></state>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.2.3`.

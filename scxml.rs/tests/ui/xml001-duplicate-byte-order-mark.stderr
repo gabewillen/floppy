@@ -1,0 +1,16 @@
+error[XML001]: a second byte order mark (U+FEFF) outside the root element
+ --> tests/ui/xml001-duplicate-byte-order-mark.scxml:1:1
+  |
+1 | ﻿<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+  | ^ invisible U+FEFF character here
+  |
+  = note: an SCXML file contains exactly one XML document: an optional `<?xml …?>` declaration, then the single root element; any other text before or after it is not well formed
+  = help: remove the duplicated byte order mark; at most one may start the file
+  = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
+help: remove the text outside the root element
+  |
+1 - ﻿<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+1 + <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain XML001`.

@@ -1,0 +1,34 @@
+error[SCXML014]: send event name cannot use both `event` and `eventexpr`
+ --> tests/ui/scxml014-send-conflicting-attributes.scxml:4:13
+  |
+4 |       <send event="ping" eventexpr="'ping'" delay="1s" delayexpr="'2s'"/>
+  |             ^^^^^^^^^^^^ ------------------ conflicting attribute
+  |             |
+  |             mutually exclusive attribute
+  |
+  = note: each `<send>` property (event, target, type, delay, and the send ID as `id` or `idlocation`) has one literal and one computed form; supplying both is ambiguous
+  = help: keep exactly one of `event` or `eventexpr`
+  = spec: SCXML 1.0 §6.2 <send>
+help: keep `event` and remove `eventexpr`
+  |
+4 -       <send event="ping" eventexpr="'ping'" delay="1s" delayexpr="'2s'"/>
+4 +       <send event="ping" delay="1s" delayexpr="'2s'"/>
+
+error[SCXML014]: send delay cannot use both `delay` and `delayexpr`
+ --> tests/ui/scxml014-send-conflicting-attributes.scxml:4:45
+  |
+4 |       <send event="ping" eventexpr="'ping'" delay="1s" delayexpr="'2s'"/>
+  |                                             ^^^^^^^^^^ ---------------- conflicting attribute
+  |                                             |
+  |                                             mutually exclusive attribute
+  |
+  = note: each `<send>` property (event, target, type, delay, and the send ID as `id` or `idlocation`) has one literal and one computed form; supplying both is ambiguous
+  = help: keep exactly one of `delay` or `delayexpr`
+  = spec: SCXML 1.0 §6.2 <send>
+help: keep `delay` and remove `delayexpr`
+  |
+4 -       <send event="ping" eventexpr="'ping'" delay="1s" delayexpr="'2s'"/>
+4 +       <send event="ping" eventexpr="'ping'" delay="1s"/>
+
+diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
+For more information about this error, try `scxml-cli --explain SCXML014`.

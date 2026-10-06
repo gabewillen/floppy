@@ -1,0 +1,751 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:stateforward:scxml:session-snapshot-diff:v2",
+  "title": "scxml.session-snapshot-diff/v2",
+  "description": "Canonical diff of two valid scxml.session-snapshot/v2 documents. Value, variable-value, and pending-send shapes are those of urn:stateforward:scxml:session-snapshot:v2.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": "scxml.session-snapshot-diff/v2"
+    },
+    "before": {
+      "$ref": "#/$defs/documentRef"
+    },
+    "after": {
+      "$ref": "#/$defs/documentRef"
+    },
+    "identical": {
+      "type": "boolean"
+    },
+    "compatible": {
+      "type": "boolean"
+    },
+    "exclude": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/section"
+          },
+          "uniqueItems": true
+        },
+        "to": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/section"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ]
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "enum": [
+              "clock",
+              "data-model-ecmascript",
+              "data-model-null",
+              "data-model-xpath",
+              "io-processor-scxml",
+              "machine"
+            ]
+          },
+          "change": {
+            "$ref": "#/$defs/change"
+          },
+          "from": {
+            "$ref": "#/$defs/digest"
+          },
+          "to": {
+            "$ref": "#/$defs/digest"
+          }
+        },
+        "required": [
+          "role",
+          "change"
+        ]
+      }
+    },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from_ms": {
+          "$ref": "#/$defs/uint"
+        },
+        "to_ms": {
+          "$ref": "#/$defs/uint"
+        }
+      },
+      "required": [
+        "from_ms",
+        "to_ms"
+      ]
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/section"
+      },
+      "uniqueItems": true
+    },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sessionDiff"
+      },
+      "maxItems": 18
+    }
+  },
+  "required": [
+    "version",
+    "before",
+    "after",
+    "identical",
+    "compatible",
+    "skipped",
+    "sessions"
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "uint": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "u32": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "section": {
+      "enum": [
+        "system",
+        "data_model",
+        "queues",
+        "pending_sends",
+        "transitions",
+        "previews",
+        "invocations"
+      ]
+    },
+    "documentRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "sha256"
+      ]
+    },
+    "change": {
+      "enum": [
+        "added",
+        "removed",
+        "changed"
+      ]
+    },
+    "stateSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exited": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          }
+        },
+        "entered": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          }
+        }
+      },
+      "required": [
+        "exited",
+        "entered"
+      ]
+    },
+    "invocationMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "$ref": "#/$defs/name"
+        },
+        "index": {
+          "$ref": "#/$defs/u32"
+        },
+        "autoforward": {
+          "type": "boolean"
+        },
+        "finished": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "state",
+        "index",
+        "autoforward",
+        "finished"
+      ]
+    },
+    "transitionKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/name"
+        },
+        "index": {
+          "$ref": "#/$defs/u32"
+        }
+      },
+      "required": [
+        "source",
+        "index"
+      ]
+    },
+    "fifo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "consumed": {
+          "$ref": "#/$defs/uint"
+        },
+        "appended": {
+          "type": "array",
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "consumed",
+        "appended"
+      ]
+    },
+    "keyedValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "change": {
+          "$ref": "#/$defs/change"
+        },
+        "from": {
+          "$ref": "urn:stateforward:scxml:session-snapshot:v2#/$defs/variableValue"
+        },
+        "to": {
+          "$ref": "urn:stateforward:scxml:session-snapshot:v2#/$defs/variableValue"
+        }
+      },
+      "required": [
+        "name",
+        "change"
+      ]
+    },
+    "sessionDiff": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "const": "root"
+            }
+          ],
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "change": {
+          "$ref": "#/$defs/change"
+        },
+        "session_id": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "$ref": "#/$defs/id"
+            },
+            "to": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ]
+        },
+        "name": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "$ref": "#/$defs/name"
+            },
+            "to": {
+              "$ref": "#/$defs/name"
+            }
+          }
+        },
+        "datamodel_name": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "string",
+              "minLength": 1
+            },
+            "to": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "ir": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "version": {
+                  "$ref": "#/$defs/u32"
+                },
+                "sha256": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "version",
+                "sha256"
+              ]
+            },
+            "to": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "version": {
+                  "$ref": "#/$defs/u32"
+                },
+                "sha256": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "version",
+                "sha256"
+              ]
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ]
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "enum": [
+                "ready",
+                "running",
+                "finished"
+              ]
+            },
+            "to": {
+              "enum": [
+                "ready",
+                "running",
+                "finished"
+              ]
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ]
+        },
+        "invoked_by": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "parent_session_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "invoke_id": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "parent_session_id",
+                "invoke_id"
+              ]
+            },
+            "to": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "parent_session_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "invoke_id": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "required": [
+                "parent_session_id",
+                "invoke_id"
+              ]
+            }
+          }
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "exited": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/name"
+              }
+            },
+            "entered": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/name"
+              }
+            },
+            "atomic": {
+              "$ref": "#/$defs/stateSet"
+            }
+          },
+          "required": [
+            "exited",
+            "entered"
+          ]
+        },
+        "bound_states": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "added": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/name"
+              }
+            },
+            "removed": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/name"
+              }
+            }
+          },
+          "required": [
+            "added",
+            "removed"
+          ]
+        },
+        "system": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "enum": [
+                  "sessionid",
+                  "name",
+                  "ioprocessors"
+                ]
+              },
+              "change": {
+                "$ref": "#/$defs/change"
+              },
+              "from": {
+                "$ref": "urn:stateforward:scxml:session-snapshot:v2#/$defs/value"
+              },
+              "to": {
+                "$ref": "urn:stateforward:scxml:session-snapshot:v2#/$defs/value"
+              }
+            },
+            "required": [
+              "name",
+              "change"
+            ]
+          }
+        },
+        "data_model": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/keyedValue"
+          }
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "$ref": "#/$defs/name"
+              },
+              "change": {
+                "$ref": "#/$defs/change"
+              },
+              "from": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/name"
+                }
+              },
+              "to": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/name"
+                }
+              }
+            },
+            "required": [
+              "state",
+              "change"
+            ]
+          }
+        },
+        "counters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "send": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "$ref": "#/$defs/uint"
+                },
+                "to": {
+                  "$ref": "#/$defs/uint"
+                }
+              },
+              "required": [
+                "from",
+                "to"
+              ]
+            },
+            "invoke": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "$ref": "#/$defs/uint"
+                },
+                "to": {
+                  "$ref": "#/$defs/uint"
+                }
+              },
+              "required": [
+                "from",
+                "to"
+              ]
+            }
+          }
+        },
+        "queues": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "internal": {
+              "$ref": "#/$defs/fifo"
+            },
+            "external": {
+              "$ref": "#/$defs/fifo"
+            }
+          }
+        },
+        "pending_sends": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "added": {
+              "type": "array",
+              "items": {
+                "$ref": "urn:stateforward:scxml:session-snapshot:v2#/$defs/pendingSend"
+              }
+            },
+            "removed": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          },
+          "required": [
+            "added",
+            "removed"
+          ]
+        },
+        "invocations": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "added": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              }
+            },
+            "removed": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              }
+            },
+            "changed": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "invoke_id": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/invocationMetadata"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/invocationMetadata"
+                  }
+                },
+                "required": [
+                  "invoke_id",
+                  "from",
+                  "to"
+                ]
+              }
+            }
+          },
+          "required": [
+            "added",
+            "removed"
+          ]
+        },
+        "transitions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "added": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/transitionKey"
+              }
+            },
+            "removed": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/transitionKey"
+              }
+            },
+            "changed": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "source": {
+                    "$ref": "#/$defs/name"
+                  },
+                  "index": {
+                    "$ref": "#/$defs/u32"
+                  },
+                  "from": {
+                    "$ref": "urn:stateforward:scxml:session-snapshot:v2#/$defs/transition"
+                  },
+                  "to": {
+                    "$ref": "urn:stateforward:scxml:session-snapshot:v2#/$defs/transition"
+                  }
+                },
+                "required": [
+                  "source",
+                  "index",
+                  "from",
+                  "to"
+                ]
+              }
+            }
+          },
+          "required": [
+            "added",
+            "removed"
+          ]
+        },
+        "reordered": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "configuration",
+              "history",
+              "bound_states",
+              "data_model",
+              "pending_sends",
+              "invocations",
+              "transitions"
+            ]
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "path",
+        "change"
+      ]
+    }
+  }
+}

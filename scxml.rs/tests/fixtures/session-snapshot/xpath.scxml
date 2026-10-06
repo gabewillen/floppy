@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- XPath data-model variables shown as their <data> markup, in document
+     order. Checkpoints: 0 after start, 1 after "go", 2 at the only drain
+     iteration (no deadline), 3 at the end. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="xpath" name="xpath" initial="s">
+  <datamodel>
+    <data id="cart">
+      <items xmlns=""><item>apple</item></items>
+    </data>
+    <data id="total" expr="1"/>
+  </datamodel>
+  <state id="s">
+    <transition event="go" target="t"/>
+  </state>
+  <state id="t"/>
+</scxml>

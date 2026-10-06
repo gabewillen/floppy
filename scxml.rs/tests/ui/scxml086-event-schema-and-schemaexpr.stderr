@@ -1,0 +1,17 @@
+error[SCXML086]: `<transition>` has both `event:schema` and `event:schemaexpr`
+ --> tests/ui/scxml086-event-schema-and-schemaexpr.scxml:9:51
+  |
+9 |                 event:schema='{"type": "object"}' event:schemaexpr="orderSchema"/>
+  |                 --------------------------------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ a second schema for the same event data
+  |                 |
+  |                 the schema is given here
+  |
+  = note: as with SCXML's other attribute/`expr` pairs, an element gives its schema either literally (`event:schema`) or as an expression (`event:schemaexpr`), not both
+  = help: keep one of the two attributes
+help: remove `event:schemaexpr`
+  |
+9 -                 event:schema='{"type": "object"}' event:schemaexpr="orderSchema"/>
+9 +                 event:schema='{"type": "object"}'/>
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scxml-cli --explain SCXML086`.
