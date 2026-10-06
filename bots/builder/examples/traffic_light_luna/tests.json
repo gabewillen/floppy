@@ -1,0 +1,61 @@
+[
+  {
+    "events": [],
+    "expect_done": false,
+    "expect_events": [
+      "light.green",
+      "walk.off"
+    ],
+    "name": "starts_green",
+    "settle_ms": 1000
+  },
+  {
+    "events": [
+      {
+        "data": "{}",
+        "delay_ms": 100,
+        "name": "pedestrian.button"
+      }
+    ],
+    "expect_done": false,
+    "expect_events": [
+      "light.green",
+      "walk.off",
+      "light.yellow",
+      "light.red",
+      "walk.on",
+      "walk.off",
+      "light.green",
+      "walk.off"
+    ],
+    "name": "button_runs_full_cycle",
+    "settle_ms": 10000
+  },
+  {
+    "events": [
+      {
+        "data": "{}",
+        "delay_ms": 0,
+        "name": "pedestrian.button"
+      },
+      {
+        "data": "{}",
+        "delay_ms": 1000,
+        "name": "pedestrian.button"
+      }
+    ],
+    "expect_done": false,
+    "expect_events": [
+      "light.green",
+      "walk.off",
+      "light.yellow",
+      "light.red",
+      "walk.on",
+      "walk.off",
+      "light.green",
+      "walk.off"
+    ],
+    "name": "button_during_yellow_is_ignored",
+    "settle_ms": 10000
+  }
+]

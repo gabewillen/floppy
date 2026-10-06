@@ -1,0 +1,8 @@
+[
+  {
+    "event": "pedestrian.button",
+    "schema": {
+      "type": "object"
+    }
+  }
+]

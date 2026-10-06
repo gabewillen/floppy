@@ -1,0 +1,232 @@
+{
+  "attempts": 3,
+  "decisions": [
+    "triage.repair",
+    "triage.repair"
+  ],
+  "failures": 2,
+  "fixes_applied": 0,
+  "history": [
+    {
+      "attempt": 1,
+      "diagnostics": [
+        {
+          "code": "test-failed",
+          "kind": "simulate",
+          "message": "test button_runs_full_cycle expected the outputs [\"light.green\",\"walk.off\",\"light.yellow\",\"light.red\",\"walk.on\",\"walk.off\",\"light.green\",\"walk.off\"] in order and done=false, observed [\"light.green\",\"walk.off\",\"light.yellow\"] and done=false"
+        },
+        {
+          "code": "test-failed",
+          "kind": "simulate",
+          "message": "test button_during_yellow_is_ignored expected the outputs [\"light.green\",\"walk.off\",\"light.yellow\",\"light.red\",\"walk.on\",\"walk.off\",\"light.green\",\"walk.off\"] in order and done=false, observed [\"light.green\",\"walk.off\",\"light.yellow\"] and done=false"
+        }
+      ],
+      "failure": 1
+    },
+    {
+      "attempt": 2,
+      "diagnostics": [
+        {
+          "code": "SCXML070",
+          "kind": "validate",
+          "message": "a `<send>` to `#_internal` cannot use `delay` Help: remove `delay` to raise the event now, or drop the `target` to deliver it after the delay on the session's own external queue"
+        },
+        {
+          "code": "SCXML070",
+          "kind": "validate",
+          "message": "a `<send>` to `#_internal` cannot use `delay` Help: remove `delay` to raise the event now, or drop the `target` to deliver it after the delay on the session's own external queue"
+        },
+        {
+          "code": "SCXML070",
+          "kind": "validate",
+          "message": "a `<send>` to `#_internal` cannot use `delay` Help: remove `delay` to raise the event now, or drop the `target` to deliver it after the delay on the session's own external queue"
+        }
+      ],
+      "failure": 2
+    }
+  ],
+  "plan": {
+    "events": [
+      {
+        "description": "Pedestrian button press received from the invoker; acted on during green and ignored in other phases.",
+        "direction": "input",
+        "name": "pedestrian.button"
+      },
+      {
+        "description": "Internal delayed event raised after the configured yellow interval.",
+        "direction": "internal",
+        "name": "timer.yellow_done"
+      },
+      {
+        "description": "Internal delayed event raised after the configured walk interval.",
+        "direction": "internal",
+        "name": "timer.walk_done"
+      },
+      {
+        "description": "Internal delayed event raised after the configured red clearance interval.",
+        "direction": "internal",
+        "name": "timer.clear_done"
+      },
+      {
+        "description": "Output to the invoker announcing the vehicle light is green.",
+        "direction": "output",
+        "name": "light.green"
+      },
+      {
+        "description": "Output to the invoker announcing the vehicle light is yellow.",
+        "direction": "output",
+        "name": "light.yellow"
+      },
+      {
+        "description": "Output to the invoker announcing the vehicle light is red.",
+        "direction": "output",
+        "name": "light.red"
+      },
+      {
+        "description": "Output to the invoker announcing the pedestrian walk signal is on.",
+        "direction": "output",
+        "name": "walk.on"
+      },
+      {
+        "description": "Output to the invoker announcing the pedestrian walk signal is off.",
+        "direction": "output",
+        "name": "walk.off"
+      }
+    ],
+    "name": "pedestrian_traffic_light",
+    "states": [
+      {
+        "id": "traffic",
+        "kind": "compound",
+        "parent": "",
+        "purpose": "Machine root; initial child is green."
+      },
+      {
+        "id": "green",
+        "kind": "atomic",
+        "parent": "traffic",
+        "purpose": "Vehicle green, pedestrian walk off. On entry send light.green and walk.off. Wait for a button press; no timer is used."
+      },
+      {
+        "id": "yellow",
+        "kind": "atomic",
+        "parent": "traffic",
+        "purpose": "Vehicle yellow, pedestrian walk off. On entry send light.yellow and start the configured yellow delay."
+      },
+      {
+        "id": "walk",
+        "kind": "atomic",
+        "parent": "traffic",
+        "purpose": "Vehicle red, pedestrian walk on. On entry send light.red and walk.on; start the configured walk delay."
+      },
+      {
+        "id": "clear",
+        "kind": "atomic",
+        "parent": "traffic",
+        "purpose": "Vehicle red, pedestrian walk off. On entry send walk.off and start the configured red clearance delay."
+      }
+    ],
+    "summary": "Start in green. A button press during green ends it immediately and begins yellow; the timed sequence then gives pedestrians a walk interval and red clearance before returning to green. Button presses in other phases are ignored. Emit outputs on state entry for every vehicle-light change and each walk signal transition.",
+    "transitions": [
+      {
+        "description": "A press ends green immediately; entering yellow announces the change and starts its delayed timer.",
+        "event": "pedestrian.button",
+        "source": "green",
+        "target": "yellow"
+      },
+      {
+        "description": "Yellow interval expires; entering walk announces vehicle red and walk on, then starts the walk timer.",
+        "event": "timer.yellow_done",
+        "source": "yellow",
+        "target": "walk"
+      },
+      {
+        "description": "Walk interval expires; entering clearance announces walk off and starts the clearance timer.",
+        "event": "timer.walk_done",
+        "source": "walk",
+        "target": "clear"
+      },
+      {
+        "description": "Red clearance expires; return to green and announce the vehicle light and walk-off status.",
+        "event": "timer.clear_done",
+        "source": "clear",
+        "target": "green"
+      }
+    ]
+  },
+  "simulation": [
+    {
+      "done": false,
+      "error": null,
+      "expect_done": false,
+      "expected": [
+        "light.green",
+        "walk.off"
+      ],
+      "invokeid": "sim_run.builder-harness.1.3",
+      "name": "starts_green",
+      "observed": [
+        "light.green",
+        "walk.off"
+      ],
+      "passed": true
+    },
+    {
+      "done": false,
+      "error": null,
+      "expect_done": false,
+      "expected": [
+        "light.green",
+        "walk.off",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "walk.off",
+        "light.green",
+        "walk.off"
+      ],
+      "invokeid": "sim_run.builder-harness.1.4",
+      "name": "button_runs_full_cycle",
+      "observed": [
+        "light.green",
+        "walk.off",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "walk.off",
+        "light.green",
+        "walk.off"
+      ],
+      "passed": true
+    },
+    {
+      "done": false,
+      "error": null,
+      "expect_done": false,
+      "expected": [
+        "light.green",
+        "walk.off",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "walk.off",
+        "light.green",
+        "walk.off"
+      ],
+      "invokeid": "sim_run.builder-harness.1.5",
+      "name": "button_during_yellow_is_ignored",
+      "observed": [
+        "light.green",
+        "walk.off",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "walk.off",
+        "light.green",
+        "walk.off"
+      ],
+      "passed": true
+    }
+  ],
+  "warnings": 0
+}

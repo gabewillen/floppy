@@ -149,10 +149,9 @@ first builder (commit `89ec4d05`), before the round-1 review fixes (the
 draft contract, per-test invoke ids, the simulation timeouts), so its
 `report.json` has no per-test `invokeid`. The traffic_light example is
 model output, kept as built: for example its `onexit` handlers do not
-cancel the phase timers, which its tests do not detect. No live
-`builder.done` of the current builder exists yet. The development session
-log reports two live runs of the current builder (2026-10-06,
-`gpt-4o-mini` and `gpt-4.1`) that ended in `builder.failed`; the
-repository holds no record of them (the live test overwrites the
-untracked `target/builder-live/failed.json`), so their outcomes and causes
-are unproven.
+cancel the phase timers, which its tests do not detect. The first live
+`builder.done` of the current builder is
+[`examples/traffic_light_luna`](examples/traffic_light_luna) (2026-10-06,
+`gpt-6-luna`; three attempts, two `triage.repair` decisions).
+[docs/live-proof.md](../../docs/live-proof.md) records that run and every
+other live result.
