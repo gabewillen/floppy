@@ -110,7 +110,7 @@ case "$proof_dir" in
 esac
 manifest="$proof_dir/manifest.tsv"
 manifest_tmp="$proof_dir/manifest.tsv.tmp"
-all_components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_service_example scxml_service_files scxml_extension_example scxml_extension_openai scxml_script_example scxml_validator scxml_reporter_rustc scxml_reporter_sarif scxml_compiler scxml_machine scxml_snapshot_codec'
+all_components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_service_example scxml_service_files scxml_extension_example scxml_script_example scxml_validator scxml_reporter_rustc scxml_reporter_sarif scxml_compiler scxml_machine scxml_snapshot_codec'
 if [ "$#" -eq 0 ]; then
     components=$all_components
 else
@@ -172,12 +172,6 @@ expected_imports() {
         # including outbound-http (with slot references) and the read-only
         # session-snapshot-host.
         scxml_extension_example) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' 'stateforward:scxml/execution-host@0.2.0' 'stateforward:scxml/outbound-http@0.2.0' 'stateforward:scxml/session-snapshot-host@0.2.0' ;;
-        # The openai namespace reaches the network only through the
-        # host-admitted, deny-by-default outbound-http capability (its key
-        # and base URL are slot references, never values), reads the
-        # read-only session snapshot, and sends the events the model chose
-        # through execution-host; no WASI interface is kept.
-        scxml_extension_openai) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' 'stateforward:scxml/execution-host@0.2.0' 'stateforward:scxml/outbound-http@0.2.0' 'stateforward:scxml/session-snapshot-host@0.2.0' ;;
         scxml_script_example) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' ;;
         scxml_reporter_rustc|scxml_reporter_sarif) printf '%s\n' 'stateforward:scxml-reporter/telemetry@0.2.0' 'stateforward:scxml-reporter/types@0.2.0' ;;
         scxml_validator) printf '%s\n' 'stateforward:scxml-validator/telemetry@0.2.0' 'stateforward:scxml-validator/expression-syntax@0.2.0' 'stateforward:scxml-validator/types@0.2.0' ;;
@@ -276,19 +270,12 @@ check_wasi_types_only_imports() {
     done
 }
 
-# Extension components a document loads from a repository (its namespace URI
-# is the repository path, docs/executable-content-extensions.md) are built and
-# verified like every component but are not host-bundled: the release ships
-# them as release assets authenticated by the release's SHA256SUMS, and the
-# host's closed artifact identities do not name them, so manifest.tsv does not
-# list them.
-repository_namespaces=' scxml_extension_openai '
 # Example components that declare WASI permissions are not host-bundled
 # either: an embedder binds them by SHA-256 (authenticate_service_component)
 # with its own grants, so manifest.tsv does not list them.
 caller_authenticated=' scxml_service_files '
 in_manifest() {
-    case "$repository_namespaces$caller_authenticated" in
+    case "$caller_authenticated" in
         *" $1 "*) return 1 ;;
         *) return 0 ;;
     esac

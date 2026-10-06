@@ -987,7 +987,7 @@ pub(crate) mod host {
             scxml_host_wasmtime::DEFAULT_FUEL,
         )?;
         let values = args.namespaces.values()?;
-        let services = args.services.components(services, &values, true)?;
+        let services = args.services.components(services, &values, true, false)?;
         let (extensions, _notes) = extensions(&args.namespaces, packages, &values, true)?;
         let host = host
             .with_extension_components(extensions)?

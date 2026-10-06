@@ -25,17 +25,17 @@ disagree are in [spec-errata.md](spec-errata.md).
   errata SHA-256
   `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f`,
   producer report digest
-  `1975a1a0467b6e0a4a80befe2a5b9902169e85c018a4d22768534dd27a54d682`,
+  `8f5ab67d3fdcaabfb32964c1728140a83b7aed7b8d87d8923867bda15d3c26c1`,
   and canonical artifact SHA-256
-  `6c8be254619f14afc8193355259c8759f15d4bf2016a46dbd4e0a36be2a6eeee`.
+  `0b54ea5b2fe782eae5b16d20188b54eb55842e9147fa0e104e80480016ec0c92`.
   The XPath evidence binds corpus digest
   `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca`,
   errata SHA-256
   `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a`,
   producer report digest
-  `c07da9831092692099d7c46696945feab67fe99044ca7cec9df8356db56276e1`,
+  `85c6c5bd0f421a0c477818ade0f9aa5fdbf23c44124ea3a6e7f1ffce71d25a26`,
   and canonical artifact SHA-256
-  `3451259154ec3784b5c229fafcbeef77c70418b0fea088be6fd2136933d6d8a7`.
+  `07a301af5f350c0e5040b24c3a68144e67ed996257894ee9cf554a94c351e91f`.
   The report bytes are checked in under
   [`tests/conformance/w3c-irp/baselines`](../tests/conformance/w3c-irp/baselines).
   These are measured IRP results of the shipped components under the
@@ -146,10 +146,15 @@ disagree are in [spec-errata.md](spec-errata.md).
   (`ServiceComponents::with_deferred_http`). Proven by the `service_invoke`
   deferred tests (a held request does not block events, a logical session's
   clock waits for it, a cancelled service abandons it, a recording session
-  refuses it). Gaps: the CLI grants services only the blocking `fetch`
-  (`begin` is refused there), batch runs refuse `begin`, the transport is not
-  interrupted when an instance abandons a request (its own timeouts bound
-  it), and the browser host offers neither.
+  refuses it; `cancelling_the_invoking_state_closes_the_streaming_connection_and_ends_its_thread`
+  proves that `ThreadedServiceHttp` closes an abandoned request's connection
+  and ends its thread; the CLI's `live_run` deferred tests prove `run`
+  wires it, against loopback servers). Gaps: batch runs (and `snapshot
+  run`) refuse `begin`, an abandoned
+  request still resolving or connecting ends only within the connect timeout
+  (nothing is sent), an embedder's own `ServiceHttp` transport is not told
+  that a request was abandoned (its own timeouts bound it), and the browser
+  host offers neither.
 - Package event contracts: a service or extension package may declare the
   events its component emits and accepts with JSON Schemas (`events`). The
   Wasmtime host enforces a service's contract on every `emit` (a mismatch
@@ -349,11 +354,8 @@ In detail:
   responses are delivered whole (no streaming), are not recorded in `run`
   replay logs (so a recorded or replayed `run` offers extension components no
   outbound HTTP: every request is refused the same way in both), and carry no
-  W3C trace headers. The `openai` package
-  does not implement agentml-go's `stream`, `retry`, or template prompts
-  ([namespaces/openai/README.md](../namespaces/openai/README.md)); its
-  function-calling mode and snapshot system message need the Wasmtime
-  host's `session-snapshot-host`, which the browser host does not offer.
+  W3C trace headers. A slow request belongs in an invoked service
+  (`outbound-http.begin`, which never blocks the session).
 - The BasicHTTP network of live sessions (`LiveHttp`, `scxml-cli run
   --http-allow`/`--http-listen`): outbound requests carry no W3C trace headers (so `_event.raw` at a
   receiver never depends on telemetry) and their response bodies are never

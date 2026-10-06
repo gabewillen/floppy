@@ -616,6 +616,8 @@ mod live {
         Http(InboundHttp),
         /// An accepted outbound `BasicHTTP` request settled.
         CommunicationSettled,
+        /// A deferred request of an invoked service settled.
+        ServiceResponse,
     }
 
     /// Reads standard input line by line into `sender`.
@@ -1529,6 +1531,16 @@ mod live {
             }
         }
 
+        /// Delivers every settled deferred request of an invoked service to
+        /// its instance (cause `service-response`).
+        fn service_responses(&mut self) -> Result<Option<End>, Box<dyn std::error::Error>> {
+            match self.session.deliver_service_responses() {
+                Ok(None) => Ok(None),
+                Ok(Some(step)) => self.outcome("service-response", Ok(step), None),
+                Err(error) => self.outcome("service-response", Err(error), None),
+            }
+        }
+
         /// Delivers every owed `error.communication` (cause
         /// `communication-error`).
         fn communication_errors(&mut self) -> Result<Option<End>, Box<dyn std::error::Error>> {
@@ -1560,6 +1572,11 @@ mod live {
         /// Milliseconds until the next deadline; `None` when nothing is
         /// scheduled.
         fn wait(&mut self) -> Result<Option<u64>, SessionHostError> {
+            // The logical clock never moves past a deferred service request
+            // in flight: its outcome is the next thing that happens.
+            if self.clock == ClockMode::Logical && self.session.awaiting_service_responses() {
+                return Ok(None);
+            }
             let deadline = self.session.next_deadline()?;
             Ok(deadline.map(|deadline| match self.clock {
                 ClockMode::Wall => {
@@ -1702,6 +1719,7 @@ mod live {
                     && wait.is_none()
                     && self.listener.is_none()
                     && !self.session.communication_pending()
+                    && !self.session.awaiting_service_responses()
                 {
                     return Ok(End::Closed("eof", EXIT_CLOSED));
                 }
@@ -1758,6 +1776,7 @@ mod live {
                     }
                     Some(Message::Http(inbound)) => self.http(inbound)?,
                     Some(Message::CommunicationSettled) => self.communication_errors()?,
+                    Some(Message::ServiceResponse) => self.service_responses()?,
                 };
                 if let Some(end) = ended {
                     return Ok(end);
@@ -1996,7 +2015,11 @@ mod live {
         // recorded or replayed session gets no outbound transport: every
         // extension request is refused, the same way in both.
         let outbound = args.record.is_none() && args.replay.is_none();
-        let service_components = args.services.components(&services, &values, outbound)?;
+        // Only a live session that neither records nor replays delivers
+        // deferred outcomes, so only it gets the deferred transport.
+        let service_components = args
+            .services
+            .components(&services, &values, outbound, outbound)?;
         let (extensions, _notes) =
             crate::snapshot::host::extensions(&args.namespaces, &packages, &values, outbound)?;
         let host = host
@@ -2005,7 +2028,7 @@ mod live {
         let messages = mpsc::channel();
         // A replay reproduces the recorded network without touching it: the
         // recorded public URL, no transport, and no listener.
-        let (http, listener) = match &replay {
+        let (mut http, listener) = match &replay {
             Some(_) => (
                 LiveHttp {
                     public_url: identity
@@ -2022,6 +2045,12 @@ mod live {
         };
         if replay.is_none() {
             identity.http_public_url = http.public_url.as_ref().map(|url| url.as_str().to_owned());
+            // A settled deferred service request wakes the loop, which
+            // delivers it (`deliver_service_responses`).
+            let sender = messages.0.clone();
+            http.on_service_response = Some(Arc::new(move || {
+                let _ = sender.send(Message::ServiceResponse);
+            }));
         }
         let log = match &args.record {
             None => None,

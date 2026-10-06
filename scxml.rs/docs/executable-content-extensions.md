@@ -1,7 +1,8 @@
 # Writing an extension component
 
 An extension namespace (SCXML 1.0 §4.10) adds executable elements to SCXML,
-for example `<openai:generate>` from the `openai` namespace. In this project a namespace
+for example `<example:fetch>` from the example namespace
+([`components/scxml-extension-example`](../components/scxml-extension-example)). In this project a namespace
 is a *package* of two independently deployed artifacts:
 
 - an **XSD** that governs the elements' XML structure (the validator and
@@ -19,13 +20,18 @@ optionally, the WASI permissions its component may import
 URI is a repository path, loaded from that repository's release ("Loading an
 element from a repository" below). The example namespace
 ([`components/scxml-extension-example`](../components/scxml-extension-example))
-exercises every host capability with one element each. Executable-content
-extension packages live under the top-level [`namespaces/`](../namespaces)
-directory, one repository namespace per folder; the first, [`namespaces/openai`](../namespaces/openai), is modelled
-on agentml-go's `<openai:generate>` and is the model for an extension component
-that calls a network service. [`namespaces/env`](../namespaces/env) is not a
-package: it documents the host's `env` attribute vocabulary ("Values are
-references" below).
+exercises every host capability with one element each and is the model for
+an extension component. Repository namespaces live under the top-level
+[`namespaces/`](../namespaces) directory, one per folder; today it holds only
+the toolchain's vocabularies: [`namespaces/env`](../namespaces/env), which is
+not a package (it documents the host's `env` attribute vocabulary, "Values
+are references" below), and [`namespaces/event`](../namespaces/event). A
+network service, such as a model call, is not an extension element: an
+element is executable content and runs synchronously inside a microstep, so
+slow I/O belongs in an invoked service
+([invoked-services.md](invoked-services.md); the echo example
+[`components/scxml-service-example`](../components/scxml-service-example) is
+its model).
 
 ## From agentml-go's Go `Namespace` to the WIT
 
@@ -50,8 +56,8 @@ in-process. Here the same roles are a component's exports and imports:
 | OpenTelemetry spans (`otel.Tracer`) | the `telemetry` import (closed operation labels; the host owns the SDK) |
 | `el xmldom.Element` | `executable-content-extension`: the exact expanded name, attributes, and flattened content |
 | `itp.Snapshot(ctx, SnapshotConfig{ExcludeData})` | `session-snapshot-host.snapshot(exclude)`: the canonical `scxml.session-snapshot/v2` document of the executing session (read-only; see below) |
-| `net/http` clients (for example agentml-go's `openai-go` client) | `outbound-http.fetch` (deny by default; admitted to the origins the package declares or the run supplies; see below) |
-| `os.LookupEnv` for keys and endpoints | an `env` slot: the element names the variable (`env:apikey="OPENAI_API_KEY"`), and the component receives an opaque reference, never the value (see below) |
+| `net/http` clients | `outbound-http.fetch` for a quick request (deny by default; admitted to the origins the package declares or the run supplies; see below); a slow request belongs in an invoked service |
+| `os.LookupEnv` for keys and endpoints | an `env` slot: the element names the variable (`env:token="API_TOKEN"`), and the component receives an opaque reference, never the value (see below) |
 | other ambient OS access | nothing ambient: an extension component reaches the outside world only through its world's imports (and, in a later release, the WASI interfaces its package declares and the run grants; see "WASI permissions") |
 
 Differences that matter when porting:
@@ -129,8 +135,8 @@ Build it for `wasm32-wasip2` and virtualize it deny-by-default with the pinned
 `wasi-virt` (as `scripts/verify-wasm-capabilities.sh` does for the shipped
 extension components), so the deployable component imports only the project
 interfaces it uses. Keep the decision logic in plain Rust behind a small trait
-so native tests exercise it without a host (the `openai` crate's `OpenAiHost` is
-the model).
+so native tests exercise it without a host (the example component's
+`ExampleNamespace::execute` is the model).
 
 ## WASI permissions
 
@@ -229,8 +235,8 @@ and `wasi:sockets` included, or anything outside its world, fails to
 instantiate). Instead:
 
 - **The package declares slots.** The manifest's `env-slots` lists the slots
-  its elements accept (`[a-z][a-z0-9-]*`, at most 32; `openai` declares
-  `apikey` and `baseurl`).
+  its elements accept (`[a-z][a-z0-9-]*`, at most 32; the example package
+  declares `url` and `token`).
 - **The document names a variable per slot.** An element binds a slot with an
   attribute in the host's `env` vocabulary, `https://github.com/stateforward/scxml.rs/namespaces/env`:
   `env:<slot>="NAME"`, or `env:<slot>expr="EXPR"` for an expression that
@@ -265,8 +271,8 @@ instantiate). Instead:
   only for that element: another element, of the same or another namespace,
   never receives it, and an element that names no slot receives nothing. A
   name the run holds no value for leaves the slot absent (the component
-  decides: `openai` fails with `error.execution` without a key, and uses
-  `https://api.openai.com/v1` without a base URL), and the CLI names the
+  decides: `<example:fetch>` sends no `authorization` without a token, and
+  uses its `url` attribute without a `url` slot), and the CLI names the
   `--env` flag that would add it before the run starts.
 
 ## Outbound HTTP: declared origins, run-supplied origins
@@ -313,23 +319,28 @@ text (or bytes) and references. The capability is deny by default:
   response body of at most 16 MiB (`payload-too-large` beyond it).
 - **The `execute` call blocks.** `fetch` runs on the session thread inside
   `execute`; fuel meters instructions, not wall time, so the transport's
-  timeouts are what bound the wait.
+  timeouts are what bound the wait. That is why `fetch` is for quick
+  requests only: a slow one (a model call, for example) belongs in an
+  invoked service, whose `outbound-http.begin` never blocks the session
+  ([invoked-services.md](invoked-services.md#slow-requests-without-blocking-the-session)).
 - **Failures are the extension component's to map.** A refused request, a
-  transport failure, or an oversized response is a `component-error`; the
-  `openai` extension component maps every one, and every non-2xx status, to
+  transport failure, or an oversized response is a `component-error`;
+  `<example:fetch>` maps every one, and every non-2xx status, to
   `execution`, so the session raises `error.execution` and keeps running.
 
-`openai` sends the `apikey` slot's reference as a bearer token
-(`authorization: Bearer <reference>`) and builds its URL from the `baseurl`
-slot's reference followed by `/responses` (so the base URL must not end with
-`/`), or from `https://api.openai.com/v1` without one. Each request is one
+`<example:fetch>` sends the `token` slot's reference as a bearer token
+(`authorization: Bearer <reference>`) and builds its URL from the `url`
+slot's reference followed by its `path` attribute, or from its `url`
+attribute without that slot. Each request is one
 `scxml.host-wasmtime.extension-http-fetch` span carrying only its closed outcome
 event and error category.
 
 ```console
-OPENAI_API_KEY=... scxml-cli snapshot run namespaces/openai/examples/hello.scxml \
+API_TOKEN=... scxml-cli snapshot run DOC.scxml \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
-  --env OPENAI_API_KEY@https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0
+  --extension-package components/scxml-extension-example/package/example.extension.json \
+  --extension-component-sha256 "https://stateforward.org/scxml/example=$EXAMPLE_SHA256" \
+  --env API_TOKEN@https://stateforward.org/scxml/example
 ```
 
 The WIT import is project-specific rather than `wasi:http`, as the
@@ -343,10 +354,8 @@ client.
 
 ## Reading the session snapshot
 
-agentml-go's `openai` namespace sends the interpreter's snapshot as the
-model's system message and turns the transitions the session can take into
-tools. An extension component here does the same through
-`stateforward:scxml/session-snapshot-host`: `snapshot(exclude)` returns the
+An extension component reads the executing session's state through
+`stateforward:scxml/session-snapshot-host` (agentml-go's `Snapshot`): `snapshot(exclude)` returns the
 executing session's canonical `scxml.session-snapshot/v2` document
 ([session-snapshot.md](session-snapshot.md), "Snapshots during executable
 content") as compact JSON text, with any of the `system`, `data_model`, `queues`,
@@ -385,9 +394,8 @@ content") as compact JSON text, with any of the `system`, `data_model`, `queues`
   the existing `snapshot-bytes` measurement; the document never becomes an
   attribute.
 
-The `openai` extension component asks for two documents: the system message
-excludes `data_model` and `transitions` (agentml-go's `ExcludeData` and
-`PruneSnapshot`), and the tools come from one that keeps only `transitions`.
+The example's `<example:snapshot location="L" exclude="S..."/>` assigns the
+document, with the sections `S` excluded, to `L`.
 
 ## Packaging
 
@@ -487,7 +495,7 @@ document needs no flag to bind it:
 
 ```xml
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0"
+       xmlns:weather="https://github.com/example-org/scxml-weather/namespaces/weather@v1.0.0"
        version="1.0" datamodel="ecmascript" initial="ask">
 ```
 
@@ -567,11 +575,9 @@ document needs no flag to bind it:
   no URI, URL, tag, commit, digest, or path is ever an attribute.
 
 ```console
-# First run: resolves, verifies, caches, and pins the element (v0.2.0 is the
-# first release that publishes it).
-OPENAI_API_KEY=... scxml-cli snapshot run namespaces/openai/examples/hello.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
-  --env OPENAI_API_KEY@https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0
+# First run: resolves, verifies, caches, and pins the element.
+scxml-cli snapshot run weather.scxml \
+  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256"
 
 # Later runs: the same command with --offline uses the cache only.
 ```
@@ -597,8 +603,8 @@ OPENAI_API_KEY=... scxml-cli snapshot run namespaces/openai/examples/hello.scxml
   callback receives no snapshot.
 - An executable-content snapshot holds the executing session only (no invoked
   sessions) and no transition previews.
-- `outbound-http` is not streamed: an extension component receives the whole
-  response body once, so `openai`'s `stream` is not supported.
+- `outbound-http` is not streamed: a component receives the whole response
+  body once.
 - WASI permissions are linked into invoked-service components only, by rule
   (extension elements are synchronous executable content; I/O-bound work
   belongs in services): the Wasmtime host refuses an extension package that

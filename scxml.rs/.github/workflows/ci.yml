@@ -48,7 +48,7 @@ jobs:
       - run: RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
       - run: RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --all-features --locked
       - run: cargo test -p scxml-wit --locked
-      - run: cargo clippy --locked --target wasm32-wasip2 -p scxml-telemetry -p scxml-validator-xsd -p scxml-clock -p scxml-compiler -p scxml-data-model-ecmascript -p scxml-data-model-null -p scxml-data-model-xpath -p scxml-ioprocessor-scxml -p scxml-ioprocessor-basichttp -p scxml-machine -p scxml-extension-example -p scxml-extension-openai -p scxml-reporter-rustc -p scxml-reporter-sarif -p scxml-script-example -p scxml-service-example -p scxml-service-files -p scxml-snapshot-codec -p scxml-validator -- -D warnings
+      - run: cargo clippy --locked --target wasm32-wasip2 -p scxml-telemetry -p scxml-validator-xsd -p scxml-clock -p scxml-compiler -p scxml-data-model-ecmascript -p scxml-data-model-null -p scxml-data-model-xpath -p scxml-ioprocessor-scxml -p scxml-ioprocessor-basichttp -p scxml-machine -p scxml-extension-example -p scxml-reporter-rustc -p scxml-reporter-sarif -p scxml-script-example -p scxml-service-example -p scxml-service-files -p scxml-snapshot-codec -p scxml-validator -- -D warnings
       - run: cargo check -p scxml-host-wasmtime --features wasmtime --locked
       - run: cargo test -p scxml-host-wasmtime --features wasmtime,http --locked
         timeout-minutes: 75
@@ -138,16 +138,16 @@ jobs:
       - name: Install the pinned wasi-virt revision
         run: cargo install --locked --git https://github.com/bytecodealliance/WASI-Virt --rev 448f6df8f688cee5d6995e96b1ffc31f9bf00742 wasi-virt
       # The eight components the conformance executor links, and the
-      # `openai` repository namespace component the namespace suites
-      # (namespaces/<name>/irp) bind; manifest.tsv does not list it.
+      # example extension component the namespace suites
+      # (namespaces/<name>/irp) bind.
       - name: Build and verify the release components
         run: |
           sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
             scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
             scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine \
-            scxml_extension_openai
+            scxml_extension_example
           echo "MANIFEST_SHA256=$(sha256sum "$RELEASE/manifest.tsv" | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
-          echo "OPENAI_SHA256=$(sha256sum "$RELEASE/scxml_extension_openai.virtualized.wasm" | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
+          echo "EXTENSION_SHA256=$(sha256sum "$RELEASE/scxml_extension_example.virtualized.wasm" | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
       # The canonical release identity is this job's build (docs/conformance.md,
       # "Canonical release identity"): publish it so contributors on other
       # hosts can check identity bytes against it, with the license texts the
@@ -164,7 +164,7 @@ jobs:
       - name: Run the conformance tests through the components
         run: |
           SCXML_COMPONENTS_DIR="$RELEASE" SCXML_COMPONENTS_MANIFEST_SHA256="$MANIFEST_SHA256" \
-            SCXML_OPENAI_COMPONENT_SHA256="$OPENAI_SHA256" \
+            SCXML_EXTENSION_COMPONENT_SHA256="$EXTENSION_SHA256" \
             cargo test --release --locked -p scxml-conformance --features wasmtime
       - name: Reproduce both canonical baselines through the CLI
         run: |
@@ -176,15 +176,16 @@ jobs:
               --canonical-baseline "tests/conformance/w3c-irp/baselines/$model.scxml-report.json"
           done
       # Each repository namespace's own suite (docs/conformance.md,
-      # "Namespace suites"), binding the openai package where it is used.
+      # "Namespace suites"), binding the example extension package where it
+      # is used.
       - name: Reproduce every namespace suite's canonical baselines through the CLI
         run: |
-          OPENAI_URI='https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0'
-          OPENAI_PACKAGE="--extension-package namespaces/openai/package/openai.extension.json --extension-component-sha256 $OPENAI_URI=$OPENAI_SHA256"
-          for suite in env:openai event: openai:openai; do
+          EXAMPLE_URI='https://stateforward.org/scxml/example'
+          EXAMPLE_PACKAGE="--extension-package components/scxml-extension-example/package/example.extension.json --extension-component-sha256 $EXAMPLE_URI=$EXTENSION_SHA256"
+          for suite in env:example event:; do
             name=${suite%%:*}
             packages=''
-            if [ -n "${suite#*:}" ]; then packages=$OPENAI_PACKAGE; fi
+            if [ -n "${suite#*:}" ]; then packages=$EXAMPLE_PACKAGE; fi
             for model in ecmascript xpath; do
               "$CARGO_TARGET_DIR/release/scxml-cli" conformance run \
                 --corpus "namespaces/$name/irp/prepared/$model" \

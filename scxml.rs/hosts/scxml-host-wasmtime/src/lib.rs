@@ -182,10 +182,12 @@ pub use service::{
 };
 #[cfg(feature = "wasmtime")]
 mod service_http;
+#[cfg(feature = "http")]
+pub use service_http::ThreadedServiceHttp;
 #[cfg(feature = "wasmtime")]
 pub use service_http::{
     DEFAULT_SERVICE_HTTP_IN_FLIGHT, MAX_SERVICE_HTTP_IN_FLIGHT, MAX_SERVICE_PENDING_REQUESTS,
-    ServiceHttp, ServiceHttpInFlightInvalid, ServiceHttpOutcome, ThreadedServiceHttp,
+    ServiceHttp, ServiceHttpInFlightInvalid, ServiceHttpOutcome,
 };
 #[cfg(feature = "wasmtime")]
 mod wasi;

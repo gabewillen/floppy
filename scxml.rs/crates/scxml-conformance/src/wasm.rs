@@ -30,9 +30,9 @@
 //! * Extension namespaces ([`WasmExecutor::with_extensions`]): each bound
 //!   namespace's component, authenticated by its trusted SHA-256, runs its
 //!   elements; the run holds exactly the harness's fake values
-//!   ([`crate::openai_service::values`]) and its only outbound transport is
+//!   ([`crate::example_server::values`]) and its only outbound transport is
 //!   the deterministic in-process stand-in
-//!   ([`crate::openai_service::OpenAiService`]), reset before every case.
+//!   ([`crate::example_server::ExampleServer`]), reset before every case.
 //! * Telemetry: one `run-case-wasm` boundary span per case with closed
 //!   labels only.
 
@@ -293,7 +293,7 @@ pub struct WasmExecutor {
     /// The bound extension namespaces (namespace-URI order).
     extensions: Vec<BoundExtension>,
     /// The outbound transport of the bound extension components, when any.
-    service: Option<std::sync::Arc<crate::openai_service::OpenAiService>>,
+    service: Option<std::sync::Arc<crate::example_server::ExampleServer>>,
 }
 
 impl std::fmt::Debug for WasmExecutor {
@@ -416,7 +416,7 @@ impl WasmExecutor {
                     include_bytes!("external_client.rs"),
                     include_bytes!("filter.rs"),
                     include_bytes!("manual_oracle.rs"),
-                    include_bytes!("openai_service.rs"),
+                    include_bytes!("example_server.rs"),
                     include_bytes!("oracle.rs"),
                     include_bytes!("report.rs"),
                     include_bytes!("runner.rs"),
@@ -450,7 +450,7 @@ impl WasmExecutor {
     /// against its schema; the run then holds the harness's fake values
     /// (granted to every bound namespace) and
     /// reaches only the in-process stand-in
-    /// ([`crate::openai_service`]). Replaces any earlier binding.
+    /// ([`crate::example_server`]). Replaces any earlier binding.
     ///
     /// # Errors
     ///
@@ -462,7 +462,7 @@ impl WasmExecutor {
         mut self,
         releases: Vec<ExtensionRelease>,
     ) -> Result<Self, WasmExecutorError> {
-        let service = std::sync::Arc::new(crate::openai_service::OpenAiService::new());
+        let service = std::sync::Arc::new(crate::example_server::ExampleServer::new());
         // The fake values are granted to every namespace this run binds.
         let uris: Vec<String> = releases
             .iter()
@@ -471,7 +471,7 @@ impl WasmExecutor {
         let values = if uris.is_empty() {
             ExtensionEnvironment::none()
         } else {
-            ExtensionEnvironment::new(crate::openai_service::values().into_iter().map(
+            ExtensionEnvironment::new(crate::example_server::values().into_iter().map(
                 |(name, value)| {
                     scxml_host_wasmtime::EnvVariable::new(name, value, uris.iter().cloned())
                 },

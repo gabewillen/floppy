@@ -2734,15 +2734,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scxml-extension-openai"
-version = "0.2.0"
-dependencies = [
- "scxml-types",
- "serde_json",
- "wit-bindgen 0.51.0",
-]
-
-[[package]]
 name = "scxml-host-wasmtime"
 version = "0.2.0"
 dependencies = [

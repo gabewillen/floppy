@@ -22,14 +22,14 @@ pub mod executor;
 pub mod external_client;
 /// Selects conformance cases by stable manifest metadata.
 pub mod filter;
+// The harness's outbound network for extension components (documented by
+// its own inner docs, whose links resolve in its scope).
+#[cfg(feature = "wasmtime")]
+pub mod example_server;
 /// Defines, validates, reads, and writes prepared corpus manifests.
 pub mod manifest;
 /// Documented automated equivalents of the W3C IRP manual-case instructions.
 pub mod manual_oracle;
-// The harness's outbound network for extension components (documented by
-// its own inner docs, whose links resolve in its scope).
-#[cfg(feature = "wasmtime")]
-pub mod openai_service;
 /// Evaluates execution results through provenance-specific conformance oracles.
 pub mod oracle;
 /// Acquires and transforms official corpus inputs into prepared artifacts.
@@ -44,13 +44,15 @@ pub mod wasm;
 
 /// Every repository namespace's own implementation report plan
 /// (`namespaces/<name>/irp`, a [`CorpusKind::NamespaceIrp`] corpus) and the
-/// repository namespaces whose packages (`namespaces/<package>/package`)
-/// its runs bind, in name order. `env` exercises its slots through the
-/// `openai` element; `event` binds nothing.
-pub const NAMESPACE_SUITES: [(&str, &[&str]); 3] = [
-    ("env", &["openai"]),
+/// extension package manifests (workspace-relative paths) its runs bind, in
+/// name order. `env` exercises its slots through the example extension's
+/// `<example:fetch>`; `event` binds nothing.
+pub const NAMESPACE_SUITES: [(&str, &[&str]); 2] = [
+    (
+        "env",
+        &["components/scxml-extension-example/package/example.extension.json"],
+    ),
     ("event", &[]),
-    ("openai", &["openai"]),
 ];
 
 pub use baseline::{BaselineError, BaselineMismatch, compare_to_baseline};

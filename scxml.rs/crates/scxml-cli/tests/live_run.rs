@@ -854,3 +854,236 @@ fn a_recorded_http_session_replays_byte_for_byte_without_the_network() {
         replayed[0]
     );
 }
+
+/// The echo service's `endpoint` slot bound to `endpoint`, by digest, on
+/// the logical clock.
+fn deferred_binding(endpoint: &str) -> Vec<String> {
+    let (dir, _) = release();
+    let component = Path::new(dir).join("scxml_service_example.virtualized.wasm");
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(fs::read(&component).expect("the echo component is readable"))
+    );
+    let manifest = workspace().join("components/scxml-service-example/package/echo.service.json");
+    vec![
+        "--clock".into(),
+        "logical".into(),
+        "--service-package".into(),
+        manifest.display().to_string(),
+        "--service-component".into(),
+        format!("{ECHO}={}", component.display()),
+        "--service-component-sha256".into(),
+        format!("{ECHO}={digest}"),
+        "--env".into(),
+        format!("ENDPOINT@{ECHO}={endpoint}"),
+    ]
+}
+
+/// `s0` invokes the echo service with its `endpoint` slot; `defer` makes it
+/// GET the slot's URL with `outbound-http.begin`, `ping` is echoed, `leave`
+/// exits `s0` (cancelling the service), and the 1 s timer `defer` arms
+/// fires on the logical clock only once no request is in flight.
+fn deferred_document(directory: &Path) -> PathBuf {
+    document(
+        directory,
+        &format!(
+            r##"<state id="s0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"><invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/><transition event="defer"><send event="defer" target="#_echo"/><send event="timer" delay="1s"/></transition><transition event="ping"><send event="ping" target="#_echo"/></transition><transition event="echo.ping"><log label="ping" expr="_event.name"/></transition><transition event="echo.fetched"><log label="fetched" expr="_event.data"/></transition><transition event="timer" target="done"><log label="timer" expr="'fired'"/></transition><transition event="leave" target="away"/></state><state id="away"><transition event="timer"><log label="timer" expr="'fired'"/></transition></state><final id="done"/>"##
+        ),
+    )
+}
+
+/// Reads one HTTP request head from `stream`.
+fn read_head(stream: &mut std::net::TcpStream) {
+    use std::io::Read as _;
+    let mut head = Vec::new();
+    let mut byte = [0_u8; 1];
+    while !head.ends_with(b"\r\n\r\n") {
+        assert_eq!(stream.read(&mut byte).expect("the head is read"), 1);
+        head.push(byte[0]);
+    }
+}
+
+fn log_lines(records: &[serde_json::Value]) -> Vec<String> {
+    records
+        .iter()
+        .filter(|record| record["type"] == "log")
+        .map(|record| {
+            format!(
+                "{}: {}",
+                record["label"].as_str().unwrap_or_default(),
+                record["text"].as_str().unwrap_or_default()
+            )
+        })
+        .collect()
+}
+
+/// `run` gives invoked services the deferred transport: a slow request never
+/// blocks the session (the `ping` sent while it is in flight is answered
+/// first), its outcome arrives as a `service-response` call, and the
+/// logical clock fires the 1 s timer only after it.
+#[test]
+fn a_service_makes_a_deferred_request_against_a_loopback_server() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
+    let port = listener.local_addr().expect("an address").port();
+    let (pinged_tx, pinged) = std::sync::mpsc::channel::<()>();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("the service connects");
+        read_head(&mut stream);
+        // Answer only after the session answered the ping.
+        pinged
+            .recv_timeout(Duration::from_secs(30))
+            .expect("the ping is answered while the request is in flight");
+        stream
+            .write_all(b"HTTP/1.1 204 No Content\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
+            .expect("the answer is written");
+    });
+    let directory = scratch("deferred");
+    let doc = deferred_document(&directory);
+    let args = deferred_binding(&format!("http://127.0.0.1:{port}/slow"));
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let mut child = command(&doc, &args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("scxml-cli must start");
+    let mut stdin = child.stdin.take().expect("stdin is piped");
+    let mut stdout = BufReader::new(child.stdout.take().expect("stdout is piped"));
+    stdin
+        .write_all(b"{\"name\":\"defer\"}\n{\"name\":\"ping\"}\n")
+        .expect("input is writable");
+    let mut lines = Vec::new();
+    loop {
+        let mut line = String::new();
+        assert!(
+            stdout.read_line(&mut line).expect("stdout is readable") > 0,
+            "the ping is logged before the run ends: {lines:?}"
+        );
+        let pinged_now = line.contains("\"label\":\"ping\"");
+        lines.push(line);
+        if pinged_now {
+            break;
+        }
+    }
+    pinged_tx.send(()).expect("the server waits");
+    drop(stdin);
+    let mut rest = String::new();
+    std::io::Read::read_to_string(&mut stdout, &mut rest).expect("stdout is readable");
+    let output = child.wait_with_output().expect("scxml-cli must finish");
+    server.join().expect("the server ends");
+    let text = format!("{}{rest}", lines.concat());
+    let records: Vec<serde_json::Value> = text
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap_or_else(|error| panic!("{line}: {error}")))
+        .collect();
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(
+        log_lines(&records),
+        ["ping: echo.ping", "fetched: 204", "timer: fired"]
+    );
+    assert!(
+        records
+            .iter()
+            .any(|record| record["type"] == "call" && record["cause"] == "service-response"),
+        "{text}"
+    );
+}
+
+/// Leaving the invoking state cancels the invocation (SCXML 6.4): `run`
+/// closes the deferred request's connection at once, while the process and
+/// its session keep running.
+#[test]
+fn leaving_the_invoking_state_closes_the_deferred_request_connection() {
+    use std::io::Read as _;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
+    let port = listener.local_addr().expect("an address").port();
+    let (requested_tx, requested) = std::sync::mpsc::channel::<()>();
+    let (closed_tx, closed) = std::sync::mpsc::channel::<Instant>();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("the service connects");
+        read_head(&mut stream);
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\n\r\n")
+            .expect("the head is written");
+        requested_tx.send(()).expect("the test waits");
+        let mut writer = stream.try_clone().expect("the stream clones");
+        let streaming = std::thread::spawn(move || {
+            while writer.write_all(b"8\r\ndata: x\n\r\n").is_ok() {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        });
+        let mut rest = [0_u8; 64];
+        while matches!(stream.read(&mut rest), Ok(read) if read > 0) {}
+        closed_tx.send(Instant::now()).expect("the test waits");
+        streaming.join().expect("the streaming thread ends");
+    });
+    let directory = scratch("deferred-cancel");
+    let doc = deferred_document(&directory);
+    let args = deferred_binding(&format!("http://127.0.0.1:{port}/stream"));
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let mut child = command(&doc, &args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("scxml-cli must start");
+    let mut stdin = child.stdin.take().expect("stdin is piped");
+    stdin
+        .write_all(b"{\"name\":\"defer\"}\n")
+        .expect("input is writable");
+    requested
+        .recv_timeout(Duration::from_secs(30))
+        .expect("the request reaches the server");
+    std::thread::sleep(Duration::from_millis(100));
+    let left = Instant::now();
+    stdin
+        .write_all(b"{\"name\":\"leave\"}\n")
+        .expect("input is writable");
+    let closed_at = closed
+        .recv_timeout(Duration::from_secs(5))
+        .expect("the server sees the connection close while the run goes on");
+    assert!(closed_at.duration_since(left) < Duration::from_secs(5));
+    assert!(
+        child.try_wait().expect("the child is waitable").is_none(),
+        "the run is still open: the cancel, not the exit, closed the connection"
+    );
+    stdin
+        .write_all(b"{\"type\":\"close\"}\n")
+        .expect("input is writable");
+    drop(stdin);
+    let output = child.wait_with_output().expect("scxml-cli must finish");
+    server.join().expect("the server ends");
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let records = parse_records(&output);
+    assert_eq!(log_lines(&records), ["timer: fired"]);
+}
+
+/// A recorded run must replay without the network, so `begin` is refused:
+/// nothing reaches the server, and the refused service fails its `send`.
+#[test]
+fn a_recorded_run_starts_no_deferred_request() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
+    let port = listener.local_addr().expect("an address").port();
+    listener
+        .set_nonblocking(true)
+        .expect("the listener is non-blocking");
+    let directory = scratch("deferred-record");
+    let doc = deferred_document(&directory);
+    let log = directory.join("session.ndjson");
+    let mut args = deferred_binding(&format!("http://127.0.0.1:{port}/slow"));
+    args.extend(["--record".into(), log.display().to_string()]);
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let output = run(&doc, &args, "{\"name\":\"defer\"}\n");
+    assert!(
+        listener.accept().is_err(),
+        "a recorded run sends no deferred request"
+    );
+    let records = parse_records(&output);
+    assert!(
+        !log_lines(&records)
+            .iter()
+            .any(|line| line.starts_with("fetched")),
+        "{}",
+        stderr(&output)
+    );
+}

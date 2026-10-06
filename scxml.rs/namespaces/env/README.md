@@ -21,11 +21,11 @@ for the full contract.
 
 ```xml
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0"
+       xmlns:example="https://stateforward.org/scxml/example"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript">
   …
-  <openai:generate env:apikey="OPENAI_API_KEY" env:baseurlexpr="'OPENAI_BASE_URL'" …/>
+  <example:fetch env:token="API_TOKEN" env:urlexpr="'API_BASE_URL'" path="/items"/>
 ```
 
 - `env:<slot>="NAME"` binds the slot `<slot>` to the variable `NAME`. A name
@@ -36,8 +36,9 @@ for the full contract.
   (SCXML's attribute/`expr` convention). A result that is not a string naming
   a variable raises `error.execution`.
 - The slots an element has are the ones its package manifest declares
-  (`env-slots`: `[a-z][a-z0-9-]*`, at most 32). `openai` declares `apikey` and
-  `baseurl`.
+  (`env-slots`: `[a-z][a-z0-9-]*`, at most 32). The example extension
+  ([`components/scxml-extension-example`](../../components/scxml-extension-example))
+  declares `url` and `token`.
 - An invoked service's `<invoke>` binds the slots its service package
   declares the same way (`<invoke type="URI" env:endpoint="ECHO_URL"/>`); an
   `env:<slot>expr` there is evaluated once, when the `<invoke>` runs
@@ -81,7 +82,7 @@ with an example.
   invocation (every later `send`, `wake`, or `cancel` of that instance), only
   inside that instance's admitted `outbound-http` requests.
 - **A missing value leaves the slot absent.** The component decides what
-  that means (`openai` fails with `error.execution` without a key). Before a
+  that means (`<example:fetch>` sends no `authorization` without a token). Before a
   run, the CLI lists each element's bound slots and names the `--env` flag
   that would supply a literal name it does not hold.
 - **Values are masked.** As defense in depth (a component never receives a
@@ -95,7 +96,9 @@ with an example.
 
 The contract above as numbered statements, each tested by the vocabulary's
 own implementation report plan ([`irp/`](irp/README.md), below), through
-the `openai` element (the only package that declares slots).
+the example extension's `<example:fetch>`
+([`components/scxml-extension-example`](../../components/scxml-extension-example),
+whose package declares the `url` and `token` slots).
 
 - <a id="env-1"></a>**env-1** (binding by name). `env:<slot>="NAME"` binds
   the element's slot `<slot>` to the variable `NAME`; the host substitutes
@@ -115,8 +118,9 @@ the `openai` element (the only package that declares slots).
   on an SCXML element is rejected (`SCXML068`).
 - <a id="env-5"></a>**env-5** (missing values). A slot whose variable the
   run holds no value for is absent: the element's component decides what
-  that means (`openai` raises `error.execution` without a key and sends
-  nothing; without a base URL it uses its default endpoint).
+  that means (`<example:fetch>` sends no `authorization` without a `token`,
+  and without a `url` slot it uses its `url` attribute, which only an origin
+  its package declares could admit).
 - <a id="env-6"></a>**env-6** (references are per element). Each execution
   binds the element's own slots: another element, of the same or another
   namespace, never receives them.
@@ -137,7 +141,7 @@ templates write differently for each data model).
 the W3C IRP format: one assertion per statement above, 20 mandatory test
 documents written with the W3C `conf:` vocabulary, prepared for the
 ECMAScript and XPath data models by the W3C templates, and run through the
-shipped components exactly as the W3C IRP is, binding the `openai`
+shipped components exactly as the W3C IRP is, binding the example extension
 package ([docs/conformance.md](../../docs/conformance.md#namespace-suites)).
 The vocabulary itself does not depend on the data model; the suite runs
 both because `env:<slot>expr` evaluates in the document's. Both data models
@@ -161,7 +165,7 @@ manifest; the validator does not load this file.
 ## Why the URI has no version
 
 A repository namespace's URI carries its release tag
-(`namespaces/openai@v0.2.0`) because a document loads that release's component
+(`namespaces/<name>@v0.2.0`) because a document loads that release's component
 and schema from it. The `env` vocabulary has nothing to load: the host defines
 it, as the SCXML namespace `http://www.w3.org/2005/07/scxml` is defined by the
 processor rather than fetched. A version suffix would name a release asset

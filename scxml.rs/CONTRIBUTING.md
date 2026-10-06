@@ -70,7 +70,7 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
 RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --all-features --locked
 cargo test -p scxml-wit --locked
-cargo clippy --locked --target wasm32-wasip2 -p scxml-telemetry -p scxml-validator-xsd -p scxml-clock -p scxml-compiler -p scxml-data-model-ecmascript -p scxml-data-model-null -p scxml-data-model-xpath -p scxml-ioprocessor-scxml -p scxml-ioprocessor-basichttp -p scxml-machine -p scxml-extension-example -p scxml-extension-openai -p scxml-reporter-rustc -p scxml-reporter-sarif -p scxml-script-example -p scxml-service-example -p scxml-service-files -p scxml-snapshot-codec -p scxml-validator -- -D warnings
+cargo clippy --locked --target wasm32-wasip2 -p scxml-telemetry -p scxml-validator-xsd -p scxml-clock -p scxml-compiler -p scxml-data-model-ecmascript -p scxml-data-model-null -p scxml-data-model-xpath -p scxml-ioprocessor-scxml -p scxml-ioprocessor-basichttp -p scxml-machine -p scxml-extension-example -p scxml-reporter-rustc -p scxml-reporter-sarif -p scxml-script-example -p scxml-service-example -p scxml-service-files -p scxml-snapshot-codec -p scxml-validator -- -D warnings
 cargo check -p scxml-host-wasmtime --features wasmtime --locked
 cargo test -p scxml-host-wasmtime --features wasmtime,http --locked
 cargo deny check
@@ -172,7 +172,7 @@ name and concurrent runs sharing one temporary directory fail.
 
 The required `irp-components` job is the conformance gate. It builds and
 verifies the eight release components the conformance executor links and
-the `openai` repository namespace component, runs every `scxml-conformance`
+the example extension component the namespace suites bind, runs every `scxml-conformance`
 test with the `wasmtime` feature through them (`irp_components.rs`
 reproduces both checked-in W3C IRP baselines and every namespace suite's
 byte for byte), and reproduces all of them through the CLI:
@@ -183,13 +183,13 @@ RELEASE="$CARGO_TARGET_DIR/wasm-artifacts/irp-components"
 sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
   scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
   scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine \
-  scxml_extension_openai
+  scxml_extension_example
 MANIFEST_SHA256=$(sha256sum "$RELEASE/manifest.tsv" | cut -d ' ' -f 1)
-OPENAI_SHA256=$(sha256sum "$RELEASE/scxml_extension_openai.virtualized.wasm" | cut -d ' ' -f 1)
+EXTENSION_SHA256=$(sha256sum "$RELEASE/scxml_extension_example.virtualized.wasm" | cut -d ' ' -f 1)
 # The uploaded release-components artifact carries the license texts.
 cp LICENSE-APACHE LICENSE-MIT "$RELEASE/"
 SCXML_COMPONENTS_DIR="$RELEASE" SCXML_COMPONENTS_MANIFEST_SHA256="$MANIFEST_SHA256" \
-  SCXML_OPENAI_COMPONENT_SHA256="$OPENAI_SHA256" \
+  SCXML_EXTENSION_COMPONENT_SHA256="$EXTENSION_SHA256" \
   cargo test --release --locked -p scxml-conformance --features wasmtime
 cargo build --release --locked -p scxml-cli --features wasmtime
 for model in ecmascript xpath; do
@@ -199,13 +199,13 @@ for model in ecmascript xpath; do
     --canonical-baseline "tests/conformance/w3c-irp/baselines/$model.scxml-report.json"
 done
 # Each repository namespace's own suite (docs/conformance.md, "Namespace
-# suites"), binding the openai package where it is used.
-OPENAI_URI='https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0'
-OPENAI_PACKAGE="--extension-package namespaces/openai/package/openai.extension.json --extension-component-sha256 $OPENAI_URI=$OPENAI_SHA256"
-for suite in env:openai event: openai:openai; do
+# suites"), binding the example extension package where it is used.
+EXAMPLE_URI='https://stateforward.org/scxml/example'
+EXAMPLE_PACKAGE="--extension-package components/scxml-extension-example/package/example.extension.json --extension-component-sha256 $EXAMPLE_URI=$EXTENSION_SHA256"
+for suite in env:example event:; do
   name=${suite%%:*}
   packages=''
-  if [ -n "${suite#*:}" ]; then packages=$OPENAI_PACKAGE; fi
+  if [ -n "${suite#*:}" ]; then packages=$EXAMPLE_PACKAGE; fi
   for model in ecmascript xpath; do
     "$CARGO_TARGET_DIR/release/scxml-cli" conformance run \
       --corpus "namespaces/$name/irp/prepared/$model" \
@@ -360,7 +360,7 @@ python3 scripts/verify-component-authored-unsafe.py
 
 The verifier checks the exact component-crate inventory (the sixteen crates
 under `components/` and the executable-content extension packages under
-`namespaces/` (`openai`), matching the inventory in
+`namespaces/` (none today), matching the inventory in
 `scripts/verify-wasm-capabilities.sh`), both lint/configuration requirements,
 and the presence of each `wit_bindgen::generate!` boundary. It then lexes every
 authored Rust source file below `components/` and `namespaces/`, excluding
@@ -385,10 +385,10 @@ Extension-component import inspection must show only the versioned project
 types, telemetry, and the `data-model-host`/`execution-host`/`outbound-http`
 interfaces the extension component calls. No extension component keeps a
 WASI interface: any WASI import (including `wasi:cli/environment`, `wasi:http`,
-and `wasi:sockets`), in any component, is a failure. `openai` and the example
-reach the network only through `outbound-http`, which the host admits only to
-the origins their package declares or a run-supplied value names, and they
-receive the run's values only as references (see
+and `wasi:sockets`), in any component, is a failure. The example reaches
+the network only through `outbound-http`, which the host admits only to
+the origins its package declares or a run-supplied value names, and it
+receives the run's values only as references (see
 [docs/executable-content-extensions.md](docs/executable-content-extensions.md)).
 
 Reporter import inspection must show only

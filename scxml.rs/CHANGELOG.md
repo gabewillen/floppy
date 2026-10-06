@@ -36,10 +36,10 @@ hard cutover.
 - BasicHTTP runs over the network in live sessions, and delayed BasicHTTP
   sends are held on the session clock.
 - Extension components execute extension-namespace elements end to end
-  under the Wasmtime host, and the first package ships: `openai`, with
-  host-admitted outbound HTTP and read-only session snapshots. A document
-  loads an element straight from a repository by naming its release
-  (`https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0`): verified against the release's `SHA256SUMS`, cached, pinned,
+  under the Wasmtime host, with host-admitted outbound HTTP and read-only
+  session snapshots. A document loads an element straight from a repository
+  by naming its release
+  (`https://github.com/<owner>/<repo>/namespaces/<name>@<tag>`): verified against the release's `SHA256SUMS`, cached, pinned,
   and loaded when a session starts. Elements receive the run's values only
   as references (`env:<slot>="NAME"`), and importing an element consents to
   the origins its manifest declares.
@@ -91,16 +91,22 @@ hard cutover.
   `take` (WIT `@0.2.0`, unreleased, additive) let a service make a slow
   request without blocking the session. The Wasmtime host admits the request
   as `fetch` does, hands it to the embedder's `ServiceHttp` transport
-  (`ServiceComponents::with_deferred_http`; `ThreadedServiceHttp` runs a
-  blocking `ExtensionHttp` on a thread per request, bounded in flight), and
+  (`ServiceComponents::with_deferred_http`; `ThreadedServiceHttp` runs an
+  `ExtensionHttpClient` request on a thread per request, bounded in flight), and
   calls the instance's `wake` when the outcome is delivered
   (`LiveSession::deliver_service_responses`, woken through
-  `LiveHttp::on_service_response`). A cancelled instance abandons its
-  requests; at most `MAX_SERVICE_PENDING_REQUESTS` (16) per instance; only
+  `LiveHttp::on_service_response`). A cancelled, completed, retired, or
+  dropped instance abandons its requests, and `ThreadedServiceHttp` (feature
+  `http`, over an `ExtensionHttpClient`) closes each abandoned request's
+  connection at once, so its thread ends without waiting for the response;
+  at most `MAX_SERVICE_PENDING_REQUESTS` (16) per instance; only
   live sessions that neither record nor replay deliver outcomes, and a
   logical one's `run_until_idle` stops while a request is in flight
   (`LiveSession::awaiting_service_responses`). Extension components cannot
-  `begin`. New telemetry operations `service-http-begin`,
+  `begin`. `scxml-cli run` (not recorded or replayed) gives services this
+  transport (`ThreadedServiceHttp`) and delivers each outcome in a call with
+  cause `service-response`; on `--clock logical` no delayed send fires while
+  a request is in flight. New telemetry operations `service-http-begin`,
   `service-http-request`, and `session-service-response`. The echo example's
   `defer` event uses it.
 - Declared WASI permissions: extension and service package manifests take
@@ -381,17 +387,8 @@ hard cutover.
   response body. `scxml-cli snapshot run` and `run` supply it (not with
   `--record` or `--replay`). New host span
   `scxml.host-wasmtime.extension-http-fetch`.
-- `namespaces/`, the top-level directory for repository namespaces
-  (executable-content extension packages), and its first package `namespaces/openai`: the `openai` namespace
-  (`https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0`, a repository namespace), a rewrite modelled on agentml-go's
-  `<openai:generate>` content-generation mode onto the extension-component
-  world (OpenAI Responses API; `model`/`modelexpr`, `prompt`, `promptexpr`,
-  and `<openai:prompt>` children, `location`, `max-output-tokens`,
-  `reasoning`, and the `apikey` and `baseurl` slots), with its XSD, package
-  manifest (declaring `https://api.openai.com`), a runnable example, and the
-  release artifact `scxml_extension_openai`, which the host's closed artifact
-  identities do not name (it binds as a caller or repository component).
-  Every failure raises `error.execution`.
+- `namespaces/`, the top-level directory for repository namespaces, one
+  folder each.
 - `stateforward:scxml/session-snapshot-host`, a read-only import of the
   `executable-content-extension` world: during `execute`, `snapshot(exclude)`
   returns the executing session's canonical `scxml.session-snapshot/v2` document
@@ -410,17 +407,6 @@ hard cutover.
   `scxml.host-wasmtime.session-snapshot` span. The browser host offers no
   executable-content snapshot (its `extension-snapshot-request` is always
   false).
-- The `openai` package sends the executing session's snapshot (data model and
-  transitions excluded) as the system message and offers agentml-go's
-  `send_<event>` function tools for the events the active configuration's
-  transitions accept (`target` and `delay` parameters). `location` is
-  optional: without it the element is in function-calling mode
-  (`tool_choice: required`); with it, `auto`. Every returned call is
-  checked (an undeclared function or malformed arguments raise
-  `error.execution` and send nothing), then sent through
-  `execution-host.send` as the original event; the example
-  `namespaces/openai/examples/decide.scxml` shows it. `retry` stays
-  unsupported.
 - The host's `event` attribute vocabulary
   (`https://github.com/stateforward/scxml.rs/namespaces/event`, unversioned
   and never fetched; [namespaces/event](namespaces/event/README.md)):
@@ -442,12 +428,12 @@ hard cutover.
   WIT `transition-snapshot` gains `event-schema`. New crate
   `scxml-event-schema`, which checks schemas with the `boon` crate.
 - Each repository namespace has its own implementation report plan,
-  `namespaces/{openai,env,event}/irp`: W3C IRP-format assertions over
+  `namespaces/{env,event}/irp`: W3C IRP-format assertions over
   numbered statements added to each namespace's README, `.txml` documents
   in the W3C `conf:` vocabulary prepared by the W3C templates for
   ECMAScript and XPath, and checked-in canonical baselines, run through
   the same component pipeline as the W3C IRP and reported separately
-  (openai 64, env 20, event 29 tests; every one passes in both data
+  (env 20, event 29 tests; every one passes in both data
   models). The conformance harness gains the `namespace-irp` corpus kind
   (`conformance prepare --namespace NAME`), the `document-rejection`
   oracle (a manifest `<reject code="..."/>`: the compiler must reject the
@@ -456,11 +442,12 @@ hard cutover.
   --extension-component-sha256 URI=HEX`; the report identity lists every
   bound package as `extensions`: namespace URI, package version, and
   the SHA-256 of its manifest, schema, and component), and a deterministic in-process
-  stand-in for the OpenAI Responses API with fake keys. The baseline
+  stand-in, with fake keys, for the server the example extension's
+  `<example:fetch>` reaches (the `env` suite binds the example package). The baseline
   generator is `generate_irp_baselines` (formerly
   `generate_w3c_irp_baselines`) and regenerates every suite; the canonical
-  component build and the `irp-components` CI job also build the `openai`
-  component. `ExtensionPackageManifest::from_json` (in
+  component build and the `irp-components` CI job also build the example
+  extension component. `ExtensionPackageManifest::from_json` (in
   `scxml-validator-core`) is now the one extension package manifest parser
   (`EXTENSION_PACKAGE_FORMAT`).
 
@@ -468,8 +455,7 @@ hard cutover.
 
 - Every repository namespace lives in its own folder under the top-level
   `namespaces/` directory, and a repository namespace URI is exactly
-  `https://github.com/<owner>/<repo>/namespaces/<name>@<tag>`: `openai` is
-  `https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0` and the
+  `https://github.com/<owner>/<repo>/namespaces/<name>@<tag>`, and the
   host's `env` vocabulary is
   `https://github.com/stateforward/scxml.rs/namespaces/env`. Any other
   repository path is an ordinary namespace URI the CLI never fetches. The
@@ -778,8 +764,8 @@ hard cutover.
     `extension-artifact`; the manifest format is
     `stateforward.scxml.extension-package/v2` in `*.extension.json`; the CLI
     takes `--extension-package`, `--extension-component`, and
-    `--extension-component-sha256`; the crates are
-    `scxml-extension-example` and `scxml-extension-openai`. The process that
+    `--extension-component-sha256`; the crate is
+    `scxml-extension-example`. The process that
     runs the CLI is the calling shell.
   - "Child session" is "invoked session" (SCXML 6.4): WIT
     `child-invocation` is `invoked-session` and the host spans are
@@ -839,9 +825,8 @@ hard cutover.
   say "extension namespace" for "custom namespace". "Custom action" stays
   where it names an element from another namespace in executable content
   (SCXML 1.0 Appendix G.7, Custom Action Elements). No alias remains.
-- The Wasmtime host's extension module is `extension.rs`, the openai
-  test suites are `openai_extension` (`cargo test --test openai_extension`),
-  and the example extension schema fixture is
+- The Wasmtime host's extension module is `extension.rs`, and the example
+  extension schema fixture is
   `tests/fixtures/extension-example.xsd`.
 
 ### Removed
@@ -1128,10 +1113,6 @@ hard cutover.
 - Extension components run only under the Wasmtime session
   host; the browser host answers executable-content extensions from the
   page's `executeExtension` callback.
-- The `openai` package does not implement agentml-go's `stream`, `retry`,
-  or Go template prompts, and its tools declare no event `data` schema (it
-  does not read the snapshot's `event_schema` yet); see
-  namespaces/openai/README.md.
 - `event:schema` references only files relative to the document: no
   repository-namespace resource or other absolute URI. Child documents the
   Wasmtime host compiles when invoked, and documents the browser host

@@ -8,16 +8,16 @@
 //! `target/conformance-components/wasm-artifacts/<binary>`, so concurrently
 //! running binaries never publish a manifest another binary is reading. Set
 //! `SCXML_COMPONENTS_DIR` and `SCXML_COMPONENTS_MANIFEST_SHA256` to use an
-//! already verified release instead; it must also hold the `openai`
-//! repository namespace component the namespace suites bind, whose trusted
-//! SHA-256 is `SCXML_OPENAI_COMPONENT_SHA256` (else the SHA-256 of the bytes
-//! the release holds, a test-only trust anchor).
+//! already verified release instead; it must also hold the example
+//! extension component the namespace suites bind, whose trusted SHA-256 is
+//! `SCXML_EXTENSION_COMPONENT_SHA256` (else the SHA-256 of the bytes the
+//! release holds, a test-only trust anchor).
 //!
 //! One [`WasmExecutor`] (it is `!Send`) lives on a dedicated worker thread
 //! for the whole binary, so the components are compiled once; tests submit
 //! runs to it with [`with_executor`], which serializes them. A second one,
-//! binding the `openai` namespace, serves the namespace suites that use it
-//! ([`with_openai_executor`]).
+//! binding the example extension package, serves the namespace suites that
+//! use it ([`with_extension_executor`]).
 #![allow(
     dead_code,
     reason = "shared by several test binaries; each uses a subset"
@@ -32,10 +32,10 @@ use scxml_conformance::{
 };
 use sha2::{Digest as _, Sha256};
 
-/// Exactly the release components [`WasmExecutor`] links, and the `openai`
-/// component the namespace suites bind (`manifest.tsv` does not list it).
+/// Exactly the release components [`WasmExecutor`] links, and the example
+/// extension component the namespace suites bind.
 const COMPONENTS: &[&str] = &[
-    "scxml_extension_openai",
+    "scxml_extension_example",
     "scxml_clock",
     "scxml_data_model_ecmascript",
     "scxml_data_model_null",
@@ -98,24 +98,24 @@ pub fn release() -> &'static (PathBuf, String) {
     })
 }
 
-/// The trusted SHA-256 of the release's `openai` component.
-pub fn openai_sha256() -> String {
-    std::env::var("SCXML_OPENAI_COMPONENT_SHA256").unwrap_or_else(|_| {
-        let bytes = std::fs::read(release().0.join("scxml_extension_openai.virtualized.wasm"))
-            .expect("the release holds the openai component");
+/// The trusted SHA-256 of the release's example extension component.
+pub fn extension_sha256() -> String {
+    std::env::var("SCXML_EXTENSION_COMPONENT_SHA256").unwrap_or_else(|_| {
+        let bytes = std::fs::read(release().0.join("scxml_extension_example.virtualized.wasm"))
+            .expect("the release holds the example extension component");
         // Test-only trust anchor: the bytes the proof script just verified.
         format!("{:x}", Sha256::digest(&bytes))
     })
 }
 
-/// A worker thread owning one executor that binds the repository namespace
-/// packages `packages` (`namespaces/<package>/package`).
+/// A worker thread owning one executor that binds the extension packages
+/// whose manifests (workspace-relative) are `packages`.
 fn spawn_worker(packages: &'static [&'static str]) -> Mutex<Sender<Job>> {
     let (dir, digest) = release().clone();
-    let openai = if packages.is_empty() {
+    let extension = if packages.is_empty() {
         String::new()
     } else {
-        openai_sha256()
+        extension_sha256()
     };
     let (sender, receiver) = mpsc::channel::<Job>();
     std::thread::spawn(move || {
@@ -126,17 +126,9 @@ fn spawn_worker(packages: &'static [&'static str]) -> Mutex<Sender<Job>> {
         } else {
             let releases = packages
                 .iter()
-                .map(|package| {
-                    ExtensionRelease::read(
-                        &workspace()
-                            .join("namespaces")
-                            .join(package)
-                            .join("package")
-                            .join(format!("{package}.extension.json")),
-                        &dir,
-                        &openai,
-                    )
-                    .expect("the namespace package reads")
+                .map(|manifest| {
+                    ExtensionRelease::read(&workspace().join(manifest), &dir, &extension)
+                        .expect("the extension package reads")
                 })
                 .collect();
             executor
@@ -155,9 +147,12 @@ fn worker() -> &'static Mutex<Sender<Job>> {
     WORKER.get_or_init(|| spawn_worker(&[]))
 }
 
-fn openai_worker() -> &'static Mutex<Sender<Job>> {
+/// The example extension package the namespace suites bind.
+const EXAMPLE_PACKAGE: &str = "components/scxml-extension-example/package/example.extension.json";
+
+fn extension_worker() -> &'static Mutex<Sender<Job>> {
     static WORKER: OnceLock<Mutex<Sender<Job>>> = OnceLock::new();
-    WORKER.get_or_init(|| spawn_worker(&["openai"]))
+    WORKER.get_or_init(|| spawn_worker(&[EXAMPLE_PACKAGE]))
 }
 
 /// Runs `job` against the binary's one component executor and returns its
@@ -168,12 +163,12 @@ pub fn with_executor<T: Send + 'static>(
     submit(worker(), job)
 }
 
-/// Runs `job` against the binary's executor that binds the `openai`
-/// namespace.
-pub fn with_openai_executor<T: Send + 'static>(
+/// Runs `job` against the binary's executor that binds the example
+/// extension package.
+pub fn with_extension_executor<T: Send + 'static>(
     job: impl FnOnce(&WasmExecutor) -> T + Send + 'static,
 ) -> T {
-    submit(openai_worker(), job)
+    submit(extension_worker(), job)
 }
 
 /// Runs the namespace suite `name`'s prepared `datamodel` corpus through the
@@ -198,8 +193,8 @@ pub fn run_namespace_corpus(name: &str, datamodel: &str) -> RunReport {
     };
     match packages {
         [] => with_executor(job),
-        ["openai"] => with_openai_executor(job),
-        _ => panic!("the support binds only the openai package"),
+        [EXAMPLE_PACKAGE] => with_extension_executor(job),
+        _ => panic!("the support binds only the example extension package"),
     }
 }
 

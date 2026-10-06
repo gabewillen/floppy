@@ -13,12 +13,11 @@
 //! ```
 //!
 //! `--components DIR` names a release written by
-//! `scripts/verify-wasm-capabilities.sh` (with `scxml_extension_openai`) and
+//! `scripts/verify-wasm-capabilities.sh` (with `scxml_extension_example`) and
 //! `--components-manifest-sha256 HEX` the trusted lowercase SHA-256 of its
 //! `manifest.tsv`; the executor authenticates every component against it.
-//! `--extension-component-sha256 HEX` is the trusted SHA-256 of the `openai`
-//! component in DIR (a repository namespace, so `manifest.tsv` does not list
-//! it), which the namespace suites bind. Every flag is required, each at
+//! `--extension-component-sha256 HEX` is the trusted SHA-256 of the example
+//! extension component in DIR, which the namespace suites bind. Every flag is required, each at
 //! most once, and any other argument is rejected. The settings are read
 //! only from these flags, as `scxml-cli conformance run` reads them.
 
@@ -110,13 +109,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     for (name, packages) in NAMESPACE_SUITES {
         let releases = packages
             .iter()
-            .map(|package| {
+            .map(|manifest| {
                 ExtensionRelease::read(
-                    &workspace
-                        .join("namespaces")
-                        .join(package)
-                        .join("package")
-                        .join(format!("{package}.extension.json")),
+                    &workspace.join(manifest),
                     &args.components,
                     &args.extension_sha256,
                 )

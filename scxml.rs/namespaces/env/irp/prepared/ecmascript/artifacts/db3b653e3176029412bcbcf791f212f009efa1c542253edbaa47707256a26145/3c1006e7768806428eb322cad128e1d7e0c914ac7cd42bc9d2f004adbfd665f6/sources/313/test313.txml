@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- env-2: a string that is not a variable name raises error.execution (the slot is not left absent) and sends nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:example="https://stateforward.org/scxml/example" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env">
+<datamodel>
+  <data conf:id="1"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <example:fetch env:url="IRP_BASE_URL" env:tokenexpr="'not a name'" path="/ok"/>
+  </onentry>
+  <transition event="error.execution" target="s1"/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<state id="s1">
+  <onentry>
+    <example:fetch env:url="IRP_BASE_URL" path="/requests/0"/>
+  </onentry>
+  <transition event="example.fetched" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

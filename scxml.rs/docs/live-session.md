@@ -168,8 +168,9 @@ decides where they go:
   `outbound-http.begin` instead of the blocking `fetch`
   ([invoked-services.md](invoked-services.md#slow-requests-without-blocking-the-session)),
   through the transport `ServiceComponents::with_deferred_http` grants (a
-  `ServiceHttp`; `ThreadedServiceHttp` runs a blocking `ExtensionHttp`
-  transport on a thread per request). The session keeps taking events and
+  `ServiceHttp`; `ThreadedServiceHttp`, feature `http`, runs each request
+  through an `ExtensionHttpClient` on a thread of its own and closes the
+  request's connection when its instance abandons it). The session keeps taking events and
   firing timers meanwhile. The transport settles each request's
   `ServiceHttpOutcome` from any thread; `LiveHttp::on_service_response`
   wakes the embedder, which calls `deliver_service_responses`: at the
@@ -177,7 +178,9 @@ decides where they go:
   instance is still live and waiting reaches it, the instance's `wake`
   runs (it reads the outcome with `take`), and every session runs to a
   stable configuration. An outcome whose instance was cancelled (its state
-  exited), completed, or retired meanwhile is dropped. A recording or
+  exited), completed, or retired meanwhile is dropped; `ThreadedServiceHttp`
+  has already closed that request's connection, so its thread ended
+  instead of waiting for the response. A recording or
   replaying session delivers no outcome, so there `begin` is refused.
 - `receive_http(request)` delivers one inbound message. Its target, in
   origin form or absolute, must end in `/sessions/{_sessionid}/basichttp`
@@ -342,7 +345,7 @@ non-fatal `error` record carrying its line number, and the session goes on.
 | --- | --- |
 | `opened` | `session`, `clock`, `ioprocessors` (`{uri: {"location": …}}`) |
 | `log` | `session`, `parent` (children only), `label` (when present), `text` |
-| `call` | `cause` (`start`, `event`, `timer`, `idle`, `http`, `communication-error`), `at_ms`, `status`, `configuration`, `next_deadline_ms`, `commands` |
+| `call` | `cause` (`start`, `event`, `timer`, `idle`, `http`, `communication-error`, `service-response`), `at_ms`, `status`, `configuration`, `next_deadline_ms`, `commands` |
 | `snapshot` | `document`: the canonical snapshot document, embedded byte for byte |
 | `done` | the root reached a top-level final state; when that final state has `<donedata>`, its evaluated value as `data` (JSON kinds) or `xml` (SCXML 5.5: the processor "SHOULD return the data to the environment in an implementation-dependent manner") |
 | `error` | `code`, `message`, `fatal`, `line` (input errors) |

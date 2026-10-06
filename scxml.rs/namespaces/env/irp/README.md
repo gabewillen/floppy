@@ -16,10 +16,13 @@ reported on its own: these results are never W3C IRP results. See
 | `prepared/{ecmascript,xpath}/` | the documents specialized by the unmodified W3C templates (`tests/conformance/w3c-irp/templates`) with SaxonJ-HE 12.8 |
 | `baselines/` | the canonical `scxml.report/v3` reports of both data models and their `SHA256SUMS` |
 
-Every run binds the `openai` package (`../../openai/package/openai.extension.json`), the only package that declares slots, and its component. The run holds only the harness's fake values for `env` slots and
-reaches only the harness's deterministic in-process stand-in for the OpenAI
-Responses API (`crates/scxml-conformance/src/openai_service.rs`, whose
-`model` table each test document's comment relies on); nothing touches the
+Every run binds the example extension package
+(`../../../components/scxml-extension-example/package/example.extension.json`,
+whose `<example:fetch>` has the `url` and `token` slots) and its component.
+The run holds only the harness's fake values for `env` slots and reaches
+only the harness's deterministic in-process stand-in for the server
+`<example:fetch>` reaches (`crates/scxml-conformance/src/example_server.rs`,
+whose path table each test document relies on); nothing touches the
 network. A document passes when it logs `Outcome` `pass` and finishes in the
 `pass` final state the templates generate, exactly as a W3C case does, or,
 for a `<reject>` test, when the canonical compiler rejects it with exactly
@@ -39,27 +42,27 @@ done
 ```
 
 and check a run against its baseline (`$RELEASE`, `$MANIFEST_SHA256`, and
-`$OPENAI_SHA256` as in the `irp-components` snippet of
+`$EXTENSION_SHA256` as in the `irp-components` snippet of
 [CONTRIBUTING.md](../../../CONTRIBUTING.md)):
 
 ```console
 scxml-cli conformance run --corpus namespaces/env/irp/prepared/xpath \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
-  --extension-package namespaces/openai/package/openai.extension.json \
-  --extension-component-sha256 "https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0=$OPENAI_SHA256" \
+  --extension-package components/scxml-extension-example/package/example.extension.json \
+  --extension-component-sha256 "https://stateforward.org/scxml/example=$EXTENSION_SHA256" \
   --canonical-baseline namespaces/env/irp/baselines/xpath.scxml-report.json
 ```
 
 The `generate_irp_baselines` example regenerates the baselines with every
-other suite's. The current baselines (manifest SHA-256 `3ca06bb2da29117c7c450f76c749a5aa8b247f932d8a1a6a0cf6fd2846e3d14d`,
+other suite's. The current baselines (manifest SHA-256 `d43479d57492b8065c5c93765b884ec579b7158e5ec340ae95563f60aa314642`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 the canonical release of docs/conformance.md, empty filter identity) measure:
 
 | Data model | Passed / Applicable | Rejections | Not Passing | Corpus digest | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | --- | --- | --- |
-| ECMAScript | 20 / 20 | 6 | 0 | `f4a43a5eddc3f7bb1178985ab2a8729829cd00d9e5e4145bcb166025725012d6` | `9bc362f4ca5540e9d8000403e8dceb80a5155673b886e8947b646e6447436d56` | `83595f7c1b00d80bee889587f30fd13f2f43ed8098853b05585248505347df05` |
-| XPath | 20 / 20 | 6 | 0 | `04eb6dab4f637664cd3ffd71fb862ca01e75763982ca680664fa0dca48d346c9` | `0b9a861dadc2f3add3411f533ac77e8d10ae27694853a6a581e62303f474d2c4` | `225dc12b65157860b462373f8fe58e7be50f271b946c288b21b2a0fcec32f5ba` |
+| ECMAScript | 20 / 20 | 6 | 0 | `e1d5b5d3eda19ad2c73782a372a05d38951300760ac35afa9099e5fc2288437b` | `edaf6bc479fcbc76c616743e421cfc4de3a937e158dcf16d99102b29fdd76aa6` | `a9907557d817387af51bc26165a3ec5b13985a7a31b5646edf037f5b19ba4c48` |
+| XPath | 20 / 20 | 6 | 0 | `2b7a48c5fe707d16b39368d05842a227ee20fc9e41ec8cb27e45dd33f2854bf0` | `c8592347d95f9ea25e19be27434fe9bd7617d5ad735081e747995a313dee367f` | `18c7156d73ad72971a828d0b21d9922844978062115e9238a649f27932aed35f` |
 
-The report identity lists the bound package: `https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0` version `0.2.0`, manifest SHA-256 `2f9002da162a9f4f500c1e423098a49dc9b8db2f0832a28da35306c652e206c1`, schema SHA-256 `8117595b5835a700ac025ecde686d6384c9de0d0de01ed44319c3e61e311dd06`, component SHA-256 `47c6d37a035e7d723c9616c3d0975c1f4ed748aee0ef80a6014fefe92c0c64a9`. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
+The report identity lists the bound package: `https://stateforward.org/scxml/example` version `0.2.0`, manifest SHA-256 `8833311c89a10942643edf66bd0e3ed66bfe10cb983d460ab260e6ea999725db`, schema SHA-256 `9b00f091f1c2ccd4610e389d5a9dbdf07624f0193bb2ba82b15ccce16af70e62`, component SHA-256 `264e74de399ccce880300af36c7821beaca25b13813eb606582211418d05062e`. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
 the suite and its baselines statically, and `irp_components.rs` reproduces
 both baselines through the components byte for byte.

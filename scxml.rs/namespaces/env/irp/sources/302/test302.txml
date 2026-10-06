@@ -1,15 +1,15 @@
 <?xml version="1.0"?>
-<!-- env-1: env:baseurl binds the baseurl slot. -->
-<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:openai="https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env">
+<!-- env-1: env:url binds the url slot (the request reaches the served base URL, with no token). -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:example="https://stateforward.org/scxml/example" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env">
 <datamodel>
   <data conf:id="1"/>
 </datamodel>
 <state id="s0">
   <onentry>
-    <openai:generate env:apikey="IRP_OPENAI_KEY" env:baseurl="IRP_BASE_URL" model="irp-echo-url" prompt="u" conf:location="1"/>
+    <example:fetch env:url="IRP_BASE_URL" path="/authorization/none"/>
   </onentry>
-  <transition conf:idQuoteVal="1=https://openai.irp.invalid/v1/responses" conf:targetpass=""/>
-  <transition conf:targetfail=""/>
+  <transition event="example.fetched" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
 </state>
 <conf:pass/>
 <conf:fail/>
