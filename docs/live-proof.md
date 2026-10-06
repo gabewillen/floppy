@@ -6,6 +6,39 @@ env file named by `NEMOBOT_LIVE_ENV_FILE`
 Each variable was granted only to its own package: `OPENAI_*` to `generate`,
 and `TYPESAFE_*` to `decision`.
 
+## 2026-10-06, `scx run` straight from the document (decisions D16, D17), model `gpt-6-luna`
+
+The runs used nemobot commit `7b0b0b8b` (subtree scxml.rs `50283481`):
+`scx` installed from the subtree with its session components and the `scx`
+namespace embedded (`SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml"
+cargo install --locked --path scxml.rs/crates/scxml-cli`), and
+`sh scripts/build-components.sh` publishing the decision namespace and both
+services into `scx`'s default package cache. The builder's `env` attributes
+scoped `OPENAI_*` to the generate service's `<invoke>`s and `TYPESAFE_*` to
+the decision service's; the consent listing showed exactly that (names
+only). The mosfet env file sets no `TYPESAFE_BASE_URL`, so in the builder
+run the decision service's `baseurl` slot was absent and the builder used
+its fallback triage. The builder command, from a clean shell
+(`env -i HOME="$HOME" PATH="$HOME/.cargo/bin:/usr/bin:/bin"`), in the
+nemobot root:
+
+```console
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"max_attempts":4,"model":"gpt-6-luna"}}' |
+  scx run --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env bots/builder/builder.scx
+```
+
+The live tests: `NEMOBOT_LIVE_ENV_FILE=<mosfet .env> NEMOBOT_LIVE_MODEL=gpt-6-luna
+cargo test -p nemobot-tests --test <test> -- --ignored --nocapture`.
+
+| Run | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| `scx run --env-file <mosfet .env> bots/builder/builder.scx` | `gpt-6-luna` (generate service); decision unconfigured (no `TYPESAFE_BASE_URL`) | pass | 1 of 1 | exit 0 in 116 s; the `done` record's data: attempt 2 of 4 after 1 failure (`validate` / `SCXML070`), 0 machine fixes, triage `fallback:unavailable`, plan `pedestrian_traffic_light`, all four of its tests passed in simulation; progress `log`s `design`, `author`, `validate`, `retry_gate`, `triage`, `author`, `validate`, `simulate`, `done`; the built document compiled again with `scx compile` (no packages) |
+| `generate_service live_generate_through_an_env_file` | `gpt-6-luna` | pass | 1 | strict structured output through `generate.result` |
+| `decision_service live_decision_through_an_env_file` | TypeSafe `system_one` (no OpenAI model) | pass (`shipped`) | 1 | the consent check is strict again: the declared origin `https://api.typesafe.ai` is listed though the run's base URL equals it |
+
+The builder's output was written to `target/builder-live-cli/` and is not
+committed. Nothing in the tests was changed to make them pass.
+
 ## 2026-10-06, WASI 0.3 async services (decision D15), model `gpt-6-luna`
 
 The runs used nemobot commit `3b5c51b3` plus the decision live test's
