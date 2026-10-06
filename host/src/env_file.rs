@@ -10,7 +10,9 @@
 //! line, never a value.
 //!
 //! The run takes only the variables its config grants ([`Values::granted`]);
-//! every other entry is dropped when the file is read.
+//! every other entry is dropped when the file is read. A granted variable the
+//! file does not set takes the config's non-secret default (`env-defaults`),
+//! when it has one.
 
 use std::path::Path;
 
@@ -62,19 +64,28 @@ impl Values {
         Self::default()
     }
 
-    /// Reads `path` and keeps exactly the `granted` variables.
+    /// Checked entries as values (the config's `env-defaults`).
+    pub(crate) const fn from_entries(entries: Vec<(String, String)>) -> Self {
+        Self { entries }
+    }
+
+    /// Reads `path` and keeps exactly the `granted` variables; one the file
+    /// does not set takes its entry in `defaults` (the config's non-secret
+    /// `env-defaults`), when there is one.
     ///
     /// # Errors
     ///
     /// [`FailureKind::EnvFile`] for an unreadable or oversized file, invalid
-    /// UTF-8, an invalid entry, or a granted variable the file does not set.
+    /// UTF-8, an invalid entry, or a granted variable neither the file nor
+    /// `defaults` sets.
     pub fn granted(
         path: &Path,
         granted: &[String],
+        defaults: &Self,
         shell: &dyn Fn(&str) -> Option<String>,
     ) -> Result<Self, HostFailure> {
         let span = observe(Operation::ReadEnvFile);
-        let result = Self::granted_inner(path, granted, shell);
+        let result = Self::granted_inner(path, granted, defaults, shell);
         span.finish(&result);
         result
     }
@@ -82,6 +93,7 @@ impl Values {
     fn granted_inner(
         path: &Path,
         granted: &[String],
+        defaults: &Self,
         shell: &dyn Fn(&str) -> Option<String>,
     ) -> Result<Self, HostFailure> {
         let error = |message: String| HostFailure::new(FailureKind::EnvFile, message);
@@ -94,9 +106,13 @@ impl Values {
             .map_err(|(line, problem)| error(format!("`{shown}`:{line}: {problem}")))?;
         let mut kept = Vec::with_capacity(granted.len());
         for name in granted {
-            let Some((_, value)) = entries.iter().find(|(entry, _)| entry == name) else {
+            let Some((_, value)) = entries
+                .iter()
+                .chain(&defaults.entries)
+                .find(|(entry, _)| entry == name)
+            else {
                 return Err(error(format!(
-                    "`{shown}` does not set the granted variable `{name}`"
+                    "`{shown}` does not set the granted variable `{name}`, and the config gives it no default"
                 )));
             };
             kept.push((name.clone(), value.clone()));
@@ -210,14 +226,36 @@ mod tests {
         std::fs::create_dir_all(&directory).expect("the fixture directory is created");
         let path = directory.join("values.env");
         std::fs::write(&path, "KEEP=kept-secret\nDROP=dropped\n").expect("the file is written");
-        let values = Values::granted(&path, &["KEEP".to_owned()], &shell).expect("valid");
+        let none = Values::none();
+        let values = Values::granted(&path, &["KEEP".to_owned()], &none, &shell).expect("valid");
         assert_eq!(values.names().collect::<Vec<_>>(), ["KEEP"]);
         let shown = format!("{values:?}");
         assert!(shown.contains("KEEP") && !shown.contains("kept-secret"));
-        let missing = Values::granted(&path, &["ABSENT".to_owned()], &shell)
+        let missing = Values::granted(&path, &["ABSENT".to_owned()], &none, &shell)
             .expect_err("a granted variable must be set");
         assert_eq!(missing.kind(), FailureKind::EnvFile);
         assert!(!missing.message().contains("kept-secret"));
+
+        // A default fills only a variable the file does not set.
+        let defaults = Values::from_entries(vec![
+            ("ABSENT".to_owned(), "https://default.invalid".to_owned()),
+            ("KEEP".to_owned(), "default-loses".to_owned()),
+        ]);
+        let values = Values::granted(
+            &path,
+            &["KEEP".to_owned(), "ABSENT".to_owned()],
+            &defaults,
+            &shell,
+        )
+        .expect("the default fills ABSENT");
+        assert_eq!(
+            values.entries,
+            [
+                ("KEEP".to_owned(), "kept-secret".to_owned()),
+                ("ABSENT".to_owned(), "https://default.invalid".to_owned()),
+            ],
+            "the env file's value wins over the default"
+        );
         std::fs::remove_dir_all(&directory).expect("the fixture directory is removed");
     }
 }

@@ -56,9 +56,9 @@ pub struct Distribution {
 /// A decision backend.
 pub trait Backend {
     /// The one `POST` that asks `batch`: `base_url` is the `baseurl` slot's
-    /// reference (the backend's default URL without one) and `api_key` the
-    /// `apikey` slot's.
-    fn request(&self, batch: &Batch, api_key: u32, base_url: Option<u32>) -> Request;
+    /// reference (no backend URL is compiled in) and `api_key` the `apikey`
+    /// slot's.
+    fn request(&self, batch: &Batch, api_key: u32, base_url: u32) -> Request;
 
     /// The distributions of a successful response body, one per question of
     /// `batch`, in order.
@@ -114,9 +114,6 @@ pub fn argmax(criteria: &[Criterion], distribution: &Distribution) -> Option<usi
 pub struct TypeSafe;
 
 impl TypeSafe {
-    /// The API base URL without a `baseurl` slot value (the SDK's
-    /// `DEFAULT_BASE_URL`; `TYPESAFE_BASE_URL` overrides it there).
-    pub const DEFAULT_BASE_URL: &'static str = "https://api.typesafe.ai";
     /// The path appended to the base URL (the SDK's `SYSTEM_ONE_PATH`).
     pub const SYSTEM_ONE_PATH: &'static str = "/v1/systemone";
     /// The model without a `model` attribute (the SDK's `DEFAULT_MODEL`).
@@ -124,7 +121,7 @@ impl TypeSafe {
 }
 
 impl Backend for TypeSafe {
-    fn request(&self, batch: &Batch, api_key: u32, base_url: Option<u32>) -> Request {
+    fn request(&self, batch: &Batch, api_key: u32, base_url: u32) -> Request {
         let questions: Map<String, Json> = batch
             .questions
             .iter()
@@ -150,17 +147,10 @@ impl Backend for TypeSafe {
             "state": batch.state,
         });
         Request {
-            url: match base_url {
-                Some(reference) => vec![
-                    Part::Reference(reference),
-                    Part::Literal(Self::SYSTEM_ONE_PATH.into()),
-                ],
-                None => vec![Part::Literal(format!(
-                    "{}{}",
-                    Self::DEFAULT_BASE_URL,
-                    Self::SYSTEM_ONE_PATH
-                ))],
-            },
+            url: vec![
+                Part::Reference(base_url),
+                Part::Literal(Self::SYSTEM_ONE_PATH.into()),
+            ],
             headers: vec![
                 (
                     "authorization".into(),

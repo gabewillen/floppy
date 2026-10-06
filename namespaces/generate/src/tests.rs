@@ -34,7 +34,7 @@ impl Default for FakeHost {
     fn default() -> Self {
         Self {
             values: BTreeMap::new(),
-            slots: BTreeMap::from([(API_KEY_SLOT.into(), 1)]),
+            slots: BTreeMap::from([(API_KEY_SLOT.into(), 1), (BASE_URL_SLOT.into(), 2)]),
             assigned: Vec::new(),
             requests: Vec::new(),
             answer: Ok(Response {
@@ -129,6 +129,7 @@ fn base() -> Vec<Attribute> {
         attr("location", "reply"),
         attr("model", "m-1"),
         env("apikey", "OPENAI_API_KEY"),
+        env("baseurl", "OPENAI_BASE_URL"),
     ]
 }
 
@@ -162,10 +163,6 @@ fn the_package_binds_the_exact_uri_schema_digest_slots_and_origin() {
     assert_eq!(manifest.http_origins, ["https://api.openai.com"]);
     assert_eq!(manifest.env_slots, [API_KEY_SLOT, BASE_URL_SLOT]);
     assert!(manifest.wasi_permissions.is_empty(), "no WASI permission");
-    assert!(
-        DEFAULT_BASE_URL.starts_with(&manifest.http_origins[0]),
-        "the default base URL is on the declared origin"
-    );
     manifest
         .verify_schema(&scxml_validator_core::SchemaSource::new(
             "generate.xsd",
@@ -190,9 +187,11 @@ fn a_text_prompt_posts_a_canonical_chat_completion_and_assigns_the_reply() {
     let request = &host.requests[0];
     assert_eq!(
         request.url,
-        [Part::Literal(
-            "https://api.openai.com/v1/chat/completions".into()
-        )]
+        [
+            Part::Reference(2),
+            Part::Literal("/chat/completions".into())
+        ],
+        "the baseurl slot's reference, then the path; no URL is compiled in"
     );
     assert_eq!(
         request.headers[0],
@@ -219,8 +218,8 @@ fn the_same_element_always_encodes_the_same_bytes() {
         role: Role::User,
         content: "q".into(),
     }];
-    let first = build_request(Some(7), 3, "m", &messages, Some(&schema));
-    let second = build_request(Some(7), 3, "m", &messages, Some(&schema));
+    let first = build_request(7, 3, "m", &messages, Some(&schema));
+    let second = build_request(7, 3, "m", &messages, Some(&schema));
     assert_eq!(first, second);
     assert!(scxml_event_schema::is_canonical_json(
         std::str::from_utf8(&first.body).expect("UTF-8")
@@ -231,14 +230,14 @@ fn the_same_element_always_encodes_the_same_bytes() {
             Part::Reference(7),
             Part::Literal("/chat/completions".into())
         ],
-        "the baseurl slot's reference replaces the default base URL"
+        "the baseurl slot's reference is the base URL"
     );
 }
 
 #[test]
 fn modelexpr_systemexpr_and_a_baseurl_slot_are_used() {
     let mut host = FakeHost::default();
-    host.slots.insert(BASE_URL_SLOT.into(), 2);
+    host.slots.insert(BASE_URL_SLOT.into(), 5);
     host.values
         .insert("m".into(), Value::Text(" nemotron ".into()));
     host.values.insert("s".into(), Value::Text("sys".into()));
@@ -256,7 +255,7 @@ fn modelexpr_systemexpr_and_a_baseurl_slot_are_used() {
         body["messages"],
         serde_json::json!([{"role":"system","content":"sys"},{"role":"user","content":"prompt"}])
     );
-    assert_eq!(host.requests[0].url[0], Part::Reference(2));
+    assert_eq!(host.requests[0].url[0], Part::Reference(5));
 }
 
 #[test]
@@ -506,6 +505,19 @@ fn malformed_cases() -> Vec<(Vec<Attribute>, Vec<Content>, &'static str)> {
             "no API key",
         ),
     ]
+}
+
+/// No backend URL is compiled in: without a `baseurl` value the element
+/// fails before any request, so the key never reaches a host the component
+/// chose.
+#[test]
+fn an_element_without_a_base_url_sends_nothing() {
+    let mut host = FakeHost::default();
+    host.slots.remove(BASE_URL_SLOT);
+    let detail = execution(run(&base(), &child("content", "q"), &mut host));
+    assert!(detail.contains("no base URL"), "{detail}");
+    assert!(host.requests.is_empty(), "nothing is sent");
+    assert!(host.assigned.is_empty());
 }
 
 #[test]

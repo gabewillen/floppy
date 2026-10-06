@@ -78,9 +78,12 @@ Timeouts are delayed sends cancelled on exit (`design` 180 s, `author`
 
 A session that runs the builder binds the `scxml`, `generate`, and `decision`
 namespace packages, an `extension-call-fuel` large enough for `sx:validate`
-(1 billion; see `namespaces/scxml`), and grants `OPENAI_API_KEY` (and
-optionally `OPENAI_BASE_URL`) for `generate` and `TYPESAFE_API_KEY` (and
-optionally `TYPESAFE_BASE_URL`) for `decision`. Drafts are validated without
+(1 billion; see `namespaces/scxml`), and grants `OPENAI_API_KEY` and
+`OPENAI_BASE_URL` for `generate` and `TYPESAFE_API_KEY` and
+`TYPESAFE_BASE_URL` for `decision`. No backend URL is compiled into a
+component, so each base URL comes from the env file or, when the file does
+not set it, from the config's non-secret `env-defaults` (for example
+`{"OPENAI_BASE_URL": "https://api.openai.com/v1"}`). Drafts are validated without
 packages, so a built machine uses no extension namespace or service.
 
 ## Proof

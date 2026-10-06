@@ -4,7 +4,7 @@
   "package-version": "0.1.0",
   "extension-artifact": "nemobot_decision.virtualized.wasm",
   "schema-artifact": "decision.xsd",
-  "schema-sha256": "738b36f34bd19d665f7d6516200cd3c4f05e71608199844d4dc8a0594dbda998",
+  "schema-sha256": "2b2d712fead56553608e5a84b7a66b6325a3b92d7997640121876c4e16fc34e5",
   "wit-world": "stateforward:scxml/executable-content-extension",
   "wit-version": "0.2.0",
   "http-origins": ["https://api.typesafe.ai"],

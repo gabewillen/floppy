@@ -16,7 +16,9 @@
 //! The ignored `live_builder_through_an_env_file` test builds the same spec
 //! with the real backends: `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p
 //! nemobot-host --test builder_bot -- --ignored`. It grants `OPENAI_API_KEY`
-//! and `TYPESAFE_API_KEY` (and their base URLs when the file sets them),
+//! (required) and, when the file sets it, `TYPESAFE_API_KEY`; the base URLs
+//! are the file's values, else the config's non-secret `env-defaults` (no
+//! backend URL is compiled into a component);
 //! writes the produced bot under `target/builder-live/`, and prints pass or
 //! fail and counts only; no value is ever printed.
 
@@ -100,6 +102,11 @@ fn artifacts() -> &'static Artifacts {
 /// A config binding the `scxml`, `generate`, and `decision` packages,
 /// granting `env` from `env_file`.
 fn config(env_file: &Path, env: &[&str]) -> Config {
+    config_with_defaults(env_file, env, &json!({}))
+}
+
+/// [`config`] with non-secret `env-defaults`.
+fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &Json) -> Config {
     let artifacts = artifacts();
     let extension = |name: &str| {
         let component = artifacts
@@ -122,6 +129,7 @@ fn config(env_file: &Path, env: &[&str]) -> Config {
         },
         "env-file": env_file.display().to_string(),
         "env": env,
+        "env-defaults": defaults,
         "extensions": [extension("scxml"), extension("generate"), extension("decision")],
         "outbound-http": true,
         "extension-call-fuel": EXTENSION_CALL_FUEL,
@@ -161,6 +169,7 @@ fn open(config: &Config, clock: ClockMode) -> SessionHandle {
             .as_deref()
             .expect("the config names an env file"),
         &config.env,
+        &config.env_defaults,
         &|_| None,
     )
     .expect("the env file grants the variables");
@@ -789,19 +798,24 @@ fn an_invalid_request_is_answered_with_builder_failed() {
 // ---------------------------------------------------------------------------
 // Live.
 
-/// Grants `key` and, when the file sets it, `base`; the failure names the
-/// variable only, never a value.
-fn grant_if_set(path: &Path, granted: &mut Vec<&'static str>, base: &'static str) {
+/// Adds `variable` to `granted` when the file sets it; the failure names the
+/// kind only, never a value.
+fn grant_if_set(path: &Path, granted: &mut Vec<&'static str>, variable: &'static str) {
     let mut probe: Vec<String> = granted.iter().map(|name| (*name).to_owned()).collect();
-    probe.push(base.to_owned());
-    match Values::granted(path, &probe, &|_| None) {
-        Ok(_) => granted.push(base),
+    probe.push(variable.to_owned());
+    match Values::granted(path, &probe, &Values::none(), &|_| None) {
+        Ok(_) => granted.push(variable),
         Err(failure)
             if failure.kind() == FailureKind::EnvFile
-                && failure.message().contains(&format!("`{base}`")) => {}
+                && failure.message().contains(&format!("`{variable}`")) => {}
         Err(failure) => panic!("the env file is unusable ({:?})", failure.kind()),
     }
 }
+
+/// `OpenAI`'s and `TypeSafe`'s base URLs, the live run's config defaults (never
+/// compiled into a component).
+const OPENAI_BASE_URL_DEFAULT: &str = "https://api.openai.com/v1";
+const TYPESAFE_BASE_URL_DEFAULT: &str = "https://api.typesafe.ai";
 
 /// Builds the spec with the real `generate` (and `decision`) backends on the
 /// wall clock (`NEMOBOT_LIVE_ENV_FILE`; `NEMOBOT_LIVE_MODEL`, default
@@ -815,12 +829,14 @@ fn live_builder_through_an_env_file() {
     };
     let model = std::env::var("NEMOBOT_LIVE_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
     let mut granted = vec!["OPENAI_API_KEY"];
-    grant_if_set(&path, &mut granted, "OPENAI_BASE_URL");
     grant_if_set(&path, &mut granted, "TYPESAFE_API_KEY");
+    let mut defaults = json!({"OPENAI_BASE_URL": OPENAI_BASE_URL_DEFAULT});
+    granted.push("OPENAI_BASE_URL");
     if granted.contains(&"TYPESAFE_API_KEY") {
-        grant_if_set(&path, &mut granted, "TYPESAFE_BASE_URL");
+        granted.push("TYPESAFE_BASE_URL");
+        defaults["TYPESAFE_BASE_URL"] = json!(TYPESAFE_BASE_URL_DEFAULT);
     }
-    let config = config(&path, &granted);
+    let config = config_with_defaults(&path, &granted, &defaults);
     let handle = open(&config, ClockMode::Wall);
     handle
         .send(build_event(&json!({

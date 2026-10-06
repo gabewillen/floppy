@@ -11,9 +11,10 @@
 //!
 //! The ignored `live_generate_through_an_env_file` test makes one real call:
 //! `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p nemobot-host --test
-//! generate_namespace -- --ignored`. It grants `OPENAI_API_KEY` and, when the
-//! file sets it, `OPENAI_BASE_URL`, and reports pass or fail only; no value
-//! is ever printed.
+//! generate_namespace -- --ignored`. It grants `OPENAI_API_KEY` (the file
+//! must set it) and `OPENAI_BASE_URL` (the file's value, else the config's
+//! `env-defaults` `OpenAI` URL: no backend URL is compiled into the
+//! component), and reports pass or fail only; no value is ever printed.
 
 #![allow(
     missing_docs,
@@ -27,7 +28,6 @@ use std::process::Command;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use nemobot_host::FailureKind;
 use nemobot_host::compile::compile_source;
 use nemobot_host::config::{CONFIG_FORMAT, Config};
 use nemobot_host::env_file::Values;
@@ -85,6 +85,11 @@ fn artifacts() -> &'static Artifacts {
 
 /// A config binding the generate package, granting `env` from `env_file`.
 fn config(env_file: &Path, env: &[&str]) -> Config {
+    config_with_defaults(env_file, env, &serde_json::json!({}))
+}
+
+/// [`config`] with non-secret `env-defaults`.
+fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &serde_json::Value) -> Config {
     let artifacts = artifacts();
     let package = workspace().join("namespaces/generate/package/generate.extension.json");
     let text = serde_json::json!({
@@ -95,6 +100,7 @@ fn config(env_file: &Path, env: &[&str]) -> Config {
         },
         "env-file": env_file.display().to_string(),
         "env": env,
+        "env-defaults": defaults,
         "extensions": [{
             "manifest": package.display().to_string(),
             "component": artifacts.component.display().to_string(),
@@ -225,6 +231,7 @@ fn open(config: &Config, document: &str) -> SessionHandle {
             .as_deref()
             .expect("the config names an env file"),
         &config.env,
+        &config.env_defaults,
         &|_| None,
     )
     .expect("the env file grants the variables");
@@ -437,6 +444,10 @@ fn without_a_granted_key_nothing_is_sent() {
     assert!(mock.received().is_empty(), "no request without a key");
 }
 
+/// `OpenAI`'s base URL, the live run's config default (never compiled into
+/// the component).
+const OPENAI_BASE_URL_DEFAULT: &str = "https://api.openai.com/v1";
+
 /// One real structured generation through an env file
 /// (`NEMOBOT_LIVE_ENV_FILE`; `NEMOBOT_LIVE_MODEL`, default `gpt-4o-mini`).
 /// Prints nothing but pass or fail.
@@ -447,19 +458,20 @@ fn live_generate_through_an_env_file() {
         panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets OPENAI_API_KEY");
     };
     let model = std::env::var("NEMOBOT_LIVE_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
-    // Grant the base URL too when the file sets it; the failure names the
-    // variable only, never a value.
-    let both = config(&path, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
-    let config = match Values::granted(&path, &both.env, &|_| None) {
-        Ok(_) => both,
-        Err(failure)
-            if failure.kind() == FailureKind::EnvFile
-                && failure.message().contains("`OPENAI_BASE_URL`") =>
-        {
-            config(&path, &["OPENAI_API_KEY"])
-        }
-        Err(failure) => panic!("the env file is unusable ({:?})", failure.kind()),
-    };
+    // No backend URL is compiled in: the run's config supplies OpenAI's as
+    // a non-secret default the file may override. The failure names the
+    // kind only, never a value.
+    let config = config_with_defaults(
+        &path,
+        &["OPENAI_API_KEY", "OPENAI_BASE_URL"],
+        &serde_json::json!({"OPENAI_BASE_URL": OPENAI_BASE_URL_DEFAULT}),
+    );
+    if let Err(failure) = Values::granted(&path, &config.env, &config.env_defaults, &|_| None) {
+        panic!(
+            "the env file must set OPENAI_API_KEY ({:?})",
+            failure.kind()
+        );
+    }
     let element = format!(
         r#"<gen:generate location="reply" model="{model}" schemaname="greeting" strict="true"
                     system="Answer in JSON only."

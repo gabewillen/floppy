@@ -31,3 +31,15 @@ reopening one needs the maintainer. All are dated 2026-10-06.
 | D10 | 2026-10-06 | Interim model backends: `generate` uses OpenAI (`OPENAI_API_KEY`, optional `OPENAI_BASE_URL`); `decision` uses TypeSafe `system_one` (`TYPESAFE_API_KEY`). NVIDIA (Nemotron through an OpenAI-compatible API) and CLM become the defaults later, so backends stay pluggable through `env:baseurl`. Keys live in mosfet's `.env` and are used only through env files and `env` slots: never printed, logged, copied, or committed. |
 | D11 | 2026-10-06 | Memory is SQLite first, then PGlite (not in the first night's scope). |
 | D12 | 2026-10-06 | Git work is local commits only: no push, no pull requests, no remotes, no branches beyond the named ones. Each repository's AGENTS.md/CONTRIBUTING.md is followed; scxml.rs's rules are normative (fail closed, no unwrap/panic on reachable paths, wasm-only resource bounds, hard cutovers, canonical outputs, thin hosts, Wasm components behind versioned WIT). |
+
+## Notes on applying the decisions
+
+- D10 and AGENTS.md (2026-10-06, review round 1): AGENTS.md forbids compiling
+  a backend URL into a component, so `generate` and `decision` compile in no
+  default base URL and their `env:baseurl` slot is required at run time
+  (a missing value is `error.execution`, like a missing key). D10's
+  "optional `OPENAI_BASE_URL`" holds at the env-file level: a nemobot config
+  may give a granted variable a non-secret default (`env-defaults`, for
+  example `{"OPENAI_BASE_URL": "https://api.openai.com/v1"}`) that the env
+  file's value overrides. The manifests' `http-origins` stay as the
+  consented origins.

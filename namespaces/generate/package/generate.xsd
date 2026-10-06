@@ -8,8 +8,8 @@
                 time); expr | one gen:content child (exactly one at run
                 time); system | systemexpr (at most one); schemaexpr | one
                 gen:schema child (at most one), with schemaname and strict;
-                the host's env slots env:apikey (required at run time) and
-                env:baseurl (optional), or their expr forms, admitted by the
+                the host's env slots env:apikey and env:baseurl (both
+                required at run time), or their expr forms, admitted by the
                 ##other wildcard and checked against the manifest
   gen:content   the prompt as text; no elements
   gen:schema    a JSON Schema as text; no elements

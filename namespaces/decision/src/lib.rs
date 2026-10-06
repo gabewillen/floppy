@@ -26,9 +26,10 @@
 //! * `model="M"` or `modelexpr="E"` (optional, at most one, a non-empty
 //!   string): the backend's model; the backend's default without one.
 //! * the host's `env` slots: `env:apikey="NAME"` (required at run time; sent
-//!   as a bearer token) and `env:baseurl="NAME"` (optional;
-//!   [`TypeSafe::DEFAULT_BASE_URL`] without it; must not end with `/`), or
-//!   their `expr` forms.
+//!   as a bearer token) and `env:baseurl="NAME"` (required at run time: the
+//!   API base URL, for example `https://api.typesafe.ai`; must not end with
+//!   `/`), or their `expr` forms. No backend URL is compiled in: an element
+//!   whose `baseurl` slot holds no value fails like one with no key.
 //!
 //! Every other attribute, any child element, and any non-white-space text
 //! is refused.
@@ -943,7 +944,9 @@ impl<B: Backend, H: DecisionHost> Context<'_, B, H> {
         let api_key = self.host.slot(API_KEY_SLOT).ok_or(Failure::Execution(
             "decision has no API key: env:apikey names no variable the run holds",
         ))?;
-        let base_url = self.host.slot(BASE_URL_SLOT);
+        let base_url = self.host.slot(BASE_URL_SLOT).ok_or(Failure::Execution(
+            "decision has no base URL: env:baseurl names no variable the run holds",
+        ))?;
         let request = self.backend.request(batch, api_key, base_url);
         let response = self
             .host

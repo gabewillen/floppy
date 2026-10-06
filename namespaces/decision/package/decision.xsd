@@ -6,9 +6,9 @@
 
   Every element: statexpr (optional); instructions | instructionsexpr (at
   most one at run time); model | modelexpr (at most one at run time); the
-  host's env slots env:apikey (required at run time) and env:baseurl
-  (optional), or their expr forms, admitted by the ##other wildcard and
-  checked against the manifest. No content.
+  host's env slots env:apikey and env:baseurl (both required at run time),
+  or their expr forms, admitted by the ##other wildcard and checked against
+  the manifest. No content.
 
   decision:rank      location, candidatesexpr (both required)
   decision:classify  location (required); labels | labelsexpr (exactly one

@@ -15,9 +15,11 @@
 //!
 //! The ignored `live_choose_through_an_env_file` test makes one real call:
 //! `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p nemobot-host --test
-//! decision_namespace -- --ignored`. It grants `TYPESAFE_API_KEY` and, when
-//! the file sets it, `TYPESAFE_BASE_URL`, and reports pass or fail and the
-//! final state reached; no value is ever printed.
+//! decision_namespace -- --ignored`. It grants `TYPESAFE_API_KEY` (the file
+//! must set it) and `TYPESAFE_BASE_URL` (the file's value, else the config's
+//! `env-defaults` `TypeSafe` URL: no backend URL is compiled into the
+//! component), and reports pass or fail and the final state reached; no
+//! value is ever printed.
 
 #![allow(
     missing_docs,
@@ -31,7 +33,6 @@ use std::process::Command;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use nemobot_host::FailureKind;
 use nemobot_host::compile::compile_source;
 use nemobot_host::config::{CONFIG_FORMAT, Config};
 use nemobot_host::env_file::Values;
@@ -90,6 +91,11 @@ fn artifacts() -> &'static Artifacts {
 
 /// A config binding the decision package, granting `env` from `env_file`.
 fn config(env_file: &Path, env: &[&str]) -> Config {
+    config_with_defaults(env_file, env, &json!({}))
+}
+
+/// [`config`] with non-secret `env-defaults`.
+fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &Json) -> Config {
     let artifacts = artifacts();
     let package = workspace().join("namespaces/decision/package/decision.extension.json");
     let text = json!({
@@ -100,6 +106,7 @@ fn config(env_file: &Path, env: &[&str]) -> Config {
         },
         "env-file": env_file.display().to_string(),
         "env": env,
+        "env-defaults": defaults,
         "extensions": [{
             "manifest": package.display().to_string(),
             "component": artifacts.component.display().to_string(),
@@ -273,6 +280,7 @@ fn open(config: &Config, document: &str) -> SessionHandle {
             .as_deref()
             .expect("the config names an env file"),
         &config.env,
+        &config.env_defaults,
         &|_| None,
     )
     .expect("the env file grants the variables");
@@ -512,6 +520,10 @@ fn without_a_granted_key_nothing_is_sent() {
     assert!(mock.received().is_empty(), "no request without a key");
 }
 
+/// `TypeSafe`'s base URL (its SDK's default), the live run's config default
+/// (never compiled into the component).
+const TYPESAFE_BASE_URL_DEFAULT: &str = "https://api.typesafe.ai";
+
 /// One real `system_one` decision through an env file
 /// (`NEMOBOT_LIVE_ENV_FILE`). Passes when the machine reaches one of its
 /// schema transitions with data its schema admits, or abstains. Prints
@@ -522,19 +534,20 @@ fn live_choose_through_an_env_file() {
     let Some(path) = std::env::var_os("NEMOBOT_LIVE_ENV_FILE").map(PathBuf::from) else {
         panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets TYPESAFE_API_KEY");
     };
-    // Grant the base URL too when the file sets it; the failure names the
-    // variable only, never a value.
-    let both = config(&path, &BOTH);
-    let config = match Values::granted(&path, &both.env, &|_| None) {
-        Ok(_) => both,
-        Err(failure)
-            if failure.kind() == FailureKind::EnvFile
-                && failure.message().contains("`TYPESAFE_BASE_URL`") =>
-        {
-            config(&path, &["TYPESAFE_API_KEY"])
-        }
-        Err(failure) => panic!("the env file is unusable ({:?})", failure.kind()),
-    };
+    // No backend URL is compiled in: the run's config supplies TypeSafe's as
+    // a non-secret default the file may override. The failure names the
+    // kind only, never a value.
+    let config = config_with_defaults(
+        &path,
+        &BOTH,
+        &json!({"TYPESAFE_BASE_URL": TYPESAFE_BASE_URL_DEFAULT}),
+    );
+    if let Err(failure) = Values::granted(&path, &config.env, &config.env_defaults, &|_| None) {
+        panic!(
+            "the env file must set TYPESAFE_API_KEY ({:?})",
+            failure.kind()
+        );
+    }
     let choose = r#"<decision:choose dataexpr="order"
                         instructions="A customer paid for order A-1 and asked for fast delivery. Choose what to do with the order."
                         env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL"/>"#;

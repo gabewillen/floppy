@@ -8,6 +8,7 @@
 //!   "components": { "dir": "target/scxml-components", "manifest-sha256": "<hex>" },
 //!   "env-file": "../mosfet/mosfet.py/.env",
 //!   "env": ["OPENAI_API_KEY", "OPENAI_BASE_URL"],
+//!   "env-defaults": { "OPENAI_BASE_URL": "https://api.openai.com/v1" },
 //!   "extensions": [
 //!     { "manifest": "namespaces/generate/package/generate.extension.json",
 //!       "component-sha256": "<hex>" }
@@ -34,6 +35,12 @@
 //!   `env` names, read from `env-file` (Docker `--env-file` format); `env`
 //!   without `env-file` is refused, and the process environment is never read
 //!   for them.
+//! * `env-defaults` (optional): non-secret values (such as a backend's base
+//!   URL) for granted variables the env file does not set; the env file's
+//!   value wins. Every name must be one `env` grants, and no key or other
+//!   secret may be put here (config files are committed). This is how a
+//!   run supplies a default backend while no backend URL is compiled into a
+//!   component.
 //! * `extensions` and `services`: package manifests, each with its component's
 //!   trusted SHA-256; `component` defaults to the manifest's artifact path,
 //!   relative to the manifest.
@@ -58,6 +65,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+use crate::env_file::Values;
 use crate::telemetry::{Operation, observe};
 use crate::{FailureKind, HostFailure};
 
@@ -129,6 +137,9 @@ pub struct Config {
     pub env_file: Option<PathBuf>,
     /// The variables the run grants, in config order, distinct.
     pub env: Vec<String>,
+    /// Non-secret defaults for granted variables the env file does not set
+    /// (`Debug` shows names only, like every [`Values`]).
+    pub env_defaults: Values,
     /// Extension packages.
     pub extensions: Vec<PackageRef>,
     /// Invoked-service packages.
@@ -154,6 +165,8 @@ struct RawConfig {
     env_file: Option<String>,
     #[serde(default)]
     env: Vec<String>,
+    #[serde(default)]
+    env_defaults: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     extensions: Vec<RawPackage>,
     #[serde(default)]
@@ -286,23 +299,7 @@ impl Config {
             .as_deref()
             .map(|value| resolve(base, value, "env-file"))
             .transpose()?;
-        let mut env: Vec<String> = Vec::with_capacity(raw.env.len());
-        for name in raw.env {
-            if !crate::env_file::is_name(&name) {
-                return Err(config_error(
-                    "field `env` lists a name that is not a variable name ([A-Za-z_][A-Za-z0-9_]*)",
-                ));
-            }
-            if env.contains(&name) {
-                return Err(config_error(format!("field `env` lists `{name}` twice")));
-            }
-            env.push(name);
-        }
-        if !env.is_empty() && env_file.is_none() {
-            return Err(config_error(
-                "field `env` needs `env-file`: granted variables come only from the env file",
-            ));
-        }
+        let (env, env_defaults) = Self::env(raw.env, raw.env_defaults, env_file.is_some())?;
         let packages = |list: Vec<RawPackage>, field: &str| {
             list.into_iter()
                 .enumerate()
@@ -349,6 +346,7 @@ impl Config {
             components,
             env_file,
             env,
+            env_defaults,
             extensions,
             services,
             grants,
@@ -357,6 +355,51 @@ impl Config {
             max_commands,
             extension_call_fuel,
         })
+    }
+
+    /// The granted variables (`env`) and their non-secret defaults
+    /// (`env-defaults`), checked.
+    fn env(
+        raw_env: Vec<String>,
+        raw_defaults: std::collections::BTreeMap<String, String>,
+        has_env_file: bool,
+    ) -> Result<(Vec<String>, Values), HostFailure> {
+        let mut env: Vec<String> = Vec::with_capacity(raw_env.len());
+        for name in raw_env {
+            if !crate::env_file::is_name(&name) {
+                return Err(config_error(
+                    "field `env` lists a name that is not a variable name ([A-Za-z_][A-Za-z0-9_]*)",
+                ));
+            }
+            if env.contains(&name) {
+                return Err(config_error(format!("field `env` lists `{name}` twice")));
+            }
+            env.push(name);
+        }
+        if !env.is_empty() && !has_env_file {
+            return Err(config_error(
+                "field `env` needs `env-file`: granted variables come only from the env file",
+            ));
+        }
+        let mut defaults = Vec::with_capacity(raw_defaults.len());
+        for (name, value) in raw_defaults {
+            if !env.contains(&name) {
+                return Err(config_error(format!(
+                    "field `env-defaults` names `{name}`, which `env` does not grant"
+                )));
+            }
+            if value.is_empty()
+                || value.len() > crate::env_file::MAX_VALUE_BYTES
+                || value.contains('\0')
+            {
+                return Err(config_error(format!(
+                    "field `env-defaults.{name}` must be non-empty, at most {} bytes, without NUL",
+                    crate::env_file::MAX_VALUE_BYTES
+                )));
+            }
+            defaults.push((name, value));
+        }
+        Ok((env, Values::from_entries(defaults)))
     }
 
     fn grant(base: &Path, index: usize, raw: RawGrant) -> Result<UriGrant, HostFailure> {
@@ -499,6 +542,7 @@ mod tests {
         )))
         .expect("valid");
         assert_eq!(config.env_file.as_deref(), Some(Path::new("/x/.env")));
+        assert_eq!(config.env_defaults, Values::none());
         assert_eq!(config.services[0].manifest, Path::new("/base/s.json"));
         assert_eq!(config.services[0].component, None);
         assert_eq!(
@@ -514,12 +558,33 @@ mod tests {
     }
 
     #[test]
+    fn env_defaults_name_granted_variables_and_debug_shows_names_only() {
+        let config = parse(&minimal(
+            r#","env-file":"e","env":["KEY","BASE"],"env-defaults":{"BASE":"https://api.example.invalid/v1"}"#,
+        ))
+        .expect("valid");
+        assert_eq!(config.env_defaults.names().collect::<Vec<_>>(), ["BASE"]);
+        assert!(
+            !format!("{config:?}").contains("api.example.invalid"),
+            "a default's value is not shown"
+        );
+    }
+
+    #[test]
     fn invalid_configs_are_refused() {
         for (extra, expected) in [
             (r#","unknown":1"#, "unknown field"),
             (r#","env":["A"]"#, "needs `env-file`"),
             (r#","env-file":"e","env":["A","A"]"#, "twice"),
             (r#","env-file":"e","env":["1A"]"#, "not a variable name"),
+            (
+                r#","env-file":"e","env":["A"],"env-defaults":{"B":"x"}"#,
+                "`env` does not grant",
+            ),
+            (
+                r#","env-file":"e","env":["A"],"env-defaults":{"A":""}"#,
+                "must be non-empty",
+            ),
             (r#","fuel":0"#, "`fuel` must be positive"),
             (
                 r#","extension-call-fuel":0"#,

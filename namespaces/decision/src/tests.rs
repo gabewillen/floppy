@@ -24,7 +24,7 @@ impl Default for FakeHost {
     fn default() -> Self {
         Self {
             values: BTreeMap::new(),
-            slots: BTreeMap::from([(API_KEY_SLOT.into(), 1)]),
+            slots: BTreeMap::from([(API_KEY_SLOT.into(), 1), (BASE_URL_SLOT.into(), 2)]),
             menu_snapshot: None,
             state_snapshot: Some(
                 r#"{"version":"scxml.session-snapshot/v2","snapshot":{"root":{"configuration":{"atomic":["s"],"full":["s"]}}}}"#
@@ -263,10 +263,6 @@ fn the_package_binds_the_exact_uri_schema_digest_slots_origin_and_abstain_contra
     assert_eq!(manifest.http_origins, ["https://api.typesafe.ai"]);
     assert_eq!(manifest.env_slots, [API_KEY_SLOT, BASE_URL_SLOT]);
     assert!(manifest.wasi_permissions.is_empty(), "no WASI permission");
-    assert!(
-        TypeSafe::DEFAULT_BASE_URL.starts_with(&manifest.http_origins[0]),
-        "the default base URL is on the declared origin"
-    );
     manifest
         .verify_schema(&scxml_validator_core::SchemaSource::new(
             "decision.xsd",
@@ -333,7 +329,11 @@ fn choose_offers_the_schema_transitions_fills_grounded_data_and_raises_the_event
     let request = &host.requests[0];
     assert_eq!(
         request.url,
-        [Part::Literal("https://api.typesafe.ai/v1/systemone".into())]
+        [
+            Part::Reference(2),
+            Part::Literal(TypeSafe::SYSTEM_ONE_PATH.into())
+        ],
+        "the baseurl slot's reference, then the path; no URL is compiled in"
     );
     assert_eq!(
         request.headers[0],
@@ -535,10 +535,24 @@ fn choose_without_a_key_sends_nothing() {
     assert!(host.requests.is_empty());
 }
 
+/// No backend URL is compiled in: without a `baseurl` value the element
+/// fails before any request, so the key never reaches a host the component
+/// chose.
+#[test]
+fn choose_without_a_base_url_sends_nothing() {
+    let mut host = order_host(&json!({}));
+    host.slots.remove(BASE_URL_SLOT);
+    assert_eq!(
+        execution(execute("choose", &choose_attributes(), &[], &mut host)),
+        "decision has no base URL: env:baseurl names no variable the run holds"
+    );
+    assert!(host.requests.is_empty());
+}
+
 #[test]
 fn a_base_url_slot_and_a_model_reach_the_request() {
     let mut host = FakeHost::answering(&json!({"classify": {"a": 0.25, "b": 0.75}}));
-    host.slots.insert(BASE_URL_SLOT.into(), 2);
+    host.slots.insert(BASE_URL_SLOT.into(), 7);
     let attributes = [
         attr("location", "kind"),
         attr("labels", " a\n b "),
@@ -554,7 +568,7 @@ fn a_base_url_slot_and_a_model_reach_the_request() {
     assert_eq!(
         host.requests[0].url,
         [
-            Part::Reference(2),
+            Part::Reference(7),
             Part::Literal(TypeSafe::SYSTEM_ONE_PATH.into())
         ]
     );
@@ -798,7 +812,7 @@ fn a_refused_raise_is_error_execution() {
 struct Uniform;
 
 impl Backend for Uniform {
-    fn request(&self, _batch: &Batch, api_key: u32, _base_url: Option<u32>) -> Request {
+    fn request(&self, _batch: &Batch, api_key: u32, _base_url: u32) -> Request {
         Request {
             url: vec![Part::Literal("http://127.0.0.1/uniform".into())],
             headers: vec![("x-key".into(), vec![Part::Reference(api_key)])],

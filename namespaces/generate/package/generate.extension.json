@@ -4,7 +4,7 @@
   "package-version": "0.1.0",
   "extension-artifact": "nemobot_generate.virtualized.wasm",
   "schema-artifact": "generate.xsd",
-  "schema-sha256": "95254e26bce625fc06cdbe7bb2d97346ae9bee69c89c8dba94f34ba01e5c860f",
+  "schema-sha256": "631da72293b2c57b07343ea048f50bf52cd505065acab0a758a959971181c66d",
   "wit-world": "stateforward:scxml/executable-content-extension",
   "wit-version": "0.2.0",
   "http-origins": ["https://api.openai.com"],

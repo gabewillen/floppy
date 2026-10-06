@@ -39,8 +39,10 @@
 //!     Both require a schema.
 //! * the host's `env` slots (`https://github.com/stateforward/scxml.rs/namespaces/env`):
 //!   `env:apikey="NAME"` (required at run time; sent as a bearer token) and
-//!   `env:baseurl="NAME"` (optional; [`DEFAULT_BASE_URL`] without it; must
-//!   not end with `/`), or their `expr` forms. The component holds opaque
+//!   `env:baseurl="NAME"` (required at run time: the API base URL, for
+//!   example `https://api.openai.com/v1`; must not end with `/`), or their
+//!   `expr` forms. No backend URL is compiled in: an element whose
+//!   `baseurl` slot holds no value fails like one with no key. The component holds opaque
 //!   references only; the host substitutes the values into the one admitted
 //!   request.
 //!
@@ -132,8 +134,6 @@ pub const NAMESPACE_URI: &str =
 pub const API_KEY_SLOT: &str = "apikey";
 /// The `env` slot of the API base URL (`env:baseurl`).
 pub const BASE_URL_SLOT: &str = "baseurl";
-/// The API base URL when the element binds no [`BASE_URL_SLOT`] value.
-pub const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
 /// The path appended to the base URL.
 pub const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
 /// `json_schema.name` when the element names none.
@@ -709,7 +709,9 @@ fn generate<H: GenerateHost>(
     let api_key = host.slot(API_KEY_SLOT).ok_or(Failure::Execution(
         "gen:generate has no API key: env:apikey names no variable the run holds",
     ))?;
-    let base_url = host.slot(BASE_URL_SLOT);
+    let base_url = host.slot(BASE_URL_SLOT).ok_or(Failure::Execution(
+        "gen:generate has no base URL: env:baseurl names no variable the run holds",
+    ))?;
     let request = build_request(base_url, api_key, &model, &messages, schema.as_ref());
     let response = host
         .post(&request)
@@ -731,12 +733,12 @@ fn generate<H: GenerateHost>(
 }
 
 /// The Chat Completions request: `POST {base_url}/chat/completions` (the
-/// `baseurl` slot's reference, or [`DEFAULT_BASE_URL`]) with the `apikey`
+/// `baseurl` slot's reference) with the `apikey`
 /// slot's reference as a bearer key and a canonical JSON body: `messages`,
 /// `model`, and, with a schema, `response_format`.
 #[must_use]
 pub fn build_request(
-    base_url: Option<u32>,
+    base_url: u32,
     api_key: u32,
     model: &str,
     messages: &[Message],
@@ -767,15 +769,10 @@ pub fn build_request(
         );
     }
     Request {
-        url: match base_url {
-            Some(reference) => vec![
-                Part::Reference(reference),
-                Part::Literal(CHAT_COMPLETIONS_PATH.into()),
-            ],
-            None => vec![Part::Literal(format!(
-                "{DEFAULT_BASE_URL}{CHAT_COMPLETIONS_PATH}"
-            ))],
-        },
+        url: vec![
+            Part::Reference(base_url),
+            Part::Literal(CHAT_COMPLETIONS_PATH.into()),
+        ],
         headers: vec![
             (
                 "authorization".into(),
