@@ -11,7 +11,7 @@
   {scxml, schemas, tests, report} or builder.failed {reason, diagnostics},
   then finishes. The event:schema contracts below are inline copies of
   schemas/*.json (an invoked child is compiled at run time and gets no schema
-  files); the nemobot-host builder_bot test keeps them equal.
+  files); the builder_bot test (tests/tests/builder_bot.rs) keeps them equal.
 
   intake -> design (an invoked generate service: topology plan) -> author
   (an invoked generate service: draft SCXML + event schemas + test scripts)

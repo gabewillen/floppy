@@ -1,64 +1,50 @@
-//! nemobot-host harness of the builder bot (`bots/builder/builder.scxml`): a
-//! parent machine invokes the builder as a child (`<invoke type="scxml"
-//! src="builder.scxml">`), forwards it a `builder.request`, and finishes on
-//! `builder.done` or `builder.failed`. The live session binds the real
-//! `scxml` and `decision` extension components and the real `generate` and
-//! `decision` service components; the services talk to one deterministic
-//! fake backend on 127.0.0.1 (Chat Completions and `TypeSafe` `system_one`;
-//! nothing reaches the network) whose canned drafts include an invalid one,
-//! so the repair loop, the machine-applicable fixes, the decision, and the
-//! simulation as an invoked child all run. One route answers its first plan
-//! late, so a `builder.timeout` fires while that generation is in flight and
-//! cancels it.
-//!
-//! `scripts/build-components.sh` builds and verifies the release session
-//! components and the namespace and service components into
-//! `target/test-builder-bot/components`.
+//! Harness of the builder bot (`bots/builder/builder.scxml`), run exactly
+//! as its README says: `scxml-cli run @<components>/components.args
+//! @bots/builder/builder.args bots/builder/parent.scxml`. The parent
+//! invokes the builder as a child (`<invoke type="scxml"
+//! src="builder.scxml" autoforward="true">`), so the `builder.request` on
+//! standard input reaches it, and finishes on `builder.done` or
+//! `builder.failed`. The session binds the real `scxml` and `decision`
+//! extension components and the real `generate` and `decision` service
+//! components; the services talk to one deterministic fake backend on
+//! 127.0.0.1 (Chat Completions and `TypeSafe` `system_one`; nothing reaches
+//! the network) whose canned drafts include an invalid one, so the repair
+//! loop, the machine-applicable fixes, the decision, and the simulation as
+//! an invoked child all run. One route answers its first plan late, so a
+//! `builder.timeout` fires while that generation is in flight and cancels
+//! it.
 //!
 //! The ignored `live_builder_through_an_env_file` test builds the same spec
 //! with the real backends: `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p
-//! nemobot-host --test builder_bot -- --ignored`. It grants `OPENAI_API_KEY`
-//! (required) and, when the file sets it, `TYPESAFE_API_KEY`; the base URLs
-//! are the file's values, else the config's non-secret `env-defaults` (no
-//! backend URL is compiled into a component);
-//! writes the produced bot under `target/builder-live/`, and prints pass or
-//! fail and counts only; no value is ever printed.
+//! nemobot-tests --test builder_bot -- --ignored`. The builder's argument
+//! file grants `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `TYPESAFE_API_KEY`, and
+//! `TYPESAFE_BASE_URL`; the values are the file's, and the base URLs fall
+//! back to `OpenAI`'s and `TypeSafe`'s, given as the calling shell's values
+//! (no backend URL is compiled into a component). It writes the produced
+//! bot under `target/builder-live/`, and prints pass or fail and counts
+//! only; no value is ever printed.
 
 #![allow(
     missing_docs,
     reason = "integration-test crate; test functions are self-describing"
 )]
 
+mod support;
+
 use std::collections::BTreeMap;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use nemobot_host::FailureKind;
-use nemobot_host::compile::compile_source;
-use nemobot_host::config::{CONFIG_FORMAT, Config};
-use nemobot_host::env_file::Values;
-use nemobot_host::packages::Packages;
-use nemobot_host::runtime::{ClockMode, Egress, SessionHandle, SessionSpec, SessionStatus};
-use scxml_host_wasmtime::{ScriptedEvent, SessionOutput};
 use serde_json::{Map, Value as Json, json};
-use sha2::{Digest as _, Sha256};
+use support::{Run, components, output, scratch, workspace, write};
 
 /// The fake keys (not secrets): the mock checks they arrive as bearers.
 const FAKE_OPENAI_KEY: &str = "sk-nemobot-fake";
 const FAKE_TYPESAFE_KEY: &str = "ts-nemobot-fake";
-/// The extension call fuel `<sx:validate>` needs (namespaces/scxml).
-const EXTENSION_CALL_FUEL: u64 = 1_000_000_000;
 const SPEC: &str = "a traffic light with a pedestrian button";
-
-fn workspace() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("the host crate sits in the nemobot workspace")
-}
 
 fn builder_dir() -> PathBuf {
     workspace().join("bots/builder")
@@ -68,226 +54,51 @@ fn builder_source() -> String {
     std::fs::read_to_string(builder_dir().join("builder.scxml")).expect("builder.scxml is readable")
 }
 
-fn sha256_file(path: &Path) -> String {
-    let bytes = std::fs::read(path).expect("the artifact is readable");
-    format!("{:x}", Sha256::digest(&bytes))
+/// The flags of the builder's README command: the packages bound to the
+/// verified components, the builder's own argument file (or `args_file`),
+/// and the parent document.
+fn builder_args(args_file: &Path, clock: &str) -> Vec<String> {
+    vec![
+        components().args(),
+        format!("@{}", args_file.display()),
+        "--clock".to_owned(),
+        clock.to_owned(),
+        "bots/builder/parent.scxml".to_owned(),
+    ]
 }
 
-/// The verified session components and the namespace and service
-/// components.
-struct Artifacts {
-    components: PathBuf,
-    manifest_sha256: String,
-    namespaces: PathBuf,
-    services: PathBuf,
+/// Starts the builder with `env_file` and sends it `request`.
+fn start(
+    args_file: &Path,
+    clock: &str,
+    env_file: &Path,
+    request: &Json,
+    env: &[(&str, &str)],
+) -> Run {
+    let mut args = builder_args(args_file, clock);
+    args.extend(["--env-file".to_owned(), env_file.display().to_string()]);
+    let mut run = Run::start(&args, env);
+    run.event("builder.request", request);
+    run.end_input();
+    run
 }
 
-fn artifacts() -> &'static Artifacts {
-    static ARTIFACTS: OnceLock<Artifacts> = OnceLock::new();
-    ARTIFACTS.get_or_init(|| {
-        let dir = workspace().join("target/test-builder-bot/components");
-        let status = Command::new("sh")
-            .arg(workspace().join("scripts/build-components.sh"))
-            .arg("--artifacts-dir")
-            .arg(&dir)
-            .current_dir(workspace())
-            .status()
-            .expect("the build script runs");
-        assert!(status.success(), "the component proof must pass");
-        let components = dir.join("scxml");
-        Artifacts {
-            manifest_sha256: sha256_file(&components.join("manifest.tsv")),
-            components,
-            namespaces: dir.join("namespaces"),
-            services: dir.join("services"),
-        }
-    })
-}
-
-/// The package each variable is granted to: `OPENAI_*` to the generate
-/// service, every other (`TYPESAFE_*`) to the decision service.
-fn scope(name: &str) -> &'static str {
-    if name.starts_with("OPENAI_") {
-        "https://github.com/stateforward/nemobot/services/generate@v0.1.0"
-    } else {
-        "https://github.com/stateforward/nemobot/services/decision@v0.1.0"
-    }
-}
-
-/// A config binding the `scxml` and `decision` namespaces and the
-/// `generate` and `decision` services, granting `env` from `env_file`, each
-/// variable to its [`scope`].
-fn config(env_file: &Path, env: &[&str]) -> Config {
-    config_with_defaults(env_file, env, &json!({}))
-}
-
-/// [`config`] with non-secret `env-defaults`.
-fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &Json) -> Config {
-    let artifacts = artifacts();
-    let extension = |name: &str| {
-        let component = artifacts
-            .namespaces
-            .join(format!("nemobot_{name}.virtualized.wasm"));
-        json!({
-            "manifest": workspace()
-                .join(format!("namespaces/{name}/package/{name}.extension.json"))
-                .display()
-                .to_string(),
-            "component": component.display().to_string(),
-            "component-sha256": sha256_file(&component),
-        })
-    };
-    let service = |name: &str| {
-        let component = artifacts
-            .services
-            .join(format!("nemobot_service_{name}.virtualized.wasm"));
-        json!({
-            "manifest": workspace()
-                .join(format!("services/{name}/package/{name}.service.json"))
-                .display()
-                .to_string(),
-            "component": component.display().to_string(),
-            "component-sha256": sha256_file(&component),
-        })
-    };
-    let text = json!({
-        "format": CONFIG_FORMAT,
-        "components": {
-            "dir": artifacts.components.display().to_string(),
-            "manifest-sha256": artifacts.manifest_sha256,
-        },
-        "env-file": env_file.display().to_string(),
-        "env": env
-            .iter()
-            .map(|name| json!({"name": name, "packages": [scope(name)]}))
-            .collect::<Vec<_>>(),
-        "env-defaults": defaults,
-        "extensions": [extension("scxml"), extension("decision")],
-        "services": [service("generate"), service("decision")],
-        "outbound-http": true,
-        "extension-call-fuel": EXTENSION_CALL_FUEL,
-    })
-    .to_string();
-    Config::parse(text.as_bytes(), &PathBuf::from("/")).expect("the test config is valid")
-}
-
-/// The parent: invokes the builder, forwards the `build` event's data as
-/// `builder.request`, and logs the answer.
-const PARENT: &str = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
-       datamodel="ecmascript" initial="running">
-  <state id="running">
-    <invoke id="builder" type="scxml" src="builder.scxml"/>
-    <transition event="build">
-      <send event="builder.request" target="#_builder"><content expr="_event.data"/></send>
-    </transition>
-    <transition event="builder.done" target="built">
-      <log label="builder.done" expr="JSON.stringify(_event.data)"/>
-    </transition>
-    <transition event="builder.failed" target="failed">
-      <log label="builder.failed" expr="JSON.stringify(_event.data)"/>
-    </transition>
-    <transition event="error.*" target="failed">
-      <log label="error" expr="_event.name"/>
-    </transition>
-  </state>
-  <final id="built"/>
-  <final id="failed"/>
-</scxml>"##;
-
-fn open(config: &Config, clock: ClockMode) -> SessionHandle {
-    open_builder(config, clock, builder_source())
-}
-
-/// [`open`] with `builder` as the text of `builder.scxml`.
-fn open_builder(config: &Config, clock: ClockMode, builder: String) -> SessionHandle {
-    let packages = Packages::load(config).expect("the four packages bind");
-    let values = Values::granted(
-        config
-            .env_file
-            .as_deref()
-            .expect("the config names an env file"),
-        &config.env_names(),
-        &config.env_defaults,
-        &|_| None,
-    )
-    .expect("the env file grants the variables");
-    let compiled = compile_source(
-        "parent.scxml",
-        PARENT.to_owned(),
-        scxml_event_schema::Resources::new(),
-        &packages,
-    )
-    .expect("the parent compiles");
-    SessionHandle::open(
-        config,
-        packages,
-        values,
-        SessionSpec {
-            compiled,
-            session_id: "builder-harness".into(),
-            clock,
-            documents: vec![("builder.scxml".into(), builder)],
-        },
-    )
-    .expect("the session opens")
-}
-
-fn build_event(request: &Json) -> ScriptedEvent {
-    ScriptedEvent {
-        name: "build".into(),
-        data: scxml_types::DataValue::JsonObject(request.to_string()),
-        trace_context: None,
-    }
-}
-
-/// Egress records until the session closes, at most `limit`.
-fn until_closed(handle: &SessionHandle, limit: Duration) -> Vec<Egress> {
-    let deadline = Instant::now() + limit;
-    let mut records = Vec::new();
-    while Instant::now() < deadline {
-        if let Some(record) = handle.recv_timeout(Duration::from_millis(100)) {
-            let closed = matches!(record, Egress::Closed { .. });
-            records.push(record);
-            if closed {
-                return records;
-            }
-        }
-    }
-    panic!(
-        "the session did not close in time; got {} records",
-        records.len()
-    );
-}
-
-fn logs(records: &[Egress]) -> Vec<(String, String)> {
-    records
+/// The root session's logs (the parent's; the builder logs nothing).
+fn logs(records: &[Json]) -> Vec<(String, String)> {
+    let root: Vec<Json> = records
         .iter()
-        .filter_map(|record| match record {
-            Egress::Outputs(outputs) => Some(outputs),
-            _ => None,
-        })
-        .flatten()
-        .filter_map(|output| match output {
-            SessionOutput::Log { entry, .. } => {
-                Some((entry.label.clone().unwrap_or_default(), entry.text.clone()))
-            }
-            SessionOutput::Done { .. } => None,
-        })
-        .collect()
+        .filter(|record| record.get("parent").is_none())
+        .cloned()
+        .collect();
+    support::logs(&root)
 }
 
-fn finished(records: &[Egress]) -> bool {
-    matches!(
-        records.last(),
-        Some(Egress::Closed {
-            status: SessionStatus::Finished,
-            ..
-        })
-    )
+fn finished(records: &[Json]) -> bool {
+    support::finished(records)
 }
 
 /// The one answer the parent logged: its label and its JSON data.
-fn answer(records: &[Egress]) -> (String, Json) {
+fn answer(records: &[Json]) -> (String, Json) {
     let logs = logs(records);
     let [(label, text)] = logs.as_slice() else {
         panic!("the parent logs exactly one answer: {logs:?}");
@@ -296,6 +107,43 @@ fn answer(records: &[Egress]) -> (String, Json) {
         label.clone(),
         serde_json::from_str(text).unwrap_or_else(|_| Json::String(text.clone())),
     )
+}
+
+/// `scxml-cli validate` of `path` with `bindings`: the exit status and the
+/// diagnostics.
+fn validate(path: &Path, bindings: &[String]) -> support::Output {
+    let mut args = vec!["validate".to_owned(), path.display().to_string()];
+    args.extend_from_slice(bindings);
+    output(&args)
+}
+
+/// Validates and compiles `scxml` with no package (as the builder's drafts
+/// are): whether it compiled.
+fn compiles(name: &str, scxml: &str) -> bool {
+    let dir = support::unique_scratch("compile");
+    let path = write(&dir, name, scxml);
+    let compiled = output(&[
+        "compile".to_owned(),
+        path.display().to_string(),
+        "--output".to_owned(),
+        dir.join("out.scxml-ir.json").display().to_string(),
+    ]);
+    compiled.status.success()
+}
+
+/// The package manifests of the builder's bindings (validation reads no
+/// component).
+fn package_manifests() -> Vec<String> {
+    vec![
+        "--extension-package".to_owned(),
+        "namespaces/scxml/package/scxml.extension.json".to_owned(),
+        "--extension-package".to_owned(),
+        "namespaces/decision/package/decision.extension.json".to_owned(),
+        "--service-package".to_owned(),
+        "services/generate/package/generate.service.json".to_owned(),
+        "--service-package".to_owned(),
+        "services/decision/package/decision.service.json".to_owned(),
+    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -752,47 +600,62 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>) {
     *request.answered.lock().expect("the answered lock") = Some(Instant::now());
 }
 
-/// Writes an env file holding both fake keys and both base URLs.
-fn env_file(test: &str, mock: &Mock, generate_route: &str, decision_route: &str) -> PathBuf {
-    let dir = workspace().join("target/test-builder-bot/env");
-    std::fs::create_dir_all(&dir).expect("the env directory is creatable");
-    let path = dir.join(format!("{test}.env"));
-    std::fs::write(
-        &path,
-        format!(
-            "OPENAI_API_KEY={FAKE_OPENAI_KEY}\nOPENAI_BASE_URL={origin}/{generate_route}/v1\nTYPESAFE_API_KEY={FAKE_TYPESAFE_KEY}\nTYPESAFE_BASE_URL={origin}/{decision_route}\n",
-            origin = mock.origin
-        ),
-    )
-    .expect("the env file is writable");
+/// Writes an env file holding the fake keys and base URLs of `env` (the
+/// builder's argument file grants all four; a variable the file does not
+/// set holds no value, so its slot is absent).
+fn env_file(
+    test: &str,
+    mock: &Mock,
+    generate_route: &str,
+    decision_route: &str,
+    env: &[&str],
+) -> PathBuf {
+    let origin = &mock.origin;
+    let values = [
+        ("OPENAI_API_KEY", FAKE_OPENAI_KEY.to_owned()),
+        ("OPENAI_BASE_URL", format!("{origin}/{generate_route}/v1")),
+        ("TYPESAFE_API_KEY", FAKE_TYPESAFE_KEY.to_owned()),
+        ("TYPESAFE_BASE_URL", format!("{origin}/{decision_route}")),
+    ];
+    let mut contents = String::new();
+    for (name, value) in values.iter().filter(|(name, _)| env.contains(name)) {
+        contents.push_str(name);
+        contents.push('=');
+        contents.push_str(value);
+        contents.push('\n');
+    }
+    let path = scratch("builder-env").join(format!("{test}.env"));
+    std::fs::write(&path, contents).expect("the env file is writable");
     path
 }
 
-const ALL: [&str; 4] = [
-    "OPENAI_API_KEY",
-    "OPENAI_BASE_URL",
-    "TYPESAFE_API_KEY",
-    "TYPESAFE_BASE_URL",
-];
+const ALL: [&str; 4] = support::GRANTED;
 
-fn run(mock: &Mock, test: &str, route: &str, env: &[&str], request: &Json) -> Vec<Egress> {
+fn builder_args_file() -> PathBuf {
+    builder_dir().join("builder.args")
+}
+
+fn run(mock: &Mock, test: &str, route: &str, env: &[&str], request: &Json) -> Vec<Json> {
     run_deciding(mock, test, route, "typesafe", env, request)
 }
 
-/// [`run`] with `builder` as the text of `builder.scxml`.
-fn run_builder(
-    mock: &Mock,
-    test: &str,
-    route: &str,
-    builder: String,
-    request: &Json,
-) -> Vec<Egress> {
-    let config = config(&env_file(test, mock, route, "typesafe"), &ALL);
-    let handle = open_builder(&config, ClockMode::Logical, builder);
-    handle
-        .send(build_event(request))
-        .expect("the session accepts the build event");
-    until_closed(&handle, Duration::from_mins(5))
+/// [`run`] with `builder` as the text of `builder.scxml`: the builder's
+/// argument file, copied with its `--resource` pointing at that text.
+fn run_builder(mock: &Mock, test: &str, route: &str, builder: &str, request: &Json) -> Vec<Json> {
+    let dir = scratch("builder-variant");
+    let document = write(&dir, &format!("{test}.scxml"), builder);
+    let shipped = std::fs::read_to_string(builder_args_file()).expect("builder.args is readable");
+    let resource = "builder.scxml=bots/builder/builder.scxml";
+    assert!(shipped.lines().any(|line| line == resource), "{shipped}");
+    let args_file = write(
+        &dir,
+        &format!("{test}.args"),
+        &shipped.replace(resource, &format!("builder.scxml={}", document.display())),
+    );
+    let env = env_file(test, mock, route, "typesafe", &ALL);
+    start(&args_file, "logical", &env, request, &[])
+        .finish(Duration::from_mins(5))
+        .records
 }
 
 /// [`run`] with the decision backend on `decision_route`.
@@ -803,13 +666,16 @@ fn run_deciding(
     decision_route: &str,
     env: &[&str],
     request: &Json,
-) -> Vec<Egress> {
-    let config = config(&env_file(test, mock, route, decision_route), env);
-    let handle = open(&config, ClockMode::Logical);
-    handle
-        .send(build_event(request))
-        .expect("the session accepts the build event");
-    until_closed(&handle, Duration::from_mins(5))
+) -> Vec<Json> {
+    let env = env_file(test, mock, route, decision_route, env);
+    let finished =
+        start(&builder_args_file(), "logical", &env, request, &[]).finish(Duration::from_mins(5));
+    assert!(
+        !finished.records.is_empty(),
+        "the session ran: {}",
+        finished.stderr
+    );
+    finished.records
 }
 
 fn chat_requests<'a>(received: &'a [Received], schema: &str) -> Vec<&'a Received> {
@@ -824,25 +690,14 @@ fn chat_requests<'a>(received: &'a [Received], schema: &str) -> Vec<&'a Received
 
 #[test]
 fn builder_scxml_validates_clean_with_its_packages() {
-    let config = config(&workspace().join("target/test-builder-bot/none.env"), &[]);
-    let packages = Packages::load(&config).expect("the three packages bind");
-    let compiled = compile_source(
-        "builder.scxml",
-        builder_source(),
-        scxml_event_schema::Resources::new(),
-        &packages,
-    )
-    .expect("builder.scxml validates and compiles");
-    // nemobot-host links no expression syntax checker, so the only finding
-    // it may report is that note (SCXML045); `scxml-cli validate`, which
-    // links one, reports nothing at all for builder.scxml.
+    let validated = validate(&builder_dir().join("builder.scxml"), &package_manifests());
+    assert!(validated.status.success(), "{}", validated.stderr);
     assert!(
-        compiled
-            .diagnostics
-            .iter()
-            .all(|diagnostic| diagnostic.code == "SCXML045"),
-        "builder.scxml validates without an error, a warning, or another note: {:?}",
-        compiled.diagnostics
+        validated
+            .stderr
+            .contains("diagnostic summary: 0 error(s), 0 warning(s), 0 note(s)"),
+        "builder.scxml validates without an error, a warning, or a note: {}",
+        validated.stderr
     );
 }
 
@@ -895,25 +750,25 @@ fn builder_inline_event_schemas_equal_the_schema_files() {
     assert_eq!(inline, files);
 }
 
-/// The bot a live run built (bots/builder/examples) still validates.
+/// The bots live runs built (bots/builder/examples) still validate.
 #[test]
-fn the_saved_live_example_validates() {
-    let path = builder_dir().join("examples/traffic_light/traffic_light.scxml");
-    let compiled = compile_source(
-        "traffic_light.scxml",
-        std::fs::read_to_string(&path).expect("the example is readable"),
-        scxml_event_schema::Resources::new(),
-        &Packages::default(),
-    )
-    .expect("the example validates and compiles");
-    assert!(
-        compiled
-            .diagnostics
-            .iter()
-            .all(|diagnostic| diagnostic.code == "SCXML045"),
-        "{:?}",
-        compiled.diagnostics
-    );
+fn the_saved_live_examples_validate() {
+    for example in ["traffic_light", "traffic_light_luna"] {
+        let validated = validate(
+            &builder_dir().join(format!("examples/{example}/traffic_light.scxml")),
+            &[],
+        );
+        assert!(
+            validated.status.success(),
+            "{example}: {}",
+            validated.stderr
+        );
+        assert!(
+            validated.stderr.contains("0 error(s), 0 warning(s)"),
+            "{example}: {}",
+            validated.stderr
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -940,13 +795,10 @@ fn the_builder_repairs_an_invalid_draft_fixes_it_simulates_it_and_reports_done()
         scxml.contains(r#"event="pedestrian.button light.timer""#),
         "{scxml}"
     );
-    compile_source(
-        "traffic_light.scxml",
-        scxml.to_owned(),
-        scxml_event_schema::Resources::new(),
-        &Packages::default(),
-    )
-    .expect("the built machine validates and compiles");
+    assert!(
+        compiles("traffic_light.scxml", scxml),
+        "the built machine validates and compiles"
+    );
     assert_eq!(
         done["schemas"],
         json!([{"event": "pedestrian.button", "schema": {"type": "object", "additionalProperties": false}}])
@@ -1050,15 +902,21 @@ fn assert_repair_requests(received: &[Received]) {
 #[test]
 fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
     let mock = Mock::start();
-    let config = config(&env_file("timeout", &mock, "slow", "redesign"), &ALL);
-    let handle = open(&config, ClockMode::Wall);
+    let env = env_file("timeout", &mock, "slow", "redesign", &ALL);
+    let mut args = builder_args(&builder_args_file(), "wall");
+    args.extend(["--env-file".to_owned(), env.display().to_string()]);
+    let mut run = Run::start(&args, &[]);
+    // The clock of the assertions below starts once the session is open.
+    let mut records = run.until(Duration::from_mins(2), |record| {
+        record["type"] == "call" && record["cause"] == "start"
+    });
     let started = Instant::now();
-    handle
-        .send(build_event(
-            &json!({"spec": SPEC, "max_attempts": 3, "generate_timeout_ms": 1000}),
-        ))
-        .expect("the session accepts the build event");
-    let records = until_closed(&handle, Duration::from_mins(3));
+    run.event(
+        "builder.request",
+        &json!({"spec": SPEC, "max_attempts": 3, "generate_timeout_ms": 1000}),
+    );
+    run.end_input();
+    records.extend(run.finish(Duration::from_mins(3)).records);
     assert!(finished(&records), "{records:?}");
     let (label, done) = answer(&records);
     assert_eq!(label, "builder.done", "{done}");
@@ -1381,7 +1239,7 @@ fn a_failed_invocations_sim_drive_does_not_drive_the_next_test() {
         &mock,
         "pings",
         "pings",
-        failing,
+        &failing,
         &json!({"spec": SPEC, "max_attempts": 1}),
     );
     assert!(finished(&records), "{records:?}");
@@ -1423,22 +1281,9 @@ fn an_invalid_request_is_answered_with_builder_failed() {
 // ---------------------------------------------------------------------------
 // Live.
 
-/// Adds `variable` to `granted` when the file sets it; the failure names the
-/// kind only, never a value.
-fn grant_if_set(path: &Path, granted: &mut Vec<&'static str>, variable: &'static str) {
-    let mut probe: Vec<String> = granted.iter().map(|name| (*name).to_owned()).collect();
-    probe.push(variable.to_owned());
-    match Values::granted(path, &probe, &Values::none(), &|_| None) {
-        Ok(_) => granted.push(variable),
-        Err(failure)
-            if failure.kind() == FailureKind::EnvFile
-                && failure.message().contains(&format!("`{variable}`")) => {}
-        Err(failure) => panic!("the env file is unusable ({:?})", failure.kind()),
-    }
-}
-
-/// `OpenAI`'s and `TypeSafe`'s base URLs, the live run's config defaults (never
-/// compiled into a component).
+/// `OpenAI`'s and `TypeSafe`'s base URLs, the live run's defaults (never
+/// compiled into a component), given as the calling shell's values: the env
+/// file's values win.
 const OPENAI_BASE_URL_DEFAULT: &str = "https://api.openai.com/v1";
 const TYPESAFE_BASE_URL_DEFAULT: &str = "https://api.typesafe.ai";
 
@@ -1453,18 +1298,11 @@ fn live_builder_through_an_env_file() {
         panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets OPENAI_API_KEY");
     };
     let model = std::env::var("NEMOBOT_LIVE_MODEL").unwrap_or_else(|_| "gpt-6-luna".into());
-    let mut granted = vec!["OPENAI_API_KEY"];
-    grant_if_set(&path, &mut granted, "TYPESAFE_API_KEY");
-    let mut defaults = json!({"OPENAI_BASE_URL": OPENAI_BASE_URL_DEFAULT});
-    granted.push("OPENAI_BASE_URL");
-    if granted.contains(&"TYPESAFE_API_KEY") {
-        granted.push("TYPESAFE_BASE_URL");
-        defaults["TYPESAFE_BASE_URL"] = json!(TYPESAFE_BASE_URL_DEFAULT);
-    }
-    let config = config_with_defaults(&path, &granted, &defaults);
-    let handle = open(&config, ClockMode::Wall);
-    handle
-        .send(build_event(&json!({
+    let finished = start(
+        &builder_args_file(),
+        "wall",
+        &path,
+        &json!({
             "spec": SPEC,
             "constraints": [
                 "send every light change and every walk signal to the invoker",
@@ -1472,33 +1310,21 @@ fn live_builder_through_an_env_file() {
             ],
             "max_attempts": 4,
             "model": model,
-        })))
-        .expect("the session accepts the build event");
-    let deadline = Instant::now() + Duration::from_mins(30);
-    let mut records = Vec::new();
-    while Instant::now() < deadline {
-        if let Some(record) = handle.recv_timeout(Duration::from_millis(250)) {
-            let done = matches!(record, Egress::Closed { .. });
-            records.push(record);
-            if done {
-                break;
-            }
-        }
-    }
-    let logs = logs(&records);
+        }),
+        &[
+            ("OPENAI_BASE_URL", OPENAI_BASE_URL_DEFAULT),
+            ("TYPESAFE_BASE_URL", TYPESAFE_BASE_URL_DEFAULT),
+        ],
+    )
+    .finish(Duration::from_mins(30));
+    let logs = logs(&finished.records);
     let out = workspace().join("target/builder-live");
     std::fs::create_dir_all(&out).expect("the output directory is creatable");
     let pass = match logs.as_slice() {
         [(label, text)] if label == "builder.done" => {
             let done: Json = serde_json::from_str(text).expect("builder.done data is JSON");
             let scxml = done["scxml"].as_str().unwrap_or_default().to_owned();
-            let valid = compile_source(
-                "traffic_light.scxml",
-                scxml.clone(),
-                scxml_event_schema::Resources::new(),
-                &Packages::default(),
-            )
-            .is_ok();
+            let valid = compiles("traffic_light.scxml", &scxml);
             std::fs::write(out.join("traffic_light.scxml"), &scxml).expect("writable");
             for member in ["schemas", "tests", "report"] {
                 std::fs::write(

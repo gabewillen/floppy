@@ -80,7 +80,7 @@
 //! `outbound-http.begin`, and the `wake` the host calls when it settled takes
 //! the outcome (`outbound-http.take`). `cancel` drops the service's state,
 //! and the host abandons the request: an embedder whose deferred transport
-//! is scxml.rs's `ThreadedServiceHttp` (as `nemobot-host`'s is) closes its
+//! is scxml.rs's `ThreadedServiceHttp` (as `scxml-cli run`'s is) closes its
 //! connection at once.
 //!
 //! The request streams (`"stream": true`, server-sent events) so that

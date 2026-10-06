@@ -1,4 +1,4 @@
-//! nemobot-host integration test of a decision: the `decision` namespace's
+//! Integration test of a decision through `scxml-cli run`: the `decision` namespace's
 //! `<decision:menu>` reads the session snapshot and writes the machine's
 //! three enabled `event:schema` transitions as the canonical menu, and the
 //! `decision` service, invoked with that menu, asks a deterministic fake
@@ -6,19 +6,15 @@
 //! network) off the session thread, fills the chosen event's data from
 //! grounded options, validates it against the menu's schema, and emits it;
 //! the machine's transition fires with that data. The key and base URL
-//! reach the run only through an env file the config names; the component
+//! reach the run only through `--env` scopes and an `--env-file`; the component
 //! holds slot references and the host substitutes the values into the
 //! admitted request.
 //!
-//! `scripts/build-components.sh` builds and verifies the release session
-//! components and the namespace and service components (import allowlists
-//! included) into `target/test-decision-service/components`.
-//!
 //! The ignored `live_decision_through_an_env_file` test makes one real call:
-//! `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p nemobot-host --test
+//! `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p nemobot-tests --test
 //! decision_service -- --ignored`. It grants `TYPESAFE_API_KEY` (the file
-//! must set it) and `TYPESAFE_BASE_URL` (the file's value, else the config's
-//! `env-defaults` `TypeSafe` URL: no backend URL is compiled into the
+//! must set it) and `TYPESAFE_BASE_URL` (the file's value, else `TypeSafe`'s, given as
+//! the calling shell's value: no backend URL is compiled into the
 //! component), and reports pass or fail and the final state reached; no
 //! value is ever printed.
 
@@ -27,106 +23,37 @@
     reason = "integration-test crate; test functions are self-describing"
 )]
 
+mod support;
+
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use nemobot_host::compile::compile_source;
-use nemobot_host::config::{CONFIG_FORMAT, Config};
-use nemobot_host::env_file::Values;
-use nemobot_host::packages::Packages;
-use nemobot_host::runtime::{ClockMode, Egress, SessionHandle, SessionSpec, SessionStatus};
-use scxml_host_wasmtime::SessionOutput;
 use serde_json::{Map, Value as Json, json};
-use sha2::{Digest as _, Sha256};
+use support::{Finished, components, labelled, logs, run_document, scratch, service_uri};
 
 const NAMESPACE_URI: &str = "https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0";
-const SERVICE_URI: &str = "https://github.com/stateforward/nemobot/services/decision@v0.1.0";
 /// The fake key (not a secret): the mock checks it arrives as the bearer.
 const FAKE_KEY: &str = "ts-nemobot-fake";
 
-fn workspace() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("the host crate sits in the nemobot workspace")
-}
-
-fn sha256_file(path: &Path) -> String {
-    let bytes = std::fs::read(path).expect("the artifact is readable");
-    format!("{:x}", Sha256::digest(&bytes))
-}
-
-/// The verified artifacts: the session components' directory and manifest
-/// digest, and the decision namespace and service components.
-struct Artifacts {
-    components: PathBuf,
-    manifest_sha256: String,
-    namespace: PathBuf,
-    service: PathBuf,
-}
-
-fn artifacts() -> &'static Artifacts {
-    static ARTIFACTS: OnceLock<Artifacts> = OnceLock::new();
-    ARTIFACTS.get_or_init(|| {
-        let dir = workspace().join("target/test-decision-service/components");
-        let status = Command::new("sh")
-            .arg(workspace().join("scripts/build-components.sh"))
-            .arg("--artifacts-dir")
-            .arg(&dir)
-            .current_dir(workspace())
-            .status()
-            .expect("the build script runs");
-        assert!(status.success(), "the component proof must pass");
-        let components = dir.join("scxml");
-        Artifacts {
-            manifest_sha256: sha256_file(&components.join("manifest.tsv")),
-            components,
-            namespace: dir.join("namespaces/nemobot_decision.virtualized.wasm"),
-            service: dir.join("services/nemobot_service_decision.virtualized.wasm"),
-        }
-    })
-}
-
-/// A config binding the decision namespace and service, granting `env` from
-/// `env_file` to the service.
-fn config(env_file: &Path, env: &[&str]) -> Config {
-    config_with_defaults(env_file, env, &json!({}))
-}
-
-/// [`config`] with non-secret `env-defaults`.
-fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &Json) -> Config {
-    let artifacts = artifacts();
-    let namespace = workspace().join("namespaces/decision/package/decision.extension.json");
-    let service = workspace().join("services/decision/package/decision.service.json");
-    let text = json!({
-        "format": CONFIG_FORMAT,
-        "components": {
-            "dir": artifacts.components.display().to_string(),
-            "manifest-sha256": artifacts.manifest_sha256,
-        },
-        "env-file": env_file.display().to_string(),
-        "env": env
-            .iter()
-            .map(|name| json!({"name": name, "packages": [SERVICE_URI]}))
-            .collect::<Vec<_>>(),
-        "env-defaults": defaults,
-        "extensions": [{
-            "manifest": namespace.display().to_string(),
-            "component": artifacts.namespace.display().to_string(),
-            "component-sha256": sha256_file(&artifacts.namespace),
-        }],
-        "services": [{
-            "manifest": service.display().to_string(),
-            "component": artifacts.service.display().to_string(),
-            "component-sha256": sha256_file(&artifacts.service),
-        }],
-        "outbound-http": true,
-    })
-    .to_string();
-    Config::parse(text.as_bytes(), &PathBuf::from("/")).expect("the test config is valid")
+/// The flags binding the session components, the `decision` namespace and
+/// service, granting `env` to the service, with `env_file` supplying the
+/// values.
+fn args(env_file: &Path, env: &[&str]) -> Vec<String> {
+    let components = components();
+    let mut args = components.session_args();
+    args.extend(components.namespace("decision"));
+    args.extend(components.service("decision"));
+    for name in env {
+        args.extend([
+            "--env".to_owned(),
+            format!("{name}@{}", service_uri("decision")),
+        ]);
+    }
+    args.extend(["--env-file".to_owned(), env_file.display().to_string()]);
+    args
 }
 
 /// One request the mock received.
@@ -266,9 +193,7 @@ impl Mock {
 
 /// Writes an env file holding the fake key and `base_url` for one test.
 fn env_file(test: &str, base_url: &str) -> PathBuf {
-    let dir = workspace().join("target/test-decision-service/env");
-    std::fs::create_dir_all(&dir).expect("the env directory is creatable");
-    let path = dir.join(format!("{test}.env"));
+    let path = scratch("decision-env").join(format!("{test}.env"));
     std::fs::write(
         &path,
         format!("TYPESAFE_API_KEY={FAKE_KEY}\nTYPESAFE_BASE_URL={base_url}\n"),
@@ -277,98 +202,20 @@ fn env_file(test: &str, base_url: &str) -> PathBuf {
     path
 }
 
-fn open(config: &Config, document: &str) -> SessionHandle {
-    let packages = Packages::load(config).expect("the decision packages bind");
-    let consent = packages.consent();
+/// Runs `document` with `args` to its end, checking the consent listing
+/// names both packages, the service's origin, and its slots.
+fn open(args: &[String], document: &str, env: &[(&str, &str)], limit: Duration) -> Finished {
+    let finished = run_document("decision.scxml", document, args, env, limit);
+    let consent = &finished.stderr;
     assert!(
-        consent.contains(&format!("extension {NAMESPACE_URI}"))
-            && consent.contains(&format!("service {SERVICE_URI}"))
-            && consent.contains("http-origins: https://api.typesafe.ai")
-            && consent.contains("env-slots: apikey, baseurl"),
+        consent.contains(&format!("element `{NAMESPACE_URI}`"))
+            && consent.contains(&format!("service `{}`", service_uri("decision")))
+            && consent.contains("outbound HTTP: https://api.typesafe.ai")
+            && consent.contains("env slots: apikey, baseurl"),
         "the consent listing names the package, its origin, and its slots: {consent}"
     );
-    let values = Values::granted(
-        config
-            .env_file
-            .as_deref()
-            .expect("the config names an env file"),
-        &config.env_names(),
-        &config.env_defaults,
-        &|_| None,
-    )
-    .expect("the env file grants the variables");
-    let compiled = compile_source(
-        "decision.scxml",
-        document.to_owned(),
-        scxml_event_schema::Resources::new(),
-        &packages,
-    )
-    .expect("the document compiles with the decision packages");
-    SessionHandle::open(
-        config,
-        packages,
-        values,
-        SessionSpec {
-            compiled,
-            session_id: "decision-service".into(),
-            clock: ClockMode::Logical,
-            documents: Vec::new(),
-        },
-    )
-    .expect("the session opens")
-}
-
-/// Egress records until the session closes, at most `limit`.
-fn until_closed(handle: &SessionHandle, limit: Duration) -> Vec<Egress> {
-    let deadline = Instant::now() + limit;
-    let mut records = Vec::new();
-    while Instant::now() < deadline {
-        if let Some(record) = handle.recv_timeout(Duration::from_millis(100)) {
-            let closed = matches!(record, Egress::Closed { .. });
-            records.push(record);
-            if closed {
-                return records;
-            }
-        }
-    }
-    panic!(
-        "the session did not close in time; got {} records",
-        records.len()
-    );
-}
-
-fn logs(records: &[Egress]) -> Vec<(String, String)> {
-    records
-        .iter()
-        .filter_map(|record| match record {
-            Egress::Outputs(outputs) => Some(outputs),
-            _ => None,
-        })
-        .flatten()
-        .filter_map(|output| match output {
-            SessionOutput::Log { entry, .. } => {
-                Some((entry.label.clone().unwrap_or_default(), entry.text.clone()))
-            }
-            SessionOutput::Done { .. } => None,
-        })
-        .collect()
-}
-
-fn finished(records: &[Egress]) -> bool {
-    matches!(
-        records.last(),
-        Some(Egress::Closed {
-            status: SessionStatus::Finished,
-            ..
-        })
-    )
-}
-
-fn labelled(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
-    pairs
-        .iter()
-        .map(|(label, text)| ((*label).to_owned(), (*text).to_owned()))
-        .collect()
+    assert!(!consent.contains(FAKE_KEY), "names only: {consent}");
+    finished
 }
 
 const SHIP_SCHEMA: &str = r#"{"description":"Ship the order to the customer.","type":"object","properties":{"sku":{"type":"string"},"carrier":{"enum":["ups","fedex"]}},"required":["sku","carrier"],"additionalProperties":false}"#;
@@ -394,7 +241,7 @@ fn document(params: &str) -> String {
     <onentry>
       <decision:menu location="menu"/>
     </onentry>
-    <invoke id="decide" type="{SERVICE_URI}" env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
+    <invoke id="decide" type="{service}" env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
       <param name="menu" expr="menu"/>
       {params}
     </invoke>
@@ -420,19 +267,23 @@ fn document(params: &str) -> String {
   <final id="held"><onentry><log label="final" expr="'held'"/></onentry></final>
   <final id="abstained"><onentry><log label="final" expr="'abstained'"/></onentry></final>
   <final id="failed"><onentry><log label="final" expr="'failed'"/></onentry></final>
-</scxml>"#
+</scxml>"#,
+        service = service_uri("decision")
     )
 }
 
 const CHOOSE: &str = r#"<param name="state" expr="order"/>"#;
 
-fn run(route: &str, test: &str, env: &[&str]) -> (Vec<Egress>, Mock) {
+fn run(route: &str, test: &str, env: &[&str]) -> (Vec<Json>, Mock) {
     let mock = Mock::start();
     let env_path = env_file(test, &format!("{}/{route}", mock.origin));
-    let config = config(&env_path, env);
-    let handle = open(&config, &document(CHOOSE));
-    let records = until_closed(&handle, Duration::from_secs(60));
-    (records, mock)
+    let finished = open(
+        &args(&env_path, env),
+        &document(CHOOSE),
+        &[],
+        Duration::from_secs(60),
+    );
+    (finished.records, mock)
 }
 
 const BOTH: [&str; 2] = ["TYPESAFE_API_KEY", "TYPESAFE_BASE_URL"];
@@ -448,7 +299,7 @@ fn choose_fires_the_chosen_schema_transition_with_schema_valid_data() {
         ]),
         "{records:?}"
     );
-    assert!(finished(&records));
+    assert!(support::finished(&records), "{records:?}");
     let received = mock.received();
     assert_eq!(received.len(), 1, "exactly one request");
     assert_eq!(received[0].request_line, "POST /ship/v1/systemone HTTP/1.1");
@@ -545,13 +396,13 @@ fn without_a_granted_key_nothing_is_sent() {
 fn classify_emits_every_labels_probability() {
     let mock = Mock::start();
     let env_path = env_file("classify", &format!("{}/classify", mock.origin));
-    let config = config(&env_path, &BOTH);
+    let args = args(&env_path, &BOTH);
     let document = format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript" initial="classifying">
   <state id="classifying">
-    <invoke id="classify" type="{SERVICE_URI}" env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
+    <invoke id="classify" type="{service}" env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
       <param name="kind" expr="'classify'"/>
       <param name="state" expr="'The order arrived damaged.'"/>
       <param name="labels" expr="['complaint', 'praise']"/>
@@ -562,10 +413,10 @@ fn classify_emits_every_labels_probability() {
     <transition event="decision.failed" target="done"><log label="code" expr="_event.data.code"/></transition>
   </state>
   <final id="done"/>
-</scxml>"#
+</scxml>"#,
+        service = service_uri("decision")
     );
-    let handle = open(&config, &document);
-    let records = until_closed(&handle, Duration::from_secs(60));
+    let records = open(&args, &document, &[], Duration::from_secs(60)).records;
     assert_eq!(
         logs(&records),
         labelled(&[("labels", r#"{"complaint":1,"praise":0}"#)]),
@@ -574,8 +425,8 @@ fn classify_emits_every_labels_probability() {
     assert_eq!(mock.received().len(), 1);
 }
 
-/// `TypeSafe`'s base URL (its SDK's default), the live run's config default
-/// (never compiled into the component).
+/// `TypeSafe`'s base URL (its SDK's default), the live run's default (never
+/// compiled into the component).
 const TYPESAFE_BASE_URL_DEFAULT: &str = "https://api.typesafe.ai";
 
 /// One real `system_one` decision through an env file
@@ -588,26 +439,17 @@ fn live_decision_through_an_env_file() {
     let Some(path) = std::env::var_os("NEMOBOT_LIVE_ENV_FILE").map(PathBuf::from) else {
         panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets TYPESAFE_API_KEY");
     };
-    // No backend URL is compiled in: the run's config supplies TypeSafe's as
-    // a non-secret default the file may override. The failure names the
-    // kind only, never a value.
-    let config = config_with_defaults(
-        &path,
-        &BOTH,
-        &json!({"TYPESAFE_BASE_URL": TYPESAFE_BASE_URL_DEFAULT}),
-    );
-    if let Err(failure) =
-        Values::granted(&path, &config.env_names(), &config.env_defaults, &|_| None)
-    {
-        panic!(
-            "the env file must set TYPESAFE_API_KEY ({:?})",
-            failure.kind()
-        );
-    }
+    // No backend URL is compiled in: TypeSafe's is the calling shell's
+    // value, which the env file's overrides.
     let params = r#"<param name="state" expr="order"/>
       <param name="instructions" expr="'A customer paid for order A-1 and asked for fast delivery. Choose what to do with the order.'"/>"#;
-    let handle = open(&config, &document(params));
-    let records = until_closed(&handle, Duration::from_secs(120));
+    let records = open(
+        &args(&path, &BOTH),
+        &document(params),
+        &[("TYPESAFE_BASE_URL", TYPESAFE_BASE_URL_DEFAULT)],
+        Duration::from_secs(120),
+    )
+    .records;
     let logs = logs(&records);
     let admitted = |schema: &str, data: &str| {
         let resolved = scxml_event_schema::resolve(schema.as_bytes(), None).ok();

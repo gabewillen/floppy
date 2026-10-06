@@ -27,8 +27,8 @@ the invoker owns the builder's lifetime (cancel the invoke to stop it).
 `builder.scxml` carries the contracts as inline `event:schema` attributes:
 an invoked child is compiled at run time and receives no schema files (a
 schema reference would reject it), so `schemas/*.json` are the canonical
-files and the `builder_bot` test of `nemobot-host` keeps the inline copies
-equal to them. The engine treats them as metadata only; `intake` checks the
+files and the `builder_bot` test (`tests/tests/builder_bot.rs`) keeps the
+inline copies equal to them. The engine treats them as metadata only; `intake` checks the
 request with its `cond` and answers `builder.failed` (`invalid-request`)
 otherwise.
 
@@ -132,20 +132,51 @@ section is refused too.
 ## Bindings
 
 A session that runs the builder binds the `scxml` and `decision` namespace
-packages and the `generate` and `decision` service packages, an
-`extension-call-fuel` large enough for `sx:validate` (1 billion; see
-`namespaces/scxml`), and grants `OPENAI_API_KEY` and `OPENAI_BASE_URL` to the
-generate service and `TYPESAFE_API_KEY` and `TYPESAFE_BASE_URL` to the
-decision service. No backend URL is compiled into a
-component, so each base URL comes from the env file or, when the file does
-not set it, from the config's non-secret `env-defaults` (for example
-`{"OPENAI_BASE_URL": "https://api.openai.com/v1"}`). Drafts are validated without
-packages, so a built machine uses no extension namespace or service.
+packages and the `generate` and `decision` service packages (each to its
+verified component: `components.args`, which `scripts/build-components.sh`
+writes), and [`builder.args`](builder.args) adds the rest:
+
+| Argument | Why |
+| --- | --- |
+| `--resource builder.scxml=bots/builder/builder.scxml` | the document `parent.scxml`'s `<invoke src="builder.scxml">` loads |
+| `--extension-call-fuel 1000000000` | `sx:validate` runs the whole validator in one extension call (see `namespaces/scxml`) |
+| `--env OPENAI_API_KEY@<generate URI>`, `--env OPENAI_BASE_URL@<generate URI>` | the generate service's `env:apikey` and `env:baseurl` slots |
+| `--env TYPESAFE_API_KEY@<decision URI>`, `--env TYPESAFE_BASE_URL@<decision URI>` | the decision service's slots |
+
+No backend URL is compiled into a component, so each base URL comes from
+the env file or, when the file does not set it, from the calling shell
+(`scxml-cli` takes a granted variable's value from its `--env-file`, else
+from the shell). A variable neither sets holds no value, so its slot is
+absent: without `TYPESAFE_API_KEY` the builder triages with its fallback.
+Drafts are validated without packages, so a built machine uses no extension
+namespace or service.
+
+## Running
+
+The builder answers its invoker (`#_parent`), so it runs as the child of
+[`parent.scxml`](parent.scxml), which invokes it with `autoforward="true"`
+(every external event reaches the builder) and logs its one answer
+(`builder.done` or `builder.failed`, data as JSON) before it finishes. From
+the repository root, after `sh scripts/build-components.sh` and with
+`scxml-cli` built with `--features wasmtime` (see the
+[README](../../README.md#running-a-bot)):
+
+```console
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
+  OPENAI_BASE_URL=https://api.openai.com/v1 TYPESAFE_BASE_URL=https://api.typesafe.ai \
+  scxml-cli run @target/components/components.args @bots/builder/builder.args \
+    --env-file .env bots/builder/parent.scxml
+```
+
+Standard output carries one JSON record per line; the answer is the `log`
+record labelled `builder.done` or `builder.failed`, and the run exits 0 once
+the parent finishes. The two base URLs on the command line are defaults the
+env file's values override.
 
 ## Proof
 
-`host/tests/builder_bot.rs` invokes the builder from a parent machine with
-the spec "a traffic light with a pedestrian button" against a fake
+`tests/tests/builder_bot.rs` runs the command above (on the logical clock,
+except where noted) with the spec "a traffic light with a pedestrian button" against a fake
 Chat Completions and `system_one` backend on 127.0.0.1: an invalid first
 draft (`SCXML005`) goes back to `author` through `triage.repair`, the second
 draft's only error is fixed by its machine-applicable fix, and the fixed

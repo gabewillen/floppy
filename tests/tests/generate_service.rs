@@ -1,23 +1,19 @@
-//! nemobot-host integration test of the `generate` service: a live session
-//! binds the real `nemobot_service_generate` component and invokes it
-//! (`<invoke type="https://github.com/stateforward/nemobot/services/generate@v0.1.0">`)
+//! Integration test of the `generate` service through `scxml-cli run`: a
+//! session binds the real `nemobot_service_generate` component and invokes
+//! it (`<invoke type="https://github.com/stateforward/nemobot/services/generate@v0.1.0">`)
 //! against a deterministic fake Chat Completions backend on 127.0.0.1
 //! (nothing reaches the network). The request runs off the session thread
 //! (`outbound-http.begin`) and its answer arrives through the service's
 //! `wake`; the service emits `generate.result` or `generate.failed`, then
-//! completes. The key and base URL reach the run only through an env file
-//! the config names; the component holds slot references and the host
-//! substitutes the values into the admitted request.
-//!
-//! `scripts/build-components.sh` builds and verifies the release session
-//! components and the namespace and service components (import allowlists
-//! included) into `target/test-generate-service/components`.
+//! completes. The key and base URL reach the run only through `--env`
+//! scopes and an `--env-file`; the component holds slot references and the
+//! host substitutes the values into the admitted request.
 //!
 //! The ignored `live_generate_through_an_env_file` test makes one real call:
-//! `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p nemobot-host --test
+//! `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p nemobot-tests --test
 //! generate_service -- --ignored`. It grants `OPENAI_API_KEY` (the file
-//! must set it) and `OPENAI_BASE_URL` (the file's value, else the config's
-//! `env-defaults` `OpenAI` URL: no backend URL is compiled into the
+//! must set it) and `OPENAI_BASE_URL` (the file's value, else `OpenAI`'s,
+//! given as the calling shell's value: no backend URL is compiled into the
 //! component), and reports pass or fail only; no value is ever printed.
 
 #![allow(
@@ -25,124 +21,72 @@
     reason = "integration-test crate; test functions are self-describing"
 )]
 
+mod support;
+
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use nemobot_host::compile::compile_source;
-use nemobot_host::config::{CONFIG_FORMAT, Config};
-use nemobot_host::env_file::Values;
-use nemobot_host::packages::Packages;
-use nemobot_host::runtime::{ClockMode, Egress, SessionHandle, SessionSpec, SessionStatus};
-use scxml_host_wasmtime::{ScriptedEvent, SessionOutput};
-use sha2::{Digest as _, Sha256};
+use support::{Finished, Run, components, labelled, logs, run_document, scratch, service_uri};
 
-const SERVICE_URI: &str = "https://github.com/stateforward/nemobot/services/generate@v0.1.0";
-const DECISION_URI: &str = "https://github.com/stateforward/nemobot/services/decision@v0.1.0";
 /// The fake key (not a secret): the mock checks it arrives as the bearer.
 const FAKE_KEY: &str = "sk-nemobot-fake";
+/// `OpenAI`'s base URL, the live run's default (never compiled into the
+/// component).
+const OPENAI_BASE_URL_DEFAULT: &str = "https://api.openai.com/v1";
 
-fn workspace() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("the host crate sits in the nemobot workspace")
+fn generate() -> String {
+    service_uri("generate")
 }
 
-fn sha256_file(path: &Path) -> String {
-    let bytes = std::fs::read(path).expect("the artifact is readable");
-    format!("{:x}", Sha256::digest(&bytes))
+fn decision() -> String {
+    service_uri("decision")
 }
 
-/// The verified artifacts: the session components' directory and manifest
-/// digest, and the service components' directory.
-struct Artifacts {
-    components: PathBuf,
-    manifest_sha256: String,
-    services: PathBuf,
-}
-
-fn artifacts() -> &'static Artifacts {
-    static ARTIFACTS: OnceLock<Artifacts> = OnceLock::new();
-    ARTIFACTS.get_or_init(|| {
-        let dir = workspace().join("target/test-generate-service/components");
-        let status = Command::new("sh")
-            .arg(workspace().join("scripts/build-components.sh"))
-            .arg("--artifacts-dir")
-            .arg(&dir)
-            .current_dir(workspace())
-            .status()
-            .expect("the build script runs");
-        assert!(status.success(), "the component proof must pass");
-        let components = dir.join("scxml");
-        Artifacts {
-            manifest_sha256: sha256_file(&components.join("manifest.tsv")),
-            components,
-            services: dir.join("services"),
+/// The flags binding the session components and the `services` packages,
+/// granting each `(name, packages)` scope, with `env_file` supplying the
+/// values.
+fn args(env_file: &Path, grants: &[(&str, &[String])], services: &[&str]) -> Vec<String> {
+    let components = components();
+    let mut args = components.session_args();
+    for name in services {
+        args.extend(components.service(name));
+    }
+    for (name, packages) in grants {
+        for uri in *packages {
+            args.extend(["--env".to_owned(), format!("{name}@{uri}")]);
         }
-    })
+    }
+    args.extend(["--env-file".to_owned(), env_file.display().to_string()]);
+    args
 }
 
-/// A config binding the generate service, granting `env` from `env_file` to
-/// it.
-fn config(env_file: &Path, env: &[&str]) -> Config {
-    config_with_defaults(env_file, env, &serde_json::json!({}))
+/// [`args`] binding the generate service and granting `env` to it.
+fn generate_args(env_file: &Path, env: &[&str]) -> Vec<String> {
+    let scope = [generate()];
+    let grants: Vec<(&str, &[String])> = env.iter().map(|name| (*name, scope.as_slice())).collect();
+    args(env_file, &grants, &["generate"])
 }
 
-/// [`config`] with non-secret `env-defaults`.
-fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &serde_json::Value) -> Config {
-    let grants: Vec<(&str, &[&str])> = env
-        .iter()
-        .map(|name| (*name, [SERVICE_URI].as_slice()))
-        .collect();
-    let text = config_text(env_file, &grants, defaults, &["generate"]);
-    Config::parse(text.as_bytes(), &PathBuf::from("/")).expect("the test config is valid")
+/// Runs `document` with `args` to its end, checking the consent listing
+/// names the generate package, its origin, and its slots.
+fn open(args: &[String], document: &str) -> Finished {
+    open_with(args, document, &[], Duration::from_secs(60))
 }
 
-/// The config text binding the `services` packages and granting each
-/// `(name, packages)` from `env_file`.
-fn config_text(
-    env_file: &Path,
-    grants: &[(&str, &[&str])],
-    defaults: &serde_json::Value,
-    services: &[&str],
-) -> String {
-    let artifacts = artifacts();
-    let services: Vec<serde_json::Value> = services
-        .iter()
-        .map(|name| {
-            let component = artifacts
-                .services
-                .join(format!("nemobot_service_{name}.virtualized.wasm"));
-            serde_json::json!({
-                "manifest": workspace()
-                    .join(format!("services/{name}/package/{name}.service.json"))
-                    .display()
-                    .to_string(),
-                "component": component.display().to_string(),
-                "component-sha256": sha256_file(&component),
-            })
-        })
-        .collect();
-    let env: Vec<serde_json::Value> = grants
-        .iter()
-        .map(|(name, packages)| serde_json::json!({"name": name, "packages": packages}))
-        .collect();
-    serde_json::json!({
-        "format": CONFIG_FORMAT,
-        "components": {
-            "dir": artifacts.components.display().to_string(),
-            "manifest-sha256": artifacts.manifest_sha256,
-        },
-        "env-file": env_file.display().to_string(),
-        "env": env,
-        "env-defaults": defaults,
-        "services": services,
-        "outbound-http": true,
-    })
-    .to_string()
+fn open_with(args: &[String], document: &str, env: &[(&str, &str)], limit: Duration) -> Finished {
+    let finished = run_document("generate.scxml", document, args, env, limit);
+    let consent = &finished.stderr;
+    assert!(
+        consent.contains(&format!("service `{}`", generate()))
+            && consent.contains("outbound HTTP: https://api.openai.com")
+            && consent.contains("env slots: apikey, baseurl"),
+        "the consent listing names the package, its origin, and its slots: {consent}"
+    );
+    assert!(!consent.contains(FAKE_KEY), "names only: {consent}");
+    finished
 }
 
 /// One request the mock received.
@@ -265,101 +209,13 @@ impl Mock {
 
 /// Writes an env file holding the fake key and `base_url` for one test.
 fn env_file(test: &str, base_url: &str) -> PathBuf {
-    let dir = workspace().join("target/test-generate-service/env");
-    std::fs::create_dir_all(&dir).expect("the env directory is creatable");
-    let path = dir.join(format!("{test}.env"));
+    let path = scratch("generate-env").join(format!("{test}.env"));
     std::fs::write(
         &path,
         format!("OPENAI_API_KEY={FAKE_KEY}\nOPENAI_BASE_URL={base_url}\n"),
     )
     .expect("the env file is writable");
     path
-}
-
-fn open(config: &Config, document: &str) -> SessionHandle {
-    let packages = Packages::load(config).expect("the generate package binds");
-    let consent = packages.consent();
-    assert!(
-        consent.contains(&format!("service {SERVICE_URI}"))
-            && consent.contains("http-origins: https://api.openai.com")
-            && consent.contains("env-slots: apikey, baseurl"),
-        "the consent listing names the package, its origin, and its slots: {consent}"
-    );
-    let values = Values::granted(
-        config
-            .env_file
-            .as_deref()
-            .expect("the config names an env file"),
-        &config.env_names(),
-        &config.env_defaults,
-        &|_| None,
-    )
-    .expect("the env file grants the variables");
-    let compiled = compile_source(
-        "generate.scxml",
-        document.to_owned(),
-        scxml_event_schema::Resources::new(),
-        &packages,
-    )
-    .expect("the document compiles with the generate service");
-    SessionHandle::open(
-        config,
-        packages,
-        values,
-        SessionSpec {
-            compiled,
-            session_id: "generate-service".into(),
-            clock: ClockMode::Logical,
-            documents: Vec::new(),
-        },
-    )
-    .expect("the session opens")
-}
-
-/// Egress records until the session closes, at most `limit`.
-fn until_closed(handle: &SessionHandle, limit: Duration) -> Vec<Egress> {
-    let deadline = Instant::now() + limit;
-    let mut records = Vec::new();
-    while Instant::now() < deadline {
-        if let Some(record) = handle.recv_timeout(Duration::from_millis(100)) {
-            let closed = matches!(record, Egress::Closed { .. });
-            records.push(record);
-            if closed {
-                return records;
-            }
-        }
-    }
-    panic!(
-        "the session did not close in time; got {} records",
-        records.len()
-    );
-}
-
-fn logs(records: &[Egress]) -> Vec<(String, String)> {
-    records
-        .iter()
-        .filter_map(|record| match record {
-            Egress::Outputs(outputs) => Some(outputs),
-            _ => None,
-        })
-        .flatten()
-        .filter_map(|output| match output {
-            SessionOutput::Log { entry, .. } => {
-                Some((entry.label.clone().unwrap_or_default(), entry.text.clone()))
-            }
-            SessionOutput::Done { .. } => None,
-        })
-        .collect()
-}
-
-fn finished(records: &[Egress]) -> bool {
-    matches!(
-        records.last(),
-        Some(Egress::Closed {
-            status: SessionStatus::Finished,
-            ..
-        })
-    )
 }
 
 /// A document that invokes the generate service with `params` (`<param>`
@@ -372,7 +228,7 @@ fn document(params: &str, log_expr: &str) -> String {
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript" initial="ask">
   <state id="ask">
-    <invoke id="gen" type="{SERVICE_URI}" env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
+    <invoke id="gen" type="{service}" env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
       {params}
     </invoke>
     <transition event="generate.result"><log label="reply" expr="{log_expr}"/></transition>
@@ -383,7 +239,8 @@ fn document(params: &str, log_expr: &str) -> String {
   </state>
   <final id="done"><onentry><log label="final" expr="'done'"/></onentry></final>
   <final id="rejected"><onentry><log label="final" expr="'rejected'"/></onentry></final>
-</scxml>"#
+</scxml>"#,
+        service = generate()
     )
 }
 
@@ -397,26 +254,19 @@ const STRUCTURED_PARAMS: &str = r#"<param name="model" expr="'mock-model'"/>
       <param name="schemaname" expr="'verdict'"/>
       <param name="strict" expr="true"/>"#;
 
-fn labelled(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
-    pairs
-        .iter()
-        .map(|(label, text)| ((*label).to_owned(), (*text).to_owned()))
-        .collect()
-}
-
 #[test]
 fn a_text_generation_posts_the_canonical_request_and_emits_the_reply() {
     let mock = Mock::start();
     let env = env_file("text", &format!("{}/text/v1", mock.origin));
-    let config = config(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
-    let handle = open(&config, &document(TEXT_PARAMS, "_event.data.text"));
-    let records = until_closed(&handle, Duration::from_secs(60));
+    let args = generate_args(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
+    let finished = open(&args, &document(TEXT_PARAMS, "_event.data.text"));
+    let records = &finished.records;
     assert_eq!(
-        logs(&records),
+        logs(records),
         labelled(&[("reply", "Hello from the fake backend!"), ("final", "done")]),
         "{records:?}"
     );
-    assert!(finished(&records));
+    assert!(support::finished(records), "{}", finished.stderr);
     let received = mock.received();
     assert_eq!(received.len(), 1, "exactly one request");
     assert_eq!(
@@ -439,17 +289,17 @@ fn a_text_generation_posts_the_canonical_request_and_emits_the_reply() {
 fn a_structured_generation_emits_the_schema_valid_object() {
     let mock = Mock::start();
     let env = env_file("json", &format!("{}/json/v1", mock.origin));
-    let config = config(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
-    let handle = open(
-        &config,
+    let args = generate_args(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
+    let finished = open(
+        &args,
         &document(
             STRUCTURED_PARAMS,
             "_event.data.json.answer + ':' + (_event.data.json.score + 1)",
         ),
     );
-    let records = until_closed(&handle, Duration::from_secs(60));
+    let records = &finished.records;
     assert_eq!(
-        logs(&records),
+        logs(records),
         labelled(&[("reply", "yes:42"), ("final", "done")]),
         "{records:?}"
     );
@@ -466,11 +316,11 @@ fn a_structured_generation_emits_the_schema_valid_object() {
 fn a_reply_that_mismatches_the_schema_is_never_emitted() {
     let mock = Mock::start();
     let env = env_file("mismatch", &format!("{}/mismatch/v1", mock.origin));
-    let config = config(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
-    let handle = open(&config, &document(STRUCTURED_PARAMS, "'unexpected'"));
-    let records = until_closed(&handle, Duration::from_secs(60));
+    let args = generate_args(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
+    let finished = open(&args, &document(STRUCTURED_PARAMS, "'unexpected'"));
+    let records = &finished.records;
     assert_eq!(
-        logs(&records),
+        logs(records),
         labelled(&[("failed", "schema-mismatch"), ("final", "done")]),
         "the result is validated before it is emitted: {records:?}"
     );
@@ -481,11 +331,11 @@ fn a_reply_that_mismatches_the_schema_is_never_emitted() {
 fn a_failing_backend_emits_generate_failed() {
     let mock = Mock::start();
     let env = env_file("fail", &format!("{}/fail/v1", mock.origin));
-    let config = config(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
-    let handle = open(&config, &document(TEXT_PARAMS, "_event.data.text"));
-    let records = until_closed(&handle, Duration::from_secs(60));
+    let args = generate_args(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
+    let finished = open(&args, &document(TEXT_PARAMS, "_event.data.text"));
+    let records = &finished.records;
     assert_eq!(
-        logs(&records),
+        logs(records),
         labelled(&[("failed", "status"), ("final", "done")]),
         "{records:?}"
     );
@@ -495,18 +345,18 @@ fn a_failing_backend_emits_generate_failed() {
 fn malformed_parameters_reject_the_start_and_send_nothing() {
     let mock = Mock::start();
     let env = env_file("malformed", &format!("{}/text/v1", mock.origin));
-    let config = config(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
+    let args = generate_args(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
     // No model, and a parameter the service does not define.
-    let handle = open(
-        &config,
+    let finished = open(
+        &args,
         &document(
             r#"<param name="prompt" expr="'Say hello.'"/><param name="temperature" expr="1"/>"#,
             "_event.data.text",
         ),
     );
-    let records = until_closed(&handle, Duration::from_secs(60));
+    let records = &finished.records;
     assert_eq!(
-        logs(&records),
+        logs(records),
         labelled(&[("final", "rejected")]),
         "{records:?}"
     );
@@ -518,11 +368,11 @@ fn without_a_granted_key_nothing_is_sent() {
     let mock = Mock::start();
     let env = env_file("nokey", &format!("{}/text/v1", mock.origin));
     // Only the base URL is granted: the apikey slot stays absent.
-    let config = config(&env, &["OPENAI_BASE_URL"]);
-    let handle = open(&config, &document(TEXT_PARAMS, "_event.data.text"));
-    let records = until_closed(&handle, Duration::from_secs(60));
+    let args = generate_args(&env, &["OPENAI_BASE_URL"]);
+    let finished = open(&args, &document(TEXT_PARAMS, "_event.data.text"));
+    let records = &finished.records;
     assert_eq!(
-        logs(&records),
+        logs(records),
         labelled(&[("failed", "unconfigured"), ("final", "done")]),
         "{records:?}"
     );
@@ -530,26 +380,27 @@ fn without_a_granted_key_nothing_is_sent() {
 }
 
 #[test]
-fn the_consent_lists_each_variable_and_the_packages_it_is_granted_to() {
+fn the_consent_lists_each_service_with_its_origins_and_slots_and_never_a_value() {
     let env = env_file("listing", "http://127.0.0.1:9/v1");
-    let text = config_text(
+    let args = args(
         &env,
         &[
-            ("OPENAI_API_KEY", &[SERVICE_URI, DECISION_URI]),
-            ("OPENAI_BASE_URL", &[SERVICE_URI]),
+            ("OPENAI_API_KEY", &[generate(), decision()]),
+            ("OPENAI_BASE_URL", &[generate()]),
         ],
-        &serde_json::json!({}),
         &["generate", "decision"],
     );
-    let config = Config::parse(text.as_bytes(), &PathBuf::from("/")).expect("valid");
-    let consent = Packages::load(&config).expect("both bind").consent();
+    let finished = open(&args, &document(TEXT_PARAMS, "_event.data.text"));
     assert!(
-        consent.ends_with(&format!(
-            "env granted:\n  OPENAI_API_KEY -> {SERVICE_URI}, {DECISION_URI}\n  OPENAI_BASE_URL -> {SERVICE_URI}\n"
-        )),
-        "{consent}"
+        finished
+            .stderr
+            .contains(&format!("service `{}`", decision()))
+            && finished
+                .stderr
+                .contains("outbound HTTP: https://api.typesafe.ai"),
+        "{}",
+        finished.stderr
     );
-    assert!(!consent.contains(FAKE_KEY), "names only: {consent}");
 }
 
 #[test]
@@ -559,20 +410,18 @@ fn a_key_granted_only_to_another_package_is_absent_and_nothing_is_sent() {
     // The key is granted to the decision service only: the generate
     // invocation's apikey slot names it, gets no reference, and is absent
     // exactly as if the run held no value.
-    let text = config_text(
+    let args = args(
         &env,
         &[
-            ("OPENAI_API_KEY", &[DECISION_URI]),
-            ("OPENAI_BASE_URL", &[SERVICE_URI]),
+            ("OPENAI_API_KEY", &[decision()]),
+            ("OPENAI_BASE_URL", &[generate()]),
         ],
-        &serde_json::json!({}),
         &["generate", "decision"],
     );
-    let config = Config::parse(text.as_bytes(), &PathBuf::from("/")).expect("valid");
-    let handle = open(&config, &document(TEXT_PARAMS, "_event.data.text"));
-    let records = until_closed(&handle, Duration::from_secs(60));
+    let finished = open(&args, &document(TEXT_PARAMS, "_event.data.text"));
+    let records = &finished.records;
     assert_eq!(
-        logs(&records),
+        logs(records),
         labelled(&[("failed", "unconfigured"), ("final", "done")]),
         "{records:?}"
     );
@@ -581,44 +430,6 @@ fn a_key_granted_only_to_another_package_is_absent_and_nothing_is_sent() {
         "no request without an in-scope key"
     );
 }
-
-#[test]
-fn a_grant_to_an_unbound_package_or_one_without_env_slots_fails_closed() {
-    let env = env_file("unknown-package", "http://127.0.0.1:9/v1");
-    let scxml_uri = "https://github.com/stateforward/nemobot/namespaces/scxml@v0.1.0";
-    for (packages, extensions, expected) in [
-        (
-            [DECISION_URI].as_slice(),
-            false,
-            "which no bound package has",
-        ),
-        ([scxml_uri].as_slice(), true, "declares no env slot"),
-    ] {
-        let mut text: serde_json::Value = serde_json::from_str(&config_text(
-            &env,
-            &[("OPENAI_API_KEY", packages)],
-            &serde_json::json!({}),
-            &["generate"],
-        ))
-        .expect("the config is JSON");
-        if extensions {
-            text["extensions"] = serde_json::json!([scxml_extension()]);
-        }
-        let text = text.to_string();
-        let config = Config::parse(text.as_bytes(), &PathBuf::from("/")).expect("valid");
-        let failure = Packages::load(&config).expect_err("an unknown scope fails closed");
-        assert_eq!(failure.kind(), nemobot_host::FailureKind::Config);
-        assert!(
-            failure.message().contains(expected),
-            "{}",
-            failure.message()
-        );
-    }
-}
-
-/// `OpenAI`'s base URL, the live run's config default (never compiled into
-/// the component).
-const OPENAI_BASE_URL_DEFAULT: &str = "https://api.openai.com/v1";
 
 /// A backend that streams its answer forever: it accepts one connection,
 /// reads the request, answers a chunked `text/event-stream` head, writes one
@@ -691,13 +502,13 @@ impl Stall {
 fn leaving_the_invoking_state_closes_the_streaming_model_call() {
     let stall = Stall::start();
     let env = env_file("stall", &format!("{}/v1", stall.origin));
-    let config = config(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
+    let mut args = generate_args(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
     let document = format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript" initial="ask">
   <state id="ask">
-    <invoke id="gen" type="{SERVICE_URI}" env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
+    <invoke id="gen" type="{generate}" env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
       {TEXT_PARAMS}
     </invoke>
     <transition event="generate.result"><log label="reply" expr="_event.data.text"/></transition>
@@ -708,47 +519,34 @@ fn leaving_the_invoking_state_closes_the_streaming_model_call() {
     <transition event="stop" target="done"/>
   </state>
   <final id="done"/>
-</scxml>"#
+</scxml>"#,
+        generate = generate()
     );
-    let handle = open(&config, &document);
+    let path = support::write(&scratch("generate-stall"), "stall.scxml", &document);
+    args.extend([
+        "--clock".to_owned(),
+        "logical".to_owned(),
+        path.display().to_string(),
+    ]);
+    let mut run = Run::start(&args, &[]);
     stall
         .requested
         .recv_timeout(Duration::from_secs(60))
         .expect("the model call reaches the backend");
     std::thread::sleep(Duration::from_millis(100));
     let left = Instant::now();
-    handle
-        .send(ScriptedEvent::named("leave"))
-        .expect("leave is delivered");
+    run.event("leave", &serde_json::Value::Null);
     let closed = stall
         .closed
         .recv_timeout(Duration::from_secs(5))
         .expect("the backend sees the connection close within 5 s of the cancel");
     assert!(closed.duration_since(left) < Duration::from_secs(5));
-    handle
-        .send(ScriptedEvent::named("stop"))
-        .expect("the session is still running");
-    let records = until_closed(&handle, Duration::from_secs(30));
-    assert_eq!(logs(&records), labelled(&[("away", "left")]), "{records:?}");
-    assert!(finished(&records));
-}
-
-/// The `scxml` extension package (it declares no env slot).
-fn scxml_extension() -> serde_json::Value {
-    let artifacts = artifacts();
-    let component = artifacts
-        .services
-        .parent()
-        .expect("the artifacts directory")
-        .join("namespaces/nemobot_scxml.virtualized.wasm");
-    serde_json::json!({
-        "manifest": workspace()
-            .join("namespaces/scxml/package/scxml.extension.json")
-            .display()
-            .to_string(),
-        "component": component.display().to_string(),
-        "component-sha256": sha256_file(&component),
-    })
+    run.event("stop", &serde_json::Value::Null);
+    run.end_input();
+    let finished = run.finish(Duration::from_secs(30));
+    let records = &finished.records;
+    assert_eq!(logs(records), labelled(&[("away", "left")]), "{records:?}");
+    assert!(support::finished(records), "{}", finished.stderr);
 }
 
 /// One real structured generation through an env file
@@ -761,22 +559,7 @@ fn live_generate_through_an_env_file() {
         panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets OPENAI_API_KEY");
     };
     let model = std::env::var("NEMOBOT_LIVE_MODEL").unwrap_or_else(|_| "gpt-6-luna".into());
-    // No backend URL is compiled in: the run's config supplies OpenAI's as
-    // a non-secret default the file may override. The failure names the
-    // kind only, never a value.
-    let config = config_with_defaults(
-        &path,
-        &["OPENAI_API_KEY", "OPENAI_BASE_URL"],
-        &serde_json::json!({"OPENAI_BASE_URL": OPENAI_BASE_URL_DEFAULT}),
-    );
-    if let Err(failure) =
-        Values::granted(&path, &config.env_names(), &config.env_defaults, &|_| None)
-    {
-        panic!(
-            "the env file must set OPENAI_API_KEY ({:?})",
-            failure.kind()
-        );
-    }
+    let args = generate_args(&path, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
     let params = format!(
         r#"<param name="model" expr="'{model}'"/>
       <param name="system" expr="'Answer in JSON only.'"/>
@@ -785,15 +568,18 @@ fn live_generate_through_an_env_file() {
       <param name="schemaname" expr="'greeting'"/>
       <param name="strict" expr="true"/>"#
     );
-    let handle = open(
-        &config,
+    // No backend URL is compiled in: OpenAI's is the calling shell's value,
+    // which the env file's overrides.
+    let finished = open_with(
+        &args,
         &document(
             &params,
             "typeof _event.data.json.greeting === 'string' &amp;&amp; _event.data.json.greeting.length &gt; 0",
         ),
+        &[("OPENAI_BASE_URL", OPENAI_BASE_URL_DEFAULT)],
+        Duration::from_secs(180),
     );
-    let records = until_closed(&handle, Duration::from_secs(180));
-    let pass = logs(&records) == labelled(&[("reply", "true"), ("final", "done")]);
+    let pass = logs(&finished.records) == labelled(&[("reply", "true"), ("final", "done")]);
     println!("live generate: {}", if pass { "pass" } else { "fail" });
     assert!(pass, "the live generation did not pass");
 }

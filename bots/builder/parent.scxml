@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The parent session that runs the builder with `scxml-cli run`
+     (README.md, "Running"): it invokes builder.scxml, autoforwards it every
+     external event (so a `builder.request` on standard input reaches the
+     builder), logs the builder's one answer with its data as JSON, and
+     finishes. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+       datamodel="ecmascript" initial="running">
+  <state id="running">
+    <invoke id="builder" type="scxml" src="builder.scxml" autoforward="true"/>
+    <transition event="builder.done" target="built">
+      <log label="builder.done" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="builder.failed" target="failed">
+      <log label="builder.failed" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="error.*" target="failed">
+      <log label="error" expr="_event.name"/>
+    </transition>
+  </state>
+  <final id="built"/>
+  <final id="failed"/>
+</scxml>

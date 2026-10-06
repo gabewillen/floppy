@@ -73,8 +73,9 @@
 //! One `execute` call runs the whole validator, the bundled XSD set
 //! included, so it needs far more instruction fuel than scxml.rs's default
 //! extension call cap (100 million): a small draft takes about 200 million.
-//! A nemobot config that binds this package sets `extension-call-fuel`
-//! (1 billion is ample for drafts of a few hundred lines); an exhausted call
+//! A run that binds this package passes `scxml-cli run --extension-call-fuel`
+//! (1 billion is ample for drafts of a few hundred lines; the builder's
+//! `bots/builder/builder.args` does); an exhausted call
 //! is `error.execution` and retires the instance for the rest of the
 //! session.
 //!
