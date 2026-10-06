@@ -292,6 +292,11 @@ pub struct LiveHttp {
     /// the embedder can wake its loop and call
     /// [`super::LiveSession::deliver_communication_errors`].
     pub on_communication_error: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Called from any thread each time a deferred request of an invoked
+    /// service settles (`outbound-http.begin`, `crate::service_http`), so
+    /// the embedder can wake its loop and call
+    /// [`super::LiveSession::deliver_service_responses`].
+    pub on_service_response: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl std::fmt::Debug for LiveHttp {
@@ -357,6 +362,10 @@ pub(crate) struct RunHttp {
     pub(crate) outbound: Option<Arc<dyn OutboundHttp>>,
     pub(crate) failures: Arc<FailureQueue>,
     pub(crate) journal: RefCell<OutboundJournal>,
+    /// Settled deferred requests of invoked services; `None` when the run
+    /// delivers none (a batch run, or a recording or replaying session,
+    /// whose inputs must be reproducible).
+    pub(crate) service_responses: Option<Arc<crate::service_http::ServiceResponses>>,
 }
 
 impl RunHttp {
@@ -366,6 +375,7 @@ impl RunHttp {
             outbound: None,
             failures: FailureQueue::new(None),
             journal: RefCell::new(OutboundJournal::Off),
+            service_responses: None,
         }
     }
 
@@ -376,6 +386,8 @@ impl RunHttp {
                 .map_or_else(|| LOOPBACK_ORIGIN.to_owned(), |url| url.0),
             outbound: http.outbound,
             failures: FailureQueue::new(http.on_communication_error),
+            service_responses: matches!(journal, OutboundJournal::Off)
+                .then(|| crate::service_http::ServiceResponses::new(http.on_service_response)),
             journal: RefCell::new(journal),
         }
     }

@@ -1089,13 +1089,12 @@ function capabilityResource(links) {
     }
 
     // This host binds no invoked-service component (invoked services are a
-    // Wasmtime host feature), so it fails closed: a document that names a
-    // service type literally fails its session start before data binding,
-    // and a service type given by `typeexpr` answers `unavailable`, which
-    // fails that `<invoke>` with `error.execution` (SCXML 6.4).
+    // Wasmtime host feature), so it loads nothing, and every service
+    // `<invoke>`, literal or `typeexpr`, answers `unavailable` when it
+    // starts, which fails that `<invoke>` with `error.execution`: invocation
+    // is a runtime action (SCXML 6.4), so the session start is unaffected.
     loadServices(_typeUris) {
-      telemetry.observe('capability', 'rejected');
-      throw unavailable();
+      telemetry.observe('capability', 'ok');
     }
     startService(_request) {
       telemetry.observe('capability', 'rejected');

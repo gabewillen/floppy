@@ -9,9 +9,9 @@
 //!   authenticated service components (release artifacts of kind
 //!   [`ArtifactKind::ServiceExample`], or caller components authenticated by
 //!   SHA-256 through [`crate::authenticate_service_component`]), each with
-//!   its [`ServicePackage`]. A session whose document names an unbound type
-//!   literally fails its start closed (`machine-capabilities.load-services`);
-//!   one given by `typeexpr` fails that `<invoke>` (`error.execution`).
+//!   its [`ServicePackage`]. An `<invoke>` of a type no service binds, literal
+//!   or given by `typeexpr`, fails when it starts (`error.execution`, SCXML
+//!   6.4); `machine-capabilities.load-services` loads only bound components.
 //! * **Lifecycle** — every invocation gets its own instance in its own
 //!   bounded store: the host checks `type-uri` against the binding, calls
 //!   `start` once, then `send` for each event the invoking session sends to
@@ -38,7 +38,11 @@
 //!   emit past either bound is invalid (`capacity-exhausted`). These two are
 //!   amplification guards and apply on every build. `outbound-http` is deny by default and admits only the
 //!   origins the service package declares, or the origin a reference's
-//!   value supplies entirely.
+//!   value supplies entirely. `fetch` blocks the export call (and so the
+//!   session); `begin` and `take` make a slow request without blocking it
+//!   (`crate::service_http`: the embedder's [`crate::ServiceHttp`]
+//!   transport performs it elsewhere, and its outcome arrives through
+//!   `wake`).
 //! * **Values and references** — the embedder holds the values of the
 //!   variables a run grants ([`ServiceComponents::with_values`]). A service
 //!   never receives one: for each `env` slot its `<invoke>` binds
@@ -82,6 +86,7 @@
 //! become attributes. Guest telemetry imports are recorded under the
 //! `invoked-service` module label.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use opentelemetry::Context;
@@ -97,6 +102,7 @@ use crate::call_budget::CallBudget;
 use crate::component::{GuestSignal, component_error, record_guest_signal};
 use crate::extension::{ExtensionHttp, outbound_http};
 use crate::memory_growth::MeteredLimits;
+use crate::service_http::{MAX_SERVICE_PENDING_REQUESTS, ServiceHttp, ServiceResponses};
 use crate::session::{native_event, native_value};
 use crate::{
     ArtifactError, ArtifactKind, AuthenticatedComponent, HostError, InvalidLimit, LifecycleLease,
@@ -271,6 +277,7 @@ pub(crate) struct ServiceBinding {
 pub struct ServiceComponents {
     bindings: Vec<ServiceBinding>,
     http: Option<Arc<dyn ExtensionHttp>>,
+    deferred: Option<Arc<dyn ServiceHttp>>,
     values: crate::ExtensionEnvironment,
     grants: crate::WasiGrants,
     call_fuel: u64,
@@ -286,6 +293,7 @@ impl Default for ServiceComponents {
 pub(crate) struct ServiceParts {
     pub(crate) bindings: Vec<(ServiceBinding, crate::wasi::WasiPlan)>,
     pub(crate) http: Option<Arc<dyn ExtensionHttp>>,
+    pub(crate) deferred: Option<Arc<dyn ServiceHttp>>,
     pub(crate) values: crate::ExtensionEnvironment,
     pub(crate) call_fuel: u64,
 }
@@ -298,6 +306,7 @@ impl ServiceComponents {
         Self {
             bindings: Vec::new(),
             http: None,
+            deferred: None,
             values: crate::ExtensionEnvironment::none(),
             grants: crate::WasiGrants::new(),
             call_fuel: DEFAULT_SERVICE_CALL_FUEL,
@@ -329,6 +338,17 @@ impl ServiceComponents {
     #[must_use]
     pub fn with_outbound_http(mut self, transport: Arc<dyn ExtensionHttp>) -> Self {
         self.http = Some(transport);
+        self
+    }
+
+    /// The transport of deferred requests (`outbound-http.begin`). Without
+    /// one (the default) every `begin` is refused with `unavailable`; with
+    /// one, the host admits each request exactly as `fetch`'s, and only a
+    /// live session that neither records nor replays delivers outcomes
+    /// (elsewhere `begin` is refused too). See `crate::service_http`.
+    #[must_use]
+    pub fn with_deferred_http(mut self, transport: Arc<dyn ServiceHttp>) -> Self {
+        self.deferred = Some(transport);
         self
     }
 
@@ -432,6 +452,7 @@ impl ServiceComponents {
         Ok(ServiceParts {
             bindings,
             http: self.http,
+            deferred: self.deferred,
             values: self.values,
             call_fuel: self.call_fuel,
         })
@@ -467,6 +488,11 @@ pub(crate) struct ServiceRuntime<'a> {
     /// The package's declared-and-granted WASI permissions.
     pub(crate) wasi: &'a crate::wasi::WasiPlan,
     pub(crate) http: Option<&'a Arc<dyn ExtensionHttp>>,
+    /// The deferred transport, when the embedder grants one.
+    pub(crate) deferred: Option<&'a Arc<dyn ServiceHttp>>,
+    /// The run's queue of settled deferred requests; `None` when the run
+    /// delivers none (a batch run, or a recording or replaying session).
+    pub(crate) responses: Option<&'a Arc<ServiceResponses>>,
     /// The values `env` slots may reference.
     pub(crate) values: &'a crate::ExtensionEnvironment,
     pub(crate) call_fuel: u64,
@@ -528,6 +554,17 @@ pub(crate) struct ServiceStoreData {
     /// at `start` and valid until the instance is dropped.
     references: Vec<(u32, String)>,
     call: Option<ServiceCall>,
+    /// The deferred transport and the run's queue its outcomes join, when
+    /// both are offered.
+    deferred: Option<(Arc<dyn ServiceHttp>, Arc<ServiceResponses>)>,
+    /// This instance's run-unique id (0 when the run delivers no deferred
+    /// outcome).
+    instance: u64,
+    /// This instance's deferred requests by ticket: `None` while in flight,
+    /// the outcome once delivered and not yet taken.
+    tickets: BTreeMap<u64, Option<Result<outbound_http::HttpResponse, ComponentError>>>,
+    /// The last ticket issued.
+    last_ticket: u64,
     /// The time of the last call, for `now-ms` outside one.
     last_now_ms: u64,
     /// The instance's WASI context (reachable only through the interfaces
@@ -631,6 +668,15 @@ impl ServiceHandle {
                 values: runtime.values.clone(),
                 references: Vec::new(),
                 call: None,
+                deferred: runtime
+                    .deferred
+                    .zip(runtime.responses)
+                    .map(|(transport, responses)| (Arc::clone(transport), Arc::clone(responses))),
+                instance: runtime
+                    .responses
+                    .map_or(0, |responses| responses.instance_id()),
+                tickets: BTreeMap::new(),
+                last_ticket: 0,
                 last_now_ms: 0,
                 wasi,
                 _store_lease: runtime.providers.acquire_store()?,
@@ -738,6 +784,39 @@ impl ServiceHandle {
     /// one.
     pub(crate) fn contract(&self) -> Option<Arc<ServiceContract>> {
         self.store.data().contract.clone()
+    }
+
+    /// This instance's run-unique id, the key its settled deferred requests
+    /// carry.
+    pub(crate) fn instance(&self) -> u64 {
+        self.store.data().instance
+    }
+
+    /// Hands the settled request `ticket` its outcome; `true` when a live
+    /// instance was waiting for it (its `wake` runs next), `false` when the
+    /// instance completed, was retired or cancelled, or holds no such
+    /// pending ticket (the outcome is dropped).
+    pub(crate) fn settle(
+        &mut self,
+        ticket: u64,
+        outcome: Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure>,
+    ) -> bool {
+        if self.lifecycle != Lifecycle::Live {
+            return false;
+        }
+        match self.store.data_mut().tickets.get_mut(&ticket) {
+            Some(slot @ None) => {
+                *slot =
+                    Some(crate::extension::settle_response(outcome).map_err(|(error, _)| error));
+                true
+            }
+            Some(Some(_)) | None => false,
+        }
+    }
+
+    /// Whether this live instance waits for a deferred request in flight.
+    pub(crate) fn awaiting(&self) -> bool {
+        self.lifecycle == Lifecycle::Live && self.store.data().tickets.values().any(Option::is_none)
     }
 
     /// The pending wakeup of a live service, in logical ms.
@@ -953,6 +1032,54 @@ fn unavailable(detail: &'static str) -> ComponentError {
 }
 
 impl ServiceStoreData {
+    /// Admits one deferred request and hands it to the transport; the
+    /// error carries the span's closed category.
+    fn begin_admitted(
+        &mut self,
+        request: outbound_http::HttpRequest,
+    ) -> Result<u64, (ComponentError, scxml_telemetry::ErrorCategory)> {
+        if self.tickets.len() >= MAX_SERVICE_PENDING_REQUESTS {
+            return Err((
+                component_error(
+                    ErrorCode::CapacityExhausted,
+                    "the instance holds as many deferred requests as it may",
+                ),
+                scxml_telemetry::ErrorCategory::Budget,
+            ));
+        }
+        let request = crate::extension::admit_request(
+            request,
+            &self.references,
+            &self.allow,
+            self.deferred.is_some(),
+            |_| {},
+        )?;
+        let Some((transport, responses)) = &self.deferred else {
+            return Err(crate::extension::no_transport());
+        };
+        let ticket = self.last_ticket.checked_add(1).ok_or((
+            component_error(
+                ErrorCode::CapacityExhausted,
+                "the instance ran out of tickets",
+            ),
+            scxml_telemetry::ErrorCategory::Budget,
+        ))?;
+        // A ticket is never issued twice, even when the transport refuses
+        // it: the refused request's outcome settles (as a transport failure)
+        // under that ticket, and must match nothing this instance holds.
+        self.last_ticket = ticket;
+        transport
+            .begin(request, responses.outcome(self.instance, ticket))
+            .map_err(|_| {
+                (
+                    component_error(ErrorCode::Unavailable, "the transport refused the request"),
+                    scxml_telemetry::ErrorCategory::Platform,
+                )
+            })?;
+        self.tickets.insert(ticket, None);
+        Ok(ticket)
+    }
+
     /// The open export call, unless the service already completed in it.
     fn open_call(&mut self) -> Result<&mut ServiceCall, ComponentError> {
         match self.call.as_mut() {
@@ -1069,6 +1196,37 @@ impl outbound_http::Host for ServiceStoreData {
                 span.fail(category);
                 Err(error)
             }
+        }
+    }
+
+    fn begin(&mut self, request: outbound_http::HttpRequest) -> Result<u64, ComponentError> {
+        if self.call.is_none() {
+            return Err(unavailable(
+                "outbound HTTP is available only during an export call",
+            ));
+        }
+        let span = scxml_telemetry::observe(
+            Module::HostWasmtime,
+            Operation::HostWasmtimeServiceHttpBegin,
+        );
+        match self.begin_admitted(request) {
+            Ok(ticket) => {
+                span.event(SignalEvent::TransformationCompleted);
+                Ok(ticket)
+            }
+            Err((error, category)) => {
+                span.event(SignalEvent::InputRejected);
+                span.fail(category);
+                Err(error)
+            }
+        }
+    }
+
+    fn take(&mut self, ticket: u64) -> Option<Result<outbound_http::HttpResponse, ComponentError>> {
+        self.call.as_ref()?;
+        match self.tickets.get(&ticket) {
+            Some(Some(_)) => self.tickets.remove(&ticket).flatten(),
+            Some(None) | None => None,
         }
     }
 }

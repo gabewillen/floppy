@@ -905,8 +905,26 @@ impl LiveSession {
         let operation = (!finished).then_some(Operation::HostWasmtimeSessionAdvance);
         let at_ms = self.now_ms()?;
         let mut step = self.step(operation, at_ms, |engine| {
-            if !finished {
-                engine.drain(Horizon::Unbounded, &mut no_hook())?;
+            if finished {
+                return Ok(Ok(()));
+            }
+            // Deadline by deadline, so the clock never moves past a deferred
+            // service request still in flight: its outcome must arrive at
+            // the time the session waits at (a recording or replaying
+            // session starts none, so for it this is the unbounded drain).
+            loop {
+                let now = engine.now()?;
+                if engine.drain(Horizon::Until(now), &mut no_hook())? == DrainStop::Finished
+                    || engine.awaiting_service_responses()
+                {
+                    break;
+                }
+                let Some(deadline) = engine.next_deadline()? else {
+                    break;
+                };
+                if engine.drain(Horizon::Until(deadline), &mut no_hook())? == DrainStop::Finished {
+                    break;
+                }
             }
             Ok(Ok(()))
         })?;
@@ -1246,6 +1264,63 @@ impl LiveSession {
                 Ok(Ok(()))
             },
         )
+    }
+
+    /// Delivers every deferred request of an invoked service that settled
+    /// since the last call (`outbound-http.begin`, see
+    /// [`LiveHttp::on_service_response`]): at the session's current time
+    /// (a timed session's clock first, firing what it reached), each outcome
+    /// whose instance is still live and waiting for it reaches that
+    /// instance, whose `wake` then runs; then every session runs to a stable
+    /// configuration. An outcome of an instance that was cancelled,
+    /// completed, or retired meanwhile is dropped. Returns `None` when
+    /// nothing had settled.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::send`], failing the session.
+    pub fn deliver_service_responses(
+        &mut self,
+    ) -> Result<Option<LiveCallResult>, SessionHostError> {
+        self.require_open()?;
+        let settled = self
+            .engine
+            .shared()
+            .http
+            .service_responses
+            .as_ref()
+            .map(|responses| responses.take())
+            .unwrap_or_default();
+        if settled.is_empty() {
+            return Ok(None);
+        }
+        if self.status != LiveStatus::Running {
+            return Ok(None);
+        }
+        let at_ms = self.time()?;
+        self.step(
+            Some(Operation::HostWasmtimeSessionServiceResponse),
+            at_ms,
+            |engine| {
+                if engine.drain(Horizon::Until(at_ms), &mut no_hook())? == DrainStop::Finished {
+                    return Ok(Ok(()));
+                }
+                engine.advance_clock_to(at_ms)?;
+                engine.deliver_service_responses(settled)?;
+                engine.drain(Horizon::Until(at_ms), &mut no_hook())?;
+                Ok(Ok(()))
+            },
+        )
+        .map(Some)
+    }
+
+    /// Whether the session waits for a deferred request of an invoked
+    /// service: one in flight for a live instance, or one settled and not
+    /// yet delivered ([`Self::deliver_service_responses`]). A logical
+    /// embedder waits for the outcome before it moves the clock again.
+    #[must_use]
+    pub fn awaiting_service_responses(&self) -> bool {
+        self.status == LiveStatus::Running && self.engine.awaiting_service_responses()
     }
 
     /// Takes every output streamed since the last call, in order.

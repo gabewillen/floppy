@@ -14,6 +14,11 @@
 //!   invocation's `endpoint` slot references (`env:endpoint="NAME"` on the
 //!   `<invoke>`) through `outbound-http` and emits `echo.fetched` carrying
 //!   the response status; without a bound `endpoint` the `send` fails;
+//! * `send(defer)` starts the same GET without waiting for it
+//!   (`outbound-http.begin`): the session keeps running, and the `wake` the
+//!   host calls once the request settled takes its outcome
+//!   (`outbound-http.take`) and emits `echo.fetched` with the status; a
+//!   `wake` that finds no settled request is the timer's and ticks;
 //! * `cancel` drops the service's state; it is idempotent.
 //!
 //! The decisions are the portable [`Echo`] state machine, tested natively;
@@ -45,6 +50,8 @@ pub const TICK_EVENT: &str = "echo.tick";
 pub const FETCH_EVENT: &str = "fetch";
 /// The event a fetch emits, carrying the response status.
 pub const FETCHED_EVENT: &str = "echo.fetched";
+/// The event name that starts the `endpoint` GET without waiting for it.
+pub const DEFER_EVENT: &str = "defer";
 /// The `env` slot whose value is the URL `fetch` requests.
 pub const ENDPOINT_SLOT: &str = "endpoint";
 
@@ -66,6 +73,9 @@ pub enum EchoAction {
     /// GET the `endpoint` slot's URL and emit [`FETCHED_EVENT`] with the
     /// status.
     Fetch,
+    /// Start the `endpoint` GET without waiting (`outbound-http.begin`); its
+    /// outcome arrives through `wake` ([`Echo::settled`]).
+    Begin,
 }
 
 /// Why the service rejected a call.
@@ -144,9 +154,13 @@ impl Echo {
         if !self.running {
             return Err(EchoError::NotRunning);
         }
-        if name == FETCH_EVENT {
+        if name == FETCH_EVENT || name == DEFER_EVENT {
             return if self.endpoint {
-                Ok(vec![EchoAction::Fetch])
+                Ok(vec![if name == FETCH_EVENT {
+                    EchoAction::Fetch
+                } else {
+                    EchoAction::Begin
+                }])
             } else {
                 Err(EchoError::NoEndpoint)
             };
@@ -179,6 +193,22 @@ impl Echo {
         // The count saturates at `u32::MAX` (documented saturation).
         let count = u32::try_from(self.ticks).unwrap_or(u32::MAX);
         let data = scxml_types::FiniteNumber::new(f64::from(count))
+            .map_or(DataValue::Absent, DataValue::Number);
+        Ok(vec![EchoAction::Emit { name, data }])
+    }
+
+    /// A deferred GET settled with `status`: emits [`FETCHED_EVENT`] with it.
+    ///
+    /// # Errors
+    ///
+    /// [`EchoError::NotRunning`] after completion or cancellation.
+    pub fn settled(&mut self, status: u16) -> Result<Vec<EchoAction>, EchoError> {
+        if !self.running {
+            return Err(EchoError::NotRunning);
+        }
+        let name =
+            EventName::new(FETCHED_EVENT.to_owned()).map_err(|_| EchoError::InvalidEventName)?;
+        let data = scxml_types::FiniteNumber::new(f64::from(status))
             .map_or(DataValue::Absent, DataValue::Number);
         Ok(vec![EchoAction::Emit { name, data }])
     }
@@ -247,6 +277,8 @@ mod guest {
         static SERVICE: RefCell<Option<Echo>> = const { RefCell::new(None) };
         // The `endpoint` slot's reference, valid for the whole invocation.
         static ENDPOINT: RefCell<Option<u32>> = const { RefCell::new(None) };
+        // The ticket of the deferred GET in flight, if any.
+        static DEFERRED: RefCell<Option<u64>> = const { RefCell::new(None) };
     }
 
     struct Component;
@@ -303,7 +335,18 @@ mod guest {
 
         fn wake() -> Result<(), ComponentError> {
             observed(Operation::Wake, || {
-                let actions = with_service(Echo::wake)?;
+                // A settled deferred GET, else the timer.
+                let settled = DEFERRED
+                    .with_borrow(|ticket| *ticket)
+                    .and_then(outbound_http::take);
+                let actions = match settled {
+                    Some(outcome) => {
+                        DEFERRED.set(None);
+                        let response = outcome?;
+                        with_service(|echo| echo.settled(response.status))?
+                    }
+                    None => with_service(Echo::wake)?,
+                };
                 run(actions)
             })
         }
@@ -347,6 +390,18 @@ mod guest {
                     invoked_service_host::complete(Some(&wit_value(data)))?;
                 }
                 EchoAction::SetWakeup(delay) => invoked_service_host::set_wakeup(delay)?,
+                EchoAction::Begin => {
+                    let reference = ENDPOINT
+                        .with_borrow(|endpoint| *endpoint)
+                        .ok_or_else(|| error(ErrorCode::Protocol, "no endpoint is bound"))?;
+                    let ticket = outbound_http::begin(&HttpRequest {
+                        method: "GET".to_owned(),
+                        url: vec![TextPart::Reference(reference)],
+                        headers: Vec::new(),
+                        body: Vec::new(),
+                    })?;
+                    DEFERRED.set(Some(ticket));
+                }
                 EchoAction::Fetch => {
                     let reference = ENDPOINT
                         .with_borrow(|endpoint| *endpoint)
@@ -546,5 +601,21 @@ mod tests {
             echo.send(super::FETCH_EVENT, DataValue::Absent),
             Ok(vec![EchoAction::Fetch])
         );
+        assert_eq!(
+            echo.send(super::DEFER_EVENT, DataValue::Absent),
+            Ok(vec![EchoAction::Begin])
+        );
+    }
+
+    #[test]
+    fn a_settled_deferred_fetch_emits_its_status() {
+        let (mut echo, _) = Echo::start([]).expect("start");
+        let actions = echo.settled(204).expect("running");
+        assert!(matches!(
+            actions.as_slice(),
+            [EchoAction::Emit { name, data }] if name.as_str() == super::FETCHED_EVENT && *data == number(204.0)
+        ));
+        echo.cancel();
+        assert_eq!(echo.settled(204), Err(EchoError::NotRunning));
     }
 }

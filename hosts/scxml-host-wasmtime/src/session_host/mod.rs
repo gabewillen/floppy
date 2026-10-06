@@ -485,6 +485,8 @@ pub(crate) struct HostCore {
     services: Vec<ServiceEntry>,
     /// The transport admitted service requests go through (none: refused).
     service_http: Option<Arc<dyn crate::extension::ExtensionHttp>>,
+    /// The deferred transport of invoked services (`outbound-http.begin`).
+    service_deferred_http: Option<Arc<dyn crate::service_http::ServiceHttp>>,
     /// Fuel cap of one service export call.
     service_call_fuel: u64,
     /// The values services' `env` slots may reference.
@@ -752,6 +754,7 @@ impl HostCore {
         &self,
         type_uri: &str,
         execution_context: &opentelemetry::Context,
+        responses: Option<&Arc<crate::service_http::ServiceResponses>>,
     ) -> Result<Option<crate::service::ServiceHandle>, HostError> {
         let Some(entry) = self.service(type_uri) else {
             return Ok(None);
@@ -767,6 +770,8 @@ impl HostCore {
             contract: entry.contract.as_ref(),
             wasi: &entry.wasi,
             http: self.service_http.as_ref(),
+            deferred: self.service_deferred_http.as_ref(),
+            responses,
             values: &self.service_values,
             call_fuel: self.service_call_fuel,
         };
@@ -940,6 +945,7 @@ impl SessionHost {
             namespace_call_fuel: crate::extension::DEFAULT_EXTENSION_CALL_FUEL,
             services: Vec::new(),
             service_http: None,
+            service_deferred_http: None,
             service_call_fuel: crate::service::DEFAULT_SERVICE_CALL_FUEL,
             service_values: crate::ExtensionEnvironment::none(),
             digests: snapshot::ComponentDigests {
@@ -1056,9 +1062,9 @@ impl SessionHost {
     /// (a mismatch fails the run with [`RunFailure::Host`]), calls `start`,
     /// delivers the events the invoking session sends it, wakes it on the
     /// run's logical clock, and calls `cancel` when the invoking state exits
-    /// first. A session whose document names an unbound type literally fails
-    /// its start closed; an unbound `typeexpr` fails that `<invoke>` with
-    /// `error.execution`. A service component imports no WASI interface
+    /// first. An `<invoke>` of a type no service binds, literal or
+    /// `typeexpr`, fails when it starts with `error.execution` (SCXML 6.4);
+    /// the session start is unaffected. A service component imports no WASI interface
     /// beyond what its package declares and the run grants
     /// ([`crate::ServiceComponents::with_wasi_grants`]): the host links
     /// exactly those, and refuses a component importing any other WASI
@@ -1084,6 +1090,7 @@ impl SessionHost {
         let crate::service::ServiceParts {
             bindings,
             http,
+            deferred,
             values,
             call_fuel,
         } = services.into_parts()?;
@@ -1105,6 +1112,7 @@ impl SessionHost {
             })
             .collect();
         core.service_http = http;
+        core.service_deferred_http = deferred;
         core.service_call_fuel = call_fuel;
         core.service_values = values;
         Ok(self)

@@ -63,7 +63,10 @@ ends with every session in a stable configuration.
   next deadline. If nothing is due, `advance` only moves the clock.
 - `advance_to(ms)` and `run_until_idle()` are for logical sessions only.
   `run_until_idle` fires every pending deadline in order, which is the batch
-  run's drain.
+  run's drain, except that it never moves the clock past a deferred request
+  of an invoked service still in flight (`awaiting_service_responses`): it
+  returns, and the embedder waits for the outcome (see "Deferred service
+  requests" below) before it calls it again.
 - `snapshot(options)` returns the canonical `scxml.session-snapshot/v2`
   document of the session in its stable configuration ([session-snapshot.md](session-snapshot.md)).
   For the same state it is the same document a batch run produces:
@@ -161,6 +164,21 @@ decides where they go:
   waits behind queued external events. A delayed send whose target no
   longer answers when it falls due takes the same path in batch and live
   runs alike.
+- Deferred service requests: an invoked service makes a slow request with
+  `outbound-http.begin` instead of the blocking `fetch`
+  ([invoked-services.md](invoked-services.md#slow-requests-without-blocking-the-session)),
+  through the transport `ServiceComponents::with_deferred_http` grants (a
+  `ServiceHttp`; `ThreadedServiceHttp` runs a blocking `ExtensionHttp`
+  transport on a thread per request). The session keeps taking events and
+  firing timers meanwhile. The transport settles each request's
+  `ServiceHttpOutcome` from any thread; `LiveHttp::on_service_response`
+  wakes the embedder, which calls `deliver_service_responses`: at the
+  session's current time (due deadlines fire first), each outcome whose
+  instance is still live and waiting reaches it, the instance's `wake`
+  runs (it reads the outcome with `take`), and every session runs to a
+  stable configuration. An outcome whose instance was cancelled (its state
+  exited), completed, or retired meanwhile is dropped. A recording or
+  replaying session delivers no outcome, so there `begin` is refused.
 - `receive_http(request)` delivers one inbound message. Its target, in
   origin form or absolute, must end in `/sessions/{_sessionid}/basichttp`
   (so a proxy may mount the listener under a prefix). The message is queued
@@ -394,6 +412,7 @@ under the session's single `session-run` span:
 | `scxml.host-wasmtime.session-advance` | an advance that fires something, or a drain to idle |
 | `scxml.host-wasmtime.session-receive-http` | one inbound BasicHTTP message that reached a session's queue |
 | `scxml.host-wasmtime.session-communication-error` | one delivery of owed `error.communication` events |
+| `scxml.host-wasmtime.session-service-response` | one delivery of settled deferred service requests |
 | `scxml.host-wasmtime.session-close` | the graceful close |
 | `scxml.host-wasmtime.extension-http-fetch` | one `outbound-http` request an extension component made, on the session thread, inside its `execute` call (blocking the call; bounded by the granted transport's timeouts) |
 | `scxml.host-wasmtime.basichttp-network-post` | one outbound request (`http` feature), on its own thread, a child of the send that issued it |

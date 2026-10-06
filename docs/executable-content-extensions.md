@@ -173,12 +173,18 @@ declare. The CLI lists each package's declared permissions, and what the run
 grants each, before it runs, and refuses `--record` and `--replay` for such a
 run: the effects and inputs of a WASI interface are outside the replay log.
 
-**This release links WASI only into invoked-service components.** An
-extension component's store lends it the executing session's state, which is
-not `Send`, and `wasmtime-wasi` links only into `Send` store data, so the
-Wasmtime host refuses an extension package that declares any WASI permission
-when it is bound or resolved (`WasiExtensionUnsupported`); its manifest still
-reads, validates, and lists. [`components/scxml-service-files`](../components/scxml-service-files)
+**WASI is linked only into invoked-service components, by rule.** An
+extension element is executable content: it runs synchronously inside a
+microstep and must stay quick. Anything asynchronous, I/O-bound, or
+long-running belongs in an invoked service
+([invoked-services.md](invoked-services.md)), whose events and `wake`s keep
+the session responsive and whose `<invoke>` is cancelled when its state
+exits. So the Wasmtime host refuses an extension package that declares any
+WASI permission when it is bound or resolved (`WasiExtensionUnsupported`);
+its manifest still reads, validates, and lists. An extension component's
+`outbound-http.fetch` blocks the session for the request's duration and is
+meant for quick requests; a slow one (a model call, for example) belongs in
+a service, which can make it without blocking (`outbound-http.begin`). [`components/scxml-service-files`](../components/scxml-service-files)
 is the example of a component that declares `wasi:filesystem`.
 
 ## Event contracts
@@ -593,8 +599,8 @@ OPENAI_API_KEY=... scxml-cli snapshot run namespaces/openai/examples/hello.scxml
   sessions) and no transition previews.
 - `outbound-http` is not streamed: an extension component receives the whole
   response body once, so `openai`'s `stream` is not supported.
-- WASI permissions are linked into invoked-service components only: the
-  Wasmtime host refuses an extension package that declares any
-  (`WasiExtensionUnsupported`), because an extension store lends the
-  executing session's non-`Send` state and `wasmtime-wasi` links only into
-  `Send` store data. The browser host links no WASI interface at all.
+- WASI permissions are linked into invoked-service components only, by rule
+  (extension elements are synchronous executable content; I/O-bound work
+  belongs in services): the Wasmtime host refuses an extension package that
+  declares any (`WasiExtensionUnsupported`). The browser host links no WASI
+  interface at all.

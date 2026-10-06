@@ -364,27 +364,41 @@ fn a_service_that_fails_is_reported_as_error_communication() {
 }
 
 #[test]
-fn an_unbound_literal_service_type_fails_the_session_start() {
+fn an_unbound_literal_service_type_raises_error_execution_at_invocation_start() {
+    // SCXML 6.4: invocation is a runtime action. The session starts although
+    // no service is bound to the literal type; only entering the invoking
+    // state fails that `<invoke>` with error.execution.
     let host = host_with(ServiceComponents::new());
-    let (ir, data_model) = lower(&document());
-    let opened = host.open(SessionOpen {
-        machine_ir: &ir,
-        data_model: data_model.as_deref(),
-        session_id: "root",
-        embedder: Rc::new(NoResources),
-        max_commands: 256,
-        clock: LiveClock::Logical,
-        record: false,
-        replay: None,
-        http: LiveHttp::default(),
-    });
-    match opened {
-        Err(error) => assert!(
-            matches!(error.failure, RunFailure::Machine { code, .. } if code == "unavailable"),
-            "{error}"
-        ),
-        Ok(_) => panic!("an unbound literal service type fails the start closed"),
-    }
+    let source = format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="idle">
+  <state id="idle"><transition event="go" target="s"/></state>
+  <state id="s">
+    <invoke type="{ECHO}"/>
+    <transition event="error.execution" target="failed"/>
+  </state>
+  <final id="failed"/>
+</scxml>"#
+    );
+    let (ir, data_model) = lower(&source);
+    let mut session = host
+        .open(SessionOpen {
+            machine_ir: &ir,
+            data_model: data_model.as_deref(),
+            session_id: "root",
+            embedder: Rc::new(NoResources),
+            max_commands: 256,
+            clock: LiveClock::Logical,
+            record: false,
+            replay: None,
+            http: LiveHttp::default(),
+        })
+        .expect("an unbound literal type does not fail the session start");
+    assert_eq!(session.configuration().expect("configuration"), ["idle"]);
+    session
+        .send(&ScriptedEvent::named("go"))
+        .expect("go is processed");
+    assert_eq!(session.status(), LiveStatus::Finished);
+    session.close().expect("the session closes");
 }
 
 #[test]
@@ -1060,4 +1074,219 @@ fn a_malformed_contract_fails_the_binding_closed() {
             "{error}"
         );
     }
+}
+
+/// A deferred transport that holds every request until the test settles it:
+/// what a slow model call looks like to the session.
+#[derive(Debug, Default)]
+struct HeldHttp {
+    held: std::sync::Mutex<Vec<(String, scxml_host_wasmtime::ServiceHttpOutcome)>>,
+}
+
+impl HeldHttp {
+    fn held(&self) -> usize {
+        self.held
+            .lock()
+            .expect("the held requests are not poisoned")
+            .len()
+    }
+
+    /// Settles every held request with `status`, returning their URLs.
+    fn settle_all(&self, status: u16) -> Vec<String> {
+        let held: Vec<_> = self
+            .held
+            .lock()
+            .expect("the held requests are not poisoned")
+            .drain(..)
+            .collect();
+        held.into_iter()
+            .map(|(url, outcome)| {
+                outcome.settle(Ok(scxml_host_wasmtime::ExtensionHttpResponse {
+                    status,
+                    body: Vec::new(),
+                }));
+                url
+            })
+            .collect()
+    }
+}
+
+impl scxml_host_wasmtime::ServiceHttp for HeldHttp {
+    fn begin(
+        &self,
+        request: scxml_host_wasmtime::ExtensionHttpRequest,
+        outcome: scxml_host_wasmtime::ServiceHttpOutcome,
+    ) -> Result<(), scxml_host_wasmtime::TransportUnavailable> {
+        self.held
+            .lock()
+            .expect("the held requests are not poisoned")
+            .push((request.url, outcome));
+        Ok(())
+    }
+}
+
+/// `s` invokes the echo service with its `endpoint` slot bound; `defer`
+/// starts the deferred GET, `ping` is echoed, `leave` exits `s` (cancelling
+/// the service), and `s` arms a 1 s timer on entry.
+fn deferred_document() -> String {
+    format!(
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="{env}" version="1.0" datamodel="ecmascript" initial="s">
+  <state id="s">
+    <onentry><send event="timer" delay="1s"/></onentry>
+    <invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/>
+    <transition event="defer"><send event="defer" target="#_echo"/></transition>
+    <transition event="ping"><send event="ping" target="#_echo"/></transition>
+    <transition event="echo.ping"><log label="ping" expr="_event.invokeid"/></transition>
+    <transition event="echo.fetched"><log label="fetched" expr="_event.data"/></transition>
+    <transition event="timer"><log label="timer" expr="'fired'"/></transition>
+    <transition event="error.communication" target="failed"/>
+    <transition event="leave" target="away"/>
+  </state>
+  <state id="away">
+    <transition event="timer"><log label="timer" expr="'fired'"/></transition>
+  </state>
+  <state id="failed"/>
+</scxml>"##,
+        env = scxml_types::ENV_NAMESPACE_URI
+    )
+}
+
+fn deferred_host(http: &std::sync::Arc<HeldHttp>) -> SessionHost {
+    host_with(
+        ServiceComponents::new()
+            .with_values(
+                scxml_host_wasmtime::ExtensionEnvironment::new([
+                    scxml_host_wasmtime::EnvVariable::new(
+                        "ENDPOINT",
+                        "http://127.0.0.1:9/slow",
+                        [ECHO.to_owned()],
+                    ),
+                ])
+                .expect("valid values"),
+            )
+            .with_deferred_http(std::sync::Arc::clone(http) as _)
+            .bind(package(ECHO), component(ArtifactKind::ServiceExample))
+            .expect("the example service binds"),
+    )
+}
+
+fn open_deferred(
+    host: &SessionHost,
+    record: bool,
+    notified: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
+) -> LiveSession {
+    let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
+        SOURCE,
+        "deferred.scxml",
+        deferred_document(),
+    ))
+    .expect("fixture parses");
+    let ir = scxml_compiler_core::lower(&document).expect("fixture lowers");
+    let counter = std::sync::Arc::clone(notified);
+    host.open(SessionOpen {
+        machine_ir: &ir.to_json().expect("fixture IR encodes"),
+        data_model: ir.data_model.as_deref(),
+        session_id: "root",
+        embedder: Rc::new(NoResources),
+        max_commands: 256,
+        clock: LiveClock::Logical,
+        record,
+        replay: None,
+        http: LiveHttp {
+            on_service_response: Some(std::sync::Arc::new(move || {
+                counter.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            })),
+            ..LiveHttp::default()
+        },
+    })
+    .expect("the session opens")
+}
+
+#[test]
+fn a_deferred_request_never_blocks_the_session_and_its_outcome_arrives_through_wake() {
+    let http = std::sync::Arc::new(HeldHttp::default());
+    let host = deferred_host(&http);
+    let notified = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut session = open_deferred(&host, false, &notified);
+    session
+        .send(&ScriptedEvent::named("defer"))
+        .expect("defer is processed");
+    // The request is in flight; the session keeps processing events.
+    assert_eq!(http.held(), 1);
+    assert!(session.awaiting_service_responses());
+    session
+        .send(&ScriptedEvent::named("ping"))
+        .expect("ping is processed while the request is in flight");
+    assert_eq!(logs(&mut session), ["ping: echo"]);
+    // A logical session does not move its clock past the pending request.
+    session.run_until_idle().expect("idle");
+    assert!(logs(&mut session).is_empty(), "the 1 s timer waits");
+    assert_eq!(
+        session
+            .deliver_service_responses()
+            .expect("nothing settled"),
+        None
+    );
+    // The request settles off the session thread; the embedder is woken and
+    // delivers it, and the service's wake emits the status.
+    assert_eq!(http.settle_all(204), ["http://127.0.0.1:9/slow"]);
+    assert_eq!(notified.load(std::sync::atomic::Ordering::Acquire), 1);
+    assert!(
+        session.awaiting_service_responses(),
+        "settled, not delivered"
+    );
+    session
+        .deliver_service_responses()
+        .expect("the outcome is delivered")
+        .expect("one outcome settled");
+    assert_eq!(logs(&mut session), ["fetched: 204"]);
+    assert!(!session.awaiting_service_responses());
+    session.run_until_idle().expect("idle");
+    assert_eq!(logs(&mut session), ["timer: fired"]);
+    session.close().expect("the session closes");
+}
+
+#[test]
+fn leaving_the_invoking_state_abandons_a_deferred_request() {
+    let http = std::sync::Arc::new(HeldHttp::default());
+    let host = deferred_host(&http);
+    let notified = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut session = open_deferred(&host, false, &notified);
+    session
+        .send(&ScriptedEvent::named("defer"))
+        .expect("defer is processed");
+    assert!(session.awaiting_service_responses());
+    // The invoking state exits: the service is cancelled while its request
+    // is in flight, and the session no longer waits for it.
+    session
+        .send(&ScriptedEvent::named("leave"))
+        .expect("leave is processed");
+    assert_eq!(session.configuration().expect("configuration"), ["away"]);
+    assert!(!session.awaiting_service_responses());
+    session.run_until_idle().expect("idle");
+    assert_eq!(logs(&mut session), ["timer: fired"]);
+    // The late outcome reaches no one.
+    assert_eq!(http.settle_all(200).len(), 1);
+    session
+        .deliver_service_responses()
+        .expect("the late outcome is dropped");
+    assert!(logs(&mut session).is_empty());
+    assert_eq!(session.configuration().expect("configuration"), ["away"]);
+    session.close().expect("the session closes");
+}
+
+#[test]
+fn a_recording_session_starts_no_deferred_request() {
+    let http = std::sync::Arc::new(HeldHttp::default());
+    let host = deferred_host(&http);
+    let notified = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    // A recorded session's inputs must replay without the network: `begin`
+    // is refused, so the service's `send` fails and it is retired.
+    let mut session = open_deferred(&host, true, &notified);
+    session
+        .send(&ScriptedEvent::named("defer"))
+        .expect("defer is processed");
+    assert_eq!(http.held(), 0);
+    assert_eq!(session.configuration().expect("configuration"), ["failed"]);
+    session.close().expect("the session closes");
 }

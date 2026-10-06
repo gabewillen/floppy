@@ -11,6 +11,17 @@ on the session's logical clock, receives the events the session sends to
 exits first. A service that traps or fails is retired, and its invoking
 session receives `error.communication` with the invoke id.
 
+Invocation is a runtime action (SCXML 6.4), so a type the host does not
+bind is judged when its `<invoke>` starts, never earlier: an `<invoke>` of a
+type no service component is bound to, whether literal or given by
+`typeexpr`, raises `error.execution` when it starts, and a session whose
+document names such a type literally starts and runs normally until then.
+The session start (`machine-capabilities.load-services`) fails closed only
+when a *bound* service component does not load (it does not compile,
+imports an undeclared WASI interface, or a declared permission is not
+granted). A compile given the run's service packages still refuses a
+literal type none of them declares (`COMP004`).
+
 ## Service packages
 
 A service package manifest (`stateforward.scxml.service-package/v1`) binds
@@ -127,6 +138,37 @@ the variable whose value the host binds, in the host's `env` vocabulary
   elements (`--env`, `--env-file`), and their outbound transport only when
   the run is not recorded or replayed. The echo example declares the slot
   `endpoint`: its `fetch` event GETs the URL that slot's value supplies.
+
+## Slow requests without blocking the session
+
+`outbound-http.fetch` blocks the service's export call, and so the session,
+until the response arrives. A slow request (a model call, for example) uses
+the deferred pair instead:
+
+- `outbound-http.begin(request)` substitutes and admits the request exactly
+  as `fetch` does (the same bounds, declared origins, and slot references),
+  hands it to the embedder's deferred transport, and returns a ticket at
+  once. The invoking session keeps processing events and timers, so a
+  `<send delay>` timeout in the invoking state can preempt the request: when
+  the state exits, the service is cancelled and its requests are abandoned
+  (their outcomes are dropped when they arrive).
+- When the request settles, the host calls the instance's `wake` (also the
+  timer's wakeup call) at the session's current time; the service reads the
+  outcome with `outbound-http.take(ticket)`, which answers it once, and
+  `none` while the request is still in flight.
+- At most 16 requests of one instance are in flight or untaken
+  (`MAX_SERVICE_PENDING_REQUESTS`, an amplification guard on every build);
+  the next `begin` fails with `capacity-exhausted`.
+- Only a live session that neither records nor replays delivers outcomes
+  ([live-session.md](live-session.md)); in a batch run, a recording or
+  replaying session, or without a deferred transport
+  (`ServiceComponents::with_deferred_http`), `begin` fails with
+  `unavailable`. A logical-clock live session never moves its clock past a
+  pending request (`run_until_idle` returns while one is outstanding).
+- Extension components cannot `begin`: executable content is synchronous.
+
+The echo example's `defer` event GETs its `endpoint` this way and emits
+`echo.fetched` from the `wake` that delivers the outcome.
 
 ## Event contracts
 

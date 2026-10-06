@@ -641,33 +641,27 @@ impl SessionLinks {
         }
     }
 
-    /// `machine-capabilities.load-services`: every literal service type URI
-    /// of the session's document must be bound, and its component must load
-    /// (one `service-load` span): compiled, its WASI imports within what its
-    /// package declares and the run grants, and pre-instantiated against its
-    /// linker. An unbound one answers `unavailable`, and a component that
-    /// does not load is a host failure of the run; both fail the session
-    /// start closed, before the first macrostep. Nothing is instantiated
-    /// until an invocation starts.
+    /// `machine-capabilities.load-services`: the component of every literal
+    /// service type URI of the session's document that the host binds must
+    /// load (one `service-load` span): compiled, its WASI imports within
+    /// what its package declares and the run grants, and pre-instantiated
+    /// against its linker. A component that does not load is a host failure
+    /// of the run and fails the session start closed, before the first
+    /// macrostep. A literal type no service binds is not a load failure: it
+    /// names an invoke type this host does not support, and, exactly as for
+    /// an unsupported `typeexpr`, its `<invoke>` raises `error.execution`
+    /// when it starts (SCXML 6.4: invocation is a runtime action; a
+    /// document that never enters the invoking state runs unaffected).
+    /// Nothing is instantiated until an invocation starts.
     pub(crate) fn load_services(&self, type_uris: &[String]) -> Result<(), ComponentError> {
         let span =
             scxml_telemetry::observe(Module::HostWasmtime, Operation::HostWasmtimeServiceLoad);
         for uri in type_uris {
-            match self.core.load_service(uri) {
-                Ok(true) => {}
-                Ok(false) => {
-                    span.event(SignalEvent::InputRejected);
-                    span.fail(ErrorCategory::Validation);
-                    return Err(component_error(
-                        ErrorCode::Unavailable,
-                        "an invoked-service type the document names has no service component",
-                    ));
-                }
-                Err(error) => {
-                    span.event(SignalEvent::InputRejected);
-                    span.fail(ErrorCategory::Platform);
-                    return Err(fatal(&self.shared, error.into()));
-                }
+            // `Ok(false)`: unbound; `start-service` answers `unavailable`.
+            if let Err(error) = self.core.load_service(uri) {
+                span.event(SignalEvent::InputRejected);
+                span.fail(ErrorCategory::Platform);
+                return Err(fatal(&self.shared, error.into()));
             }
         }
         span.event(SignalEvent::ArtifactAccepted);
@@ -716,10 +710,11 @@ impl SessionLinks {
                 "the invocation exceeds the invoked sessions bounds",
             ));
         }
-        let handle = match self
-            .core
-            .instantiate_service(&request.type_uri, &self.execution_context)
-        {
+        let handle = match self.core.instantiate_service(
+            &request.type_uri,
+            &self.execution_context,
+            self.shared.http.service_responses.as_ref(),
+        ) {
             Ok(Some(handle)) => handle,
             Ok(None) => {
                 return Err(component_error(

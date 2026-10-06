@@ -1042,10 +1042,12 @@ interface machine-capability-types {
     /// SCXML processor type). `type-uris` is the Machine IR's list of them:
     /// exact URIs, sorted, unique, and never empty. The machine calls it
     /// exactly once per session, root or invoked, before data binding and
-    /// the first macrostep, and only when the list is not empty. Errors:
-    /// any error, including `unavailable` when a type URI has no bound
-    /// service component, fails the session start closed: no data is bound
-    /// and no macrostep runs.
+    /// the first macrostep, and only when the list is not empty. A type URI
+    /// with no bound service component is not an error here: it names an
+    /// invoke type the host does not support, and its `<invoke>` fails when
+    /// it starts (`start-service` answers `unavailable`, SCXML 6.4). Errors:
+    /// any error (a bound component that does not load) fails the session
+    /// start closed: no data is bound and no macrostep runs.
     load-services: func(type-uris: list<string>) -> result<_, component-error>;
     /// Starts one invoked service (SCXML 6.4): the host instantiates the
     /// service component bound to exactly `request.type-uri` in its own
@@ -1700,7 +1702,9 @@ interface invoked-service-api {
   /// autoforwarded.
   /// Errors: any error retires the instance and reports it `failed`.
   send: func(event: event) -> result<_, component-error>;
-  /// The wakeup `invoked-service-host.set-wakeup` asked for is due.
+  /// The wakeup `invoked-service-host.set-wakeup` asked for is due, or a
+  /// request this instance started with `outbound-http.begin` settled (its
+  /// outcome is ready for `outbound-http.take`); one call may follow both.
   /// Errors: as `send`.
   wake: func() -> result<_, component-error>;
   /// The invoking state exited (or the invoking session ended) before the
@@ -1747,9 +1751,11 @@ interface executable-content-extension-api {
 /// Deny by default: a host that grants nothing refuses every request with
 /// `unavailable`. A granting host sends only to the targets its embedder
 /// allowlists, follows no redirect (a redirect status is returned as the
-/// response), and adds no ambient credentials, cookies, or proxy. A call blocks
-/// the calling `execute` until the response or the failure; the granting host
-/// bounds its connect and total time. The URL, headers, and bodies are
+/// response), and adds no ambient credentials, cookies, or proxy. `fetch`
+/// blocks the calling `execute` (or service export call, and so the session)
+/// until the response or the failure; the granting host bounds its connect
+/// and total time. `begin` and `take` let an invoked service make a slow
+/// request without blocking the session. The URL, headers, and bodies are
 /// extension component payload: hosts never put them into telemetry. The
 /// capability works only during an extension component's `execute`, or an
 /// invoked service's `invoked-service-api` export call (admitted to the
@@ -1809,6 +1815,29 @@ interface outbound-http {
   /// or the call is made outside `execute` (or a service's export call); `payload-too-large` when the
   /// response body exceeds its bound.
   fetch: func(request: http-request) -> result<http-response, component-error>;
+  /// Starts one request without waiting for it: invoked services only (an
+  /// extension component's `execute` is synchronous executable content, so
+  /// there every call fails with `unavailable`). The host substitutes and
+  /// admits the request exactly as `fetch` does, hands it to a transport
+  /// that performs it off the session thread, and returns a ticket at once,
+  /// so the invoking session keeps processing events (and timers) while the
+  /// request is in flight. When the request settles, the host calls the
+  /// instance's `wake` at the session's current time; the service then
+  /// reads the outcome with `take`. A cancelled or retired instance's
+  /// requests are abandoned: their outcomes are dropped and no further
+  /// call reaches the instance. Tickets are unique per instance; at most 16
+  /// requests of one instance are in flight or untaken at once.
+  /// Errors: as `fetch` before anything is sent (`invalid-input`,
+  /// `unavailable` also when the run delivers no deferred outcome, as a
+  /// batch run or a recorded session does); `capacity-exhausted` past 16
+  /// requests.
+  begin: func(request: http-request) -> result<u64, component-error>;
+  /// The outcome of the request `ticket` started, once it settled, taken
+  /// once (the ticket is then forgotten); `none` while it is in flight and
+  /// for a ticket this instance does not hold. The outcome's errors are
+  /// `fetch`'s transport errors. Works only during an invoked service's
+  /// export call; elsewhere it answers `none`.
+  take: func(ticket: u64) -> option<result<http-response, component-error>>;
 }
 
 /// Read-only snapshot of the executing session, offered to extension components
