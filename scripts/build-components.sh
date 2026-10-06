@@ -4,12 +4,13 @@
 #
 # Usage: sh scripts/build-components.sh [--artifacts-dir DIR] [--session-only]
 #
-# 1. The scxml.rs session components a nemobot-host session links (machine,
-#    compiler, the three data models, both I/O processors, clock), built and
-#    verified by the subtree's own scxml.rs/scripts/verify-wasm-capabilities.sh
-#    into DIR/scxml, whose manifest.tsv SHA-256 is the config's
-#    `components.manifest-sha256`. Its CARGO_TARGET_DIR is
-#    target/scxml.rs (never the subtree's own target directory).
+# 1. The scxml.rs session components a `scxml-cli run` session links
+#    (machine, compiler, the three data models, both I/O processors, clock),
+#    built and verified by the subtree's own
+#    scxml.rs/scripts/verify-wasm-capabilities.sh into DIR/scxml, whose
+#    manifest.tsv SHA-256 is the run's `--components-manifest-sha256`. Its
+#    CARGO_TARGET_DIR is target/scxml.rs (never the subtree's own target
+#    directory).
 # 2. Unless --session-only: every nemobot namespace component and invoked
 #    service component, built one cargo invocation per component (so
 #    features never unify across them) with the reproducible release flags
@@ -19,8 +20,11 @@
 #    wasm-tools, and its imports checked against its allowlist below (no
 #    WASI interface is retained). DIR/namespaces and DIR/services receive
 #    each `<component>.virtualized.wasm` and a `components.tsv` with their
-#    sizes and SHA-256 digests (the `component-sha256` of each package in a
-#    config).
+#    sizes and SHA-256 digests.
+# 3. Unless --session-only: DIR/components.args, a scxml-cli argument file
+#    (`scxml-cli run @DIR/components.args ...`) that binds the session
+#    components and every package above to its verified component by
+#    SHA-256.
 #
 # DIR defaults to target/components. Tool identities are checked by the
 # scxml.rs script; this script checks them again before building namespaces.
@@ -235,3 +239,40 @@ build_component() {
 
 build_kind namespaces $namespace_components
 build_kind services $service_components
+
+# 3. DIR/components.args: a scxml-cli argument file (`scxml-cli run @FILE`,
+# one argument per line) that binds the session components and every
+# package above to the components just verified, each authenticated by its
+# SHA-256 (the trust anchors scxml-cli requires; the manifests are not).
+# Bots add their own argument file (bots/<name>/<name>.args) for the rest.
+package_args() {
+    flag=$1
+    uri_field=$2
+    manifest_path=$3
+    component_path=$4
+    uri=$(sed -n "s/.*\"$uri_field\": *\"\([^\"]*\)\".*/\1/p" "$manifest_path")
+    [ -n "$uri" ] || { echo "no $uri_field in $manifest_path" >&2; exit 1; }
+    printf '%s-package\n%s\n' "$flag" "$manifest_path"
+    printf '%s-component\n%s=%s\n' "$flag" "$uri" "$component_path"
+    printf '%s-component-sha256\n%s=%s\n' "$flag" "$uri" "$(sha256_file "$component_path")"
+}
+args_file="$artifacts_dir/components.args"
+args_tmp="$args_file.tmp"
+{
+    printf -- '--components\n%s\n' "$artifacts_dir/scxml"
+    printf -- '--components-manifest-sha256\n%s\n' "$session_manifest_sha256"
+    for component in $namespace_components; do
+        name=${component#nemobot_}
+        package_args --extension namespace-uri \
+            "$workspace/namespaces/$name/package/$name.extension.json" \
+            "$artifacts_dir/namespaces/$component.virtualized.wasm"
+    done
+    for component in $service_components; do
+        name=${component#nemobot_service_}
+        package_args --service service-uri \
+            "$workspace/services/$name/package/$name.service.json" \
+            "$artifacts_dir/services/$component.virtualized.wasm"
+    done
+} > "$args_tmp"
+mv "$args_tmp" "$args_file"
+printf 'components-args path=%s\n' "$args_file"
