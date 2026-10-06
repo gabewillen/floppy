@@ -445,6 +445,52 @@ fn system_one(chosen: &str, body: &[u8]) -> Option<String> {
     Some(json!({"model": "jev-latest", "answers": answers}).to_string())
 }
 
+/// The mock's answer to one request on `path` with the structured-output
+/// `schema`, after `authors` draft and `plans` plan requests on that path.
+fn mock_reply(
+    path: &str,
+    schema: Option<&str>,
+    authors: usize,
+    plans: usize,
+    body: &[u8],
+) -> Option<String> {
+    match (path, schema) {
+        (
+            "/repair/v1/chat/completions"
+            | "/broken/v1/chat/completions"
+            | "/smuggle/v1/chat/completions"
+            | "/unicode/v1/chat/completions"
+            | "/doctype/v1/chat/completions"
+            | "/impostor/v1/chat/completions",
+            Some("topology_plan"),
+        ) => Some(completion(PLAN)),
+        ("/flaky/v1/chat/completions", Some("topology_plan")) => {
+            (plans != 2).then(|| completion(PLAN))
+        }
+        ("/unicode/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&unicode_prefix_draft()))
+        }
+        ("/doctype/v1/chat/completions", Some("scxml_draft")) => Some(completion(&doctype_draft())),
+        ("/impostor/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&impostor_draft()))
+        }
+        ("/smuggle/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&smuggling_draft()))
+        }
+        ("/repair/v1/chat/completions", Some("scxml_draft")) => Some(completion(&match authors {
+            1 => invalid_draft(),
+            2 => fixable_draft(),
+            _ => draft(&traffic_light(&green_separate(), "red")),
+        })),
+        ("/broken/v1/chat/completions" | "/flaky/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&invalid_draft()))
+        }
+        ("/typesafe/v1/systemone", _) => system_one("triage.repair", body),
+        ("/redesign/v1/systemone", _) => system_one("triage.redesign", body),
+        _ => None,
+    }
+}
+
 /// One request the mock received.
 #[derive(Clone, Debug)]
 struct Received {
@@ -547,46 +593,7 @@ impl Mock {
                     };
                     (count("scxml_draft"), count("topology_plan"))
                 };
-                let reply = match (path.as_str(), request.schema_name()) {
-                    (
-                        "/repair/v1/chat/completions"
-                        | "/broken/v1/chat/completions"
-                        | "/smuggle/v1/chat/completions"
-                        | "/unicode/v1/chat/completions"
-                        | "/doctype/v1/chat/completions"
-                        | "/impostor/v1/chat/completions",
-                        Some("topology_plan"),
-                    ) => Some(completion(PLAN)),
-                    ("/flaky/v1/chat/completions", Some("topology_plan")) => {
-                        (plans != 2).then(|| completion(PLAN))
-                    }
-                    ("/unicode/v1/chat/completions", Some("scxml_draft")) => {
-                        Some(completion(&unicode_prefix_draft()))
-                    }
-                    ("/doctype/v1/chat/completions", Some("scxml_draft")) => {
-                        Some(completion(&doctype_draft()))
-                    }
-                    ("/impostor/v1/chat/completions", Some("scxml_draft")) => {
-                        Some(completion(&impostor_draft()))
-                    }
-                    ("/smuggle/v1/chat/completions", Some("scxml_draft")) => {
-                        Some(completion(&smuggling_draft()))
-                    }
-                    ("/repair/v1/chat/completions", Some("scxml_draft")) => {
-                        Some(completion(&match authors {
-                            1 => invalid_draft(),
-                            2 => fixable_draft(),
-                            _ => draft(&traffic_light(&green_separate(), "red")),
-                        }))
-                    }
-                    (
-                        "/broken/v1/chat/completions" | "/flaky/v1/chat/completions",
-                        Some("scxml_draft"),
-                    ) => Some(completion(&invalid_draft())),
-                    ("/typesafe/v1/systemone", _) => system_one("triage.repair", &body),
-                    ("/redesign/v1/systemone", _) => system_one("triage.redesign", &body),
-                    _ => None,
-                };
+                let reply = mock_reply(&path, request.schema_name(), authors, plans, &body);
                 let (status, reply) = reply.map_or(("404 Not Found", "{}".to_owned()), |reply| {
                     ("200 OK", reply)
                 });
