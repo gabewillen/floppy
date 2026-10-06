@@ -11,8 +11,8 @@ reopening one needs the maintainer. All are dated 2026-10-06.
 | Kind | squashed `git subtree` |
 | Source repository | local scxml.rs (`stateforward/scxml.rs`) |
 | Source branch | `feat/invoke-services` |
-| Source commit | `9971c05abdc3f9a9b4d2367ab71f256bfd6075ba` ("Resolve repository services from services/<name>@<tag> like repository namespaces") |
-| Squash commit here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05") |
+| Source commit | `fe7d555daf8beb99f69f25024d3e70fdb8bf28bb` ("Bound the events one invoked-service export call may emit by count and bytes") |
+| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d") |
 | Update | `git subtree pull --prefix scxml.rs <scxml.rs> feat/invoke-services --squash`, after the change lands upstream |
 
 ## Decisions
@@ -33,6 +33,19 @@ reopening one needs the maintainer. All are dated 2026-10-06.
 | D12 | 2026-10-06 | Git work is local commits only: no push, no pull requests, no remotes, no branches beyond the named ones. Each repository's AGENTS.md/CONTRIBUTING.md is followed; scxml.rs's rules are normative (fail closed, no unwrap/panic on reachable paths, wasm-only resource bounds, hard cutovers, canonical outputs, thin hosts, Wasm components behind versioned WIT). |
 
 ## Notes on applying the decisions
+
+- D4 (2026-10-06, review round 1): slice 2 delivers WASI permissions for
+  invoked services only. The scxml.rs session host links no WASI interface
+  into extension components (`ArtifactError::WasiExtensionUnsupported`:
+  the extension store is not `Send`), so an extension package that declares
+  a WASI permission fails closed, in scxml.rs and in `nemobot-host`. This
+  is a known limitation, not parity with the decision; the follow-up is
+  WASI linking for extension stores upstream in scxml.rs.
+- D5 (2026-10-06, review round 1): "candidates are the enabled
+  transitions" is applied by evaluating each transition's `cond` in the
+  current data model (with the current `_event`) when `decision:choose`
+  builds its menu; see `namespaces/decision` ("Guards") for how a failed or
+  non-boolean guard is treated.
 
 - D10 and AGENTS.md (2026-10-06, review round 1): AGENTS.md forbids compiling
   a backend URL into a component, so `generate` and `decision` compile in no
