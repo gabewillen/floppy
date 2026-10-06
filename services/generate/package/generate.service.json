@@ -8,12 +8,5 @@
   "wit-world": "stateforward:scxml/invoked-service",
   "wit-version": "0.2.0",
   "http-origins": ["https://api.openai.com"],
-  "env-slots": ["apikey", "baseurl"],
-  "events": {
-    "emits": [
-      {"name": "generate.failed", "schema-artifact": "events.json#/$defs/Failed", "schema-sha256": "4a81802a34aefa7dc2ae00ad12bf05d5f53f69595e4e45856b263dadb291c97d"},
-      {"name": "generate.result", "schema-artifact": "events.json#/$defs/Result", "schema-sha256": "4a81802a34aefa7dc2ae00ad12bf05d5f53f69595e4e45856b263dadb291c97d"}
-    ],
-    "accepts": []
-  }
+  "env-slots": ["apikey", "baseurl"]
 }

@@ -30,7 +30,7 @@
 # scxml.rs script; this script checks them again before building namespaces.
 set -eu
 
-expected_wasm_tools='wasm-tools 1.240.0'
+expected_wasm_tools='wasm-tools 1.244.0'
 expected_wasi_virt='wasi-virt 0.2.0'
 expected_wasi_virt_source='https://github.com/bytecodealliance/WASI-Virt'
 expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
@@ -93,15 +93,14 @@ expected_imports() {
                 'stateforward:scxml/data-model-host@0.2.0' \
                 'stateforward:scxml/session-snapshot-host@0.2.0'
             ;;
-        # The generate and decision services: emit and complete through
-        # invoked-service-host, one deferred request through outbound-http
-        # (begin/take); nothing else.
+        # The generate and decision services: one async `invoke` export
+        # (their events go to the stream it returns) and one request through
+        # outbound-http's async `fetch`; they never read the logical clock.
         nemobot_service_generate|nemobot_service_decision)
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
-                'stateforward:scxml/telemetry@0.2.0' \
-                'stateforward:scxml/invoked-service-host@0.2.0' \
-                'stateforward:scxml/outbound-http@0.2.0'
+                'stateforward:scxml/outbound-http@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0'
             ;;
         *) echo "no import allowlist for component: $1" >&2; exit 1 ;;
     esac
@@ -218,7 +217,7 @@ build_component() {
         cp "$raw" "$repeat"
     fi
     cmp -s "$virtualized" "$repeat" || { echo "non-deterministic wasi-virt output: $component" >&2; exit 1; }
-    wasm-tools validate --features component-model "$virtualized"
+    wasm-tools validate --features component-model,cm-async "$virtualized"
     imports=$(wasm-tools component wit "$virtualized" | sed -n 's/^  import \(.*\);$/\1/p')
     if printf '%s\n' "$imports" | grep -q '^wasi:'; then
         echo "virtualized component retains a WASI capability: $component" >&2

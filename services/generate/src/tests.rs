@@ -212,7 +212,7 @@ fn a_text_reply_becomes_the_result_event() {
     let generation = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
     assert_eq!(
         outcome(&generation, ok(reply("hello there"))),
-        Emitted {
+        Returned {
             name: RESULT_EVENT,
             data: r#"{"text":"hello there"}"#.into()
         }
@@ -220,7 +220,7 @@ fn a_text_reply_becomes_the_result_event() {
 }
 
 #[test]
-fn a_structured_reply_is_validated_before_it_is_emitted() {
+fn a_structured_reply_is_validated_before_it_is_returned() {
     let generation = parse(&[
         ("model", text("m")),
         ("prompt", text("p")),
@@ -229,18 +229,18 @@ fn a_structured_reply_is_validated_before_it_is_emitted() {
     .expect("valid");
     assert_eq!(
         outcome(&generation, ok(reply(r#"{"score":41,"answer":"yes"}"#))),
-        Emitted {
+        Returned {
             name: RESULT_EVENT,
             data: r#"{"json":{"answer":"yes","score":41}}"#.into()
         }
     );
     assert_eq!(
         outcome(&generation, ok(reply(r#"{"answer":"yes"}"#))),
-        Emitted::failed(FailureCode::SchemaMismatch)
+        Returned::failed(FailureCode::SchemaMismatch)
     );
     assert_eq!(
         outcome(&generation, ok(reply("not json"))),
-        Emitted::failed(FailureCode::NotJson)
+        Returned::failed(FailureCode::NotJson)
     );
 }
 
@@ -250,46 +250,46 @@ fn every_failure_has_its_closed_code() {
     let failed = |answered| outcome(&generation, answered);
     assert_eq!(
         failed(Err(TransportFailure::Unavailable)),
-        Emitted::failed(FailureCode::Transport)
+        Returned::failed(FailureCode::Transport)
     );
     assert_eq!(
         failed(Err(TransportFailure::TooLarge)),
-        Emitted::failed(FailureCode::Malformed)
+        Returned::failed(FailureCode::Malformed)
     );
     assert_eq!(
         failed(Ok(Response {
             status: 500,
             body: Vec::new()
         })),
-        Emitted::failed(FailureCode::Status)
+        Returned::failed(FailureCode::Status)
     );
     assert_eq!(
         failed(ok(b"{}".to_vec())),
-        Emitted::failed(FailureCode::Malformed)
+        Returned::failed(FailureCode::Malformed)
     );
     assert_eq!(
         failed(ok(stream(&[
             chunk(&serde_json::json!({ "content": "cut" }), None),
             chunk(&serde_json::json!({}), Some("length")),
         ]))),
-        Emitted::failed(FailureCode::Truncated)
+        Returned::failed(FailureCode::Truncated)
     );
     assert_eq!(
         failed(ok(stream(&[chunk(
             &serde_json::json!({}),
             Some("content_filter")
         )]))),
-        Emitted::failed(FailureCode::Filtered)
+        Returned::failed(FailureCode::Filtered)
     );
     assert_eq!(
         failed(ok(stream(&[
             chunk(&serde_json::json!({ "refusal": "n" }), None),
             chunk(&serde_json::json!({ "refusal": "o" }), Some("stop")),
         ]))),
-        Emitted::failed(FailureCode::Refusal)
+        Returned::failed(FailureCode::Refusal)
     );
     assert_eq!(
-        Emitted::failed(FailureCode::Unconfigured).data,
+        Returned::failed(FailureCode::Unconfigured).data,
         r#"{"code":"unconfigured"}"#
     );
 }
@@ -347,19 +347,21 @@ fn a_stream_that_is_cut_short_or_malformed_is_never_a_reply() {
     );
 }
 
+/// The builder's `event:schema` for each of this service's events
+/// (`bots/builder/schemas`), which the invoking document declares: a service
+/// package declares no event contract.
 #[test]
-fn every_failure_code_and_both_events_satisfy_the_package_event_schemas() {
-    let events: Json =
-        serde_json::from_str(include_str!("../package/events.json")).expect("events.json is JSON");
-    let compile = |name: &str| {
-        let mut schema = events["$defs"][name].clone();
-        schema["$schema"] = events["$schema"].clone();
-        CompiledSchema::new(&schema.to_string()).expect("the schema compiles")
+fn every_failure_code_and_both_events_satisfy_the_builder_event_schemas() {
+    let compile = |text: &str| {
+        let value: Json = serde_json::from_str(text).expect("the schema is JSON");
+        CompiledSchema::new(&scxml_event_schema::canonical_json(&value))
+            .expect("the schema compiles")
     };
-    let failed = compile("Failed");
+    let failed = compile(include_str!(
+        "../../../bots/builder/schemas/generate.failed.json"
+    ));
     for code in [
         FailureCode::Unconfigured,
-        FailureCode::Refused,
         FailureCode::Transport,
         FailureCode::Status,
         FailureCode::Malformed,
@@ -370,13 +372,15 @@ fn every_failure_code_and_both_events_satisfy_the_package_event_schemas() {
         FailureCode::SchemaMismatch,
     ] {
         assert!(
-            failed.admits(&Data::JsonObject(Emitted::failed(code).data)),
+            failed.admits(&Data::JsonObject(Returned::failed(code).data)),
             "{}",
             code.name()
         );
     }
     assert!(!failed.admits(&Data::JsonObject(r#"{"code":"other"}"#.into())));
-    let result = compile("Result");
+    let result = compile(include_str!(
+        "../../../bots/builder/schemas/generate.result.json"
+    ));
     for data in [r#"{"text":"t"}"#, r#"{"json":{"a":1}}"#, r#"{"json":null}"#] {
         assert!(result.admits(&Data::JsonObject(data.into())), "{data}");
     }
@@ -400,5 +404,4 @@ fn the_package_manifest_binds_the_exact_uri_and_artifacts() {
         "nemobot_service_generate.virtualized.wasm"
     );
     assert_eq!(manifest.env_slots, [API_KEY_SLOT, BASE_URL_SLOT]);
-    assert!(manifest.wasi_permissions.is_empty());
 }

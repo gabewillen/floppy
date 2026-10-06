@@ -1,6 +1,6 @@
 [package]
 name = "nemobot-service-decision"
-description = "The `decision` invoked service: choose an event from a menu (filled from grounded options and validated against its schema), rank, or classify, through a pluggable backend, as a Wasm component that never blocks the session"
+description = "The `decision` invoked service: choose an event from a menu (filled from grounded options and validated against its schema), rank, or classify, through a pluggable backend, as a Wasm component whose `invoke` export is an `async func`"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -19,7 +19,8 @@ crate-type = ["cdylib", "rlib"]
 scxml-event-schema.workspace = true
 scxml-types.workspace = true
 serde_json.workspace = true
-wit-bindgen.workspace = true
+# The WASI 0.3 async ABI: `invoke` is an `async func`.
+wit-bindgen = { workspace = true, features = ["async", "async-spawn"] }
 
 [dev-dependencies]
 # The package test reads the manifest with the parser every host uses.

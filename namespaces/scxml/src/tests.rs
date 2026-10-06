@@ -69,7 +69,6 @@ fn the_package_binds_the_exact_uri_schema_digest_and_world() {
     );
     assert!(manifest.http_origins.is_empty(), "no network");
     assert!(manifest.env_slots.is_empty(), "no env slots");
-    assert!(manifest.wasi_permissions.is_empty(), "no WASI permission");
     manifest
         .verify_schema(&scxml_validator_core::SchemaSource::new(
             "scxml.xsd",

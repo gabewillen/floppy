@@ -69,33 +69,37 @@
 //! * **The decision.** One batch asks the selection (every offered event,
 //!   plus [`ABSTAIN_LABEL`]) and every offered event's member questions.
 //!   When nothing is offered, the abstain label wins, or the chosen event's
-//!   probability is below `threshold`, the service emits [`ABSTAIN_EVENT`]
+//!   probability is below `threshold`, the service returns [`ABSTAIN_EVENT`]
 //!   `{"reason": "no-candidates" | "declined" | "below-threshold", "confidence": P}`
 //!   (`confidence` absent for `no-candidates`, which sends nothing).
-//! * **Validation before emit.** The filled data must satisfy the chosen
-//!   event's schema from the menu; otherwise the service emits
+//! * **Validation before returning.** The filled data must satisfy the chosen
+//!   event's schema from the menu; otherwise the service returns
 //!   [`FAILED_EVENT`] `{"code": "schema-mismatch"}` and never the event.
 //!
 //! # `rank` and `classify`
 //!
-//! `rank` emits [`RANKED_EVENT`] `{"ranking": [{"candidate": C, "score": P}]}`,
+//! `rank` returns [`RANKED_EVENT`] `{"ranking": [{"candidate": C, "score": P}]}`,
 //! every candidate once, by score descending, ties by label. `classify`
-//! emits [`CLASSIFIED_EVENT`] `{"labels": {L: P}}` with every label's
+//! returns [`CLASSIFIED_EVENT`] `{"labels": {L: P}}` with every label's
 //! probability.
 //!
-//! # Events and contracts
+//! # Events
 //!
-//! Every invocation emits exactly one event, then completes. A failure
-//! emits [`FAILED_EVENT`] `{"code": C}` with one closed [`FailureCode`].
-//! The chosen event of `choose` is defined by the invoking document (its
-//! menu's `event:schema` transitions), so the package cannot declare it, and
-//! scxml.rs's package event contract is closed once it declares any event:
-//! the package therefore declares no event contract (the host checks emits
-//! against bounds only), and the service validates what it emits itself:
-//! the chosen event's data against the menu's schema for it, and its own
-//! events by construction (their shapes are documented here). An event name
-//! the menu offers is a valid SCXML event name with no `*` and no empty
-//! token.
+//! `invoke` (the component's one export, an `async func`) writes exactly
+//! one event to the stream it returns, then resolves its result future with
+//! no data. A failure returns [`FAILED_EVENT`] `{"code": C}` with one closed
+//! [`FailureCode`]. The chosen event of `choose` is defined by the invoking
+//! document (its menu's `event:schema` transitions), and the document
+//! describes this service's own events with `event:schema` too
+//! (`bots/builder/builder.scxml`); the service validates what it returns
+//! itself: the chosen event's data against the menu's schema for it, and
+//! its own events by construction (their shapes are documented here). An
+//! event name the menu offers is a valid SCXML event name with no `*` and no
+//! empty token. The service reads no event: it drops the event stream
+//! `invoke` receives. `outbound-http.fetch` is an `async func`: awaiting it
+//! suspends only the invocation's own task, and leaving the invoking state
+//! cancels the invocation (SCXML 6.4), which closes the request's
+//! connection.
 //!
 //! # Bounds
 //!
@@ -109,11 +113,12 @@
 //!
 //! # Telemetry
 //!
-//! Each export call records one observation through scxml.rs's `telemetry`
-//! WIT facade: its closed operation, its closed outcome (`ok`, `rejected`,
-//! `failed`), and one closed signal event. No attribute carries the state, a
-//! label, an event name, or a URL, so the cardinality is the product of the
-//! three closed enums.
+//! `invoke` records one observation through scxml.rs's `telemetry` WIT
+//! facade (operation `start`: its closed outcome, `ok`, `rejected`, or
+//! `failed`, and one closed signal event), and one closed signal event
+//! (operation `send`) when it returns its event. No attribute carries the
+//! state, a label, an event name, or a URL, so the cardinality is the
+//! product of the closed enums.
 
 #![cfg_attr(not(target_arch = "wasm32"), forbid(unsafe_code))]
 #![cfg_attr(
@@ -153,13 +158,13 @@ pub const API_KEY_SLOT: &str = "apikey";
 /// The `env` slot of the API base URL (`env:baseurl`).
 pub const BASE_URL_SLOT: &str = "baseurl";
 
-/// The event `choose` emits when it takes no event.
+/// The event `choose` returns when it takes no event.
 pub const ABSTAIN_EVENT: &str = "decision.abstain";
-/// The event `rank` emits.
+/// The event `rank` returns.
 pub const RANKED_EVENT: &str = "decision.ranked";
-/// The event `classify` emits.
+/// The event `classify` returns.
 pub const CLASSIFIED_EVENT: &str = "decision.classified";
-/// The event a failed decision emits.
+/// The event a failed decision returns.
 pub const FAILED_EVENT: &str = "decision.failed";
 /// The selection's reserved criterion: no event fits. It holds spaces, so
 /// it is never an event name.
@@ -230,7 +235,9 @@ pub struct Response {
 /// Why the transport answered no response.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransportFailure {
-    /// No response: refused, unreachable, timed out, or failed.
+    /// No response: refused by the host before sending (an origin the
+    /// package does not declare, or no transport), unreachable, timed out,
+    /// or failed.
     Unavailable,
     /// The response body exceeds the host's bound.
     TooLarge,
@@ -241,8 +248,6 @@ pub enum TransportFailure {
 pub enum FailureCode {
     /// The `apikey` or `baseurl` slot names no variable the run holds.
     Unconfigured,
-    /// The host refused the request before sending it.
-    Refused,
     /// The transport failed: no response.
     Transport,
     /// The backend answered with a non-2xx status.
@@ -260,7 +265,6 @@ impl FailureCode {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Unconfigured => "unconfigured",
-            Self::Refused => "refused",
             Self::Transport => "transport",
             Self::Status => "status",
             Self::Malformed => "malformed",
@@ -269,17 +273,17 @@ impl FailureCode {
     }
 }
 
-/// The one event an invocation emits before it completes: its name and its
+/// The one event an invocation returns before it completes: its name and its
 /// data as a canonical JSON object.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Emitted {
+pub struct Returned {
     /// The event name: a menu event, or one of this service's events.
     pub name: String,
     /// Canonical JSON object text.
     pub data: String,
 }
 
-impl Emitted {
+impl Returned {
     fn new(name: &str, data: &Json) -> Self {
         Self {
             name: name.to_owned(),
@@ -303,7 +307,7 @@ impl Emitted {
     }
 }
 
-/// One event `choose` may emit.
+/// One event `choose` may return.
 #[derive(Debug)]
 pub struct Candidate {
     /// The event name.
@@ -716,11 +720,11 @@ pub fn parse_parameters<'a>(
     })
 }
 
-/// What a request does next: emit at once (nothing to ask), or ask.
+/// What a request does next: return at once (nothing to ask), or ask.
 #[derive(Debug)]
 pub enum Plan {
     /// Emit this event and complete without a request (an empty menu).
-    Emit(Emitted),
+    Return(Returned),
     /// Ask the backend this batch.
     Ask(Prepared),
 }
@@ -842,7 +846,7 @@ impl DecisionRequest {
                     .filter_map(|index| ground(&menu, index, evidence.as_ref()))
                     .collect();
                 if offered.is_empty() {
-                    return Ok(Plan::Emit(Emitted::abstain("no-candidates", None)));
+                    return Ok(Plan::Return(Returned::abstain("no-candidates", None)));
                 }
                 (
                     choose_questions(&menu, &offered, instructions),
@@ -906,25 +910,25 @@ impl Prepared {
         &self,
         backend: &B,
         answered: Result<Response, TransportFailure>,
-    ) -> Emitted {
+    ) -> Returned {
         let response = match answered {
             Ok(response) => response,
-            Err(TransportFailure::Unavailable) => return Emitted::failed(FailureCode::Transport),
-            Err(TransportFailure::TooLarge) => return Emitted::failed(FailureCode::Malformed),
+            Err(TransportFailure::Unavailable) => return Returned::failed(FailureCode::Transport),
+            Err(TransportFailure::TooLarge) => return Returned::failed(FailureCode::Malformed),
         };
         if !(200..300).contains(&response.status) {
-            return Emitted::failed(FailureCode::Status);
+            return Returned::failed(FailureCode::Status);
         }
         let Ok(distributions) = backend.answers(&self.batch, &response.body) else {
-            return Emitted::failed(FailureCode::Malformed);
+            return Returned::failed(FailureCode::Malformed);
         };
         match self.decided(&distributions) {
-            Ok(emitted) => emitted,
-            Err(code) => Emitted::failed(code),
+            Ok(returned) => returned,
+            Err(code) => Returned::failed(code),
         }
     }
 
-    fn decided(&self, distributions: &[Distribution]) -> Result<Emitted, FailureCode> {
+    fn decided(&self, distributions: &[Distribution]) -> Result<Returned, FailureCode> {
         let question = self.batch.questions.first().ok_or(NO_ANSWER)?;
         let distribution = distributions.first().ok_or(NO_ANSWER)?;
         match &self.decide {
@@ -941,10 +945,10 @@ impl Prepared {
                     .unwrap_or(0.0);
                 let Some(grounded) = offered.get(chosen) else {
                     // The abstain label is the selection's last criterion.
-                    return Ok(Emitted::abstain("declined", Some(confidence)));
+                    return Ok(Returned::abstain("declined", Some(confidence)));
                 };
                 if confidence < *threshold {
-                    return Ok(Emitted::abstain("below-threshold", Some(confidence)));
+                    return Ok(Returned::abstain("below-threshold", Some(confidence)));
                 }
                 let candidate = menu.get(grounded.candidate).ok_or(NO_ANSWER)?;
                 let data = filled_data(offered, chosen, distributions)?;
@@ -954,7 +958,7 @@ impl Prepared {
                 {
                     return Err(FailureCode::SchemaMismatch);
                 }
-                Ok(Emitted::new(&candidate.event, &data))
+                Ok(Returned::new(&candidate.event, &data))
             }
             Decide::Rank { candidates } => {
                 let mut ranked: Vec<(f64, &str, &Json)> = question
@@ -983,7 +987,7 @@ impl Prepared {
                         serde_json::json!({ "candidate": candidate, "score": score })
                     })
                     .collect();
-                Ok(Emitted::new(
+                Ok(Returned::new(
                     RANKED_EVENT,
                     &serde_json::json!({ "ranking": ranking }),
                 ))
@@ -1005,7 +1009,7 @@ impl Prepared {
                         )
                     })
                     .collect();
-                Ok(Emitted::new(
+                Ok(Returned::new(
                     CLASSIFIED_EVENT,
                     &serde_json::json!({ "labels": labels }),
                 ))
@@ -1023,33 +1027,24 @@ mod guest {
     wit_bindgen::generate!({
         world: "invoked-service",
         path: "../../scxml.rs/crates/scxml-wit/wit/scxml",
+        // The world's `wasi:clocks` interfaces too.
+        generate_all,
     });
 
-    use std::cell::RefCell;
-
     use exports::stateforward::scxml::invoked_service_api::Guest;
-    use stateforward::scxml::invoked_service_host;
     use stateforward::scxml::outbound_http::{self, BodyPart, HttpHeader, HttpRequest, TextPart};
     use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
     use stateforward::scxml::types::{
-        ComponentError, DataValue, ErrorCode, ErrorVersion, Event, EventType, ServiceInvocation,
+        ComponentError, DataValue, ErrorCode, ErrorVersion, Event, EventType, InvokeRequest,
         SlotReference,
     };
 
-    use super::{Emitted, FailureCode, Part, Plan, Prepared, Response, TransportFailure, TypeSafe};
+    use super::{
+        FailureCode, Part, Plan, Prepared, Response, Returned, TransportFailure, TypeSafe,
+    };
 
-    /// One invocation's prepared batch and the ticket of its request in
-    /// flight.
-    struct Pending {
-        prepared: Prepared,
-        ticket: u64,
-    }
-
-    thread_local! {
-        // This instance's one invocation (see the generate service: one
-        // owner, one thread, no re-entry).
-        static PENDING: RefCell<Option<Pending>> = const { RefCell::new(None) };
-    }
+    /// The invocation's result: `ok` (no done data), or its error.
+    type Done = Result<Option<DataValue>, ComponentError>;
 
     struct Component;
 
@@ -1092,20 +1087,18 @@ mod guest {
         })
     }
 
-    /// Emits the invocation's one event, then completes.
-    fn finish(emitted: &Emitted) -> Result<(), ComponentError> {
-        invoked_service_host::emit(&Event {
-            name: emitted.name.clone(),
+    fn event(returned: &Returned) -> Event {
+        Event {
+            name: returned.name.clone(),
             event_type: EventType::External,
             send_id: None,
             origin: None,
             origin_type: None,
             invoke_id: None,
-            data: DataValue::JsonObject(emitted.data.clone()),
+            data: DataValue::JsonObject(returned.data.clone()),
             raw: None,
             trace_context: None,
-        })?;
-        invoked_service_host::complete(None)
+        }
     }
 
     fn slot(references: &[SlotReference], name: &str) -> Option<u32> {
@@ -1115,115 +1108,121 @@ mod guest {
             .map(|bound| bound.reference)
     }
 
+    /// What `invoke` found: the one event to return at once, or the batch
+    /// to ask first.
+    enum Next {
+        Return(Returned),
+        Ask(Box<Prepared>, HttpRequest),
+    }
+
+    fn next(request: InvokeRequest) -> Result<Next, ComponentError> {
+        if request.type_uri != super::SERVICE_URI {
+            return Err(error(ErrorCode::InvalidInput, "service type URI differs"));
+        }
+        let parameters = request
+            .parameters
+            .into_iter()
+            .map(|entry| Ok((entry.name, native_value(entry.value)?)))
+            .collect::<Result<Vec<_>, ComponentError>>()?;
+        let plan = super::parse_parameters(
+            parameters
+                .iter()
+                .map(|(name, value)| (name.as_str(), value)),
+        )
+        .and_then(super::DecisionRequest::plan)
+        .map_err(|detail| error(ErrorCode::InvalidInput, detail))?;
+        let prepared = match plan {
+            Plan::Return(returned) => return Ok(Next::Return(returned)),
+            Plan::Ask(prepared) => prepared,
+        };
+        let (Some(api_key), Some(base_url)) = (
+            slot(&request.references, super::API_KEY_SLOT),
+            slot(&request.references, super::BASE_URL_SLOT),
+        ) else {
+            return Ok(Next::Return(Returned::failed(FailureCode::Unconfigured)));
+        };
+        let built = prepared.request(&TypeSafe, api_key, base_url);
+        let http = HttpRequest {
+            method: "POST".into(),
+            url: text_parts(&built.url),
+            headers: built
+                .headers
+                .iter()
+                .map(|(name, value)| HttpHeader {
+                    name: name.clone(),
+                    value: text_parts(value),
+                })
+                .collect(),
+            body: vec![BodyPart::Bytes(built.body)],
+        };
+        Ok(Next::Ask(Box::new(prepared), http))
+    }
+
+    #[allow(
+        clippy::unused_async_trait_impl,
+        reason = "the WIT `invoke` is an `async func`; it returns once its task is spawned"
+    )]
     impl Guest for Component {
-        fn type_uri() -> String {
-            telemetry::event(
-                Operation::TypeUri,
-                SignalEvent::TransformationCompleted,
-                None,
-            );
-            super::SERVICE_URI.to_owned()
-        }
-
-        fn start(
-            request: ServiceInvocation,
-            references: Vec<SlotReference>,
-        ) -> Result<(), ComponentError> {
-            observed(Operation::Start, || {
-                if request.type_uri != super::SERVICE_URI {
-                    return Err(error(ErrorCode::InvalidInput, "service type URI differs"));
-                }
-                let parameters = request
-                    .parameters
-                    .into_iter()
-                    .map(|entry| Ok((entry.name, native_value(entry.value)?)))
-                    .collect::<Result<Vec<_>, ComponentError>>()?;
-                let plan = super::parse_parameters(
-                    parameters
-                        .iter()
-                        .map(|(name, value)| (name.as_str(), value)),
-                )
-                .and_then(super::DecisionRequest::plan)
-                .map_err(|detail| error(ErrorCode::InvalidInput, detail))?;
-                let prepared = match plan {
-                    Plan::Emit(emitted) => return finish(&emitted),
-                    Plan::Ask(prepared) => prepared,
-                };
-                let (Some(api_key), Some(base_url)) = (
-                    slot(&references, super::API_KEY_SLOT),
-                    slot(&references, super::BASE_URL_SLOT),
-                ) else {
-                    return finish(&Emitted::failed(FailureCode::Unconfigured));
-                };
-                let built = prepared.request(&TypeSafe, api_key, base_url);
-                let ticket = outbound_http::begin(&HttpRequest {
-                    method: "POST".into(),
-                    url: text_parts(&built.url),
-                    headers: built
-                        .headers
-                        .iter()
-                        .map(|(name, value)| HttpHeader {
-                            name: name.clone(),
-                            value: text_parts(value),
-                        })
-                        .collect(),
-                    body: vec![BodyPart::Bytes(built.body)],
-                });
-                match ticket {
-                    Ok(ticket) => {
-                        PENDING.set(Some(Pending { prepared, ticket }));
-                        Ok(())
-                    }
-                    Err(_) => finish(&Emitted::failed(FailureCode::Refused)),
-                }
-            })
-        }
-
-        fn send(_event: Event) -> Result<(), ComponentError> {
-            observed(Operation::Send, || {
+        async fn invoke(
+            request: InvokeRequest,
+            _events: wit_bindgen::StreamReader<Event>,
+        ) -> Result<
+            (
+                wit_bindgen::StreamReader<Event>,
+                wit_bindgen::FutureReader<Done>,
+            ),
+            ComponentError,
+        > {
+            // The service accepts no event: its input stream is dropped.
+            let next = observed(Operation::Start, || next(request))?;
+            let (mut returned, returned_reader) = wit_stream::new::<Event>();
+            let (done, done_reader) = wit_future::new::<Done>(|| {
                 Err(error(
-                    ErrorCode::InvalidInput,
-                    "the decision service accepts no event",
+                    ErrorCode::Platform,
+                    "the service ended without a result",
                 ))
-            })
-        }
-
-        fn wake() -> Result<(), ComponentError> {
-            observed(Operation::Wake, || {
-                let settled = PENDING.with_borrow(|pending| {
-                    pending
-                        .as_ref()
-                        .and_then(|pending| outbound_http::take(pending.ticket))
-                });
-                let Some(settled) = settled else {
-                    return Ok(());
+            });
+            wit_bindgen::spawn(async move {
+                let decided = match next {
+                    Next::Return(decided) => decided,
+                    // Suspends only this task, never the invoking session.
+                    Next::Ask(prepared, http) => {
+                        let answered = outbound_http::fetch(http)
+                            .await
+                            .map(|response| Response {
+                                status: response.status,
+                                body: response.body,
+                            })
+                            .map_err(|failure| match failure.code {
+                                ErrorCode::PayloadTooLarge => TransportFailure::TooLarge,
+                                _ => TransportFailure::Unavailable,
+                            });
+                        prepared.decide(&TypeSafe, answered)
+                    }
                 };
-                let Some(pending) = PENDING.take() else {
-                    return Ok(());
-                };
-                let answered = settled
-                    .map(|response| Response {
-                        status: response.status,
-                        body: response.body,
-                    })
-                    .map_err(|failure| match failure.code {
-                        ErrorCode::PayloadTooLarge => TransportFailure::TooLarge,
-                        _ => TransportFailure::Unavailable,
-                    });
-                finish(&pending.prepared.decide(&TypeSafe, answered))
-            })
-        }
-
-        fn cancel() -> Result<(), ComponentError> {
-            observed(Operation::Cancel, || {
-                PENDING.set(None);
-                Ok(())
-            })
+                telemetry::event(
+                    Operation::Send,
+                    if decided.name == super::FAILED_EVENT {
+                        SignalEvent::InputRejected
+                    } else {
+                        SignalEvent::TransformationCompleted
+                    },
+                    None,
+                );
+                // The one event, then the result: `done.invoke.<id>` follows
+                // it.
+                if returned.write_one(event(&decided)).await.is_some() {
+                    return;
+                }
+                drop(returned);
+                let _ = done.write(Ok(None)).await;
+            });
+            Ok((returned_reader, done_reader))
         }
     }
 
-    /// One export call's closed telemetry: its outcome and one event (no
-    /// attribute carries input).
+    /// One call's closed telemetry: its outcome and one event (no attribute
+    /// carries input).
     fn observed<T>(
         operation: Operation,
         body: impl FnOnce() -> Result<T, ComponentError>,

@@ -1,18 +1,18 @@
-//! Integration test of package binding and WASI grants through
-//! `scxml-cli run` (decision D4): service packages bind with their grants;
-//! a declared permission the run does not grant, a grant naming nothing
-//! declared, and an extension package that declares a WASI permission fail
-//! closed before anything runs; and the consent listing names every
-//! declared permission with what the run grants it. Live sessions run
-//! `<invoke type="<service URI>">` of the echo service bound with a
-//! declared event contract (a conforming emit is delivered, and an emit the
-//! contract refuses retires the service with `error.communication`) and of
-//! the files service through its granted directory.
+//! Integration test of service binding and WASI resources through
+//! `scxml-cli run` (decision D15): a service may use exactly the `wasi:*`
+//! interfaces its component imports, and the run grants their runtime
+//! resources with wasmtime CLI's option names scoped to the service URI
+//! (`--dir URI=HOST::GUEST`). An imported resource the run does not grant,
+//! a grant naming an unbound URI, and a grant for an interface the
+//! component does not import fail closed before anything runs; the consent
+//! listing names every service's WASI imports and the resources the run
+//! grants it. A live session runs the files service through its granted
+//! directory.
 //!
 //! The subtree's `scxml.rs/scripts/verify-wasm-capabilities.sh` builds and
-//! verifies scxml.rs's example components (the echo service, which declares
-//! no WASI permission; the files service, which declares `wasi:filesystem`;
-//! and the example extension) into `target/test-service-packages/scxml`.
+//! verifies scxml.rs's example components (the echo service, which imports
+//! no WASI interface but the logical clock, and the files service, which
+//! imports `wasi:filesystem`) into `target/test-service-packages/scxml`.
 
 #![allow(
     missing_docs,
@@ -26,13 +26,10 @@ use std::process::Command;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use serde_json::{Value as Json, json};
-use sha2::{Digest as _, Sha256};
-use support::{Components, Run, components, logs, output, scratch, workspace, write};
+use support::{Components, Run, components, logs, output, workspace, write};
 
 const ECHO_URI: &str = "https://stateforward.org/scxml/services/echo";
 const FILES_URI: &str = "https://stateforward.org/scxml/services/files";
-const EXAMPLE_URI: &str = "https://stateforward.org/scxml/example";
 
 /// The directory of the verified example components.
 fn examples() -> &'static Path {
@@ -43,11 +40,7 @@ fn examples() -> &'static Path {
             .arg("scripts/verify-wasm-capabilities.sh")
             .arg("--artifacts-dir")
             .arg(&dir)
-            .args([
-                "scxml_service_example",
-                "scxml_service_files",
-                "scxml_extension_example",
-            ])
+            .args(["scxml_service_example", "scxml_service_files"])
             .current_dir(workspace().join("scxml.rs"))
             .env("CARGO_TARGET_DIR", workspace().join("target/scxml.rs"))
             .env_remove("RUSTFLAGS")
@@ -84,42 +77,18 @@ fn files() -> Vec<String> {
     )
 }
 
-/// The example extension package, copied with a declared WASI permission
-/// (its schema beside it).
-fn extension_declaring_wasi() -> Vec<String> {
-    let source = workspace().join("scxml.rs/components/scxml-extension-example/package");
-    let dir = scratch("wasi-extension");
-    std::fs::copy(source.join("example.xsd"), dir.join("example.xsd")).expect("the schema copies");
-    let mut manifest: Json = serde_json::from_slice(
-        &std::fs::read(source.join("example.extension.json")).expect("readable"),
-    )
-    .expect("the manifest is JSON");
-    manifest["wasi-permissions"] =
-        json!([{"interface": "wasi:filesystem", "mount": "workspace", "access": "read-write"}]);
-    let path = write(&dir, "example.extension.json", &manifest.to_string());
-    Components::package_args(
-        "extension",
-        &path,
-        EXAMPLE_URI,
-        &examples().join("scxml_extension_example.virtualized.wasm"),
-    )
-}
-
-/// The granted directory of the files service's `workspace` mount.
+/// The directory the run preopens for the files service.
 fn workspace_directory() -> PathBuf {
     let directory = workspace().join("target/test-service-packages/workspace");
     std::fs::create_dir_all(&directory).expect("the granted directory is creatable");
     directory
 }
 
-/// A filesystem grant of the `workspace` mount to `uri`.
+/// `--dir` preopening that directory at `/workspace` for `uri`.
 fn workspace_grant(uri: &str) -> Vec<String> {
     vec![
-        "--grant".into(),
-        format!(
-            "{uri}=wasi:filesystem=workspace={}",
-            workspace_directory().display()
-        ),
+        "--dir".into(),
+        format!("{uri}={}::/workspace", workspace_directory().display()),
     ]
 }
 
@@ -152,7 +121,7 @@ fn refused(bindings: &[Vec<String>]) -> String {
 }
 
 #[test]
-fn a_granted_service_binds_and_the_consent_lists_its_permission_and_grant() {
+fn a_granted_service_binds_and_the_consent_lists_its_imports_and_resources() {
     let output = run_with(&[echo(), files(), workspace_grant(FILES_URI)], IDLE);
     assert_eq!(
         output.status.code(),
@@ -166,28 +135,34 @@ fn a_granted_service_binds_and_the_consent_lists_its_permission_and_grant() {
             && consent.contains(&format!("service `{FILES_URI}`")),
         "{consent}"
     );
-    let files_line = consent
+    let files_imports = consent
         .lines()
-        .find(|line| line.starts_with("  = WASI: wasi:filesystem"))
-        .expect("the files service's permission is listed");
+        .find(|line| line.starts_with("  = WASI imports: ") && line.contains("wasi:filesystem"))
+        .expect("the files service's imports are listed");
     assert!(
-        files_line.contains("workspace") && files_line.contains("test-service-packages/workspace"),
-        "the listing names the declared mount and the granted directory: {consent}"
+        files_imports.contains("wasi:filesystem/preopens"),
+        "{consent}"
+    );
+    let resources = consent
+        .lines()
+        .find(|line| line.starts_with("  = WASI resources: --dir "))
+        .expect("the files service's directory is listed");
+    assert!(
+        resources.contains("test-service-packages/workspace::/workspace"),
+        "the listing names the granted directory and its guest path: {consent}"
     );
     assert_eq!(
-        consent.matches("  = WASI: none").count(),
+        consent.matches("  = WASI resources: none").count(),
         1,
-        "only files declares a permission: {consent}"
+        "only files is granted a resource: {consent}"
     );
 }
 
 #[test]
-fn an_ungranted_declared_permission_fails_closed() {
+fn an_ungranted_imported_resource_fails_closed() {
     let message = refused(&[files()]);
     assert!(
-        message.contains("files.service.json")
-            && message.contains("declares wasi:filesystem")
-            && message.contains("the run does not grant"),
+        message.contains("imports a WASI interface whose resource the run does not grant"),
         "{message}"
     );
 }
@@ -201,63 +176,22 @@ fn a_grant_naming_an_unbound_uri_fails_closed() {
     ]);
     assert!(
         message.contains("https://stateforward.org/scxml/services/none")
-            && message.contains("not the service URI of any --service-package"),
+            && message.contains("not the service URI of any bound service"),
         "{message}"
     );
 }
 
 #[test]
-fn a_grant_of_an_undeclared_permission_fails_closed() {
+fn a_grant_for_an_interface_the_component_does_not_import_fails_closed() {
     let message = refused(&[echo(), workspace_grant(ECHO_URI)]);
     assert!(
-        message.contains(ECHO_URI) && message.contains("does not declare"),
-        "{message}"
-    );
-}
-
-#[test]
-fn an_extension_declaring_a_wasi_permission_is_refused() {
-    let message = refused(&[extension_declaring_wasi()]);
-    assert!(
-        message.contains(EXAMPLE_URI) && message.contains("WASI belongs to invoked services"),
+        message.contains("grants a WASI resource no bound service component imports"),
         "{message}"
     );
 }
 
 // ---------------------------------------------------------------------------
 // Live sessions.
-
-/// The echo package with a declared contract: it accepts `say` carrying an
-/// object with `text`, and emits `echo.say` whose `text` is a string.
-fn contracted_echo() -> Vec<String> {
-    let source = workspace().join("scxml.rs/components/scxml-service-example/package");
-    let dir = scratch("contracted-echo");
-    let schemas = br#"{"$defs":{"Echo":{"properties":{"text":{"type":"string"}},"type":"object"},"Say":{"required":["text"],"type":"object"}}}"#;
-    std::fs::write(dir.join("events.json"), schemas).expect("the schemas are writable");
-    let digest = format!("{:x}", Sha256::digest(schemas));
-    let mut manifest: Json =
-        serde_json::from_slice(&std::fs::read(source.join("echo.service.json")).expect("readable"))
-            .expect("the manifest is JSON");
-    manifest["events"] = json!({
-        "emits": [{"name": "echo.say", "schema-artifact": "events.json#/$defs/Echo", "schema-sha256": digest}],
-        "accepts": [{"name": "say", "schema-artifact": "events.json#/$defs/Say", "schema-sha256": digest}],
-    });
-    let path = write(&dir, "echo.service.json", &manifest.to_string());
-    service(&path, ECHO_URI, "scxml_service_example.virtualized.wasm")
-}
-
-/// `s` invokes the echo service and relays `say` to it with the event's
-/// data; it logs each `echo.say` and finishes in `failed` when the service
-/// fails.
-const CONTRACT_DOCUMENT: &str = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
-  <state id="s">
-    <invoke type="https://stateforward.org/scxml/services/echo" id="echo"/>
-    <transition event="say"><send event="say" target="#_echo"><content expr="_event.data"/></send></transition>
-    <transition event="echo.say"><log label="echo.say" expr="JSON.stringify(_event.data)"/></transition>
-    <transition event="error.communication" target="failed"><log label="failed" expr="_event.invokeid"/></transition>
-  </state>
-  <final id="failed"/>
-</scxml>"##;
 
 /// Starts a live session of `document` with `bindings` on the logical
 /// clock.
@@ -271,35 +205,6 @@ fn start(bindings: &[Vec<String>], document: &str) -> Run {
         path.display().to_string(),
     ]);
     Run::start(&args, &[])
-}
-
-fn is_log(record: &Json) -> bool {
-    record["type"] == "log"
-}
-
-#[test]
-fn a_contracted_service_delivers_a_conforming_emit_and_fails_closed_on_another() {
-    let mut run = start(&[contracted_echo()], CONTRACT_DOCUMENT);
-    run.event("say", &json!({"text": "hi"}));
-    let records = run.until(Duration::from_secs(60), is_log);
-    assert_eq!(
-        logs(&records),
-        [("echo.say".to_owned(), r#"{"text":"hi"}"#.to_owned())],
-        "a conforming emit is delivered"
-    );
-
-    // `say` is accepted (`text` is present), but the echo's `text` is no
-    // string: the emit breaks the contract, the host retires the service,
-    // and the session gets error.communication with the invoke id.
-    run.event("say", &json!({"text": 5}));
-    run.end_input();
-    let finished = run.finish(Duration::from_secs(60));
-    assert_eq!(
-        logs(&finished.records),
-        [("failed".to_owned(), "echo".to_owned())],
-        "the refused emit is never delivered"
-    );
-    assert!(support::finished(&finished.records), "{}", finished.stderr);
 }
 
 /// Reads `seed.txt` and writes `out.txt` in the files service's workspace,
@@ -321,8 +226,8 @@ const FILES_DOCUMENT: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" v
   <final id="done"/>
 </scxml>"#;
 
-/// The run's filesystem grant reaches the files service at run time: the
-/// host links `wasi:filesystem` for the granted directory.
+/// The run's `--dir` reaches the files service at run time: the host links
+/// `wasi:filesystem` with that directory preopened.
 #[test]
 fn a_granted_files_service_reads_and_writes_its_directory() {
     let directory = workspace_directory();

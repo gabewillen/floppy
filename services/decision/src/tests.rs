@@ -84,7 +84,7 @@ fn prepared(parameters: &[(&str, Data)]) -> Prepared {
         .expect("within bounds")
     {
         Plan::Ask(prepared) => prepared,
-        Plan::Emit(emitted) => panic!("expected a question, got {emitted:?}"),
+        Plan::Return(returned) => panic!("expected a question, got {returned:?}"),
     }
 }
 
@@ -99,7 +99,7 @@ fn the_service_uri_is_the_repository_path_of_its_name_at_its_tag() {
 }
 
 #[test]
-fn the_package_binds_the_exact_uri_slots_and_origin_and_declares_no_event_contract() {
+fn the_package_binds_the_exact_uri_slots_and_origin() {
     let manifest = scxml_validator_core::ServicePackageManifest::from_json(include_bytes!(
         "../package/decision.service.json"
     ))
@@ -112,9 +112,48 @@ fn the_package_binds_the_exact_uri_slots_and_origin_and_declares_no_event_contra
     );
     assert_eq!(manifest.env_slots, [API_KEY_SLOT, BASE_URL_SLOT]);
     assert_eq!(manifest.http_origins, ["https://api.typesafe.ai"]);
-    // The chosen event is the document's: a declared contract would be
-    // closed and refuse it, so the service validates what it emits itself.
-    assert!(manifest.events.emits.is_empty() && manifest.events.accepts.is_empty());
+}
+
+/// The builder's `event:schema` for this service's own events
+/// (`bots/builder/schemas`), which the invoking document declares.
+#[test]
+fn every_failure_code_and_abstain_reason_satisfy_the_builder_event_schemas() {
+    let compile = |text: &str| {
+        let value: serde_json::Value = serde_json::from_str(text).expect("the schema is JSON");
+        scxml_event_schema::CompiledSchema::new(&scxml_event_schema::canonical_json(&value))
+            .expect("the schema compiles")
+    };
+    let failed = compile(include_str!(
+        "../../../bots/builder/schemas/decision.failed.json"
+    ));
+    for code in [
+        FailureCode::Unconfigured,
+        FailureCode::Transport,
+        FailureCode::Status,
+        FailureCode::Malformed,
+        FailureCode::SchemaMismatch,
+    ] {
+        assert!(
+            failed.admits(&scxml_types::DataValue::JsonObject(
+                Returned::failed(code).data
+            )),
+            "{}",
+            code.name()
+        );
+    }
+    let abstain = compile(include_str!(
+        "../../../bots/builder/schemas/decision.abstain.json"
+    ));
+    for data in [
+        r#"{"reason":"no-candidates"}"#,
+        r#"{"confidence":0.25,"reason":"declined"}"#,
+        r#"{"confidence":0.5,"reason":"below-threshold"}"#,
+    ] {
+        assert!(
+            abstain.admits(&scxml_types::DataValue::JsonObject(data.into())),
+            "{data}"
+        );
+    }
 }
 
 #[test]
@@ -160,8 +199,8 @@ fn choose_asks_the_selection_and_the_grounded_members_in_one_batch() {
 }
 
 #[test]
-fn choose_emits_the_chosen_event_with_grounded_data_validated_against_its_schema() {
-    let emitted = choose().decide(
+fn choose_returns_the_chosen_event_with_grounded_data_validated_against_its_schema() {
+    let returned = choose().decide(
         &TypeSafe,
         ok(&json!({
             "selection": {"order.ship": 0.7, "order.cancel": 0.1, "order.hold": 0.1, "none of these": 0.1},
@@ -171,8 +210,8 @@ fn choose_emits_the_chosen_event_with_grounded_data_validated_against_its_schema
         })),
     );
     assert_eq!(
-        emitted,
-        Emitted {
+        returned,
+        Returned {
             name: "order.ship".into(),
             data: r#"{"carrier":"fedex","sku":"A-1"}"#.into()
         }
@@ -181,7 +220,7 @@ fn choose_emits_the_chosen_event_with_grounded_data_validated_against_its_schema
 
 #[test]
 fn choose_breaks_ties_by_label_bytes() {
-    let emitted = choose().decide(
+    let returned = choose().decide(
         &TypeSafe,
         ok(&json!({
             "selection": {"order.ship": 0.4, "order.cancel": 0.4, "order.hold": 0.1, "none of these": 0.1},
@@ -190,8 +229,8 @@ fn choose_breaks_ties_by_label_bytes() {
             "fill.1.0": {"customer": 0.5, "stock": 0.5},
         })),
     );
-    assert_eq!(emitted.name, "order.cancel");
-    assert_eq!(emitted.data, r#"{"reason":"customer"}"#);
+    assert_eq!(returned.name, "order.cancel");
+    assert_eq!(returned.data, r#"{"reason":"customer"}"#);
 }
 
 #[test]
@@ -241,9 +280,9 @@ fn choose_abstains_when_declined_below_threshold_or_with_nothing_to_offer() {
     .plan()
     .expect("within bounds");
     match plan {
-        Plan::Emit(emitted) => assert_eq!(
-            emitted,
-            Emitted {
+        Plan::Return(returned) => assert_eq!(
+            returned,
+            Returned {
                 name: ABSTAIN_EVENT.into(),
                 data: r#"{"reason":"no-candidates"}"#.into()
             }
@@ -253,7 +292,7 @@ fn choose_abstains_when_declined_below_threshold_or_with_nothing_to_offer() {
 }
 
 #[test]
-fn filled_data_that_fails_the_schema_is_never_emitted() {
+fn filled_data_that_fails_the_schema_is_never_returned() {
     // The evidence offers a carrier the schema's enum does not admit, and
     // the backend picks it.
     let prepared = prepared(&[
@@ -264,7 +303,7 @@ fn filled_data_that_fails_the_schema_is_never_emitted() {
             Data::JsonObject(r#"{"carrier":"dhl","sku":"A-1"}"#.into()),
         ),
     ]);
-    let emitted = prepared.decide(
+    let returned = prepared.decide(
         &TypeSafe,
         ok(&json!({
             "selection": {"order.ship": 1.0},
@@ -273,19 +312,19 @@ fn filled_data_that_fails_the_schema_is_never_emitted() {
             "fill.1.0": {"stock": 1.0},
         })),
     );
-    assert_eq!(emitted, Emitted::failed(FailureCode::SchemaMismatch));
+    assert_eq!(returned, Returned::failed(FailureCode::SchemaMismatch));
 }
 
 #[test]
-fn a_failed_request_or_a_malformed_answer_emits_its_failure_code() {
+fn a_failed_request_or_a_malformed_answer_returns_its_failure_code() {
     let prepared = choose();
     assert_eq!(
         prepared.decide(&TypeSafe, Err(TransportFailure::Unavailable)),
-        Emitted::failed(FailureCode::Transport)
+        Returned::failed(FailureCode::Transport)
     );
     assert_eq!(
         prepared.decide(&TypeSafe, Err(TransportFailure::TooLarge)),
-        Emitted::failed(FailureCode::Malformed)
+        Returned::failed(FailureCode::Malformed)
     );
     assert_eq!(
         prepared.decide(
@@ -295,7 +334,7 @@ fn a_failed_request_or_a_malformed_answer_emits_its_failure_code() {
                 body: Vec::new()
             })
         ),
-        Emitted::failed(FailureCode::Status)
+        Returned::failed(FailureCode::Status)
     );
     // An answer naming a label the question does not offer.
     assert_eq!(
@@ -308,15 +347,15 @@ fn a_failed_request_or_a_malformed_answer_emits_its_failure_code() {
                 "fill.1.0": {"stock": 1.0},
             }))
         ),
-        Emitted::failed(FailureCode::Malformed)
+        Returned::failed(FailureCode::Malformed)
     );
     // An answer missing a question.
     assert_eq!(
         prepared.decide(&TypeSafe, ok(&json!({"selection": {"order.ship": 1.0}}))),
-        Emitted::failed(FailureCode::Malformed)
+        Returned::failed(FailureCode::Malformed)
     );
     assert_eq!(
-        Emitted::failed(FailureCode::Unconfigured).data,
+        Returned::failed(FailureCode::Unconfigured).data,
         r#"{"code":"unconfigured"}"#
     );
 }
@@ -331,13 +370,13 @@ fn rank_sorts_by_score_then_label_and_keeps_every_candidate() {
             Data::JsonArray(r#"["b","a",{"id":3}]"#.into()),
         ),
     ]);
-    let emitted = prepared.decide(
+    let returned = prepared.decide(
         &TypeSafe,
         ok(&json!({"rank": {"a": 0.4, "b": 0.4, "{\"id\":3}": 0.2}})),
     );
-    assert_eq!(emitted.name, RANKED_EVENT);
+    assert_eq!(returned.name, RANKED_EVENT);
     assert_eq!(
-        emitted.data,
+        returned.data,
         r#"{"ranking":[{"candidate":"a","score":0.4},{"candidate":"b","score":0.4},{"candidate":{"id":3},"score":0.2}]}"#
     );
 }
@@ -354,12 +393,12 @@ fn classify_takes_labels_in_every_form() {
             ("state", Data::String("I am fine".into())),
             ("labels", labels.clone()),
         ]);
-        let emitted = prepared.decide(
+        let returned = prepared.decide(
             &TypeSafe,
             ok(&json!({"classify": {"calm": 0.75, "angry": 0.25}})),
         );
-        assert_eq!(emitted.name, CLASSIFIED_EVENT, "{labels:?}");
-        assert_eq!(emitted.data, r#"{"labels":{"angry":0.25,"calm":0.75}}"#);
+        assert_eq!(returned.name, CLASSIFIED_EVENT, "{labels:?}");
+        assert_eq!(returned.data, r#"{"labels":{"angry":0.25,"calm":0.75}}"#);
     }
 }
 
@@ -516,15 +555,15 @@ fn another_backend_plugs_in_behind_the_trait() {
 
     let prepared = choose();
     assert_eq!(prepared.request(&First, 1, 2).body, b"4");
-    let emitted = prepared.decide(
+    let returned = prepared.decide(
         &First,
         Ok(Response {
             status: 200,
             body: Vec::new(),
         }),
     );
-    assert_eq!(emitted.name, "order.ship");
-    assert_eq!(emitted.data, r#"{"carrier":"ups","sku":"A-1"}"#);
+    assert_eq!(returned.name, "order.ship");
+    assert_eq!(returned.data, r#"{"carrier":"ups","sku":"A-1"}"#);
 }
 
 #[test]

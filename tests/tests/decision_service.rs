@@ -4,7 +4,7 @@
 //! `decision` service, invoked with that menu, asks a deterministic fake
 //! `TypeSafe` `system_one` backend on 127.0.0.1 (nothing reaches the
 //! network) off the session thread, fills the chosen event's data from
-//! grounded options, validates it against the menu's schema, and emits it;
+//! grounded options, validates it against the menu's schema, and returns it;
 //! the machine's transition fires with that data. The key and base URL
 //! reach the run only through `--env` scopes and an `--env-file`; the component
 //! holds slot references and the host substitutes the values into the
@@ -358,7 +358,7 @@ fn choose_fires_another_transition_when_the_backend_prefers_it() {
 }
 
 #[test]
-fn choose_emits_decision_abstain_when_none_fits() {
+fn choose_returns_decision_abstain_when_none_fits() {
     let (records, _mock) = run("abstain", "abstain", &BOTH);
     assert_eq!(
         logs(&records),
@@ -371,7 +371,7 @@ fn choose_emits_decision_abstain_when_none_fits() {
 }
 
 #[test]
-fn an_answer_outside_the_menu_emits_decision_failed_and_no_event() {
+fn an_answer_outside_the_menu_returns_decision_failed_and_no_event() {
     let (records, mock) = run("stray", "stray", &BOTH);
     assert_eq!(
         logs(&records),
@@ -393,7 +393,7 @@ fn without_a_granted_key_nothing_is_sent() {
 }
 
 #[test]
-fn classify_emits_every_labels_probability() {
+fn classify_returns_every_labels_probability() {
     let mock = Mock::start();
     let env_path = env_file("classify", &format!("{}/classify", mock.origin));
     let args = args(&env_path, &BOTH);

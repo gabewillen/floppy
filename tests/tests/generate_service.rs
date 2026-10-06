@@ -3,9 +3,9 @@
 //! it (`<invoke type="https://github.com/stateforward/nemobot/services/generate@v0.1.0">`)
 //! against a deterministic fake Chat Completions backend on 127.0.0.1
 //! (nothing reaches the network). The request runs off the session thread
-//! (`outbound-http.begin`) and its answer arrives through the service's
-//! `wake`; the service emits `generate.result` or `generate.failed`, then
-//! completes. The key and base URL reach the run only through `--env`
+//! (the service awaits `outbound-http.fetch`, an `async func`, which
+//! suspends only its own task); the service returns `generate.result` or
+//! `generate.failed` on the stream `invoke` returned, then completes. The key and base URL reach the run only through `--env`
 //! scopes and an `--env-file`; the component holds slot references and the
 //! host substitutes the values into the admitted request.
 //!
@@ -255,7 +255,7 @@ const STRUCTURED_PARAMS: &str = r#"<param name="model" expr="'mock-model'"/>
       <param name="strict" expr="true"/>"#;
 
 #[test]
-fn a_text_generation_posts_the_canonical_request_and_emits_the_reply() {
+fn a_text_generation_posts_the_canonical_request_and_returns_the_reply() {
     let mock = Mock::start();
     let env = env_file("text", &format!("{}/text/v1", mock.origin));
     let args = generate_args(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
@@ -286,7 +286,7 @@ fn a_text_generation_posts_the_canonical_request_and_emits_the_reply() {
 }
 
 #[test]
-fn a_structured_generation_emits_the_schema_valid_object() {
+fn a_structured_generation_returns_the_schema_valid_object() {
     let mock = Mock::start();
     let env = env_file("json", &format!("{}/json/v1", mock.origin));
     let args = generate_args(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
@@ -313,7 +313,7 @@ fn a_structured_generation_emits_the_schema_valid_object() {
 }
 
 #[test]
-fn a_reply_that_mismatches_the_schema_is_never_emitted() {
+fn a_reply_that_mismatches_the_schema_is_never_returned() {
     let mock = Mock::start();
     let env = env_file("mismatch", &format!("{}/mismatch/v1", mock.origin));
     let args = generate_args(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
@@ -322,13 +322,13 @@ fn a_reply_that_mismatches_the_schema_is_never_emitted() {
     assert_eq!(
         logs(records),
         labelled(&[("failed", "schema-mismatch"), ("final", "done")]),
-        "the result is validated before it is emitted: {records:?}"
+        "the result is validated before it is returned: {records:?}"
     );
     assert_eq!(mock.received().len(), 1);
 }
 
 #[test]
-fn a_failing_backend_emits_generate_failed() {
+fn a_failing_backend_returns_generate_failed() {
     let mock = Mock::start();
     let env = env_file("fail", &format!("{}/fail/v1", mock.origin));
     let args = generate_args(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
