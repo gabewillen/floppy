@@ -50,6 +50,12 @@ reopening one needs the maintainer. All are dated 2026-10-06.
   current data model (with the current `_event`) when `decision:choose`
   builds its menu; see `namespaces/decision` ("Guards") for how a failed or
   non-boolean guard is treated.
+- D5 and AGENTS.md (2026-10-06, review round 3): `decision:choose` raises
+  events the document defines (the menu's `event:schema` transitions), so
+  the `decision` package declares only `decision.abstain`; the chosen
+  event's contract is the transition's `event:schema`, which the data is
+  validated against before the raise. AGENTS.md states this exception to
+  "declare the event contracts of the events their component emits".
 
 - D10 and AGENTS.md (2026-10-06, review round 1): AGENTS.md forbids compiling
   a backend URL into a component, so `generate` and `decision` compile in no

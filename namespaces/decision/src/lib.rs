@@ -99,6 +99,11 @@
 //!   (`confidence` absent for `no-candidates`; an empty menu sends nothing).
 //! * **Validation before raise.** The filled data must satisfy the chosen
 //!   event's compiled schema; otherwise nothing is raised (`error.execution`).
+//! * **Event contracts.** The package manifest declares only the event this
+//!   namespace defines, [`ABSTAIN_EVENT`]. The chosen event is defined by the
+//!   document: its contract is the `event:schema` of the transition offered
+//!   in the menu, against which the data is validated before the raise, so
+//!   the manifest does not (and cannot) declare it (AGENTS.md, decision D5).
 //!
 //! # Failures
 //!
