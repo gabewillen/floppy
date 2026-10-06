@@ -350,10 +350,12 @@ the single-threaded session loop. Elsewhere the platform default applies.
 `--record FILE` writes NDJSON. The first line is a header:
 
 ```json
-{"type":"header","format":"scxml.live-log/v1","ir_sha256":"…","components_manifest_sha256":"…","session_id":"session","max_commands":18446744073709551615,"fuel":…,"clock":"wall","namespaces":[{"uri":"…","extension_component_sha256":"…"}],"http_public_url":null}
+{"type":"header","format":"scxml.live-log/v1","ir_sha256":"…","components_manifest_sha256":"…","session_id":"session","max_commands":18446744073709551615,"fuel":…,"clock":"wall","namespaces":[{"uri":"…","extension_component_sha256":"…"}],"services":[{"uri":"…","service_component_sha256":"…"}],"http_public_url":null}
 ```
 
-`http_public_url` is the advertised BasicHTTP base of a `--http-listen`
+`namespaces` and `services` list each bound extension and invoked service
+by URI with the SHA-256 its component is authenticated under, sorted by
+URI. `http_public_url` is the advertised BasicHTTP base of a `--http-listen`
 run (else `null`). One line per input follows: `start` (`epoch_ms`, always
 first), `event` (`at_ms`, `name`,
 `data`/`xml`), `advance` (`to_ms`), `idle`, `snapshot` (`options`), `http`
@@ -369,7 +371,9 @@ carrier as received, so it needs the same access and retention protection
 as those messages.
 
 `--replay FILE` checks the header against the document's Machine IR, the
-component release, and the namespace bindings. Any mismatch fails with
+component release, the namespace bindings, and the service bindings (a
+different service component digest, or a service bound or unbound). Any
+mismatch fails with
 `[replay-identity-mismatch]`. The session id, fuel, and command budget come
 from the log, so `--replay` refuses every flag that would change them. So
 does the network: a replay advertises the recorded `http_public_url`,

@@ -12,7 +12,8 @@
 //! The release components are built and verified once by
 //! `scripts/verify-wasm-capabilities.sh` into `target/cli-components`; set
 //! `SCXML_COMPONENTS_DIR` and `SCXML_COMPONENTS_MANIFEST_SHA256` to use an
-//! already verified release instead.
+//! already verified release instead (it must hold
+//! `scxml_service_example.virtualized.wasm` too).
 
 use std::fs;
 use std::io::{BufRead as _, BufReader, Write as _};
@@ -23,9 +24,11 @@ use std::time::{Duration, Instant};
 
 use sha2::{Digest as _, Sha256};
 
-/// Exactly the release components the Wasmtime session host links.
+/// The release components the Wasmtime session host links, and the echo
+/// invoked-service example the service replay test binds.
 const COMPONENTS: &[&str] = &[
     "scxml_clock",
+    "scxml_service_example",
     "scxml_data_model_ecmascript",
     "scxml_data_model_null",
     "scxml_data_model_xpath",
@@ -329,6 +332,84 @@ fn a_recorded_run_replays_its_records_and_snapshots_byte_for_byte() {
     assert_eq!(refused.status.code(), Some(2));
     assert!(
         stderr(&refused).contains("[replay-identity-mismatch]"),
+        "{}",
+        stderr(&refused)
+    );
+}
+
+const ECHO: &str = "https://stateforward.org/scxml/services/echo";
+
+/// A recorded run binds its invoked services' component digests: the same
+/// binding replays, and a different `--service-component-sha256` is refused
+/// before anything runs.
+#[test]
+fn a_replay_with_a_different_service_component_is_refused() {
+    let directory = scratch("replay-service");
+    let doc = document(
+        &directory,
+        &format!(
+            r##"<state id="s0"><invoke type="{ECHO}" id="echo"/><transition event="ping"><send event="ping" target="#_echo"/></transition><transition event="echo.ping"><log label="echoed" expr="_event.name"/></transition><transition event="stop"><send event="stop" target="#_echo"/></transition><transition event="done.invoke.echo" target="done"/></state><final id="done"/>"##
+        ),
+    );
+    let (dir, _) = release();
+    let component = Path::new(dir).join("scxml_service_example.virtualized.wasm");
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(fs::read(&component).expect("the echo component is readable"))
+    );
+    let manifest = workspace().join("components/scxml-service-example/package/echo.service.json");
+    let binding = |sha256: &str| -> Vec<String> {
+        vec![
+            "--clock".into(),
+            "logical".into(),
+            "--service-package".into(),
+            manifest.display().to_string(),
+            "--service-component".into(),
+            format!("{ECHO}={}", component.display()),
+            "--service-component-sha256".into(),
+            format!("{ECHO}={sha256}"),
+        ]
+    };
+    let log = directory.join("session.ndjson");
+    let log_arg = log.display().to_string();
+    let recorded_args = [binding(&digest), vec!["--record".into(), log_arg.clone()]].concat();
+    let recorded_args: Vec<&str> = recorded_args.iter().map(String::as_str).collect();
+    let input = "{\"name\":\"ping\"}\n{\"name\":\"stop\"}\n";
+    let recorded = run(&doc, &recorded_args, input);
+    assert_eq!(recorded.status.code(), Some(0), "{}", stderr(&recorded));
+    let header: serde_json::Value = serde_json::from_str(
+        fs::read_to_string(&log)
+            .expect("the log is readable")
+            .lines()
+            .next()
+            .expect("a header line"),
+    )
+    .expect("the header is JSON");
+    assert_eq!(
+        header["services"],
+        serde_json::json!([{"uri": ECHO, "service_component_sha256": digest}])
+    );
+
+    let replay_args = |sha256: &str| -> Vec<String> {
+        let mut args = binding(sha256);
+        // A replay takes its clock from the log.
+        args.drain(0..2);
+        args.extend(["--replay".into(), log_arg.clone()]);
+        args
+    };
+    let same = replay_args(&digest);
+    let same: Vec<&str> = same.iter().map(String::as_str).collect();
+    let replayed = run(&doc, &same, "");
+    assert_eq!(replayed.status.code(), Some(0), "{}", stderr(&replayed));
+    assert_eq!(parse_records(&recorded)[1..], parse_records(&replayed)[1..]);
+
+    let other = replay_args(&"c".repeat(64));
+    let other: Vec<&str> = other.iter().map(String::as_str).collect();
+    let refused = run(&doc, &other, "");
+    assert_eq!(refused.status.code(), Some(2), "{}", stderr(&refused));
+    assert!(
+        stderr(&refused).contains("[replay-identity-mismatch]")
+            && stderr(&refused).contains("invoked service components"),
         "{}",
         stderr(&refused)
     );

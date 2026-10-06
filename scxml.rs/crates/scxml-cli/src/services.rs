@@ -706,6 +706,41 @@ impl ServiceFlags {
         Ok(grants)
     }
 
+    /// The run's service identity for a `--record`/`--replay` log: each
+    /// bound service's URI with the SHA-256 its component is authenticated
+    /// under (`--service-component-sha256`, or the digest a repository
+    /// service's release pins), sorted.
+    ///
+    /// # Errors
+    ///
+    /// A package without its digest, or a repository service whose digest
+    /// cannot be pinned.
+    #[cfg(feature = "wasmtime")]
+    pub(crate) fn identity(
+        &self,
+        resolved: &Services,
+    ) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+        let mut identity = Vec::new();
+        for package in &resolved.packages {
+            let uri = &package.manifest.service_uri;
+            let sha256 = if let ServiceOrigin::Repository { .. } = package.origin {
+                resolved
+                    .store
+                    .as_ref()
+                    .ok_or("a repository service was resolved without a repository store")?
+                    .service_component_sha256(uri)?
+            } else {
+                self.digests
+                    .get(uri)
+                    .ok_or("every service package needs --service-component-sha256")?
+                    .clone()
+            };
+            identity.push((uri.clone(), sha256));
+        }
+        identity.sort();
+        Ok(identity)
+    }
+
     /// Reads, authenticates, and binds every package's service component,
     /// with the run's values for the services' `env` slots (references
     /// only) and, when `outbound` is true, the outbound transport each
