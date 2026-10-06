@@ -62,8 +62,13 @@
 //!   configuration (`transitions` section, in its walk order) that carry an
 //!   `event:schema`: each of their event descriptors that names an event
 //!   (`*` is skipped; `e.*` names `e`), unless a transition listed earlier
-//!   has a descriptor that matches the same event (that one would be
-//!   selected for it). **Guards:** a transition with a `cond` is offered
+//!   in the same active atomic state's chain has a descriptor that matches
+//!   the same event (that one would be selected for it); each event is
+//!   offered once. The walk lists a shared ancestor's transitions once,
+//!   in the first chain that reaches it, and a leaf without eventful
+//!   transitions of its own opens no chain, so in those two cases the menu
+//!   can leave out an event SCXML would also select, never offer one it
+//!   would not. **Guards:** a transition with a `cond` is offered
 //!   only when its condition, evaluated in the current data model (with
 //!   the current `_event`, not the event being offered), is exactly `true`;
 //!   one whose condition is exactly `false` is skipped and takes no event
@@ -198,8 +203,8 @@ pub const MAX_STATE_BYTES: usize = wasm_bound(512 * 1024);
 pub const MAX_INSTRUCTIONS_BYTES: usize = wasm_bound(16 * 1024);
 /// Upper bound on the model name's bytes (wasm builds only).
 pub const MAX_MODEL_BYTES: usize = wasm_bound(256);
-/// Upper bound on an explicit candidate's event name bytes.
-pub const MAX_EVENT_NAME_BYTES: usize = 256;
+/// Upper bound on a candidate's event name bytes (wasm builds only).
+pub const MAX_EVENT_NAME_BYTES: usize = wasm_bound(256);
 
 /// One attribute of an element.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -558,7 +563,7 @@ fn matches(descriptor: &str, event: &str) -> bool {
 /// white space, no `*`, no empty `.`-separated token, bounded.
 fn valid_event_name(name: &str) -> bool {
     !name.is_empty()
-        && name.len() <= MAX_EVENT_NAME_BYTES
+        && !exceeds_wasm_bound(name.len(), MAX_EVENT_NAME_BYTES)
         && !name.contains('*')
         && !name.chars().any(scxml_types::is_xml_space)
         && name.split('.').all(|token| !token.is_empty())
@@ -595,9 +600,30 @@ pub fn snapshot_menu<E>(
         return Ok(Vec::new());
     };
     let transitions = transitions.as_array().ok_or_else(malformed)?;
+    let atomic: Vec<&str> = document
+        .pointer("/snapshot/root/configuration/atomic")
+        .and_then(Json::as_array)
+        .ok_or_else(malformed)?
+        .iter()
+        .map(|state| state.as_str().ok_or_else(malformed))
+        .collect::<Result<_, _>>()?;
+    // SCXML 3.13 selects per active atomic state: the first enabled
+    // matching transition of that state's chain (the state, then its
+    // ancestors). The walk lists each leaf's chain in turn, so a transition
+    // only preempts later ones of the same chain: `earlier` restarts where
+    // a listed transition's source is another active atomic state.
+    let mut leaf: Option<&str> = None;
     let mut earlier: Vec<&str> = Vec::new();
     let mut menu: Vec<Candidate> = Vec::new();
     for transition in transitions {
+        let source = transition
+            .get("source")
+            .and_then(Json::as_str)
+            .ok_or_else(malformed)?;
+        if leaf != Some(source) && atomic.contains(&source) {
+            leaf = Some(source);
+            earlier.clear();
+        }
         let descriptors: Vec<&str> = transition
             .get("events")
             .and_then(Json::as_array)

@@ -160,12 +160,28 @@ fn without_schema(events: &[&str]) -> Json {
     json!({"source": "s", "index": 1, "events": events, "targets": [], "type": "external", "has_cond": false})
 }
 
+/// A snapshot whose one active atomic state is `s`, the source of every
+/// transition the listing helpers build.
 fn snapshot(transitions: &[Json]) -> String {
+    snapshot_in(&["s"], transitions)
+}
+
+/// A snapshot whose active atomic states are `atomic`.
+fn snapshot_in(atomic: &[&str], transitions: &[Json]) -> String {
     json!({
         "version": "scxml.session-snapshot/v2",
-        "snapshot": {"root": {"transitions": transitions}},
+        "snapshot": {"root": {
+            "configuration": {"atomic": atomic, "full": atomic},
+            "transitions": transitions,
+        }},
     })
     .to_string()
+}
+
+/// `transition` listed from `source`.
+fn from(source: &str, mut transition: Json) -> Json {
+    transition["source"] = json!(source);
+    transition
 }
 
 fn ship_schema() -> Json {
@@ -1016,5 +1032,91 @@ fn malformed_system_one_answers_fail_closed() {
         Ok(vec![Distribution {
             probabilities: vec![1.0]
         }])
+    );
+}
+
+/// The menu of `transitions` under the active atomic states `atomic`, every
+/// guard enabled.
+fn menu_events_in(atomic: &[&str], transitions: &[Json]) -> Vec<String> {
+    snapshot_menu(&snapshot_in(atomic, transitions), &mut |_| {
+        Ok::<_, ()>(Some(true))
+    })
+    .expect("the snapshot is well formed")
+    .into_iter()
+    .map(|candidate| candidate.event)
+    .collect()
+}
+
+/// In a parallel state each active atomic state selects its own
+/// transition (SCXML 3.13): a transition in one region's chain does not
+/// preempt a sibling region's transition for the same event.
+#[test]
+fn the_snapshot_menu_preempts_only_within_one_atomic_states_chain() {
+    let schema = json!({"type": "object"});
+    // Leaf a1's chain (a1, A, P), then leaf b1's (b1, B): A's schema-less
+    // `go` does not hide b1's schema'd `go`.
+    let events = menu_events_in(
+        &["a1", "b1"],
+        &[
+            from("a1", with_schema(&["a"], &schema)),
+            from("A", without_schema(&["go"])),
+            from("P", with_schema(&["go", "p"], &schema)),
+            from("b1", with_schema(&["go"], &schema)),
+            from("B", with_schema(&["go.more", "b"], &schema)),
+        ],
+    );
+    // P's `go` is preempted by A's in a1's chain; b1's `go` is offered once;
+    // B's `go.more` is preempted by b1's `go` in b1's chain.
+    assert_eq!(events, ["a", "p", "go", "b"]);
+
+    // The same event offered by two chains is offered once.
+    let events = menu_events_in(
+        &["a1", "b1"],
+        &[
+            from("a1", with_schema(&["go"], &schema)),
+            from("b1", with_schema(&["go"], &schema)),
+        ],
+    );
+    assert_eq!(events, ["go"]);
+
+    // A listing whose source is not a string, or a snapshot without its
+    // configuration, is malformed.
+    let mut sourceless = with_schema(&["x"], &schema);
+    sourceless["source"] = json!(1);
+    assert_eq!(
+        menu_events(&[sourceless]),
+        Err(Failure::Execution("the session snapshot is malformed"))
+    );
+    let unconfigured =
+        json!({"snapshot": {"root": {"transitions": [with_schema(&["x"], &schema)]}}});
+    assert_eq!(
+        snapshot_menu(&unconfigured.to_string(), &mut |_| Ok::<_, ()>(Some(true)))
+            .map(|menu| menu.len()),
+        Err(Failure::Execution("the session snapshot is malformed"))
+    );
+}
+
+/// The event-name bound is a wasm-only resource bound: natively a long
+/// event name is offered and accepted; on wasm one over the bound is not.
+#[test]
+fn the_event_name_bound_applies_to_wasm_builds_only() {
+    let schema = json!({"type": "object"});
+    let long = "e".repeat(257);
+    let offered = menu_events_in(&["s"], &[with_schema(&[long.as_str()], &schema)]);
+    let explicit = explicit_menu(&json!([{"event": long, "schema": true}]));
+    if cfg!(target_arch = "wasm32") {
+        assert_eq!(MAX_EVENT_NAME_BYTES, 256);
+        assert!(offered.is_empty());
+        assert!(explicit.is_err());
+    } else {
+        assert_eq!(MAX_EVENT_NAME_BYTES, usize::MAX);
+        assert_eq!(offered, [long.clone()]);
+        assert_eq!(explicit.map(|menu| menu.len()), Ok(1));
+    }
+    let at_bound = "e".repeat(256);
+    assert_eq!(
+        menu_events_in(&["s"], &[with_schema(&[at_bound.as_str()], &schema)]),
+        [at_bound],
+        "a name at the wasm bound is offered on every build"
     );
 }
