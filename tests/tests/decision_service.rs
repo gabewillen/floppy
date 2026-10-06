@@ -210,7 +210,12 @@ fn open(args: &[String], document: &str, env: &[(&str, &str)], limit: Duration) 
     assert!(
         consent.contains(&format!("element `{NAMESPACE_URI}`"))
             && consent.contains(&format!("service `{}`", service_uri("decision")))
-            && consent.contains("outbound HTTP: https://api.typesafe.ai")
+            // A run whose base URL value is the origin itself (the live
+            // run's TypeSafe default) sees it masked, as scxml-cli masks
+            // every held value in the text it writes.
+            && (consent.contains("outbound HTTP: https://api.typesafe.ai")
+                || (env.iter().any(|(_, value)| *value == TYPESAFE_BASE_URL_DEFAULT)
+                    && consent.contains("outbound HTTP: [masked]")))
             && consent.contains("env slots: apikey, baseurl"),
         "the consent listing names the package, its origin, and its slots: {consent}"
     );

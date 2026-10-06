@@ -6,6 +6,27 @@ env file named by `NEMOBOT_LIVE_ENV_FILE`
 Each variable was granted only to its own package: `OPENAI_*` to `generate`,
 and `TYPESAFE_*` to `decision`.
 
+## 2026-10-06, WASI 0.3 async services (decision D15), model `gpt-6-luna`
+
+The runs used nemobot commit `3b5c51b3` plus the decision live test's
+consent check below (subtree scxml.rs `aa12fa6d`): `services/generate` and
+`services/decision` are each one async `invoke` export that awaits
+`outbound-http.fetch`, on wasmtime 49 with the Component Model async ABI,
+through `scxml-cli run`. `OPENAI_*` was granted to the generate service and
+`TYPESAFE_*` to the decision service. Commands:
+`NEMOBOT_LIVE_ENV_FILE=<mosfet .env> NEMOBOT_LIVE_MODEL=gpt-6-luna cargo test
+-p nemobot-tests --test <test> -- --ignored <name>`.
+
+| Test | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| `generate_service live_generate_through_an_env_file` | `gpt-6-luna` | pass | 1 | strict structured output through `generate.result`, from a streamed reply |
+| `decision_service live_decision_through_an_env_file` | TypeSafe `system_one` (no OpenAI model) | pass (`shipped`) | 2 | the service's returned `order.ship` with schema-valid data. The first run failed only the test's consent check: the env file's `TYPESAFE_BASE_URL` equals the package origin, so scxml-cli masks it in the listing (`outbound HTTP: [masked]`); the check now accepts that when the run's base URL is the origin. The second run, with `--nocapture`, printed the outcome |
+| `builder_bot live_builder_through_an_env_file` | `gpt-6-luna` (generate service), TypeSafe `system_one` (decision triage) | pass | 1 of 3 | `builder.done` on attempt 1 of 4: 0 failures, 0 machine fixes, no triage decision (so the decision service did not run inside the builder); plan `traffic_light`; 124 s |
+
+The builder's output was written to `target/builder-live/` and is not
+committed. Apart from the consent check above, nothing in the tests was
+changed to make them pass.
+
 ## 2026-10-06, the builder through `scxml-cli run`, model `gpt-6-luna`
 
 nemobot has no runtime of its own since decision D14, so this run went
