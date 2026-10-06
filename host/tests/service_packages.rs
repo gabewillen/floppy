@@ -4,12 +4,17 @@
 //! `Packages::load` (before any session can open, since a session takes the
 //! loaded packages), an extension package that declares a WASI permission is
 //! refused, and the consent listing names every declared permission with
-//! what the run grants it.
+//! what the run grants it. A live session through `SessionHandle` runs
+//! `<invoke type="<service URI>">` of the echo service bound with a declared
+//! event contract: a conforming emit is delivered, and an emit the contract
+//! refuses retires the service (`error.communication`).
 //!
 //! The subtree's `scxml.rs/scripts/verify-wasm-capabilities.sh` builds and
 //! verifies scxml.rs's example components (the echo service, which declares
 //! no WASI permission; the files service, which declares `wasi:filesystem`;
-//! and the example extension) into `target/test-service-packages/scxml`.
+//! and the example extension) into `target/test-service-packages/scxml`;
+//! `scripts/build-components.sh --session-only` builds the session
+//! components into `target/test-service-packages/components`.
 
 #![allow(
     missing_docs,
@@ -19,11 +24,15 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 use nemobot_host::FailureKind;
+use nemobot_host::compile::compile_source;
 use nemobot_host::config::{CONFIG_FORMAT, Config};
 use nemobot_host::env_file::Values;
 use nemobot_host::packages::Packages;
+use nemobot_host::runtime::{ClockMode, Egress, SessionHandle, SessionSpec, SessionStatus};
+use scxml_host_wasmtime::{ScriptedEvent, SessionOutput};
 use serde_json::{Value as Json, json};
 use sha2::{Digest as _, Sha256};
 
@@ -209,5 +218,223 @@ fn an_extension_declaring_a_wasi_permission_is_refused() {
         message.contains("https://stateforward.org/scxml/example")
             && message.contains("links no WASI interface into extension components"),
         "{message}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// A live session invoking a contracted service.
+
+/// The verified session components directory and its manifest digest.
+fn session_components() -> &'static (PathBuf, String) {
+    static COMPONENTS: OnceLock<(PathBuf, String)> = OnceLock::new();
+    COMPONENTS.get_or_init(|| {
+        let artifacts = workspace().join("target/test-service-packages/components");
+        let status = Command::new("sh")
+            .arg(workspace().join("scripts/build-components.sh"))
+            .arg("--session-only")
+            .arg("--artifacts-dir")
+            .arg(&artifacts)
+            .current_dir(workspace())
+            .status()
+            .expect("the build script runs");
+        assert!(status.success(), "the session component proof must pass");
+        let components = artifacts.join("scxml");
+        let digest = sha256_file(&components.join("manifest.tsv"));
+        (components, digest)
+    })
+}
+
+/// The echo package with a declared contract: it accepts `say` carrying an
+/// object with `text`, and emits `echo.say` whose `text` is a string.
+fn contracted_echo() -> Json {
+    let source = workspace().join("scxml.rs/components/scxml-service-example/package");
+    let dir = workspace().join("target/test-service-packages/contracted-echo");
+    std::fs::create_dir_all(&dir).expect("the fixture directory is creatable");
+    let schemas = br#"{"$defs":{"Echo":{"properties":{"text":{"type":"string"}},"type":"object"},"Say":{"required":["text"],"type":"object"}}}"#;
+    std::fs::write(dir.join("events.json"), schemas).expect("the schemas are writable");
+    let digest = format!("{:x}", Sha256::digest(schemas));
+    let mut manifest: Json =
+        serde_json::from_slice(&std::fs::read(source.join("echo.service.json")).expect("readable"))
+            .expect("the manifest is JSON");
+    manifest["events"] = json!({
+        "emits": [{"name": "echo.say", "schema-artifact": "events.json#/$defs/Echo", "schema-sha256": digest}],
+        "accepts": [{"name": "say", "schema-artifact": "events.json#/$defs/Say", "schema-sha256": digest}],
+    });
+    let path = dir.join("echo.service.json");
+    std::fs::write(&path, manifest.to_string()).expect("the manifest is writable");
+    package(&path, "scxml_service_example.virtualized.wasm")
+}
+
+/// `s` invokes the echo service and relays `say` to it with the event's
+/// data; it logs each `echo.say` and finishes in `failed` when the service
+/// fails.
+const CONTRACT_DOCUMENT: &str = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
+  <state id="s">
+    <invoke type="https://stateforward.org/scxml/services/echo" id="echo"/>
+    <transition event="say"><send event="say" target="#_echo"><content expr="_event.data"/></send></transition>
+    <transition event="echo.say"><log label="echo.say" expr="JSON.stringify(_event.data)"/></transition>
+    <transition event="error.communication" target="failed"><log label="failed" expr="_event.invokeid"/></transition>
+  </state>
+  <final id="failed"/>
+</scxml>"##;
+
+fn say(text: &Json) -> ScriptedEvent {
+    ScriptedEvent {
+        name: "say".into(),
+        data: scxml_types::DataValue::JsonObject(json!({"text": text}).to_string()),
+        trace_context: None,
+    }
+}
+
+/// The logs of egress records until `done` holds for one, at most 30 s.
+fn logs_until(handle: &SessionHandle, done: impl Fn(&Egress) -> bool) -> (Vec<String>, Egress) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut logs = Vec::new();
+    while Instant::now() < deadline {
+        if let Some(record) = handle.recv_timeout(Duration::from_millis(100)) {
+            if let Egress::Outputs(outputs) = &record {
+                logs.extend(outputs.iter().filter_map(|output| match output {
+                    SessionOutput::Log { entry, .. } => Some(format!(
+                        "{}: {}",
+                        entry.label.clone().unwrap_or_default(),
+                        entry.text
+                    )),
+                    SessionOutput::Done { .. } => None,
+                }));
+            }
+            if done(&record) {
+                return (logs, record);
+            }
+        }
+    }
+    panic!("no expected egress record within 30 s; logs {logs:?}");
+}
+
+/// Opens a live session of `document` through `nemobot-host` with the real
+/// session components, `services` bound with `grants`, and returns it with
+/// the logs up to its opening.
+fn open_session(
+    services: &[Json],
+    grants: &[Json],
+    document: &str,
+) -> (SessionHandle, Vec<String>) {
+    let (components, digest) = session_components();
+    let text = json!({
+        "format": CONFIG_FORMAT,
+        "components": {"dir": components.display().to_string(), "manifest-sha256": digest},
+        "services": services,
+        "grants": grants,
+        "outbound-http": false,
+    })
+    .to_string();
+    let config = Config::parse(text.as_bytes(), &PathBuf::from("/")).expect("the config is valid");
+    let packages = Packages::load(&config).expect("the services bind");
+    let compiled = compile_source(
+        "service.scxml",
+        document.to_owned(),
+        scxml_event_schema::Resources::new(),
+        &packages,
+    )
+    .expect("the document compiles");
+    let handle = SessionHandle::open(
+        &config,
+        packages,
+        Values::none(),
+        SessionSpec {
+            compiled,
+            session_id: "service".into(),
+            clock: ClockMode::Logical,
+            documents: Vec::new(),
+        },
+    )
+    .expect("the session opens with the services bound");
+    let (logs, _) = logs_until(&handle, |record| matches!(record, Egress::Opened { .. }));
+    (handle, logs)
+}
+
+#[test]
+fn a_contracted_service_delivers_a_conforming_emit_and_fails_closed_on_another() {
+    let (handle, _) = open_session(&[contracted_echo()], &[], CONTRACT_DOCUMENT);
+
+    handle
+        .send(say(&json!("hi")))
+        .expect("the session takes say");
+    let (logs, _) = logs_until(&handle, |record| matches!(record, Egress::Outputs(_)));
+    assert_eq!(
+        logs,
+        [r#"echo.say: {"text":"hi"}"#],
+        "a conforming emit is delivered"
+    );
+
+    // `say` is accepted (`text` is present), but the echo's `text` is no
+    // string: the emit breaks the contract, the host retires the service,
+    // and the session gets error.communication with the invoke id.
+    handle.send(say(&json!(5))).expect("the session takes say");
+    let (logs, closed) = logs_until(&handle, |record| matches!(record, Egress::Closed { .. }));
+    assert_eq!(
+        logs,
+        ["failed: echo"],
+        "the refused emit is never delivered"
+    );
+    assert!(
+        matches!(
+            closed,
+            Egress::Closed {
+                status: SessionStatus::Finished,
+                ..
+            }
+        ),
+        "{closed:?}"
+    );
+}
+
+/// Reads `seed.txt` and writes `out.txt` in the files service's workspace,
+/// then finishes.
+const FILES_DOCUMENT: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
+  <state id="s">
+    <invoke type="https://stateforward.org/scxml/services/files" id="files">
+      <param name="seed" expr="'seed.txt'"/>
+      <param name="name" expr="'out.txt'"/>
+      <param name="text" expr="'written by the service'"/>
+    </invoke>
+    <transition event="done.invoke.files" target="done">
+      <log label="done" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="error.*" target="done">
+      <log label="failed" expr="_event.name"/>
+    </transition>
+  </state>
+  <final id="done"/>
+</scxml>"#;
+
+/// The config's filesystem grant reaches the files service at run time:
+/// `nemobot-host` links `wasi:filesystem` for the granted directory.
+#[test]
+fn a_granted_files_service_reads_and_writes_its_directory_through_nemobot_host() {
+    let grant = workspace_grant(FILES_URI);
+    let directory = PathBuf::from(grant["directory"].as_str().expect("the grant's directory"));
+    std::fs::write(directory.join("seed.txt"), "from the host").expect("seed is written");
+    let _ = std::fs::remove_file(directory.join("out.txt"));
+    let (handle, mut logs) = open_session(&[files()], &[grant], FILES_DOCUMENT);
+    let (rest, closed) = logs_until(&handle, |record| matches!(record, Egress::Closed { .. }));
+    logs.extend(rest);
+    assert_eq!(
+        logs,
+        [r#"done: {"seed":"from the host","wrote":22}"#],
+        "the service read the seed through its granted mount"
+    );
+    assert!(
+        matches!(
+            closed,
+            Egress::Closed {
+                status: SessionStatus::Finished,
+                ..
+            }
+        ),
+        "{closed:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(directory.join("out.txt")).expect("the service wrote out.txt"),
+        "written by the service"
     );
 }
