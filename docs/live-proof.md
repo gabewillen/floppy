@@ -6,6 +6,24 @@ env file named by `NEMOBOT_LIVE_ENV_FILE`
 Each variable was granted only to its own package: `OPENAI_*` to `generate`,
 and `TYPESAFE_*` to `decision`.
 
+## 2026-10-06, model calls as invoked services, model `gpt-6-luna`
+
+The runs used nemobot commit `d5728e9b` (code at `813d57c8`): `generate`
+and `decision` are invoked services (`services/generate`,
+`services/decision`) whose requests run off the session thread, the
+builder invokes them with `<finalize>`/`done.invoke` and a preempting
+`builder.timeout`, and the subtree is scxml.rs `5eb077c4`. `OPENAI_*` was
+granted to the generate service and `TYPESAFE_*` to the decision service.
+
+| Test | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| `builder_bot live_builder_through_an_env_file` | `gpt-6-luna` (generate service) | pass | 1 of 3 | `builder.done` on attempt 1 of 4: 0 failures, 0 machine fixes, 0 warnings, no triage decision (so the decision service did not run inside the builder); plan `pedestrian_traffic_light` (5 states); both of its tests (`normal_cycle`, `button_ends_green_early`) passed in simulation; the built document compiled again outside the builder (`compile_source`, no packages) |
+| `generate_service live_generate_through_an_env_file` | `gpt-6-luna` | pass | 1 | strict structured output through `generate.result` |
+| `decision_service live_decision_through_an_env_file` | TypeSafe `system_one` (no OpenAI model) | pass (`shipped`) | 1 | `decision:menu` menu, the service's emitted `order.ship` with schema-valid data |
+
+The builder's output was written to `target/builder-live/` and is not
+committed. Nothing in the tests was changed to make them pass.
+
 ## 2026-10-06, model `gpt-6-luna`
 
 The runs used the working tree of nemobot commit `57954078`. That commit
