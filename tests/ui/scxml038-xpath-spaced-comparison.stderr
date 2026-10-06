@@ -1,5 +1,5 @@
 warning[SCXML038]: xpath syntax error in `cond`: `> =` is not an operator
- --> tests/ui/scxml038-xpath-spaced-comparison.scxml:6:41
+ --> tests/ui/scxml038-xpath-spaced-comparison.scx:6:41
   |
 6 |     <transition event="go" cond="$count &gt; = 3" target="b"/>
   |                                  --------------- while parsing this `cond`
@@ -15,7 +15,7 @@ help: compare with `>=`
 6 +     <transition event="go" cond="$count &gt;= 3" target="b"/>
 
 warning[SCXML057]: `count` selects a child element named `count`, not the variable `$count`
- --> tests/ui/scxml038-xpath-spaced-comparison.scxml:8:25
+ --> tests/ui/scxml038-xpath-spaced-comparison.scx:8:25
   |
 8 |       <assign location="count" expr="$count + 1"/>
   |                         ^^^^^ relative path from `<datamodel>`
@@ -31,5 +31,5 @@ help: use `$count`
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
 Some diagnostics have detailed explanations: SCXML038, SCXML057.
-For more information about a diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-xpath-spaced-comparison.scxml
+For more information about a diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-xpath-spaced-comparison.scx

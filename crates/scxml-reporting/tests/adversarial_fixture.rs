@@ -10,7 +10,7 @@ use scxml_validator_xsd::XsdSchemaBackend;
 /// The source id of the documents these tests parse.
 const SOURCE_ID: SourceId = SourceId::new(1);
 
-const SOURCE: &str = include_str!("../../../tests/fixtures/validator-adversarial.scxml");
+const SOURCE: &str = include_str!("../../../tests/fixtures/validator-adversarial.scx");
 
 #[test]
 fn broken_scxml_produces_ai_actionable_deterministic_artifacts() {

@@ -1,5 +1,5 @@
 error[SCXML040]: `expr` was declined by the data-model syntax checker
- --> tests/ui/scxml040-xpath-over-nesting-bound.scxml:4:18
+ --> tests/ui/scxml040-xpath-over-nesting-bound.scx:4:18
   |
 4 |       <log expr="(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((...
   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ over the data model's size or nesting bound
@@ -9,4 +9,4 @@ error[SCXML040]: `expr` was declined by the data-model syntax checker
   = spec: SCXML 1.0 §5.9 Expressions
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML040`.
+For more information about this error, try `scx --explain SCXML040`.

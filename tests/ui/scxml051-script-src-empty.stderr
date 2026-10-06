@@ -1,5 +1,5 @@
 error[SCXML051]: `<script src>` does not name a fetchable script
- --> tests/ui/scxml051-script-src-empty.scxml:4:20
+ --> tests/ui/scxml051-script-src-empty.scx:4:20
   |
 4 |       <script src=" "/>
   |                    ^ empty, oversized, or control-character URI
@@ -9,4 +9,4 @@ error[SCXML051]: `<script src>` does not name a fetchable script
   = spec: SCXML 1.0 §5.8 <script>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML051`.
+For more information about this error, try `scx --explain SCXML051`.

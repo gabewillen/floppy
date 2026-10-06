@@ -1,5 +1,5 @@
 warning[SCXML038]: xpath syntax error in `<script>`: `<script>` is not supported by the XPath data model
- --> tests/ui/scxml038-xpath-script.scxml:8:22
+ --> tests/ui/scxml038-xpath-script.scx:8:22
   |
 8 |     <onentry><script>count = count + 1;</script></onentry>
   |                      ^^^^^^^^^^^^^^^^^^ not supported by `datamodel="xpath"`
@@ -14,5 +14,5 @@ help: remove the `<script>` element
 8 +     <onentry></onentry>
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-xpath-script.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-xpath-script.scx

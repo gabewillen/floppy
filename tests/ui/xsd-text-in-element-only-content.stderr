@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.2.3]: `<final>` cannot contain character data
- --> tests/ui/xsd-text-in-element-only-content.scxml:3:5
+ --> tests/ui/xsd-text-in-element-only-content.scx:3:5
   |
 2 |   <final id="a">
   |    ----- `<final>` has element-only content
@@ -16,4 +16,4 @@ help: remove the stray text
 3 +     
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.2.3`.
+For more information about this error, try `scx --explain XSD-cvc-complex-type.2.3`.

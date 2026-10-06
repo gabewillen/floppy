@@ -16,7 +16,7 @@
     <data id="greetings" expr="0"/>
   </datamodel>
   <state id="s">
-    <invoke id="kid" type="http://www.w3.org/TR/scxml/" src="child-autoforward.child.scxml" autoforward="true"/>
+    <invoke id="kid" type="http://www.w3.org/TR/scxml/" src="child-autoforward.child.scx" autoforward="true"/>
     <transition event="hello">
       <assign location="greetings" expr="greetings + 1"/>
     </transition>

@@ -1,5 +1,5 @@
 error[SCXML016]: invoke source cannot use both `src` and `srcexpr`
- --> tests/ui/scxml016-invoke-conflicting-source.scxml:3:13
+ --> tests/ui/scxml016-invoke-conflicting-source.scx:3:13
   |
 3 |     <invoke src="child.scxml" srcexpr="'child.scxml'"/>
   |             ^^^^^^^^^^^^^^^^^ ----------------------- conflicting attribute
@@ -15,4 +15,4 @@ help: keep `src` and remove `srcexpr`
 3 +     <invoke src="child.scxml"/>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML016`.
+For more information about this error, try `scx --explain SCXML016`.

@@ -1,5 +1,5 @@
 error[XML001]: unescaped `<` in the text of `<script>`
- --> tests/ui/xml001-script-less-than.scxml:2:29
+ --> tests/ui/xml001-script-less-than.scx:2:29
   |
 2 |   <script>for (var i = 0; i < 3; i++) { }</script>
   |                             ^ `<` starts a tag here, but no element name follows it
@@ -13,4 +13,4 @@ help: escape `<` as `&lt;`
   |                             ~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

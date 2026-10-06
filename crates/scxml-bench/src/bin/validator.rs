@@ -3,7 +3,7 @@
 //! Runs three fixed workloads through the public validation and rendering
 //! entry points and prints the median microseconds per iteration:
 //!
-//! - `fixtures`: every `tests/fixtures/*.scxml` document (valid, invalid,
+//! - `fixtures`: every `tests/fixtures/*.scx` document (valid, invalid,
 //!   adversarial, representative, script) validated once per iteration under
 //!   the strict schema policy with the bundled W3C SCXML schema and the
 //!   fixture extension-namespace schema;
@@ -43,26 +43,26 @@ const DOCUMENT_SOURCE: SourceId = SourceId::new(1);
 /// working directory.
 const FIXTURES: [(&str, &str); 5] = [
     (
-        "valid.scxml",
-        include_str!("../../../../tests/fixtures/valid.scxml"),
+        "valid.scx",
+        include_str!("../../../../tests/fixtures/valid.scx"),
     ),
     (
-        "invalid.scxml",
-        include_str!("../../../../tests/fixtures/invalid.scxml"),
+        "invalid.scx",
+        include_str!("../../../../tests/fixtures/invalid.scx"),
     ),
-    ("validator-adversarial.scxml", ADVERSARIAL),
+    ("validator-adversarial.scx", ADVERSARIAL),
     (
-        "representative-machine.scxml",
-        include_str!("../../../../tests/fixtures/representative-machine.scxml"),
+        "representative-machine.scx",
+        include_str!("../../../../tests/fixtures/representative-machine.scx"),
     ),
     (
-        "script-machine.scxml",
-        include_str!("../../../../tests/fixtures/script-machine.scxml"),
+        "script-machine.scx",
+        include_str!("../../../../tests/fixtures/script-machine.scx"),
     ),
 ];
 
 /// Adversarial fixture; its report is also the rendering workload input.
-const ADVERSARIAL: &str = include_str!("../../../../tests/fixtures/validator-adversarial.scxml");
+const ADVERSARIAL: &str = include_str!("../../../../tests/fixtures/validator-adversarial.scx");
 
 /// Extension-namespace schema the valid and invalid fixtures use.
 const CUSTOM_SCHEMA: &str = include_str!("../../../../tests/fixtures/extension-example.xsd");
@@ -155,7 +155,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let semantic_validator = bench_validator(SchemaMode::Off);
     let generated = generated_source()?;
     let adversarial =
-        validator.validate_source(DOCUMENT_SOURCE, "validator-adversarial.scxml", ADVERSARIAL);
+        validator.validate_source(DOCUMENT_SOURCE, "validator-adversarial.scx", ADVERSARIAL);
     let artifact = adversarial.report.canonical_artifact(&adversarial.source)?;
     let workloads: [(&str, Body<'_>); 4] = [
         (

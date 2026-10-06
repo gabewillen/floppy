@@ -1,5 +1,5 @@
 error[SCXML010]: initial transition requires a `target`
- --> tests/ui/scxml010-initial-transition-missing-target.scxml:4:8
+ --> tests/ui/scxml010-initial-transition-missing-target.scx:4:8
   |
 4 |       <transition/>
   |        ^^^^^^^^^^ missing target
@@ -13,4 +13,4 @@ help: add the default `target`
   |                  +++++++++++
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML010`.
+For more information about this error, try `scx --explain SCXML010`.

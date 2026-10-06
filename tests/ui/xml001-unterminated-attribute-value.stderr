@@ -1,5 +1,5 @@
 error[XML001]: the value of `id` is never closed: `"` is missing
- --> tests/ui/xml001-unterminated-attribute-value.scxml:2:13
+ --> tests/ui/xml001-unterminated-attribute-value.scx:2:13
   |
 2 |   <state id="a>
   |             ^ this `"` opens the value of `id`
@@ -13,4 +13,4 @@ help: close the value of `id` with `"`
   |               +
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

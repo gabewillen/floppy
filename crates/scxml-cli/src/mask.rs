@@ -9,8 +9,12 @@
 //! canonical session snapshot document is written exactly: its `sha256`
 //! covers its bytes, so it is never masked, and it gets the protections of
 //! the canonical artifacts it is (it holds data-model values). A value shorter
-//! than [`MIN_MASKED_BYTES`] is not masked (it would mask ordinary text). The
-//! cost is bounded: at most the number of values times the output length.
+//! than [`MIN_MASKED_BYTES`] is not masked (it would mask ordinary text), nor
+//! is a value that is byte for byte one of the bound packages' declared
+//! `http-origins`: that string is public (the package manifest declares it,
+//! and the consent listing must show it), so masking it would hide what the
+//! run consents to and protect nothing. The cost is bounded: at most the
+//! number of values times the output length.
 
 use std::borrow::Cow;
 use std::sync::OnceLock;
@@ -22,11 +26,12 @@ pub(crate) const MIN_MASKED_BYTES: usize = 4;
 
 static VALUES: OnceLock<Vec<String>> = OnceLock::new();
 
-/// Installs the run's values; only the first call has an effect.
-pub(crate) fn install(values: &[(String, String)]) {
+/// Installs the run's values, except any equal to one of `public` (the
+/// bound packages' declared origins); only the first call has an effect.
+pub(crate) fn install(values: &[(String, String)], public: &[String]) {
     let mut forms: Vec<String> = Vec::new();
     for (_, value) in values {
-        if value.len() < MIN_MASKED_BYTES {
+        if value.len() < MIN_MASKED_BYTES || public.contains(value) {
             continue;
         }
         forms.push(value.clone());
@@ -66,11 +71,15 @@ mod tests {
 
     #[test]
     fn values_and_their_json_forms_are_masked() {
-        install(&[
-            ("KEY".into(), "sk-secret-1".into()),
-            ("QUOTED".into(), "a\"b\\c-long".into()),
-            ("SHORT".into(), "abc".into()),
-        ]);
+        install(
+            &[
+                ("KEY".into(), "sk-secret-1".into()),
+                ("QUOTED".into(), "a\"b\\c-long".into()),
+                ("SHORT".into(), "abc".into()),
+                ("BASE".into(), "https://api.example".into()),
+            ],
+            &["https://api.example".to_owned()],
+        );
         assert_eq!(scrub("key sk-secret-1 end"), "key [masked] end");
         assert_eq!(
             scrub(r#"{"v":"a\"b\\c-long"}"#),
@@ -81,6 +90,11 @@ mod tests {
             scrub("abc stays"),
             "abc stays",
             "short values are not masked"
+        );
+        assert_eq!(
+            scrub("outbound HTTP: https://api.example"),
+            "outbound HTTP: https://api.example",
+            "a value that is a declared origin is public"
         );
         assert!(matches!(scrub("nothing"), Cow::Borrowed(_)));
     }

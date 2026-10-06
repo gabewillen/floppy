@@ -29,21 +29,11 @@ pub(crate) fn load(document: &Path, source: &[u8]) -> Resources {
         return Resources::new();
     }
     let span = observe(Module::Cli, Operation::CliReadEventSchema);
-    let directory = document
-        .parent()
-        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-    let root = fs::canonicalize(if directory.as_os_str().is_empty() {
-        Path::new(".")
-    } else {
-        &directory
-    });
+    let root = document_directory(document);
     let mut resources = Resources::new();
     let mut missing = false;
     for reference in references {
-        let bytes = root
-            .as_ref()
-            .ok()
-            .and_then(|root| read_below(root, &reference));
+        let bytes = root.as_ref().and_then(|root| read_below(root, &reference));
         match bytes {
             Some(bytes) => {
                 resources.insert(reference, bytes);
@@ -58,6 +48,46 @@ pub(crate) fn load(document: &Path, source: &[u8]) -> Resources {
         span.event(SignalEvent::ExternalReadCompleted);
     }
     resources
+}
+
+/// The canonical directory of the document at `document`, which its file
+/// references resolve against; `None` when it cannot be canonicalized.
+pub(crate) fn document_directory(document: &Path) -> Option<PathBuf> {
+    let directory = document
+        .parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    fs::canonicalize(if directory.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        &directory
+    })
+    .ok()
+}
+
+/// The bytes of the file `reference` names at or below `root` (a
+/// [`document_directory`]) when it is a path the `event:schema` vocabulary
+/// accepts ([`resource_problem`]) with no fragment; `None` otherwise, or
+/// when it does not resolve to a regular file at or below `root`. Used for
+/// `<invoke src>` documents next to the running document.
+#[cfg_attr(
+    not(feature = "wasmtime"),
+    allow(dead_code, reason = "only a running session loads invoked documents")
+)]
+pub(crate) fn read_reference(root: &Path, reference: &str) -> Option<Vec<u8>> {
+    if reference.contains('#') || resource_problem(reference).is_some() {
+        return None;
+    }
+    // Reading an invoked SCXML document is a source read, like the run's own
+    // document (`crate::read_source`).
+    let span = observe(Module::Cli, Operation::CliReadSource);
+    let bytes = read_below(root, reference);
+    if bytes.is_some() {
+        span.event(SignalEvent::ExternalReadCompleted);
+    } else {
+        span.event(SignalEvent::InputRejected);
+        span.fail(ErrorCategory::InputRead);
+    }
+    bytes
 }
 
 /// The distinct resource parts of the document's `event:schema` references
@@ -152,7 +182,7 @@ mod tests {
     #[test]
     fn references_name_files_below_the_document() {
         let directory =
-            std::env::temp_dir().join(format!("scxml-cli-event-schemas-{}", std::process::id()));
+            std::env::temp_dir().join(format!("scx-event-schemas-{}", std::process::id()));
         let schemas = directory.join("schemas");
         fs::create_dir_all(&schemas).expect("the fixture directory is created");
         fs::write(schemas.join("order one.json"), br#"{"type":"object"}"#)
@@ -183,10 +213,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_fifo_is_never_opened() {
-        let directory = std::env::temp_dir().join(format!(
-            "scxml-cli-event-schemas-fifo-{}",
-            std::process::id()
-        ));
+        let directory =
+            std::env::temp_dir().join(format!("scx-event-schemas-fifo-{}", std::process::id()));
         fs::create_dir_all(&directory).expect("the fixture directory is created");
         let status = std::process::Command::new("mkfifo")
             .arg(directory.join("pipe.json"))

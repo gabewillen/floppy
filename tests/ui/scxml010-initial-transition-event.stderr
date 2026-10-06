@@ -1,5 +1,5 @@
 error[SCXML010]: initial transition must not have `event`
- --> tests/ui/scxml010-initial-transition-event.scxml:4:19
+ --> tests/ui/scxml010-initial-transition-event.scx:4:19
   |
 4 |       <transition event="boot" cond="true" target="c"/>
   |                   ^^^^^^^^^^^^ initialization fallback must be unconditional
@@ -13,7 +13,7 @@ help: remove `event`
 4 +       <transition cond="true" target="c"/>
 
 error[SCXML010]: initial transition must not have `cond`
- --> tests/ui/scxml010-initial-transition-event.scxml:4:32
+ --> tests/ui/scxml010-initial-transition-event.scx:4:32
   |
 4 |       <transition event="boot" cond="true" target="c"/>
   |                                ^^^^^^^^^^^ initialization fallback must be unconditional
@@ -27,4 +27,4 @@ help: remove `cond`
 4 +       <transition event="boot" target="c"/>
 
 diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
-For more information about this error, try `scxml-cli --explain SCXML010`.
+For more information about this error, try `scx --explain SCXML010`.

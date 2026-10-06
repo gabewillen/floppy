@@ -1,6 +1,6 @@
 //! Every self-checking `--explain` example emits its code and its corrected
 //! example does not, validated with the bundled W3C schema and the ECMAScript
-//! and `XPath` expression checkers, composed exactly as `scxml-cli validate`
+//! and `XPath` expression checkers, composed exactly as `scx validate`
 //! composes them.
 
 use scxml_validator_core::ExternalScripts;
@@ -112,7 +112,7 @@ impl ExpressionSyntaxChecker for XPathChecker {
 }
 
 /// Entries whose examples cannot be validated as documents by
-/// `scxml-cli validate`, with the reason. Every other entry is
+/// `scx validate`, with the reason. Every other entry is
 /// self-checking; the list must not grow without a reason, and an entry in
 /// it must not become self-checking unnoticed.
 const NOT_SELF_CHECKING: &[(&str, &str)] = &[

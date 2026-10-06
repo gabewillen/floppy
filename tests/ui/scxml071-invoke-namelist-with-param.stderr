@@ -1,5 +1,5 @@
 error[SCXML071]: an `<invoke>` with `<param>` children cannot also use `namelist`
- --> tests/ui/scxml071-invoke-namelist-with-param.scxml:6:13
+ --> tests/ui/scxml071-invoke-namelist-with-param.scx:6:13
   |
 6 |     <invoke namelist="x">
   |             ^^^^^^^^^^^^ namelist conflicts with the param children
@@ -15,4 +15,4 @@ help: pass the namelist locations as `<param>` children
 6 +     <invoke><param name="x" location="x"/>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML071`.
+For more information about this error, try `scx --explain SCXML071`.

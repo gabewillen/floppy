@@ -1,5 +1,5 @@
 error[XSD001]: cannot resolve an XML Schema for namespace `urn:example:acme`
- --> tests/ui/xsd001-unregistered-namespace.scxml:2:20
+ --> tests/ui/xsd001-unregistered-namespace.scx:2:20
   |
 2 |        xmlns:acme="urn:example:acme"
   |                    ^^^^^^^^^^^^^^^^ no schema is registered for it
@@ -12,4 +12,4 @@ error[XSD001]: cannot resolve an XML Schema for namespace `urn:example:acme`
   = spec: SCXML 1.0 §4.10 Extensibility of Executable Content
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD001`.
+For more information about this error, try `scx --explain XSD001`.

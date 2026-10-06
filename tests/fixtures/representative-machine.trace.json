@@ -432,5 +432,5 @@
   ],
   "schema": "stateforward.machine-trace/v1",
   "session-id": "machine-session",
-  "source": "tests/fixtures/representative-machine.scxml"
+  "source": "tests/fixtures/representative-machine.scx"
 }

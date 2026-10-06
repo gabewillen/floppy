@@ -1,5 +1,5 @@
 error[SCXML085]: `event:schema` is not allowed on `<state>`
- --> tests/ui/scxml085-event-vocabulary-misplaced.scxml:4:20
+ --> tests/ui/scxml085-event-vocabulary-misplaced.scx:4:20
   |
 4 |   <state id="idle" event:schema='{"type": "object"}'>
   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ an `event` attribute on an element that handles or creates no event data
@@ -12,7 +12,7 @@ help: remove `event:schema`
 4 +   <state id="idle">
 
 error[SCXML085]: `<event:schema>` is an element in the `event` namespace, which has none
- --> tests/ui/scxml085-event-vocabulary-misplaced.scxml:6:8
+ --> tests/ui/scxml085-event-vocabulary-misplaced.scx:6:8
   |
 6 |       <event:schema/>
   |        ^^^^^^^^^^^^ not an element of any vocabulary
@@ -21,7 +21,7 @@ error[SCXML085]: `<event:schema>` is an element in the `event` namespace, which 
   = help: remove the element, and describe the event data with an `event:schema` attribute on the element that handles or creates it
 
 error[SCXML085]: `event:schma` is not an attribute of the `event` vocabulary
- --> tests/ui/scxml085-event-vocabulary-misplaced.scxml:8:45
+ --> tests/ui/scxml085-event-vocabulary-misplaced.scx:8:45
   |
 8 |     <transition event="order" target="done" event:schma="true"/>
   |                                             ^^^^^^^^^^^^^^^^^^ unknown on `<transition>`
@@ -34,4 +34,4 @@ help: use `schema`
   |                                                   ~~~~~~
 
 diagnostic summary: 3 error(s), 0 warning(s), 0 note(s), 3 total
-For more information about this error, try `scxml-cli --explain SCXML085`.
+For more information about this error, try `scx --explain SCXML085`.

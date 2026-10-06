@@ -1,5 +1,5 @@
 error[XML003]: undefined entity reference `&nbsp;`
- --> tests/ui/xml003-html-entity.scxml:3:30
+ --> tests/ui/xml003-html-entity.scx:3:30
   |
 3 |     <onentry><log label="done&nbsp;now"/></onentry>
   |                              ^^^^^^ not a predefined or declared entity
@@ -13,4 +13,4 @@ help: use the numeric character reference `&#160;`
   |                              ~~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML003`.
+For more information about this error, try `scx --explain XML003`.

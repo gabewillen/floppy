@@ -4,7 +4,7 @@
 )]
 
 //! Every applicable official IRP case of both checked-in prepared corpora
-//! compiles through the path users run: `scxml-cli compile`, whose validator
+//! compiles through the path users run: `scx compile`, whose validator
 //! links the ECMAScript and `XPath` expression-syntax checkers. The conformance
 //! runner's compiler links no expression checker, so the IRP gate alone never
 //! exercises these diagnostics on the official documents.
@@ -35,7 +35,7 @@ struct OfficialCase {
     source: PathBuf,
 }
 
-/// What `scxml-cli compile` reported for one case.
+/// What `scx compile` reported for one case.
 struct Compiled {
     label: String,
     /// The error code the W3C requires, for a [`W3C_REJECTED`] case.
@@ -80,7 +80,7 @@ fn compile(case: &OfficialCase, output: &Path) -> Compiled {
     let label = format!("{} {}", case.datamodel, case.id);
     let stem = format!("{}-{}", case.datamodel, case.id);
     let canonical = output.join(format!("{stem}.report.json"));
-    let result = Command::new(env!("CARGO_BIN_EXE_scxml-cli"))
+    let result = Command::new(env!("CARGO_BIN_EXE_scx"))
         .arg("compile")
         .arg("--output")
         .arg(output.join(format!("{stem}.scxml-ir.json")))
@@ -89,7 +89,7 @@ fn compile(case: &OfficialCase, output: &Path) -> Compiled {
         .arg("--")
         .arg(&case.source)
         .output()
-        .expect("scxml-cli must spawn");
+        .expect("scx must spawn");
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
     if let Ok(bytes) = std::fs::read(&canonical) {
@@ -131,10 +131,8 @@ fn every_applicable_official_case_compiles_through_the_validator_linked_cli() {
     // ECMAScript: 202 cases less 436 (not applicable) and 513 (no
     // document); XPath: 202 less 24 not applicable and 513.
     assert_eq!(cases.len(), 200 + 177, "applicable official documents");
-    let output = std::env::temp_dir().join(format!(
-        "scxml-cli-irp-validator-path-{}",
-        std::process::id()
-    ));
+    let output =
+        std::env::temp_dir().join(format!("scx-irp-validator-path-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&output);
     std::fs::create_dir_all(&output).expect("the output directory must be created");
 

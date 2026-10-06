@@ -89,7 +89,7 @@ fn package() -> String {
 
 fn fixture() -> String {
     workspace()
-        .join("tests/fixtures/namespaces/example.scxml")
+        .join("tests/fixtures/namespaces/example.scx")
         .display()
         .to_string()
 }
@@ -103,12 +103,12 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 fn cli(args: &[&str], env: &[(&str, &str)]) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_scxml-cli"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_scx"));
     command.args(args).env("NO_COLOR", "1");
     for (name, value) in env {
         command.env(name, value);
     }
-    command.output().expect("scxml-cli must run")
+    command.output().expect("scx must run")
 }
 
 fn text(bytes: &[u8]) -> String {
@@ -325,64 +325,4 @@ fn snapshot_run_rejects_an_unbound_namespace_before_executing() {
     assert_eq!(rejected.status.code(), Some(2));
     assert!(text(&rejected.stderr).contains("error[COMP002]"));
     assert!(rejected.stdout.is_empty(), "no document is written");
-}
-
-/// `--extension-call-fuel` caps every extension component call: one
-/// instruction of fuel cannot run the example element, whose call traps on
-/// exhausted fuel, so the run fails before the document finishes.
-#[test]
-fn snapshot_run_caps_each_extension_call_at_the_extension_call_fuel() {
-    let document = fixture();
-    let starved = run_example(&document, &["--extension-call-fuel", "1"], &[]);
-    let stderr = text(&starved.stderr);
-    assert!(!starved.status.success(), "{stderr}");
-    assert!(stderr.contains("all fuel consumed"), "{stderr}");
-    assert!(!text(&starved.stdout).contains(r#""done""#));
-    let ample = run_example(&document, &["--extension-call-fuel", "1000000000"], &[]);
-    assert!(ample.status.success(), "{}", text(&ample.stderr));
-    assert!(text(&ample.stdout).contains(r#""done""#));
-    let invalid = run_example(&document, &["--extension-call-fuel", "0"], &[]);
-    assert_eq!(invalid.status.code(), Some(2));
-    assert!(text(&invalid.stderr).contains("--extension-call-fuel requires a positive integer"));
-}
-
-/// An `@FILE` argument is replaced by the file's lines, one argument each:
-/// the whole binding of the example package can live in one file.
-#[test]
-fn an_argument_file_carries_the_binding_flags() {
-    let release = release();
-    let scratch = scratch("argument-file");
-    let file = scratch.join("example.args");
-    fs::write(
-        &file,
-        [
-            "--components".to_owned(),
-            release.dir.clone(),
-            "--components-manifest-sha256".to_owned(),
-            release.manifest_sha256.clone(),
-            "--extension-package".to_owned(),
-            package(),
-            "--extension-component".to_owned(),
-            format!(
-                "{EXAMPLE_URI}={}/scxml_extension_example.virtualized.wasm",
-                release.dir
-            ),
-            "--extension-component-sha256".to_owned(),
-            format!("{EXAMPLE_URI}={}", release.example_sha256),
-        ]
-        .join("\n"),
-    )
-    .expect("the argument file is writable");
-    let document = fixture();
-    let argument = format!("@{}", file.display());
-    let run = cli(&["snapshot", "run", &argument, &document], &[]);
-    assert!(run.status.success(), "{}", text(&run.stderr));
-    assert!(text(&run.stdout).contains(r#""done""#));
-
-    let missing = cli(
-        &["snapshot", "run", "@/nonexistent/scxml.args", &document],
-        &[],
-    );
-    assert_eq!(missing.status.code(), Some(2));
-    assert!(text(&missing.stderr).contains("cannot read the argument file"));
 }

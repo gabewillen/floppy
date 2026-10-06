@@ -58,7 +58,7 @@ fn document(body: &str) -> String {
 }
 
 pub(super) fn diagnostics(xml: &str) -> Vec<Diagnostic> {
-    let document = parse_xml(SourceText::new(SOURCE, "xpath.scxml", xml.to_owned()))
+    let document = parse_xml(SourceText::new(SOURCE, "xpath.scx", xml.to_owned()))
         .expect("XPath fixture must be well-formed");
     validate_expressions(&document, &XPathChecker)
         .diagnostics()

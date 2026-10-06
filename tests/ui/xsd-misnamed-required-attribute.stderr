@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.3.2.2]: `<raise>` requires `event` but has `name`, which it does not accept
- --> tests/ui/xsd-misnamed-required-attribute.scxml:8:21
+ --> tests/ui/xsd-misnamed-required-attribute.scx:8:21
   |
 8 |     <onentry><raise name="go"/></onentry>
   |               ----- ^^^^ unknown attribute
@@ -16,4 +16,4 @@ help: rename `name` to `event`
   |                     ~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.3.2.2`.
+For more information about this error, try `scx --explain XSD-cvc-complex-type.3.2.2`.

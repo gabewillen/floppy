@@ -345,22 +345,93 @@ impl WasmExecutor {
         )
     }
 
-    /// The shared constructor; `snapshot_collection` selects both the
-    /// capture behavior and the pinned telemetry providers it needs.
+    /// Authenticates release components held in memory (for example ones
+    /// an embedder compiled in): `manifest` is the release's `manifest.tsv`
+    /// bytes and `artifact` returns the bytes of each named
+    /// `*.virtualized.wasm` artifact, both checked exactly as
+    /// [`WasmExecutor::from_release_dir`] checks the files.
+    ///
+    /// # Errors
+    ///
+    /// As [`WasmExecutor::from_release_dir`]; an artifact `artifact` does not
+    /// return fails as [`WasmExecutorError::Read`].
+    pub fn from_release_bytes(
+        manifest: &[u8],
+        trusted_manifest_sha256: &str,
+        artifact: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ) -> Result<Self, WasmExecutorError> {
+        Self::build_from(
+            manifest,
+            trusted_manifest_sha256,
+            &|name| {
+                artifact(name).ok_or_else(|| {
+                    WasmExecutorError::Read(
+                        name,
+                        std::io::Error::from(std::io::ErrorKind::NotFound),
+                    )
+                })
+            },
+            SnapshotCollection::Off,
+        )
+    }
+
+    /// As [`WasmExecutor::from_release_bytes`], collecting snapshots as
+    /// [`WasmExecutor::from_release_dir_collecting_snapshots`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`WasmExecutor::from_release_bytes`].
+    pub fn from_release_bytes_collecting_snapshots(
+        manifest: &[u8],
+        trusted_manifest_sha256: &str,
+        artifact: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ) -> Result<Self, WasmExecutorError> {
+        Self::build_from(
+            manifest,
+            trusted_manifest_sha256,
+            &|name| {
+                artifact(name).ok_or_else(|| {
+                    WasmExecutorError::Read(
+                        name,
+                        std::io::Error::from(std::io::ErrorKind::NotFound),
+                    )
+                })
+            },
+            SnapshotCollection::EveryCheckpoint,
+        )
+    }
+
+    /// The shared constructor of a release directory.
     fn build(
         dir: &Path,
         trusted_manifest_sha256: &str,
         snapshot_collection: SnapshotCollection,
     ) -> Result<Self, WasmExecutorError> {
-        let trusted = TrustedManifestDigest::from_hex(trusted_manifest_sha256)
-            .map_err(|_| WasmExecutorError::InvalidDigest)?;
         let manifest = read_release_file(dir, "manifest.tsv", MAX_RELEASE_MANIFEST_BYTES)?;
         let component_limit = u64::try_from(scxml_host_wasmtime::MAX_AUTHENTICATED_COMPONENT_BYTES)
             .unwrap_or(u64::MAX);
+        Self::build_from(
+            &manifest,
+            trusted_manifest_sha256,
+            &|name| read_release_file(dir, name, component_limit),
+            snapshot_collection,
+        )
+    }
+
+    /// The shared constructor; `snapshot_collection` selects both the
+    /// capture behavior and the pinned telemetry providers it needs.
+    fn build_from(
+        manifest: &[u8],
+        trusted_manifest_sha256: &str,
+        artifact: &dyn Fn(&'static str) -> Result<Vec<u8>, WasmExecutorError>,
+        snapshot_collection: SnapshotCollection,
+    ) -> Result<Self, WasmExecutorError> {
+        let trusted = TrustedManifestDigest::from_hex(trusted_manifest_sha256)
+            .map_err(|_| WasmExecutorError::InvalidDigest)?;
         let mut authenticated = Vec::with_capacity(COMPONENTS.len());
         for (kind, name) in COMPONENTS {
-            let bytes = read_release_file(dir, name, component_limit)?;
-            let component = authenticate_component(&manifest, trusted, kind, name, &bytes)
+            let bytes = artifact(name)?;
+            let component = authenticate_component(manifest, trusted, kind, name, &bytes)
                 .map_err(WasmExecutorError::Host)?;
             authenticated.push((kind, component, bytes));
         }

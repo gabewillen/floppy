@@ -31,7 +31,7 @@ hard cutover.
   `stateforward.scxml.service-cache/v1`) are new. The README's
   versioning table lists each contract at `0.1.0` and `0.2.0`.
 - Invoked sessions run at any depth on one shared logical clock, and
-  live sessions (`scxml-cli run`, `SessionHost::open`) take events as they
+  live sessions (`scx run`, `SessionHost::open`) take events as they
   arrive, with record and replay.
 - BasicHTTP runs over the network in live sessions, and delayed BasicHTTP
   sends are held on the session clock.
@@ -54,15 +54,20 @@ hard cutover.
 
 ### Added
 
-- `scxml-cli` argument files: an argument `@FILE` before `--` is replaced by
-  the lines of `FILE`, one argument per line taken literally, exactly as
-  rustc reads `@path` (no quoting, comments, or nesting; regular file, UTF-8,
-  at most 1 MiB), so a run's packages, digests, grants, and `--env` scopes
-  can live in one file.
-- `scxml-cli snapshot run` and `run` take `--extension-call-fuel N`, the
-  instruction fuel cap of one extension component call
-  (`ExtensionComponents::with_call_fuel`; `DEFAULT_EXTENSION_CALL_FUEL`
-  without it), for elements that link large components.
+- `scx` embeds the authenticated release session components: its build
+  (`crates/scxml-cli/build.rs`, the default `wasmtime` feature) reads the
+  `scripts/verify-wasm-capabilities.sh` release (`target/wasm-artifacts/release`
+  or `SCXML_WASM_ARTIFACTS_DIR`), checks every component's SHA-256 and size
+  against `manifest.tsv`, and fails with a message naming what is missing;
+  `run`, `snapshot run`, and `conformance run` use them by default, and
+  `--components DIR --components-manifest-sha256 HEX` overrides them
+  (`WasmExecutor::from_release_bytes`,
+  `WasmExecutor::from_release_bytes_collecting_snapshots`).
+- `DEFAULT_EXTENSION_CALL_FUEL` is one billion instructions (it was 100
+  million): one call of an element that links the whole validator compiles
+  the bundled W3C SCXML 1.0 XSD set (measured 166 to 214 million
+  instructions per `<sx:validate>` call in nemobot, about 85% of it the
+  schema compilation, which `xsd-schema` cannot cache across documents).
 - Invoked services (SCXML 6.4): an `<invoke>` whose type is neither absent
   nor the SCXML type runs in a `stateforward:scxml/invoked-service` Wasm
   component the Wasmtime session host binds to that exact type URI
@@ -110,7 +115,7 @@ hard cutover.
   keeps a logical clock from moving past a request in flight). The
   responses are recorded inputs (`InputRecord::HttpResponse`, the
   `http-response` record of `scxml.live-log/v1`), so `--record` and
-  `--replay` work with services; `scxml-cli run` delivers each in a call
+  `--replay` work with services; `scx run` delivers each in a call
   with cause `http-response`. An extension component's `fetch` is the same
   WIT function, driven to completion inside its synchronous `execute`.
   Telemetry operations `service-wait-until`, `service-http-fetch`,
@@ -125,7 +130,7 @@ hard cutover.
   without its import, and a `wasi:*` import the host never links
   (`wasi:cli`, `wasi:http`) fail closed when the service is bound, before
   anything runs (`ArtifactError::WasiResourceUngranted`,
-  `WasiGrantUndeclared`, `WasiImportUndeclared`, `WasiGrantInvalid`). The
+  `WasiGrantUndeclared`, `UnknownImport`, `WasiGrantInvalid`). The
   CLI lists each service's `= WASI imports:` and `= WASI resources:` before
   running. Extension components get no WASI interface, by rule: extension
   elements are synchronous executable content, and I/O-bound work belongs
@@ -151,12 +156,14 @@ hard cutover.
   `EnvVariable`s, each granted to exact package URIs (extension namespace or
   invoked-service type URIs); a slot naming a variable not granted to its
   element's namespace or its `<invoke>`'s type URI is absent, exactly like
-  an unheld one. The CLI's `--env` is now `--env NAME@URI[=VALUE]`
-  (repeatable per package; the unscoped `--env NAME[=VALUE]` is removed), a
-  granted variable's value is its flag's, else its last `--env-file` entry,
-  else the calling shell's, and `--env-file` entries no flag grants are
-  dropped. The pre-run listing says `(no value granted: add --env
-  NAME@URI)`.
+  an unheld one. The CLI derives the grants from the document: a variable
+  goes only to the packages of the elements and `<invoke>`s whose `env`
+  attributes name it (and to the package of every `env:<slot>expr` slot,
+  whose name is known only when it executes). `--env NAME[=VALUE]` and
+  `--env-file` supply values: a variable's value is its flag's, else its
+  last `--env-file` entry, else, only for a bare `--env NAME`, the calling
+  shell's; a variable no slot can name is dropped. The pre-run listing shows
+  each variable and the elements and `<invoke>`s it goes to (names only).
 - Per-input bounds for invoked services: between two inputs (its start,
   an event, its due timers, an HTTP response) an invocation runs at most the
   configured fuel (`ServiceComponents::with_call_fuel`) and returns at most
@@ -225,11 +232,11 @@ hard cutover.
   pluggable clock (`WallClock`, `ManualClock`, or logical), with `<log>`
   records and the root's completion as `SessionOutput`s and byte-exact
   record and replay; see [docs/live-session.md](docs/live-session.md).
-  `scxml-cli run DOC` keeps one live session open over newline-delimited
+  `scx run DOC` keeps one live session open over newline-delimited
   JSON (`--clock`, `--snapshot-on`, `--on-eof`, `--record`, `--replay`).
 - `BasicHTTP` over the network for live sessions (SCXML C.2): the `http`
   feature of `scxml-host-wasmtime` (`NetworkClient`, a deny-by-default
-  allowlist; `BasicHttpListener`), `scxml-cli run --http-allow`,
+  allowlist; `BasicHttpListener`), `scx run --http-allow`,
   `--http-listen`, and `--http-public-url`. Record and replay cover the
   network. The `Sent` output and the CLI's `sent` record are removed.
 - Delayed `BasicHTTP` sends, held on the session clock by the SCXML Event
@@ -390,7 +397,7 @@ hard cutover.
   admits each one only to an origin the element's package declares or a
   reference's value supplies; the `http` feature's `ExtensionHttpClient`
   bounds each request by a 10 s connect and 120 s total timeout and a 16 MiB
-  response body. `scxml-cli snapshot run` and `run` supply it (not with
+  response body. `scx snapshot run` and `run` supply it (not with
   `--record` or `--replay`). New host span
   `scxml.host-wasmtime.extension-http-fetch`.
 - `namespaces/`, the top-level directory for repository namespaces, one
@@ -517,7 +524,7 @@ hard cutover.
   and `usize::MAX` natively (and compared through
   `scxml_types::exceeds_wasm_bound`), so the shipped components keep their
   bounds and native builds have none of their own:
-  - validation and compilation: the native `scxml-cli` validates and
+  - validation and compilation: the native `scx` validates and
     compiles documents of any size and never reports `SCXML027`,
     `SCXML041`, `SCXML069`, or `COMP001`, nor `SCXML028`, `SCXML040`,
     `XML002`, or `XSD006` for a size bound;
@@ -555,7 +562,7 @@ hard cutover.
   its name and value; XSD content-model expansion and compilation work; the
   ECMAScript side-effect analysis's 200,000 steps per fragment; the graph
   analysis work budget of 8,000,000 units per machine or 1,024 per element
-  and target reference, past which even the native `scxml-cli` reports
+  and target reference, past which even the native `scx` reports
   `SCXML028`; and the rendered and SARIF report size), the format and
   interchange contracts (WIT value bounds, the `data-model-api`
   `initialize` bounds, and the session snapshot format), network ingress
@@ -578,7 +585,7 @@ hard cutover.
   error event are warnings, not errors: `SCXML038` (syntax), `SCXML039`
   (location), `SCXML056` (undeclared XPath variable), and `SCXML066` (empty
   expression); every applicable official IRP document compiles through
-  `scxml-cli` with no error. Accepted as conforming: `type` on `<initial>`
+  `scx` with no error. Accepted as conforming: `type` on `<initial>`
   and history transitions (`SCXML010`, `SCXML020`), a `<parallel>` with no
   regions, `<assign type="delete">` with an `expr` (which is ignored, CR
   C.3.6), every `<data id>` ECMAScript can declare (non-ASCII, hyphenated,
@@ -670,7 +677,7 @@ hard cutover.
   the listener itself failed. Its accept loop never blocks (it checks for
   `stop` every 10 ms, `ACCEPT_POLL`), so `ListenerHandle::stop` returns
   promptly on any bound address, including `0.0.0.0` and `::`, and
-  dropping a `ListenerHandle` stops it. `scxml-cli run --http-listen`
+  dropping a `ListenerHandle` stops it. `scx run --http-listen`
   keeps its listener for the session, fails the run with
   `http-listener-failed` when a listener thread panicked, and stops it on
   close.
@@ -758,7 +765,7 @@ hard cutover.
     WIT `record step` is `call-result`, engine `Step` is `CommandResult`
     (`RunReport.result`, `MAX_EFFECTS_PER_COMMAND`), `LiveStep` is
     `LiveCallResult`, the browser `Step` is `CallResult` and due deliveries
-    report `{results, complete}`, and `scxml-cli run` writes `call` records
+    report `{results, complete}`, and `scx run` writes `call` records
     and takes `--snapshot-on call`. The engine-command budget is a command
     budget: `--max-steps` is `--max-commands`, the corpus manifest's
     `default_step_budget` and a case's `max_steps` are
@@ -1081,7 +1088,7 @@ hard cutover.
   encoded is `platform`, one too large for the channel `payload-too-large`,
   and a reply that cannot be written loses the session instead of blocking
   it. An inbound BasicHTTP message the listener already answered `503` is
-  no longer delivered as an event by `scxml-cli run`.
+  no longer delivered as an event by `scx run`.
 - The browser host forwards `release-foreach` to its data model untraced,
   as the Wasmtime host does, instead of opening a capability span for it
   after every command.
@@ -1097,7 +1104,7 @@ hard cutover.
   the same way instead of being ignored). An invocation request a machine call made without
   suspending for it is discarded with the child it built, and a second one
   while one is pending is `host-invariant`, as under Wasmtime.
-- `scxml-cli run` with `--http-listen` checks the listener at least every
+- `scx run` with `--http-listen` checks the listener at least every
   250 ms while a timer is pending, so a panicked listener thread fails the
   run promptly. A BasicHTTP listener backing off after an `accept` failure
   stops within one accept poll, and every connection it drops after
@@ -1245,7 +1252,7 @@ SCXML implementation.
   Diagnostics carry exact byte spans and rustc/clippy-style fixes and are
   emitted as one canonical `scxml.report/v2` artifact. The validator runs
   zero-config (XML, the bundled official W3C SCXML 1.0 XSD, and semantic
-  rules by default), explains any code with `scxml-cli --explain CODE`, and
+  rules by default), explains any code with `scx --explain CODE`, and
   emits `--format json` (canonical report) or `--format sarif` for agent
   repair loops. `SCXML040` (an expression over the data model's size or
   nesting bound) is an error, because the data model applies the same bound
@@ -1322,7 +1329,7 @@ SCXML implementation.
   and applies every oracle, and executes it only through a `CaseExecutor`,
   the shipped components under the Wasmtime session host
   (`scxml_conformance::WasmExecutor`, `wasmtime` feature); the crate links no
-  in-process SCXML execution. `scxml-cli conformance run` requires
+  in-process SCXML execution. `scx conformance run` requires
   `--components DIR --components-manifest-sha256 HEX` (a build without the
   `wasmtime` feature fails closed before any case runs), and
   `--canonical-baseline` compares a run with a checked-in canonical baseline
@@ -1334,10 +1341,10 @@ SCXML implementation.
   check (size, JSON, version, shape, canonical bytes, digest, bounds, names,
   consistency), diffs two documents as `scxml.session-snapshot-diff/v1`, and
   renders both for people. The optional `scxml-snapshot-codec` component
-  exports the same `encode` and `diff`. `scxml-cli snapshot show`, `check`
+  exports the same `encode` and `diff`. `scx snapshot show`, `check`
   (`SNAP-<code>` diagnostics with a pointer, explained by
   `--explain SNAP-<code>`), and `diff` read documents, escaping control and
-  bidi characters in human output. `scxml-cli snapshot run` executes a
+  bidi characters in human output. `scx snapshot run` executes a
   document through the shipped components under Wasmtime (the `wasmtime`
   feature) and writes the final checkpoint document, or the `--at`/`--every`
   checkpoints to `--output-dir DIR`; without the feature it fails with
@@ -1351,7 +1358,7 @@ SCXML implementation.
   `stateforward:scxml/ir-source` import (bounded, version-checked, and
   validated, failing closed as a typed failed session).
 - Codegen-free `component-wasm` packaging (`scxml-packager`, the compiler
-  component, and `scxml-cli compile --artifact component-wasm`): a data-only
+  component, and `scx compile --artifact component-wasm`): a data-only
   `ir-source` provider composed with a pinned prebuilt generic machine
   template, with template and IR digests in the package recipe. Browsers use
   runtime `ir-source` mode only.

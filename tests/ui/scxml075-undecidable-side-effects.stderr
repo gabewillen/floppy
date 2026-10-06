@@ -1,5 +1,5 @@
 warning[SCXML075]: cannot prove that `cond` on `<transition>` has no side effect
- --> tests/ui/scxml075-undecidable-side-effects.scxml:4:34
+ --> tests/ui/scxml075-undecidable-side-effects.scx:4:34
   |
 4 |     <transition event="go" cond="isReady()" target="f"/>
   |                                  ^^^^^^^^^ calls `isReady`, which the validator cannot see
@@ -11,7 +11,7 @@ warning[SCXML075]: cannot prove that `cond` on `<transition>` has no side effect
   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 warning[SCXML075]: cannot prove that `cond` on `<transition>` has no side effect
- --> tests/ui/scxml075-undecidable-side-effects.scxml:5:36
+ --> tests/ui/scxml075-undecidable-side-effects.scx:5:36
   |
 5 |     <transition event="eval" cond="eval(code)" target="f"/>
   |                                    ^^^^^^^^^^ `eval` runs text as code
@@ -23,5 +23,5 @@ warning[SCXML075]: cannot prove that `cond` on `<transition>` has no side effect
   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML075`.
-validated tests/ui/scxml075-undecidable-side-effects.scxml
+For more information about this diagnostic, try `scx --explain SCXML075`.
+validated tests/ui/scxml075-undecidable-side-effects.scx

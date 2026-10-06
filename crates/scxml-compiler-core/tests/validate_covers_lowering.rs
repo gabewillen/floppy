@@ -6,7 +6,7 @@
 //! error key with its exact number of source sites; a source scan fails the
 //! suite when a site is added, removed, or renamed without updating the
 //! table. Each key either names documents that reach it (lowering must fail
-//! with that key, the validator composed as `scxml-cli validate` must report
+//! with that key, the validator composed as `scx validate` must report
 //! the expected error code, and `compile` must stop at validation instead of
 //! reporting `COMP001`), or states why no parsed document can reach it.
 

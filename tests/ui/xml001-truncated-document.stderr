@@ -1,5 +1,5 @@
 error[XML001]: the document ends before `<scxml>` is closed
- --> tests/ui/xml001-truncated-document.scxml:5:17
+ --> tests/ui/xml001-truncated-document.scx:5:17
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
   |  ----- `<scxml>` opens here and is never closed
@@ -17,4 +17,4 @@ help: add `</scxml>` at the end of the document
   | ++++++++
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

@@ -1,5 +1,5 @@
 warning[SCXML093]: this `<invoke type>` is a platform-specific value, not a URI
- --> tests/ui/invoke-service-types.scxml:3:19
+ --> tests/ui/invoke-service-types.scx:3:19
   |
 3 |     <invoke type="echo"/>
   |                   ^^^^ no service package binds a type that is not a URI
@@ -9,7 +9,7 @@ warning[SCXML093]: this `<invoke type>` is a platform-specific value, not a URI
   = spec: SCXML 1.0 §6.4 <invoke>
 
 warning[SCXML094]: no service package binds this `<invoke type>`
- --> tests/ui/invoke-service-types.scxml:4:19
+ --> tests/ui/invoke-service-types.scx:4:19
   |
 4 |     <invoke type="https://stateforward.org/scxml/services/echo" id="svc"/>
   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no service component is bound to this URI
@@ -20,5 +20,5 @@ warning[SCXML094]: no service package binds this `<invoke type>`
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
 Some diagnostics have detailed explanations: SCXML093, SCXML094.
-For more information about a diagnostic, try `scxml-cli --explain SCXML093`.
-validated tests/ui/invoke-service-types.scxml
+For more information about a diagnostic, try `scx --explain SCXML093`.
+validated tests/ui/invoke-service-types.scx

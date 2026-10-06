@@ -1,5 +1,5 @@
 error[XML001]: malformed XML: unterminated XML reference in attribute value
- --> tests/ui/xml001-unescaped-ampersand.scxml:3:25
+ --> tests/ui/xml001-unescaped-ampersand.scx:3:25
   |
 3 |     <transition cond="x && y" target="b"/>
   |                         ^^^^ not well-formed XML
@@ -9,4 +9,4 @@ error[XML001]: malformed XML: unterminated XML reference in attribute value
   = spec: XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

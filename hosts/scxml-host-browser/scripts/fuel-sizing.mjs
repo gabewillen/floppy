@@ -110,7 +110,7 @@ const FOREACH_ITEMS = [60, 90, 1_000];
 const WIDE_REGIONS = 64;
 /** States of the large inline child workload. */
 const CHILD_STATES = 4_000;
-const representative = await readFile(join(workspace, 'tests/fixtures/representative-machine.scxml'), 'utf8');
+const representative = await readFile(join(workspace, 'tests/fixtures/representative-machine.scx'), 'utf8');
 
 const workloads = [
   ...FOREACH_ITEMS.map((items) => [`<foreach> over ${items} items`, foreach(items), 'ecmascript', []]),

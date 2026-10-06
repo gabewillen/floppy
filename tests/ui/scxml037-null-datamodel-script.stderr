@@ -1,5 +1,5 @@
 error[SCXML037]: the null data model does not support `<script>`
- --> tests/ui/scxml037-null-datamodel-script.scxml:4:8
+ --> tests/ui/scxml037-null-datamodel-script.scx:4:8
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="a">
   |                                                                         ---- the null data model is selected here
@@ -19,4 +19,4 @@ help: select the ECMAScript data model
   |                                                                         ~~~~~~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML037`.
+For more information about this error, try `scx --explain SCXML037`.

@@ -1,5 +1,5 @@
 error[SCXML005]: transition targets are whitespace-separated, not comma-separated: `r1b,r2b` is not one state ID
- --> tests/ui/scxml005-comma-separated-targets.scxml:5:38
+ --> tests/ui/scxml005-comma-separated-targets.scx:5:38
   |
 5 |     <transition event="both" target="r1b,r2b"/>
   |                                      ^^^^^^^ comma-separated targets
@@ -13,4 +13,4 @@ help: separate the targets with spaces
   |                                      ~~~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML005`.
+For more information about this error, try `scx --explain SCXML005`.

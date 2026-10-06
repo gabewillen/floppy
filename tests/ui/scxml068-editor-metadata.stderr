@@ -1,5 +1,5 @@
 error[SCXML068]: this compiler cannot lower attribute `xml:lang` from another namespace on `<scxml>`
- --> tests/ui/scxml068-editor-metadata.scxml:2:104
+ --> tests/ui/scxml068-editor-metadata.scx:2:104
   |
 2 | <scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ed="urn:example:editor" version="1.0" initial="a" xml:lang="en">
   |                                                                                                        ^^^^^^^^^^^^^ namespace `http://www.w3.org/XML/1998/namespace`
@@ -12,7 +12,7 @@ help: remove `xml:lang`
 2 + <scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ed="urn:example:editor" version="1.0" initial="a">
 
 error[SCXML068]: this compiler cannot lower `<ed:layout>` from namespace `urn:example:editor` inside `<scxml>`
- --> tests/ui/scxml068-editor-metadata.scxml:3:4
+ --> tests/ui/scxml068-editor-metadata.scx:3:4
   |
 2 | <scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ed="urn:example:editor" version="1.0" initial="a" xml:lang="en">
   |  ----- this compiler lowers only SCXML children of `<scxml>`
@@ -26,7 +26,7 @@ help: remove `<ed:layout>`
 3 -   <ed:layout width="640" height="480"/>
 
 error[SCXML068]: this compiler cannot lower 2 attributes from other namespaces on `<state>`
- --> tests/ui/scxml068-editor-metadata.scxml:4:17
+ --> tests/ui/scxml068-editor-metadata.scx:4:17
   |
 4 |   <state id="a" ed:x="10" ed:y="20">
   |                 ^^^^^^^^^ --------- namespace `urn:example:editor`
@@ -41,4 +41,4 @@ help: remove the 2 attributes
 4 +   <state id="a">
 
 diagnostic summary: 3 error(s), 0 warning(s), 0 note(s), 3 total
-For more information about this error, try `scxml-cli --explain SCXML068`.
+For more information about this error, try `scx --explain SCXML068`.

@@ -129,7 +129,20 @@ use extension_bindings::stateforward::scxml::{
 /// Default instruction fuel cap of one extension component call (`initialize`,
 /// `execute`, or `shutdown`); every call also runs on the session host's
 /// per-call budget.
-pub const DEFAULT_EXTENSION_CALL_FUEL: u64 = 100_000_000;
+///
+/// Rationale for one billion: an element may link a whole validator, and
+/// one call then compiles the bundled W3C SCXML 1.0 XSD set before it
+/// validates anything. Measured with nemobot's `<sx:validate>` (the scxml.rs
+/// validator in one component, release build, `wasm32-wasip2`), one call
+/// takes about 166 million instructions for a two-state document, 191
+/// million for a 40-state document, and 214 million for a 1.2 KiB
+/// model-written draft; natively about 85% of that time is the XSD set's
+/// compilation (`xsd_schema::process_loaded_schemas`), which `xsd-schema`
+/// can neither serialize nor share across documents (its name table interns
+/// each instance's names). One billion covers such a call several times
+/// over; it stays a bound, not a target, and an exhausted call still
+/// retires the instance.
+pub const DEFAULT_EXTENSION_CALL_FUEL: u64 = 1_000_000_000;
 /// Maximum namespaces one session host binds.
 pub const MAX_EXTENSION_COMPONENTS: usize = 64;
 /// Maximum bytes of one bound namespace URI (the package-manifest field

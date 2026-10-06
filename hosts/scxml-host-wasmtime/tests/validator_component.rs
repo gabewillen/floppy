@@ -6,7 +6,7 @@
 //! exactly one checked data model (`ecmascript` or `xpath`) and no extra CLI
 //! arguments is validated through a [`ComponentValidator`] with that data
 //! model's component linked, and the component's canonical report bytes must
-//! equal the case's `.json` snapshot, which `scxml-cli validate --format
+//! equal the case's `.json` snapshot, which `scx validate --format
 //! json` (linking the native ECMAScript and `XPath` checkers) produced. So the
 //! component reports the same expression diagnostics (codes, spans, labels,
 //! notes, help, and fixes) as the CLI, not merely the same codes.
@@ -195,7 +195,7 @@ fn component_expression_diagnostics_match_the_cli_snapshots() {
     let mut mismatches = Vec::new();
     for case in cases {
         let source =
-            String::from_utf8(read(&ui.join(format!("{case}.scxml")))).expect("UI case is UTF-8");
+            String::from_utf8(read(&ui.join(format!("{case}.scx")))).expect("UI case is UTF-8");
         // Extra CLI arguments (schemas, policies) have no request field here.
         if source.trim_start().starts_with("<?ui-args") {
             continue;
@@ -210,7 +210,7 @@ fn component_expression_diagnostics_match_the_cli_snapshots() {
         };
         let expected = String::from_utf8(read(&ui.join(format!("{case}.json"))))
             .expect("UI snapshot is UTF-8");
-        let actual = validate(validator, &format!("tests/ui/{case}.scxml"), &source);
+        let actual = validate(validator, &format!("tests/ui/{case}.scx"), &source);
         if actual.trim_end() != expected.trim_end() {
             mismatches.push(format!(
                 "{case}\n  cli:       {}\n  component: {}",
@@ -256,7 +256,7 @@ fn component_expression_diagnostics_match_the_cli_snapshots() {
 /// the two validators differ on purpose for a document over one: the native
 /// CLI's snapshot is clean, while the validator component, a wasm build,
 /// still reports the bound. The CLI side of each generated document is
-/// `scxml-cli`'s `ui` test (`check_generated_budget_cases`).
+/// `scx`'s `ui` test (`check_generated_budget_cases`).
 #[test]
 fn the_wasm_validator_keeps_the_bounds_the_native_cli_lifts() {
     const HEAD: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="ecmascript">"#;
@@ -266,10 +266,10 @@ fn the_wasm_validator_keeps_the_bounds_the_native_cli_lifts() {
 
     let case = "valid-scxml069-state-nesting-over-wasm-bound";
     let ui = artifacts.workspace.join("tests/ui");
-    let source = String::from_utf8(read(&ui.join(format!("{case}.scxml")))).expect("UTF-8");
+    let source = String::from_utf8(read(&ui.join(format!("{case}.scx")))).expect("UTF-8");
     let native = String::from_utf8(read(&ui.join(format!("{case}.json")))).expect("UTF-8");
     assert!(!reports(&native, "SCXML069"), "{native}");
-    let wasm = validate(&ecmascript, &format!("tests/ui/{case}.scxml"), &source);
+    let wasm = validate(&ecmascript, &format!("tests/ui/{case}.scx"), &source);
     assert!(reports(&wasm, "SCXML069"), "{wasm}");
 
     let chain = (0..65_536).fold(
@@ -422,7 +422,7 @@ fn guest_validate_span_records_its_events_and_error_category() {
         (result, guest_validate_span(&spans))
     };
     let mut request = ValidationRequest {
-        source_name: "valid.scxml".to_owned(),
+        source_name: "valid.scx".to_owned(),
         source: r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"><final id="f"/></scxml>"#.to_owned(),
         policy: SchemaPolicy::Strict,
         schemas: Vec::new(),
@@ -474,7 +474,7 @@ fn guest_validate_span_without_a_carrier_is_a_root_span_under_a_noop_global_prov
     let validator = ComponentValidator::new(&artifacts().validator, None, &config(), &providers)
         .expect("the validator component compiles and links");
     let result = validator.validate(&ValidationRequest {
-        source_name: "valid.scxml".to_owned(),
+        source_name: "valid.scx".to_owned(),
         source: r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"><final id="f"/></scxml>"#.to_owned(),
         policy: SchemaPolicy::Strict,
         schemas: Vec::new(),

@@ -1,5 +1,5 @@
 warning[SCXML038]: xpath syntax error in `cond`: `&&` is not an XPath operator
- --> tests/ui/scxml038-xpath-mixed-habits.scxml:8:48
+ --> tests/ui/scxml038-xpath-mixed-habits.scx:8:48
   |
 8 |     <transition event="range" cond="$a1 &gt; 1 &amp;&amp; $a1 &lt; 9 || $a1 == 0" target="b"/>
   |                                     -------------------------------------------- while parsing this `cond`
@@ -15,7 +15,7 @@ help: use `and`
   |                                                ~~~
 
 warning[SCXML038]: xpath syntax error in `cond`: `||` is not an XPath operator
- --> tests/ui/scxml038-xpath-mixed-habits.scxml:8:70
+ --> tests/ui/scxml038-xpath-mixed-habits.scx:8:70
   |
 8 |     <transition event="range" cond="$a1 &gt; 1 &amp;&amp; $a1 &lt; 9 || $a1 == 0" target="b"/>
   |                                     -------------------------------------------- while parsing this `cond`
@@ -31,7 +31,7 @@ help: use `or`
   |                                                                      ~~
 
 warning[SCXML038]: xpath syntax error in `cond`: `==` is not an XPath operator
- --> tests/ui/scxml038-xpath-mixed-habits.scxml:8:77
+ --> tests/ui/scxml038-xpath-mixed-habits.scx:8:77
   |
 8 |     <transition event="range" cond="$a1 &gt; 1 &amp;&amp; $a1 &lt; 9 || $a1 == 0" target="b"/>
   |                                     -------------------------------------------- while parsing this `cond`
@@ -47,7 +47,7 @@ help: compare with `=`
   |                                                                             ~
 
 warning[SCXML038]: xpath syntax error in `cond`: `==` is not an XPath operator
- --> tests/ui/scxml038-xpath-mixed-habits.scxml:9:44
+ --> tests/ui/scxml038-xpath-mixed-habits.scx:9:44
   |
 9 |     <transition event="first" cond="$count == 1 &amp;&amp; true()" target="b"/>
   |                                     ----------------------------- while parsing this `cond`
@@ -63,7 +63,7 @@ help: compare with `=`
   |                                            ~
 
 warning[SCXML038]: xpath syntax error in `cond`: `&&` is not an XPath operator
- --> tests/ui/scxml038-xpath-mixed-habits.scxml:9:49
+ --> tests/ui/scxml038-xpath-mixed-habits.scx:9:49
   |
 9 |     <transition event="first" cond="$count == 1 &amp;&amp; true()" target="b"/>
   |                                     ----------------------------- while parsing this `cond`
@@ -79,7 +79,7 @@ help: use `and`
   |                                                 ~~~
 
 warning[SCXML038]: xpath syntax error in `cond`: `===` is not an XPath operator
-  --> tests/ui/scxml038-xpath-mixed-habits.scxml:10:43
+  --> tests/ui/scxml038-xpath-mixed-habits.scx:10:43
    |
 10 |     <transition event="loud" cond="$count === 1 AND $a1 !== 2" target="b"/>
    |                                    -------------------------- while parsing this `cond`
@@ -95,7 +95,7 @@ help: compare with `=`
    |                                           ~
 
 warning[SCXML038]: xpath syntax error in `cond`: XPath operators are lowercase: `AND` is not an operator
-  --> tests/ui/scxml038-xpath-mixed-habits.scxml:10:49
+  --> tests/ui/scxml038-xpath-mixed-habits.scx:10:49
    |
 10 |     <transition event="loud" cond="$count === 1 AND $a1 !== 2" target="b"/>
    |                                    -------------------------- while parsing this `cond`
@@ -111,7 +111,7 @@ help: use `and`
    |                                                 ~~~
 
 warning[SCXML038]: xpath syntax error in `cond`: `!==` is not an XPath operator
-  --> tests/ui/scxml038-xpath-mixed-habits.scxml:10:57
+  --> tests/ui/scxml038-xpath-mixed-habits.scx:10:57
    |
 10 |     <transition event="loud" cond="$count === 1 AND $a1 !== 2" target="b"/>
    |                                    -------------------------- while parsing this `cond`
@@ -127,7 +127,7 @@ help: compare with `!=`
    |                                                         ~~
 
 warning[SCXML038]: xpath syntax error in `cond`: `%` is not an XPath operator
-  --> tests/ui/scxml038-xpath-mixed-habits.scxml:11:39
+  --> tests/ui/scxml038-xpath-mixed-habits.scx:11:39
    |
 11 |     <transition event="odd" cond="$a1 % 2 = 1 &amp;&amp; !$done" target="b"/>
    |                                   ----------------------------- while parsing this `cond`
@@ -143,7 +143,7 @@ help: use `mod`
    |                                       ~~~
 
 warning[SCXML038]: xpath syntax error in `cond`: `&&` is not an XPath operator
-  --> tests/ui/scxml038-xpath-mixed-habits.scxml:11:47
+  --> tests/ui/scxml038-xpath-mixed-habits.scx:11:47
    |
 11 |     <transition event="odd" cond="$a1 % 2 = 1 &amp;&amp; !$done" target="b"/>
    |                                   ----------------------------- while parsing this `cond`
@@ -159,7 +159,7 @@ help: use `and`
    |                                               ~~~
 
 warning[SCXML038]: xpath syntax error in `cond`: `!` is not an XPath operator
-  --> tests/ui/scxml038-xpath-mixed-habits.scxml:11:58
+  --> tests/ui/scxml038-xpath-mixed-habits.scx:11:58
    |
 11 |     <transition event="odd" cond="$a1 % 2 = 1 &amp;&amp; !$done" target="b"/>
    |                                   ----------------------------- while parsing this `cond`
@@ -175,5 +175,5 @@ help: negate with `not()`
    |                                                          ~~~~     +
 
 diagnostic summary: 0 error(s), 11 warning(s), 0 note(s), 11 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-xpath-mixed-habits.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-xpath-mixed-habits.scx

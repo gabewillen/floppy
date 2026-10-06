@@ -1,5 +1,5 @@
 warning[SCXML038]: ecmascript syntax error in `cond`: unexpected `=` where an operand was expected
- --> tests/ui/scxml038-spaced-equality-variants.scxml:1:190
+ --> tests/ui/scxml038-spaced-equality-variants.scx:1:190
   |
 1 | ...sition event="go" cond="x = = 3" target="b"/><transitio...
   |                            ------- while parsing this `cond`
@@ -15,7 +15,7 @@ help: compare with `==`
 1 + ...ion event="go" cond="x == 3" target="b"/><transit...
 
 warning[SCXML038]: ecmascript syntax error in `cond`: unexpected `=` where an operand was expected
- --> tests/ui/scxml038-spaced-equality-variants.scxml:1:240
+ --> tests/ui/scxml038-spaced-equality-variants.scx:1:240
   |
 1 | ...nsition event="h" cond="x == = 3" target="b"/><transitio...
   |                            -------- while parsing this `cond`
@@ -31,7 +31,7 @@ help: compare with `===`
 1 + ...ion event="h" cond="x === 3" target="b"/><transit...
 
 warning[SCXML038]: ecmascript syntax error in `cond`: unexpected `=` where an operand was expected
- --> tests/ui/scxml038-spaced-equality-variants.scxml:1:291
+ --> tests/ui/scxml038-spaced-equality-variants.scx:1:291
   |
 1 | ...nsition event="i" cond="x !== = 3" target="b"/></state><f...
   |                            --------- while parsing this `cond`
@@ -47,5 +47,5 @@ help: remove the stray `=` and compare with `!==`
 1 + ...n event="i" cond="x !== 3" target="b"/></state><f...
 
 diagnostic summary: 0 error(s), 3 warning(s), 0 note(s), 3 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-spaced-equality-variants.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-spaced-equality-variants.scx

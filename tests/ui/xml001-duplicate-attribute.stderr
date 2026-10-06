@@ -1,5 +1,5 @@
 error[XML001]: duplicate attribute `target`
- --> tests/ui/xml001-duplicate-attribute.scxml:2:51
+ --> tests/ui/xml001-duplicate-attribute.scx:2:51
   |
 2 |   <state id="a"><transition event="go" target="f" target="a"/></state><final id="f"/>
   |                                        ------     ^^^^^^^^^^ `target` is repeated here
@@ -15,4 +15,4 @@ help: remove the repeated `target` attribute
 2 +   <state id="a"><transition event="go" target="f"/></state><final id="f"/>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

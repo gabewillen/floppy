@@ -1,5 +1,5 @@
 error[SCXML004]: transition must have at least one of `event`, `cond`, or `target`
- --> tests/ui/scxml004-inert-transition.scxml:3:6
+ --> tests/ui/scxml004-inert-transition.scx:3:6
   |
 3 |     <transition/>
   |      ^^^^^^^^^^ transition has no trigger, guard, or target
@@ -13,4 +13,4 @@ help: add the event that triggers the transition
   |                ++++++++++
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML004`.
+For more information about this error, try `scx --explain SCXML004`.

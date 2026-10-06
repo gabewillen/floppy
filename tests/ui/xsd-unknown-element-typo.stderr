@@ -1,5 +1,5 @@
 error[XSD-cvc-elt.1]: `<trasition>` is not an SCXML 1.0 element
- --> tests/ui/xsd-unknown-element-typo.scxml:3:6
+ --> tests/ui/xsd-unknown-element-typo.scx:3:6
   |
 3 |     <trasition event="go" target="b"></trasition>
   |      ^^^^^^^^^                         --------- closing tag of the unknown element
@@ -15,4 +15,4 @@ help: an SCXML element with a similar name exists: `<transition>`
   |      ~~~~~~~~~~                         ~~~~~~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-elt.1`.
+For more information about this error, try `scx --explain XSD-cvc-elt.1`.

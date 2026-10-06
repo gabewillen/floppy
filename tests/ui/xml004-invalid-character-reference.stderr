@@ -1,5 +1,5 @@
 error[XML004]: invalid character reference `&#7;`
- --> tests/ui/xml004-invalid-character-reference.scxml:3:30
+ --> tests/ui/xml004-invalid-character-reference.scx:3:30
   |
 3 |     <onentry><log label="bell&#7;"/></onentry>
   |                              ^^^^ code point is outside the XML Char range
@@ -13,4 +13,4 @@ help: remove the invalid character reference
 3 +     <onentry><log label="bell"/></onentry>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML004`.
+For more information about this error, try `scx --explain XML004`.

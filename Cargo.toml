@@ -113,7 +113,7 @@ serde_json = { version = "1.0.145", default-features = false, features = ["std"]
 serde_path_to_error = { version = "0.1.20", default-features = false }
 unicode-width = { version = "0.2.2", default-features = false }
 sha2 = { version = "0.10.9", default-features = false }
-# `scxml-cli run` only (Unix): SIGINT and SIGTERM reach its single-threaded
+# `scx run` only (Unix): SIGINT and SIGTERM reach its single-threaded
 # session loop as channel messages through a watcher thread, so the CLI keeps
 # `forbid(unsafe_code)`. `iterator` is the only feature it needs.
 signal-hook = { version = "0.3.18", default-features = false, features = ["iterator"] }

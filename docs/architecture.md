@@ -495,7 +495,7 @@ key in-memory hash tables and never reach a diagnostic or report.
 
 ## Embedding the Wasmtime host
 
-Embedders get live sessions, as `scxml-cli run` uses them, from the Wasmtime
+Embedders get live sessions, as `scx run` uses them, from the Wasmtime
 host ([live-session.md](live-session.md)): `SessionHost::open` returns a
 `LiveSession`. Its calls are `send`, `advance` (driven by
 `next_deadline` and a pluggable `WallClock`, `ManualClock`, or logical

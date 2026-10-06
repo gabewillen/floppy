@@ -1,5 +1,5 @@
 error[SCXML031]: final state cannot contain `<transition>`
- --> tests/ui/scxml031-final-with-children.scxml:3:6
+ --> tests/ui/scxml031-final-with-children.scx:3:6
   |
 2 |   <final id="f">
   |    ----- final state declared here
@@ -21,4 +21,4 @@ help: remove this `<transition>`
 3 -     <transition event="go" target="f"/>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML031`.
+For more information about this error, try `scx --explain SCXML031`.

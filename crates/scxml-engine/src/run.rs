@@ -408,7 +408,7 @@ impl Engine {
     /// </scxml>"#;
     /// let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
     ///     scxml_syntax::SourceId::new(1),
-    ///     "example.scxml",
+    ///     "example.scx",
     ///     source,
     /// ))?;
     /// let mut engine = Engine::new(scxml_compiler_core::lower(&document)?)?;

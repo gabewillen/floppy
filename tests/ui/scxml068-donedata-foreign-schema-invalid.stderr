@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.2.4]: `<x:note>` is not allowed here inside `<donedata>`
- --> tests/ui/scxml068-donedata-foreign-schema-invalid.scxml:7:16
+ --> tests/ui/scxml068-donedata-foreign-schema-invalid.scx:7:16
   |
 7 |     <donedata><x:note>reviewed</x:note></donedata>
   |      --------  ^^^^^^ not allowed at this position
@@ -11,4 +11,4 @@ error[XSD-cvc-complex-type.2.4]: `<x:note>` is not allowed here inside `<donedat
   = spec: XML Schema 1.0 Part 1 §3.4.4 Element Locally Valid (Complex Type) (`cvc-complex-type.2.4`)
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.2.4`.
+For more information about this error, try `scx --explain XSD-cvc-complex-type.2.4`.

@@ -1,5 +1,5 @@
 warning[SCXML026]: unconditional eventless transition cycle: a -> b -> c -> a
- --> tests/ui/scxml026-eventless-cycle-three-states.scxml:2:37
+ --> tests/ui/scxml026-eventless-cycle-three-states.scx:2:37
   |
 2 |   <state id="a"><transition target="b"/></state>
   |              -                      ^ `a` enters `b` without consuming an event
@@ -15,5 +15,5 @@ warning[SCXML026]: unconditional eventless transition cycle: a -> b -> c -> a
   = spec: SCXML 1.0 §3.13 Selecting and Executing Transitions
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML026`.
-validated tests/ui/scxml026-eventless-cycle-three-states.scxml
+For more information about this diagnostic, try `scx --explain SCXML026`.
+validated tests/ui/scxml026-eventless-cycle-three-states.scx

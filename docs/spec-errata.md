@@ -360,7 +360,7 @@ matrix marks the requirements concerned as partial, not covered.
   communicate with this SCXML session using the Basic HTTP Event I/O
   Processor."
 - **This implementation** lists a location for every session. Unless the
-  embedder provides an address (`scxml-cli run --http-listen` with
+  embedder provides an address (`scx run --http-listen` with
   `--http-public-url`, or the browser host's `http.location`), it is
   `http://basichttp.loopback.invalid/sessions/<id>/basichttp`, an address
   under the reserved `.invalid` domain (RFC 6761) that only the run's

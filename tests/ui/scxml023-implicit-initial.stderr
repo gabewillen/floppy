@@ -1,5 +1,5 @@
 warning[SCXML023]: the `<scxml>` root has several child states but no explicit initial state
- --> tests/ui/scxml023-implicit-initial.scxml:1:2
+ --> tests/ui/scxml023-implicit-initial.scx:1:2
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
   |  ^^^^^ entry behavior depends on implicit document order
@@ -15,5 +15,5 @@ help: make the current entry state `a` explicit
   |                                                             ++++++++++++
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML023`.
-validated tests/ui/scxml023-implicit-initial.scxml
+For more information about this diagnostic, try `scx --explain SCXML023`.
+validated tests/ui/scxml023-implicit-initial.scx

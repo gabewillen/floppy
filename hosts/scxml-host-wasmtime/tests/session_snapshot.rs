@@ -302,8 +302,8 @@ fn load_fixtures() -> Vec<(Fixture, String)> {
         .map(|name| {
             let ops = std::fs::read_to_string(fixtures().join(format!("{name}.ops.json")))
                 .expect("ops are readable");
-            let source = std::fs::read_to_string(fixtures().join(format!("{name}.scxml")))
-                .unwrap_or_else(|error| panic!("{name}.scxml: {error}"));
+            let source = std::fs::read_to_string(fixtures().join(format!("{name}.scx")))
+                .unwrap_or_else(|error| panic!("{name}.scx: {error}"));
             (parse_ops(&name, &ops), source)
         })
         .collect()
@@ -312,7 +312,7 @@ fn load_fixtures() -> Vec<(Fixture, String)> {
 fn lower(name: &str, source: &str) -> (Vec<u8>, Option<String>) {
     let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
         SOURCE,
-        format!("{name}.scxml"),
+        format!("{name}.scx"),
         source,
     ))
     .unwrap_or_else(|_| panic!("{name}: the fixture parses"));
@@ -467,7 +467,7 @@ fn is_component_digest(path: &str) -> bool {
 }
 
 /// A stored snapshot golden's codec failures: `check` (what
-/// `scxml-cli snapshot check` runs) must accept it, since its `sha256` was
+/// `scx snapshot check` runs) must accept it, since its `sha256` was
 /// re-derived, and every component digest must be the placeholder.
 fn stored_golden_failures(label: &str, bytes: &[u8], instance: &serde_json::Value) -> Vec<String> {
     let mut failures = Vec::new();

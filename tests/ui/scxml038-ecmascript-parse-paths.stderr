@@ -1,5 +1,5 @@
 warning[SCXML038]: ecmascript syntax error in `cond`: the expression ends before it is complete
- --> tests/ui/scxml038-ecmascript-parse-paths.scxml:4:38
+ --> tests/ui/scxml038-ecmascript-parse-paths.scx:4:38
   |
 4 |     <transition event="e1" cond="x ? 1" target="b"/>
   |                                  ----- while parsing this `cond`
@@ -11,7 +11,7 @@ warning[SCXML038]: ecmascript syntax error in `cond`: the expression ends before
   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 warning[SCXML038]: ecmascript syntax error in `cond`: the left side of `=` cannot be assigned to
- --> tests/ui/scxml038-ecmascript-parse-paths.scxml:5:40
+ --> tests/ui/scxml038-ecmascript-parse-paths.scx:5:40
   |
 5 |     <transition event="e2" cond="x + 1 = 2" target="b"/>
   |                                  --------- while parsing this `cond`
@@ -27,7 +27,7 @@ help: compare with `===`
   |                                        ~~~
 
 warning[SCXML076]: `cond` on `<transition>` has a side effect
- --> tests/ui/scxml038-ecmascript-parse-paths.scxml:6:40
+ --> tests/ui/scxml038-ecmascript-parse-paths.scx:6:40
   |
 6 |     <transition event="e3" cond="o.a.b = 3" target="b"/>
   |                                        ^ `=` assigns `o.a.b` instead of comparing it
@@ -43,7 +43,7 @@ help: compare with `===`
   |                                        ~~~
 
 warning[SCXML038]: ecmascript syntax error in `cond`: `.1` is not a property access
- --> tests/ui/scxml038-ecmascript-parse-paths.scxml:7:35
+ --> tests/ui/scxml038-ecmascript-parse-paths.scx:7:35
   |
 7 |     <transition event="e4" cond="x.1" target="b"/>
   |                                  --- while parsing this `cond`
@@ -59,7 +59,7 @@ help: index with `[1]`
   |                                   ~~~
 
 warning[SCXML038]: ecmascript syntax error in `cond`: `let` declares a variable, which a `cond` cannot do
- --> tests/ui/scxml038-ecmascript-parse-paths.scxml:8:34
+ --> tests/ui/scxml038-ecmascript-parse-paths.scx:8:34
   |
 8 |     <transition event="e5" cond="let y = 1" target="b"/>
   |                                  ^^^ a declaration, not an expression
@@ -71,7 +71,7 @@ warning[SCXML038]: ecmascript syntax error in `cond`: `let` declares a variable,
   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 warning[SCXML038]: ecmascript syntax error in `cond`: the expression ends before it is complete
-  --> tests/ui/scxml038-ecmascript-parse-paths.scxml:10:37
+  --> tests/ui/scxml038-ecmascript-parse-paths.scx:10:37
    |
 10 |     <transition event="e7" cond="x in" target="b"/>
    |                                  ---- while parsing this `cond`
@@ -83,7 +83,7 @@ warning[SCXML038]: ecmascript syntax error in `cond`: the expression ends before
    = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 warning[SCXML038]: ecmascript syntax error in `cond`: unterminated string literal
-  --> tests/ui/scxml038-ecmascript-parse-paths.scxml:11:34
+  --> tests/ui/scxml038-ecmascript-parse-paths.scx:11:34
    |
 11 |     <transition event="e8" cond="'unterminated" target="b"/>
    |                                  ^ string starts here
@@ -96,5 +96,5 @@ warning[SCXML038]: ecmascript syntax error in `cond`: unterminated string litera
 
 diagnostic summary: 0 error(s), 7 warning(s), 0 note(s), 7 total
 Some diagnostics have detailed explanations: SCXML038, SCXML076.
-For more information about a diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-ecmascript-parse-paths.scxml
+For more information about a diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-ecmascript-parse-paths.scx

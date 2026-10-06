@@ -1,5 +1,5 @@
 error[SCXML053]: `<assign>` declares more than one value source: `expr` and the child content
- --> tests/ui/scxml053-assign-expr-and-element-child.scxml:4:45
+ --> tests/ui/scxml053-assign-expr-and-element-child.scx:4:45
   |
 4 |     <onentry><assign location="$x" expr="1"><item/></assign></onentry>
   |                                    -------- ^^^^^^^ the child content conflicts with `expr`
@@ -15,4 +15,4 @@ help: remove `expr`
 4 +     <onentry><assign location="$x"><item/></assign></onentry>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML053`.
+For more information about this error, try `scx --explain SCXML053`.

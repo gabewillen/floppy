@@ -21,7 +21,7 @@ use serde_json::Value;
 /// The source id of the documents these tests parse.
 const SOURCE_ID: SourceId = SourceId::new(1);
 
-const SOURCE: &str = include_str!("../../../tests/fixtures/validator-adversarial.scxml");
+const SOURCE: &str = include_str!("../../../tests/fixtures/validator-adversarial.scx");
 
 fn config() -> Config {
     Config {

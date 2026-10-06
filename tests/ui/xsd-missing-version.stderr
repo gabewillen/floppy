@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.4]: `<scxml>` is missing required attribute `version`
- --> tests/ui/xsd-missing-version.scxml:1:2
+ --> tests/ui/xsd-missing-version.scx:1:2
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml"
   |  ^^^^^ missing `version`
@@ -14,4 +14,4 @@ help: add `version="1.0"`
   |                   ++++++++++++++
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.4`.
+For more information about this error, try `scx --explain XSD-cvc-complex-type.4`.

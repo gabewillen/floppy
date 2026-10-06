@@ -1,5 +1,5 @@
 warning[SCXML038]: xpath syntax error in `cond`: expected `)` to close the function call, found the end of the expression
- --> tests/ui/scxml038-xpath-unclosed-call.scxml:8:56
+ --> tests/ui/scxml038-xpath-unclosed-call.scx:8:56
   |
 8 |     <transition event="go" cond="count($user/name &gt; 0" target="b"/>
   |                                  ----------------------- while parsing this `cond`
@@ -12,5 +12,5 @@ warning[SCXML038]: xpath syntax error in `cond`: expected `)` to close the funct
   = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-xpath-unclosed-call.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-xpath-unclosed-call.scx

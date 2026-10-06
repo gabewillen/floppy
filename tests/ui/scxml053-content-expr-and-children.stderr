@@ -1,5 +1,5 @@
 error[SCXML053]: `<content>` declares more than one value source: `expr` and the child content
- --> tests/ui/scxml053-content-expr-and-children.scxml:2:60
+ --> tests/ui/scxml053-content-expr-and-children.scx:2:60
   |
 2 | ...send event="t"><content expr="1">literal</content></send></onent...
   |                            -------- ^^^^^^^ the child content conflicts with `expr`
@@ -15,4 +15,4 @@ help: remove `expr`
 2 + ...<send event="t"><content>literal</content></send>...
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML053`.
+For more information about this error, try `scx --explain SCXML053`.

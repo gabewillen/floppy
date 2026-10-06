@@ -1867,7 +1867,7 @@ fn sarif_rule(code: &str) -> Value {
         format!("\n\nSpecification: {}", entry.spec)
     };
     let help = format!(
-        "How to fix: {}.{specification}\n\nRun `scxml-cli --explain {code}` for examples.",
+        "How to fix: {}.{specification}\n\nRun `scx --explain {code}` for examples.",
         entry.help
     );
     rule.insert("help".into(), json!({"text": help}));

@@ -1,5 +1,5 @@
 error[SCXML064]: `<state>` has 2 `<initial>` children, but allows at most one
- --> tests/ui/scxml064-repeated-children.scxml:4:6
+ --> tests/ui/scxml064-repeated-children.scx:4:6
   |
 3 |     <initial><transition target="a1"/></initial>
   |      ------- first `<initial>`
@@ -14,7 +14,7 @@ help: remove the second `<initial>`
 4 -     <initial><transition target="a2"/></initial>
 
 error[SCXML064]: `<send>` has 2 `<content>` children, but allows at most one
- --> tests/ui/scxml064-repeated-children.scxml:8:10
+ --> tests/ui/scxml064-repeated-children.scx:8:10
   |
 7 |         <content>first</content>
   |          ------- first `<content>`
@@ -29,7 +29,7 @@ help: remove the second `<content>`
 8 -         <content>second</content>
 
 error[SCXML064]: `<invoke>` has 2 `<content>` children, but allows at most one
-  --> tests/ui/scxml064-repeated-children.scxml:13:8
+  --> tests/ui/scxml064-repeated-children.scx:13:8
    |
 12 |       <content expr="'child.scxml'"/>
    |        ------- first `<content>`
@@ -44,7 +44,7 @@ help: remove the second `<content>`
 13 -       <content expr="'other.scxml'"/>
 
 error[SCXML064]: `<invoke>` has 2 `<finalize>` children, but allows at most one
-  --> tests/ui/scxml064-repeated-children.scxml:15:8
+  --> tests/ui/scxml064-repeated-children.scx:15:8
    |
 14 |       <finalize><log expr="'one'"/></finalize>
    |        -------- first `<finalize>`
@@ -59,7 +59,7 @@ help: remove the second `<finalize>`
 15 -       <finalize><log expr="'two'"/></finalize>
 
 warning[SCXML029]: state `a2` can never become active
-  --> tests/ui/scxml064-repeated-children.scxml:18:16
+  --> tests/ui/scxml064-repeated-children.scx:18:16
    |
  3 |     <initial><transition target="a1"/></initial>
    |      ------- `a` enters its `<initial>` target by default
@@ -76,4 +76,4 @@ warning[SCXML029]: state `a2` can never become active
 
 diagnostic summary: 4 error(s), 1 warning(s), 0 note(s), 5 total
 Some diagnostics have detailed explanations: SCXML029, SCXML064.
-For more information about a diagnostic, try `scxml-cli --explain SCXML029`.
+For more information about a diagnostic, try `scx --explain SCXML029`.

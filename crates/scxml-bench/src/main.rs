@@ -5,7 +5,7 @@
 //! command to a stable configuration) and per engine command (one microstep-producing
 //! engine command, the requested command plus its resumes):
 //!
-//! - `representative`: `tests/fixtures/representative-machine.scxml`
+//! - `representative`: `tests/fixtures/representative-machine.scx`
 //!   (compound states, a two-region parallel state, deep history, an internal
 //!   raise, `In()` guards), driven through `begin`, `step`, then repeated
 //!   `pause`/`resume` round trips through deep history;
@@ -46,7 +46,7 @@ const DOCUMENT_SOURCE: SourceId = SourceId::new(1);
 
 /// Representative fixture, embedded so the benchmark is independent of the
 /// working directory.
-const REPRESENTATIVE: &str = include_str!("../../../tests/fixtures/representative-machine.scxml");
+const REPRESENTATIVE: &str = include_str!("../../../tests/fixtures/representative-machine.scx");
 
 /// Region counts of the synthetic parallel-wide sweep.
 const REGIONS: [usize; 4] = [8, 16, 32, 64];

@@ -1,5 +1,5 @@
 error[XML001]: attribute `final` on `<parallel>` has no value
- --> tests/ui/xml001-attribute-without-value.scxml:2:20
+ --> tests/ui/xml001-attribute-without-value.scx:2:20
   |
 2 |   <parallel id="p" final>
   |                    ^^^^^ an XML attribute needs `=` and a quoted value
@@ -13,4 +13,4 @@ help: remove `final`
 2 +   <parallel id="p">
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

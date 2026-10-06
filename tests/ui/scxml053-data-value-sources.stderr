@@ -1,5 +1,5 @@
 error[SCXML053]: `<data>` declares more than one value source: `expr` and `src`
- --> tests/ui/scxml053-data-value-sources.scxml:2:36
+ --> tests/ui/scxml053-data-value-sources.scx:2:36
   |
 2 |   <datamodel><data id="x" expr="1" src="file:x.json"/><data id="y" expr="2">3</data></datamodel>
   |                           -------- ^^^^^^^^^^^^^^^^^ `src` conflicts with `expr`
@@ -15,7 +15,7 @@ help: remove `src`
 2 +   <datamodel><data id="x" expr="1"/><data id="y" expr="2">3</data></datamodel>
 
 error[SCXML053]: `<data>` declares more than one value source: `expr` and the child content
- --> tests/ui/scxml053-data-value-sources.scxml:2:77
+ --> tests/ui/scxml053-data-value-sources.scx:2:77
   |
 2 |   <datamodel><data id="x" expr="1" src="file:x.json"/><data id="y" expr="2">3</data></datamodel>
   |                                                                    -------- ^ the child content conflicts with `expr`
@@ -31,4 +31,4 @@ help: remove `expr`
 2 +   <datamodel><data id="x" expr="1" src="file:x.json"/><data id="y">3</data></datamodel>
 
 diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
-For more information about this error, try `scxml-cli --explain SCXML053`.
+For more information about this error, try `scx --explain SCXML053`.

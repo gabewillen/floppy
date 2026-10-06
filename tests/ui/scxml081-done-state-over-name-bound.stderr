@@ -1,5 +1,5 @@
 error[SCXML081]: state ID `sxxxxxxxxxxxxxxxxxxxxxxx…` is 1,014 bytes, so the `done.state.` event it raises is 1,025 bytes, more than the 1,024 an event name may have
- --> tests/ui/scxml081-done-state-over-name-bound.scxml:2:14
+ --> tests/ui/scxml081-done-state-over-name-bound.scx:2:14
   |
 2 |   <state id="sxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...
   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `done.state.` and these 1,014 bytes make 1,025
@@ -9,4 +9,4 @@ error[SCXML081]: state ID `sxxxxxxxxxxxxxxxxxxxxxxx…` is 1,014 bytes, so the `
   = spec: SCXML 1.0 §3.7 <final>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML081`.
+For more information about this error, try `scx --explain SCXML081`.

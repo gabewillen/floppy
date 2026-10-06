@@ -1,5 +1,5 @@
 warning[SCXML078]: `<parallel>` has no child states
- --> tests/ui/scxml078-regionless-parallel.scxml:3:6
+ --> tests/ui/scxml078-regionless-parallel.scx:3:6
   |
 3 |     <parallel id="p"/>
   |      ^^^^^^^^ no transition is enabled through this state
@@ -13,5 +13,5 @@ help: change `<parallel>` to `<state>`
   |      ~~~~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML078`.
-validated tests/ui/scxml078-regionless-parallel.scxml
+For more information about this diagnostic, try `scx --explain SCXML078`.
+validated tests/ui/scxml078-regionless-parallel.scx

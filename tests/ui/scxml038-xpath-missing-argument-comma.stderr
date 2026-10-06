@@ -1,5 +1,5 @@
 warning[SCXML038]: xpath syntax error in `expr`: expected `,` between the function's arguments, found `$name`
- --> tests/ui/scxml038-xpath-missing-argument-comma.scxml:5:35
+ --> tests/ui/scxml038-xpath-missing-argument-comma.scx:5:35
   |
 5 |       <log expr="concat('Hello, ' $name)"/>
   |                  ----------------------- while parsing this `expr`
@@ -15,5 +15,5 @@ help: separate the arguments with `,`
   |                                  ~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-xpath-missing-argument-comma.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-xpath-missing-argument-comma.scx

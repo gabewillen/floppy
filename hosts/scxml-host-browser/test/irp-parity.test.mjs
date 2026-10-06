@@ -2,7 +2,7 @@
 // browser host supports runs through the browser host and must reach the
 // disposition and final configuration the checked-in baseline records for
 // the Wasmtime session host (tests/conformance/w3c-irp/baselines, produced by
-// `scxml-cli conformance run` through the shipped components).
+// `scx conformance run` through the shipped components).
 //
 // Scope, per data-model variant (ECMAScript and XPath):
 // * compared: every case decided by the `Outcome` log oracle, `<invoke>`

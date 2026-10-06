@@ -1,5 +1,5 @@
 //! The `--explain` examples of the compile-only `COMP` codes, compiled as
-//! `scxml-cli compile` compiles them: a document example is shown as XML
+//! `scx compile` compiles them: a document example is shown as XML
 //! only because this test checks it, so the erroneous one must emit its
 //! code and the corrected one must compile with no diagnostic at all.
 

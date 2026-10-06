@@ -1,5 +1,5 @@
 error[XML001]: the document ends before `<state>`, `<scxml>` are closed
- --> tests/ui/xml001-truncated-nested-elements.scxml:6:44
+ --> tests/ui/xml001-truncated-nested-elements.scx:6:44
   |
 5 |   <state id="running">
   |    ----- `<state>` opens here and is never closed
@@ -18,4 +18,4 @@ help: add `</state></scxml>` at the end of the document
   | ++++++++
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

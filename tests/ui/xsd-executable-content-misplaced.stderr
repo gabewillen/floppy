@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.2.4]: `<log>` is not allowed here inside `<state>`
- --> tests/ui/xsd-executable-content-misplaced.scxml:3:6
+ --> tests/ui/xsd-executable-content-misplaced.scx:3:6
   |
 2 |   <state id="a">
   |    ----- in the content of this `<state>`
@@ -16,4 +16,4 @@ help: run it on entry by wrapping it in `<onentry>`
   |     +++++++++                       ++++++++++
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.2.4`.
+For more information about this error, try `scx --explain XSD-cvc-complex-type.2.4`.

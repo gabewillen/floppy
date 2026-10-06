@@ -1,5 +1,5 @@
 error[SCXML005]: transition target `実行中x` does not exist
- --> tests/ui/scxml005-unknown-target-unicode-column.scxml:2:98
+ --> tests/ui/scxml005-unknown-target-unicode-column.scx:2:98
   |
 2 | ...on event="開始" target="実行中x"/></state>
   |                            ^^^^^^^ unknown target identifier
@@ -15,4 +15,4 @@ help: a state with a similar name exists: `実行中`
   |                            ~~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML005`.
+For more information about this error, try `scx --explain SCXML005`.

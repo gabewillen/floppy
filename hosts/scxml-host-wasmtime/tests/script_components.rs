@@ -3,7 +3,7 @@
 //!
 //! `scripts/verify-wasm-capabilities.sh scxml_machine scxml_script_example`
 //! builds and virtualizes the generic machine and the example script
-//! component, then uses the CLI to compile `tests/fixtures/script-machine.scxml`
+//! component, then uses the CLI to compile `tests/fixtures/script-machine.scx`
 //! three ways: with the script pinned from a script package (compile-time
 //! resolution), unpinned (runtime resolution), and packaged as
 //! `component-wasm` with the pinned script bundled. These tests run those

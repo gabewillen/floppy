@@ -1,5 +1,5 @@
 warning[SCXML038]: xpath syntax error in `expr`: `…` is a placeholder, not an expression
- --> tests/ui/scxml038-xpath-placeholder.scxml:4:42
+ --> tests/ui/scxml038-xpath-placeholder.scx:4:42
   |
 4 |     <onentry><assign location="$x" expr="…"/></onentry>
   |                                          ^ placeholder
@@ -10,7 +10,7 @@ warning[SCXML038]: xpath syntax error in `expr`: `…` is a placeholder, not an 
   = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 warning[SCXML038]: xpath syntax error in `cond`: `…` is a placeholder, not an expression
- --> tests/ui/scxml038-xpath-placeholder.scxml:5:34
+ --> tests/ui/scxml038-xpath-placeholder.scx:5:34
   |
 5 |     <transition event="go" cond="…" target="done"/>
   |                                  ^ placeholder
@@ -21,5 +21,5 @@ warning[SCXML038]: xpath syntax error in `cond`: `…` is a placeholder, not an 
   = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-xpath-placeholder.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-xpath-placeholder.scx

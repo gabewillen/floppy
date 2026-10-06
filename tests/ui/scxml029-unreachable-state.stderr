@@ -1,5 +1,5 @@
 warning[SCXML029]: state `orphan` can never become active
- --> tests/ui/scxml029-unreachable-state.scxml:6:14
+ --> tests/ui/scxml029-unreachable-state.scx:6:14
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
   |                                                                       - the <scxml> root enters `a` by default
@@ -13,5 +13,5 @@ warning[SCXML029]: state `orphan` can never become active
   = spec: SCXML 1.0 §3.13 Selecting and Executing Transitions
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML029`.
-validated tests/ui/scxml029-unreachable-state.scxml
+For more information about this diagnostic, try `scx --explain SCXML029`.
+validated tests/ui/scxml029-unreachable-state.scx

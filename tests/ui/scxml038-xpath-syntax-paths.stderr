@@ -1,5 +1,5 @@
 warning[SCXML038]: xpath syntax error in `cond`: `||` is not an XPath operator
- --> tests/ui/scxml038-xpath-syntax-paths.scxml:7:45
+ --> tests/ui/scxml038-xpath-syntax-paths.scx:7:45
   |
 7 |     <transition event="e1" cond="$count = 1 || $done" target="b"/>
   |                                  ------------------- while parsing this `cond`
@@ -15,7 +15,7 @@ help: use `or`
   |                                             ~~
 
 warning[SCXML038]: xpath syntax error in `cond`: `%` is not an XPath operator
- --> tests/ui/scxml038-xpath-syntax-paths.scxml:8:41
+ --> tests/ui/scxml038-xpath-syntax-paths.scx:8:41
   |
 8 |     <transition event="e2" cond="$count % 2 = 0" target="b"/>
   |                                  -------------- while parsing this `cond`
@@ -31,7 +31,7 @@ help: use `mod`
   |                                         ~~~
 
 warning[SCXML038]: xpath syntax error in `cond`: XPath operators are lowercase: `AND` is not an operator
- --> tests/ui/scxml038-xpath-syntax-paths.scxml:9:41
+ --> tests/ui/scxml038-xpath-syntax-paths.scx:9:41
   |
 9 |     <transition event="e3" cond="$count AND $done" target="b"/>
   |                                  ---------------- while parsing this `cond`
@@ -47,7 +47,7 @@ help: use `and`
   |                                         ~~~
 
 warning[SCXML038]: xpath syntax error in `cond`: namespace prefix `fn` is not declared
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:10:34
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:10:34
    |
 10 |     <transition event="e4" cond="fn:concat('a', 'b') = 'ab'" target="b"/>
    |                                  ^^^^^^^^^ syntax error
@@ -63,7 +63,7 @@ help: call `concat()` without the prefix
    |                                  ~~~~~~
 
 warning[SCXML038]: xpath syntax error in `cond`: wrong number of arguments to `contains()`
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:11:34
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:11:34
    |
 11 |     <transition event="e5" cond="contains('a')" target="b"/>
    |                                  ^^^^^^^^ called with the wrong number of arguments
@@ -75,7 +75,7 @@ warning[SCXML038]: xpath syntax error in `cond`: wrong number of arguments to `c
    = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 warning[SCXML038]: xpath syntax error in `cond`: unterminated string literal
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:12:43
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:12:43
    |
 12 |     <transition event="e6" cond="$count = 'open" target="b"/>
    |                                  -------------- while parsing this `cond`
@@ -87,7 +87,7 @@ warning[SCXML038]: xpath syntax error in `cond`: unterminated string literal
    = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 warning[SCXML038]: xpath syntax error in `cond`: `$` must be followed by a variable name
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:13:34
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:13:34
    |
 13 |     <transition event="e7" cond="$ count = 1" target="b"/>
    |                                  ^ syntax error
@@ -99,7 +99,7 @@ warning[SCXML038]: xpath syntax error in `cond`: `$` must be followed by a varia
    = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 warning[SCXML038]: xpath syntax error in `cond`: unknown XPath axis `sideways`
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:14:41
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:14:41
    |
 14 |     <transition event="e8" cond="$count/sideways::x" target="b"/>
    |                                  ------------------ while parsing this `cond`
@@ -111,7 +111,7 @@ warning[SCXML038]: xpath syntax error in `cond`: unknown XPath axis `sideways`
    = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 warning[SCXML038]: xpath syntax error in `cond`: expected a node test (a name, `*`, `text()`, or `node()`), found the end of the expression
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:15:41
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:15:41
    |
 15 |     <transition event="e9" cond="$count/@" target="b"/>
    |                                  -------- while parsing this `cond`
@@ -123,7 +123,7 @@ warning[SCXML038]: xpath syntax error in `cond`: expected a node test (a name, `
    = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 warning[SCXML038]: xpath syntax error in `cond`: `?` is not an XPath operator
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:16:41
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:16:41
    |
 16 |     <transition event="e10" cond="$done ? 1 : 0" target="b"/>
    |                                   ------------- while parsing this `cond`
@@ -135,7 +135,7 @@ warning[SCXML038]: xpath syntax error in `cond`: `?` is not an XPath operator
    = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 warning[SCXML038]: xpath syntax error in `cond`: `===` is not an XPath operator
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:17:42
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:17:42
    |
 17 |     <transition event="e11" cond="$count === 3" target="b"/>
    |                                   ------------ while parsing this `cond`
@@ -151,7 +151,7 @@ help: compare with `=`
    |                                          ~
 
 warning[SCXML038]: xpath syntax error in `cond`: `;` cannot end an XPath expression
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:18:45
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:18:45
    |
 18 |     <transition event="e12" cond="$count = 1;" target="b"/>
    |                                   ----------- while parsing this `cond`
@@ -167,7 +167,7 @@ help: remove the `;`
 18 +     <transition event="e12" cond="$count = 1" target="b"/>
 
 warning[SCXML038]: xpath syntax error in `cond`: expected `]` to close the predicate, found the end of the expression
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:19:46
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:19:46
    |
 19 |     <transition event="e13" cond="$count[1 = 1" target="b"/>
    |                                   ------------ while parsing this `cond`
@@ -180,7 +180,7 @@ warning[SCXML038]: xpath syntax error in `cond`: expected `]` to close the predi
    = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 warning[SCXML038]: xpath syntax error in `cond`: the expression ends before it is complete
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:20:42
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:20:42
    |
 20 |     <transition event="e14" cond="$count &gt;" target="b"/>
    |                                   ----------- while parsing this `cond`
@@ -192,7 +192,7 @@ warning[SCXML038]: xpath syntax error in `cond`: the expression ends before it i
    = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 warning[SCXML038]: xpath syntax error in `cond`: `not` is a function in XPath, not an operator
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:21:50
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:21:50
    |
 21 |     <transition event="e15" cond="$count = 1 and not $done" target="b"/>
    |                                   ------------------------ while parsing this `cond`
@@ -208,7 +208,7 @@ help: call `not()` with parentheses
    |                                                  ~~~~     +
 
 warning[SCXML038]: xpath syntax error in `cond`: unknown XPath function `cuont()`
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:22:35
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:22:35
    |
 22 |     <transition event="e16" cond="cuont($count) = 1" target="b"/>
    |                                   ^^^^^ unknown function
@@ -224,7 +224,7 @@ help: use `count()`
    |                                   ~~~~~
 
 warning[SCXML038]: xpath syntax error in `cond`: `!` is not an XPath operator
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:23:35
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:23:35
    |
 23 |     <transition event="e17" cond="!($done or $count = 1)" target="b"/>
    |                                   ^ syntax error
@@ -240,7 +240,7 @@ help: negate with `not()`
    |                                   ~~~
 
 warning[SCXML038]: xpath syntax error in `cond`: unexpected `$done` after a complete expression
-  --> tests/ui/scxml038-xpath-syntax-paths.scxml:24:46
+  --> tests/ui/scxml038-xpath-syntax-paths.scx:24:46
    |
 24 |     <transition event="e18" cond="$count = 1 $done" target="b"/>
    |                                   ---------------- while parsing this `cond`
@@ -252,5 +252,5 @@ warning[SCXML038]: xpath syntax error in `cond`: unexpected `$done` after a comp
    = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 diagnostic summary: 0 error(s), 18 warning(s), 0 note(s), 18 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-xpath-syntax-paths.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-xpath-syntax-paths.scx

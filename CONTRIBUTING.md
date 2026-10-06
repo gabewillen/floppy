@@ -59,10 +59,14 @@ run):
 sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
 ```
 
-and then runs:
+and then runs (`scx` embeds the release session components, so its build
+needs `target/wasm-artifacts/release` first, or `SCXML_WASM_ARTIFACTS_DIR`
+naming another release directory; without them `crates/scxml-cli/build.rs`
+fails with a message saying so):
 
 ```console
 cargo fmt --all --check
+sh scripts/verify-wasm-capabilities.sh
 cargo check --workspace --all-targets --locked
 cargo test --workspace --all-targets --locked
 cargo test --workspace --doc --locked
@@ -102,7 +106,7 @@ cargo test -p scxml-conformance --test published_contract_docs --locked
 
 The IRP gate compiles through the canonical compiler with no expression
 checker linked, so a separate gate runs the path users run: every applicable
-official case of both prepared corpora goes through `scxml-cli compile`, whose
+official case of both prepared corpora goes through `scx compile`, whose
 validator links the ECMAScript and XPath expression-syntax checkers, and must
 compile with zero error diagnostics (case 301, which the W3C requires the
 processor to reject, must be rejected with only `COMP003`). Warnings are
@@ -193,7 +197,7 @@ SCXML_COMPONENTS_DIR="$RELEASE" SCXML_COMPONENTS_MANIFEST_SHA256="$MANIFEST_SHA2
   cargo test --release --locked -p scxml-conformance --features wasmtime
 cargo build --release --locked -p scxml-cli --features wasmtime
 for model in ecmascript xpath; do
-  "$CARGO_TARGET_DIR/release/scxml-cli" conformance run \
+  "$CARGO_TARGET_DIR/release/scx" conformance run \
     --corpus "tests/conformance/w3c-irp/prepared/$model" \
     --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
     --canonical-baseline "tests/conformance/w3c-irp/baselines/$model.scxml-report.json"
@@ -207,7 +211,7 @@ for suite in env:example event:; do
   packages=''
   if [ -n "${suite#*:}" ]; then packages=$EXAMPLE_PACKAGE; fi
   for model in ecmascript xpath; do
-    "$CARGO_TARGET_DIR/release/scxml-cli" conformance run \
+    "$CARGO_TARGET_DIR/release/scx" conformance run \
       --corpus "namespaces/$name/irp/prepared/$model" \
       --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" $packages \
       --canonical-baseline "namespaces/$name/irp/baselines/$model.scxml-report.json"
@@ -218,13 +222,13 @@ done
 # must be byte-identical to each other and to the checked-in baseline, with
 # sound, reproducible documents.
 for model in ecmascript xpath; do
-  "$CARGO_TARGET_DIR/release/scxml-cli" conformance run \
+  "$CARGO_TARGET_DIR/release/scx" conformance run \
     --corpus "tests/conformance/w3c-irp/prepared/$model" \
     --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
     --snapshot-every-checkpoint \
     --canonical-baseline "tests/conformance/w3c-irp/baselines/$model.scxml-report.json"
 done
-# `scxml-cli snapshot run` end to end through the same release.
+# `scx snapshot run` end to end through the same release.
 SCXML_COMPONENTS_DIR="$RELEASE" SCXML_COMPONENTS_MANIFEST_SHA256="$MANIFEST_SHA256" \
   cargo test --release --locked -p scxml-cli --features wasmtime --test snapshot_run --test live_run
 ```
@@ -325,7 +329,7 @@ gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
 Checked-in expected outputs are regenerated only through explicit flags:
 
 ```console
-sh scripts/bless-fixtures.sh --ui               # scxml-cli UI snapshots
+sh scripts/bless-fixtures.sh --ui               # scx UI snapshots
 sh scripts/bless-fixtures.sh --validator-rules  # docs/validator-rules.md code table
 sh scripts/bless-fixtures.sh --trace-fixture    # shared trace fixture
 sh scripts/bless-fixtures.sh --session-snapshot # session-snapshot goldens and diff goldens
@@ -560,7 +564,7 @@ benchmark or profile. The deterministic engine benchmark is:
 cargo run --release --locked -p scxml-bench -- 200
 ```
 
-It drives `tests/fixtures/representative-machine.scxml` and a synthetic
+It drives `tests/fixtures/representative-machine.scx` and a synthetic
 parallel machine swept over 8, 16, 32, and 64 all-toggling regions
 (`parallel-wide-<N>`) through `Engine::run` and prints the median
 nanoseconds per run and per engine command, plus a work checksum that must
@@ -588,8 +592,8 @@ Boundaries per crate, which new code follows:
 | `scxml-scheduler` | none (pure; runs inside the session host's run span) |
 | `scxml-snapshot` | none (pure; the host's `session-snapshot` span, the codec's observations, and the CLI spans cover it) |
 | `scxml-snapshot-codec` | one `encode` or `diff` observation per call with the `snapshot-bytes` measurement, plus one event; no id, pointer, or code attribute |
-| `scxml-cli snapshot` | `snapshot-run`, `snapshot-show`, `snapshot-check`, `snapshot-diff` (one span per subcommand) |
-| `scxml-cli run` | `run` (one span per command); the host's live-session spans cover each call |
+| `scx snapshot` | `snapshot-run`, `snapshot-show`, `snapshot-check`, `snapshot-diff` (one span per subcommand) |
+| `scx run` | `run` (one span per command); the host's live-session spans cover each call |
 | `scxml-host-wasmtime` live sessions | `session-open`, `session-send`, `session-advance` (only when a deadline fires or a logical drain runs; never per wait), `session-receive-http` (only when an inbound message reaches a session's queue), `session-communication-error` (only when owed events are delivered), `session-close`, and the existing `session-snapshot`; no attribute beyond the closed operation and outcome labels |
 | `scxml-host-wasmtime` extension components | `extension-http-fetch` (one per `outbound-http` request an extension component makes, on the session thread, a child of the `execute` call); only the closed outcome event and error category (`invalid-input` for a malformed or refused request, `unsupported` when no transport is granted, `platform` for a transport failure or an oversized response); never a URL, host, header, body, status, prompt, or model; each `session-snapshot-host.snapshot` an extension component calls is one `session-snapshot` span (the checkpoint snapshot's operation) with only its closed signal event and error category, plus the `snapshot-bytes` measurement, never the document |
 | `scxml-host-wasmtime` invoked services | `service-start` (one per invocation started), `service-send` (one per event delivered to an invocation's `events` stream), `service-wait-until` (one per firing of an invocation's due timers), `service-cancel` (one per cancelled invocation), `service-http-fetch` (one per `outbound-http.fetch` a service makes, from admission to its response), `service-http-request` (one per admitted request the embedder's transport performs), and `session-http-response` (one per delivery of a service's HTTP response to a live session); only the closed outcome event and error category; never a type URI, invoke id, event, payload, or URL |
@@ -662,7 +666,7 @@ The deterministic validator and reporter benchmark is:
 cargo run --release --locked -p scxml-bench --bin validator -- 5
 ```
 
-It validates every `tests/fixtures/*.scxml` document and a generated
+It validates every `tests/fixtures/*.scx` document and a generated
 2000-state document (with and without XSD) and renders one canonical artifact
 through the rustc and SARIF reporters, printing the median microseconds per
 iteration and a work checksum (documents, diagnostics, rendered bytes) that

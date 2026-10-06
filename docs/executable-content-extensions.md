@@ -192,16 +192,16 @@ instantiate). Instead:
 - **The run holds the values.** The embedder supplies them
   (`ExtensionComponents::with_values`), each variable granted to exact package
   URIs (`EnvVariable`); a slot naming a variable not granted to the element's
-  namespace is absent, exactly as if no value were held. The CLI grants a
-  variable to a namespace with `--env NAME@URI` or `--env NAME@URI=VALUE`
-  (repeat it for several namespaces; there is no unscoped form) and holds its
-  flag's value, else its last `--env-file PATH` entry (Docker's format:
-  `NAME=VALUE` with the value taken literally, a bare `NAME` from the shell,
-  `#` comments, blank lines ignored), else the calling shell's; an
-  `--env-file` entry no flag grants is dropped. Nothing by default; there is
-  no whole-environment form. Values are masked (`[masked]`) in the text the CLI
-  writes; canonical snapshot documents are written exactly (their `sha256`
-  covers their bytes).
+  namespace is absent, exactly as if no value were held. The CLI derives the
+  grants from the document: a variable goes to the packages of the elements
+  (and `<invoke>`s) whose `env` attributes name it, and to the package of
+  every `env:<slot>expr` slot. Values come from `--env NAME=VALUE`, else the
+  last `--env-file PATH` entry (Docker's format: `NAME=VALUE` with the value
+  taken literally, a bare `NAME` from the shell, `#` comments, blank lines
+  ignored), else, for a bare `--env NAME`, the calling shell's; a variable no
+  slot can name is dropped. Nothing by default; there is no whole-environment
+  form. Values are masked (`[masked]`) in the text the CLI writes; canonical
+  snapshot documents are written exactly (their `sha256` covers their bytes).
 - **The component holds references.** For each `execute` call the host binds
   every slot the element names, whose variable the run holds, to a fresh
   opaque `value-reference` and passes the list (`slot-reference`: slot and
@@ -274,11 +274,10 @@ attribute without that slot. Each request is one
 event and error category.
 
 ```console
-API_TOKEN=... scxml-cli snapshot run DOC.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+API_TOKEN=... scx snapshot run DOC.scx \
   --extension-package components/scxml-extension-example/package/example.extension.json \
   --extension-component-sha256 "https://stateforward.org/scxml/example=$EXAMPLE_SHA256" \
-  --env API_TOKEN@https://stateforward.org/scxml/example
+  --env API_TOKEN
 ```
 
 The WIT import is project-specific rather than `wasi:http`, as the
@@ -372,16 +371,15 @@ to it, and the CLI lists it before every run. Version 1 manifests are rejected.
 ```console
 # Structure: the package's schema validates its namespace, and its env-slots
 # every env attribute.
-scxml-cli validate machine.scxml --extension-package weather/weather.extension.json
+scx validate machine.scx --extension-package weather/weather.extension.json
 
 # Binding: compile requires a verified package for every used namespace.
-scxml-cli compile machine.scxml --output machine.scxml-ir.json \
+scx compile machine.scx --output machine.scxml-ir.json \
   --extension-package weather/weather.extension.json
 
 # Execution: the extension component, authenticated by its SHA-256, with the
 # value its token slot names.
-scxml-cli snapshot run machine.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+scx snapshot run machine.scx \
   --extension-package weather/weather.extension.json \
   --extension-component https://example.org/scxml/weather@v1.0.0="weather.wasm" \
   --extension-component-sha256 https://example.org/scxml/weather@v1.0.0="$WEATHER_SHA256" \
@@ -512,8 +510,7 @@ document needs no flag to bind it:
 
 ```console
 # First run: resolves, verifies, caches, and pins the element.
-scxml-cli snapshot run weather.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256"
+scx snapshot run weather.scx
 
 # Later runs: the same command with --offline uses the cache only.
 ```

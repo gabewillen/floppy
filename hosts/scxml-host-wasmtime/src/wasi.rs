@@ -11,7 +11,7 @@
 //!   `wasi:clocks/monotonic-clock`), randomness (`wasi:random/*`), and the
 //!   `wasi:io` interfaces need no grant. Every other `wasi:*` interface,
 //!   such as `wasi:cli` or `wasi:http`, is never linked: a component that
-//!   imports one is refused ([`ArtifactError::WasiImportUndeclared`]).
+//!   imports one is refused ([`ArtifactError::UnknownImport`]).
 //! * **Resources** — only runtime resources need a grant, named after
 //!   wasmtime CLI's options ([`WasiOptions`]): `wasi:filesystem` needs at
 //!   least one preopened directory (`--dir HOST::GUEST`), `wasi:sockets/tcp`
@@ -221,7 +221,7 @@ impl WasiPlan {
     /// # Errors
     ///
     /// [`ArtifactError::WasiGrantInvalid`] for options outside their bounds,
-    /// [`ArtifactError::WasiImportUndeclared`] for a `wasi:*` import this
+    /// [`ArtifactError::UnknownImport`] for a `wasi:*` import this
     /// host never links, [`ArtifactError::WasiResourceUngranted`] for an
     /// imported interface whose resource `options` does not grant, and
     /// [`ArtifactError::WasiGrantUndeclared`] for a granted resource no
@@ -241,7 +241,7 @@ impl WasiPlan {
             let unit = Unit::ALL
                 .into_iter()
                 .find(|unit| unit.name() == interface)
-                .ok_or(ArtifactError::WasiImportUndeclared)?;
+                .ok_or(ArtifactError::UnknownImport)?;
             linked.push(unit);
         }
         linked.sort_unstable();
@@ -433,14 +433,14 @@ mod tests {
         assert!(!planned.linked.is_empty());
         assert_eq!(
             refusal(&["wasi:cli/environment@0.2.9"], &WasiOptions::default()),
-            ArtifactError::WasiImportUndeclared
+            ArtifactError::UnknownImport
         );
         assert_eq!(
             refusal(
                 &["wasi:http/outgoing-handler@0.2.9"],
                 &WasiOptions::default()
             ),
-            ArtifactError::WasiImportUndeclared
+            ArtifactError::UnknownImport
         );
     }
 

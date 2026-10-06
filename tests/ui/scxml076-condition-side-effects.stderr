@@ -1,5 +1,5 @@
 warning[SCXML076]: `cond` on `<transition>` has a side effect
- --> tests/ui/scxml076-condition-side-effects.scxml:7:36
+ --> tests/ui/scxml076-condition-side-effects.scx:7:36
   |
 7 |     <transition event="go" cond="x = 2" target="f"/>
   |                                    ^ `=` assigns `x` instead of comparing it
@@ -15,7 +15,7 @@ help: compare with `===`
   |                                    ~~~
 
 warning[SCXML076]: `cond` on `<transition>` has a side effect
- --> tests/ui/scxml076-condition-side-effects.scxml:8:39
+ --> tests/ui/scxml076-condition-side-effects.scx:8:39
   |
 8 |     <transition event="retry" cond="++tries &lt; 3" target="a"/>
   |                                       ^^^^^ changes `tries`, which is outside the condition
@@ -27,7 +27,7 @@ warning[SCXML076]: `cond` on `<transition>` has a side effect
   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 warning[SCXML076]: `cond` on `<transition>` has a side effect
- --> tests/ui/scxml076-condition-side-effects.scxml:9:38
+ --> tests/ui/scxml076-condition-side-effects.scx:9:38
   |
 9 |     <transition event="both" cond="x = 3 and ready" target="f"/>
   |                                      ^ `=` assigns `x` instead of comparing it
@@ -43,7 +43,7 @@ help: compare with `===`
   |                                      ~~~
 
 warning[SCXML038]: ecmascript syntax error in `cond`: `and` is not an ECMAScript operator
- --> tests/ui/scxml076-condition-side-effects.scxml:9:42
+ --> tests/ui/scxml076-condition-side-effects.scx:9:42
   |
 9 |     <transition event="both" cond="x = 3 and ready" target="f"/>
   |                                    --------------- while parsing this `cond`
@@ -60,5 +60,5 @@ help: use `&&`
 
 diagnostic summary: 0 error(s), 4 warning(s), 0 note(s), 4 total
 Some diagnostics have detailed explanations: SCXML038, SCXML076.
-For more information about a diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml076-condition-side-effects.scxml
+For more information about a diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml076-condition-side-effects.scx

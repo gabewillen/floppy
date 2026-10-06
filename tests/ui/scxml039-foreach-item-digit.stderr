@@ -1,5 +1,5 @@
 warning[SCXML039]: `<foreach item>` must be a variable name, but `1bad` starts with a digit
- --> tests/ui/scxml039-foreach-item-digit.scxml:4:41
+ --> tests/ui/scxml039-foreach-item-digit.scx:4:41
   |
 4 |     <onentry><foreach array="arr" item="1bad" index="i"><log expr="i"/></foreach></onentry>
   |                                         ^^^^ not a variable name
@@ -14,5 +14,5 @@ help: prefix the name with `item`: `item1bad`
   |                                         ~~~~~~~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML039`.
-validated tests/ui/scxml039-foreach-item-digit.scxml
+For more information about this diagnostic, try `scx --explain SCXML039`.
+validated tests/ui/scxml039-foreach-item-digit.scx

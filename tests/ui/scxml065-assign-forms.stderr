@@ -1,5 +1,5 @@
 error[SCXML065]: `<assign type="addattribute">` names no attribute: `attr` is missing
- --> tests/ui/scxml065-assign-forms.scxml:8:44
+ --> tests/ui/scxml065-assign-forms.scx:8:44
   |
 8 |       <assign location="$cart/items" type="addattribute" expr="'x'"/>
   |                                            ^^^^^^^^^^^^ adds an attribute
@@ -13,7 +13,7 @@ help: add the `attr` to set
   |                                                                    +++++++++
 
 error[SCXML065]: `attr` on `<assign>` is used only with `type="addattribute"`
- --> tests/ui/scxml065-assign-forms.scxml:9:38
+ --> tests/ui/scxml065-assign-forms.scx:9:38
   |
 9 |       <assign location="$cart/items" attr="count" expr="1"/>
   |                                      ^^^^^^^^^^^^ attribute name without `addattribute`
@@ -27,7 +27,7 @@ help: remove `attr`
 9 +       <assign location="$cart/items" expr="1"/>
 
 error[SCXML065]: `<assign>` has no value
-  --> tests/ui/scxml065-assign-forms.scxml:10:8
+  --> tests/ui/scxml065-assign-forms.scx:10:8
    |
 10 |       <assign location="$total"/>
    |        ^^^^^^ neither `expr` nor child content
@@ -41,4 +41,4 @@ help: add the `expr` to assign
    |                                +++++++++
 
 diagnostic summary: 3 error(s), 0 warning(s), 0 note(s), 3 total
-For more information about this error, try `scxml-cli --explain SCXML065`.
+For more information about this error, try `scx --explain SCXML065`.

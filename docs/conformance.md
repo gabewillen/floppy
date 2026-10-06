@@ -11,7 +11,7 @@ self-tests only; its results are never W3C IRP pass claims.
 
 ## Pipeline at a glance
 
-`scxml-cli conformance prepare` parses the official W3C
+`scx conformance prepare` parses the official W3C
 `assertions/assert/test/start/dep` XML manifest, consumes a local pinned corpus
 or explicitly downloads into a cache, and invokes an explicitly configured
 Saxon process against a selected data-model XSLT. It records source, revision,
@@ -469,16 +469,18 @@ Selection, compilation, capability detection, and every oracle stay in the
 runner; case execution goes through a `CaseExecutor`
 (`crates/scxml-conformance/src/executor.rs`). `conformance run` executes every
 case only through the shipped Wasm components under the Wasmtime session host
-(`scxml_conformance::wasm::WasmExecutor`, `scxml-cli --features wasmtime`): the
+(`scxml_conformance::wasm::WasmExecutor`, `scx --features wasmtime`): the
 generic machine, the data model the document names, the SCXML and `BasicHTTP`
 I/O processors, the clock, and the compiler for invoked child documents.
-`--components DIR` names the release artifacts that
-`scripts/verify-wasm-capabilities.sh` writes (its `--artifacts-dir DIR`, or
-`SCXML_WASM_ARTIFACTS_DIR`, or `wasm-artifacts/release`) and
-`--components-manifest-sha256 HEX` their trusted manifest digest
-(`$RELEASE` and `$MANIFEST_SHA256` in the examples); every component is
-authenticated against it, and a build without the `wasmtime` feature fails
-closed with `wasmtime-disabled` before executing any case. There is no other
+By default they are the release `scx` embeds (the artifacts
+`scripts/verify-wasm-capabilities.sh` writes to `wasm-artifacts/release`, or
+`SCXML_WASM_ARTIFACTS_DIR`, checked against their manifest when `scx` is
+built); `--components DIR` names another release directory (its
+`--artifacts-dir DIR`) and `--components-manifest-sha256 HEX` its trusted
+manifest digest (`$RELEASE` and `$MANIFEST_SHA256` in the examples). Every
+component is authenticated against the manifest's digest, and a build
+without the `wasmtime` feature (`--no-default-features`) fails closed with
+`wasmtime-disabled` before executing any case. There is no other
 execution path: the crate links no in-process SCXML execution, and
 `scxml_conformance::run_suite` requires an executor.
 
@@ -649,12 +651,12 @@ preparation, integrity, or runner-contract defects produce `HarnessError`.
 
 The conformance runner compiles every case through the canonical compiler
 with no expression-syntax checker linked, so the IRP gate never exercises the
-expression diagnostics users see. `scxml-cli validate` and `compile` link the
+expression diagnostics users see. `scx validate` and `compile` link the
 ECMAScript and XPath checkers. The test
 `crates/scxml-cli/tests/irp_validator_path.rs` runs that path: it compiles
 every applicable official case of both checked-in prepared corpora (every
 case not declared `NotApplicable`, less case 513, which has no SCXML
-document) with the `scxml-cli` binary and requires each compile to succeed
+document) with the `scx` binary and requires each compile to succeed
 with zero error diagnostics. The one exception is case 301, whose W3C
 instruction requires the processor to reject the document ("the processor
 should reject this document because it can't download the script"): its
@@ -981,7 +983,7 @@ closed on one. Every other case uses the W3C `Outcome` oracle unchanged.
 ```console
 name=env  # or event
 for model in ecmascript xpath; do
-  scxml-cli conformance prepare \
+  scx conformance prepare \
     --manifest "namespaces/$name/irp/manifest.xml" \
     --source-dir "namespaces/$name/irp/sources" \
     --templates tests/conformance/w3c-irp/templates --datamodel "$model" \
@@ -1014,7 +1016,7 @@ and component bytes).
 
 ```console
 EXAMPLE_URI='https://stateforward.org/scxml/example'
-scxml-cli conformance run --corpus namespaces/env/irp/prepared/xpath \
+scx conformance run --corpus namespaces/env/irp/prepared/xpath \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
   --extension-package components/scxml-extension-example/package/example.extension.json \
   --extension-component-sha256 "$EXAMPLE_URI=$EXTENSION_SHA256" \

@@ -1,5 +1,5 @@
 warning[SCXML038]: xpath syntax error in `cond`: `not` is a function in XPath, not an operator
- --> tests/ui/scxml038-xpath-not-without-parentheses.scxml:8:34
+ --> tests/ui/scxml038-xpath-not-without-parentheses.scx:8:34
   |
 8 |     <transition event="go" cond="not $done" target="b"/>
   |                                  ^^^ syntax error
@@ -15,5 +15,5 @@ help: call `not()` with parentheses
   |                                  ~~~~     +
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-xpath-not-without-parentheses.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-xpath-not-without-parentheses.scx

@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.2.4]: `<elseif>` is not allowed here inside `<if>`
- --> tests/ui/xsd-if-branch-order.scxml:3:92
+ --> tests/ui/xsd-if-branch-order.scx:3:92
   |
 3 | ...<state id="a"><onentry><if cond="x == 1"><log expr="'one'"/><else/><log expr="'other'"/><elseif cond="x == 2"/><log exp...
   |                            --                                   ----                        ^^^^^^ not allowed at this position
@@ -17,4 +17,4 @@ help: move the `<elseif>` branch before `<else>`
 3 + ...<log expr="'one'"/><elseif cond="x == 2"/><log ex...
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.2.4`.
+For more information about this error, try `scx --explain XSD-cvc-complex-type.2.4`.

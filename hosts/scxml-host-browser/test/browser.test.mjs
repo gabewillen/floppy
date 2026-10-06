@@ -44,7 +44,7 @@ const workspace = resolve(packageRoot, '../..');
 const irPath = process.env.SCXML_BROWSER_IR;
 assert.ok(
   irPath,
-  'SCXML_BROWSER_IR must name the CLI-compiled lowered IR of tests/fixtures/representative-machine.scxml; ' +
+  'SCXML_BROWSER_IR must name the CLI-compiled lowered IR of tests/fixtures/representative-machine.scx; ' +
     'run `sh scripts/verify-browser-host.sh` from the repository root (README.md, "Tests")',
 );
 const tracePath = join(workspace, 'tests/fixtures/representative-machine.trace.json');
@@ -223,7 +223,7 @@ test('async bridge: runtime-computed URLs load through resources in a worker, el
       delivered: [['pass']],
       status: 'finished',
     });
-    assert.deepEqual(worker.resolved, ['async-data.json', 'async-child.scxml']);
+    assert.deepEqual(worker.resolved, ['async-data.json', 'async-child.scx']);
 
     // Not isolated: the `none` fallback. The static `<data src>` is still
     // prefetched through `resources` before the machine runs; the runtime

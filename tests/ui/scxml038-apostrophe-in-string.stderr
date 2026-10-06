@@ -1,5 +1,5 @@
 warning[SCXML038]: ecmascript syntax error in `expr`: the string literal ends early at this `'`
- --> tests/ui/scxml038-apostrophe-in-string.scxml:2:95
+ --> tests/ui/scxml038-apostrophe-in-string.scx:2:95
   |
 2 | ...llo"/></send><log expr="'it's done'"/></onentry><transition...
   |                            ----------- while parsing this `expr`
@@ -15,5 +15,5 @@ help: escape the inner `'`
   |                            ~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-apostrophe-in-string.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-apostrophe-in-string.scx

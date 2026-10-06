@@ -1,4 +1,4 @@
-//! `scxml-cli snapshot show|check|diff|run` against real documents: output
+//! `scx snapshot show|check|diff|run` against real documents: output
 //! forms and the documented exit codes.
 
 use std::fs;
@@ -20,11 +20,11 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 fn cli(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_scxml-cli"))
+    Command::new(env!("CARGO_BIN_EXE_scx"))
         .args(args)
         .env("NO_COLOR", "1")
         .output()
-        .expect("scxml-cli must run")
+        .expect("scx must run")
 }
 
 fn text(bytes: &[u8]) -> String {
@@ -179,7 +179,7 @@ fn damaged_documents_are_located_snap_diagnostics() {
     assert!(stderr.starts_with(&format!(
         "error[SNAP-integrity-mismatch]: `sha256` does not match the canonical bytes of `snapshot`\n  --> {damaged}\n   = pointer: /sha256\n   = help: "
     )), "{stderr}");
-    assert!(stderr.contains("try `scxml-cli --explain SNAP-integrity-mismatch`"));
+    assert!(stderr.contains("try `scx --explain SNAP-integrity-mismatch`"));
     let check_json = cli(&["snapshot", "check", &damaged, "--format", "json"]);
     assert_eq!(
         text(&check_json.stdout),

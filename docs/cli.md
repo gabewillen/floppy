@@ -1,14 +1,20 @@
 # Command-line interface
 
-`scxml-cli` (crate [`crates/scxml-cli`](../crates/scxml-cli)) validates,
+`scx` (crate [`crates/scxml-cli`](../crates/scxml-cli)) validates,
 compiles, and runs SCXML documents. Run it from the workspace with
 `cargo run -p scxml-cli -- <command>`. Commands that execute a document run it
-only through the shipped Wasm components under the Wasmtime host, so they need
-a CLI built with `--features wasmtime` and a component release
-(`--components DIR --components-manifest-sha256 HEX`, built by
-`scripts/verify-wasm-capabilities.sh` as in the
-[README quickstart](../README.md#quickstart), which sets `$RELEASE` and
-`$MANIFEST_SHA256`).
+only through the shipped Wasm components under the Wasmtime host (the
+default `wasmtime` feature). `scx` embeds the authenticated release session
+components: building it reads the release `scripts/verify-wasm-capabilities.sh`
+writes (`target/wasm-artifacts/release`, or `SCXML_WASM_ARTIFACTS_DIR`),
+checks every component's SHA-256 against its `manifest.tsv`, and fails with a
+message naming what is missing rather than building without them; each run
+authenticates them again against that manifest's SHA-256.
+`--components DIR --components-manifest-sha256 HEX` overrides them with
+another release directory and its trusted manifest digest (the
+[README quickstart](../README.md#quickstart) sets `$RELEASE` and
+`$MANIFEST_SHA256` for the commands that still name a release, such as
+namespace suites).
 
 | Command | Does | Needs `wasmtime` |
 | --- | --- | --- |
@@ -77,7 +83,7 @@ The semantic inventory covers (the generated table in
 
 Rendering follows rustc: primary `^^^` and secondary `---` labels on the most
 specific bytes, `= note:`/`= help:`/`= spec:` footers, and inline `help:`
-suggestion snippets. `scxml-cli --explain CODE` prints the long-form
+suggestion snippets. `scx --explain CODE` prints the long-form
 explanation of any code; the code table in
 [validator-rules.md](validator-rules.md) is generated from the same
 source.
@@ -87,9 +93,9 @@ source.
 AI repair loops should consume the canonical artifact, not the text:
 
 ```console
-scxml-cli validate machine.scxml --format json   # canonical scxml.report bytes on stdout
-scxml-cli validate machine.scxml --format sarif  # SARIF 2.1.0 with fixes on stdout
-scxml-cli --explain SCXML005                     # long-form explanation
+scx validate machine.scx --format json   # canonical scxml.report bytes on stdout
+scx validate machine.scx --format sarif  # SARIF 2.1.0 with fixes on stdout
+scx --explain SCXML005                     # long-form explanation
 ```
 
 The exit status is `0` when the report has no errors, `1` when it has errors
@@ -110,13 +116,13 @@ semantic gaps and the AgentML comparison are listed in
 ### Validate and compile
 
 ```console
-cargo run -p scxml-cli -- validate machine.scxml \
+cargo run -p scxml-cli -- validate machine.scx \
   --schema http://www.w3.org/2005/07/scxml=scxml.xsd \
   --schema urn:vendor:extension=extension.xsd \
   --policy strict \
   --canonical machine.scxml-report.json
 
-cargo run -p scxml-cli -- compile machine.scxml \
+cargo run -p scxml-cli -- compile machine.scx \
   --output machine.scxml-ir.json \
   --schema http://www.w3.org/2005/07/scxml=scxml.xsd
 ```
@@ -132,7 +138,7 @@ that is not a relative path at or below that directory, is `SCXML088`.
 ```console
 # Package for a non-browser AOT host: the template is the pinned virtualized
 # generic machine (for example from scripts/verify-wasm-capabilities.sh).
-cargo run -p scxml-cli -- compile machine.scxml \
+cargo run -p scxml-cli -- compile machine.scx \
   --artifact component-wasm \
   --machine-template target/wasm-artifacts/release/scxml_machine.virtualized.wasm \
   --machine-template-sha256 <pinned-sha256> \
@@ -145,7 +151,7 @@ cargo run -p scxml-cli -- compile machine.scxml \
 ```console
 # Pin a Wasm script component for <script src="example.wasm"/> (compile-time
 # resolution); add --script-resolution runtime to leave src to the host loader.
-cargo run -p scxml-cli -- compile script-machine.scxml \
+cargo run -p scxml-cli -- compile script-machine.scx \
   --script example.wasm=build/example.wasm \
   --script-sha256 example.wasm=<pinned-sha256> \
   --output script-machine.scxml-ir.json
@@ -170,7 +176,6 @@ cargo run -p scxml-cli -- conformance prepare \
 #        --errata tests/conformance/w3c-irp/errata/xpath.json
 
 cargo run --release -p scxml-cli --features wasmtime -- conformance run \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
   --corpus tests/conformance/w3c-irp/prepared/ecmascript \
   --allow-not-passing \
   --json /tmp/scxml-conformance.json \
@@ -181,11 +186,10 @@ cargo run --release -p scxml-cli --features wasmtime -- conformance run \
 
 ```console
 # Read-only session snapshots (docs/session-snapshot.md): run the quickstart's
-# hello.scxml through its release components ($RELEASE) and write one
+# hello.scx through its release components ($RELEASE) and write one
 # canonical scxml.session-snapshot/v2 document per checkpoint to
 # out/NNNN.snapshot.json, then render, check, and diff them.
-cargo run --release -p scxml-cli --features wasmtime -- snapshot run target/hello.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+cargo run --release -p scxml-cli --features wasmtime -- snapshot run target/hello.scx \
   --event finish --every --output-dir out
 cargo run -p scxml-cli -- snapshot show out/0002.snapshot.json
 cargo run -p scxml-cli -- snapshot check out/0002.snapshot.json
@@ -200,10 +204,9 @@ cargo run -p scxml-cli -- snapshot diff out/0000.snapshot.json out/0002.snapshot
 # authenticated by its SHA-256.
 EXAMPLE_URI=https://stateforward.org/scxml/example
 EXAMPLE_SHA256=$(awk -F'\t' '$2 == "scxml_extension_example" { print $5 }' "$RELEASE/manifest.tsv")
-cargo run -p scxml-cli -- validate tests/fixtures/namespaces/example.scxml \
+cargo run -p scxml-cli -- validate tests/fixtures/namespaces/example.scx \
   --extension-package components/scxml-extension-example/package/example.extension.json
-cargo run --release -p scxml-cli --features wasmtime -- snapshot run tests/fixtures/namespaces/example.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+cargo run --release -p scxml-cli --features wasmtime -- snapshot run tests/fixtures/namespaces/example.scx \
   --extension-package components/scxml-extension-example/package/example.extension.json \
   --extension-component "$EXAMPLE_URI=$RELEASE/scxml_extension_example.virtualized.wasm" \
   --extension-component-sha256 "$EXAMPLE_URI=$EXAMPLE_SHA256"
@@ -218,11 +221,9 @@ cargo run --release -p scxml-cli --features wasmtime -- snapshot run tests/fixtu
 # exits 0 when the root reaches a top-level final state. --record writes a
 # replay log that --replay reproduces byte for byte on the logical clock.
 printf '%s\n' '{"name":"finish"}' | \
-  cargo run --release -p scxml-cli --features wasmtime -- run target/hello.scxml \
-    --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+  cargo run --release -p scxml-cli --features wasmtime -- run target/hello.scx \
     --snapshot-on done --record target/hello.live.ndjson
-cargo run --release -p scxml-cli --features wasmtime -- run target/hello.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+cargo run --release -p scxml-cli --features wasmtime -- run target/hello.scx \
   --replay target/hello.live.ndjson
 ```
 
@@ -233,7 +234,7 @@ cargo run --release -p scxml-cli --features wasmtime -- run target/hello.scxml \
 # and may post only to 127.0.0.1:8402; B listens on 8402, may post only to
 # 8401, and pings A with its own location as the reply address. Each exits
 # 0 once its root finishes.
-cat > target/pong.scxml <<'EOF'
+cat > target/pong.scx <<'EOF'
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="idle">
   <state id="idle">
     <transition event="ping" target="done">
@@ -246,7 +247,7 @@ cat > target/pong.scxml <<'EOF'
   <final id="done"/>
 </scxml>
 EOF
-cat > target/ping.scxml <<'EOF'
+cat > target/ping.scx <<'EOF'
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="waiting">
   <state id="waiting">
     <onentry>
@@ -263,9 +264,9 @@ cat > target/ping.scxml <<'EOF'
 </scxml>
 EOF
 SCXML_RUN="cargo run --release -p scxml-cli --features wasmtime -- run"
-$SCXML_RUN target/pong.scxml --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+$SCXML_RUN target/pong.scx \
   --session-id a --http-listen 8401 --http-allow http://127.0.0.1:8402 < /dev/null &
-$SCXML_RUN target/ping.scxml --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+$SCXML_RUN target/ping.scx \
   --session-id b --http-listen 8402 --http-allow http://127.0.0.1:8401 < /dev/null
 # A logs {"label":"ping from","text":"b"}, B logs {"label":"pong","text":"7"};
 # both report the delivering call as {"type":"call","cause":"http",...}.
@@ -275,15 +276,6 @@ $SCXML_RUN target/ping.scxml --components "$RELEASE" --components-manifest-sha25
 ```
 
 ## Flags and exit status
-
-An argument `@FILE` (before `--`) is replaced by the lines of `FILE`, one
-argument per line, exactly as rustc reads `@path`: each line is taken
-literally (no quoting, escapes, comments, or variable expansion), a line
-starting with `@` is not read as another file, CRLF reads like LF, and a
-relative path inside is relative to the current directory. The file must be
-a regular UTF-8 file of at most 1 MiB. A run's whole binding (components,
-packages, digests, grants, `--env` scopes) can live in one such file:
-`scxml-cli run @bot.args bot.scxml`.
 
 `compile` writes the artifact to `--output` and its recipe to
 `<output>.recipe.json`, and with `--canonical` also writes the canonical
@@ -301,25 +293,27 @@ for `validate`, `compile`, `snapshot run`, and `run`. `snapshot run` and `run`
 also execute each bound namespace's extension component: `extension-artifact`
 relative to the manifest, or `--extension-component URI=PATH`, authenticated by
 the required `--extension-component-sha256 URI=HEX` (the manifest is not a trust
-anchor for the extension component). `--extension-call-fuel N` caps the
-instruction fuel of each extension component call at `N` (default: the host's
-`DEFAULT_EXTENSION_CALL_FUEL`, 100 million). A namespace whose URI is a repository
+anchor for the extension component). Each extension component call runs
+under the host's `DEFAULT_EXTENSION_CALL_FUEL` instruction cap (one billion,
+enough for an element that compiles the whole W3C SCXML XSD set in one call;
+its documentation records the measurement). A namespace whose URI is a repository
 element needs no flag ("Loading an element from a repository" below).
-`--env NAME@URI` and `--env NAME@URI=VALUE` (repeatable) grant the variable
-`NAME` to exactly the package whose namespace or service type URI is `URI`
-(everything after the first `@` up to the first `=`; repeat the flag to grant
-one variable to several packages, and at most one of a variable's flags may
-give `=VALUE`); there is no unscoped form. `--env-file PATH` (repeatable,
+The document scopes every variable: an element (or an invoked service's
+`<invoke>`) names the variable for one of its slots (`env:<slot>="NAME"`), and
+the variable goes only to the packages (the element's namespace URI, or the
+`<invoke>`'s literal `type`) of the elements and `<invoke>`s that name it. An
+`env:<slot>expr` slot names its variable only when it executes, so its
+element's package may receive any variable the run holds, the reference
+minted for that element at that execution. `--env-file PATH` (repeatable,
 Docker's `--env-file` format: one `NAME=VALUE` or bare `NAME` per line, the
-value taken literally, `#` comments) supplies values. A granted variable holds
-its flag's `VALUE`, else the last `--env-file` entry for it, else the calling
-shell's value; an `--env-file` entry no flag grants is dropped. Nothing is held
-by default. An element (or an invoked service's `<invoke>`) names the variable
-for one of its slots (`env:<slot>="NAME"`); when the variable is granted to the
-element's namespace (or the service's type URI) its extension or service
-component receives an opaque reference, never the value, and otherwise the slot
-is absent exactly as if no value were held (a service's reference lives for
-its whole invocation; see [invoked-services.md](invoked-services.md#values-are-references-env-slots)), and every value is masked (`[masked]`) in the text the CLI
+value taken literally, `#` comments) and `--env NAME` or `--env NAME=VALUE`
+(repeatable, once per `NAME`) supply values. A variable holds its flag's
+`VALUE`, else the last `--env-file` entry for it, else, only when `--env NAME`
+names it, the calling shell's value; a variable no slot can name is dropped.
+Nothing is held by default. The extension or service component receives an
+opaque reference, never the value, and a slot whose variable holds no value
+is absent (a service's reference lives for its whole invocation; see
+[invoked-services.md](invoked-services.md#values-are-references-env-slots)), and every value is masked (`[masked]`) in the text the CLI
 writes (notes, diagnostics, live-session records); canonical snapshot
 documents are written exactly (their `sha256` covers their bytes) and get
 the protections of the canonical artifacts they are.
@@ -328,7 +322,10 @@ keeps JSON and SARIF stderr clean) lists, on standard error, each bound
 element's namespace, version (release tag and pinned commit, or package
 version and manifest), declared outbound origins, the slots the document
 binds with the variables they name, noting each one the run holds no value
-granted to that namespace for with the `--env NAME@URI` flag that adds it.
+for. `snapshot run` and `run` then list each variable the document names and
+the elements and `<invoke>`s it goes to (`env `NAME``, `= to: <invoke
+type="URI"> env:SLOT, <ELEMENT> of `URI` env:SLOT`), and each
+`env:<slot>expr` slot; names and URIs only, never a value.
 A literal `<invoke type>` of exactly
 `https://github.com/OWNER/REPO/services/NAME@TAG` that no `--service-package`
 binds is a repository service: it is resolved, verified, cached, and pinned
@@ -465,15 +462,11 @@ specifies the URI, layout, trust model, cache, and bounds.
 # The token in a gitignored .env file (Docker's format).
 printf 'WEATHER_TOKEN=%s\n' "$WEATHER_TOKEN" > .env
 # First run: resolves, verifies, caches, and pins the element.
-cargo run --release -p scxml-cli --features wasmtime -- snapshot run weather.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
-  --env-file .env \
-  --env WEATHER_TOKEN@https://github.com/example-org/scxml-weather/namespaces/weather@v1.0.0
+cargo run --release -p scxml-cli --features wasmtime -- snapshot run weather.scx \
+  --env-file .env
 # Later runs need no network at all.
-cargo run --release -p scxml-cli --features wasmtime -- snapshot run weather.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
-  --env-file .env --offline \
-  --env WEATHER_TOKEN@https://github.com/example-org/scxml-weather/namespaces/weather@v1.0.0
+cargo run --release -p scxml-cli --features wasmtime -- snapshot run weather.scx \
+  --env-file .env --offline
 ```
 
 The first command prints, before it runs, the element's namespace, its

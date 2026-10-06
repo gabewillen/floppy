@@ -1,5 +1,5 @@
 warning[SCXML056]: `$retries-1` is one undeclared variable named `retries-1`, not `$retries` minus `1`
- --> tests/ui/scxml056-xpath-hyphen-subtraction.scxml:5:41
+ --> tests/ui/scxml056-xpath-hyphen-subtraction.scx:5:41
   |
 5 |       <assign location="$retries" expr="$retries-1"/>
   |                                         ^^^^^^^^^^ undeclared variable
@@ -14,5 +14,5 @@ help: subtract with `$retries - 1`
   |                                         ~~~~~~~~~~~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML056`.
-validated tests/ui/scxml056-xpath-hyphen-subtraction.scxml
+For more information about this diagnostic, try `scx --explain SCXML056`.
+validated tests/ui/scxml056-xpath-hyphen-subtraction.scx

@@ -55,7 +55,7 @@ The validator checks every `env` attribute against the element's package:
 - `SCXML068`: an `env` attribute on any other SCXML element (an attribute in
   another namespace on an SCXML element).
 
-`scxml-cli explain SCXML083` and `scxml-cli explain SCXML084` give each rule
+`scx explain SCXML083` and `scx explain SCXML084` give each rule
 with an example.
 
 ## Values, references, and masking
@@ -64,13 +64,14 @@ with an example.
   (`ExtensionComponents::with_values`), each variable granted to exact package
   URIs; a slot naming a variable not granted to its element's namespace (or
   its `<invoke>`'s service type URI) is absent, exactly as if no value were
-  held. The CLI grants a variable with `--env NAME@URI` or
-  `--env NAME@URI=VALUE` (repeat it for several packages; there is no
-  unscoped form) and holds its flag's value, else its last `--env-file PATH`
-  entry (Docker's format: `NAME=VALUE` taken literally, a bare `NAME` from
-  the shell, `#` comments and blank lines ignored), else the calling shell's;
-  an `--env-file` entry no flag grants is dropped. Nothing is held by
-  default, and there is no whole-environment form.
+  held. The CLI derives the grants from the document: a variable goes to
+  the packages of the elements and `<invoke>`s whose `env` attributes name
+  it, and to the package of every `env:<slot>expr` slot. It holds the value
+  of `--env NAME=VALUE`, else the last `--env-file PATH` entry (Docker's
+  format: `NAME=VALUE` taken literally, a bare `NAME` from the shell, `#`
+  comments and blank lines ignored), else, for a bare `--env NAME`, the
+  calling shell's; a variable no slot can name is dropped. Nothing is held
+  by default, and there is no whole-environment form.
 - **The component holds references.** For each `execute` call the host binds
   every slot the element names, whose variable the run holds, to a fresh
   opaque `value-reference`. A reference is valid only during that call and
@@ -130,7 +131,7 @@ whose package declares the `url` and `token` slots).
   before it is sent (the element raises `error.execution`).
 
 Not covered by the suite: masking, which applies to the text the CLI
-writes and is never observable by a document (`scxml-cli` tests cover it),
+writes and is never observable by a document (`scx` tests cover it),
 and that an expression is evaluated anew at each execution (a portable
 test would need an expression that reads data-model state, which the W3C
 templates write differently for each data model).

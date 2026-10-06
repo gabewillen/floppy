@@ -1,5 +1,5 @@
 error[SCXML005]: transition target `zz\u{202E}DER` does not exist
- --> tests/ui/scxml005-bidi-control-in-target.scxml:2:48
+ --> tests/ui/scxml005-bidi-control-in-target.scx:2:48
   |
 2 |   <state id="a"><transition event="go" target="zz\u{202E}DER"/></state>
   |                                                ^^^^^^^^^^^^^ unknown target identifier
@@ -9,7 +9,7 @@ error[SCXML005]: transition target `zz\u{202E}DER` does not exist
   = spec: SCXML 1.0 §3.5 <transition>
 
 warning[SCXML062]: a Unicode bidirectional control character changes how this line is displayed
- --> tests/ui/scxml005-bidi-control-in-target.scxml:2:50
+ --> tests/ui/scxml005-bidi-control-in-target.scx:2:50
   |
 2 |   <state id="a"><transition event="go" target="zz\u{202E}DER"/></state>
   |                                                  ^^^^^^^^ U+202E RIGHT-TO-LEFT OVERRIDE
@@ -24,4 +24,4 @@ help: write the control character as a character reference
 
 diagnostic summary: 1 error(s), 1 warning(s), 0 note(s), 2 total
 Some diagnostics have detailed explanations: SCXML005, SCXML062.
-For more information about a diagnostic, try `scxml-cli --explain SCXML005`.
+For more information about a diagnostic, try `scx --explain SCXML005`.

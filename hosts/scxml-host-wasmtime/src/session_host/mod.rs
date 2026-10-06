@@ -1083,7 +1083,7 @@ impl SessionHost {
     /// # Errors
     ///
     /// A component over the host's byte bound or of the wrong kind; a WASI
-    /// import the host never links ([`crate::ArtifactError::WasiImportUndeclared`]),
+    /// import the host never links ([`crate::ArtifactError::UnknownImport`]),
     /// an imported resource the run does not grant
     /// ([`crate::ArtifactError::WasiResourceUngranted`]), or a grant no import
     /// uses ([`crate::ArtifactError::WasiGrantUndeclared`]); or

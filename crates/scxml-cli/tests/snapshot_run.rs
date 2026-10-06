@@ -3,7 +3,7 @@
     reason = "integration-test crate; test functions are self-describing"
 )]
 
-//! `scxml-cli snapshot run` end to end through the shipped components
+//! `scx snapshot run` end to end through the shipped components
 //! (`wasmtime` feature): the success path against the shared session
 //! snapshot fixtures, and every failure exit. Also pins that
 //! `conformance run --snapshot-every-checkpoint` still applies the plain
@@ -70,11 +70,11 @@ fn release() -> &'static (String, String) {
 }
 
 fn cli(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_scxml-cli"))
+    Command::new(env!("CARGO_BIN_EXE_scx"))
         .args(args)
         .env("NO_COLOR", "1")
         .output()
-        .expect("scxml-cli must run")
+        .expect("scx must run")
 }
 
 /// `snapshot run DOC <release flags> <extra>`.
@@ -129,7 +129,7 @@ fn golden(checkpoint: &str) -> Vec<u8> {
 
 #[test]
 fn run_writes_the_requested_checkpoints() {
-    let document = fixtures().join("delayed-send.scxml");
+    let document = fixtures().join("delayed-send.scx");
     let directory = scratch("every");
     let out = directory.join("docs");
     let out_text = out.display().to_string();
@@ -224,7 +224,7 @@ fn run_writes_the_requested_checkpoints() {
 
 #[test]
 fn run_failures_exit_2() {
-    let document = fixtures().join("delayed-send.scxml");
+    let document = fixtures().join("delayed-send.scx");
     let directory = scratch("failures");
 
     let unreached = run(&document, &["--event", "go", "--at", "99"]);
@@ -253,7 +253,7 @@ fn run_failures_exit_2() {
     assert_eq!(rejected.status.code(), Some(2));
     assert!(rejected.stdout.is_empty());
 
-    let invalid = directory.join("invalid.scxml");
+    let invalid = directory.join("invalid.scx");
     fs::write(
         &invalid,
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="missing"><state id="a"/></scxml>"#,
@@ -278,7 +278,7 @@ fn the_snapshot_proof_honours_the_baseline() {
     let corpus = workspace().join("tests/conformance/w3c-irp/prepared/xpath");
     // The proof writes its summary under the current directory.
     let directory = scratch("proof");
-    let output = Command::new(env!("CARGO_BIN_EXE_scxml-cli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_scx"))
         .current_dir(&directory)
         .args([
             "conformance",
@@ -297,7 +297,7 @@ fn the_snapshot_proof_honours_the_baseline() {
             "--fail-on-regression",
         ])
         .output()
-        .expect("scxml-cli must run");
+        .expect("scx must run");
     assert_eq!(output.status.code(), Some(2), "{}", text(&output.stderr));
     let stdout = text(&output.stdout);
     assert!(

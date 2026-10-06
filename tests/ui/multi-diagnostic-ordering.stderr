@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.4]: `<scxml>` is missing required attribute `version`
- --> tests/ui/multi-diagnostic-ordering.scxml:1:2
+ --> tests/ui/multi-diagnostic-ordering.scx:1:2
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml"
   |  ^^^^^ missing `version`
@@ -14,7 +14,7 @@ help: add `version="1.0"`
   |                         ++++++++++++++
 
 error[XSD001]: cannot resolve an XML Schema for namespace `urn:example:custom`
- --> tests/ui/multi-diagnostic-ordering.scxml:2:17
+ --> tests/ui/multi-diagnostic-ordering.scx:2:17
   |
 2 |        xmlns:c="urn:example:custom"
   |                 ^^^^^^^^^^^^^^^^^^ no schema is registered for it
@@ -27,7 +27,7 @@ error[XSD001]: cannot resolve an XML Schema for namespace `urn:example:custom`
   = spec: SCXML 1.0 §4.10 Extensibility of Executable Content
 
 error[SCXML006]: initial state `missing` does not exist
- --> tests/ui/multi-diagnostic-ordering.scxml:3:17
+ --> tests/ui/multi-diagnostic-ordering.scx:3:17
   |
 3 |        initial="missing">
   |                 ^^^^^^^ unknown initial state
@@ -37,7 +37,7 @@ error[SCXML006]: initial state `missing` does not exist
   = spec: SCXML 1.0 §3.2 <scxml>
 
 error[SCXML013]: event descriptors are whitespace-separated, not comma-separated
- --> tests/ui/multi-diagnostic-ordering.scxml:5:24
+ --> tests/ui/multi-diagnostic-ordering.scx:5:24
   |
 5 |     <transition event="finish, abort" target="don"/>
   |                        ^^^^^^^^^^^^^ comma in event descriptor list
@@ -51,7 +51,7 @@ help: replace commas with spaces
   |                        ~~~~~~~~~~~~
 
 error[SCXML005]: transition target `don` does not exist
-  --> tests/ui/multi-diagnostic-ordering.scxml:5:47
+  --> tests/ui/multi-diagnostic-ordering.scx:5:47
    |
  5 |     <transition event="finish, abort" target="don"/>
    |                                               ^^^ unknown target identifier
@@ -68,7 +68,7 @@ help: a state with a similar name exists: `done`
    |                                               ~~~~
 
 error[SCXML068]: this compiler cannot lower `<c:mark>` from namespace `urn:example:custom` inside `<state>`
- --> tests/ui/multi-diagnostic-ordering.scxml:6:6
+ --> tests/ui/multi-diagnostic-ordering.scx:6:6
   |
 4 |   <state id="ready">
   |    ----- this compiler lowers only SCXML children of `<state>`
@@ -83,7 +83,7 @@ help: remove `<c:mark>`
 6 -     <c:mark value="not-an-integer"/>
 
 error[XSD-cvc-complex-type.2.4]: `<log>` is not allowed here inside `<state>`
- --> tests/ui/multi-diagnostic-ordering.scxml:7:6
+ --> tests/ui/multi-diagnostic-ordering.scx:7:6
   |
 4 |   <state id="ready">
   |    ----- in the content of this `<state>`
@@ -101,7 +101,7 @@ help: run it on entry by wrapping it in `<onentry>`
   |     +++++++++                         ++++++++++
 
 error[SCXML002]: duplicate identifier `ready`
- --> tests/ui/multi-diagnostic-ordering.scxml:9:14
+ --> tests/ui/multi-diagnostic-ordering.scx:9:14
   |
 4 |   <state id="ready">
   |              ----- first declared here
@@ -115,4 +115,4 @@ error[SCXML002]: duplicate identifier `ready`
 
 diagnostic summary: 8 error(s), 0 warning(s), 0 note(s), 8 total
 Some diagnostics have detailed explanations: SCXML002, SCXML005, SCXML006, SCXML013, SCXML068, XSD-cvc-complex-type.2.4, XSD-cvc-complex-type.4, XSD001.
-For more information about a diagnostic, try `scxml-cli --explain SCXML002`.
+For more information about a diagnostic, try `scx --explain SCXML002`.

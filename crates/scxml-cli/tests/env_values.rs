@@ -8,8 +8,9 @@
 //! whose package declares the `url` and `token` slots) against a loopback
 //! server: each element receives references for its own slots only, a value
 //! reaches only requests to an origin its package declares or one a value
-//! supplies entirely, a value granted to another package is absent, and
-//! `--env-file` values are masked in what the CLI writes. No test touches
+//! supplies entirely, a variable goes only to the elements and `<invoke>`s
+//! whose `env` attributes name it, and `--env-file` values are masked in what
+//! the CLI writes. No test touches
 //! the real network.
 
 use std::fs;
@@ -90,11 +91,11 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 fn cli(args: &[String]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_scxml-cli"))
+    Command::new(env!("CARGO_BIN_EXE_scx"))
         .args(args)
         .env("NO_COLOR", "1")
         .output()
-        .expect("scxml-cli must run")
+        .expect("scx must run")
 }
 
 fn text(bytes: &[u8]) -> String {
@@ -281,10 +282,7 @@ fn values_reach_only_their_element_and_only_admitted_origins() {
     let output = directory.join("final.snapshot.json");
     let origin = server.origin.clone();
     let echo = format!("{origin}/echo");
-    let grants = [
-        format!("KEY@{EXAMPLE_URI}=key-test"),
-        format!("A_BASE@{EXAMPLE_URI}={origin}"),
-    ];
+    let grants = ["KEY=key-test".to_owned(), format!("A_BASE={origin}")];
     // A's url slot names a value that is a whole origin, so its request is
     // admitted though nothing declares it, carrying A's token.
     let a = r#"env:url="A_BASE" path="/echo" env:token="KEY""#;
@@ -370,10 +368,7 @@ fn values_reach_only_their_element_and_only_admitted_origins() {
             "",
         ),
         &[],
-        &[
-            "--env",
-            &format!("HOST_ONLY@{EXAMPLE_URI}=http://127.0.0.1"),
-        ],
+        &["--env", "HOST_ONLY=http://127.0.0.1"],
     );
     assert!(split.status.success(), "{}", text(&split.stderr));
     assert!(
@@ -383,12 +378,13 @@ fn values_reach_only_their_element_and_only_admitted_origins() {
     assert_eq!(server.echoes(), 5, "only A's request was sent");
 }
 
-/// A value granted only to another package (the echo service) never reaches
-/// the example element: its slot naming it is absent, exactly like an
-/// unheld value, even toward an origin its package declares, and the listing
-/// names the flag that would grant it.
+/// A variable goes only to the elements and `<invoke>`s whose `env`
+/// attributes name it: the echo service's `<invoke>` names `KEY`, the
+/// example element names `OTHER` (which the run does not hold) for its
+/// token, so the example element's slot is absent even toward an origin its
+/// package declares, and the listing shows each variable and where it goes.
 #[test]
-fn a_value_granted_to_another_package_is_absent() {
+fn a_variable_goes_only_to_the_elements_naming_it() {
     let server = Server::start();
     let directory = scratch("scoped");
     let output = directory.join("final.snapshot.json");
@@ -396,7 +392,7 @@ fn a_value_granted_to_another_package_is_absent() {
         workspace().join("components/scxml-service-example/package/echo.service.json");
     let mut flags = strings(&[
         "--env",
-        &format!("KEY@{ECHO_URI}=key-test"),
+        "KEY=key-test",
         "--service-package",
         &echo_manifest.display().to_string(),
         "--service-component",
@@ -413,33 +409,37 @@ fn a_value_granted_to_another_package_is_absent() {
     flags.extend(example_package(&directory, &[&server.origin]));
     let document = two_elements(
         &directory,
-        &format!(r#"url="{}" path="/echo" env:token="KEY""#, server.origin),
+        &format!(r#"url="{}" path="/echo" env:token="OTHER""#, server.origin),
         &format!(r#"url="{}/echo""#, server.origin),
         &format!(r#"<invoke type="{ECHO_URI}" id="echo" env:endpoint="KEY"/>"#),
     );
     let (out_of_scope, shown) = snapshot_run(&document, &output, &flags);
-    assert!(
-        out_of_scope.status.success(),
-        "{}",
-        text(&out_of_scope.stderr)
-    );
+    let stderr = text(&out_of_scope.stderr);
+    assert!(out_of_scope.status.success(), "{stderr}");
     assert!(shown.contains(r#"first = "status=200 slots=""#), "{shown}");
     assert!(
         server.authorizations().is_empty(),
         "no request carried the value"
     );
+    assert!(stderr.contains("token <- OTHER (no value)"), "{stderr}");
     assert!(
-        text(&out_of_scope.stderr).contains(&format!(
-            "token <- KEY (no value granted: add --env KEY@{EXAMPLE_URI})"
+        stderr.contains(&format!(
+            "env `KEY`\n  = to: <invoke type=\"{ECHO_URI}\"> env:endpoint"
         )),
-        "{}",
-        text(&out_of_scope.stderr)
+        "{stderr}"
     );
+    assert!(
+        stderr.contains(&format!(
+            "env `OTHER` (no value)\n  = to: <fetch> of `{EXAMPLE_URI}` env:token"
+        )),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("key-test"), "never a value: {stderr}");
 }
 
 /// Values from `--env-file` (Docker's format, CRLF included), masked in what
 /// the CLI writes as text (here a live session's log record), and a missing
-/// one named by the flag that adds it.
+/// one listed as holding no value.
 #[test]
 fn env_files_supply_values_that_are_masked_in_cli_output() {
     let release = release();
@@ -477,8 +477,6 @@ fn env_files_supply_values_that_are_masked_in_cli_output() {
         "close",
         "--env-file",
         &env_file.display().to_string(),
-        "--env",
-        &format!("KEY@{EXAMPLE_URI}"),
     ]);
     args.extend(example_package(&directory, &[&server.origin]));
     let live = cli(&args);
@@ -498,17 +496,15 @@ fn env_files_supply_values_that_are_masked_in_cli_output() {
         "the value reached the admitted request as a header"
     );
 
-    // Without the file the key has no value: the run says which flag adds it.
+    // Without the file the key has no value: the listing says so.
     let output = directory.join("final.snapshot.json");
-    let mut flags = strings(&["--env", &format!("OTHER@{EXAMPLE_URI}=x-value")]);
+    let mut flags = strings(&["--env", "OTHER=x-value"]);
     flags.extend(example_package(&directory, &[&server.origin]));
     let (missing, shown) = snapshot_run(&document.display().to_string(), &output, &flags);
     assert!(missing.status.success(), "{}", text(&missing.stderr));
     assert!(shown.contains("configuration: atomic [done]"), "{shown}");
     assert!(
-        text(&missing.stderr).contains(&format!(
-            "token <- KEY (no value granted: add --env KEY@{EXAMPLE_URI})"
-        )),
+        text(&missing.stderr).contains("token <- KEY (no value)"),
         "{}",
         text(&missing.stderr)
     );

@@ -1,5 +1,5 @@
 error[XML002]: XML element depth limit exceeded (maximum 256)
-   --> tests/ui/xml002-nesting-limit.scxml:257:1
+   --> tests/ui/xml002-nesting-limit.scx:257:1
     |
 257 | <state id="s255">
     | ^ resource budget exceeded here
@@ -8,4 +8,4 @@ error[XML002]: XML element depth limit exceeded (maximum 256)
     = help: split the machine into smaller documents (for example with `<invoke>`), reduce nesting, or validate with larger explicitly configured limits
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML002`.
+For more information about this error, try `scx --explain XML002`.

@@ -713,7 +713,7 @@ impl Client {
             .timeout_connect(Some(CONNECT_TIMEOUT))
             .timeout_global(Some(TOTAL_TIMEOUT))
             .max_response_header_size(MAX_RESPONSE_HEAD_BYTES)
-            .user_agent("scxml-cli")
+            .user_agent("scx")
             .tls_config(tls)
             .build()
             .new_agent();
@@ -789,7 +789,7 @@ impl Repository {
     fn get(&self, url: url::Url, _limit: u64, _accept: &str) -> Result<Vec<u8>, String> {
         let _ = (&self.token, self.bases.admits(&url));
         Err(format!(
-            "cannot fetch `{url}`: this scxml-cli was built without `--features wasmtime`, which links its network client\n  = help: rebuild with `--features wasmtime`; repository namespaces already in the extension cache still resolve"
+            "cannot fetch `{url}`: this scx was built without `--features wasmtime`, which links its network client\n  = help: rebuild with `--features wasmtime`; repository namespaces already in the extension cache still resolve"
         ))
     }
 

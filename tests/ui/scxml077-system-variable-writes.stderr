@@ -1,5 +1,5 @@
 warning[SCXML077]: `<script>` changes the system variable `_event`
- --> tests/ui/scxml077-system-variable-writes.scxml:6:22
+ --> tests/ui/scxml077-system-variable-writes.scx:6:22
   |
 6 |       <script>delete _event; _name += '!';</script>
   |                      ^^^^^^ `_event` is a read-only system variable
@@ -10,7 +10,7 @@ warning[SCXML077]: `<script>` changes the system variable `_event`
   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 warning[SCXML077]: `<script>` changes the system variable `_name`
- --> tests/ui/scxml077-system-variable-writes.scxml:6:30
+ --> tests/ui/scxml077-system-variable-writes.scx:6:30
   |
 6 |       <script>delete _event; _name += '!';</script>
   |                              ^^^^^ `_name` is a read-only system variable
@@ -21,7 +21,7 @@ warning[SCXML077]: `<script>` changes the system variable `_name`
   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 warning[SCXML077]: `<script>` changes the system variable `_event`
- --> tests/ui/scxml077-system-variable-writes.scxml:7:50
+ --> tests/ui/scxml077-system-variable-writes.scx:7:50
   |
 7 |       <script>Reflect.deleteProperty(globalThis, '_event'); delete globalThis._ioprocessors;</script>
   |                                                  ^^^^^^^^ `_event` is a read-only system variable
@@ -32,7 +32,7 @@ warning[SCXML077]: `<script>` changes the system variable `_event`
   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 warning[SCXML077]: `<script>` changes the system variable `_ioprocessors`
- --> tests/ui/scxml077-system-variable-writes.scxml:7:79
+ --> tests/ui/scxml077-system-variable-writes.scx:7:79
   |
 7 |       <script>Reflect.deleteProperty(globalThis, '_event'); delete globalThis._ioprocessors;</script>
   |                                                                               ^^^^^^^^^^^^^ `_ioprocessors` is a read-only system variable
@@ -43,7 +43,7 @@ warning[SCXML077]: `<script>` changes the system variable `_ioprocessors`
   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 warning[SCXML077]: `expr` on `<assign>` changes the system variable `_sessionid`
- --> tests/ui/scxml077-system-variable-writes.scxml:8:34
+ --> tests/ui/scxml077-system-variable-writes.scx:8:34
   |
 8 |       <assign location="d" expr="_sessionid = 'mine'"/>
   |                                  ^^^^^^^^^^ `_sessionid` is a read-only system variable
@@ -54,5 +54,5 @@ warning[SCXML077]: `expr` on `<assign>` changes the system variable `_sessionid`
   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 diagnostic summary: 0 error(s), 5 warning(s), 0 note(s), 5 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML077`.
-validated tests/ui/scxml077-system-variable-writes.scxml
+For more information about this diagnostic, try `scx --explain SCXML077`.
+validated tests/ui/scxml077-system-variable-writes.scx

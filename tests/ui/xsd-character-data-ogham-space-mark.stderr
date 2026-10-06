@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.2.3]: `<onentry>` cannot contain character data
- --> tests/ui/xsd-character-data-ogham-space-mark.scxml:4:14
+ --> tests/ui/xsd-character-data-ogham-space-mark.scx:4:14
   |
 4 |     <onentry>&#x1680;</onentry>
   |      ------- ^^^^^^^^ unexpected text
@@ -15,4 +15,4 @@ help: remove the stray text
 4 +     <onentry></onentry>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.2.3`.
+For more information about this error, try `scx --explain XSD-cvc-complex-type.2.3`.

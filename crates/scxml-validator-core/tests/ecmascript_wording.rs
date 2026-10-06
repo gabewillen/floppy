@@ -2,7 +2,7 @@
 //! messages (docs/validator-rules.md: checker messages are rewritten into
 //! project-owned wording that echoes the source text). Each fragment below
 //! is a mistake agents make; each is checked with the real Boa-backed
-//! checker, composed as `scxml-cli validate` composes it.
+//! checker, composed as `scx validate` composes it.
 
 use scxml_validator_core::ExternalScripts;
 use std::sync::Arc;

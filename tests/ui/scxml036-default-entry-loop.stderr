@@ -1,5 +1,5 @@
 warning[SCXML036]: eventless transitions loop forever without consuming an event: `a` -> `a`
- --> tests/ui/scxml036-default-entry-loop.scxml:4:27
+ --> tests/ui/scxml036-default-entry-loop.scx:4:27
   |
 4 |       <transition target="p"/>
   |                           ^ enters `p`, which lands in `a` by default
@@ -9,5 +9,5 @@ warning[SCXML036]: eventless transitions loop forever without consuming an event
   = spec: SCXML 1.0 §3.13 Selecting and Executing Transitions
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML036`.
-validated tests/ui/scxml036-default-entry-loop.scxml
+For more information about this diagnostic, try `scx --explain SCXML036`.
+validated tests/ui/scxml036-default-entry-loop.scx
