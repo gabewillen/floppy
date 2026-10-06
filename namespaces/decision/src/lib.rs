@@ -63,7 +63,18 @@
 //!   `event:schema`: each of their event descriptors that names an event
 //!   (`*` is skipped; `e.*` names `e`), unless a transition listed earlier
 //!   has a descriptor that matches the same event (that one would be
-//!   selected for it). Conditions are never evaluated. `event:schemaexpr`
+//!   selected for it). **Guards:** a transition with a `cond` is offered
+//!   only when its condition, evaluated in the current data model (with
+//!   the current `_event`, not the event being offered), is exactly `true`;
+//!   one whose condition is exactly `false` is skipped and takes no event
+//!   from a later transition; one whose condition fails or is not a
+//!   boolean is not offered but still takes its events from later
+//!   transitions. So a chosen event is never one only a disabled
+//!   transition would take, but a guard that reads `_event.data` of the
+//!   offered event is judged against the current event (author such guards
+//!   without `event:schema`, or expect them not to be offered).
+//!   Conditions run once per `choose`, so they must be free of side
+//!   effects, as SCXML conditions should be anyway. `event:schemaexpr`
 //!   transitions are not offered (a snapshot carries the expression, not
 //!   the schema). The description is the schema's `description`, else its
 //!   `title` (first line).
@@ -553,45 +564,80 @@ fn valid_event_name(name: &str) -> bool {
         && name.split('.').all(|token| !token.is_empty())
 }
 
+/// What one transition's guard evaluated to (see [`snapshot_menu`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Guard {
+    /// No `cond`, or a `cond` that evaluated to `true`.
+    Enabled,
+    /// A `cond` that evaluated to `false`.
+    Disabled,
+    /// A `cond` whose evaluation failed or was not a boolean.
+    Unknown,
+}
+
 /// The menu of a `scxml.session-snapshot/v2` document: see the crate
-/// documentation ("The menu").
+/// documentation ("The menu"). `guard` evaluates one transition's `cond`
+/// text: `Ok(Some(b))` for a boolean, `Ok(None)` for a failed or
+/// non-boolean evaluation.
 ///
 /// # Errors
 ///
-/// A static detail when the document is malformed or a schema does not
-/// compile or match its digest.
-pub fn snapshot_menu(document: &str) -> Result<Vec<Candidate>, &'static str> {
-    const MALFORMED: &str = "the session snapshot is malformed";
-    let document: Json = serde_json::from_str(document).map_err(|_| MALFORMED)?;
+/// [`Failure::Execution`] with a static detail when the document is
+/// malformed or a schema does not compile or match its digest;
+/// [`Failure::Host`] when `guard` fails non-recoverably.
+pub fn snapshot_menu<E>(
+    document: &str,
+    guard: &mut dyn FnMut(&str) -> Result<Option<bool>, E>,
+) -> Result<Vec<Candidate>, Failure<E>> {
+    let malformed = || Failure::Execution("the session snapshot is malformed");
+    let document: Json = serde_json::from_str(document).map_err(|_| malformed())?;
     let Some(transitions) = document.pointer("/snapshot/root/transitions") else {
         return Ok(Vec::new());
     };
-    let transitions = transitions.as_array().ok_or(MALFORMED)?;
+    let transitions = transitions.as_array().ok_or_else(malformed)?;
     let mut earlier: Vec<&str> = Vec::new();
     let mut menu: Vec<Candidate> = Vec::new();
     for transition in transitions {
         let descriptors: Vec<&str> = transition
             .get("events")
             .and_then(Json::as_array)
-            .ok_or(MALFORMED)?
+            .ok_or_else(malformed)?
             .iter()
-            .map(|descriptor| descriptor.as_str().ok_or(MALFORMED))
+            .map(|descriptor| descriptor.as_str().ok_or_else(malformed))
             .collect::<Result<_, _>>()?;
-        if let Some(event_schema) = transition.get("event_schema")
+        let state = match (
+            transition.get("cond"),
+            transition.get("has_cond").and_then(Json::as_bool),
+        ) {
+            (None, Some(false) | None) => Guard::Enabled,
+            (Some(Json::String(cond)), Some(true) | None) => {
+                match guard(cond).map_err(Failure::Host)? {
+                    Some(true) => Guard::Enabled,
+                    Some(false) => Guard::Disabled,
+                    None => Guard::Unknown,
+                }
+            }
+            _ => return Err(malformed()),
+        };
+        if state == Guard::Disabled {
+            continue;
+        }
+        if state == Guard::Enabled
+            && let Some(event_schema) = transition.get("event_schema")
             && event_schema.get("kind").and_then(Json::as_str) == Some("schema")
         {
             let text = event_schema
                 .get("schema")
                 .and_then(Json::as_str)
-                .ok_or(MALFORMED)?;
+                .ok_or_else(malformed)?;
             if event_schema.get("sha256").and_then(Json::as_str)
                 != Some(sha256_hex(text.as_bytes()).as_str())
             {
-                return Err(MALFORMED);
+                return Err(malformed());
             }
-            let schema: Json = serde_json::from_str(text).map_err(|_| MALFORMED)?;
+            let schema: Json = serde_json::from_str(text).map_err(|_| malformed())?;
             let compiled = CompiledSchema::new(text)
-                .map_err(|_| "a transition's event schema does not compile")?;
+                .map_err(|_| Failure::Execution("a transition's event schema does not compile"))?;
             let mut compiled = Some(compiled);
             for descriptor in &descriptors {
                 if *descriptor == "*" {
@@ -608,8 +654,9 @@ pub fn snapshot_menu(document: &str) -> Result<Vec<Candidate>, &'static str> {
                 // again only for a second offered descriptor.
                 let compiled = match compiled.take() {
                     Some(compiled) => compiled,
-                    None => CompiledSchema::new(text)
-                        .map_err(|_| "a transition's event schema does not compile")?,
+                    None => CompiledSchema::new(text).map_err(|_| {
+                        Failure::Execution("a transition's event schema does not compile")
+                    })?,
                 };
                 menu.push(Candidate {
                     event: event.to_owned(),
@@ -1175,7 +1222,13 @@ impl<B: Backend, H: DecisionHost> Context<'_, B, H> {
             return explicit_menu(&value).map_err(Failure::Execution);
         }
         let document = self.snapshot(&MENU_SNAPSHOT_EXCLUDE)?;
-        snapshot_menu(&document).map_err(Failure::Execution)
+        let host = &mut *self.host;
+        snapshot_menu(&document, &mut |cond| {
+            Ok(match host.evaluate(cond)? {
+                Ok(Value::Bool(value)) => Some(value),
+                Ok(_) | Err(()) => None,
+            })
+        })
     }
 
     fn choose(&mut self) -> Result<(), Failure<H::Error>> {

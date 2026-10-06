@@ -710,10 +710,30 @@ fn malformed_elements_are_refused_before_anything_is_sent() {
     );
 }
 
+/// The menu of `transitions` with every guard answering by its text:
+/// `"yes"` true, `"no"` false, anything else not a boolean.
+fn menu_events(transitions: &[Json]) -> Result<Vec<String>, Failure<()>> {
+    snapshot_menu(&snapshot(transitions), &mut |cond| {
+        Ok(match cond {
+            "yes" => Some(true),
+            "no" => Some(false),
+            _ => None,
+        })
+    })
+    .map(|menu| menu.into_iter().map(|candidate| candidate.event).collect())
+}
+
+/// `transition` with the guard `cond`.
+fn guarded(mut transition: Json, cond: &str) -> Json {
+    transition["has_cond"] = json!(true);
+    transition["cond"] = json!(cond);
+    transition
+}
+
 #[test]
 fn the_snapshot_menu_follows_selection_order_and_skips_what_cannot_be_offered() {
     let schema = json!({"type": "object"});
-    let menu = snapshot_menu(&snapshot(&[
+    let events = menu_events(&[
         without_schema(&["order"]),
         // Preempted by the earlier `order` descriptor.
         with_schema(&["order.ship"], &schema),
@@ -725,24 +745,111 @@ fn the_snapshot_menu_follows_selection_order_and_skips_what_cannot_be_offered() 
         // A wildcard matches every later event.
         with_schema(&["*"], &schema),
         with_schema(&["e"], &schema),
-    ]))
+    ])
     .expect("the snapshot is well formed");
-    let events: Vec<&str> = menu
-        .iter()
-        .map(|candidate| candidate.event.as_str())
-        .collect();
     assert_eq!(events, ["a", "b", "c"]);
 
     let mut tampered: Json =
         serde_json::from_str(&snapshot(&[with_schema(&["x"], &schema)])).expect("JSON");
     tampered["snapshot"]["root"]["transitions"][0]["event_schema"]["sha256"] = json!("00");
     assert_eq!(
-        snapshot_menu(&tampered.to_string()).map(|menu| menu.len()),
-        Err("the session snapshot is malformed")
+        snapshot_menu(&tampered.to_string(), &mut |_| Ok::<_, ()>(Some(true)))
+            .map(|menu| menu.len()),
+        Err(Failure::Execution("the session snapshot is malformed"))
     );
     assert_eq!(
-        snapshot_menu(r#"{"snapshot":{"root":{}}}"#).map(|menu| menu.len()),
+        snapshot_menu(r#"{"snapshot":{"root":{}}}"#, &mut |_| Ok::<_, ()>(Some(
+            true
+        )))
+        .map(|menu| menu.len()),
         Ok(0)
+    );
+}
+
+/// The menu offers only enabled transitions: a guard that is exactly
+/// `true` offers, `false` neither offers nor preempts, and a failed or
+/// non-boolean guard does not offer but still preempts later transitions.
+#[test]
+fn the_snapshot_menu_offers_only_transitions_whose_guards_hold() {
+    let schema = json!({"type": "object"});
+    let events = menu_events(&[
+        guarded(with_schema(&["on"], &schema), "yes"),
+        guarded(with_schema(&["off"], &schema), "no"),
+        // The disabled `off` takes nothing: this one offers it.
+        with_schema(&["off"], &schema),
+        guarded(with_schema(&["maybe"], &schema), "1 + 1"),
+        // Preempted by the earlier `maybe`, whose guard is not a boolean.
+        with_schema(&["maybe"], &schema),
+        // A disabled schema-less transition preempts nothing either.
+        guarded(without_schema(&["later"]), "no"),
+        with_schema(&["later"], &schema),
+    ])
+    .expect("the snapshot is well formed");
+    assert_eq!(events, ["on", "off", "later"]);
+
+    let mut asked = Vec::new();
+    snapshot_menu(
+        &snapshot(&[guarded(with_schema(&["x"], &schema), "plan !== null")]),
+        &mut |cond| {
+            asked.push(cond.to_owned());
+            Ok::<_, ()>(Some(true))
+        },
+    )
+    .expect("well formed");
+    assert_eq!(asked, ["plan !== null"], "the guard's text is evaluated");
+
+    let mut lying = with_schema(&["x"], &schema);
+    lying["has_cond"] = json!(true);
+    assert_eq!(
+        menu_events(&[lying]),
+        Err(Failure::Execution("the session snapshot is malformed")),
+        "has_cond without its cond"
+    );
+    assert_eq!(
+        snapshot_menu(
+            &snapshot(&[guarded(with_schema(&["x"], &schema), "fatal")]),
+            &mut |_| Err("fatal")
+        )
+        .map(|menu| menu.len()),
+        Err(Failure::Host("fatal")),
+        "a non-recoverable host failure passes through"
+    );
+}
+
+/// `choose` evaluates each offered transition's guard through the host.
+#[test]
+fn choose_skips_a_transition_whose_guard_is_false() {
+    let mut host = order_host(&json!({
+        "selection": {"order.ship": 0.8, "none of these": 0.2},
+    }));
+    let guarded_cancel = {
+        let mut snapshot: Json =
+            serde_json::from_str(&order_snapshot()).expect("the order snapshot is JSON");
+        let transitions = snapshot["snapshot"]["root"]["transitions"]
+            .as_array_mut()
+            .expect("transitions");
+        for transition in transitions.iter_mut() {
+            if transition["events"] != json!(["order.ship"]) {
+                transition["has_cond"] = json!(true);
+                transition["cond"] = json!("closed");
+            }
+        }
+        snapshot.to_string()
+    };
+    host.menu_snapshot = Some(guarded_cancel);
+    host.values.insert("closed".into(), Value::Bool(false));
+    let _ = execute("choose", &choose_attributes(), &[], &mut host);
+    let offered: Vec<String> = host.body()["questions"]["selection"]["criteria"]
+        .as_object()
+        .expect("the selection question")
+        .keys()
+        .cloned()
+        .collect();
+    assert!(offered.contains(&"order.ship".to_owned()), "{offered:?}");
+    assert_eq!(
+        offered.len(),
+        2,
+        "only order.ship and the abstain label: {offered:?}"
     );
 }
 
