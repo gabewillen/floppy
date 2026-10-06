@@ -23,11 +23,11 @@ invoked service). The decisions behind this plan are in
 | Abilities (listening, speaking, cognition, memory, ...) | Invoked children: `<invoke type="scxml" src="abilities/<name>.scxml" id="<name>">`, talking to the parent through `#_parent` and to the child through `#_<invokeid>` |
 | Ability attachment protocol (`bot.ability.attachment.*`, yamux) | Not ported: `<invoke>` lifecycle is attach (start on state entry) and detach (cancel on state exit, `done.invoke.<id>` on completion) |
 | Devices (phone, audio, smart phone) | Invoked services: `<invoke type="https://github.com/stateforward/nemobot/services/<device>@<tag>">` (later phases) |
-| Providers (SDK owners) | Extension namespaces (`namespaces/`) for executable content, invoked services (`services/`) for long-lived effects (table below) |
+| Providers (SDK owners) | Invoked services (`services/`) for every effect: anything asynchronous, I/O-bound, or long-running (decision D13); extension namespaces (`namespaces/`) only for synchronous, quick executable content (table below) |
 | Starlark behaviors (compiled, stored, cached) | Validator-gated SCXML: the builder bot authors the behavior as an SCXML document, `sx:validate` gates it, and a simulation as an invoked child proves it before it is stored; a matched behavior runs as an invoked child |
 | Persistent routines (`hsm.every` / `hsm.at` across turns) | Long-lived invoked children whose schedules are self-rescheduling `<send delay>` loops; each tick is an event to the parent, which decides on it in a new turn |
 | pydantic event data models | JSON Schemas referenced by `event:schema` on the transitions that take the event (metadata-only in the engine) |
-| Model-facing event menus and payload filling (Intuition, Processor) | The `decision` namespace: candidates are the enabled transitions with their `event:schema` read through `session-snapshot-host`, ranked by a backend, data filled to the schema and validated before the event is raised |
+| Model-facing event menus and payload filling (Intuition, Processor) | `<decision:menu>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as a canonical menu; the `decision` service, invoked with it, asks a backend, fills the chosen event's data to its schema, validates it, and emits it |
 | Event names `bot.*`, `bot.ability.*`, `phone.*` | Unchanged, byte for byte |
 | Telemetry (`mosfet.telemetry`) | scxml.rs's OpenTelemetry facade (guests through the telemetry WIT; `nemobot-host` through the OpenTelemetry API) |
 
@@ -44,9 +44,9 @@ has to cover.
 | `hsm.final` (15) | `<final id>`, with `<donedata>` for a result |
 | `hsm.transition(...)` (725) with `hsm.target` (649) | `<transition event="..." target="...">`; a targetless transition is internal (`type="internal"` where the source is compound) |
 | `hsm.guard` (574) | `cond` (ECMAScript data model) |
-| `hsm.effect` (567) | executable content: `<assign>`, `<raise>`, `<send>`, `<log>`, `<script>`, and extension elements (`generate:*`, `decision:*`, `sx:*`) |
+| `hsm.effect` (567) | executable content (synchronous and quick): `<assign>`, `<raise>`, `<send>`, `<log>`, `<script>`, and extension elements (`decision:menu`, `sx:*`); an effect that does I/O becomes an `<invoke>` of a service |
 | `hsm.entry` (20) / `hsm.exit` (13) | `<onentry>` / `<onexit>` |
-| `hsm.activity` (138) | `<invoke>`: started on entry, cancelled on exit, `done.invoke.<id>` and `error.*` on completion or failure |
+| `hsm.activity` (138) | `<invoke>`: started on entry, cancelled on exit, `done.invoke.<id>` and `error.*` on completion or failure; every model call (the `generate` and `decision` services) is one |
 | `hsm.defer` (104) | No SCXML equivalent; modelled with a data-model queue: in a deferring state, `<transition event="E" type="internal"><script>queue.push(_event)</script></transition>`; on exit (or entry of the state that handles them), `<foreach array="queue" item="e"><send eventexpr="e.name" target="#_internal" .../></foreach>` re-raises them in order, then clears the queue |
 | `hsm.after(duration)` (48) | `<send event="<state>.after" delay="..." id="<state>-after"/>` on entry, `<cancel sendid="<state>-after"/>` on exit, and a transition on the event |
 | `hsm.every(period)` (28) | a self-rescheduling loop: the transition on the tick re-sends the tick with the same `delay` |
@@ -64,10 +64,10 @@ component code.
 
 | mosfet provider | nemobot | Phase |
 | --- | --- | --- |
-| `openai_compat` | `generate` namespace, OpenAI backend (`env:apikey`, `env:baseurl`) | 1 |
-| `gemini` (text) | `generate` namespace through an OpenAI-compatible base URL | 7 |
-| `typesafe` (`system_one` Choice/Score) | `decision` namespace, TypeSafe backend (`TYPESAFE_API_KEY`) | 1 |
-| `needle` (local tool-calling reflex model) | `decision` namespace backend | 7 |
+| `openai_compat` | `services/generate`, OpenAI backend (`env:apikey`, `env:baseurl`) | 1 |
+| `gemini` (text) | `services/generate` through an OpenAI-compatible base URL | 7 |
+| `typesafe` (`system_one` Choice/Score) | `services/decision`, TypeSafe backend (`TYPESAFE_API_KEY`) | 1 |
+| `needle` (local tool-calling reflex model) | `services/decision` backend (the `Backend` trait) | 7 |
 | `sqlite_memory` | `services/memory`, SQLite (a service declaring `wasi:filesystem`) | 3 |
 | `postgres_memory` | `services/memory`, PGlite | 7 |
 | `elevenlabs`, `moonshine`, `mlx_audio`, `pyannote` | `services/speech` (text-to-speech, speech-to-text, diarization backends) | 6 |
@@ -81,9 +81,9 @@ phase 7; until then every backend is selected by its `env:baseurl` slot.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 0 | scxml.rs invoked services: slice 1 (`invoked-service` world, host and CLI binding, echo example) and slice 2 (WASI permissions and grants, event contracts, env slots on `<invoke>`, repository services); nemobot repository scaffold (subtree, workspace, `nemobot-host` embedder and smoke test, namespace skeletons, rules, this plan) | Done (scxml.rs `feat/invoke-services` at `9971c05a`, now `2bf0dd55`; this repository's first commits), except one open item of decision D4: WASI linking for extension components (see "Known gaps"). Until it lands upstream or the maintainer narrows D4, an extension package that declares a WASI permission is refused |
-| 1 | Namespaces: `scxml` (`sx:validate` wrapping the validator component, returning canonical diagnostics and fixes), `generate` (OpenAI text and structured output), `decision` (enabled-transition candidates, TypeSafe ranking, schema fill and validation before raise) | `scxml` implemented (`sx:validate`); `generate` implemented (`gen:generate`: Chat Completions text and schema-validated structured output, `env:apikey`/`env:baseurl`); `decision` implemented (`decision:rank`, `decision:classify`, `decision:choose`: snapshot menu of `event:schema` transitions whose guards evaluate to true, grounded per-member fill, schema validation before raise, `decision.abstain`; TypeSafe `system_one` backend behind the `Backend` trait, `env:apikey`/`env:baseurl`) |
-| 2 | Builder bot: `bots/builder/` SCXML (intake, design, author, `sx:validate`, fix or regenerate with bounded retries as states, simulate the draft as an invoked child via `#_<invokeid>`, package, `builder.done`/`builder.failed`), then a CLI around `nemobot-host` | `bots/builder/builder.scxml` implemented (contract schemas in `bots/builder/schemas`, `decision:choose` triage with a cond-based fallback, simulation as an invoked child); deterministic harness in `host/tests/builder_bot.rs`; the only passing live build (`bots/builder/examples/traffic_light`) comes from the first builder (commit `89ec4d05`); a live `builder.done` of the current builder is still open (the session log reports two live runs on 2026-10-06 ending in `builder.failed`, which the repository does not record, so they are unproven); the CLI is not started |
+| 0 | scxml.rs invoked services: slice 1 (`invoked-service` world, host and CLI binding, echo example) and slice 2 (WASI permissions and grants, event contracts, env slots on `<invoke>`, repository services), then deferred service requests (`outbound-http.begin`/`take`, outcomes through `wake`) and unbound invoke types failing at invocation start; nemobot repository scaffold (subtree, workspace, `nemobot-host` embedder and smoke test, namespace skeletons, rules, this plan) | Done (scxml.rs `feat/invoke-services` at `9971c05a`, now `5eb077c4`; this repository's first commits). Extension components get no WASI, by rule (decision D13), not as a gap |
+| 1 | Namespaces and services: `scxml` (`sx:validate` wrapping the validator component, returning canonical diagnostics and fixes), `generate` (OpenAI text and structured output), `decision` (enabled-transition candidates, TypeSafe ranking, schema fill and validation before emit) | `scxml` namespace implemented (`sx:validate`); `services/generate` implemented (one Chat Completions call per `<invoke>`, text or schema-validated structured output, `generate.result`/`generate.failed`, never blocking the session; `env:apikey`/`env:baseurl`); `decision` split per D13: the namespace's `decision:menu` (snapshot menu of `event:schema` transitions whose guards evaluate to true) and `services/decision` (request kinds `choose`, `rank`, `classify`; grounded per-member fill, validation against the menu's schema before emit, `decision.abstain`, `decision.failed`; TypeSafe `system_one` backend behind the `Backend` trait, `env:apikey`/`env:baseurl`) |
+| 2 | Builder bot: `bots/builder/` SCXML (intake, design, author, `sx:validate`, fix or regenerate with bounded retries as states, simulate the draft as an invoked child via `#_<invokeid>`, package, `builder.done`/`builder.failed`), then a CLI around `nemobot-host` | `bots/builder/builder.scxml` implemented (contract schemas in `bots/builder/schemas`; design and author invoke the generate service and triage invokes the decision service on the `decision:menu` menu, each with `<finalize>`/`done.invoke` and a `builder.timeout` that preempts and cancels the call; cond-based fallback; simulation as an invoked child); deterministic harness in `host/tests/builder_bot.rs` (including a timeout firing while a generation is in flight); live results in [live-proof.md](live-proof.md); the CLI is not started |
 | 3 | Memory service on SQLite | Not started |
 | 4 | Bot core: body and cognition as SCXML, abilities as invoked children, mosfet's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | Not started |
 | 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Not started |
@@ -92,11 +92,13 @@ phase 7; until then every backend is selected by its `env:baseurl` slot.
 
 ## Known gaps carried from phase 0
 
-- The scxml.rs session host still links no WASI interface into extension
-  components (`ArtifactError::WasiExtensionUnsupported`), although decision D4
-  lets extensions declare any WASI permission; `nemobot-host` therefore refuses
-  extension packages that declare one, and grants to extension URIs. Closing
-  this belongs upstream in scxml.rs.
+- By rule (decision D13), not as a gap: extension components get no WASI
+  interface and no outbound transport; `nemobot-host` refuses extension
+  packages that declare a WASI permission, and grants to extension URIs.
+  Every effect is an invoked service.
+- A cancelled service's request is abandoned, not interrupted: the
+  transport thread runs until the response or its own timeout (600 s in
+  `nemobot-host`), and the outcome is dropped.
 - `nemobot-host` produces the consent listing (`Packages::consent`) but no
   binary shows it yet: showing it before running belongs to the CLI of
   phase 2, which is not started.

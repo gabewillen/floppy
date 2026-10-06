@@ -11,8 +11,8 @@ reopening one needs the maintainer. All are dated 2026-10-06.
 | Kind | squashed `git subtree` |
 | Source repository | local scxml.rs (`stateforward/scxml.rs`) |
 | Source branch | `feat/invoke-services` |
-| Source commit | `ebc051ae110bf9de6a328c9c9bbb47cd7b5b0ed3` ("Scope env values to the package URIs they are granted to") |
-| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d"), then `070aa258` ("Squashed 'scxml.rs/' changes from fe7d555d..dd18cd11"), then `0a20ad2b` ("Squashed 'scxml.rs/' changes from dd18cd11..2bf0dd55"), then `bf96cbf9` ("Squashed 'scxml.rs/' changes from 2bf0dd55..ebc051ae") |
+| Source commit | `5eb077c4b` ("Let invoked services make slow outbound requests without blocking the session"), on top of `18fce591` ("Fail an unbound literal invoke type when its invoke starts, not at session start") |
+| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d"), then `070aa258` ("Squashed 'scxml.rs/' changes from fe7d555d..dd18cd11"), then `0a20ad2b` ("Squashed 'scxml.rs/' changes from dd18cd11..2bf0dd55"), then `bf96cbf9` ("Squashed 'scxml.rs/' changes from 2bf0dd55..ebc051ae"), then `a2aaf0da` ("Squashed 'scxml.rs/' changes from ebc051ae1..5eb077c4b") |
 | Update | `git subtree pull --prefix scxml.rs <scxml.rs> feat/invoke-services --squash`, after the change lands upstream |
 
 ## Decisions
@@ -31,36 +31,53 @@ reopening one needs the maintainer. All are dated 2026-10-06.
 | D10 | 2026-10-06 | Interim model backends: `generate` uses OpenAI (`OPENAI_API_KEY`, optional `OPENAI_BASE_URL`); `decision` uses TypeSafe `system_one` (`TYPESAFE_API_KEY`). NVIDIA (Nemotron through an OpenAI-compatible API) and CLM become the defaults later, so backends stay pluggable through `env:baseurl`. Keys live in mosfet's `.env` and are used only through env files and `env` slots: never printed, logged, copied, or committed. |
 | D11 | 2026-10-06 | Memory is SQLite first, then PGlite (not in the first night's scope). |
 | D12 | 2026-10-06 | Git work is local commits only: no push, no pull requests, no remotes, no branches beyond the named ones. Each repository's AGENTS.md/CONTRIBUTING.md is followed; scxml.rs's rules are normative (fail closed, no unwrap/panic on reachable paths, wasm-only resource bounds, hard cutovers, canonical outputs, thin hosts, Wasm components behind versioned WIT). |
+| D13 | 2026-10-06 | Anything asynchronous, I/O-bound, or long-running is an invoked service (`<invoke>`). Extension elements are executable content: synchronous and quick, per the SCXML specification. So extension components get no WASI (services only; the host refusal stays, as the rule rather than a gap), and model calls never run inside executable content. `generate` becomes `services/generate`; `decision` splits into the synchronous `<decision:menu>` (namespace) and `services/decision`. |
 
 ## Notes on applying the decisions
 
-- D4 (2026-10-06, review round 1): slice 2 delivers WASI permissions for
-  invoked services only. The scxml.rs session host links no WASI interface
-  into extension components (`ArtifactError::WasiExtensionUnsupported`:
-  the extension store is not `Send`), so an extension package that declares
-  a WASI permission fails closed, in scxml.rs and in `nemobot-host`. This
-  is a known limitation, not parity with the decision, and D4 stays open
-  for extensions until either WASI linking for extension stores lands
-  upstream in scxml.rs (it needs the extension store data to become `Send`,
-  or a WASI binding that does not require it) or the maintainer signs off
-  on narrowing D4 to services until then. AGENTS.md encodes the narrower
-  rule meanwhile.
-- D5 (2026-10-06, review round 1): "candidates are the enabled
-  transitions" is applied by evaluating each transition's `cond` in the
-  current data model (with the current `_event`) when `decision:choose`
-  builds its menu; see `namespaces/decision` ("Guards") for how a failed or
-  non-boolean guard is treated.
-- D5 and AGENTS.md (2026-10-06, review round 3): `decision:choose` raises
-  events the document defines (the menu's `event:schema` transitions), so
-  the `decision` package declares only `decision.abstain`; the chosen
-  event's contract is the transition's `event:schema`, which the data is
-  validated against before the raise. AGENTS.md states this exception to
-  "declare the event contracts of the events their component emits".
+- D4 and D13 (2026-10-06): slice 2 delivers WASI permissions for invoked
+  services only, and the scxml.rs session host refuses an extension package
+  that declares a WASI permission (`ArtifactError::WasiExtensionUnsupported`),
+  as does `nemobot-host`. Review round 1 recorded this as an open gap of
+  D4; D13 settles it: extension elements are synchronous executable
+  content, so WASI belongs to services only, by rule. Both repositories'
+  AGENTS.md and docs state it that way.
+- D13 (2026-10-06): a service's slow request must not block the session.
+  scxml.rs's `outbound-http.fetch` blocks the calling export call, so
+  scxml.rs gained `outbound-http.begin`/`take` (`feat/invoke-services`
+  `5eb077c4`): the host admits the request, an embedder transport performs
+  it off the session thread (`ThreadedServiceHttp`), and the outcome reaches
+  the instance through `wake` (`LiveSession::deliver_service_responses`). A
+  cancelled instance abandons its requests, so a `builder.timeout` in the
+  invoking state preempts a model call in flight. A logical-clock session
+  never moves its clock past a pending request. `nemobot-host` gives
+  services this deferred transport only, and extensions no transport.
+- D5 and D13 (2026-10-06): "candidates are the enabled transitions" is
+  applied by `<decision:menu>`, which evaluates each transition's `cond` in
+  the current data model (with the current `_event`) when it builds the
+  menu; see `namespaces/decision` ("Guards") for how a failed or
+  non-boolean guard is treated. The `decision` service, invoked with that
+  menu, fills the chosen event's data from grounded options and validates
+  it against the menu's schema before it emits it. scxml.rs closes a
+  package's event contract once it declares any event, and the chosen event
+  is the document's, so the `decision` service package declares no event
+  contract and the service validates what it emits itself (AGENTS.md states
+  this exception). `rank` and `classify` are request kinds of the service.
+- D2 and the scxml.rs regression (2026-10-06): slice 1 made an `<invoke>`
+  whose literal type no service binds fail the session start
+  (`load-services`), so scxml.rs's synthetic fixture
+  `invoke_with_unknown_processor_type_fails_at_invocation_start` failed. SCXML
+  6.4 makes invocation a runtime action (W3C case 216 relies on an
+  invocation failing when it runs), so that was a semantic regression:
+  scxml.rs `18fce591` loads only bound components at session start and fails
+  the `<invoke>` of an unbound type with `error.execution` when it starts,
+  literal or `typeexpr`. The fixture passes unchanged.
 
 - D10 and AGENTS.md (2026-10-06, review round 1): AGENTS.md forbids compiling
-  a backend URL into a component, so `generate` and `decision` compile in no
-  default base URL and their `env:baseurl` slot is required at run time
-  (a missing value is `error.execution`, like a missing key). D10's
+  a backend URL into a component, so the `generate` and `decision` services
+  compile in no default base URL and their `env:baseurl` slot is required at
+  run time (a missing value emits `generate.failed` or `decision.failed`
+  with `unconfigured`, like a missing key). D10's
   "optional `OPENAI_BASE_URL`" holds at the env-file level: a nemobot config
   may give a granted variable a non-secret default (`env-defaults`, for
   example `{"OPENAI_BASE_URL": "https://api.openai.com/v1"}`) that the env
@@ -69,7 +86,7 @@ reopening one needs the maintainer. All are dated 2026-10-06.
 - Env scoping (2026-10-06, approved by the maintainer as overnight decision
   4): each granted variable in a nemobot config names the exact package URIs
   (extension namespaces or services) allowed to receive it
-  (`"env": [{"name": "OPENAI_API_KEY", "packages": ["<generate URI>"]}]`).
+  (`"env": [{"name": "OPENAI_API_KEY", "packages": ["<generate service URI>"]}]`).
   The scope is enforced by scxml.rs's session host (`EnvVariable`,
   `ExtensionEnvironment` on `feat/invoke-services`), so a slot reference to
   a variable not granted to its element's or `<invoke>`'s package is absent
