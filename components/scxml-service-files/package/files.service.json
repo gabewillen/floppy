@@ -8,8 +8,5 @@
   "wit-world": "stateforward:scxml/invoked-service",
   "wit-version": "0.2.0",
   "http-origins": [],
-  "env-slots": [],
-  "wasi-permissions": [
-    { "interface": "wasi:filesystem", "mount": "workspace", "access": "read-write" }
-  ]
+  "env-slots": []
 }

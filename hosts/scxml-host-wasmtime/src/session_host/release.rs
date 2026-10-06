@@ -283,7 +283,7 @@ the release manifest does not list this artifact exactly once\n  --> release/man
         // session component is absent from it.
         let clock = b"clock";
         let manifest = format!(
-            "schema\tstateforward.wasm-artifacts/v1\nprofile\trelease\ntarget\twasm32-wasip2\nartifact-count\t1\nwasm-tools\twasm-tools 1.240.0\nwasi-virt\twasi-virt 0.2.0\nartifact\tscxml_clock\tscxml_clock.virtualized.wasm\t{}\t{}\n",
+            "schema\tstateforward.wasm-artifacts/v1\nprofile\trelease\ntarget\twasm32-wasip2\nartifact-count\t1\nwasm-tools\twasm-tools 1.244.0\nwasi-virt\twasi-virt 0.2.0\nartifact\tscxml_clock\tscxml_clock.virtualized.wasm\t{}\t{}\n",
             clock.len(),
             crate::artifact::lower_hex(&sha2::Sha256::digest(clock)),
         );

@@ -504,7 +504,6 @@ impl WasmExecutor {
                         wit_version: manifest.wit_version.clone(),
                         env_slots: manifest.env_slots.clone(),
                         http_origins: manifest.http_origins.clone(),
-                        wasi_permissions: manifest.wasi_permissions.clone(),
                         schema: release.schema.bytes.clone(),
                     },
                     &component,

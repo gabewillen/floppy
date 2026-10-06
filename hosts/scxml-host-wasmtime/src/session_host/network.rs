@@ -292,11 +292,11 @@ pub struct LiveHttp {
     /// the embedder can wake its loop and call
     /// [`super::LiveSession::deliver_communication_errors`].
     pub on_communication_error: Option<Arc<dyn Fn() + Send + Sync>>,
-    /// Called from any thread each time a deferred request of an invoked
-    /// service settles (`outbound-http.begin`, `crate::service_http`), so
-    /// the embedder can wake its loop and call
-    /// [`super::LiveSession::deliver_service_responses`].
-    pub on_service_response: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Called from any thread each time the HTTP response of an invoked
+    /// service's request arrives (`outbound-http.fetch`), so the embedder
+    /// can wake its loop and call
+    /// [`super::LiveSession::deliver_http_responses`].
+    pub on_http_response: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl std::fmt::Debug for LiveHttp {
@@ -362,10 +362,12 @@ pub(crate) struct RunHttp {
     pub(crate) outbound: Option<Arc<dyn OutboundHttp>>,
     pub(crate) failures: Arc<FailureQueue>,
     pub(crate) journal: RefCell<OutboundJournal>,
-    /// Settled deferred requests of invoked services; `None` when the run
-    /// delivers none (a batch run, or a recording or replaying session,
-    /// whose inputs must be reproducible).
-    pub(crate) service_responses: Option<Arc<crate::service_http::ServiceResponses>>,
+    /// The settled requests of invoked services, waiting for delivery as
+    /// external inputs; `None` for a batch run (which performs each request
+    /// at once) and a replay (whose responses come from the record).
+    pub(crate) http_responses: Option<Arc<crate::service::HttpResponses>>,
+    /// Whether this is a live session (batch runs are not).
+    live: bool,
 }
 
 impl RunHttp {
@@ -375,7 +377,8 @@ impl RunHttp {
             outbound: None,
             failures: FailureQueue::new(None),
             journal: RefCell::new(OutboundJournal::Off),
-            service_responses: None,
+            http_responses: None,
+            live: false,
         }
     }
 
@@ -386,9 +389,32 @@ impl RunHttp {
                 .map_or_else(|| LOOPBACK_ORIGIN.to_owned(), |url| url.0),
             outbound: http.outbound,
             failures: FailureQueue::new(http.on_communication_error),
-            service_responses: matches!(journal, OutboundJournal::Off)
-                .then(|| crate::service_http::ServiceResponses::new(http.on_service_response)),
+            http_responses: (!matches!(journal, OutboundJournal::Replaying(_)))
+                .then(|| crate::service::HttpResponses::new(http.on_http_response)),
             journal: RefCell::new(journal),
+            live: true,
+        }
+    }
+
+    /// How this run carries out its invoked services' requests through
+    /// `transport`: a batch run at once, a live session on transport threads
+    /// (delivering each response as an external input), a replay from its
+    /// record; with no transport (and no record) they are refused.
+    pub(crate) fn service_requests(
+        &self,
+        transport: Option<&Arc<dyn crate::extension::ExtensionHttp>>,
+    ) -> crate::service::RequestMode {
+        use crate::service::RequestMode;
+        if self.live && matches!(*self.journal.borrow(), OutboundJournal::Replaying(_)) {
+            return RequestMode::Recorded;
+        }
+        match (transport, &self.http_responses) {
+            (None, _) => RequestMode::None,
+            (Some(transport), Some(responses)) => RequestMode::Threaded {
+                transport: Arc::clone(transport),
+                responses: Arc::clone(responses),
+            },
+            (Some(transport), None) => RequestMode::Immediate(Arc::clone(transport)),
         }
     }
 

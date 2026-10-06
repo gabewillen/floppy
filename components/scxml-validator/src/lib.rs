@@ -105,8 +105,6 @@ fn verify_package_binding(
         http_origins: package.http_origins.to_vec(),
         // The WIT package record carries no WASI permissions: validation
         // only checks the schema binding and never links the component.
-        wasi_permissions: Vec::new(),
-        events: scxml_validator_core::PackageEvents::default(),
     };
     manifest.verify_schema(&SchemaSource::new(schema.system_id, schema.bytes))
 }

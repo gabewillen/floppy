@@ -65,12 +65,12 @@ pub fn env_slot<'a>(local_name: &'a str, declared: &[String]) -> Option<(&'a str
 
 /// Every `SCXML083` and `SCXML084` finding of `document`; `slots` maps an
 /// extension namespace URI to the slots its package declares, and
-/// `services` an invoked-service type URI to its bound service.
+/// `services` an invoked-service type URI to its package's `env` slots.
 #[must_use]
 pub fn env_attribute_diagnostics(
     document: &Document,
     slots: Option<&BTreeMap<String, Vec<String>>>,
-    services: Option<&BTreeMap<String, crate::BoundService>>,
+    services: Option<&BTreeMap<String, Vec<String>>>,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     document.root.visit(&mut |element| {
@@ -174,7 +174,7 @@ fn check_slots(
 fn invoke_slots(
     element: &Element,
     attributes: &[&Attribute],
-    services: Option<&BTreeMap<String, crate::BoundService>>,
+    services: Option<&BTreeMap<String, Vec<String>>>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let literal = |name: &str| {
@@ -189,14 +189,8 @@ fn invoke_slots(
     match literal("type") {
         Some(type_uri) if !scxml_types::is_scxml_invoke_type(type_uri) => {
             match services.and_then(|services| services.get(type_uri)) {
-                Some(service) => {
-                    check_slots(
-                        element,
-                        type_uri,
-                        attributes,
-                        &service.env_slots,
-                        diagnostics,
-                    );
+                Some(slots) => {
+                    check_slots(element, type_uri, attributes, slots, diagnostics);
                 }
                 None => check_slot_syntax(element, attributes, diagnostics),
             }
@@ -486,13 +480,7 @@ mod tests {
 
     #[test]
     fn invoked_services_have_the_slots_their_package_declares() {
-        let services = BTreeMap::from([(
-            "urn:svc".to_owned(),
-            crate::BoundService {
-                env_slots: vec!["apikey".to_owned()],
-                ..crate::BoundService::default()
-            },
-        )]);
+        let services = BTreeMap::from([("urn:svc".to_owned(), vec!["apikey".to_owned()])]);
         let codes = |invoke: &str| -> Vec<String> {
             let text = format!(
                 r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="{ENV_NAMESPACE_URI}" version="1.0"><state id="s">{invoke}</state></scxml>"#

@@ -49,6 +49,9 @@ mod guest {
     wit_bindgen::generate!({
         world: "executable-content-extension",
         path: "../../crates/scxml-wit/wit/scxml",
+        // `execute` is synchronous executable content, so it lowers the
+        // `async func fetch` synchronously: the call blocks `execute`.
+        async: ["-import:stateforward:scxml/outbound-http@0.2.0#fetch"],
     });
 
     use std::cell::Cell;

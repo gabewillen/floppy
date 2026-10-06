@@ -317,6 +317,22 @@ pub enum InputRecord {
         /// Whether the transport accepted the request.
         accepted: bool,
     },
+    /// [`LiveSession::deliver_http_responses`] of the HTTP response to one
+    /// request an invoked service made (`outbound-http.fetch`), delivered at
+    /// `at_ms`. A replay delivers it from the record instead of the network.
+    HttpResponse {
+        /// The logical time.
+        at_ms: u64,
+        /// The invoke ids from the root to the invoked service: its
+        /// lineage. Replay delivers only to the invocation of this lineage;
+        /// any other diverges.
+        path: Vec<String>,
+        /// The request's number within its invocation, from 0 in the order
+        /// the invocation made them.
+        request: u64,
+        /// The response, or the transport's failure.
+        response: Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure>,
+    },
 }
 
 /// What [`LiveSession::apply`] produced.
@@ -908,14 +924,14 @@ impl LiveSession {
             if finished {
                 return Ok(Ok(()));
             }
-            // Deadline by deadline, so the clock never moves past a deferred
-            // service request still in flight: its outcome must arrive at
-            // the time the session waits at (a recording or replaying
-            // session starts none, so for it this is the unbounded drain).
+            // Deadline by deadline, so the clock never moves past an invoked
+            // service's request still in flight: its response must arrive at
+            // the time the session waits at (from the network, or from the
+            // record of a replay).
             loop {
                 let now = engine.now()?;
                 if engine.drain(Horizon::Until(now), &mut no_hook())? == DrainStop::Finished
-                    || engine.awaiting_service_responses()
+                    || engine.awaiting_http_responses()
                 {
                     break;
                 }
@@ -980,6 +996,21 @@ impl LiveSession {
                 .communication_errors_at(
                     *at_ms,
                     senders.iter().cloned().map(Owed::Recorded).collect(),
+                )
+                .map(Applied::Call),
+            InputRecord::HttpResponse {
+                at_ms,
+                path,
+                request,
+                response,
+            } => self
+                .replay_http_response(
+                    *at_ms,
+                    &super::RecordedResponse {
+                        path: path.clone(),
+                        request: *request,
+                        outcome: response.clone(),
+                    },
                 )
                 .map(Applied::Call),
             InputRecord::OutboundHttp { .. } => Ok(Applied::OutboundDecision),
@@ -1266,61 +1297,108 @@ impl LiveSession {
         )
     }
 
-    /// Delivers every deferred request of an invoked service that settled
-    /// since the last call (`outbound-http.begin`, see
-    /// [`LiveHttp::on_service_response`]): at the session's current time
-    /// (a timed session's clock first, firing what it reached), each outcome
-    /// whose instance is still live and waiting for it reaches that
-    /// instance, whose `wake` then runs; then every session runs to a stable
-    /// configuration. An outcome of an instance that was cancelled,
-    /// completed, or retired meanwhile is dropped. Returns `None` when
-    /// nothing had settled.
+    /// Delivers every HTTP response of an invoked service's request that
+    /// arrived since the last call (`outbound-http.fetch`, see
+    /// [`LiveHttp::on_http_response`]), each as one external input: at the
+    /// session's current time (a timed session's clock first, firing what it
+    /// reached), the response reaches the invocation that waits for it,
+    /// whose event loop then runs until it waits again, and every session
+    /// runs to a stable configuration. A response of an invocation that was
+    /// cancelled or ended meanwhile is dropped. A recording session records
+    /// each delivered response ([`InputRecord::HttpResponse`]). Returns the
+    /// last delivery's call result, or `None` when nothing had arrived.
     ///
     /// # Errors
     ///
     /// As [`Self::send`], failing the session.
-    pub fn deliver_service_responses(
-        &mut self,
-    ) -> Result<Option<LiveCallResult>, SessionHostError> {
+    pub fn deliver_http_responses(&mut self) -> Result<Option<LiveCallResult>, SessionHostError> {
         self.require_open()?;
         let settled = self
             .engine
             .shared()
             .http
-            .service_responses
+            .http_responses
             .as_ref()
             .map(|responses| responses.take())
             .unwrap_or_default();
-        if settled.is_empty() {
-            return Ok(None);
-        }
-        if self.status != LiveStatus::Running {
+        if settled.is_empty() || self.status != LiveStatus::Running {
             return Ok(None);
         }
         let at_ms = self.time()?;
+        let mut last = None;
+        for item in settled {
+            if self.status != LiveStatus::Running {
+                break;
+            }
+            let mut delivered = Vec::new();
+            let step = self.step(
+                Some(Operation::HostWasmtimeSessionHttpResponse),
+                at_ms,
+                |engine| {
+                    if engine.drain(Horizon::Until(at_ms), &mut no_hook())? == DrainStop::Finished {
+                        return Ok(Ok(()));
+                    }
+                    engine.advance_clock_to(at_ms)?;
+                    delivered = engine.deliver_http_responses(vec![item])?;
+                    engine.drain(Horizon::Until(at_ms), &mut no_hook())?;
+                    Ok(Ok(()))
+                },
+            );
+            for response in delivered {
+                self.record(InputRecord::HttpResponse {
+                    at_ms,
+                    path: response.path,
+                    request: response.request,
+                    response: response.outcome,
+                });
+            }
+            last = Some(step?);
+        }
+        Ok(last)
+    }
+
+    /// Replays one recorded HTTP response at its recorded time to the
+    /// invoked service of the recorded lineage; a response no invocation of
+    /// that lineage waits for diverges.
+    fn replay_http_response(
+        &mut self,
+        at_ms: u64,
+        response: &super::RecordedResponse,
+    ) -> Result<LiveCallResult, SessionHostError> {
+        self.require_open()?;
+        let now = self.now_ms()?;
+        if at_ms < now {
+            return Err(self.error(scxml_scheduler::Violation::ClockRegression.into()));
+        }
         self.step(
-            Some(Operation::HostWasmtimeSessionServiceResponse),
+            Some(Operation::HostWasmtimeSessionHttpResponse),
             at_ms,
             |engine| {
                 if engine.drain(Horizon::Until(at_ms), &mut no_hook())? == DrainStop::Finished {
-                    return Ok(Ok(()));
+                    return Ok(Err(replay_diverged(
+                        "the recorded HTTP response arrived after the session finished",
+                    )));
                 }
                 engine.advance_clock_to(at_ms)?;
-                engine.deliver_service_responses(settled)?;
+                if !engine.deliver_recorded_response(response)? {
+                    return Err(replay_diverged(
+                        "no invoked service of the recorded lineage waits for the recorded HTTP response",
+                    ));
+                }
                 engine.drain(Horizon::Until(at_ms), &mut no_hook())?;
                 Ok(Ok(()))
             },
         )
-        .map(Some)
     }
 
-    /// Whether the session waits for a deferred request of an invoked
-    /// service: one in flight for a live instance, or one settled and not
-    /// yet delivered ([`Self::deliver_service_responses`]). A logical
-    /// embedder waits for the outcome before it moves the clock again.
+    /// Whether the session waits for the HTTP response of an invoked
+    /// service's request: one in flight (or, in a replay, still to come from
+    /// the record), or one arrived and not yet delivered
+    /// ([`Self::deliver_http_responses`]). A logical embedder waits for the
+    /// response before it moves the clock again.
     #[must_use]
-    pub fn awaiting_service_responses(&self) -> bool {
-        self.status == LiveStatus::Running && self.engine.awaiting_service_responses()
+    pub fn awaiting_http_responses(&self) -> bool {
+        self.status == LiveStatus::Running && self.engine.awaiting_http_responses()
     }
 
     /// Takes every output streamed since the last call, in order.

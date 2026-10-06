@@ -1,1 +1,0 @@
-{"$defs":{"Reply":{"required":["text"],"type":"object","properties":{"text":{"type":"string"}}}}}

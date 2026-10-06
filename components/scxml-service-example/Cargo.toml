@@ -17,7 +17,9 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 scxml-types.workspace = true
-wit-bindgen.workspace = true
+# The WASI 0.3 async ABI: `invoke` is an `async func`, and the service's
+# tasks run on after it returns.
+wit-bindgen = { workspace = true, features = ["async", "async-spawn"] }
 
 
 [lints]

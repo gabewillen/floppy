@@ -5,17 +5,19 @@
 //! Any other literal type names an invoked service, which a host runs only
 //! through the service component it binds to that exact URI:
 //!
-//! * `SCXML093` (error): the type is neither an SCXML invoke type nor an
+//! * `SCXML093` (warning): the type is neither an SCXML invoke type nor an
 //!   absolute URI of at most [`scxml_types::MAX_SERVICE_TYPE_URI_BYTES`]
-//!   bytes ([`scxml_types::is_service_type_uri`]). No host can bind it, so
-//!   the invocation could only fail with `error.execution`; lowering rejects
-//!   it.
+//!   bytes ([`scxml_types::is_service_type_uri`]). SCXML 6.4.1 allows
+//!   platform-specific type values, but no service package binds one that is
+//!   not a URI, so on this host its `<invoke>` raises `error.execution` when
+//!   it runs.
 //! * `SCXML094` (warning): the type is a well-formed service URI that no
 //!   service package the validator was given binds
-//!   ([`crate::Validator::with_services`]). The session start fails
-//!   closed unless the running host binds it; `compile` rejects it
-//!   (`COMP004`). Checked only when the validator was given its bound
-//!   service types.
+//!   ([`crate::Validator::with_services`]). Invocation is a runtime action
+//!   (SCXML 6.4), so the document still compiles and runs, and its
+//!   `<invoke>` raises `error.execution` when it runs unless the running
+//!   host binds the type. Checked only when the validator was given its
+//!   bound service types.
 //!
 //! `typeexpr` values are evaluated at run time and are not judged here.
 
@@ -34,7 +36,7 @@ const SPEC_INVOKE: &str = "SCXML 1.0 §6.4 <invoke>";
 #[must_use]
 pub fn invoke_type_diagnostics(
     document: &Document,
-    bound: Option<&BTreeMap<String, crate::BoundService>>,
+    bound: Option<&BTreeMap<String, Vec<String>>>,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     document.root.visit(&mut |element| {
@@ -54,15 +56,15 @@ pub fn invoke_type_diagnostics(
         }
         if !is_service_type_uri(value) {
             diagnostics.push(
-                Diagnostic::error(
+                Diagnostic::warning(
                     "SCXML093",
-                    "this `<invoke type>` is not an SCXML invoke type or an absolute service type URI",
+                    "this `<invoke type>` is a platform-specific value, not a URI",
                     attribute.value_span,
                 )
                 .with_category(DiagnosticCategory::Semantic)
-                .with_primary_message("not a type any host can bind")
+                .with_primary_message("no service package binds a type that is not a URI")
                 .with_note(format!(
-                    "an absent `type`, `scxml`, or `http://www.w3.org/TR/scxml/` invokes an SCXML session; any other type names an invoked service by an exact absolute URI (a scheme, `:`, no white space, at most {MAX_SERVICE_TYPE_URI_BYTES} bytes), which the host binds to a service component"
+                    "SCXML 6.4.1 allows platform-specific invoke types; a service package binds an invoked service by an exact absolute URI (a scheme, `:`, no white space, at most {MAX_SERVICE_TYPE_URI_BYTES} bytes), so this `<invoke>` raises error.execution when it runs unless the running platform defines this type"
                 ))
                 .with_help("write the service's absolute type URI exactly as its service package declares it (`service-uri`), or `scxml` for an SCXML session")
                 .with_spec_reference(SPEC_INVOKE),
@@ -80,7 +82,7 @@ pub fn invoke_type_diagnostics(
                 )
                 .with_category(DiagnosticCategory::Package)
                 .with_primary_message("no service component is bound to this URI")
-                .with_note("an invoked service runs only in the service component its host binds to the exact type URI; without one the session start fails closed, and `compile` rejects the document (`COMP004`)")
+                .with_note("an invoked service runs only in the service component its host binds to the exact type URI; invocation is a runtime action, so without one this `<invoke>` raises error.execution when it runs")
                 .with_help("bind the service with its package manifest (`--service-package MANIFEST.json`), or correct the URI to one a bound package declares")
                 .with_spec_reference(SPEC_INVOKE),
             );
@@ -94,7 +96,7 @@ mod tests {
     use super::invoke_type_diagnostics;
     use std::collections::BTreeMap;
 
-    fn codes(source: &str, bound: Option<&BTreeMap<String, crate::BoundService>>) -> Vec<String> {
+    fn codes(source: &str, bound: Option<&BTreeMap<String, Vec<String>>>) -> Vec<String> {
         let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
             scxml_syntax::SourceId::new(0),
             "t.scxml",
@@ -128,7 +130,7 @@ mod tests {
     }
 
     #[test]
-    fn malformed_types_are_errors_and_unbound_services_warnings() {
+    fn platform_specific_types_and_unbound_services_are_warnings() {
         assert_eq!(
             codes(&machine(r#"<invoke type="echo"/>"#), None),
             ["SCXML093"]
@@ -144,7 +146,7 @@ mod tests {
             codes(&machine(&invoke), Some(&BTreeMap::new())),
             ["SCXML094"]
         );
-        let bound = BTreeMap::from([(uri.to_owned(), crate::BoundService::default())]);
+        let bound = BTreeMap::from([(uri.to_owned(), Vec::new())]);
         assert!(codes(&machine(&invoke), Some(&bound)).is_empty());
     }
 }

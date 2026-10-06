@@ -7,6 +7,9 @@
 //!   processor, invoked service, extension component, Wasm script component,
 //!   script bundle provider, session snapshot codec, and host worlds);
 //! * `wit/scxml/deps/clock/clock.wit` — `stateforward:scxml-clock`;
+//! * `wit/scxml/deps/wasi-clocks/clocks.wit` — `wasi:clocks@0.3.0`, vendored
+//!   verbatim from WASI 0.3 (as `wasmtime-wasi` 49.0.2 ships it) for the
+//!   invoked-service world's `wasi:clocks/monotonic-clock` import;
 //! * `wit/basichttp/basichttp.wit` — `stateforward:scxml-basichttp` (the
 //!   `BasicHTTP` Event I/O Processor and its narrow `http-transport` import);
 //! * `wit/validator/validator.wit` — `stateforward:scxml-validator`;
@@ -175,7 +178,13 @@ mod tests {
             resolve
                 .push_dir(std::path::Path::new(WIT_PATH).join(directory))
                 .expect("canonical WIT package must parse and resolve");
-            for (_, package) in &resolve.packages {
+            // Only this repository's packages; a vendored standard package
+            // (`wasi:clocks`) keeps its upstream text.
+            for (_, package) in resolve
+                .packages
+                .iter()
+                .filter(|(_, package)| package.name.namespace == "stateforward")
+            {
                 let package_name = package.name.to_string();
                 if package.docs.contents.is_none() {
                     undocumented.push(format!("{package_name} package"));
@@ -347,10 +356,10 @@ mod tests {
         assert_documented(
             &docs,
             &[format!(
-                "`type-uri` an absolute URI of at most {} bytes",
+                "`type-uri` at most {} bytes",
                 scxml_types::MAX_SERVICE_TYPE_URI_BYTES
             )],
-            "scxml.wit service-invocation",
+            "scxml.wit invoke-request",
         );
 
         let ecmascript = include_str!("../../../components/scxml-data-model-ecmascript/src/lib.rs");

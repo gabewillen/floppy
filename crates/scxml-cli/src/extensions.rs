@@ -59,8 +59,8 @@ use std::sync::Arc;
 use scxml_compiler_core::NamespaceSchemaBinding;
 use scxml_telemetry::{ErrorCategory, Module, Operation, observe};
 use scxml_validator_core::{
-    DeclaredEvents, ExtensionPackageManifest, MAX_COMPONENT_SCHEMA_BYTES, MemorySchemaResolver,
-    PackageEvents, SchemaResolveError, SchemaResolver, SchemaSource,
+    ExtensionPackageManifest, MAX_COMPONENT_SCHEMA_BYTES, MemorySchemaResolver, SchemaResolveError,
+    SchemaResolver, SchemaSource,
 };
 
 use crate::repository::{Repository, RepositoryFlags, RepositoryUri};
@@ -92,9 +92,6 @@ pub(crate) struct Package {
     pub(crate) manifest: ExtensionPackageManifest,
     /// The schema bytes the manifest's digest names.
     pub(crate) schema: SchemaSource,
-    /// The manifest's declared event contract, every schema verified and
-    /// resolved.
-    pub(crate) events: DeclaredEvents,
 }
 
 impl Package {
@@ -137,7 +134,6 @@ impl Package {
             wit_version: manifest.wit_version.clone(),
             env_slots: manifest.env_slots.clone(),
             http_origins: manifest.http_origins.clone(),
-            wasi_permissions: manifest.wasi_permissions.clone(),
             schema: self.schema.bytes.clone(),
         }
     }
@@ -274,21 +270,10 @@ impl Packages {
             .collect()
     }
 
-    /// Whether any package declares a WASI permission.
-    #[cfg(feature = "wasmtime")]
-    pub(crate) fn declares_wasi(&self) -> bool {
-        self.explicit
-            .iter()
-            .chain(&self.repository)
-            .any(|package| !package.manifest.wasi_permissions.is_empty())
-    }
-
     /// What importing each element consents to: its namespace, version,
-    /// declared outbound origins, the slots the document binds (with the
+    /// declared outbound origins, and the slots the document binds (with the
     /// variables they name and, when `granted` is given, whether the run
-    /// holds a value for each granted to that namespace), and its declared
-    /// WASI permissions (which this release's host refuses for extension
-    /// components). Never a value.
+    /// holds a value for each granted to that namespace). Never a value.
     pub(crate) fn summary(&self, granted: Option<&[HeldValue]>) -> Vec<String> {
         let mut lines = Vec::new();
         for package in self.explicit.iter().chain(&self.repository) {
@@ -330,24 +315,13 @@ impl Packages {
                 .collect();
             slots.sort();
             slots.dedup();
-            let wasi = if manifest.wasi_permissions.is_empty() {
-                "none".to_owned()
-            } else {
-                manifest
-                    .wasi_permissions
-                    .iter()
-                    .map(scxml_types::WasiPermission::describe)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            };
             lines.push(format!(
-                "element `{uri}`\n  = version: {version}\n  = outbound HTTP: {origins}\n  = env slots: {}\n  = WASI: {wasi}{}",
+                "element `{uri}`\n  = version: {version}\n  = outbound HTTP: {origins}\n  = env slots: {}",
                 if slots.is_empty() {
                     "none".to_owned()
                 } else {
                     slots.join(", ")
-                },
-                events_line(&package.events).unwrap_or_default()
+                }
             ));
         }
         lines
@@ -438,98 +412,11 @@ fn load_one(path: &Path) -> Result<Package, Box<dyn std::error::Error>> {
     manifest
         .verify_schema(&schema)
         .map_err(|error| format!("extension package `{shown}` does not verify: {error}"))?;
-    let events = load_package_events(path, &manifest.events, "extension package")
-        .map_err(|error| format!("extension package `{shown}` does not verify: {error}"))?;
     Ok(Package {
         origin: PackageOrigin::Manifest(path.to_path_buf()),
         manifest,
         schema,
-        events,
     })
-}
-
-/// Byte bound of one package event schema file (the component request's
-/// per-resource bound for `event:schema` files).
-pub(crate) const MAX_EVENT_SCHEMA_BYTES: u64 = 4 * 1024 * 1024;
-
-const _: () = assert!(
-    MAX_EVENT_SCHEMA_BYTES == scxml_event_schema::MAX_REQUEST_RESOURCE_BYTES as u64,
-    "package event schemas are bounded like event:schema files"
-);
-
-/// Reads the schema files a manifest's `events` names, relative to the
-/// manifest, and verifies and resolves every declared schema.
-///
-/// # Errors
-///
-/// A message for an unreadable or oversized file, or every
-/// [`PackageEvents::resolve`] failure.
-pub(crate) fn load_package_events(
-    manifest: &Path,
-    events: &PackageEvents,
-    package: &str,
-) -> Result<DeclaredEvents, String> {
-    events.check(package)?;
-    let mut files = BTreeMap::new();
-    for file in events.schema_files() {
-        let decoded = percent_decoded(file).ok_or_else(|| {
-            format!(
-                "{package} field `events`: a schema file path is not UTF-8 once percent-decoded"
-            )
-        })?;
-        let path = relative_to_manifest(manifest, &decoded, "events")?;
-        let bytes = read_bounded(&path, MAX_EVENT_SCHEMA_BYTES).map_err(|error| {
-            format!(
-                "{package}: cannot read its event schema `{}`: {error}",
-                path.display()
-            )
-        })?;
-        files.insert(file.to_owned(), bytes);
-    }
-    events.resolve(package, &files)
-}
-
-/// `text` with `%XX` escapes decoded, when the result is UTF-8 (a schema
-/// file reference is a URI path, like an `event:schema` reference).
-pub(crate) fn percent_decoded(text: &str) -> Option<String> {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    while let Some(&byte) = bytes.get(index) {
-        if byte == b'%' {
-            let hex = bytes.get(index + 1..index + 3)?;
-            let value = u8::from_str_radix(std::str::from_utf8(hex).ok()?, 16).ok()?;
-            out.push(value);
-            index += 3;
-        } else {
-            out.push(byte);
-            index += 1;
-        }
-    }
-    String::from_utf8(out).ok()
-}
-
-/// The consent line of a declared event contract, or `None` when the
-/// package declares none.
-pub(crate) fn events_line(events: &DeclaredEvents) -> Option<String> {
-    if !events.declared {
-        return None;
-    }
-    let names = |list: &[scxml_validator_core::DeclaredEvent]| {
-        if list.is_empty() {
-            "none".to_owned()
-        } else {
-            list.iter()
-                .map(|event| event.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        }
-    };
-    Some(format!(
-        "\n  = events: emits {}; accepts {}",
-        names(&events.emits),
-        names(&events.accepts)
-    ))
 }
 
 /// `artifact` inside the manifest's directory: a relative path of plain
@@ -1147,7 +1034,6 @@ mod tests {
                 },
                 manifest,
                 schema: SchemaSource::new("x.xsd", Vec::new()),
-                events: DeclaredEvents::default(),
             }],
             slot_uses: slot_uses(source),
             ..Packages::default()

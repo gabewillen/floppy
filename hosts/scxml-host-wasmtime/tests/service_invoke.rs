@@ -1,13 +1,14 @@
 //! Invoked services (SCXML 6.4) under the Wasmtime session host: the echo
-//! and timer example (`components/scxml-service-example`) invoked by a live
-//! session of the shipped machine, data model, and I/O processors.
+//! and timer example (`components/scxml-service-example`, a WASI 0.3
+//! `async fn invoke`) invoked by live sessions of the shipped machine, data
+//! model, and I/O processors.
 //!
 //! `scripts/verify-wasm-capabilities.sh` builds and verifies every component
 //! into this suite's own artifact directory; the example service is bound
 //! through the release manifest (and, for the caller path, by SHA-256). The
-//! files example (`components/scxml-service-files`), whose package declares
-//! `wasi:filesystem`, proves the declared-and-granted WASI path: it is bound
-//! by SHA-256 with the run's grants.
+//! files example (`components/scxml-service-files`), whose component
+//! imports `wasi:filesystem`, proves the WASI resource path: it is bound by
+//! SHA-256 with the directory the run preopens for it.
 
 #![allow(
     missing_docs,
@@ -18,16 +19,19 @@
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use scxml_host_wasmtime::scxml_snapshot::Options;
 use scxml_host_wasmtime::{
-    ArtifactError, ArtifactKind, AuthenticatedComponent, DocumentKind, EmbeddedDocument, HostError,
-    LiveClock, LiveHttp, LiveSession, LiveStatus, MachineScripts, RunFailure, ScriptedEvent,
-    ServiceComponents, ServicePackage, SessionEmbedder, SessionHost, SessionHostComponents,
-    SessionOpen, SessionOutput, SnapshotFailure, TelemetryProviders, TrustedComponentDigest,
-    TrustedManifestDigest, WasiGrant, WasiGrants, WasmtimeHostConfig, authenticate_component,
-    authenticate_service_component,
+    ArtifactError, ArtifactKind, AuthenticatedComponent, DocumentKind, EmbeddedDocument,
+    EnvVariable, ExtensionEnvironment, ExtensionHttp, ExtensionHttpFailure, ExtensionHttpRequest,
+    ExtensionHttpResponse, HostError, InputRecord, LiveClock, LiveHttp, LiveSession, LiveStatus,
+    MachineScripts, RunFailure, ScriptedEvent, ServiceComponents, ServicePackage, SessionEmbedder,
+    SessionHost, SessionHostComponents, SessionOpen, SessionOutput, SnapshotFailure,
+    TelemetryProviders, TrustedComponentDigest, TrustedManifestDigest, WasiOptions,
+    WasmtimeHostConfig, authenticate_component, authenticate_service_component,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -129,15 +133,12 @@ fn session_components() -> SessionHostComponents<'static> {
     }
 }
 
-/// The checked-in example manifest as the host's package.
-fn package(service_uri: &str) -> ServicePackage {
-    let manifest = scxml_validator_core::ServicePackageManifest::from_json(include_bytes!(
-        "../../../components/scxml-service-example/package/echo.service.json"
-    ))
-    .expect("the example manifest parses");
-    manifest
-        .verify(None)
-        .expect("the example manifest verifies");
+/// A checked-in service manifest as the host's package, bound to
+/// `service_uri`.
+fn package_from(bytes: &[u8], service_uri: &str) -> ServicePackage {
+    let manifest = scxml_validator_core::ServicePackageManifest::from_json(bytes)
+        .expect("the manifest parses");
+    manifest.verify(None).expect("the manifest verifies");
     ServicePackage {
         service_uri: service_uri.into(),
         package_version: manifest.package_version,
@@ -146,19 +147,28 @@ fn package(service_uri: &str) -> ServicePackage {
         wit_version: manifest.wit_version,
         http_origins: manifest.http_origins,
         env_slots: manifest.env_slots,
-        wasi_permissions: manifest.wasi_permissions,
-        events: scxml_host_wasmtime::ServiceEvents::default(),
     }
 }
 
+/// The checked-in example manifest as the host's package.
+fn package(service_uri: &str) -> ServicePackage {
+    package_from(
+        include_bytes!("../../../components/scxml-service-example/package/echo.service.json"),
+        service_uri,
+    )
+}
+
 fn host_with(services: ServiceComponents) -> SessionHost {
+    try_host(services).expect("the verified components link")
+}
+
+fn try_host(services: ServiceComponents) -> Result<SessionHost, HostError> {
     SessionHost::new(
         &session_components(),
         &WasmtimeHostConfig::default(),
         &TelemetryProviders::new(),
     )
     .and_then(|host| host.with_service_components(services))
-    .expect("the verified components link")
 }
 
 fn host() -> SessionHost {
@@ -182,17 +192,24 @@ impl SessionEmbedder for NoResources {
     }
 }
 
-/// The parent document: `s` invokes the echo service with a 250 ms wakeup;
-/// its `<finalize>` counts the messages it saw.
+/// The parent document: `s` invokes the echo service with a 250 ms timer
+/// and arms a 100 ms and a 300 ms delayed send around it; its `<finalize>`
+/// counts the messages it saw.
 fn document() -> String {
     format!(
         r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
   <datamodel><data id="finalized" expr="0"/></datamodel>
   <state id="s">
+    <onentry>
+      <send event="before" delay="100ms"/>
+      <send event="after" delay="300ms"/>
+    </onentry>
     <invoke type="{ECHO}" id="echo">
       <param name="delay" expr="250"/>
       <finalize><assign location="finalized" expr="finalized + 1"/></finalize>
     </invoke>
+    <transition event="before"><log label="before" expr="finalized"/></transition>
+    <transition event="after"><log label="after" expr="finalized"/></transition>
     <transition event="echo.tick">
       <log label="tick" expr="_event.invokeid + ' ' + _event.data + ' ' + finalized"/>
     </transition>
@@ -230,17 +247,18 @@ fn lower(source: &str) -> (Vec<u8>, Option<String>) {
     ))
     .expect("fixture parses");
     let ir = scxml_compiler_core::lower(&document).expect("fixture lowers");
-    assert_eq!(
-        ir.invoke_types,
-        [ECHO],
-        "the IR lists the literal service type"
-    );
     let data_model = ir.data_model.clone();
     (ir.to_json().expect("fixture IR encodes"), data_model)
 }
 
-fn open(host: &SessionHost) -> LiveSession {
-    let (ir, data_model) = lower(&document());
+fn open_with(
+    host: &SessionHost,
+    source: &str,
+    record: bool,
+    replay: Option<&[InputRecord]>,
+    http: LiveHttp,
+) -> Result<LiveSession, scxml_host_wasmtime::SessionHostError> {
+    let (ir, data_model) = lower(source);
     host.open(SessionOpen {
         machine_ir: &ir,
         data_model: data_model.as_deref(),
@@ -248,11 +266,14 @@ fn open(host: &SessionHost) -> LiveSession {
         embedder: Rc::new(NoResources),
         max_commands: 256,
         clock: LiveClock::Logical,
-        record: false,
-        replay: None,
-        http: LiveHttp::default(),
+        record,
+        replay,
+        http,
     })
-    .expect("the session opens")
+}
+
+fn open(host: &SessionHost) -> LiveSession {
+    open_with(host, &document(), false, None, LiveHttp::default()).expect("the session opens")
 }
 
 /// Every log record of the call as `label: text`.
@@ -272,33 +293,32 @@ fn logs(session: &mut LiveSession) -> Vec<String> {
 }
 
 #[test]
-fn an_echo_service_wakes_echoes_and_completes_with_data() {
+fn an_echo_service_ticks_on_the_logical_clock_echoes_and_completes_with_data() {
     let host = host();
     let mut session = open(&host);
-    // The start ran the service: it asked for its wakeup and the session is
-    // idle until then.
+    // The start ran `invoke`: the service waits on its 250 ms timer, which
+    // the session schedules on its logical clock with its delayed sends.
     assert_eq!(session.configuration().expect("configuration"), ["s"]);
-    assert_eq!(session.next_deadline().expect("deadline"), Some(250));
+    assert_eq!(session.next_deadline().expect("deadline"), Some(100));
     assert!(logs(&mut session).is_empty());
 
-    // The wakeup delivers `echo.tick`, stamped with the invoke id, after the
-    // invocation's `<finalize>`.
-    let step = session.advance_to(250).expect("the wakeup fires");
-    assert_eq!(step.status, LiveStatus::Running);
-    assert_eq!(step.next_deadline, None, "the one wakeup was taken");
-    assert_eq!(logs(&mut session), ["tick: echo 1 1"]);
+    // The timer falls due in order with the delayed sends; `echo.tick` is
+    // stamped with the invoke id and runs the invocation's `<finalize>`.
+    session.advance_to(300).expect("the deadlines fire");
+    assert_eq!(
+        logs(&mut session),
+        ["before: 0", "tick: echo 1 1", "after: 1"]
+    );
+    assert_eq!(session.next_deadline().expect("deadline"), None);
 
-    // `<send target="#_echo">` reaches the service, which echoes it.
+    // `<send target="#_echo">` reaches the service's `events` stream, and
+    // the event it returns carries the invoke id and its type as origin.
     session
         .send(&ScriptedEvent::named("ping"))
         .expect("ping is processed");
-    assert_eq!(
-        logs(&mut session),
-        [format!("echo.ping: echo {ECHO} 2")],
-        "the echo carries the invoke id and the service type as its origin type"
-    );
+    assert_eq!(logs(&mut session), [format!("echo.ping: echo {ECHO} 2")]);
 
-    // `stop` completes the service: `done.invoke.echo` carries its data.
+    // `stop` resolves the service's future: `done.invoke.echo` carries it.
     session
         .send(&ScriptedEvent::named("stop"))
         .expect("stop is processed");
@@ -332,9 +352,8 @@ fn leaving_the_invoking_state_cancels_the_service() {
         .send(&ScriptedEvent::named("leave"))
         .expect("leave is processed");
     assert_eq!(session.configuration().expect("configuration"), ["away"]);
-    // The cancelled service's wakeup is gone and nothing it held remains:
-    // the session snapshots again.
-    assert_eq!(session.next_deadline().expect("deadline"), None);
+    // SCXML 6.4: the cancelled invocation's timer is gone, no done.invoke
+    // follows, and the session snapshots again.
     session
         .snapshot(&Options::default())
         .expect("no invoked service remains");
@@ -345,96 +364,82 @@ fn leaving_the_invoking_state_cancels_the_service() {
 }
 
 #[test]
-fn a_service_that_fails_is_reported_as_error_communication() {
+fn a_service_whose_future_resolves_err_raises_error_communication() {
     let host = host();
     let mut session = open(&host);
     // The service cannot echo a name `echo.` would push past the event-name
-    // bound: its `send` fails and the host retires it.
+    // bound: its future resolves `err`.
     session
         .send(&ScriptedEvent::named("long"))
         .expect("the long event is processed");
     assert_eq!(logs(&mut session), ["failed: echo platform"]);
     assert_eq!(session.configuration().expect("configuration"), ["failed"]);
-    // No done.invoke follows, the wakeup is gone, and `#_echo` is now
+    // No done.invoke follows, its timer is gone, and `#_echo` is now
     // unreachable.
-    assert_eq!(session.next_deadline().expect("deadline"), None);
     session.run_until_idle().expect("idle");
-    assert!(logs(&mut session).is_empty());
+    assert!(
+        logs(&mut session)
+            .iter()
+            .all(|line| !line.starts_with("tick"))
+    );
     session.close().expect("the session closes");
 }
 
-#[test]
-fn an_unbound_literal_service_type_raises_error_execution_at_invocation_start() {
-    // SCXML 6.4: invocation is a runtime action. The session starts although
-    // no service is bound to the literal type; only entering the invoking
-    // state fails that `<invoke>` with error.execution.
-    let host = host_with(ServiceComponents::new());
-    let source = format!(
+/// A document whose `go` enters a state that invokes `invoke`.
+fn runtime_document(invoke: &str) -> String {
+    format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="idle">
   <state id="idle"><transition event="go" target="s"/></state>
   <state id="s">
-    <invoke type="{ECHO}"/>
+    {invoke}
     <transition event="error.execution" target="failed"/>
   </state>
   <final id="failed"/>
 </scxml>"#
-    );
-    let (ir, data_model) = lower(&source);
-    let mut session = host
-        .open(SessionOpen {
-            machine_ir: &ir,
-            data_model: data_model.as_deref(),
-            session_id: "root",
-            embedder: Rc::new(NoResources),
-            max_commands: 256,
-            clock: LiveClock::Logical,
-            record: false,
-            replay: None,
-            http: LiveHttp::default(),
-        })
-        .expect("an unbound literal type does not fail the session start");
-    assert_eq!(session.configuration().expect("configuration"), ["idle"]);
-    session
-        .send(&ScriptedEvent::named("go"))
-        .expect("go is processed");
-    assert_eq!(session.status(), LiveStatus::Finished);
-    session.close().expect("the session closes");
+    )
 }
 
 #[test]
-fn an_unbound_typeexpr_service_raises_error_execution() {
-    let host = host();
-    let source = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
-  <state id="s">
-    <invoke typeexpr="'urn:example:missing'"/>
-    <transition event="error.execution" target="failed"/>
-  </state>
-  <final id="failed"/>
-</scxml>"#;
-    let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
-        SOURCE,
-        "dynamic.scxml",
-        source,
-    ))
-    .expect("fixture parses");
-    let ir = scxml_compiler_core::lower(&document).expect("fixture lowers");
-    assert!(ir.invoke_types.is_empty());
-    let bytes = ir.to_json().expect("fixture IR encodes");
-    let mut session = host
-        .open(SessionOpen {
-            machine_ir: &bytes,
-            data_model: Some("ecmascript"),
-            session_id: "root",
-            embedder: Rc::new(NoResources),
-            max_commands: 256,
-            clock: LiveClock::Logical,
-            record: false,
-            replay: None,
-            http: LiveHttp::default(),
-        })
-        .expect("the session opens");
-    assert_eq!(session.configuration().expect("configuration"), ["failed"]);
-    session.close().expect("the session closes");
+fn an_unbound_or_platform_specific_invoke_type_raises_error_execution_when_it_runs() {
+    // SCXML 6.4: invocation is a runtime action. The session starts although
+    // no service is bound to the type; only entering the invoking state
+    // fails that `<invoke>` with error.execution. A platform-specific type
+    // that is not a URI (SCXML 6.4.1) and an unbound `typeexpr` fail the
+    // same way.
+    for (services, invoke) in [
+        (
+            ServiceComponents::new(),
+            format!(r#"<invoke type="{ECHO}"/>"#),
+        ),
+        (
+            ServiceComponents::new()
+                .bind(package(ECHO), component(ArtifactKind::ServiceExample))
+                .expect("binds"),
+            r#"<invoke type="echo"/>"#.to_owned(),
+        ),
+        (
+            ServiceComponents::new()
+                .bind(package(ECHO), component(ArtifactKind::ServiceExample))
+                .expect("binds"),
+            r#"<invoke typeexpr="'urn:example:missing'"/>"#.to_owned(),
+        ),
+    ] {
+        let host = host_with(services);
+        let mut session = open_with(
+            &host,
+            &runtime_document(&invoke),
+            false,
+            None,
+            LiveHttp::default(),
+        )
+        .expect("an unbound type does not fail the session start");
+        assert_eq!(session.configuration().expect("configuration"), ["idle"]);
+        session
+            .send(&ScriptedEvent::named("go"))
+            .expect("go is processed");
+        assert_eq!(session.status(), LiveStatus::Finished, "{invoke}");
+        session.close().expect("the session closes");
+    }
 }
 
 #[test]
@@ -450,37 +455,29 @@ fn a_caller_service_component_binds_by_digest_and_kind_is_checked() {
             .expect("a caller service binds"),
     );
     let mut session = open(&host);
-    assert_eq!(session.next_deadline().expect("deadline"), Some(250));
+    assert_eq!(session.next_deadline().expect("deadline"), Some(100));
     session.close().expect("the session closes");
-    // A service bound to a URI its component does not implement fails the
-    // run when the invocation instantiates it.
+    // A component bound to a URI it does not implement rejects its start:
+    // the `<invoke>` raises error.execution.
     let other = "https://stateforward.org/scxml/services/other";
     let host = host_with(
         ServiceComponents::new()
             .bind(package(other), &caller)
             .expect("binding checks no component identity"),
     );
-    let source = document().replace(ECHO, other);
-    let (ir, data_model) = {
-        let document =
-            scxml_syntax::parse_xml(scxml_syntax::SourceText::new(SOURCE, "other.scxml", source))
-                .expect("fixture parses");
-        let ir = scxml_compiler_core::lower(&document).expect("fixture lowers");
-        let data_model = ir.data_model.clone();
-        (ir.to_json().expect("encodes"), data_model)
-    };
-    let opened = host.open(SessionOpen {
-        machine_ir: &ir,
-        data_model: data_model.as_deref(),
-        session_id: "root",
-        embedder: Rc::new(NoResources),
-        max_commands: 256,
-        clock: LiveClock::Logical,
-        record: false,
-        replay: None,
-        http: LiveHttp::default(),
-    });
-    assert!(opened.is_err(), "a type-uri mismatch fails closed");
+    let mut session = open_with(
+        &host,
+        &runtime_document(&format!(r#"<invoke type="{other}"/>"#)),
+        false,
+        None,
+        LiveHttp::default(),
+    )
+    .expect("the session opens");
+    session
+        .send(&ScriptedEvent::named("go"))
+        .expect("go is processed");
+    assert_eq!(session.status(), LiveStatus::Finished);
+    session.close().expect("the session closes");
     // Only service artifact kinds bind.
     assert!(
         ServiceComponents::new()
@@ -495,34 +492,6 @@ fn a_caller_service_component_binds_by_digest_and_kind_is_checked() {
     );
 }
 
-/// The checked-in files manifest as the host's package.
-fn files_package() -> ServicePackage {
-    let manifest = scxml_validator_core::ServicePackageManifest::from_json(include_bytes!(
-        "../../../components/scxml-service-files/package/files.service.json"
-    ))
-    .expect("the files manifest parses");
-    manifest.verify(None).expect("the files manifest verifies");
-    assert_eq!(
-        manifest.wasi_permissions,
-        [scxml_host_wasmtime::WasiPermission::Filesystem {
-            mount: "workspace".into(),
-            access: scxml_host_wasmtime::FilesystemAccess::ReadWrite,
-        }],
-        "the files example declares exactly one read-write mount"
-    );
-    ServicePackage {
-        service_uri: manifest.service_uri,
-        package_version: manifest.package_version,
-        service_artifact: manifest.service_artifact,
-        wit_world: manifest.wit_world,
-        wit_version: manifest.wit_version,
-        http_origins: manifest.http_origins,
-        env_slots: manifest.env_slots,
-        wasi_permissions: manifest.wasi_permissions,
-        events: scxml_host_wasmtime::ServiceEvents::default(),
-    }
-}
-
 /// The files component, authenticated by its SHA-256 like any caller
 /// service component.
 fn files_component() -> AuthenticatedComponent {
@@ -530,6 +499,13 @@ fn files_component() -> AuthenticatedComponent {
     let digest = TrustedComponentDigest::from_hex(&format!("{:x}", Sha256::digest(bytes)))
         .expect("digest is canonical");
     authenticate_service_component(bytes, digest).expect("the files component authenticates")
+}
+
+fn files_package() -> ServicePackage {
+    package_from(
+        include_bytes!("../../../components/scxml-service-files/package/files.service.json"),
+        FILES,
+    )
 }
 
 /// A fresh directory of this suite's own for one test.
@@ -544,16 +520,12 @@ fn scratch(name: &str) -> std::path::PathBuf {
     directory
 }
 
-fn workspace_grant(directory: &Path) -> WasiGrants {
-    WasiGrants::new()
-        .grant(
-            FILES,
-            WasiGrant::Filesystem {
-                mount: "workspace".into(),
-                directory: directory.to_path_buf(),
-            },
-        )
-        .expect("the grant is well formed")
+/// `--dir FILES=DIRECTORY::/workspace`.
+fn workspace_dir(directory: &Path) -> WasiOptions {
+    WasiOptions {
+        dirs: vec![(directory.to_path_buf(), "/workspace".into())],
+        ..WasiOptions::default()
+    }
 }
 
 /// Reads `seed.txt` and writes `out.txt` in the service's workspace.
@@ -575,55 +547,27 @@ const FILES_DOCUMENT: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" v
   <state id="failed"/>
 </scxml>"#;
 
-fn open_files(host: &SessionHost) -> Result<LiveSession, scxml_host_wasmtime::SessionHostError> {
-    let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
-        SOURCE,
-        "files.scxml",
-        FILES_DOCUMENT,
-    ))
-    .expect("fixture parses");
-    let ir = scxml_compiler_core::lower(&document).expect("fixture lowers");
-    assert_eq!(ir.invoke_types, [FILES]);
-    let bytes = ir.to_json().expect("fixture IR encodes");
-    host.open(SessionOpen {
-        machine_ir: &bytes,
-        data_model: Some("ecmascript"),
-        session_id: "root",
-        embedder: Rc::new(NoResources),
-        max_commands: 256,
-        clock: LiveClock::Logical,
-        record: false,
-        replay: None,
-        http: LiveHttp::default(),
-    })
-}
-
-fn files_host(package: ServicePackage, grants: WasiGrants) -> Result<SessionHost, HostError> {
-    SessionHost::new(
-        &session_components(),
-        &WasmtimeHostConfig::default(),
-        &TelemetryProviders::new(),
-    )
-    .and_then(|host| {
-        host.with_service_components(
-            ServiceComponents::new()
-                .bind(package, &files_component())
-                .expect("the files package binds")
-                .with_wasi_grants(grants),
-        )
+fn files_host(wasi: Option<WasiOptions>) -> Result<SessionHost, HostError> {
+    let services = ServiceComponents::new()
+        .bind(files_package(), &files_component())
+        .expect("the files package binds");
+    try_host(match wasi {
+        Some(options) => services.with_wasi(FILES, options),
+        None => services,
     })
 }
 
 #[test]
-fn a_granted_filesystem_permission_reads_and_writes_the_granted_directory() {
+fn a_preopened_directory_is_what_the_filesystem_import_reads_and_writes() {
     let directory = scratch("granted");
     std::fs::write(directory.join("seed.txt"), "from the host").expect("seed is written");
-    let host = files_host(files_package(), workspace_grant(&directory)).expect("the grant links");
-    let mut session = open_files(&host).expect("the session opens");
+    let host = files_host(Some(workspace_dir(&directory))).expect("the grant links");
+    let mut session = open_with(&host, FILES_DOCUMENT, false, None, LiveHttp::default())
+        .expect("the session opens");
     assert_eq!(
         logs(&mut session),
         [r#"done: {"seed":"from the host","wrote":22}"#],
-        "the service read the host's seed through its granted mount"
+        "the service read the host's seed through its preopened directory"
     );
     assert_eq!(session.configuration().expect("configuration"), ["done"]);
     session.close().expect("the session closes");
@@ -634,156 +578,117 @@ fn a_granted_filesystem_permission_reads_and_writes_the_granted_directory() {
 }
 
 #[test]
-fn a_read_only_mount_refuses_the_write() {
-    let directory = scratch("read-only");
-    std::fs::write(directory.join("seed.txt"), "seed").expect("seed is written");
-    let mut package = files_package();
-    package.wasi_permissions = vec![scxml_host_wasmtime::WasiPermission::Filesystem {
-        mount: "workspace".into(),
-        access: scxml_host_wasmtime::FilesystemAccess::ReadOnly,
-    }];
-    let host = files_host(package, workspace_grant(&directory)).expect("the grant links");
-    let mut session = open_files(&host).expect("the session opens");
-    assert_eq!(logs(&mut session), ["failed: error.execution"]);
-    session.close().expect("the session closes");
-    assert!(!directory.join("out.txt").exists(), "nothing was written");
-}
-
-#[test]
-fn an_ungranted_or_undeclared_wasi_permission_fails_the_binding_closed() {
-    let directory = scratch("ungranted");
-    let refused = |package: ServicePackage, grants: WasiGrants| match files_host(package, grants) {
+fn an_ungranted_or_unused_wasi_resource_fails_the_binding_closed() {
+    let refused = |result: Result<SessionHost, HostError>| match result {
         Err(HostError::Artifact(error)) => error,
         Err(other) => panic!("unexpected failure: {other}"),
         Ok(_) => panic!("the binding must fail closed"),
     };
-    // Declared but not granted.
+    // The component imports wasi:filesystem: without a directory it fails
+    // at bind time, before any session starts.
     assert_eq!(
-        refused(files_package(), WasiGrants::new()),
-        ArtifactError::WasiPermissionUngranted
+        refused(files_host(None)),
+        ArtifactError::WasiResourceUngranted
     );
-    // Granted for another mount: that grant names nothing the package
-    // declares.
-    let other_mount = WasiGrants::new()
-        .grant(
-            FILES,
-            WasiGrant::Filesystem {
-                mount: "other".into(),
-                directory: directory.clone(),
-            },
-        )
-        .expect("well formed");
+    // A grant whose interface the component does not import, or to a URI
+    // no package binds, fails the same way.
+    let directory = scratch("unused");
     assert_eq!(
-        refused(files_package(), other_mount),
+        refused(files_host(Some(WasiOptions {
+            allow_ip_name_lookup: true,
+            ..workspace_dir(&directory)
+        }))),
         ArtifactError::WasiGrantUndeclared
     );
-    // Granted beyond the declaration.
-    let extra = workspace_grant(&directory)
-        .grant(FILES, WasiGrant::Clocks)
-        .expect("well formed");
     assert_eq!(
-        refused(files_package(), extra),
-        ArtifactError::WasiGrantUndeclared
+        refused(try_host(
+            ServiceComponents::new()
+                .bind(package(ECHO), component(ArtifactKind::ServiceExample))
+                .expect("binds")
+                .with_wasi(ECHO, workspace_dir(&directory))
+        )),
+        ArtifactError::WasiGrantUndeclared,
+        "the echo service imports no filesystem"
     );
-    // Granted to a URI no package binds.
-    let unbound = workspace_grant(&directory)
-        .grant(ECHO, WasiGrant::Random)
-        .expect("well formed");
     assert_eq!(
-        refused(files_package(), unbound),
-        ArtifactError::WasiGrantUndeclared
+        refused(try_host(
+            ServiceComponents::new()
+                .bind(package(ECHO), component(ArtifactKind::ServiceExample))
+                .expect("binds")
+                .with_wasi(FILES, workspace_dir(&directory))
+        )),
+        ArtifactError::WasiGrantUndeclared,
+        "no package binds the granted URI"
     );
-    // Malformed grants are refused when they are made.
+    // A preopened directory that does not exist fails closed when the
+    // invocation starts (`--dir` is opened for each invocation's context).
+    let host = files_host(Some(workspace_dir(&directory.join("missing"))))
+        .expect("the plan does not open the directory");
     assert!(
-        WasiGrants::new()
-            .grant(
-                FILES,
-                WasiGrant::SocketsTcp {
-                    connect: Vec::new()
-                }
-            )
-            .is_err()
-    );
-    assert!(
-        workspace_grant(&directory)
-            .grant(
-                FILES,
-                WasiGrant::Filesystem {
-                    mount: "workspace".into(),
-                    directory: directory.clone(),
-                },
-            )
-            .is_err(),
-        "one mount is granted once"
+        open_with(&host, FILES_DOCUMENT, false, None, LiveHttp::default()).is_err(),
+        "a directory that cannot be opened fails closed"
     );
 }
 
-#[test]
-fn an_undeclared_wasi_import_fails_the_session_start_closed() {
-    // The files component imports wasi:filesystem, but this package declares
-    // no WASI permission: the host links none, and the session start fails
-    // before the first macrostep.
-    let mut package = files_package();
-    package.wasi_permissions = Vec::new();
-    let host = files_host(package, WasiGrants::new()).expect("nothing to grant");
-    match open_files(&host) {
-        Err(error) => assert!(
-            matches!(
-                error.failure,
-                RunFailure::Host(HostError::Artifact(ArtifactError::WasiImportUndeclared))
-            ),
-            "{error}"
-        ),
-        Ok(_) => panic!("an undeclared WASI import fails the start closed"),
-    }
-    // A package that declares another interface does not cover it either.
-    let mut package = files_package();
-    package.wasi_permissions = vec![scxml_host_wasmtime::WasiPermission::Random];
-    let host = files_host(
-        package,
-        WasiGrants::new()
-            .grant(FILES, WasiGrant::Random)
-            .expect("well formed"),
-    )
-    .expect("the random grant links");
-    assert!(
-        open_files(&host).is_err(),
-        "wasi:filesystem stays undeclared"
-    );
-}
-
-#[test]
-fn a_service_without_wasi_imports_needs_no_grant() {
-    // The echo example imports no WASI interface: it binds and runs with no
-    // grant, as before.
-    let host = host_with(
-        ServiceComponents::new()
-            .bind(package(ECHO), component(ArtifactKind::ServiceExample))
-            .expect("binds")
-            .with_wasi_grants(WasiGrants::new()),
-    );
-    let mut session = open(&host);
-    assert_eq!(session.next_deadline().expect("deadline"), Some(250));
-    session.close().expect("the session closes");
-}
-
-/// A transport that records each admitted request and answers 204.
+/// A transport that answers 204, records each admitted request's URL, and,
+/// when `hold` is set, holds every request until the test releases it: what
+/// a slow model call looks like to the session.
 #[derive(Debug, Default)]
-struct RecordingHttp {
-    urls: std::sync::Mutex<Vec<String>>,
+struct TestHttp {
+    hold: bool,
+    urls: Mutex<Vec<String>>,
+    released: Mutex<usize>,
+    wake: Condvar,
 }
 
-impl scxml_host_wasmtime::ExtensionHttp for RecordingHttp {
-    fn fetch(
-        &self,
-        request: &scxml_host_wasmtime::ExtensionHttpRequest,
-    ) -> Result<scxml_host_wasmtime::ExtensionHttpResponse, scxml_host_wasmtime::ExtensionHttpFailure>
-    {
+impl TestHttp {
+    fn held() -> Arc<Self> {
+        Arc::new(Self {
+            hold: true,
+            ..Self::default()
+        })
+    }
+
+    fn urls(&self) -> Vec<String> {
         self.urls
             .lock()
             .expect("the request log is not poisoned")
-            .push(request.url.clone());
-        Ok(scxml_host_wasmtime::ExtensionHttpResponse {
+            .clone()
+    }
+
+    /// Releases one held request.
+    fn release_one(&self) {
+        *self
+            .released
+            .lock()
+            .expect("the release count is not poisoned") += 1;
+        self.wake.notify_all();
+    }
+}
+
+impl ExtensionHttp for TestHttp {
+    fn fetch(
+        &self,
+        request: &ExtensionHttpRequest,
+    ) -> Result<ExtensionHttpResponse, ExtensionHttpFailure> {
+        let index = {
+            let mut urls = self.urls.lock().expect("the request log is not poisoned");
+            urls.push(request.url.clone());
+            urls.len()
+        };
+        if self.hold {
+            let mut released = self
+                .released
+                .lock()
+                .expect("the release count is not poisoned");
+            while *released < index {
+                released = self
+                    .wake
+                    .wait(released)
+                    .expect("the release count is not poisoned");
+            }
+        }
+        Ok(ExtensionHttpResponse {
             status: 204,
             body: Vec::new(),
         })
@@ -791,17 +696,24 @@ impl scxml_host_wasmtime::ExtensionHttp for RecordingHttp {
 }
 
 /// `s` invokes the echo service binding its `endpoint` slot as `invoke`
-/// says; `fetch` makes the service GET the slot's URL.
+/// says (with a 1 s timer of its own); `fetch` makes the service GET the
+/// slot's URL, `ping` is echoed, and `leave` exits `s`.
 fn endpoint_document(invoke: &str) -> String {
     format!(
         r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="{env}" version="1.0" datamodel="ecmascript" initial="s">
   <state id="s">
+    <onentry><send event="timer" delay="1s"/></onentry>
     {invoke}
     <transition event="fetch"><send event="fetch" target="#_echo"/></transition>
+    <transition event="ping"><send event="ping" target="#_echo"/></transition>
+    <transition event="echo.ping"><log label="ping" expr="_event.invokeid"/></transition>
     <transition event="echo.fetched"><log label="fetched" expr="_event.data"/></transition>
+    <transition event="timer"><log label="timer" expr="'fired'"/></transition>
     <transition event="error.execution" target="refused"/>
     <transition event="error.communication" target="failed"/>
+    <transition event="leave" target="away"/>
   </state>
+  <state id="away"><transition event="timer"><log label="timer" expr="'fired'"/></transition></state>
   <state id="refused"/>
   <state id="failed"/>
 </scxml>"##,
@@ -809,411 +721,141 @@ fn endpoint_document(invoke: &str) -> String {
     )
 }
 
-fn open_endpoint(host: &SessionHost, invoke: &str) -> LiveSession {
-    let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
-        SOURCE,
-        "endpoint.scxml",
-        endpoint_document(invoke),
-    ))
-    .expect("fixture parses");
-    let ir = scxml_compiler_core::lower(&document).expect("fixture lowers");
-    host.open(SessionOpen {
-        machine_ir: &ir.to_json().expect("fixture IR encodes"),
-        data_model: ir.data_model.as_deref(),
-        session_id: "root",
-        embedder: Rc::new(NoResources),
-        max_commands: 256,
-        clock: LiveClock::Logical,
-        record: false,
-        replay: None,
-        http: LiveHttp::default(),
-    })
-    .expect("the session opens")
-}
+const BOUND: &str = r#"<invoke type="https://stateforward.org/scxml/services/echo" id="echo" env:endpoint="ENDPOINT"/>"#;
 
 /// `values` are `(name, value, granted package URI)`.
-fn endpoint_host(
-    http: &std::sync::Arc<RecordingHttp>,
-    values: &[(&str, &str, &str)],
-) -> SessionHost {
+fn endpoint_host(http: &Arc<TestHttp>, values: &[(&str, &str, &str)]) -> SessionHost {
     host_with(
         ServiceComponents::new()
             .with_values(
-                scxml_host_wasmtime::ExtensionEnvironment::new(values.iter().map(
-                    |(name, value, uri)| {
-                        scxml_host_wasmtime::EnvVariable::new(*name, *value, [(*uri).to_owned()])
-                    },
-                ))
+                ExtensionEnvironment::new(values.iter().map(|(name, value, uri)| {
+                    EnvVariable::new(*name, *value, [(*uri).to_owned()])
+                }))
                 .expect("valid values"),
             )
-            .with_outbound_http(std::sync::Arc::clone(http) as _)
+            .with_outbound_http(Arc::clone(http) as _)
             .bind(package(ECHO), component(ArtifactKind::ServiceExample))
             .expect("the example service binds"),
     )
+}
+
+/// A live HTTP network that counts the responses that arrive.
+fn counted(notified: &Arc<AtomicUsize>) -> LiveHttp {
+    let counter = Arc::clone(notified);
+    LiveHttp {
+        on_http_response: Some(Arc::new(move || {
+            counter.fetch_add(1, Ordering::AcqRel);
+        })),
+        ..LiveHttp::default()
+    }
+}
+
+/// Waits until `notified` reaches `count` (a response arrived).
+fn arrived(notified: &AtomicUsize, count: usize) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while notified.load(Ordering::Acquire) < count {
+        assert!(Instant::now() < deadline, "the response arrives");
+        std::thread::sleep(Duration::from_millis(2));
+    }
 }
 
 #[test]
 fn an_env_slot_reference_lives_for_the_whole_invocation() {
-    let http = std::sync::Arc::new(RecordingHttp::default());
+    let http = Arc::new(TestHttp::default());
     let host = endpoint_host(&http, &[("ENDPOINT", "http://127.0.0.1:9/status", ECHO)]);
     for invoke in [
-        format!(r#"<invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/>"#),
+        BOUND.to_owned(),
         format!(r#"<invoke type="{ECHO}" id="echo" env:endpointexpr="'END' + 'POINT'"/>"#),
     ] {
-        let mut session = open_endpoint(&host, &invoke);
-        // The reference bound at `start` is used by a later `send`: its
-        // value reaches only the transport, at the origin it supplies.
-        for _ in 0..2 {
+        let notified = Arc::new(AtomicUsize::new(0));
+        let mut session = open_with(
+            &host,
+            &endpoint_document(&invoke),
+            false,
+            None,
+            counted(&notified),
+        )
+        .expect("the session opens");
+        // The reference bound at the start serves every request of the
+        // invocation: its value reaches only the transport.
+        for count in 1..=2 {
             session
                 .send(&ScriptedEvent::named("fetch"))
                 .expect("fetch is processed");
+            arrived(&notified, count);
+            session
+                .deliver_http_responses()
+                .expect("the response is delivered")
+                .expect("one response arrived");
             assert_eq!(logs(&mut session), ["fetched: 204"], "{invoke}");
         }
         session.close().expect("the session closes");
     }
-    assert_eq!(
-        *http.urls.lock().expect("the request log is not poisoned"),
-        ["http://127.0.0.1:9/status"; 4]
-    );
+    assert_eq!(http.urls(), ["http://127.0.0.1:9/status"; 4]);
 }
 
 #[test]
 fn an_unbound_out_of_scope_or_undeclared_env_slot_never_reaches_the_network() {
-    let http = std::sync::Arc::new(RecordingHttp::default());
-    // No value: the slot is absent, the service's fetch fails, and the host
-    // retires it (error.communication).
-    let host = endpoint_host(&http, &[]);
-    let mut session = open_endpoint(
-        &host,
-        &format!(r#"<invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/>"#),
-    );
-    session
-        .send(&ScriptedEvent::named("fetch"))
-        .expect("fetch is processed");
-    assert_eq!(session.configuration().expect("configuration"), ["failed"]);
-    session.close().expect("the session closes");
-    // A value granted only to another package is absent exactly like no
-    // value: the echo service's fetch fails the same way.
-    let host = endpoint_host(&http, &[("ENDPOINT", "http://127.0.0.1:9/status", FILES)]);
-    let mut session = open_endpoint(
-        &host,
-        &format!(r#"<invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/>"#),
-    );
-    session
-        .send(&ScriptedEvent::named("fetch"))
-        .expect("fetch is processed");
-    assert_eq!(session.configuration().expect("configuration"), ["failed"]);
-    session.close().expect("the session closes");
+    let http = Arc::new(TestHttp::default());
+    // No value, or a value granted only to another package: the slot is
+    // absent, so the service's fetch fails and its future resolves `err`
+    // (error.communication).
+    for values in [
+        &[][..],
+        &[("ENDPOINT", "http://127.0.0.1:9/status", FILES)][..],
+    ] {
+        let host = endpoint_host(&http, values);
+        let mut session = open_with(
+            &host,
+            &endpoint_document(BOUND),
+            false,
+            None,
+            LiveHttp::default(),
+        )
+        .expect("the session opens");
+        session
+            .send(&ScriptedEvent::named("fetch"))
+            .expect("fetch is processed");
+        assert_eq!(session.configuration().expect("configuration"), ["failed"]);
+        session.close().expect("the session closes");
+    }
     // A slot the package does not declare rejects the start: the `<invoke>`
     // raises error.execution and the service never runs.
     let host = endpoint_host(&http, &[("ENDPOINT", "http://127.0.0.1:9/status", ECHO)]);
-    let mut session = open_endpoint(
+    let mut session = open_with(
         &host,
-        &format!(r#"<invoke type="{ECHO}" id="echo" env:other="ENDPOINT"/>"#),
-    );
+        &endpoint_document(&format!(
+            r#"<invoke type="{ECHO}" id="echo" env:other="ENDPOINT"/>"#
+        )),
+        false,
+        None,
+        LiveHttp::default(),
+    )
+    .expect("the session opens");
     assert_eq!(session.configuration().expect("configuration"), ["refused"]);
-    assert!(
-        http.urls
-            .lock()
-            .expect("the request log is not poisoned")
-            .is_empty()
-    );
-}
-
-/// `s` invokes the echo service and relays `say` (immediately, or 10 ms
-/// later for `later`) to it with the event's data.
-fn contract_document() -> String {
-    format!(
-        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
-  <state id="s">
-    <onentry><send event="stop" target="#_echo" delay="20ms" id="early"/></onentry>
-    <invoke type="{ECHO}" id="echo"/>
-    <transition event="say"><send event="say" target="#_echo"><content expr="_event.data"/></send></transition>
-    <transition event="later"><send event="say" target="#_echo" delay="10ms"><content expr="_event.data"/></send></transition>
-    <transition event="stop"><send event="stop" target="#_echo"/></transition>
-    <transition event="echo.say"><log label="echo.say" expr="JSON.stringify(_event.data)"/></transition>
-    <transition event="error.execution"><log label="refused" expr="_event.name"/></transition>
-    <transition event="error.communication" cond="_event.sendid == 'early'"><log label="undeliverable" expr="_event.sendid"/></transition>
-    <transition event="error.communication" target="failed"><log label="failed" expr="_event.invokeid"/></transition>
-  </state>
-  <state id="failed"/>
-</scxml>"##
-    )
-}
-
-fn schema(name: &str, schema: &str) -> scxml_host_wasmtime::ServiceEventSchema {
-    scxml_host_wasmtime::ServiceEventSchema {
-        name: name.into(),
-        schema: schema.into(),
-    }
-}
-
-/// The echo package with a contract: it accepts `say` carrying an object
-/// with `text`, and emits `echo.say` whose `text` is a string.
-fn contract_host() -> SessionHost {
-    let mut package = package(ECHO);
-    package.events = scxml_host_wasmtime::ServiceEvents {
-        emits: vec![schema(
-            "echo.say",
-            r#"{"properties":{"text":{"type":"string"}},"type":"object"}"#,
-        )],
-        accepts: vec![schema("say", r#"{"required":["text"],"type":"object"}"#)],
-    };
-    host_with(
-        ServiceComponents::new()
-            .bind(package, component(ArtifactKind::ServiceExample))
-            .expect("the contracted example binds"),
-    )
-}
-
-/// Opens the contract document and lets its early delayed send fall due:
-/// scheduled before the service started, it is checked when it falls due,
-/// and `stop` is not accepted, so it is undeliverable.
-fn open_contract(host: &SessionHost) -> LiveSession {
-    let mut session = open_contract_session(host);
-    session.advance_to(20).expect("the early send falls due");
-    assert_eq!(logs(&mut session), ["undeliverable: early"]);
-    session
-}
-
-fn open_contract_session(host: &SessionHost) -> LiveSession {
-    let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
-        SOURCE,
-        "contract.scxml",
-        contract_document(),
-    ))
-    .expect("fixture parses");
-    let ir = scxml_compiler_core::lower(&document).expect("fixture lowers");
-    host.open(SessionOpen {
-        machine_ir: &ir.to_json().expect("fixture IR encodes"),
-        data_model: ir.data_model.as_deref(),
-        session_id: "root",
-        embedder: Rc::new(NoResources),
-        max_commands: 256,
-        clock: LiveClock::Logical,
-        record: false,
-        replay: None,
-        http: LiveHttp::default(),
-    })
-    .expect("the session opens")
-}
-
-fn say(name: &str, data: &str) -> ScriptedEvent {
-    ScriptedEvent {
-        data: scxml_types::DataValue::canonical_json_object(data).expect("an object"),
-        ..ScriptedEvent::named(name)
-    }
-}
-
-#[test]
-fn a_send_the_service_contract_refuses_raises_error_execution() {
-    let host = contract_host();
-    let mut session = open_contract(&host);
-    session.send(&say("say", r#"{"text":"hi"}"#)).expect("say");
-    assert_eq!(logs(&mut session), [r#"echo.say: {"text":"hi"}"#]);
-    // Data the accepted schema refuses, and an event the contract does not
-    // declare, raise error.execution at the `<send>`; the service runs on.
-    session.send(&say("say", r#"{"n":1}"#)).expect("say");
-    assert_eq!(logs(&mut session), ["refused: error.execution"]);
-    session.send(&ScriptedEvent::named("stop")).expect("stop");
-    assert_eq!(logs(&mut session), ["refused: error.execution"]);
-    // A delayed send is checked when it is sent.
-    session.send(&say("later", r#"{"n":1}"#)).expect("later");
-    assert_eq!(logs(&mut session), ["refused: error.execution"]);
-    assert_eq!(session.next_deadline().expect("deadline"), None);
-    session
-        .send(&say("later", r#"{"text":"late"}"#))
-        .expect("later");
-    session
-        .run_until_idle()
-        .expect("the delayed send falls due");
-    assert_eq!(logs(&mut session), [r#"echo.say: {"text":"late"}"#]);
-    assert_eq!(session.configuration().expect("configuration"), ["s"]);
     session.close().expect("the session closes");
+    assert!(http.urls().is_empty());
 }
 
 #[test]
-fn an_emit_the_service_contract_refuses_retires_the_service() {
-    let host = contract_host();
-    let mut session = open_contract(&host);
-    // Accepted (`text` is present), but the echo's `text` is no string:
-    // the emit is invalid, the host retires the service, and the invoking
-    // session gets error.communication with the invoke id.
-    session.send(&say("say", r#"{"text":5}"#)).expect("say");
-    assert_eq!(logs(&mut session), ["failed: echo"]);
-    assert_eq!(session.configuration().expect("configuration"), ["failed"]);
-    session.close().expect("the session closes");
-}
-
-#[test]
-fn a_malformed_contract_fails_the_binding_closed() {
-    for events in [
-        scxml_host_wasmtime::ServiceEvents {
-            emits: vec![schema("echo.say", r#"{ "type": "string" }"#)],
-            accepts: Vec::new(),
-        },
-        scxml_host_wasmtime::ServiceEvents {
-            emits: vec![schema("echo.*", "true")],
-            accepts: Vec::new(),
-        },
-        scxml_host_wasmtime::ServiceEvents {
-            emits: vec![schema("b", "true"), schema("a", "true")],
-            accepts: Vec::new(),
-        },
-    ] {
-        let mut package = package(ECHO);
-        package.events = events;
-        let error = ServiceComponents::new()
-            .bind(package, component(ArtifactKind::ServiceExample))
-            .expect_err("a malformed contract is refused");
-        assert!(
-            matches!(
-                error,
-                HostError::Artifact(ArtifactError::EventContractInvalid)
-            ),
-            "{error}"
-        );
-    }
-}
-
-/// A deferred transport that holds every request until the test settles it:
-/// what a slow model call looks like to the session.
-#[derive(Debug, Default)]
-struct HeldHttp {
-    held: std::sync::Mutex<Vec<(String, scxml_host_wasmtime::ServiceHttpOutcome)>>,
-}
-
-impl HeldHttp {
-    fn held(&self) -> usize {
-        self.held
-            .lock()
-            .expect("the held requests are not poisoned")
-            .len()
-    }
-
-    /// Settles every held request with `status`, returning their URLs.
-    fn settle_all(&self, status: u16) -> Vec<String> {
-        let held: Vec<_> = self
-            .held
-            .lock()
-            .expect("the held requests are not poisoned")
-            .drain(..)
-            .collect();
-        held.into_iter()
-            .map(|(url, outcome)| {
-                outcome.settle(Ok(scxml_host_wasmtime::ExtensionHttpResponse {
-                    status,
-                    body: Vec::new(),
-                }));
-                url
-            })
-            .collect()
-    }
-}
-
-impl scxml_host_wasmtime::ServiceHttp for HeldHttp {
-    fn begin(
-        &self,
-        request: scxml_host_wasmtime::ExtensionHttpRequest,
-        outcome: scxml_host_wasmtime::ServiceHttpOutcome,
-    ) -> Result<(), scxml_host_wasmtime::TransportUnavailable> {
-        self.held
-            .lock()
-            .expect("the held requests are not poisoned")
-            .push((request.url, outcome));
-        Ok(())
-    }
-}
-
-/// `s` invokes the echo service with its `endpoint` slot bound; `defer`
-/// starts the deferred GET, `ping` is echoed, `leave` exits `s` (cancelling
-/// the service), and `s` arms a 1 s timer on entry.
-fn deferred_document() -> String {
-    format!(
-        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="{env}" version="1.0" datamodel="ecmascript" initial="s">
-  <state id="s">
-    <onentry><send event="timer" delay="1s"/></onentry>
-    <invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/>
-    <transition event="defer"><send event="defer" target="#_echo"/></transition>
-    <transition event="ping"><send event="ping" target="#_echo"/></transition>
-    <transition event="echo.ping"><log label="ping" expr="_event.invokeid"/></transition>
-    <transition event="echo.fetched"><log label="fetched" expr="_event.data"/></transition>
-    <transition event="timer"><log label="timer" expr="'fired'"/></transition>
-    <transition event="error.communication" target="failed"/>
-    <transition event="leave" target="away"/>
-  </state>
-  <state id="away">
-    <transition event="timer"><log label="timer" expr="'fired'"/></transition>
-  </state>
-  <state id="failed"/>
-</scxml>"##,
-        env = scxml_types::ENV_NAMESPACE_URI
+fn a_fetch_suspends_only_its_task_and_its_response_arrives_as_an_external_input() {
+    let http = TestHttp::held();
+    let host = endpoint_host(&http, &[("ENDPOINT", "http://127.0.0.1:9/slow", ECHO)]);
+    let notified = Arc::new(AtomicUsize::new(0));
+    let mut session = open_with(
+        &host,
+        &endpoint_document(BOUND),
+        false,
+        None,
+        counted(&notified),
     )
-}
-
-fn deferred_host(http: &std::sync::Arc<HeldHttp>) -> SessionHost {
-    host_with(
-        ServiceComponents::new()
-            .with_values(
-                scxml_host_wasmtime::ExtensionEnvironment::new([
-                    scxml_host_wasmtime::EnvVariable::new(
-                        "ENDPOINT",
-                        "http://127.0.0.1:9/slow",
-                        [ECHO.to_owned()],
-                    ),
-                ])
-                .expect("valid values"),
-            )
-            .with_deferred_http(std::sync::Arc::clone(http) as _)
-            .bind(package(ECHO), component(ArtifactKind::ServiceExample))
-            .expect("the example service binds"),
-    )
-}
-
-fn open_deferred(
-    host: &SessionHost,
-    record: bool,
-    notified: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
-) -> LiveSession {
-    let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
-        SOURCE,
-        "deferred.scxml",
-        deferred_document(),
-    ))
-    .expect("fixture parses");
-    let ir = scxml_compiler_core::lower(&document).expect("fixture lowers");
-    let counter = std::sync::Arc::clone(notified);
-    host.open(SessionOpen {
-        machine_ir: &ir.to_json().expect("fixture IR encodes"),
-        data_model: ir.data_model.as_deref(),
-        session_id: "root",
-        embedder: Rc::new(NoResources),
-        max_commands: 256,
-        clock: LiveClock::Logical,
-        record,
-        replay: None,
-        http: LiveHttp {
-            on_service_response: Some(std::sync::Arc::new(move || {
-                counter.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-            })),
-            ..LiveHttp::default()
-        },
-    })
-    .expect("the session opens")
-}
-
-#[test]
-fn a_deferred_request_never_blocks_the_session_and_its_outcome_arrives_through_wake() {
-    let http = std::sync::Arc::new(HeldHttp::default());
-    let host = deferred_host(&http);
-    let notified = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let mut session = open_deferred(&host, false, &notified);
+    .expect("the session opens");
     session
-        .send(&ScriptedEvent::named("defer"))
-        .expect("defer is processed");
-    // The request is in flight; the session keeps processing events.
-    assert_eq!(http.held(), 1);
-    assert!(session.awaiting_service_responses());
+        .send(&ScriptedEvent::named("fetch"))
+        .expect("fetch is processed");
+    assert!(session.awaiting_http_responses());
+    // Neither the session nor the service waits for the request: the
+    // service keeps reading its events while its fetch is pending.
     session
         .send(&ScriptedEvent::named("ping"))
         .expect("ping is processed while the request is in flight");
@@ -1222,73 +864,114 @@ fn a_deferred_request_never_blocks_the_session_and_its_outcome_arrives_through_w
     session.run_until_idle().expect("idle");
     assert!(logs(&mut session).is_empty(), "the 1 s timer waits");
     assert_eq!(
-        session
-            .deliver_service_responses()
-            .expect("nothing settled"),
+        session.deliver_http_responses().expect("nothing arrived"),
         None
     );
-    // The request settles off the session thread; the embedder is woken and
-    // delivers it, and the service's wake emits the status.
-    assert_eq!(http.settle_all(204), ["http://127.0.0.1:9/slow"]);
-    assert_eq!(notified.load(std::sync::atomic::Ordering::Acquire), 1);
-    assert!(
-        session.awaiting_service_responses(),
-        "settled, not delivered"
-    );
+    // The response arrives off the session thread; the embedder is woken
+    // and delivers it, and the service returns the status.
+    http.release_one();
+    arrived(&notified, 1);
+    assert!(session.awaiting_http_responses(), "arrived, not delivered");
     session
-        .deliver_service_responses()
-        .expect("the outcome is delivered")
-        .expect("one outcome settled");
+        .deliver_http_responses()
+        .expect("the response is delivered")
+        .expect("one response arrived");
     assert_eq!(logs(&mut session), ["fetched: 204"]);
-    assert!(!session.awaiting_service_responses());
+    assert!(!session.awaiting_http_responses());
     session.run_until_idle().expect("idle");
     assert_eq!(logs(&mut session), ["timer: fired"]);
     session.close().expect("the session closes");
 }
 
 #[test]
-fn leaving_the_invoking_state_abandons_a_deferred_request() {
-    let http = std::sync::Arc::new(HeldHttp::default());
-    let host = deferred_host(&http);
-    let notified = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let mut session = open_deferred(&host, false, &notified);
+fn leaving_the_invoking_state_drops_a_request_in_flight() {
+    let http = TestHttp::held();
+    let host = endpoint_host(&http, &[("ENDPOINT", "http://127.0.0.1:9/slow", ECHO)]);
+    let notified = Arc::new(AtomicUsize::new(0));
+    let mut session = open_with(
+        &host,
+        &endpoint_document(BOUND),
+        false,
+        None,
+        counted(&notified),
+    )
+    .expect("the session opens");
     session
-        .send(&ScriptedEvent::named("defer"))
-        .expect("defer is processed");
-    assert!(session.awaiting_service_responses());
-    // The invoking state exits: the service is cancelled while its request
-    // is in flight, and the session no longer waits for it.
+        .send(&ScriptedEvent::named("fetch"))
+        .expect("fetch is processed");
+    assert!(session.awaiting_http_responses());
+    // The invoking state exits: the invocation is cancelled while its
+    // request is in flight, and the session no longer waits for it.
     session
         .send(&ScriptedEvent::named("leave"))
         .expect("leave is processed");
     assert_eq!(session.configuration().expect("configuration"), ["away"]);
-    assert!(!session.awaiting_service_responses());
+    assert!(!session.awaiting_http_responses());
     session.run_until_idle().expect("idle");
     assert_eq!(logs(&mut session), ["timer: fired"]);
-    // The late outcome reaches no one.
-    assert_eq!(http.settle_all(200).len(), 1);
+    // The late response reaches no one.
+    http.release_one();
+    arrived(&notified, 1);
     session
-        .deliver_service_responses()
-        .expect("the late outcome is dropped");
+        .deliver_http_responses()
+        .expect("the late response is dropped");
     assert!(logs(&mut session).is_empty());
     assert_eq!(session.configuration().expect("configuration"), ["away"]);
     session.close().expect("the session closes");
 }
 
 #[test]
-fn a_recording_session_starts_no_deferred_request() {
-    let http = std::sync::Arc::new(HeldHttp::default());
-    let host = deferred_host(&http);
-    let notified = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    // A recorded session's inputs must replay without the network: `begin`
-    // is refused, so the service's `send` fails and it is retired.
-    let mut session = open_deferred(&host, true, &notified);
+fn a_recorded_http_response_replays_without_the_network() {
+    let http = Arc::new(TestHttp::default());
+    let host = endpoint_host(&http, &[("ENDPOINT", "http://127.0.0.1:9/status", ECHO)]);
+    let notified = Arc::new(AtomicUsize::new(0));
+    let mut session = open_with(
+        &host,
+        &endpoint_document(BOUND),
+        true,
+        None,
+        counted(&notified),
+    )
+    .expect("the recording session opens");
     session
-        .send(&ScriptedEvent::named("defer"))
-        .expect("defer is processed");
-    assert_eq!(http.held(), 0);
-    assert_eq!(session.configuration().expect("configuration"), ["failed"]);
+        .send(&ScriptedEvent::named("fetch"))
+        .expect("fetch is processed");
+    arrived(&notified, 1);
+    session
+        .deliver_http_responses()
+        .expect("the response is delivered")
+        .expect("one response arrived");
+    session.run_until_idle().expect("idle");
+    let recorded_logs = logs(&mut session);
+    assert_eq!(recorded_logs, ["fetched: 204", "timer: fired"]);
+    let records = session.take_recorded();
     session.close().expect("the session closes");
+    assert!(
+        records.iter().any(|record| matches!(
+            record,
+            InputRecord::HttpResponse { path, request: 0, response: Ok(response), .. }
+                if path == &["echo".to_owned()] && response.status == 204
+        )),
+        "the response is a recorded input: {records:?}"
+    );
+    // The replay delivers the recorded response; the network is not used.
+    let sent = http.urls().len();
+    let mut replay = open_with(
+        &host,
+        &endpoint_document(BOUND),
+        false,
+        Some(&records),
+        LiveHttp::default(),
+    )
+    .expect("the replay opens");
+    let mut replayed = Vec::new();
+    for record in &records {
+        replay.apply(record).expect("the record applies");
+        replayed.extend(logs(&mut replay));
+    }
+    assert_eq!(replayed, recorded_logs);
+    assert_eq!(http.urls().len(), sent, "a replay sends no request");
+    replay.close().expect("the replay closes");
 }
 
 /// A loopback model server that streams its answer slowly: it reads one
@@ -1299,7 +982,7 @@ fn a_recording_session_starts_no_deferred_request() {
 struct SlowStream {
     port: u16,
     requested: std::sync::mpsc::Receiver<()>,
-    disconnected: std::sync::mpsc::Receiver<std::time::Instant>,
+    disconnected: std::sync::mpsc::Receiver<Instant>,
     server: std::thread::JoinHandle<()>,
 }
 
@@ -1333,7 +1016,7 @@ impl SlowStream {
                 let chunk = b"data: {\"choices\":[{\"delta\":{\"content\":\"token\"}}]}\n\n";
                 let framed = [format!("{:x}\r\n", chunk.len()).as_bytes(), chunk, b"\r\n"].concat();
                 while writer.write_all(&framed).is_ok() {
-                    std::thread::sleep(std::time::Duration::from_millis(20));
+                    std::thread::sleep(Duration::from_millis(20));
                 }
             });
             // The client sends nothing more: the next read ends when it
@@ -1346,7 +1029,7 @@ impl SlowStream {
                 }
             }
             disconnected_tx
-                .send(std::time::Instant::now())
+                .send(Instant::now())
                 .expect("the test listens");
             // A write fails soon after the close, which ends the stream.
             streaming.join().expect("the streaming thread ends");
@@ -1363,44 +1046,49 @@ impl SlowStream {
 #[cfg(feature = "http")]
 #[test]
 fn cancelling_the_invoking_state_closes_the_streaming_connection_and_ends_its_thread() {
-    use std::time::{Duration, Instant};
     let server = SlowStream::start();
     let client = scxml_host_wasmtime::ExtensionHttpClient::new(
         scxml_host_wasmtime::ExtensionHttpConfig::new(),
     )
     .expect("the default client configuration is valid");
-    let transport = std::sync::Arc::new(
-        scxml_host_wasmtime::ThreadedServiceHttp::new(client, 4).expect("a valid bound"),
-    );
     let host = host_with(
         ServiceComponents::new()
             .with_values(
-                scxml_host_wasmtime::ExtensionEnvironment::new([
-                    scxml_host_wasmtime::EnvVariable::new(
-                        "ENDPOINT",
-                        format!("http://127.0.0.1:{}/slow", server.port),
-                        [ECHO.to_owned()],
-                    ),
-                ])
+                ExtensionEnvironment::new([EnvVariable::new(
+                    "ENDPOINT",
+                    format!("http://127.0.0.1:{}/slow", server.port),
+                    [ECHO.to_owned()],
+                )])
                 .expect("valid values"),
             )
-            .with_deferred_http(std::sync::Arc::clone(&transport) as _)
+            .with_outbound_http(Arc::new(client))
             .bind(package(ECHO), component(ArtifactKind::ServiceExample))
             .expect("the example service binds"),
     );
-    let notified = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let mut session = open_deferred(&host, false, &notified);
+    let notified = Arc::new(AtomicUsize::new(0));
+    let mut session = open_with(
+        &host,
+        &endpoint_document(BOUND),
+        false,
+        None,
+        counted(&notified),
+    )
+    .expect("the session opens");
     session
-        .send(&ScriptedEvent::named("defer"))
-        .expect("defer is processed");
+        .send(&ScriptedEvent::named("fetch"))
+        .expect("fetch is processed");
     server
         .requested
         .recv_timeout(Duration::from_secs(10))
         .expect("the request reaches the server");
     // The answer is streaming and will never end on its own.
     std::thread::sleep(Duration::from_millis(100));
-    assert_eq!(transport.in_flight(), 1, "the request thread is waiting");
-    assert!(session.awaiting_service_responses());
+    assert_eq!(
+        notified.load(Ordering::Acquire),
+        0,
+        "the request is waiting"
+    );
+    assert!(session.awaiting_http_responses());
     // Leaving the invoking state cancels the invocation (SCXML 6.4), which
     // closes the request's connection.
     let cancelled = Instant::now();
@@ -1413,18 +1101,19 @@ fn cancelling_the_invoking_state_closes_the_streaming_connection_and_ends_its_th
         .recv_timeout(Duration::from_secs(2))
         .expect("the server sees the connection close within 2 s");
     assert!(disconnected.duration_since(cancelled) < Duration::from_secs(2));
-    // No request thread outlives the cancel.
+    // The request's transport thread ends at once: it reports its (failed)
+    // outcome within 2 s of the cancel.
     let deadline = Instant::now() + Duration::from_secs(2);
-    while transport.in_flight() > 0 {
+    while notified.load(Ordering::Acquire) == 0 {
         assert!(
             Instant::now() < deadline,
-            "the request thread ends within 2 s of the cancel"
+            "the transport thread ends within 2 s of the cancel"
         );
         std::thread::sleep(Duration::from_millis(5));
     }
-    // Its outcome (a transport failure) reaches no one.
+    // Its outcome reaches no one.
     session
-        .deliver_service_responses()
+        .deliver_http_responses()
         .expect("the late outcome is dropped");
     assert!(logs(&mut session).is_empty());
     assert_eq!(session.configuration().expect("configuration"), ["away"]);

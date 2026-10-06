@@ -109,26 +109,6 @@ pub fn load_extensions<C: SessionCapabilities>(
     caps.load_extensions(namespaces)
 }
 
-/// Loads the invoked-service components a ready session's document names
-/// literally (SCXML 6.4), before [`bind_initial_data`] and its first command:
-/// one [`SessionCapabilities::load_services`] call with the Machine IR's
-/// `invoke_types`, and none for a document that names no service. A service
-/// type given only by `typeexpr` is resolved when it starts.
-///
-/// # Errors
-///
-/// The capability's error; the session must then be discarded.
-pub fn load_services<C: SessionCapabilities>(
-    engine: &Engine,
-    caps: &mut C,
-) -> Result<(), C::Error> {
-    let types = &engine.machine().invoke_types;
-    if types.is_empty() {
-        return Ok(());
-    }
-    caps.load_services(types)
-}
-
 /// Binds a ready session's data before its first command (SCXML 5.2-5.3,
 /// W3C Appendix D `interpret`), with the `<param>`/`namelist` entries an
 /// invoking parent passed (`parameters`, empty for a session nobody

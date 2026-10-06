@@ -184,8 +184,6 @@ mod guest {
                     http_origins: package.http_origins,
                     // The WIT package record carries no WASI permissions:
                     // compilation never links the extension component.
-                    wasi_permissions: Vec::new(),
-                    events: scxml_validator_core::PackageEvents::default(),
                 })
                 .collect(),
             schema_mode: match request.options.schema_policy {
@@ -389,7 +387,6 @@ pub fn compile(mut request: CompileRequest) -> Result<CompileOutput, CompileErro
             package_schemas,
             scripts: request.scripts,
             script_resolution: request.script_resolution,
-            service_types: None,
             event_schemas,
         });
         // Package only an accepted lowering; rejected sources still yield a
@@ -710,8 +707,6 @@ mod tests {
             wit_version: scxml_validator_core::SUPPORTED_NAMESPACE_WIT_VERSION.into(),
             env_slots: Vec::new(),
             http_origins: Vec::new(),
-            wasi_permissions: Vec::new(),
-            events: scxml_validator_core::PackageEvents::default(),
         }];
         assert_eq!(
             compile(foreign_world),

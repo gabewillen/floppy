@@ -831,14 +831,6 @@ fn table() -> Vec<Entry> {
             )],
         ),
         covered(
-            "an invoke type is neither the SCXML type nor an absolute service type URI",
-            1,
-            vec![
-                (state(r#"<invoke type="echo"/>"#), "SCXML093"),
-                (state(r#"<invoke type="urn:a b"/>"#), "SCXML093"),
-            ],
-        ),
-        covered(
             "invoke src/srcexpr",
             1,
             vec![(
@@ -902,13 +894,26 @@ fn table() -> Vec<Entry> {
             DECODE_ONLY,
         ),
         never(
-            "invoke env slots must be sorted by slot, each slot once",
+            "invoke env attributes must be sorted by local name",
             1,
             INVARIANT,
         ),
-        never("an invoke env slot is not an env-slots name", 1, DECODE_ONLY),
-        never("an invoke env slot names no valid variable", 1, DECODE_ONLY),
-        never("invoke env slots", 1, COUNT_IMPLIED),
+        never(
+            "an invoke attribute is not in the env namespace",
+            1,
+            INVARIANT,
+        ),
+        never(
+            "an invoke env attribute binds no env-slots name, or one slot twice",
+            1,
+            DECODE_ONLY,
+        ),
+        never(
+            "an invoke env attribute names no valid variable",
+            1,
+            DECODE_ONLY,
+        ),
+        never("invoke env attributes", 1, COUNT_IMPLIED),
         covered(
             "state id",
             1,
@@ -1498,11 +1503,6 @@ fn table() -> Vec<Entry> {
         never("new state initial", 2, INVARIANT),
         never("only history states may omit an id", 1, INVARIANT),
         never("sorted string table is not strictly increasing", 1, INVARIANT),
-        never(
-            "invoke types must list exactly the literal service type URIs",
-            1,
-            INVARIANT,
-        ),
         never("state ancestor", 1, INVARIANT),
         never("state ancestor index distance", 1, INVARIANT),
         never("state ancestor index is empty", 1, INVARIANT),

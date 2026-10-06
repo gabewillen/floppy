@@ -2,16 +2,16 @@
 //! service.
 
 use scxml_compiler_core::{
-    ContentIr, EnvSlotIr, InvokeChildIr, InvokeIr, MachineIr, MarkupContext, XmlNodeIr,
+    ContentIr, InvokeChildIr, InvokeIr, MachineIr, MarkupContext, XmlNodeIr,
 };
 use scxml_types::{
-    DataValue, EventName, InvokeId, NamedValue, SCXML_INVOKE_TYPE_URI, StateId,
-    is_scxml_invoke_type, is_service_type_uri,
+    DataValue, EventName, ExtensionAttribute, InvokeId, NamedValue, NamespaceUri, QualifiedName,
+    SCXML_INVOKE_TYPE_URI, StateId, is_scxml_invoke_type,
 };
 
 use super::{
-    CapabilityErrorKind, DeferredRequest, DocumentKind, EnvBinding, Interpreter,
-    InvocationProgress, InvokedSession, ServiceInvocation, SessionCapabilities,
+    CapabilityErrorKind, DeferredRequest, DocumentKind, Interpreter, Invocation,
+    InvocationProgress, InvokeRequest, InvokedSession, SessionCapabilities,
 };
 use crate::{EffectFailure, Engine, PlatformError};
 
@@ -60,7 +60,7 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
             }
             // `env` slots belong to invoked services; a `typeexpr` that
             // evaluates to the SCXML type with slots bound fails closed.
-            _ if !invoke.env.is_empty() => self.invocation_failed(engine),
+            _ if !invoke.attributes.is_empty() => self.invocation_failed(engine),
             _ => self.start_session_invocation(engine, state, invoke),
         }
     }
@@ -156,7 +156,7 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
         // A host that starts the child later suspends the run right after
         // this effect; the start's result settles when the run continues,
         // exactly as it does here.
-        let result = self.caps.start_invocation(request);
+        let result = self.caps.start_invocation(Invocation::Session(request));
         self.started(
             engine,
             state,
@@ -167,13 +167,14 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
         )
     }
 
-    /// Starts one invoked service (SCXML 6.4): a leaf invocation the host
-    /// runs through the service component bound to exactly `type_uri`. The
-    /// `src`/`srcexpr` text and the `<content>` value are evaluated here and
-    /// handed to the service as data (nothing is loaded or compiled); the
-    /// invoke id and parameters are resolved as for a session. A malformed
-    /// type URI, an unbound one (`unavailable`), or a rejected start fails
-    /// the invocation with `error.execution`.
+    /// Starts one invoked service (SCXML 6.4), which the host runs through
+    /// the service component bound to exactly `type_uri`. The `src`/`srcexpr`
+    /// text and the `<content>` value are evaluated here and handed to the
+    /// service as data (nothing is loaded or compiled); the invoke id and
+    /// parameters are resolved as for a session. A type no component is
+    /// bound to (`unavailable`; SCXML 6.4.1 allows platform-specific types,
+    /// which the host judges) or a rejected start fails the invocation with
+    /// `error.execution`.
     fn start_service_invocation(
         &mut self,
         engine: &mut Engine,
@@ -181,10 +182,6 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
         invoke: &InvokeIr,
         type_uri: String,
     ) -> Result<(), EffectFailure<C::Error>> {
-        // A `typeexpr` may evaluate to text no host can bind.
-        if !is_service_type_uri(&type_uri) {
-            return self.invocation_failed(engine);
-        }
         let source = match self.invoke_text(engine, invoke.src.as_ref(), invoke.srcexpr.as_ref())? {
             CommandResult::Value(value) => value,
             CommandResult::Failed => return Ok(()),
@@ -215,37 +212,45 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
                 CommandResult::Value(arguments) => arguments,
                 CommandResult::Failed => return Ok(()),
             };
-        // `env` slots: each names its variable literally or by an expression
-        // evaluated here, with no current event; the host binds the value
-        // (never seen by the machine or the service) by reference.
-        let mut env = Vec::with_capacity(invoke.env.len());
-        for binding in &invoke.env {
-            let name = match binding {
-                EnvSlotIr::Name { name, .. } => name.clone(),
-                EnvSlotIr::Expr { expr, .. } => {
-                    match self.invoke_text(engine, None, Some(expr))? {
-                        CommandResult::Value(Some(name)) => name,
+        // `env` attributes: each names its variable literally or by an
+        // expression evaluated here, with no current event; the host binds
+        // the value (never seen by the machine or the service) by reference.
+        let mut attributes = Vec::with_capacity(invoke.attributes.len());
+        for attribute in &invoke.attributes {
+            let local = attribute.name.local_name.as_str();
+            let (slot, name) = match local.strip_suffix("expr") {
+                Some(slot) if !slot.is_empty() => {
+                    match self.invoke_text(engine, None, Some(&attribute.value))? {
+                        CommandResult::Value(Some(name)) => (slot, name),
                         CommandResult::Value(None) => return self.invocation_failed(engine),
                         CommandResult::Failed => return Ok(()),
                     }
                 }
+                _ => (local, attribute.value.clone()),
             };
-            env.push(EnvBinding {
-                slot: binding.slot().to_owned(),
-                name,
+            // Machine IR validation admits only the `env` namespace here.
+            let Ok(namespace_uri) = NamespaceUri::new(scxml_types::ENV_NAMESPACE_URI) else {
+                return self.invocation_failed(engine);
+            };
+            attributes.push(ExtensionAttribute {
+                name: QualifiedName {
+                    namespace_uri: Some(namespace_uri),
+                    local_name: slot.to_owned(),
+                },
+                value: name,
             });
         }
-        let request = ServiceInvocation {
+        attributes.sort_by(|first, second| first.name.local_name.cmp(&second.name.local_name));
+        let request = InvokeRequest {
             invoke_id,
             type_uri: type_uri.clone(),
             source,
             content,
             parameters,
-            env,
-            parent_session_id: self.state.session_id().to_owned(),
+            attributes,
             trace_context: self.outbound.clone(),
         };
-        let result = match self.caps.start_service(request) {
+        let result = match self.caps.start_invocation(Invocation::Service(request)) {
             // No service component is bound to the type: the invocation
             // fails, never the session (SCXML 6.4).
             Err(error) if C::error_kind(&error) == CapabilityErrorKind::Unavailable => {

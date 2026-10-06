@@ -9,9 +9,9 @@ use std::collections::BTreeMap;
 use scxml_compiler_core::{MachineIr, SCXML_NAMESPACE, ScriptSourceIr, XmlNodeIr, lower};
 use scxml_engine::interpret::{
     self, BasicHttpSend, CapabilityErrorKind, DocumentKind, ExtensionExecution, ExtensionSnapshot,
-    ForeachItems, InlineBody, InterpretFailure, Interpreter, InvocationContext, InvocationProgress,
-    InvokedSession, LoadedDocument, Observation, SendDisposition, SendTarget, ServiceInvocation,
-    SessionCapabilities, SessionState,
+    ForeachItems, InlineBody, InterpretFailure, Interpreter, Invocation, InvocationContext,
+    InvocationProgress, InvokeRequest, InvokedSession, LoadedDocument, Observation,
+    SendDisposition, SendTarget, SessionCapabilities, SessionState,
 };
 use scxml_engine::{BatchEnd, Command, Engine, EngineStatus, RunFailure, RunReport};
 use scxml_syntax::{SourceId, SourceText, parse_xml};
@@ -101,13 +101,10 @@ struct Mock {
     snapshots: Option<Vec<(scxml_engine::EngineSnapshot, u64)>>,
     /// What `load-extensions` answers (`None`: every namespace loads).
     load_failure: Option<CapabilityErrorKind>,
-    /// The service type URIs the mock host binds.
+    /// The service types the mock host binds.
     bound_services: Vec<String>,
-    /// What `load-services` answers (`None`: every bound component loads;
-    /// an unbound type is no load failure, it fails its own `<invoke>`).
-    service_load_failure: Option<CapabilityErrorKind>,
     /// Every service start the host accepted, in order.
-    services: Vec<ServiceInvocation>,
+    services: Vec<InvokeRequest>,
 }
 
 /// A scripted extension-component answer.
@@ -513,33 +510,6 @@ impl SessionCapabilities for Mock {
         self.load_failure.map_or(Ok(()), |kind| Err(fail(kind)))
     }
 
-    fn load_services(&mut self, type_uris: &[String]) -> Result<(), MockError> {
-        self.calls
-            .push(format!("load-services {}", type_uris.join(" ")));
-        self.service_load_failure
-            .map_or(Ok(()), |kind| Err(fail(kind)))
-    }
-
-    fn start_service(
-        &mut self,
-        request: ServiceInvocation,
-    ) -> Result<InvocationProgress, MockError> {
-        self.calls.push(format!(
-            "start-service:{}:{}",
-            request.invoke_id, request.type_uri
-        ));
-        if !self.bound_services.contains(&request.type_uri) {
-            return Err(fail(CapabilityErrorKind::Unavailable));
-        }
-        let result = if let Some(kind) = self.start_failure {
-            Err(fail(kind))
-        } else {
-            self.services.push(request);
-            Ok(())
-        };
-        self.progress(result)
-    }
-
     fn compile_invocation(
         &mut self,
         source_name: &str,
@@ -559,10 +529,11 @@ impl SessionCapabilities for Mock {
             .map_err(|_| fail(CapabilityErrorKind::InvalidInput))
     }
 
-    fn start_invocation(
-        &mut self,
-        request: InvokedSession,
-    ) -> Result<InvocationProgress, MockError> {
+    fn start_invocation(&mut self, request: Invocation) -> Result<InvocationProgress, MockError> {
+        let request = match request {
+            Invocation::Session(request) => request,
+            Invocation::Service(request) => return self.start_service(request),
+        };
         self.calls
             .push(format!("start-invocation:{}", request.invoke_id));
         self.timeline.push(format!("start:{}", request.invoke_id));
@@ -629,6 +600,26 @@ struct Session {
     caps: Mock,
 }
 
+impl Mock {
+    /// `start-invocation` of an invoked service.
+    fn start_service(&mut self, request: InvokeRequest) -> Result<InvocationProgress, MockError> {
+        self.calls.push(format!(
+            "start-service:{}:{}",
+            request.invoke_id, request.type_uri
+        ));
+        if !self.bound_services.contains(&request.type_uri) {
+            return Err(fail(CapabilityErrorKind::Unavailable));
+        }
+        let result = if let Some(kind) = self.start_failure {
+            Err(fail(kind))
+        } else {
+            self.services.push(request);
+            Ok(())
+        };
+        self.progress(result)
+    }
+}
+
 impl Session {
     fn new(ir: MachineIr, caps: Mock) -> Self {
         Self {
@@ -640,7 +631,6 @@ impl Session {
 
     fn start(&mut self) -> Result<RunReport, RunFailure<MockError>> {
         interpret::load_extensions(&self.engine, &mut self.caps)
-            .and_then(|()| interpret::load_services(&self.engine, &mut self.caps))
             .and_then(|()| interpret::bind_initial_data(&mut self.engine, &mut self.caps, &[]))
             .map_err(|error| RunFailure {
                 error,
@@ -2201,14 +2191,6 @@ fn a_service_invocation_evaluates_its_request_and_loads_nothing() {
     );
     assert_eq!(session.active(), ["s"]);
     assert!(
-        session
-            .caps
-            .calls
-            .contains(&format!("load-services {ECHO}")),
-        "{:?}",
-        session.caps.calls
-    );
-    assert!(
         !session
             .caps
             .calls
@@ -2231,7 +2213,6 @@ fn a_service_invocation_evaluates_its_request_and_loads_nothing() {
             value: text("value")
         }]
     );
-    assert_eq!(request.parent_session_id, "session");
     let image = session
         .engine
         .snapshot(scxml_engine::SnapshotOptions::default())
@@ -2241,7 +2222,7 @@ fn a_service_invocation_evaluates_its_request_and_loads_nothing() {
 }
 
 #[test]
-fn an_unbound_or_malformed_service_type_raises_error_execution() {
+fn an_unbound_or_platform_specific_service_type_raises_error_execution() {
     // `typeexpr` naming a service no host binds (`unavailable`).
     let mut caps = Mock::default();
     caps.texts
@@ -2249,17 +2230,18 @@ fn an_unbound_or_malformed_service_type_raises_error_execution() {
     let session = Session::started(service_machine(r#"<invoke typeexpr="t"/>"#), caps);
     assert_eq!(session.active(), ["exec"]);
     assert!(session.caps.services.is_empty());
-    // `typeexpr` evaluating to text that is no URI: no start is requested.
+    // `typeexpr` evaluating to a platform-specific type that is no URI
+    // (SCXML 6.4.1): the host judges it, and none binds it.
     let mut caps = Mock::default();
     caps.texts.insert("t".into(), Ok(Some("echo".into())));
     let session = Session::started(service_machine(r#"<invoke typeexpr="t"/>"#), caps);
     assert_eq!(session.active(), ["exec"]);
     assert!(
-        !session
+        session
             .caps
             .calls
             .iter()
-            .any(|call| call.starts_with("start-service")),
+            .any(|call| call == "start-service:s.session.0:echo"),
         "{:?}",
         session.caps.calls
     );
@@ -2294,22 +2276,6 @@ fn an_unbound_literal_service_type_raises_error_execution_at_invocation_start() 
         "{:?}",
         session.caps.calls
     );
-}
-
-#[test]
-fn a_failed_service_load_fails_the_session_start() {
-    let mut caps = Mock::default();
-    caps.bound_services.push(ECHO.into());
-    caps.service_load_failure = Some(CapabilityErrorKind::Other);
-    let mut session = Session::new(
-        service_machine(&format!(r#"<invoke type="{ECHO}"/>"#)),
-        caps,
-    );
-    let failure = session
-        .start()
-        .expect_err("load-services fails the start closed");
-    assert_eq!(failure.error.kind, CapabilityErrorKind::Other);
-    assert_eq!(*session.engine.status(), EngineStatus::Ready);
 }
 
 #[test]
@@ -2348,7 +2314,7 @@ fn a_failed_service_raises_error_communication_with_its_invoke_id() {
     let mut session = Session::started(ir, caps);
     session
         .engine
-        .queue_invocation_failure(InvokeId::new("echo").expect("id"), None)
+        .queue_communication_error(None, Some(InvokeId::new("echo").expect("id")), None)
         .expect("a running session queues the failure");
     let queued = session
         .engine
@@ -2370,7 +2336,7 @@ fn a_failed_service_raises_error_communication_with_its_invoke_id() {
             .caps
             .calls
             .contains(&"cancel-invocation:echo".to_owned()),
-        "leaving the invoking state cancels the retired service: {:?}",
+        "leaving the invoking state cancels the failed service: {:?}",
         session.caps.calls
     );
 }
@@ -3243,17 +3209,18 @@ fn a_service_invocation_names_its_env_slot_variables_never_values() {
     let [request] = session.caps.services.as_slice() else {
         panic!("one service start: {:?}", session.caps.services);
     };
+    let env_attribute = |slot: &str, name: &str| scxml_types::ExtensionAttribute {
+        name: scxml_types::QualifiedName {
+            namespace_uri: Some(scxml_types::NamespaceUri::new(env).expect("the env namespace")),
+            local_name: slot.into(),
+        },
+        value: name.into(),
+    };
     assert_eq!(
-        request.env,
+        request.attributes,
         [
-            scxml_engine::interpret::EnvBinding {
-                slot: "baseurl".into(),
-                name: "BASE_URL".into()
-            },
-            scxml_engine::interpret::EnvBinding {
-                slot: "token".into(),
-                name: "TOKEN".into()
-            },
+            env_attribute("baseurl", "BASE_URL"),
+            env_attribute("token", "TOKEN")
         ]
     );
     // An expression that fails fails the invocation.

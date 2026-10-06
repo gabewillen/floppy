@@ -10,8 +10,8 @@
 
 use scxml_compiler_core::{ScriptSourceIr, XmlNodeIr};
 use scxml_types::{
-    AssignPlacement, AssignSource, DataInitializer, DataValue, Event, FormValueSource, NamedValue,
-    SendId, SendRequest, StateId, TraceContext,
+    AssignPlacement, AssignSource, DataInitializer, DataValue, Event, ExtensionAttribute,
+    FormValueSource, NamedValue, SendId, SendRequest, StateId, TraceContext,
 };
 
 use super::InterpretFailure;
@@ -227,12 +227,13 @@ pub struct InvokedSession {
 }
 
 /// One evaluated `<invoke>` of an invoked service the interpreter asks the
-/// host to start (WIT `service-invocation`, SCXML 6.4).
+/// host to start (WIT `invoke-request`, SCXML 6.4).
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ServiceInvocation {
+pub struct InvokeRequest {
     /// Interpreter-owned invoke id.
     pub invoke_id: String,
-    /// The exact service type URI ([`scxml_types::is_service_type_uri`]).
+    /// The `<invoke>`'s type (or evaluated `typeexpr`) exactly as authored
+    /// or evaluated; the host routes by it byte for byte.
     pub type_uri: String,
     /// Evaluated `src`/`srcexpr` text: data for the service, never loaded.
     pub source: Option<String>,
@@ -241,25 +242,23 @@ pub struct ServiceInvocation {
     /// `<param>` and `namelist` entries evaluated in the invoking session
     /// (SCXML 6.4.2), in document order.
     pub parameters: Vec<NamedValue>,
-    /// The `env` slots the `<invoke>` binds, sorted by slot: each the
-    /// variable whose value the host binds to the slot as an opaque
-    /// reference for the whole invocation. Never a value.
-    pub env: Vec<EnvBinding>,
-    /// The invoking session's `_sessionid`.
-    pub parent_session_id: String,
+    /// The `<invoke>`'s `env` attributes, sorted by slot: `env:<slot>` with
+    /// the name of the variable whose value the host binds to the slot as
+    /// an opaque reference for the whole invocation (`env:<slot>expr`
+    /// evaluated when the `<invoke>` ran). Never a value.
+    pub attributes: Vec<ExtensionAttribute>,
     /// Carrier of the invoking effect batch. Never changes semantics.
     pub trace_context: Option<TraceContext>,
 }
 
-/// One `env` slot an invoked service's `<invoke>` binds: the slot and the
-/// name of the variable (evaluated from `env:<slot>expr` when the
-/// `<invoke>` ran). Names are not secrets.
+/// What one `<invoke>` asks the host to start (WIT `invocation`, SCXML
+/// 6.4).
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct EnvBinding {
-    /// The slot.
-    pub slot: String,
-    /// The variable name.
-    pub name: String,
+pub enum Invocation {
+    /// An invoked SCXML session.
+    Session(InvokedSession),
+    /// An invoked service.
+    Service(InvokeRequest),
 }
 
 /// Capabilities one interpreted session executes through.
@@ -607,45 +606,22 @@ pub trait SessionCapabilities {
         source: &str,
     ) -> Result<Vec<u8>, Self::Error>;
 
-    /// Constructs one invoked session and has it started: inside this call
+    /// Starts one invocation: inside this call
     /// ([`InvocationProgress::Completed`]), or by the host once the run
     /// suspends right after this effect ([`InvocationProgress::Deferred`],
     /// what both shipped hosts do; the result comes back through
-    /// [`super::Interpreter::continuing`]).
+    /// [`super::Interpreter::continuing`]). An invoked session is
+    /// constructed and started; an invoked service runs in the service
+    /// component the host binds to its exact type.
     ///
     /// # Errors
     ///
     /// [`CapabilityErrorKind::InvalidInput`] when the child is rejected at
-    /// load (the invocation fails with `error.execution`); everything else
-    /// fails the session.
-    fn start_invocation(
-        &mut self,
-        request: InvokedSession,
-    ) -> Result<InvocationProgress, Self::Error>;
-
-    /// Loads the service component of every service type URI in
-    /// `type_uris` (SCXML 6.4): the Machine IR's exact, sorted, unique,
-    /// non-empty `invoke_types`. Called once per session by
-    /// [`load_services`](super::load_services), before data binding.
-    ///
-    /// # Errors
-    ///
-    /// Any error is fatal: the session must not start.
-    fn load_services(&mut self, type_uris: &[String]) -> Result<(), Self::Error>;
-
-    /// Starts one invoked service, inside this call or deferred as
-    /// [`Self::start_invocation`].
-    ///
-    /// # Errors
-    ///
-    /// [`CapabilityErrorKind::Unavailable`] when no service component is
-    /// bound to the type, and the recoverable kinds when the service
-    /// rejected its start (each fails the invocation with
-    /// `error.execution`); everything else fails the session.
-    fn start_service(
-        &mut self,
-        request: ServiceInvocation,
-    ) -> Result<InvocationProgress, Self::Error>;
+    /// load or the service rejected its start, and
+    /// [`CapabilityErrorKind::Unavailable`] for a service type no component
+    /// is bound to (each fails the invocation with `error.execution`);
+    /// everything else fails the session.
+    fn start_invocation(&mut self, request: Invocation) -> Result<InvocationProgress, Self::Error>;
 
     /// Cancels and drops one invocation (an invoked session or service), now or deferred as
     /// [`Self::start_invocation`]; an absent id succeeds.

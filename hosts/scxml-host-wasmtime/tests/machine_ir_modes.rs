@@ -737,7 +737,6 @@ fn two_block_machine() -> MachineIr {
         data: Vec::new(),
         scripts: Vec::new(),
         extension_namespaces: Vec::new(),
-        invoke_types: Vec::new(),
     }
 }
 
@@ -1112,7 +1111,6 @@ mod guard_ir {
             data: Vec::new(),
             scripts: Vec::new(),
             extension_namespaces: Vec::new(),
-            invoke_types: Vec::new(),
         }
     }
 }

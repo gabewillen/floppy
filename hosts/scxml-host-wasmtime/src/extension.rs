@@ -49,8 +49,7 @@
 //!   ([`ExtensionObserver::value_missing`]). An element's references are its
 //!   own: another element, of the same or another namespace, never receives
 //!   them. Extension components import no WASI interface at all: this host
-//!   links none into them, and refuses a package that declares one
-//!   (`wasi-permissions`) when it is bound or resolved.
+//!   links none into them, so one that imports any fails to instantiate.
 //! * **Outbound HTTP** — `stateforward:scxml/outbound-http` is deny by default:
 //!   without an embedder-supplied transport
 //!   ([`ExtensionComponents::with_outbound_http`]) every request is refused
@@ -106,6 +105,10 @@ use crate::{
 };
 
 pub mod extension_bindings {
+    // `outbound-http.fetch` is an `async func` (WASI 0.3): the host
+    // implements it concurrently and drives every extension component call
+    // through the async ABI to completion before it returns, so `execute`
+    // stays synchronous executable content.
     wasmtime::component::bindgen!({
         path: "../../crates/scxml-wit/wit/scxml",
         world: "executable-content-extension",
@@ -113,6 +116,8 @@ pub mod extension_bindings {
             "stateforward:scxml/types": crate::bindings::stateforward::scxml::types,
             "stateforward:scxml/telemetry": crate::bindings::stateforward::scxml::telemetry,
         },
+        exports: { default: async },
+        require_store_data_send: true,
     });
 }
 
@@ -403,11 +408,6 @@ pub struct ExtensionPackage {
     /// reach (canonicalized like an [`crate::HttpAllowlist`]); binding the
     /// package consents to them.
     pub http_origins: Vec<String>,
-    /// The WASI interfaces its extension component may import. Extension
-    /// elements are synchronous executable content and WASI belongs to
-    /// invoked services, so a binding whose package declares any fails
-    /// closed ([`ArtifactError::WasiExtensionUnsupported`]).
-    pub wasi_permissions: Vec<scxml_types::WasiPermission>,
     /// The schema bytes (at most [`MAX_NAMESPACE_SCHEMA_BYTES`]).
     pub schema: Vec<u8>,
 }
@@ -637,15 +637,12 @@ impl ExtensionComponents {
 /// namespace, a schema within [`MAX_NAMESPACE_SCHEMA_BYTES`], at most
 /// [`MAX_DECLARED_ITEMS`] valid `env-slots` and `http-origins` (the latter
 /// canonicalized like an [`crate::HttpAllowlist`]), a URI not in `bound`,
-/// fewer than [`MAX_EXTENSION_COMPONENTS`] bindings, and no declared WASI
-/// permission.
+/// and fewer than [`MAX_EXTENSION_COMPONENTS`] bindings.
 ///
 /// Extension components get no WASI interface, by rule: an extension element
 /// is executable content, run synchronously inside a microstep, and
 /// anything asynchronous, I/O-bound, or long-running belongs in an invoked
-/// service, the only component WASI is linked into. A package that declares
-/// a WASI permission is refused ([`ArtifactError::WasiExtensionUnsupported`])
-/// rather than run without it.
+/// service, the only component WASI is linked into.
 pub(crate) fn check_binding<'a>(
     package: &ExtensionPackage,
     component: &AuthenticatedComponent,
@@ -672,9 +669,6 @@ pub(crate) fn check_binding<'a>(
         || bound.any(|uri| uri == namespace_uri)
     {
         return Err(ArtifactError::NamespaceBinding.into());
-    }
-    if !package.wasi_permissions.is_empty() {
-        return Err(ArtifactError::WasiExtensionUnsupported.into());
     }
     Ok(())
 }
@@ -786,9 +780,10 @@ pub(crate) struct Executed {
     pub(crate) external: Vec<WitEvent>,
 }
 
-/// One `execute` call in progress inside an extension component store.
+/// One `execute` call in progress inside an extension component store. The
+/// session's lent state is not store data (it is the session thread's):
+/// it waits in [`LENT`] for the call.
 struct ExecutionCall {
-    lent: Lent,
     event: Option<scxml_types::Event>,
     internal: Vec<WitEvent>,
     external: Vec<WitEvent>,
@@ -796,6 +791,35 @@ struct ExecutionCall {
     snapshots: u32,
     /// The values this call's references stand for, by reference.
     references: Vec<(u32, String)>,
+}
+
+std::thread_local! {
+    /// The session state lent to the `execute` call running on this thread,
+    /// innermost last.
+    static LENT: std::cell::RefCell<Vec<Lent>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Runs `body` with the session state lent to the `execute` call running on
+/// this thread.
+///
+/// # Errors
+///
+/// `unavailable` outside an `execute` call (or re-entered from inside one),
+/// and `body`'s error.
+fn with_lent<T>(
+    body: impl FnOnce(&mut Lent) -> Result<T, ComponentError>,
+) -> Result<T, ComponentError> {
+    let unavailable = || {
+        component_error(
+            ErrorCode::Unavailable,
+            "session capabilities are available only during execution",
+        )
+    };
+    LENT.with(|lent| {
+        let mut stack = lent.try_borrow_mut().map_err(|_| unavailable())?;
+        let lent = stack.last_mut().ok_or_else(unavailable)?;
+        body(lent)
+    })
 }
 
 /// Store data of one extension component instance.
@@ -980,14 +1004,16 @@ impl ExtensionInstance {
         store.limiter(|state| &mut state.limits);
         runtime.call_budget.share(&mut store);
         store.set_fuel(runtime.call_fuel)?;
-        let guest = extension_bindings::ExecutableContentExtension::instantiate(
-            &mut store,
-            component,
-            runtime.linker,
+        let guest = crate::service::block_on(
+            extension_bindings::ExecutableContentExtension::instantiate_async(
+                &mut store,
+                component,
+                runtime.linker,
+            ),
         )?;
         let api = guest.stateforward_scxml_executable_content_extension_api();
         store.set_fuel(runtime.call_fuel)?;
-        if api.call_namespace_uri(&mut store)? != namespace_uri {
+        if crate::service::block_on(api.call_namespace_uri(&mut store))? != namespace_uri {
             return Err(HostError::Component(
                 "extension-component-uri-mismatch".into(),
             ));
@@ -1008,11 +1034,13 @@ impl ExtensionInstance {
             call_fuel: runtime.call_fuel,
         };
         instance.store.set_fuel(instance.call_fuel)?;
-        match instance
-            .guest
-            .stateforward_scxml_executable_content_extension_api()
-            .call_initialize(&mut instance.store)
-        {
+        let initialized = crate::service::block_on(
+            instance
+                .guest
+                .stateforward_scxml_executable_content_extension_api()
+                .call_initialize(&mut instance.store),
+        );
+        match initialized {
             Ok(Ok(())) => Ok(instance),
             Ok(Err(_)) => {
                 // `shutdown` is idempotent by contract and runs on every
@@ -1085,20 +1113,28 @@ impl ExtensionInstance {
             }
         }
         self.store.data_mut().call = Some(ExecutionCall {
-            lent,
             event,
             internal: Vec::new(),
             external: Vec::new(),
             snapshots: 0,
             references,
         });
+        LENT.with_borrow_mut(|stack| stack.push(lent));
         let result = self.store.set_fuel(self.call_fuel).and_then(|()| {
-            self.guest
-                .stateforward_scxml_executable_content_extension_api()
-                .call_execute(&mut self.store, element, context, &slots)
+            crate::service::block_on(
+                self.guest
+                    .stateforward_scxml_executable_content_extension_api()
+                    .call_execute(&mut self.store, element, context, &slots),
+            )
         });
         // The session's state always returns to the machine store, whatever
         // the extension component did.
+        let lent = LENT.with_borrow_mut(Vec::pop).unwrap_or_else(|| Lent {
+            data_model: None,
+            links: None,
+            configuration: Vec::new(),
+            image: None,
+        });
         let Some(call) = self.store.data_mut().call.take() else {
             // Unreachable by construction (only this function sets and takes
             // the call); fail closed without losing the session's state.
@@ -1107,12 +1143,7 @@ impl ExtensionInstance {
                     ErrorCode::Platform,
                     "extension component execution state was lost",
                 )),
-                Lent {
-                    data_model: None,
-                    links: None,
-                    configuration: Vec::new(),
-                    image: None,
-                },
+                lent,
             );
         };
         let outcome = match result {
@@ -1135,7 +1166,7 @@ impl ExtensionInstance {
                 internal: call.internal,
                 external: call.external,
             }),
-            call.lent,
+            lent,
         )
     }
 
@@ -1149,9 +1180,11 @@ impl ExtensionInstance {
             Operation::HostWasmtimeExtensionShutdown,
         );
         let result = self.store.set_fuel(self.call_fuel).and_then(|()| {
-            self.guest
-                .stateforward_scxml_executable_content_extension_api()
-                .call_shutdown(&mut self.store)
+            crate::service::block_on(
+                self.guest
+                    .stateforward_scxml_executable_content_extension_api()
+                    .call_shutdown(&mut self.store),
+            )
         });
         if matches!(result, Ok(Ok(()))) {
             span.event(SignalEvent::TransformationCompleted);
@@ -1258,32 +1291,34 @@ impl crate::bindings::stateforward::scxml::types::Host for ExtensionStoreData {}
 
 impl data_model_host::Host for ExtensionStoreData {
     fn evaluate(&mut self, expression: String) -> Result<WitDataValue, ComponentError> {
-        let call = self.call()?;
-        let model =
-            call.lent.data_model.as_deref_mut().ok_or_else(|| {
+        let event = self.call()?.event.clone();
+        with_lent(|lent| {
+            let model = lent.data_model.as_deref_mut().ok_or_else(|| {
                 component_error(ErrorCode::Unavailable, "no data model is linked")
             })?;
-        model
-            .evaluate_value(&expression, call.event.as_ref())
-            .map(wit_value)
-            .map_err(failure_code)
+            model
+                .evaluate_value(&expression, event.as_ref())
+                .map(wit_value)
+                .map_err(failure_code)
+        })
     }
 
     fn assign(&mut self, location: String, value: WitDataValue) -> Result<(), ComponentError> {
         let value = native_value(value)?;
-        let call = self.call()?;
-        let model =
-            call.lent.data_model.as_deref_mut().ok_or_else(|| {
+        let event = self.call()?.event.clone();
+        with_lent(|lent| {
+            let model = lent.data_model.as_deref_mut().ok_or_else(|| {
                 component_error(ErrorCode::Unavailable, "no data model is linked")
             })?;
-        model
-            .assign(
-                &location,
-                &scxml_types::AssignSource::Value(value),
-                &scxml_types::AssignPlacement::ReplaceChildren,
-                call.event.as_ref(),
-            )
-            .map_err(failure_code)
+            model
+                .assign(
+                    &location,
+                    &scxml_types::AssignSource::Value(value),
+                    &scxml_types::AssignPlacement::ReplaceChildren,
+                    event.as_ref(),
+                )
+                .map_err(failure_code)
+        })
     }
 }
 
@@ -1295,7 +1330,7 @@ impl execution_host::Host for ExtensionStoreData {
     }
 
     fn send(&mut self, request: SendRequest) -> Result<(), ComponentError> {
-        let call = self.call()?;
+        self.call()?;
         // Only the SCXML Event I/O Processor's sends route here exactly as
         // `<send>` routes them; an extension component sends through no other
         // processor.
@@ -1307,11 +1342,13 @@ impl execution_host::Host for ExtensionStoreData {
                 "an extension component sends only through the SCXML Event I/O Processor",
             ));
         }
-        let links =
-            call.lent.links.as_deref_mut().ok_or_else(|| {
+        let target = with_lent(|lent| {
+            let links = lent.links.as_deref_mut().ok_or_else(|| {
                 component_error(ErrorCode::Unavailable, "no I/O processor is linked")
             })?;
-        match links.classify_target(request.target.as_deref()) {
+            Ok(links.classify_target(request.target.as_deref()))
+        })?;
+        match target {
             SendTarget::Internal => {
                 // As `<send>` (SCXML 6.2.1: 'delay' "Must not occur ...
                 // when the attribute 'target' has the value \"_internal\"",
@@ -1348,7 +1385,13 @@ impl execution_host::Host for ExtensionStoreData {
                 "no live session answers the send target",
             )),
             SendTarget::Local | SendTarget::Parent | SendTarget::Invocation(_) => {
-                match links.send(&request)? {
+                let disposition = with_lent(|lent| {
+                    let links = lent.links.as_deref_mut().ok_or_else(|| {
+                        component_error(ErrorCode::Unavailable, "no I/O processor is linked")
+                    })?;
+                    links.send(&request)
+                })?;
+                match disposition {
                     crate::bindings::stateforward::scxml::machine_capability_types::SendDisposition::EnqueueExternal(event) => {
                         self.queue(event, EventQueue::External)
                     }
@@ -1366,12 +1409,13 @@ impl execution_host::Host for ExtensionStoreData {
     }
 
     fn cancel(&mut self, send_id: String) -> Result<(), ComponentError> {
-        let call = self.call()?;
-        let links =
-            call.lent.links.as_deref_mut().ok_or_else(|| {
+        self.call()?;
+        with_lent(|lent| {
+            let links = lent.links.as_deref_mut().ok_or_else(|| {
                 component_error(ErrorCode::Unavailable, "no I/O processor is linked")
             })?;
-        links.cancel(&send_id, None)
+            links.cancel(&send_id, None)
+        })
     }
 
     fn log(&mut self, level: LogLevel, _message: String) {
@@ -1391,16 +1435,21 @@ impl execution_host::Host for ExtensionStoreData {
     }
 
     fn in_state(&mut self, state_id: String) -> bool {
-        self.call
-            .as_ref()
-            .is_some_and(|call| call.lent.configuration.contains(&state_id))
+        self.call.is_some()
+            && with_lent(|lent| Ok(lent.configuration.contains(&state_id))).unwrap_or(false)
     }
 
     fn now_ms(&mut self) -> u64 {
-        self.call
-            .as_ref()
-            .and_then(|call| call.lent.links.as_deref())
-            .map_or(0, crate::session_host::SessionLinks::now_ms)
+        if self.call.is_none() {
+            return 0;
+        }
+        with_lent(|lent| {
+            Ok(lent
+                .links
+                .as_deref()
+                .map_or(0, crate::session_host::SessionLinks::now_ms))
+        })
+        .unwrap_or(0)
     }
 }
 
@@ -1421,13 +1470,6 @@ impl session_snapshot_host::Host for ExtensionStoreData {
                 "an `execute` call takes at most 64 session snapshots",
             ));
         }
-        let (Some(image), Some(links)) = (call.lent.image.as_ref(), call.lent.links.as_deref_mut())
-        else {
-            return Err(component_error(
-                ErrorCode::Unavailable,
-                "the session snapshot is not available for this `execute` call",
-            ));
-        };
         call.snapshots = call.snapshots.saturating_add(1);
         let span =
             scxml_telemetry::observe(Module::HostWasmtime, Operation::HostWasmtimeSessionSnapshot);
@@ -1443,16 +1485,35 @@ impl session_snapshot_host::Host for ExtensionStoreData {
                 session_snapshot_host::Section::Transitions => scxml_snapshot::Section::Transitions,
             })
             .collect();
-        let result = crate::session_host::extension_document(
-            image,
-            &exclude,
-            crate::session_host::ExtensionState {
-                data_model: call.lent.data_model.as_mut(),
-                links,
-                internal: &call.internal,
-                external: &call.external,
-            },
-        );
+        let internal = &call.internal;
+        let external = &call.external;
+        let result = with_lent(|lent| {
+            let (Some(image), Some(links)) = (lent.image.as_ref(), lent.links.as_deref_mut())
+            else {
+                return Err(component_error(
+                    ErrorCode::Unavailable,
+                    "the session snapshot is not available for this `execute` call",
+                ));
+            };
+            Ok(crate::session_host::extension_document(
+                image,
+                &exclude,
+                crate::session_host::ExtensionState {
+                    data_model: lent.data_model.as_mut(),
+                    links,
+                    internal,
+                    external,
+                },
+            ))
+        });
+        let result = match result {
+            Ok(result) => result,
+            Err(error) => {
+                span.event(SignalEvent::InputRejected);
+                span.fail(ErrorCategory::Unsupported);
+                return Err(error);
+            }
+        };
         match result {
             Ok(bytes) => {
                 span.event(SignalEvent::ArtifactProduced);
@@ -1939,43 +2000,39 @@ pub(crate) fn settle_response(
     })
 }
 
-impl outbound_http::Host for ExtensionStoreData {
-    fn fetch(
-        &mut self,
+impl outbound_http::Host for ExtensionStoreData {}
+
+/// An extension component lowers `fetch` synchronously (its `execute` is
+/// synchronous executable content): the host performs the admitted request
+/// before it answers, blocking `execute`.
+#[allow(
+    clippy::unused_async_trait_impl,
+    reason = "the WIT `fetch` is an `async func`; an extension's request completes before it returns"
+)]
+impl<U> outbound_http::HostWithStore<U> for wasmtime::component::HasSelf<ExtensionStoreData> {
+    async fn fetch(
+        accessor: &wasmtime::component::Accessor<U, Self>,
         request: outbound_http::HttpRequest,
     ) -> Result<outbound_http::HttpResponse, ComponentError> {
-        self.call()?;
-        let span = scxml_telemetry::observe(
-            Module::HostWasmtime,
-            Operation::HostWasmtimeExtensionHttpFetch,
-        );
-        match self.fetch_granted(request) {
-            Ok(response) => {
-                span.event(SignalEvent::TransformationCompleted);
-                Ok(response)
+        accessor.with(|mut access| {
+            let data = access.get();
+            data.call()?;
+            let span = scxml_telemetry::observe(
+                Module::HostWasmtime,
+                Operation::HostWasmtimeExtensionHttpFetch,
+            );
+            match data.fetch_granted(request) {
+                Ok(response) => {
+                    span.event(SignalEvent::TransformationCompleted);
+                    Ok(response)
+                }
+                Err((error, category)) => {
+                    span.event(SignalEvent::InputRejected);
+                    span.fail(category);
+                    Err(error)
+                }
             }
-            Err((error, category)) => {
-                span.event(SignalEvent::InputRejected);
-                span.fail(category);
-                Err(error)
-            }
-        }
-    }
-
-    /// Executable content is synchronous: an extension component never
-    /// starts a deferred request.
-    fn begin(&mut self, _request: outbound_http::HttpRequest) -> Result<u64, ComponentError> {
-        Err(component_error(
-            ErrorCode::Unavailable,
-            "deferred outbound HTTP is offered to invoked services only",
-        ))
-    }
-
-    fn take(
-        &mut self,
-        _ticket: u64,
-    ) -> Option<Result<outbound_http::HttpResponse, ComponentError>> {
-        None
+        })
     }
 }
 

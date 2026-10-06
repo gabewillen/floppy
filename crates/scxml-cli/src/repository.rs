@@ -28,11 +28,9 @@
 //!   tags).
 //! * The manifest (`namespaces/<name>/package/<name>.extension.json`, or
 //!   `services/<name>/package/<name>.service.json`), its schema
-//!   (`schema-artifact`, relative to the manifest; optional for a service),
-//!   and the event schema files its `events` names come from
-//!   `raw.githubusercontent.com` at that commit, never at the tag; the
-//!   schema and event schema files must match the digests the manifest
-//!   declares.
+//!   (`schema-artifact`, relative to the manifest; optional for a service)
+//!   come from `raw.githubusercontent.com` at that commit, never at the tag;
+//!   the schema must match the digest the manifest declares.
 //! * The component is the release asset the manifest's `extension-artifact`
 //!   or `service-artifact` names, from the release of `<tag>`,
 //!   authenticated by the SHA-256 that release's `SHA256SUMS` asset lists for
@@ -1016,46 +1014,8 @@ impl Repository {
             schema_limit,
             || self.raw_url(&uri, &entry.commit, &parsed.schema_artifact),
         )?;
-        let events = self.event_files(namespace_uri, &uri, &entry.commit, &parsed.events)?;
-        let package = verify_package(namespace_uri, &manifest, &schema, &events, &entry)?;
+        let package = verify_package(namespace_uri, &manifest, &schema, &entry)?;
         Ok((package, entry))
-    }
-
-    /// The schema files a repository package's `events` names, at `commit`:
-    /// each from the cache, or (online) fetched and checked against the
-    /// SHA-256 the pinned manifest declares for it.
-    fn event_files(
-        &self,
-        namespace_uri: &str,
-        uri: &RepositoryUri,
-        commit: &str,
-        events: &scxml_validator_core::PackageEvents,
-    ) -> Result<std::collections::BTreeMap<String, Vec<u8>>, String> {
-        events
-            .check("repository package")
-            .map_err(|error| format!("{} `{namespace_uri}`: {error}", label(namespace_uri)))?;
-        let mut files = std::collections::BTreeMap::new();
-        for event in events.emits.iter().chain(&events.accepts) {
-            let file = event.schema_file();
-            if files.contains_key(file) {
-                continue;
-            }
-            if !valid_relative(file) {
-                return Err(format!(
-                    "{} `{namespace_uri}`: an `events` schema file is not a plain relative path",
-                    label(namespace_uri)
-                ));
-            }
-            let bytes = self.pinned(
-                namespace_uri,
-                "event schema",
-                &event.schema_sha256,
-                crate::extensions::MAX_EVENT_SCHEMA_BYTES,
-                || self.raw_url(uri, commit, file),
-            )?;
-            files.insert(file.to_owned(), bytes);
-        }
-        Ok(files)
     }
 
     /// First use of `namespace_uri`: resolves its tag, fetches and verifies
@@ -1086,7 +1046,6 @@ impl Repository {
             schema_limit,
             "*/*",
         )?;
-        let events = self.event_files(namespace_uri, uri, &commit, &parsed.events)?;
         let entry = Entry {
             uri: namespace_uri.to_owned(),
             commit,
@@ -1095,7 +1054,7 @@ impl Repository {
             component_sha256: None,
         };
         // Only a verified package is stored and pinned.
-        verify_package(namespace_uri, &manifest, &schema, &events, &entry)?;
+        verify_package(namespace_uri, &manifest, &schema, &entry)?;
         self.cache.store(&manifest)?;
         self.cache.store(&schema)?;
         self.cache.write_entry(&entry)?;
@@ -1223,21 +1182,20 @@ impl Repository {
             || self.raw_url(&uri, &entry.commit, &uri.manifest_name()),
         )?;
         let parsed = parse_service_manifest(service_uri, &manifest)?;
-        let (schema, events) = self.service_files(service_uri, &uri, &entry.commit, &parsed)?;
-        let package = verify_service(service_uri, &manifest, schema.as_deref(), &events, &entry)?;
+        let schema = self.service_schema(service_uri, &uri, &entry.commit, &parsed)?;
+        let package = verify_service(service_uri, &manifest, schema.as_deref(), &entry)?;
         Ok((package, entry))
     }
 
-    /// The optional schema and the event schema files of a repository
-    /// service at `commit`, each checked against the digest its manifest
-    /// declares.
-    fn service_files(
+    /// The optional schema of a repository service at `commit`, checked
+    /// against the digest its manifest declares.
+    fn service_schema(
         &self,
         service_uri: &str,
         uri: &RepositoryUri,
         commit: &str,
         manifest: &scxml_validator_core::ServicePackageManifest,
-    ) -> Result<ServiceFiles, String> {
+    ) -> Result<Option<Vec<u8>>, String> {
         check_service_manifest(service_uri, manifest)?;
         let schema = match (&manifest.schema_artifact, &manifest.schema_sha256) {
             (Some(artifact), Some(digest)) => Some(self.pinned(
@@ -1249,8 +1207,7 @@ impl Repository {
             )?),
             _ => None,
         };
-        let events = self.event_files(service_uri, uri, commit, &manifest.events)?;
-        Ok((schema, events))
+        Ok(schema)
     }
 
     /// First use of `service_uri`: resolves its tag, fetches and verifies
@@ -1264,7 +1221,7 @@ impl Repository {
             "*/*",
         )?;
         let parsed = parse_service_manifest(service_uri, &manifest)?;
-        let (schema, events) = self.service_files(service_uri, uri, &commit, &parsed)?;
+        let schema = self.service_schema(service_uri, uri, &commit, &parsed)?;
         let entry = Entry {
             uri: service_uri.to_owned(),
             commit,
@@ -1273,7 +1230,7 @@ impl Repository {
             component_sha256: None,
         };
         // Only a verified package is stored and pinned.
-        verify_service(service_uri, &manifest, schema.as_deref(), &events, &entry)?;
+        verify_service(service_uri, &manifest, schema.as_deref(), &entry)?;
         self.cache.store(&manifest)?;
         self.cache.write_entry(&entry)?;
         Ok(entry)
@@ -1336,10 +1293,6 @@ impl Repository {
     }
 }
 
-/// A repository service's optional schema bytes and its event schema files
-/// by authored path.
-type ServiceFiles = (Option<Vec<u8>>, std::collections::BTreeMap<String, Vec<u8>>);
-
 /// A resolved repository service: its package and its component's exact
 /// bytes and SHA-256.
 pub(crate) struct ResolvedService {
@@ -1401,13 +1354,12 @@ fn check_service_manifest(
     Ok(())
 }
 
-/// Verifies a repository service's manifest, optional schema, and event
-/// schemas against the pinned entry and each other, and returns its package.
+/// Verifies a repository service's manifest and optional schema against the
+/// pinned entry and each other, and returns its package.
 fn verify_service(
     service_uri: &str,
     manifest_bytes: &[u8],
     schema: Option<&[u8]>,
-    event_files: &std::collections::BTreeMap<String, Vec<u8>>,
     entry: &Entry,
 ) -> Result<ServicePackage, String> {
     if sha256_hex(manifest_bytes) != entry.manifest_sha256 {
@@ -1420,10 +1372,6 @@ fn verify_service(
     manifest.verify(schema).map_err(|error| {
         format!("repository service `{service_uri}`: its package does not verify: {error}")
     })?;
-    let events = manifest
-        .events
-        .resolve("repository package", event_files)
-        .map_err(|error| format!("repository service `{service_uri}`: {error}"))?;
     let tag = RepositoryUri::parse_service(service_uri)
         .map(|uri| uri.tag)
         .unwrap_or_default();
@@ -1433,7 +1381,6 @@ fn verify_service(
             commit: entry.commit.clone(),
         },
         manifest,
-        events,
     })
 }
 
@@ -1517,7 +1464,6 @@ fn verify_package(
     namespace_uri: &str,
     manifest_bytes: &[u8],
     schema_bytes: &[u8],
-    event_files: &std::collections::BTreeMap<String, Vec<u8>>,
     entry: &Entry,
 ) -> Result<Package, String> {
     let manifest = scxml_validator_core::ExtensionPackageManifest::from_json(manifest_bytes)
@@ -1539,10 +1485,6 @@ fn verify_package(
             "repository namespace `{namespace_uri}`: its schema's targetNamespace is not this URI"
         ));
     }
-    let events = manifest
-        .events
-        .resolve("repository package", event_files)
-        .map_err(|error| format!("repository namespace `{namespace_uri}`: {error}"))?;
     let tag = RepositoryUri::parse(namespace_uri)
         .map(|uri| uri.tag)
         .unwrap_or_default();
@@ -1553,7 +1495,6 @@ fn verify_package(
         },
         manifest,
         schema,
-        events,
     })
 }
 

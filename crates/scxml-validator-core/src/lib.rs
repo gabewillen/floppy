@@ -62,14 +62,12 @@ mod event_attributes;
 mod graph;
 mod invoke_types;
 mod lowering;
-mod package_events;
 mod refine;
 mod request;
 mod schema;
 mod schema_values;
 mod script_check;
 mod semantic;
-mod service_events;
 mod service_package;
 pub mod spans;
 mod text_direction;
@@ -98,10 +96,6 @@ pub use graph::{
     graph_work_budget,
 };
 pub use lowering::bounds as lowering_bounds;
-pub use package_events::{
-    DeclaredEvent, DeclaredEvents, MAX_DECLARED_EVENT_NAME_BYTES, MAX_DECLARED_EVENTS,
-    PackageEvent, PackageEvents, is_declared_event_name,
-};
 pub use request::{
     ComponentRequestBoundary, MAX_COMPONENT_METADATA_BYTES, MAX_COMPONENT_PACKAGE_COUNT,
     MAX_COMPONENT_REQUEST_BYTES, MAX_COMPONENT_SCHEMA_BYTES, MAX_COMPONENT_SCHEMA_COUNT,
@@ -132,16 +126,6 @@ pub use service_package::{
 };
 pub use xml_error::{xml_error_code, xml_error_diagnostic};
 
-/// What the validator knows of one bound invoked service: its package's
-/// declared `env` slots and event contract.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct BoundService {
-    /// The `env` slots an `<invoke>` of it may bind.
-    pub env_slots: Vec<String>,
-    /// Its declared event contract, every schema resolved.
-    pub events: DeclaredEvents,
-}
-
 /// Schema execution mode for one validation run.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum SchemaMode {
@@ -166,10 +150,10 @@ pub struct Validator<R, B> {
     /// The `env` slots each bound extension namespace's package declares
     /// (`SCXML083`); `None` judges no slot.
     extension_slots: Option<std::collections::BTreeMap<String, Vec<String>>>,
-    /// The invoked services the caller's service packages bind, by exact
-    /// type URI (`SCXML094`, `SCXML083` on `<invoke>`, `SCXML095`,
-    /// `SCXML096`); `None` judges no binding.
-    services: Option<std::collections::BTreeMap<String, BoundService>>,
+    /// The `env` slots of each invoked service the caller's service packages
+    /// bind, by exact type URI (`SCXML094`, `SCXML083` on `<invoke>`);
+    /// `None` judges no binding.
+    services: Option<std::collections::BTreeMap<String, Vec<String>>>,
     /// The bytes of each schema file an `event:schema` references, keyed by
     /// the reference's resource part as authored.
     event_schema_resources: EventSchemaResources,
@@ -222,18 +206,16 @@ impl<R, B> Validator<R, B> {
         self
     }
 
-    /// The invoked services the caller's service packages bind, by exact
-    /// type URI: a literal `<invoke type>` naming a service none of them
-    /// binds is `SCXML094`; an `env` attribute on an `<invoke>` of a bound
-    /// service must name a slot its package declares (`SCXML083`); and a
-    /// transition handling an event the service declares is checked against
-    /// its declared schema (`SCXML095`, `SCXML096`). Without this call no
-    /// binding is judged (`SCXML093`, a malformed type, is judged either
-    /// way).
+    /// The `env` slots of each invoked service the caller's service packages
+    /// bind, by exact type URI: a literal `<invoke type>` naming a service
+    /// none of them binds is `SCXML094`, and an `env` attribute on an
+    /// `<invoke>` of a bound service must name a slot its package declares
+    /// (`SCXML083`). Without this call no binding is judged (`SCXML093`, a
+    /// type that is not a URI, is judged either way).
     #[must_use]
     pub fn with_services(
         mut self,
-        services: std::collections::BTreeMap<String, BoundService>,
+        services: std::collections::BTreeMap<String, Vec<String>>,
     ) -> Self {
         self.services = Some(services);
         self
@@ -440,13 +422,6 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
             report.push(diagnostic);
         }
         for diagnostic in invoke_types::invoke_type_diagnostics(document, self.services.as_ref()) {
-            report.push(diagnostic);
-        }
-        for diagnostic in service_events::service_event_diagnostics(
-            document,
-            self.services.as_ref(),
-            event_schemas,
-        ) {
             report.push(diagnostic);
         }
         refine::refine_report(Some(document), &mut report);

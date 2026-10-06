@@ -1,10 +1,10 @@
-error[SCXML093]: this `<invoke type>` is not an SCXML invoke type or an absolute service type URI
+warning[SCXML093]: this `<invoke type>` is a platform-specific value, not a URI
  --> tests/ui/invoke-service-types.scxml:3:19
   |
 3 |     <invoke type="echo"/>
-  |                   ^^^^ not a type any host can bind
+  |                   ^^^^ no service package binds a type that is not a URI
   |
-  = note: an absent `type`, `scxml`, or `http://www.w3.org/TR/scxml/` invokes an SCXML session; any other type names an invoked service by an exact absolute URI (a scheme, `:`, no white space, at most 4096 bytes), which the host binds to a service component
+  = note: SCXML 6.4.1 allows platform-specific invoke types; a service package binds an invoked service by an exact absolute URI (a scheme, `:`, no white space, at most 4096 bytes), so this `<invoke>` raises error.execution when it runs unless the running platform defines this type
   = help: write the service's absolute type URI exactly as its service package declares it (`service-uri`), or `scxml` for an SCXML session
   = spec: SCXML 1.0 §6.4 <invoke>
 
@@ -14,10 +14,11 @@ warning[SCXML094]: no service package binds this `<invoke type>`
 4 |     <invoke type="https://stateforward.org/scxml/services/echo" id="svc"/>
   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no service component is bound to this URI
   |
-  = note: an invoked service runs only in the service component its host binds to the exact type URI; without one the session start fails closed, and `compile` rejects the document (`COMP004`)
+  = note: an invoked service runs only in the service component its host binds to the exact type URI; invocation is a runtime action, so without one this `<invoke>` raises error.execution when it runs
   = help: bind the service with its package manifest (`--service-package MANIFEST.json`), or correct the URI to one a bound package declares
   = spec: SCXML 1.0 §6.4 <invoke>
 
-diagnostic summary: 1 error(s), 1 warning(s), 0 note(s), 2 total
+diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
 Some diagnostics have detailed explanations: SCXML093, SCXML094.
 For more information about a diagnostic, try `scxml-cli --explain SCXML093`.
+validated tests/ui/invoke-service-types.scxml

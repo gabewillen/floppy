@@ -358,7 +358,7 @@ impl ExtensionHttpClient {
     pub(crate) fn fetch_cancellable(
         &self,
         request: &crate::ExtensionHttpRequest,
-        cancel: &Arc<crate::service_http::CancelSignal>,
+        cancel: &Arc<crate::service::CancelSignal>,
     ) -> Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure> {
         if cancel.is_cancelled() {
             return Err(crate::ExtensionHttpFailure::Transport);
@@ -382,7 +382,13 @@ impl crate::ExtensionHttp for ExtensionHttpClient {
         &self,
         request: &crate::ExtensionHttpRequest,
     ) -> Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure> {
-        perform(&self.agent, request)
+        // An invoked service's request runs on a transport thread that holds
+        // its invocation's cancellation (SCXML 6.4): it gets a connection of
+        // its own that the cancel closes.
+        match crate::service::request_cancel() {
+            Some(cancel) => self.fetch_cancellable(request, &cancel),
+            None => perform(&self.agent, request),
+        }
     }
 }
 
@@ -441,7 +447,7 @@ mod cancellable {
         Buffers, ConnectionDetails, LazyBuffers, NextTimeout, Transport,
     };
 
-    use crate::service_http::CancelSignal;
+    use crate::service::CancelSignal;
 
     fn cancelled() -> ureq::Error {
         ureq::Error::Io(std::io::Error::new(

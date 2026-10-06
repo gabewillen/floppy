@@ -23,9 +23,10 @@ use scxml_scheduler::{Invoked, SessionKey};
 
 use crate::bindings::exports::stateforward::scxml::machine_api::InvocationContext;
 use crate::bindings::stateforward::scxml::machine_capability_types::{
-    DocumentKind, InvocationProgress, InvokedSession, LoadedDocument, Observation, SendDisposition,
+    DocumentKind, Invocation, InvocationProgress, InvokedSession, LoadedDocument, Observation,
+    SendDisposition,
 };
-use crate::bindings::stateforward::scxml::types::ServiceInvocation;
+use crate::bindings::stateforward::scxml::types::InvokeRequest;
 use crate::bindings::stateforward::scxml::types::{
     BaggagePolicy, BasichttpSend, ComponentError, DataValue as WitDataValue, ErrorCode,
     Event as WitEvent, InvocationAddress, SendRequest, SendTarget, Sender,
@@ -121,17 +122,6 @@ impl SessionLinks {
     }
 
     /// The session this one invoked as `invoke_id`, while it is live.
-    /// Whether this session's invocation `invoke_id` accepts `event`: true
-    /// unless it is a live invoked service whose contract refuses it.
-    fn child_accepts(
-        &self,
-        invoke_id: &str,
-        event: &crate::bindings::stateforward::scxml::types::Event,
-    ) -> bool {
-        self.child(invoke_id)
-            .is_none_or(|child| self.shared.sessions.borrow().accepts(child, event))
-    }
-
     fn child(&self, invoke_id: &str) -> Option<SessionKey> {
         self.shared
             .invoked_sessions
@@ -388,17 +378,6 @@ impl SessionLinks {
         &mut self,
         request: &SendRequest,
     ) -> Result<SendDisposition, ComponentError> {
-        // A delayed send to an invoked service with an event contract is
-        // checked against it when it is sent (it is checked again when it
-        // falls due); the processor classifies the target.
-        if request.delay_ms > 0
-            && self.shared.sessions.borrow().any_contract()
-            && let SendTarget::Invocation(invoke_id) =
-                self.classify_target(request.target.as_deref())
-            && !self.child_accepts(&invoke_id, &request.event)
-        {
-            return Err(not_accepted());
-        }
         let sender = self.sender();
         let action = self
             .io_call(|api, store| api.call_dispatch(store, request, &sender))
@@ -426,11 +405,6 @@ impl SessionLinks {
             }
             Ok(DispatchDecision::Invocation(routed)) => {
                 if let Some(target) = self.child(&routed.invoke_id) {
-                    // An invoked service's event contract admits only the
-                    // events it declares accepting (`error.execution`).
-                    if !self.shared.sessions.borrow().accepts(target, &routed.event) {
-                        return Err(not_accepted());
-                    }
                     self.shared
                         .invoked_sessions
                         .borrow_mut()
@@ -641,43 +615,29 @@ impl SessionLinks {
         }
     }
 
-    /// `machine-capabilities.load-services`: the component of every literal
-    /// service type URI of the session's document that the host binds must
-    /// load (one `service-load` span): compiled, its WASI imports within
-    /// what its package declares and the run grants, and pre-instantiated
-    /// against its linker. A component that does not load is a host failure
-    /// of the run and fails the session start closed, before the first
-    /// macrostep. A literal type no service binds is not a load failure: it
-    /// names an invoke type this host does not support, and, exactly as for
-    /// an unsupported `typeexpr`, its `<invoke>` raises `error.execution`
-    /// when it starts (SCXML 6.4: invocation is a runtime action; a
-    /// document that never enters the invoking state runs unaffected).
-    /// Nothing is instantiated until an invocation starts.
-    pub(crate) fn load_services(&self, type_uris: &[String]) -> Result<(), ComponentError> {
-        let span =
-            scxml_telemetry::observe(Module::HostWasmtime, Operation::HostWasmtimeServiceLoad);
-        for uri in type_uris {
-            // `Ok(false)`: unbound; `start-service` answers `unavailable`.
-            if let Err(error) = self.core.load_service(uri) {
-                span.event(SignalEvent::InputRejected);
-                span.fail(ErrorCategory::Platform);
-                return Err(fatal(&self.shared, error.into()));
-            }
+    /// `machine-capabilities.start-invocation`: an invoked SCXML session
+    /// ([`Self::start_invocation`]) or an invoked service
+    /// ([`Self::start_service`]).
+    pub(crate) fn start(
+        &mut self,
+        request: Invocation,
+    ) -> Result<InvocationProgress, ComponentError> {
+        match request {
+            Invocation::Session(request) => self.start_invocation(request),
+            Invocation::Service(request) => self.start_service(request),
         }
-        span.event(SignalEvent::ArtifactAccepted);
-        Ok(())
     }
 
-    /// `machine-capabilities.start-service`: instantiates the service bound
-    /// to the request's exact type URI for this invocation, registers it as
-    /// this session's invocation, and defers its `start` to the host (WIT
-    /// `invocation-progress.deferred`), like an invoked session's start. An
-    /// unbound type answers `unavailable` (the `<invoke>` fails with
-    /// `error.execution`); an invocation beyond the host's invoke limits
-    /// answers `invalid-input`.
-    pub(crate) fn start_service(
+    /// Registers one invoked service as this session's invocation and
+    /// defers its start to the host (WIT `invocation-progress.deferred`),
+    /// like an invoked session's start: the run starts its invocation once
+    /// this session's call suspended. A type no service binds answers
+    /// `unavailable` (the `<invoke>` fails with `error.execution`, SCXML
+    /// 6.4); an invocation beyond the host's invoke limits answers
+    /// `invalid-input`.
+    fn start_service(
         &mut self,
-        request: ServiceInvocation,
+        request: InvokeRequest,
     ) -> Result<InvocationProgress, ComponentError> {
         let result = self.request_service(request);
         if result.is_err() {
@@ -691,7 +651,7 @@ impl SessionLinks {
 
     fn request_service(
         &mut self,
-        request: ServiceInvocation,
+        request: InvokeRequest,
     ) -> Result<InvocationProgress, ComponentError> {
         if self.child(&request.invoke_id).is_some() {
             return Err(component_error(
@@ -710,35 +670,17 @@ impl SessionLinks {
                 "the invocation exceeds the invoked sessions bounds",
             ));
         }
-        let handle = match self.core.instantiate_service(
-            &request.type_uri,
-            &self.execution_context,
-            self.shared.http.service_responses.as_ref(),
-        ) {
-            Ok(Some(handle)) => handle,
-            Ok(None) => {
-                return Err(component_error(
-                    ErrorCode::Unavailable,
-                    "no service component is bound to this invoke type",
-                ));
-            }
-            Err(error) => return Err(fatal(&self.shared, error.into())),
-        };
         let registered = self
             .shared
             .invoked_sessions
             .borrow_mut()
             .register(self.key, request.invoke_id.clone());
         let child = registered.map_err(|violation| fatal(&self.shared, violation.into()))?;
-        {
-            let mut sessions = self.shared.sessions.borrow_mut();
-            sessions.insert(child, None);
-            sessions.set_contract(child, handle.contract());
-        }
+        self.shared.sessions.borrow_mut().insert(child, None);
         let deferred = self.defer(DeferredRequest::StartService {
             child,
-            handle: Box::new(handle),
-            request,
+            request: Box::new(request),
+            execution_context: self.execution_context.clone(),
         });
         if deferred.is_err() {
             self.shared.invoked_sessions.borrow_mut().remove(child);
@@ -792,7 +734,7 @@ impl SessionLinks {
     /// carries it out once this session's call suspended, so a chain of
     /// invocations never nests calls. A request that cannot be met fails
     /// here, inside the call.
-    pub(crate) fn start_invocation(
+    fn start_invocation(
         &mut self,
         request: InvokedSession,
     ) -> Result<InvocationProgress, ComponentError> {
@@ -914,8 +856,8 @@ impl SessionLinks {
     /// whatever it (or a session below it) sends to its invoking session
     /// from now on is ignored (official case 252); events already on the
     /// invoking session's queue stay. The rest (its `cancel` when
-    /// unfinished, then dropping it with its external queue, its timers or
-    /// wakeup, and every session it invoked) is deferred to the host like a
+    /// unfinished, then dropping it with its external queue, its timers, and
+    /// every session it invoked) is deferred to the host like a
     /// start. An absent invoke id succeeds without effect.
     pub(crate) fn cancel_invocation(
         &mut self,
@@ -1100,14 +1042,4 @@ fn http_trace_context(context: WitTraceContext) -> HttpTraceContext {
             BaggagePolicy::Propagate => HttpBaggagePolicy::Propagate,
         },
     }
-}
-
-/// The `<send>` failure for an event an invoked service's contract refuses:
-/// `invalid-input`, which the machine raises as `error.execution` (a message
-/// the processor cannot carry).
-fn not_accepted() -> ComponentError {
-    component_error(
-        ErrorCode::InvalidInput,
-        "the invoked service's package does not declare accepting this event with data its schema admits",
-    )
 }

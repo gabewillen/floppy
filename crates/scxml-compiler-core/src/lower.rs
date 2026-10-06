@@ -620,7 +620,7 @@ impl<'r> Builder<'r> {
                 }
             },
             children,
-            env: invoke_env(element)?,
+            attributes: invoke_env(element)?,
         })
     }
 
@@ -1048,7 +1048,6 @@ impl<'r> Builder<'r> {
                 })
             })
             .collect::<Result<Vec<_>, LowerError>>()?;
-        let invoke_types = crate::ir::literal_service_types(&states)?;
         let machine = MachineIr {
             version: crate::MACHINE_IR_VERSION,
             name,
@@ -1060,7 +1059,6 @@ impl<'r> Builder<'r> {
             data,
             scripts,
             extension_namespaces,
-            invoke_types,
         };
         machine.validate()?;
         Ok(machine)
@@ -1435,47 +1433,42 @@ fn is_invoke_env_attribute(element: &Element, attribute: &scxml_syntax::Attribut
         && element.name.is(Some(SCXML_NAMESPACE), "invoke")
 }
 
-/// The `env` slot bindings of one `<invoke>`, sorted by slot: `env:<slot>`
-/// names a variable and `env:<slot>expr` an expression evaluating to one
-/// (a slot never ends in `expr`). Only an invoked service's `<invoke>` binds
-/// slots; which slots its package declares is the validator's `SCXML083`.
-fn invoke_env(element: &Element) -> Result<Vec<crate::EnvSlotIr>, LowerError> {
-    use crate::EnvSlotIr;
-    let mut env: Vec<EnvSlotIr> = Vec::new();
+/// The `env` attributes of one `<invoke>`, sorted by local name:
+/// `env:<slot>` names a variable and `env:<slot>expr` an expression
+/// evaluating to one (a slot never ends in `expr`). Only an invoked
+/// service's `<invoke>` binds slots; which slots its package declares is the
+/// validator's `SCXML083`.
+fn invoke_env(element: &Element) -> Result<Vec<crate::XmlAttributeIr>, LowerError> {
+    let mut attributes: Vec<crate::XmlAttributeIr> = Vec::new();
+    let mut slots = std::collections::BTreeSet::new();
     for attribute in &element.attributes {
         if !is_invoke_env_attribute(element, attribute) {
             continue;
         }
         let local = attribute.name.local_name.as_str();
-        let binding = match local.strip_suffix("expr") {
-            Some(slot) if !slot.is_empty() => EnvSlotIr::Expr {
-                slot: slot.to_owned(),
-                expr: attribute.value.clone(),
-            },
-            _ => EnvSlotIr::Name {
-                slot: local.to_owned(),
-                name: attribute.value.clone(),
-            },
-        };
-        if env.iter().any(|bound| bound.slot() == binding.slot()) {
+        let (slot, expression) = crate::ir::invoke_env_slot(local);
+        if !slots.insert(slot.to_owned()) {
             return Err(LowerError::InvalidStructure(
                 "an invoke binds one env slot twice",
             ));
         }
-        let valid = scxml_validator_core::is_env_slot(binding.slot())
-            && match &binding {
-                EnvSlotIr::Name { name, .. } => scxml_validator_core::is_env_name(name),
-                EnvSlotIr::Expr { .. } => true,
-            };
+        let valid = scxml_validator_core::is_env_slot(slot)
+            && (expression || scxml_validator_core::is_env_name(&attribute.value));
         if !valid {
             return Err(LowerError::InvalidStructure(
                 "an invoke env slot is not an env-slots name bound to a variable name",
             ));
         }
-        env.push(binding);
+        attributes.push(crate::XmlAttributeIr {
+            name: crate::ExpandedNameIr {
+                namespace_uri: Some(scxml_types::ENV_NAMESPACE_URI.to_owned()),
+                local_name: local.to_owned(),
+            },
+            value: attribute.value.clone(),
+        });
     }
-    if env.is_empty() {
-        return Ok(env);
+    if attributes.is_empty() {
+        return Ok(attributes);
     }
     let service = match optional_attr(element, "type") {
         Some(type_value) => !scxml_types::is_scxml_invoke_type(&type_value),
@@ -1486,8 +1479,8 @@ fn invoke_env(element: &Element) -> Result<Vec<crate::EnvSlotIr>, LowerError> {
             "only an invoked service's invoke binds env slots",
         ));
     }
-    env.sort_by(|first, second| first.slot().cmp(second.slot()));
-    Ok(env)
+    attributes.sort_by(|first, second| first.name.local_name.cmp(&second.name.local_name));
+    Ok(attributes)
 }
 
 /// Whether `attribute` is `event:schema` or `event:schemaexpr` on an element

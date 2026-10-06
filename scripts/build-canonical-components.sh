@@ -14,7 +14,7 @@
 #   * image: the official Rust 1.98.0 Debian bookworm image, pinned by
 #     digest and forced to linux/amd64;
 #   * toolchain: rust-toolchain.toml's channel with the wasm32-wasip2 target;
-#   * tools: wasm-tools 1.240.0 and wasi-virt at the pinned revision the
+#   * tools: wasm-tools 1.244.0 and wasi-virt at the pinned revision the
 #     workflow installs;
 #   * build: scripts/verify-wasm-capabilities.sh over the eight components
 #     the conformance executor links and the example extension component
@@ -39,7 +39,7 @@ set -eu
 base_image='rust:1.98.0-bookworm@sha256:82150a52ec202c1b14d7817e14516c392bb7f5cfebd88f1ed531cb37ebd39922'
 platform='linux/amd64'
 tools_image='scxml-canonical-components:1'
-wasm_tools_version='1.240.0'
+wasm_tools_version='1.244.0'
 wasi_virt_source='https://github.com/bytecodealliance/WASI-Virt'
 wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine scxml_extension_example'

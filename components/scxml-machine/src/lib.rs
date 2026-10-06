@@ -733,8 +733,8 @@ mod guest {
     use scxml_engine::interpret::{
         self, BasicHttpSend, CapabilityErrorKind, DocumentKind, ExtensionExecution,
         ExtensionSnapshot, FailureCategory, ForeachItems, InlineBody, InterpretFailure,
-        Interpreter, InvocationContext as Invoked, InvocationProgress, InvokedSession,
-        SendTarget as NativeSendTarget, ServiceInvocation, SessionCapabilities, SessionState,
+        Interpreter, Invocation, InvocationContext as Invoked, InvocationProgress,
+        SendTarget as NativeSendTarget, SessionCapabilities, SessionState,
     };
     use scxml_engine::{BatchEnd, Command, EngineStatus};
     use scxml_types::{
@@ -752,6 +752,7 @@ mod guest {
         SessionFailure, SnapshotOptions, Status,
     };
     use stateforward::scxml::ir_source;
+    use stateforward::scxml::machine_capability_types::Invocation as WitInvocation;
     use stateforward::scxml::machine_capability_types::{
         DocumentKind as WitDocumentKind, EventSchema as WitEventSchema,
         EventSchemaText as WitEventSchemaText, HistoryValue as WitHistoryValue,
@@ -761,8 +762,7 @@ mod guest {
         TransitionSnapshot as WitTransitionSnapshot, TransitionType as WitTransitionType,
     };
     use stateforward::scxml::telemetry::{self, Operation, Outcome};
-    use stateforward::scxml::types::EnvBinding as WitEnvBinding;
-    use stateforward::scxml::types::ServiceInvocation as WitServiceInvocation;
+    use stateforward::scxml::types::InvokeRequest as WitInvokeRequest;
     use stateforward::scxml::types::{
         AssignPlacement as WitAssignPlacement, AssignSource as WitAssignSource,
         BaggagePolicy as WitBaggagePolicy, BasichttpSend as WitBasichttpSend, ComponentError,
@@ -892,7 +892,6 @@ mod guest {
                 None,
                 |engine, caps, _| {
                     interpret::load_extensions(engine, caps)?;
-                    interpret::load_services(engine, caps)?;
                     interpret::bind_initial_data(engine, caps, &[])
                 },
                 RunCommand::Engine(Command::Start),
@@ -964,7 +963,6 @@ mod guest {
                     caps.start_parent = parent;
                     state.set_invoked(invoked);
                     interpret::load_extensions(engine, caps)?;
-                    interpret::load_services(engine, caps)?;
                     interpret::bind_initial_data(engine, caps, &parameters)
                 },
                 RunCommand::Engine(Command::Start),
@@ -976,8 +974,8 @@ mod guest {
             invoke_id: String,
             message: InvocationMessage,
         ) -> Result<CallResult, SessionFailure> {
-            if matches!(message, InvocationMessage::Failed) {
-                return self.invocation_failed(invoke_id);
+            if matches!(message, InvocationMessage::CommunicationError) {
+                return self.invocation_communication_error(invoke_id);
             }
             let event = to_invocation_event(invoke_id, message).map_err(|error| {
                 telemetry::observe(Operation::Deliver, Outcome::Rejected, None, None);
@@ -1042,7 +1040,7 @@ mod guest {
                 None,
                 move |engine, _, _| {
                     engine
-                        .queue_communication_error(send_id, None)
+                        .queue_communication_error(send_id, None, None)
                         .map_err(engine_error)
                 },
                 RunCommand::Engine(Command::Resume),
@@ -1281,12 +1279,15 @@ mod guest {
         /// message." The error carries the message's send id (5.10.1, the
         /// failed attempt's), and the resumed run is the macrostep that
         /// processes it; the message itself is never dequeued.
-        /// `deliver-from-invocation` of a `failed` message: the invoked
-        /// service `invoke_id` was retired after it started, so its
+        /// `deliver-from-invocation` of a `communication-error` message: the
+        /// invoked service `invoke_id` failed after it started, so its
         /// `error.communication` (carrying the invoke id) joins the internal
         /// queue and the resumed run is the macrostep that processes it, as
         /// for `communication-error` (SCXML 3.12.2).
-        fn invocation_failed(&self, invoke_id: String) -> Result<CallResult, SessionFailure> {
+        fn invocation_communication_error(
+            &self,
+            invoke_id: String,
+        ) -> Result<CallResult, SessionFailure> {
             let Ok(invoke_id) = scxml_types::InvokeId::new(invoke_id) else {
                 telemetry::observe(Operation::Deliver, Outcome::Rejected, None, None);
                 telemetry::event(
@@ -1302,7 +1303,7 @@ mod guest {
                 None,
                 move |engine, _, _| {
                     engine
-                        .queue_invocation_failure(invoke_id, None)
+                        .queue_communication_error(None, Some(invoke_id), None)
                         .map_err(engine_error)
                 },
                 RunCommand::Engine(Command::Resume),
@@ -1323,7 +1324,7 @@ mod guest {
                 context,
                 move |engine, _, _| {
                     engine
-                        .queue_communication_error(send_id, trace_context)
+                        .queue_communication_error(send_id, None, trace_context)
                         .map_err(engine_error)
                 },
                 RunCommand::Engine(Command::Resume),
@@ -1917,36 +1918,6 @@ mod guest {
             self.capabilities.load_extensions(namespace_uris)
         }
 
-        fn load_services(&mut self, type_uris: &[String]) -> Result<(), ComponentError> {
-            self.capabilities.load_services(type_uris)
-        }
-
-        fn start_service(
-            &mut self,
-            request: ServiceInvocation,
-        ) -> Result<InvocationProgress, ComponentError> {
-            let request = WitServiceInvocation {
-                invoke_id: request.invoke_id,
-                type_uri: request.type_uri,
-                source: request.source,
-                content: request.content.as_ref().map(wit_value).transpose()?,
-                parameters: wit_named_values(&request.parameters)?,
-                env: request
-                    .env
-                    .into_iter()
-                    .map(|binding| WitEnvBinding {
-                        slot: binding.slot,
-                        name: binding.name,
-                    })
-                    .collect(),
-                parent_session_id: request.parent_session_id,
-                trace_context: request.trace_context.as_ref().map(to_wit_trace_context),
-            };
-            self.capabilities
-                .start_service(&request)
-                .map(invocation_progress)
-        }
-
         fn compile_invocation(
             &mut self,
             source_name: &str,
@@ -1957,14 +1928,41 @@ mod guest {
 
         fn start_invocation(
             &mut self,
-            request: InvokedSession,
+            request: Invocation,
         ) -> Result<InvocationProgress, ComponentError> {
-            let request = WitInvokedSession {
-                invoke_id: request.invoke_id,
-                machine_ir: request.machine_ir,
-                data_model: request.data_model,
-                parameters: wit_named_values(&request.parameters)?,
-                trace_context: request.trace_context.as_ref().map(to_wit_trace_context),
+            let request = match request {
+                Invocation::Session(request) => WitInvocation::Session(WitInvokedSession {
+                    invoke_id: request.invoke_id,
+                    machine_ir: request.machine_ir,
+                    data_model: request.data_model,
+                    parameters: wit_named_values(&request.parameters)?,
+                    trace_context: request.trace_context.as_ref().map(to_wit_trace_context),
+                }),
+                Invocation::Service(request) => WitInvocation::Service(WitInvokeRequest {
+                    invoke_id: request.invoke_id,
+                    type_uri: request.type_uri,
+                    source: request.source,
+                    content: request.content.as_ref().map(wit_value).transpose()?,
+                    parameters: wit_named_values(&request.parameters)?,
+                    attributes: request
+                        .attributes
+                        .into_iter()
+                        .map(|attribute| stateforward::scxml::types::ExtensionAttribute {
+                            name: stateforward::scxml::types::QualifiedName {
+                                namespace_uri: attribute
+                                    .name
+                                    .namespace_uri
+                                    .map(|uri| uri.as_str().to_owned()),
+                                local_name: attribute.name.local_name,
+                            },
+                            value: attribute.value,
+                        })
+                        .collect(),
+                    // The host binds the references; the machine never
+                    // holds one.
+                    references: Vec::new(),
+                    trace_context: request.trace_context.as_ref().map(to_wit_trace_context),
+                }),
             };
             self.capabilities
                 .start_invocation(&request)
@@ -2126,10 +2124,10 @@ mod guest {
                 event
             }
             // `deliver-from-invocation` handles it before this conversion.
-            InvocationMessage::Failed => {
+            InvocationMessage::CommunicationError => {
                 return Err(error(
                     ErrorCode::Protocol,
-                    "a failed invocation is no event",
+                    "an invocation's communication error is no event",
                 ));
             }
         };
@@ -2826,7 +2824,6 @@ mod tests {
             data: Vec::new(),
             scripts: Vec::new(),
             extension_namespaces: Vec::new(),
-            invoke_types: Vec::new(),
         }
     }
 

@@ -29,10 +29,8 @@ pub const MAX_HTTP_ORIGIN_BYTES: usize = 2_048;
 /// The only extension package manifest format (its `format` field) this
 /// release reads.
 pub const EXTENSION_PACKAGE_FORMAT: &str = "stateforward.scxml.extension-package/v2";
-/// Manifest fields in their canonical order (`format` first); every field is
-/// required except `wasi-permissions` and `events`, each omitted when the
-/// package declares none.
-const EXTENSION_PACKAGE_FIELDS: [&str; 12] = [
+/// Manifest fields in their canonical order (`format` first).
+const EXTENSION_PACKAGE_FIELDS: [&str; 10] = [
     "format",
     "namespace-uri",
     "package-version",
@@ -43,8 +41,6 @@ const EXTENSION_PACKAGE_FIELDS: [&str; 12] = [
     "wit-version",
     "http-origins",
     "env-slots",
-    "wasi-permissions",
-    "events",
 ];
 
 /// Whether `slot` is an `env-slots` entry: `[a-z][a-z0-9-]*`, at most
@@ -124,27 +120,14 @@ pub struct ExtensionPackageManifest {
     /// reach: at most [`MAX_EXTENSION_PACKAGE_LIST_ITEMS`] distinct
     /// [`is_http_origin`] entries. Binding the package consents to them.
     pub http_origins: Vec<String>,
-    /// The WASI interfaces its extension component may import: a canonical
-    /// list ([`scxml_types::check_wasi_permissions`]), empty when the
-    /// manifest omits the field. Hosts link only those the run also grants.
-    pub wasi_permissions: Vec<scxml_types::WasiPermission>,
-    /// The events the extension component emits and accepts, each with its
-    /// data schema ([`crate::PackageEvents`]); empty when the manifest omits
-    /// `events`. Declared for consent and the validator's cross-check;
-    /// session hosts enforce event contracts on invoked services only.
-    pub events: crate::PackageEvents,
 }
 
 impl ExtensionPackageManifest {
     /// Parses one [`EXTENSION_PACKAGE_FORMAT`] manifest: a JSON object with
     /// exactly the manifest fields, every value a string except
     /// `http-origins` and `env-slots` (arrays of at most
-    /// [`MAX_EXTENSION_PACKAGE_LIST_ITEMS`] strings) and the optional
-    /// `wasi-permissions` (a non-empty canonical list of known permissions,
-    /// [`scxml_types::wasi_permissions_from_json`]; an unknown interface,
-    /// field, or value is rejected), the optional `events` a declared event
-    /// contract ([`crate::PackageEvents::from_json`]), and `format` equal to
-    /// [`EXTENSION_PACKAGE_FORMAT`]. The other entries are judged by
+    /// [`MAX_EXTENSION_PACKAGE_LIST_ITEMS`] strings), and `format` equal to
+    /// [`EXTENSION_PACKAGE_FORMAT`]. The entries themselves are judged by
     /// [`Self::verify_schema`]. Deterministic and side-effect-free; records
     /// no telemetry.
     ///
@@ -209,11 +192,6 @@ impl ExtensionPackageManifest {
             wit_version: field("wit-version")?,
             env_slots: list("env-slots")?,
             http_origins: list("http-origins")?,
-            wasi_permissions: scxml_types::wasi_permissions_from_json(
-                object.get("wasi-permissions"),
-            )
-            .map_err(|error| format!("field `wasi-permissions`: {error}"))?,
-            events: crate::PackageEvents::from_json(object.get("events"))?,
         })
     }
 
@@ -225,13 +203,10 @@ impl ExtensionPackageManifest {
     /// # Errors
     ///
     /// Returns a stable message when a required field is empty or oversized,
-    /// the WIT identity is unsupported, the `wasi-permissions` list is not
-    /// canonical, or schema identity/integrity does not match the supplied
-    /// schema bytes. Errors never include caller-controlled field values.
+    /// the WIT identity is unsupported, or schema identity/integrity does not
+    /// match the supplied schema bytes. Errors never include caller-controlled
+    /// field values.
     pub fn verify_schema(&self, schema: &SchemaSource) -> Result<(), String> {
-        scxml_types::check_wasi_permissions(&self.wasi_permissions)
-            .map_err(|error| format!("extension package field `wasi-permissions`: {error}"))?;
-        self.events.check("extension package")?;
         for (name, value) in [
             ("namespace-uri", self.namespace_uri.as_str()),
             ("package-version", self.package_version.as_str()),
@@ -919,45 +894,12 @@ mod tests {
             wit_version: "0.2.0".into(),
             env_slots: Vec::new(),
             http_origins: Vec::new(),
-            wasi_permissions: Vec::new(),
-            events: crate::PackageEvents::default(),
         };
         assert_eq!(manifest.verify_schema(&source), Ok(()));
         let mut invalid = manifest.clone();
         invalid.schema_sha256 = "00".repeat(32);
         assert!(invalid.verify_schema(&source).is_err());
         assert_eq!(manifest.namespace_uri, "urn:example");
-    }
-
-    #[test]
-    fn package_manifest_declares_wasi_permissions_only_from_the_closed_vocabulary() {
-        let base = r#"{"format":"stateforward.scxml.extension-package/v2","namespace-uri":"urn:example","package-version":"1.0.0","extension-artifact":"x.wasm","schema-artifact":"x.xsd","schema-sha256":"00","wit-world":"stateforward:scxml/executable-content-extension","wit-version":"0.2.0","http-origins":[],"env-slots":[]"#;
-        let parse = |suffix: &str| {
-            ExtensionPackageManifest::from_json(format!("{base}{suffix}}}").as_bytes())
-        };
-        assert_eq!(parse("").expect("omitted").wasi_permissions, Vec::new());
-        assert_eq!(
-            parse(r#","wasi-permissions":[{"interface":"wasi:random"},{"interface":"wasi:sockets/tcp"}]"#)
-                .expect("declared")
-                .wasi_permissions,
-            vec![
-                scxml_types::WasiPermission::Random,
-                scxml_types::WasiPermission::SocketsTcp
-            ]
-        );
-        for suffix in [
-            r#","wasi-permissions":[]"#,
-            r#","wasi-permissions":[{"interface":"wasi:http/outgoing-handler"}]"#,
-            r#","wasi-permissions":[{"interface":"wasi:random","extra":"x"}]"#,
-            r#","wasi-permissions":[{"interface":"wasi:sockets/tcp"},{"interface":"wasi:random"}]"#,
-            r#","wasi-permissions":"wasi:random""#,
-        ] {
-            let error = parse(suffix).expect_err("fails closed");
-            assert!(
-                error.starts_with("field `wasi-permissions`"),
-                "{suffix}: {error}"
-            );
-        }
     }
 
     #[test]
@@ -976,8 +918,6 @@ mod tests {
                 "https://api.example".into(),
                 "http://127.0.0.1:8080/v1".into(),
             ],
-            wasi_permissions: Vec::new(),
-            events: crate::PackageEvents::default(),
         };
         assert_eq!(manifest.verify_schema(&source), Ok(()));
         for slots in [
@@ -1027,8 +967,6 @@ mod tests {
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION.into(),
             env_slots: Vec::new(),
             http_origins: Vec::new(),
-            wasi_permissions: Vec::new(),
-            events: crate::PackageEvents::default(),
         };
         assert_eq!(
             manifest.verify_schema(&source),
@@ -1075,8 +1013,6 @@ mod tests {
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION.into(),
             env_slots: Vec::new(),
             http_origins: Vec::new(),
-            wasi_permissions: Vec::new(),
-            events: crate::PackageEvents::default(),
         };
         let oversized_system_id = SchemaSource::new(
             "x".repeat(MAX_COMPONENT_METADATA_BYTES + 1),
@@ -1116,8 +1052,6 @@ mod tests {
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION.into(),
             env_slots: Vec::new(),
             http_origins: Vec::new(),
-            wasi_permissions: Vec::new(),
-            events: crate::PackageEvents::default(),
         };
         assert_eq!(
             manifest.verify_schema(&source),

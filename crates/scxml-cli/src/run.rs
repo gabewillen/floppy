@@ -38,7 +38,8 @@ pub const RUN_OPTIONS: &[&str] = &[
     "--service-package",
     "--service-component",
     "--service-component-sha256",
-    "--grant",
+    "--dir",
+    "--wasi",
     "--env",
     "--env-file",
     "--extension-call-fuel",
@@ -204,7 +205,8 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
             "--components-manifest-sha256" => "HEX",
             "--extension-package" | "--service-package" => "MANIFEST.json",
             "--extension-component-sha256" | "--service-component-sha256" => "URI=HEX",
-            "--grant" => "URI=PERMISSION[=VALUE]",
+            "--dir" => "URI=HOST::GUEST",
+            "--wasi" => "URI=inherit-network or URI=allow-ip-name-lookup",
             "--env" => "NAME@URI or NAME@URI=VALUE",
             "--env-file" => "PATH",
             "--fuel" | "--max-commands" | "--extension-call-fuel" => "N",
@@ -617,8 +619,8 @@ mod live {
         Http(InboundHttp),
         /// An accepted outbound `BasicHTTP` request settled.
         CommunicationSettled,
-        /// A deferred request of an invoked service settled.
-        ServiceResponse,
+        /// The HTTP response of an invoked service's request arrived.
+        HttpResponse,
     }
 
     /// Reads standard input line by line into `sender`.
@@ -842,7 +844,67 @@ mod live {
             InputRecord::OutboundHttp { accepted } => Object::record("outbound")
                 .boolean("accepted", *accepted)
                 .finish(),
+            InputRecord::HttpResponse {
+                at_ms,
+                path,
+                request,
+                response,
+            } => {
+                let object = Object::record("http-response")
+                    .number("at_ms", *at_ms)
+                    .raw("path", &json::strings(path))
+                    .number("request", *request);
+                match response {
+                    Ok(response) => {
+                        let object = object.number("status", u64::from(response.status));
+                        // A UTF-8 body is written as text, any other as hex.
+                        match std::str::from_utf8(&response.body) {
+                            Ok(text) => object.string("body", text),
+                            Err(_) => object.string("body_hex", &hex_encode(&response.body)),
+                        }
+                        .finish()
+                    }
+                    Err(failure) => object
+                        .string(
+                            "failure",
+                            match failure {
+                                scxml_host_wasmtime::ExtensionHttpFailure::NotAllowed => {
+                                    "not-allowed"
+                                }
+                                scxml_host_wasmtime::ExtensionHttpFailure::Transport => "transport",
+                                scxml_host_wasmtime::ExtensionHttpFailure::ResponseTooLarge => {
+                                    "response-too-large"
+                                }
+                            },
+                        )
+                        .finish(),
+                }
+            }
         })
+    }
+
+    /// `bytes` as lowercase hex.
+    fn hex_encode(bytes: &[u8]) -> String {
+        use std::fmt::Write as _;
+        bytes.iter().fold(String::new(), |mut text, byte| {
+            let _ = write!(text, "{byte:02x}");
+            text
+        })
+    }
+
+    /// Lowercase or uppercase hex as bytes; `None` for anything else.
+    fn hex_decode(text: &str) -> Option<Vec<u8>> {
+        if !text.len().is_multiple_of(2) {
+            return None;
+        }
+        text.as_bytes()
+            .chunks(2)
+            .map(|pair| {
+                std::str::from_utf8(pair)
+                    .ok()
+                    .and_then(|pair| u8::from_str_radix(pair, 16).ok())
+            })
+            .collect()
     }
 
     /// One recorded inbound `BasicHTTP` event (always `external`, without
@@ -1023,6 +1085,10 @@ mod live {
             .collect()
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one match over the closed record types"
+    )]
     fn log_record(
         fields: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<Option<InputRecord>, String> {
@@ -1109,6 +1175,54 @@ mod live {
                 };
                 Ok(Some(InputRecord::OutboundHttp {
                     accepted: *accepted,
+                }))
+            }
+            Some("http-response") => {
+                only(&[
+                    "type", "at_ms", "path", "request", "status", "body", "body_hex", "failure",
+                ])?;
+                let path = read_path(fields.get("path"))?;
+                let response = match (fields.get("failure"), fields.get("status")) {
+                    (Some(serde_json::Value::String(failure)), None) => {
+                        Err(match failure.as_str() {
+                            "not-allowed" => scxml_host_wasmtime::ExtensionHttpFailure::NotAllowed,
+                            "transport" => scxml_host_wasmtime::ExtensionHttpFailure::Transport,
+                            "response-too-large" => {
+                                scxml_host_wasmtime::ExtensionHttpFailure::ResponseTooLarge
+                            }
+                            _ => return Err("an http-response `failure` is not a failure".into()),
+                        })
+                    }
+                    (None, Some(_)) => {
+                        let status = u16::try_from(number("status")?)
+                            .map_err(|_| "`status` must be an HTTP status".to_owned())?;
+                        let body = match (fields.get("body"), fields.get("body_hex")) {
+                            (Some(serde_json::Value::String(body)), None) => {
+                                body.as_bytes().to_vec()
+                            }
+                            (None, Some(serde_json::Value::String(body))) => {
+                                hex_decode(body).ok_or("an http-response `body_hex` is not hex")?
+                            }
+                            _ => {
+                                return Err(
+                                    "an http-response needs exactly one of `body` and `body_hex`"
+                                        .into(),
+                                );
+                            }
+                        };
+                        Ok(scxml_host_wasmtime::ExtensionHttpResponse { status, body })
+                    }
+                    _ => {
+                        return Err(
+                            "an http-response needs exactly one of `status` and `failure`".into(),
+                        );
+                    }
+                };
+                Ok(Some(InputRecord::HttpResponse {
+                    at_ms: number("at_ms")?,
+                    path,
+                    request: number("request")?,
+                    response,
                 }))
             }
             Some("close") => {
@@ -1532,13 +1646,13 @@ mod live {
             }
         }
 
-        /// Delivers every settled deferred request of an invoked service to
-        /// its instance (cause `service-response`).
-        fn service_responses(&mut self) -> Result<Option<End>, Box<dyn std::error::Error>> {
-            match self.session.deliver_service_responses() {
+        /// Delivers every HTTP response of an invoked service's request that
+        /// arrived to its invocation (cause `http-response`).
+        fn http_responses(&mut self) -> Result<Option<End>, Box<dyn std::error::Error>> {
+            match self.session.deliver_http_responses() {
                 Ok(None) => Ok(None),
-                Ok(Some(step)) => self.outcome("service-response", Ok(step), None),
-                Err(error) => self.outcome("service-response", Err(error), None),
+                Ok(Some(step)) => self.outcome("http-response", Ok(step), None),
+                Err(error) => self.outcome("http-response", Err(error), None),
             }
         }
 
@@ -1573,9 +1687,9 @@ mod live {
         /// Milliseconds until the next deadline; `None` when nothing is
         /// scheduled.
         fn wait(&mut self) -> Result<Option<u64>, SessionHostError> {
-            // The logical clock never moves past a deferred service request
-            // in flight: its outcome is the next thing that happens.
-            if self.clock == ClockMode::Logical && self.session.awaiting_service_responses() {
+            // The logical clock never moves past an invoked service's request
+            // in flight: its response is the next thing that happens.
+            if self.clock == ClockMode::Logical && self.session.awaiting_http_responses() {
                 return Ok(None);
             }
             let deadline = self.session.next_deadline()?;
@@ -1720,7 +1834,7 @@ mod live {
                     && wait.is_none()
                     && self.listener.is_none()
                     && !self.session.communication_pending()
-                    && !self.session.awaiting_service_responses()
+                    && !self.session.awaiting_http_responses()
                 {
                     return Ok(End::Closed("eof", EXIT_CLOSED));
                 }
@@ -1777,7 +1891,7 @@ mod live {
                     }
                     Some(Message::Http(inbound)) => self.http(inbound)?,
                     Some(Message::CommunicationSettled) => self.communication_errors()?,
-                    Some(Message::ServiceResponse) => self.service_responses()?,
+                    Some(Message::HttpResponse) => self.http_responses()?,
                 };
                 if let Some(end) = ended {
                     return Ok(end);
@@ -1837,6 +1951,7 @@ mod live {
                     InputRecord::Snapshot { .. } => "snapshot",
                     InputRecord::Http { .. } => "http",
                     InputRecord::CommunicationErrors { .. } => "communication-error",
+                    InputRecord::HttpResponse { .. } => "http-response",
                     InputRecord::OutboundHttp { .. } => "outbound",
                     InputRecord::Start { .. } => "start",
                 };
@@ -1845,6 +1960,7 @@ mod live {
                     InputRecord::Event { .. }
                         | InputRecord::Http { .. }
                         | InputRecord::CommunicationErrors { .. }
+                        | InputRecord::HttpResponse { .. }
                 );
                 let mut applied = self.session.apply(record);
                 if settles && records.peek() == Some(&&InputRecord::Idle) {
@@ -1948,22 +2064,9 @@ mod live {
             &args.namespaces.repository,
         )?;
         args.services.check(&services.packages)?;
-        // A WASI permission reaches outside the session (a filesystem, a
-        // socket) or reads nondeterministic inputs (clocks, randomness),
-        // none of which the replay log records, so such a run is neither
-        // recorded nor replayed.
-        if (args.record.is_some() || args.replay.is_some())
-            && (crate::services::declares_wasi(&services.packages) || packages.declares_wasi())
-        {
-            return Err("[record-wasi] --record and --replay cannot run a package that declares WASI permissions: its effects and inputs are outside the replay log".into());
-        }
         let values = args.namespaces.values()?;
         crate::mask::install(&crate::extensions::HeldValue::pairs(&values));
         crate::extensions::write_notes(&packages.summary(Some(&values)));
-        crate::extensions::write_notes(&crate::services::summary(
-            &services.packages,
-            Some(&args.services),
-        ));
         let (ir, data_model) =
             crate::snapshot::host::compile(&args.document, &packages.all(), &services.packages)?;
         let mut namespaces = Vec::new();
@@ -2007,20 +2110,27 @@ mod live {
             identity.fuel = log.fuel;
             identity.http_public_url.clone_from(&log.http_public_url);
         }
+        // The service components load once the replay log matched the run's
+        // identity. An invoked service's HTTP responses are recorded inputs:
+        // a run that records performs its requests, and a replay answers
+        // them from its log without the network.
+        let (service_components, service_imports) =
+            args.services
+                .components(&services, &values, args.replay.is_none())?;
+        crate::extensions::write_notes(&crate::services::summary(
+            &services.packages,
+            Some(&args.services),
+            Some(&service_imports),
+        ));
         let host = SessionHost::from_release_dir(
             &args.components.dir,
             &args.components.manifest_sha256,
             identity.fuel,
         )?;
         // A replay log does not record extension components' responses, so a
-        // recorded or replayed session gets no outbound transport: every
+        // recorded or replayed session gets no extension transport: every
         // extension request is refused, the same way in both.
         let outbound = args.record.is_none() && args.replay.is_none();
-        // Only a live session that neither records nor replays delivers
-        // deferred outcomes, so only it gets the deferred transport.
-        let service_components = args
-            .services
-            .components(&services, &values, outbound, outbound)?;
         let (extensions, _notes) =
             crate::snapshot::host::extensions(&args.namespaces, &packages, &values, outbound)?;
         let host = host
@@ -2046,11 +2156,11 @@ mod live {
         };
         if replay.is_none() {
             identity.http_public_url = http.public_url.as_ref().map(|url| url.as_str().to_owned());
-            // A settled deferred service request wakes the loop, which
-            // delivers it (`deliver_service_responses`).
+            // An invoked service's HTTP response wakes the loop, which
+            // delivers it (`deliver_http_responses`).
             let sender = messages.0.clone();
-            http.on_service_response = Some(Arc::new(move || {
-                let _ = sender.send(Message::ServiceResponse);
+            http.on_http_response = Some(Arc::new(move || {
+                let _ = sender.send(Message::HttpResponse);
             }));
         }
         let log = match &args.record {

@@ -1025,9 +1025,19 @@ function capabilityResource(links) {
       }
       return ir;
     }
+    // `request` is the WIT `invocation` variant. This host binds no
+    // invoked-service component (invoked services are a Wasmtime host
+    // feature), so every service `<invoke>`, literal or `typeexpr`, answers
+    // `unavailable` when it starts, which fails that `<invoke>` with
+    // `error.execution`: invocation is a runtime action (SCXML 6.4), so the
+    // session start is unaffected.
     startInvocation(request) {
+      if (request.tag === 'service') {
+        telemetry.observe('capability', 'rejected');
+        throw unavailable();
+      }
       if (run.modules === undefined) throw unsupportedInvoke();
-      return observed('invocation', () => requestStart(links, request));
+      return observed('invocation', () => requestStart(links, request.val));
     }
     cancelInvocation(invokeId) {
       if (!links.children.has(invokeId)) return 'completed';
@@ -1088,18 +1098,6 @@ function capabilityResource(links) {
       }
     }
 
-    // This host binds no invoked-service component (invoked services are a
-    // Wasmtime host feature), so it loads nothing, and every service
-    // `<invoke>`, literal or `typeexpr`, answers `unavailable` when it
-    // starts, which fails that `<invoke>` with `error.execution`: invocation
-    // is a runtime action (SCXML 6.4), so the session start is unaffected.
-    loadServices(_typeUris) {
-      telemetry.observe('capability', 'ok');
-    }
-    startService(_request) {
-      telemetry.observe('capability', 'rejected');
-      throw unavailable();
-    }
   };
 }
 

@@ -715,7 +715,7 @@ impl Gather<'_> {
                 // `error.communication` carrying the invoke id.
                 Delivery::FromInvocation {
                     invoke_id,
-                    message: Invoked::Failed,
+                    message: Invoked::CommunicationError,
                 } => self.event(&WitEvent {
                     name: "error.communication".to_owned(),
                     event_type: WitEventType::Platform,

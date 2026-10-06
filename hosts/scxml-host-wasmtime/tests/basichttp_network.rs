@@ -288,7 +288,7 @@ fn network(allow: &[&str], total_timeout: Duration) -> (LiveHttp, mpsc::Receiver
             on_communication_error: Some(Arc::new(move || {
                 let _ = wake.lock().map(|wake| wake.send(()));
             })),
-            on_service_response: None,
+            on_http_response: None,
         },
         woken,
     )

@@ -1,15 +1,8 @@
-//! Literal invoked-service types: the Machine IR's `invoke_types` list and
-//! the `COMP004` compile gate.
+//! Invoked-service `<invoke>`s in Machine IR: any literal type lowers (an
+//! invoke type is a runtime action, SCXML 6.4.1), and the `env` attributes
+//! of an invoked service's `<invoke>` lower as authored.
 
-#[allow(
-    dead_code,
-    reason = "the shared helpers also serve validate_covers_lowering.rs"
-)]
-mod common;
-
-use scxml_compiler_core::{
-    CompileInput, Compiler, LowerError, MachineIr, SCXML_NAMESPACE, ScriptResolution, lower,
-};
+use scxml_compiler_core::{ExpandedNameIr, MachineIr, SCXML_NAMESPACE, XmlAttributeIr, lower};
 use scxml_syntax::{SourceId, SourceText, parse_xml};
 
 const ECHO: &str = "https://stateforward.org/scxml/services/echo";
@@ -31,135 +24,65 @@ fn lowered(source: &str) -> MachineIr {
 }
 
 #[test]
-fn invoke_types_list_the_literal_service_types_sorted_and_unique() {
-    let ir = lowered(&machine(&format!(
-        r#"<invoke type="{ECHO}"/><invoke type="scxml" src="c.scxml"/><invoke typeexpr="'urn:x:dynamic'"/>"#
-    )));
-    assert_eq!(ir.invoke_types, [ECHO, "urn:z:svc"]);
+fn any_literal_invoke_type_lowers_and_is_judged_when_the_invoke_runs() {
+    // SCXML 6.4.1 allows platform-specific invoke types, so a type that is
+    // not a URI lowers like any other.
+    let ir = lowered(&machine(r#"<invoke type="echo"/>"#));
+    assert_eq!(ir.states[0].invokes[0].type_value.as_deref(), Some("echo"));
     let bytes = ir.to_json().expect("encodes");
     assert_eq!(MachineIr::from_json(&bytes).expect("decodes"), ir);
 }
 
-#[test]
-fn a_machine_without_services_encodes_no_invoke_types_key() {
-    let source = format!(
-        r#"<scxml xmlns="{SCXML_NAMESPACE}" version="1.0"><state id="a"><invoke type="scxml" src="c.scxml"/></state></scxml>"#
-    );
-    let ir = lowered(&source);
-    assert!(ir.invoke_types.is_empty());
-    let text = String::from_utf8(ir.to_json().expect("encodes")).expect("utf8");
-    assert!(!text.contains("invoke_types"), "{text}");
+fn env_attribute(local_name: &str, value: &str) -> XmlAttributeIr {
+    XmlAttributeIr {
+        name: ExpandedNameIr {
+            namespace_uri: Some(scxml_types::ENV_NAMESPACE_URI.to_owned()),
+            local_name: local_name.to_owned(),
+        },
+        value: value.to_owned(),
+    }
 }
 
 #[test]
-fn decoded_invoke_types_must_match_the_literal_service_types() {
-    let mut ir = lowered(&machine(""));
-    ir.invoke_types.pop();
-    assert!(matches!(
-        ir.validate(),
-        Err(LowerError::InvalidStructure(_))
-    ));
-    let mut ir = lowered(&machine(""));
-    ir.invoke_types.reverse();
-    assert!(matches!(
-        ir.validate(),
-        Err(LowerError::InvalidStructure(_))
-    ));
-    let mut ir = lowered(&machine(""));
-    ir.invoke_types.push("urn:zz:extra".into());
-    assert!(matches!(
-        ir.validate(),
-        Err(LowerError::InvalidStructure(_))
-    ));
-}
-
-fn compile(source: &str, bound: Option<&[&str]>) -> scxml_compiler_core::CompileOutput {
-    Compiler::new(common::validator()).compile(CompileInput {
-        source_name: "case.scxml".into(),
-        source: source.into(),
-        packages: Vec::new(),
-        package_schemas: Vec::new(),
-        scripts: Vec::new(),
-        script_resolution: ScriptResolution::Compile,
-        service_types: bound.map(|bound| bound.iter().map(|uri| (*uri).to_owned()).collect()),
-        event_schemas: std::collections::BTreeMap::new(),
-    })
-}
-
-fn codes(output: &scxml_compiler_core::CompileOutput) -> Vec<String> {
-    output
-        .validation
-        .report
-        .diagnostics()
-        .iter()
-        .map(|diagnostic| diagnostic.code.clone())
-        .collect()
-}
-
-#[test]
-fn compile_rejects_each_unbound_literal_service_type_with_comp004() {
-    let source = machine("");
-    let output = compile(&source, Some(&[]));
-    assert!(output.artifact.is_none());
-    assert_eq!(codes(&output), ["COMP004", "COMP004"]);
-    let output = compile(&source, Some(&[ECHO]));
-    assert!(output.artifact.is_none());
-    assert_eq!(codes(&output), ["COMP004"]);
-    let output = compile(&source, Some(&[ECHO, "urn:z:svc"]));
-    assert!(output.artifact.is_some(), "{:?}", codes(&output));
-    // The compiler component (run-time child compilation) judges no binding.
-    assert!(compile(&source, None).artifact.is_some());
-}
-
-#[test]
-fn invoked_services_lower_their_env_slots_sorted_by_slot() {
-    use scxml_compiler_core::EnvSlotIr;
+fn invoked_services_lower_their_env_attributes_sorted_by_local_name() {
     let env = scxml_types::ENV_NAMESPACE_URI;
     let ir = lowered(&machine(&format!(
         r#"<invoke xmlns:env="{env}" type="{ECHO}" env:token="TOKEN" env:baseurlexpr="'BASE'"/>"#
     )));
     let invoke = &ir.states[0].invokes[0];
     assert_eq!(
-        invoke.env,
+        invoke.attributes,
         [
-            EnvSlotIr::Expr {
-                slot: "baseurl".into(),
-                expr: "'BASE'".into()
-            },
-            EnvSlotIr::Name {
-                slot: "token".into(),
-                name: "TOKEN".into()
-            },
+            env_attribute("baseurlexpr", "'BASE'"),
+            env_attribute("token", "TOKEN"),
         ]
     );
     let bytes = ir.to_json().expect("encodes");
     let json: serde_json::Value = serde_json::from_slice(&bytes).expect("JSON");
     assert_eq!(
-        json["states"][0]["invokes"][0]["env"],
-        serde_json::json!([
-            {"kind": "expr", "slot": "baseurl", "expr": "'BASE'"},
-            {"kind": "name", "slot": "token", "name": "TOKEN"}
-        ])
+        json["states"][0]["invokes"][0]["attributes"][1],
+        serde_json::json!({"name": {"namespace_uri": env, "local_name": "token"}, "value": "TOKEN"})
     );
     assert_eq!(MachineIr::from_json(&bytes).expect("decodes"), ir);
-    // Without slots the encoding has no `env` key: existing Machine IR bytes
-    // are unchanged.
+    // Without env attributes the encoding has no `attributes` key: existing
+    // Machine IR bytes are unchanged.
     assert!(
         !String::from_utf8(lowered(&machine("")).to_json().expect("encodes"))
             .expect("utf8")
-            .contains("\"env\"")
+            .contains("\"attributes\"")
     );
-    // A decoded binding on an SCXML session's invoke, out of order, or
-    // naming no variable is rejected.
+    // A decoded attribute on an SCXML session's invoke, out of order, outside
+    // the env namespace, binding one slot twice, or naming no variable is
+    // rejected.
     for tamper in [
         |ir: &mut MachineIr| ir.states[0].invokes[0].type_value = Some("scxml".into()),
-        |ir: &mut MachineIr| ir.states[0].invokes[0].env.reverse(),
+        |ir: &mut MachineIr| ir.states[0].invokes[0].attributes.reverse(),
+        |ir: &mut MachineIr| ir.states[0].invokes[0].attributes[1].name.namespace_uri = None,
         |ir: &mut MachineIr| {
-            ir.states[0].invokes[0].env[1] = EnvSlotIr::Name {
-                slot: "token".into(),
-                name: "1TOKEN".into(),
-            };
+            ir.states[0].invokes[0].attributes[1] = env_attribute("baseurl", "BASE");
+            ir.states[0].invokes[0].attributes.swap(0, 1);
         },
+        |ir: &mut MachineIr| ir.states[0].invokes[0].attributes[1].value = "1TOKEN".into(),
     ] {
         let mut tampered = ir.clone();
         tamper(&mut tampered);

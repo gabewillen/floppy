@@ -64,8 +64,8 @@ fn compile_only_examples_are_checked_or_prose() {
             );
         }
     }
-    // COMP002's two documents and the erroneous ones of COMP003 and COMP004.
-    assert_eq!(checked, 4, "compile-checked document examples");
+    // COMP002's two documents and the erroneous one of COMP003.
+    assert_eq!(checked, 3, "compile-checked document examples");
 }
 
 #[test]

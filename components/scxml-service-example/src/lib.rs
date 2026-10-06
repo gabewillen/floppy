@@ -1,31 +1,36 @@
 //! Example invoked-service component (SCXML 6.4): an echo and timer service.
 //!
 //! It exercises the whole `invoked-service` contract so hosts can prove
-//! service invocation end to end:
+//! service invocation end to end, as one `async fn invoke`
+//! (`invoked-service-api.invoke`, WASI 0.3):
 //!
-//! * `start` reads the `delay` parameter (milliseconds, a non-negative whole
-//!   number or a string of digits) and, when it is present and positive,
-//!   asks for one wakeup that far ahead (`invoked-service-host.set-wakeup`);
-//! * `wake` emits `echo.tick` carrying the number of ticks so far;
-//! * `send(e)` emits `echo.<name>` carrying `e`'s data, except for an event
-//!   named `stop`, which completes the service with the JSON object
-//!   `{"echoed":N,"ticks":M}` (the invoking session receives it on
-//!   `done.invoke.<id>`), and an event named `fetch`, which GETs the URL the
-//!   invocation's `endpoint` slot references (`env:endpoint="NAME"` on the
-//!   `<invoke>`) through `outbound-http` and emits `echo.fetched` carrying
-//!   the response status; without a bound `endpoint` the `send` fails;
-//! * `send(defer)` starts the same GET without waiting for it
-//!   (`outbound-http.begin`): the session keeps running, and the `wake` the
-//!   host calls once the request settled takes its outcome
-//!   (`outbound-http.take`) and emits `echo.fetched` with the status; a
-//!   `wake` that finds no settled request is the timer's and ticks;
-//! * `cancel` drops the service's state; it is idempotent.
+//! * the `delay` parameter (milliseconds, a non-negative whole number or a
+//!   string of digits), when it is present and positive, starts a timer
+//!   (`wasi:clocks/monotonic-clock.wait-for`, which the host runs on the
+//!   session's logical clock); when it falls due the service returns
+//!   `echo.tick` carrying the number of ticks so far;
+//! * every event on the `events` stream (the invoking session's
+//!   `<send target="#_invokeid">` and autoforwarded events) is returned as
+//!   `echo.<name>` carrying the event's data, except for:
+//!   * `stop`, which resolves the service's future with the JSON object
+//!     `{"echoed":N,"ticks":M}` (the invoking session receives it on
+//!     `done.invoke.<id>`);
+//!   * `fetch`, which GETs the URL the invocation's `endpoint` slot
+//!     references (`env:endpoint="NAME"` on the `<invoke>`) through
+//!     `outbound-http.fetch`, suspending only that task (the service keeps
+//!     reading events meanwhile), and returns `echo.fetched` carrying the
+//!     response status; without a bound `endpoint`, or when the request
+//!     fails, the future resolves with an error (`error.communication`).
+//!
+//! When the invoking state exits first, the host cancels the invocation
+//! (SCXML 6.4) and drops its instance: there is nothing to release.
 //!
 //! The decisions are the portable [`Echo`] state machine, tested natively;
-//! the guest executes the [`EchoAction`]s it returns against the WIT
-//! imports. It reaches nothing else: no WASI interface, and the network only
-//! through the host-admitted `outbound-http` request whose URL the run's
-//! value supplies (the component never sees it).
+//! the guest carries out the [`EchoAction`]s it returns against the WIT
+//! imports. It reaches nothing else: no WASI interface beyond its world's
+//! logical clock, and the network only through the host-admitted
+//! `outbound-http` request whose URL the run's value supplies (the component
+//! never sees it).
 
 #![cfg_attr(not(target_arch = "wasm32"), forbid(unsafe_code))]
 #![cfg_attr(
@@ -40,45 +45,37 @@ use scxml_types::{DataValue, EventName};
 
 /// The exact service type URI this component implements.
 pub const ECHO_SERVICE_URI: &str = "https://stateforward.org/scxml/services/echo";
-/// The parameter that schedules the first wakeup, in milliseconds.
+/// The parameter that starts the timer, in milliseconds.
 pub const DELAY_PARAMETER: &str = "delay";
 /// The event name that completes the service.
 pub const STOP_EVENT: &str = "stop";
-/// The event `wake` emits.
+/// The event the timer returns.
 pub const TICK_EVENT: &str = "echo.tick";
 /// The event name that GETs the `endpoint` slot's URL.
 pub const FETCH_EVENT: &str = "fetch";
-/// The event a fetch emits, carrying the response status.
+/// The event a fetch returns, carrying the response status.
 pub const FETCHED_EVENT: &str = "echo.fetched";
-/// The event name that starts the `endpoint` GET without waiting for it.
-pub const DEFER_EVENT: &str = "defer";
 /// The `env` slot whose value is the URL `fetch` requests.
 pub const ENDPOINT_SLOT: &str = "endpoint";
 
-/// One effect the guest carries out through `invoked-service-host`, in
-/// order.
+/// What the guest does for one input, in order.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EchoAction {
-    /// `emit` one external event.
-    Emit {
+    /// Return one external event to the invoking session.
+    Return {
         /// The event name.
         name: EventName,
         /// Its data.
         data: DataValue,
     },
-    /// `complete` with this data.
-    Complete(DataValue),
-    /// `set-wakeup` this many milliseconds ahead.
-    SetWakeup(u64),
-    /// GET the `endpoint` slot's URL and emit [`FETCHED_EVENT`] with the
+    /// Resolve the service's future with this data (`done.invoke`).
+    Done(DataValue),
+    /// GET the `endpoint` slot's URL, then [`Echo::fetched`] with the
     /// status.
     Fetch,
-    /// Start the `endpoint` GET without waiting (`outbound-http.begin`); its
-    /// outcome arrives through `wake` ([`Echo::settled`]).
-    Begin,
 }
 
-/// Why the service rejected a call.
+/// Why the service rejected an input.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EchoError {
     /// The `delay` parameter is not a non-negative whole number of
@@ -86,7 +83,7 @@ pub enum EchoError {
     InvalidDelay,
     /// `echo.<name>` is not a valid event name.
     InvalidEventName,
-    /// The service already completed or was cancelled.
+    /// The service already completed.
     NotRunning,
     /// `fetch` without an `endpoint` slot reference.
     NoEndpoint,
@@ -103,7 +100,8 @@ pub struct Echo {
 
 impl Echo {
     /// Starts the service with the invocation's parameters (in document
-    /// order; the last `delay` wins).
+    /// order; the last `delay` wins), and the timer's milliseconds when one
+    /// is due.
     ///
     /// # Errors
     ///
@@ -111,18 +109,13 @@ impl Echo {
     /// whole number of milliseconds.
     pub fn start<'a>(
         parameters: impl IntoIterator<Item = (&'a str, &'a DataValue)>,
-    ) -> Result<(Self, Vec<EchoAction>), EchoError> {
+    ) -> Result<(Self, Option<u64>), EchoError> {
         let mut delay = None;
         for (name, value) in parameters {
             if name == DELAY_PARAMETER {
                 delay = Some(delay_ms(value)?);
             }
         }
-        let actions = delay
-            .filter(|delay| *delay > 0)
-            .map(EchoAction::SetWakeup)
-            .into_iter()
-            .collect();
         Ok((
             Self {
                 ticks: 0,
@@ -130,7 +123,7 @@ impl Echo {
                 running: true,
                 endpoint: false,
             },
-            actions,
+            delay.filter(|delay| *delay > 0),
         ))
     }
 
@@ -141,26 +134,22 @@ impl Echo {
     }
 
     /// One event the invoking session sent: `stop` completes the service,
-    /// `fetch` requests the `endpoint` URL, and any other event is echoed as
-    /// `echo.<name>` with its data.
+    /// `fetch` requests the `endpoint` URL, and any other event is returned
+    /// as `echo.<name>` with its data.
     ///
     /// # Errors
     ///
-    /// [`EchoError::NotRunning`] after completion or cancellation,
+    /// [`EchoError::NotRunning`] after completion,
     /// [`EchoError::NoEndpoint`] for `fetch` without a bound endpoint, and
     /// [`EchoError::InvalidEventName`] when `echo.<name>` is not a valid
     /// event name.
-    pub fn send(&mut self, name: &str, data: DataValue) -> Result<Vec<EchoAction>, EchoError> {
+    pub fn send(&mut self, name: &str, data: DataValue) -> Result<EchoAction, EchoError> {
         if !self.running {
             return Err(EchoError::NotRunning);
         }
-        if name == FETCH_EVENT || name == DEFER_EVENT {
+        if name == FETCH_EVENT {
             return if self.endpoint {
-                Ok(vec![if name == FETCH_EVENT {
-                    EchoAction::Fetch
-                } else {
-                    EchoAction::Begin
-                }])
+                Ok(EchoAction::Fetch)
             } else {
                 Err(EchoError::NoEndpoint)
             };
@@ -170,20 +159,20 @@ impl Echo {
             let summary = format!("{{\"echoed\":{},\"ticks\":{}}}", self.echoed, self.ticks);
             let summary = DataValue::canonical_json_object(&summary)
                 .map_err(|_| EchoError::InvalidEventName)?;
-            return Ok(vec![EchoAction::Complete(summary)]);
+            return Ok(EchoAction::Done(summary));
         }
         let name =
             EventName::new(format!("echo.{name}")).map_err(|_| EchoError::InvalidEventName)?;
         self.echoed = self.echoed.saturating_add(1);
-        Ok(vec![EchoAction::Emit { name, data }])
+        Ok(EchoAction::Return { name, data })
     }
 
-    /// The wakeup fell due: emits `echo.tick` with the tick count.
+    /// The timer fell due: returns `echo.tick` with the tick count.
     ///
     /// # Errors
     ///
-    /// [`EchoError::NotRunning`] after completion or cancellation.
-    pub fn wake(&mut self) -> Result<Vec<EchoAction>, EchoError> {
+    /// [`EchoError::NotRunning`] after completion.
+    pub fn tick(&mut self) -> Result<EchoAction, EchoError> {
         if !self.running {
             return Err(EchoError::NotRunning);
         }
@@ -194,15 +183,15 @@ impl Echo {
         let count = u32::try_from(self.ticks).unwrap_or(u32::MAX);
         let data = scxml_types::FiniteNumber::new(f64::from(count))
             .map_or(DataValue::Absent, DataValue::Number);
-        Ok(vec![EchoAction::Emit { name, data }])
+        Ok(EchoAction::Return { name, data })
     }
 
-    /// A deferred GET settled with `status`: emits [`FETCHED_EVENT`] with it.
+    /// A GET answered `status`: returns [`FETCHED_EVENT`] with it.
     ///
     /// # Errors
     ///
-    /// [`EchoError::NotRunning`] after completion or cancellation.
-    pub fn settled(&mut self, status: u16) -> Result<Vec<EchoAction>, EchoError> {
+    /// [`EchoError::NotRunning`] after completion.
+    pub fn fetched(&mut self, status: u16) -> Result<EchoAction, EchoError> {
         if !self.running {
             return Err(EchoError::NotRunning);
         }
@@ -210,15 +199,10 @@ impl Echo {
             EventName::new(FETCHED_EVENT.to_owned()).map_err(|_| EchoError::InvalidEventName)?;
         let data = scxml_types::FiniteNumber::new(f64::from(status))
             .map_or(DataValue::Absent, DataValue::Number);
-        Ok(vec![EchoAction::Emit { name, data }])
+        Ok(EchoAction::Return { name, data })
     }
 
-    /// The invocation was cancelled; idempotent.
-    pub fn cancel(&mut self) {
-        self.running = false;
-    }
-
-    /// Whether the service still accepts `send` and `wake`.
+    /// Whether the service still takes inputs.
     #[must_use]
     pub const fn running(&self) -> bool {
         self.running
@@ -254,179 +238,246 @@ mod guest {
     wit_bindgen::generate!({
         world: "invoked-service",
         path: "../../crates/scxml-wit/wit/scxml",
+        // The world's `wasi:clocks` interfaces too.
+        generate_all,
     });
 
     use std::cell::RefCell;
+    use std::collections::VecDeque;
+    use std::rc::Rc;
+    use std::task::{Poll, Waker};
 
     use exports::stateforward::scxml::invoked_service_api::Guest;
-    use stateforward::scxml::invoked_service_host;
     use stateforward::scxml::outbound_http::{self, HttpRequest, TextPart};
     use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
     use stateforward::scxml::types::{
-        ComponentError, DataValue, ErrorCode, ErrorVersion, Event, EventType, ServiceInvocation,
-        SlotReference,
+        ComponentError, DataValue, ErrorCode, ErrorVersion, Event, EventType, InvokeRequest,
     };
+    use wasi::clocks::monotonic_clock;
 
     use super::{Echo, EchoAction, EchoError};
 
-    thread_local! {
-        // This instance's one invocation. The Component Model instance is
-        // its single owner (the host instantiates one per invocation, on one
-        // thread); each export borrows it for that call only, and the
-        // imports it calls cannot re-enter the component.
-        static SERVICE: RefCell<Option<Echo>> = const { RefCell::new(None) };
-        // The `endpoint` slot's reference, valid for the whole invocation.
-        static ENDPOINT: RefCell<Option<u32>> = const { RefCell::new(None) };
-        // The ticket of the deferred GET in flight, if any.
-        static DEFERRED: RefCell<Option<u64>> = const { RefCell::new(None) };
+    /// The service's result: `ok` with its done data, or its error.
+    type Done = Result<Option<DataValue>, ComponentError>;
+
+    /// What the service's tasks hand the task that owns the returned
+    /// stream, in order.
+    enum Output {
+        Event(Event),
+        Done(Done),
+    }
+
+    /// A single-threaded queue from the service's tasks to the writer task.
+    #[derive(Default)]
+    struct Queue {
+        items: VecDeque<Output>,
+        waker: Option<Waker>,
+    }
+
+    type Outputs = Rc<RefCell<Queue>>;
+
+    fn push(outputs: &Outputs, output: Output) {
+        let mut queue = outputs.borrow_mut();
+        queue.items.push_back(output);
+        if let Some(waker) = queue.waker.take() {
+            waker.wake();
+        }
+    }
+
+    async fn next(outputs: &Outputs) -> Output {
+        std::future::poll_fn(|cx| {
+            let mut queue = outputs.borrow_mut();
+            if let Some(output) = queue.items.pop_front() {
+                Poll::Ready(output)
+            } else {
+                queue.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        })
+        .await
     }
 
     struct Component;
 
+    #[allow(
+        clippy::unused_async_trait_impl,
+        reason = "the WIT `invoke` is an `async func`; it returns once its tasks are spawned"
+    )]
     impl Guest for Component {
-        fn type_uri() -> String {
-            telemetry::event(
-                Operation::TypeUri,
-                SignalEvent::TransformationCompleted,
+        async fn invoke(
+            request: InvokeRequest,
+            mut events: wit_bindgen::StreamReader<Event>,
+        ) -> Result<
+            (
+                wit_bindgen::StreamReader<Event>,
+                wit_bindgen::FutureReader<Done>,
+            ),
+            ComponentError,
+        > {
+            let started = start(&request);
+            telemetry::observe(
+                Operation::Start,
+                if started.is_ok() {
+                    Outcome::Ok
+                } else {
+                    Outcome::Rejected
+                },
+                None,
                 None,
             );
-            super::ECHO_SERVICE_URI.to_owned()
-        }
-
-        fn start(
-            request: ServiceInvocation,
-            references: Vec<SlotReference>,
-        ) -> Result<(), ComponentError> {
-            observed(Operation::Start, || {
-                if request.type_uri != super::ECHO_SERVICE_URI {
-                    return Err(error(ErrorCode::InvalidInput, "service type URI differs"));
-                }
-                let parameters = request
-                    .parameters
-                    .into_iter()
-                    .map(|entry| Ok((entry.name, native_value(entry.value)?)))
-                    .collect::<Result<Vec<_>, ComponentError>>()?;
-                let (mut echo, actions) = Echo::start(
-                    parameters
-                        .iter()
-                        .map(|(name, value)| (name.as_str(), value)),
-                )
-                .map_err(echo_error)?;
-                let endpoint = references
-                    .iter()
-                    .find(|binding| binding.slot == super::ENDPOINT_SLOT)
-                    .map(|binding| binding.reference);
-                if endpoint.is_some() {
-                    echo.bind_endpoint();
-                }
-                ENDPOINT.set(endpoint);
-                SERVICE.set(Some(echo));
-                run(actions)
-            })
-        }
-
-        fn send(event: Event) -> Result<(), ComponentError> {
-            observed(Operation::Send, || {
-                let data = native_value(event.data)?;
-                let actions = with_service(|echo| echo.send(&event.name, data))?;
-                run(actions)
-            })
-        }
-
-        fn wake() -> Result<(), ComponentError> {
-            observed(Operation::Wake, || {
-                // A settled deferred GET, else the timer.
-                let settled = DEFERRED
-                    .with_borrow(|ticket| *ticket)
-                    .and_then(outbound_http::take);
-                let actions = match settled {
-                    Some(outcome) => {
-                        DEFERRED.set(None);
-                        let response = outcome?;
-                        with_service(|echo| echo.settled(response.status))?
+            let (echo, delay, endpoint) = started?;
+            let echo = Rc::new(RefCell::new(echo));
+            let outputs: Outputs = Rc::default();
+            let (mut returned, returned_reader) = wit_stream::new::<Event>();
+            let (done, done_reader) = wit_future::new::<Done>(|| {
+                Err(error(
+                    ErrorCode::Platform,
+                    "the service ended without a result",
+                ))
+            });
+            // The writer: every returned event in order, then the result.
+            let writer_outputs = Rc::clone(&outputs);
+            wit_bindgen::spawn(async move {
+                loop {
+                    match next(&writer_outputs).await {
+                        Output::Event(event) => {
+                            if returned.write_one(event).await.is_some() {
+                                return;
+                            }
+                        }
+                        Output::Done(result) => {
+                            drop(returned);
+                            let _ = done.write(result).await;
+                            return;
+                        }
                     }
-                    None => with_service(Echo::wake)?,
-                };
-                run(actions)
-            })
+                }
+            });
+            // The timer, on the session's logical clock.
+            if let Some(delay) = delay {
+                let timer_echo = Rc::clone(&echo);
+                let timer_outputs = Rc::clone(&outputs);
+                wit_bindgen::spawn(async move {
+                    monotonic_clock::wait_for(delay.saturating_mul(1_000_000)).await;
+                    let action = timer_echo.borrow_mut().tick();
+                    carry_out(action, &timer_echo, &timer_outputs, endpoint);
+                });
+            }
+            // The events the invoking session sends.
+            wit_bindgen::spawn(async move {
+                while let Some(event) = events.next().await {
+                    telemetry::event(Operation::Send, SignalEvent::InputAccepted, None);
+                    let action = match native_value(event.data) {
+                        Ok(data) => echo.borrow_mut().send(&event.name, data),
+                        Err(failure) => {
+                            push(&outputs, Output::Done(Err(failure)));
+                            return;
+                        }
+                    };
+                    if carry_out(action, &echo, &outputs, endpoint) {
+                        return;
+                    }
+                    // A task spawned from a running task (a fetch) is polled
+                    // only once the executor runs again: yield so it does.
+                    wit_bindgen::yield_async().await;
+                }
+            });
+            Ok((returned_reader, done_reader))
         }
+    }
 
-        fn cancel() -> Result<(), ComponentError> {
-            observed(Operation::Cancel, || {
-                SERVICE.with_borrow_mut(|service| {
-                    if let Some(echo) = service.as_mut() {
-                        echo.cancel();
+    /// Parses the request: the service state, its timer, and its
+    /// `endpoint` reference.
+    fn start(request: &InvokeRequest) -> Result<(Echo, Option<u64>, Option<u32>), ComponentError> {
+        if request.type_uri != super::ECHO_SERVICE_URI {
+            return Err(error(ErrorCode::InvalidInput, "service type URI differs"));
+        }
+        let parameters = request
+            .parameters
+            .iter()
+            .map(|entry| Ok((entry.name.as_str(), native_value(entry.value.clone())?)))
+            .collect::<Result<Vec<_>, ComponentError>>()?;
+        let (mut echo, delay) = Echo::start(parameters.iter().map(|(name, value)| (*name, value)))
+            .map_err(echo_error)?;
+        let endpoint = request
+            .references
+            .iter()
+            .find(|binding| binding.slot == super::ENDPOINT_SLOT)
+            .map(|binding| binding.reference);
+        if endpoint.is_some() {
+            echo.bind_endpoint();
+        }
+        Ok((echo, delay, endpoint))
+    }
+
+    /// Carries out one action; `true` when the service is done.
+    fn carry_out(
+        action: Result<EchoAction, EchoError>,
+        echo: &Rc<RefCell<Echo>>,
+        outputs: &Outputs,
+        endpoint: Option<u32>,
+    ) -> bool {
+        match action {
+            Err(EchoError::NotRunning) => true,
+            Err(failure) => {
+                push(outputs, Output::Done(Err(echo_error(failure))));
+                true
+            }
+            Ok(EchoAction::Return { name, data }) => {
+                push(
+                    outputs,
+                    Output::Event(event(name.as_str(), wit_value(data))),
+                );
+                false
+            }
+            Ok(EchoAction::Done(data)) => {
+                push(outputs, Output::Done(Ok(Some(wit_value(data)))));
+                true
+            }
+            Ok(EchoAction::Fetch) => {
+                let Some(reference) = endpoint else {
+                    push(
+                        outputs,
+                        Output::Done(Err(echo_error(EchoError::NoEndpoint))),
+                    );
+                    return true;
+                };
+                // Suspends only this task: the service keeps reading events.
+                let echo = Rc::clone(echo);
+                let outputs = Rc::clone(outputs);
+                wit_bindgen::spawn(async move {
+                    let response = outbound_http::fetch(HttpRequest {
+                        method: "GET".to_owned(),
+                        url: vec![TextPart::Reference(reference)],
+                        headers: Vec::new(),
+                        body: Vec::new(),
+                    })
+                    .await;
+                    match response {
+                        Ok(response) => {
+                            let action = echo.borrow_mut().fetched(response.status);
+                            carry_out(action, &echo, &outputs, Some(reference));
+                        }
+                        Err(failure) => push(&outputs, Output::Done(Err(failure))),
                     }
                 });
-                Ok(())
-            })
-        }
-    }
-
-    fn with_service(
-        body: impl FnOnce(&mut Echo) -> Result<Vec<EchoAction>, EchoError>,
-    ) -> Result<Vec<EchoAction>, ComponentError> {
-        SERVICE.with_borrow_mut(|service| match service.as_mut() {
-            Some(echo) => body(echo).map_err(echo_error),
-            None => Err(error(ErrorCode::Protocol, "the service was not started")),
-        })
-    }
-
-    fn run(actions: Vec<EchoAction>) -> Result<(), ComponentError> {
-        for action in actions {
-            match action {
-                EchoAction::Emit { name, data } => invoked_service_host::emit(&Event {
-                    name: name.as_str().to_owned(),
-                    event_type: EventType::External,
-                    send_id: None,
-                    origin: None,
-                    origin_type: None,
-                    invoke_id: None,
-                    data: wit_value(data),
-                    raw: None,
-                    trace_context: None,
-                })?,
-                EchoAction::Complete(data) => {
-                    invoked_service_host::complete(Some(&wit_value(data)))?;
-                }
-                EchoAction::SetWakeup(delay) => invoked_service_host::set_wakeup(delay)?,
-                EchoAction::Begin => {
-                    let reference = ENDPOINT
-                        .with_borrow(|endpoint| *endpoint)
-                        .ok_or_else(|| error(ErrorCode::Protocol, "no endpoint is bound"))?;
-                    let ticket = outbound_http::begin(&HttpRequest {
-                        method: "GET".to_owned(),
-                        url: vec![TextPart::Reference(reference)],
-                        headers: Vec::new(),
-                        body: Vec::new(),
-                    })?;
-                    DEFERRED.set(Some(ticket));
-                }
-                EchoAction::Fetch => {
-                    let reference = ENDPOINT
-                        .with_borrow(|endpoint| *endpoint)
-                        .ok_or_else(|| error(ErrorCode::Protocol, "no endpoint is bound"))?;
-                    let response = outbound_http::fetch(&HttpRequest {
-                        method: "GET".to_owned(),
-                        url: vec![TextPart::Reference(reference)],
-                        headers: Vec::new(),
-                        body: Vec::new(),
-                    })?;
-                    invoked_service_host::emit(&Event {
-                        name: super::FETCHED_EVENT.to_owned(),
-                        event_type: EventType::External,
-                        send_id: None,
-                        origin: None,
-                        origin_type: None,
-                        invoke_id: None,
-                        data: DataValue::Number(f64::from(response.status)),
-                        raw: None,
-                        trace_context: None,
-                    })?;
-                }
+                false
             }
         }
-        Ok(())
+    }
+
+    fn event(name: &str, data: DataValue) -> Event {
+        Event {
+            name: name.to_owned(),
+            event_type: EventType::External,
+            send_id: None,
+            origin: None,
+            origin_type: None,
+            invoke_id: None,
+            data,
+            raw: None,
+            trace_context: None,
+        }
     }
 
     fn native_value(value: DataValue) -> Result<scxml_types::DataValue, ComponentError> {
@@ -485,30 +536,6 @@ mod guest {
         }
     }
 
-    /// One export call's closed telemetry: its outcome and one event.
-    fn observed<T>(
-        operation: Operation,
-        body: impl FnOnce() -> Result<T, ComponentError>,
-    ) -> Result<T, ComponentError> {
-        let result = body();
-        let outcome = match &result {
-            Ok(_) => Outcome::Ok,
-            Err(failure) if failure.code == ErrorCode::InvalidInput => Outcome::Rejected,
-            Err(_) => Outcome::Failed,
-        };
-        telemetry::observe(operation, outcome, None, None);
-        telemetry::event(
-            operation,
-            if result.is_ok() {
-                SignalEvent::TransformationCompleted
-            } else {
-                SignalEvent::InputRejected
-            },
-            None,
-        );
-        result
-    }
-
     export!(Component);
 }
 
@@ -522,17 +549,17 @@ mod tests {
     }
 
     #[test]
-    fn start_schedules_a_wakeup_from_the_delay_parameter() {
+    fn start_reads_the_timer_from_the_delay_parameter() {
         let delay = number(250.0);
-        let (_, actions) = Echo::start([("delay", &delay)]).expect("valid delay");
-        assert_eq!(actions, [EchoAction::SetWakeup(250)]);
+        let (_, timer) = Echo::start([("delay", &delay)]).expect("valid delay");
+        assert_eq!(timer, Some(250));
         let text = DataValue::String("40".into());
-        let (_, actions) = Echo::start([("other", &delay), ("delay", &text)]).expect("digits");
-        assert_eq!(actions, [EchoAction::SetWakeup(40)]);
-        let (_, actions) = Echo::start([]).expect("no delay");
-        assert!(actions.is_empty());
+        let (_, timer) = Echo::start([("other", &delay), ("delay", &text)]).expect("digits");
+        assert_eq!(timer, Some(40));
+        let (_, timer) = Echo::start([]).expect("no delay");
+        assert_eq!(timer, None);
         let zero = number(0.0);
-        assert!(Echo::start([("delay", &zero)]).expect("zero").1.is_empty());
+        assert_eq!(Echo::start([("delay", &zero)]).expect("zero").1, None);
         for bad in [
             number(-1.0),
             number(1.5),
@@ -549,48 +576,42 @@ mod tests {
     #[test]
     fn send_echoes_and_stop_completes_with_a_summary() {
         let (mut echo, _) = Echo::start([]).expect("start");
-        let actions = echo
+        let action = echo
             .send("ping", DataValue::String("x".into()))
             .expect("echo");
         assert!(matches!(
-            actions.as_slice(),
-            [EchoAction::Emit { name, data }] if name.as_str() == "echo.ping" && *data == DataValue::String("x".into())
+            action,
+            EchoAction::Return { name, data } if name.as_str() == "echo.ping" && data == DataValue::String("x".into())
         ));
-        let tick = echo.wake().expect("wake");
+        let tick = echo.tick().expect("tick");
         assert!(matches!(
-            tick.as_slice(),
-            [EchoAction::Emit { name, .. }] if name.as_str() == TICK_EVENT
+            tick,
+            EchoAction::Return { name, .. } if name.as_str() == TICK_EVENT
         ));
         let done = echo.send("stop", DataValue::Absent).expect("stop");
         assert_eq!(
             done,
-            [EchoAction::Complete(DataValue::JsonObject(
-                "{\"echoed\":1,\"ticks\":1}".into()
-            ))]
+            EchoAction::Done(DataValue::JsonObject("{\"echoed\":1,\"ticks\":1}".into()))
         );
         assert!(!echo.running());
         assert_eq!(
             echo.send("late", DataValue::Absent),
             Err(EchoError::NotRunning)
         );
-        assert_eq!(echo.wake(), Err(EchoError::NotRunning));
+        assert_eq!(echo.tick(), Err(EchoError::NotRunning));
     }
 
     #[test]
-    fn invalid_echo_names_and_cancellation_fail_closed() {
+    fn invalid_echo_names_fail_closed() {
         let (mut echo, _) = Echo::start([]).expect("start");
         assert_eq!(
             echo.send(&"a".repeat(1_100), DataValue::Absent),
             Err(EchoError::InvalidEventName)
         );
-        echo.cancel();
-        echo.cancel();
-        assert!(!echo.running());
-        assert_eq!(echo.wake(), Err(EchoError::NotRunning));
     }
 
     #[test]
-    fn fetch_requests_the_bound_endpoint_only() {
+    fn fetch_requests_the_bound_endpoint_only_and_returns_its_status() {
         let (mut echo, _) = Echo::start([]).expect("start");
         assert_eq!(
             echo.send(super::FETCH_EVENT, DataValue::Absent),
@@ -599,23 +620,12 @@ mod tests {
         echo.bind_endpoint();
         assert_eq!(
             echo.send(super::FETCH_EVENT, DataValue::Absent),
-            Ok(vec![EchoAction::Fetch])
+            Ok(EchoAction::Fetch)
         );
-        assert_eq!(
-            echo.send(super::DEFER_EVENT, DataValue::Absent),
-            Ok(vec![EchoAction::Begin])
-        );
-    }
-
-    #[test]
-    fn a_settled_deferred_fetch_emits_its_status() {
-        let (mut echo, _) = Echo::start([]).expect("start");
-        let actions = echo.settled(204).expect("running");
+        let action = echo.fetched(204).expect("running");
         assert!(matches!(
-            actions.as_slice(),
-            [EchoAction::Emit { name, data }] if name.as_str() == super::FETCHED_EVENT && *data == number(204.0)
+            action,
+            EchoAction::Return { name, data } if name.as_str() == super::FETCHED_EVENT && data == number(204.0)
         ));
-        echo.cancel();
-        assert_eq!(echo.settled(204), Err(EchoError::NotRunning));
     }
 }

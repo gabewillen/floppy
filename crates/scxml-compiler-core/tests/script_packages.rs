@@ -72,7 +72,6 @@ fn compile(scripts: Vec<ScriptPackage>, resolution: ScriptResolution) -> Compile
         package_schemas: Vec::new(),
         scripts,
         script_resolution: resolution,
-        service_types: None,
         event_schemas: std::collections::BTreeMap::new(),
     })
 }
@@ -272,7 +271,6 @@ fn src_with_inline_content_is_rejected_before_lowering() {
         package_schemas: Vec::new(),
         scripts: Vec::new(),
         script_resolution: ScriptResolution::Runtime,
-        service_types: None,
         event_schemas: std::collections::BTreeMap::new(),
     });
     assert!(output.artifact.is_none());
@@ -302,7 +300,6 @@ fn one_uri_cannot_carry_two_pins() {
         package_schemas: Vec::new(),
         scripts: vec![package("lib.wasm", scxml_script::WASM_MEDIA_TYPE, bytes)],
         script_resolution: ScriptResolution::Compile,
-        service_types: None,
         event_schemas: std::collections::BTreeMap::new(),
     });
     let ir = output

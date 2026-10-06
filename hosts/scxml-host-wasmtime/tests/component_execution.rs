@@ -64,7 +64,7 @@ fn hostile_fixture(name: &str) -> std::path::PathBuf {
 fn write_fixture_manifest(directory: &Path, size: usize, digest: &str) -> std::path::PathBuf {
     let manifest = directory.join("manifest.tsv");
     let text = format!(
-        "schema\tstateforward.wasm-artifacts/v1\nprofile\trelease\ntarget\twasm32-wasip2\nartifact-count\t1\nwasm-tools\twasm-tools 1.240.0\nwasi-virt\twasi-virt 0.2.0\nartifact\tscxml_machine\tscxml_machine.virtualized.wasm\t{size}\t{digest}\n"
+        "schema\tstateforward.wasm-artifacts/v1\nprofile\trelease\ntarget\twasm32-wasip2\nartifact-count\t1\nwasm-tools\twasm-tools 1.244.0\nwasi-virt\twasi-virt 0.2.0\nartifact\tscxml_machine\tscxml_machine.virtualized.wasm\t{size}\t{digest}\n"
     );
     std::fs::write(&manifest, text).expect("fixture manifest is writable");
     manifest
@@ -102,7 +102,7 @@ fn inspect_script_manifest(manifest: &Path) -> (std::path::PathBuf, String, Stri
         "profile\trelease",
         "target\twasm32-wasip2",
         "artifact-count\t1",
-        "wasm-tools\twasm-tools 1.240.0",
+        "wasm-tools\twasm-tools 1.244.0",
         "wasi-virt\twasi-virt 0.2.0",
     ] {
         assert!(
