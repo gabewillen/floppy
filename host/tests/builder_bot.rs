@@ -162,6 +162,11 @@ const PARENT: &str = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version=
 </scxml>"##;
 
 fn open(config: &Config, clock: ClockMode) -> SessionHandle {
+    open_builder(config, clock, builder_source())
+}
+
+/// [`open`] with `builder` as the text of `builder.scxml`.
+fn open_builder(config: &Config, clock: ClockMode, builder: String) -> SessionHandle {
     let packages = Packages::load(config).expect("the three packages bind");
     let values = Values::granted(
         config
@@ -188,7 +193,7 @@ fn open(config: &Config, clock: ClockMode) -> SessionHandle {
             compiled,
             session_id: "builder-harness".into(),
             clock,
-            documents: vec![("builder.scxml".into(), builder_source())],
+            documents: vec![("builder.scxml".into(), builder)],
         },
     )
     .expect("the session opens")
@@ -401,6 +406,45 @@ fn impostor_draft() -> String {
     .to_string()
 }
 
+/// A valid draft whose green state first sends `error.stale` and then
+/// `builder.timeout` to `#_parent`: the error ends each test, so the
+/// `builder.timeout` is still queued when the candidate's invocation is
+/// cancelled.
+fn stale_timeout_draft() -> String {
+    draft(&traffic_light(&green_separate(), "red").replace(
+        "<onentry><send target=\"#_parent\" event=\"light.green\"/>",
+        "<onentry><send target=\"#_parent\" event=\"error.stale\"/><send target=\"#_parent\" event=\"builder.timeout\"/><send target=\"#_parent\" event=\"light.green\"/>",
+    ))
+}
+
+/// A draft that finishes on its second `ping`, with two tests that each
+/// send one `ping` and expect it not to finish: a test whose `ping` is sent
+/// twice fails.
+fn two_ping_draft() -> String {
+    json!({
+        "scxml": format!(
+            r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript" name="two_pings" initial="first">
+  <state id="first">
+    <onentry><send target="#_parent" event="ready"/></onentry>
+    <transition event="ping" event:schema='{BUTTON_SCHEMA}' target="second"/>
+  </state>
+  <state id="second">
+    <transition event="ping" event:schema='{BUTTON_SCHEMA}' target="end"/>
+  </state>
+  <final id="end"/>
+</scxml>"##
+        ),
+        "schemas": [{"event": "ping", "schema": BUTTON_SCHEMA}],
+        "tests": [
+            {"name": "first run", "events": [{"name": "ping", "data": "{}", "delay_ms": 0}],
+             "settle_ms": 1000, "expect_events": ["ready"], "expect_done": false},
+            {"name": "second run", "events": [{"name": "ping", "data": "{}", "delay_ms": 0}],
+             "settle_ms": 1000, "expect_events": ["ready"], "expect_done": false},
+        ],
+    })
+    .to_string()
+}
+
 fn completion(content: &str) -> String {
     json!({
         "choices": [{"index": 0, "finish_reason": "stop",
@@ -461,7 +505,9 @@ fn mock_reply(
             | "/smuggle/v1/chat/completions"
             | "/unicode/v1/chat/completions"
             | "/doctype/v1/chat/completions"
-            | "/impostor/v1/chat/completions",
+            | "/impostor/v1/chat/completions"
+            | "/stale/v1/chat/completions"
+            | "/pings/v1/chat/completions",
             Some("topology_plan"),
         ) => Some(completion(PLAN)),
         ("/flaky/v1/chat/completions", Some("topology_plan")) => {
@@ -474,6 +520,11 @@ fn mock_reply(
         ("/impostor/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&impostor_draft()))
         }
+        ("/stale/v1/chat/completions", Some("scxml_draft")) => Some(completion(&match authors {
+            1 => stale_timeout_draft(),
+            _ => draft(&traffic_light(&green_separate(), "red")),
+        })),
+        ("/pings/v1/chat/completions", Some("scxml_draft")) => Some(completion(&two_ping_draft())),
         ("/smuggle/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&smuggling_draft()))
         }
@@ -637,6 +688,22 @@ const ALL: [&str; 4] = [
 
 fn run(mock: &Mock, test: &str, route: &str, env: &[&str], request: &Json) -> Vec<Egress> {
     run_deciding(mock, test, route, "typesafe", env, request)
+}
+
+/// [`run`] with `builder` as the text of `builder.scxml`.
+fn run_builder(
+    mock: &Mock,
+    test: &str,
+    route: &str,
+    builder: String,
+    request: &Json,
+) -> Vec<Egress> {
+    let config = config(&env_file(test, mock, route, "typesafe"), &ALL);
+    let handle = open_builder(&config, ClockMode::Logical, builder);
+    handle
+        .send(build_event(request))
+        .expect("the session accepts the build event");
+    until_closed(&handle, Duration::from_mins(5))
 }
 
 /// [`run`] with the decision backend on `decision_route`.
@@ -1122,6 +1189,72 @@ fn a_candidates_control_event_names_are_recorded_as_outputs() {
         simulation,
         json!(["sim.settle", "sim.drive", "light.green"]),
         "{done}"
+    );
+}
+
+/// A `builder.timeout` a cancelled candidate sent to `#_parent` does not
+/// end the simulation as a timeout: the first draft's tests fail on its
+/// `error.stale` (each test, not the whole simulation), and the repaired
+/// draft passes.
+#[test]
+fn a_cancelled_candidates_builder_timeout_does_not_end_the_simulation() {
+    let mock = Mock::start();
+    let records = run(&mock, "stale", "stale", &ALL, &json!({"spec": SPEC}));
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "builder.done", "{done}");
+    let report = &done["report"];
+    assert_eq!(report["failures"], 1, "{report}");
+    let diagnostics = report["history"][0]["diagnostics"]
+        .as_array()
+        .expect("the failure's diagnostics");
+    assert_eq!(diagnostics.len(), 2, "both tests ran: {report}");
+    assert!(
+        diagnostics.iter().all(|d| d["code"] == "test-failed"
+            && d["message"]
+                .as_str()
+                .is_some_and(|m| m.contains("error error.stale"))),
+        "{report}"
+    );
+}
+
+/// The `sim.drive` of a test whose candidate fails to start is not taken by
+/// the next test: that test's `ping` is sent once. The builder here is
+/// `builder.scxml` with its first test's invocation content replaced by a
+/// text that is no SCXML document (a validated draft gives no way to make
+/// the child's start fail).
+#[test]
+fn a_failed_invocations_sim_drive_does_not_drive_the_next_test() {
+    let source = builder_source();
+    let failing = source.replacen(
+        r#"<content expr="scxml_text"/>"#,
+        r#"<content expr="sim_index === 0 ? 'not a document' : scxml_text"/>"#,
+        1,
+    );
+    assert_ne!(failing, source, "the builder invokes scxml_text");
+    let mock = Mock::start();
+    let records = run_builder(
+        &mock,
+        "pings",
+        "pings",
+        failing,
+        &json!({"spec": SPEC, "max_attempts": 1}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "builder.failed", "{failed}");
+    let diagnostics = failed["diagnostics"]
+        .as_array()
+        .expect("the failure's diagnostics");
+    assert_eq!(
+        diagnostics.len(),
+        1,
+        "only the test whose invocation failed fails: {failed}"
+    );
+    let message = diagnostics[0]["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("test first run") && message.contains("error error.execution"),
+        "{failed}"
     );
 }
 

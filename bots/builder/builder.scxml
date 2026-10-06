@@ -93,6 +93,11 @@
     <data id="sim_test_cap_ms" expr="120000"/>
     <data id="candidate_id" expr="null"/>
     <data id="sim_index" expr="0"/>
+    <!-- Counters of simulations and test runs: each control event the
+         builder sends itself carries the one it belongs to, so a control
+         event left on the queue by an earlier run never counts. -->
+    <data id="simulation" expr="0"/>
+    <data id="sim_run_seq" expr="0"/>
     <data id="sim_results" expr="[]"/>
     <data id="observed" expr="[]"/>
     <data id="child_done" expr="false"/>
@@ -212,14 +217,20 @@
        tests of at most sim_test_cap_ms each) plus a margin. -->
   <state id="simulate" initial="sim_next">
     <onentry>
-      <send id="simulate-timeout" event="builder.timeout" delayexpr="(max_tests * sim_test_cap_ms + 60000) + 'ms'"/>
+      <assign location="simulation" expr="simulation + 1"/>
+      <send id="simulate-timeout" event="builder.timeout" delayexpr="(max_tests * sim_test_cap_ms + 60000) + 'ms'">
+        <param name="run" expr="simulation"/>
+      </send>
       <assign location="sim_index" expr="0"/>
       <assign location="sim_results" expr="[]"/>
     </onentry>
     <onexit>
       <cancel sendid="simulate-timeout"/>
     </onexit>
-    <transition event="builder.timeout" target="retry_gate">
+    <!-- Only this simulation's own timeout: a candidate's event of that name
+         (it carries an invoke id, also after its invocation was cancelled)
+         and an earlier simulation's fired timeout fall through. -->
+    <transition event="builder.timeout" cond="!_event.invokeid &amp;&amp; _event.data !== null &amp;&amp; typeof _event.data === 'object' &amp;&amp; _event.data.run === simulation" target="retry_gate">
       <assign location="diagnostics" expr="[{kind: 'timeout', code: 'simulate-timeout', message: 'the simulation did not finish in time'}]"/>
     </transition>
 
@@ -237,8 +248,13 @@
         <assign location="child_done" expr="false"/>
         <assign location="sim_error" expr="null"/>
         <assign location="sim_sends" expr="[]"/>
-        <!-- Processed after the invocation starts (external queue). -->
-        <send event="sim.drive"/>
+        <assign location="sim_run_seq" expr="sim_run_seq + 1"/>
+        <!-- Processed after the invocation starts (external queue). A run
+             whose invocation fails to start ends on error.execution before
+             this is processed; the tag keeps the next run from taking it. -->
+        <send event="sim.drive">
+          <param name="run" expr="sim_run_seq"/>
+        </send>
       </onentry>
       <onexit>
         <foreach array="sim_sends" item="sid">
@@ -249,10 +265,10 @@
       <invoke idlocation="candidate_id" type="scxml">
         <content expr="scxml_text"/>
       </invoke>
-      <!-- The builder's own control events never carry an invoke id; a
-           candidate's events of the same names fall through to the
-           recorder below. -->
-      <transition event="sim.drive" cond="!_event.invokeid">
+      <!-- The builder's own control events never carry an invoke id and
+           carry this run's tag; a candidate's events of the same names fall
+           through to the recorder below, and an earlier run's are dropped. -->
+      <transition event="sim.drive" cond="!_event.invokeid &amp;&amp; _event.data !== null &amp;&amp; typeof _event.data === 'object' &amp;&amp; _event.data.run === sim_run_seq">
         <foreach array="draft.tests[sim_index].events" item="step">
           <send eventexpr="step.name" targetexpr="'#_' + candidate_id" idlocation="sent_id"
                 delayexpr="Math.min(Math.max(step.delay_ms, 0), 60000) + 'ms'">
@@ -261,12 +277,14 @@
           <assign location="sim_sends" expr="sim_sends.concat([sent_id])"/>
         </foreach>
         <send id="sim-settle" event="sim.settle"
-              delayexpr="Math.min(sim_test_cap_ms, Math.max.apply(null, [1, draft.tests[sim_index].settle_ms].concat(draft.tests[sim_index].events.map(function (e) { return e.delay_ms + 1; })))) + 'ms'"/>
+              delayexpr="Math.min(sim_test_cap_ms, Math.max.apply(null, [1, draft.tests[sim_index].settle_ms].concat(draft.tests[sim_index].events.map(function (e) { return e.delay_ms + 1; })))) + 'ms'">
+          <param name="run" expr="sim_run_seq"/>
+        </send>
       </transition>
       <transition event="done.invoke" cond="_event.invokeid === candidate_id" target="sim_check">
         <assign location="child_done" expr="true"/>
       </transition>
-      <transition event="sim.settle" cond="!_event.invokeid" target="sim_check"/>
+      <transition event="sim.settle" cond="!_event.invokeid &amp;&amp; _event.data !== null &amp;&amp; typeof _event.data === 'object' &amp;&amp; _event.data.run === sim_run_seq" target="sim_check"/>
       <transition event="error.*" cond="!_event.invokeid || _event.invokeid === candidate_id" target="sim_check">
         <assign location="sim_error" expr="_event.name"/>
       </transition>

@@ -66,9 +66,14 @@ intake -> design -> author -> validate -> simulate -> package -> done
   sends to `#_parent` until the settle time (at most `sim_test_cap_ms`,
   120 s) or its `done.invoke`, and compares: the expected outputs must
   appear in order (others may come between) and the child must finish
-  exactly when the test says so. The builder's own `sim.drive` and
-  `sim.settle` are taken only without an invoke id, so a child that sends
-  events of those names has them recorded as outputs.
+  exactly when the test says so. The builder's own control events
+  (`sim.drive`, `sim.settle`, and the simulation's `builder.timeout`) are
+  taken only without an invoke id and only with the `run` tag of the test
+  run (`sim_run_seq`) or simulation (`simulation`) that sent them: a child
+  that sends events of those names has them recorded as outputs (or, once
+  its invocation is cancelled, dropped), and a control event an earlier run
+  left on the queue (for example the `sim.drive` of a run whose invocation
+  failed to start) is dropped.
 * `package`: sends `builder.done`.
 * `retry_gate`: every failure (generation, draft, validation, simulation,
   timeout) passes through it; it counts the failure and fails the build at
@@ -132,20 +137,22 @@ its tests. Other cases cover a redesign that sends the plan it replaces,
 a failed redesign keeping that plan, `triage.repair` not being offered
 without a plan, a draft that breaks the draft contract never running (also
 through a non-ASCII namespace prefix or an entity), a candidate's
-`sim.settle` and `sim.drive` being recorded as outputs, the fallback
-triage exhausting
-`max_attempts`, and an invalid request. The
+`sim.settle` and `sim.drive` being recorded as outputs, a cancelled
+candidate's `builder.timeout` not ending the next simulation, a failed
+invocation's `sim.drive` not driving the next test, the fallback triage
+exhausting `max_attempts`, and an invalid request. The
 ignored `live_builder_through_an_env_file` test runs the same spec with the
 real backends; [`examples/traffic_light`](examples/traffic_light) is one such
 live build (its `report.json` records one attempt, so no triage ran), kept
 because it validates and passed its own simulation. It was built by the
 first builder (commit `89ec4d05`), before the round-1 review fixes (the
 draft contract, per-test invoke ids, the simulation timeouts), so its
-`report.json` has no per-test `invokeid`. Two live runs of the current
-builder (2026-10-06, `gpt-4o-mini` and `gpt-4.1`) ended in
-`builder.failed` with `attempts-exhausted`: the first on validation
-errors, the second on simulation tests whose expected outputs the drafts
-did not produce in time. No live `builder.done` of the current builder
-exists yet. It is model output, kept as built: for example
-its `onexit` handlers do not cancel the phase timers, which its tests do not
-detect.
+`report.json` has no per-test `invokeid`. The traffic_light example is
+model output, kept as built: for example its `onexit` handlers do not
+cancel the phase timers, which its tests do not detect. No live
+`builder.done` of the current builder exists yet. The development session
+log reports two live runs of the current builder (2026-10-06,
+`gpt-4o-mini` and `gpt-4.1`) that ended in `builder.failed`; the
+repository holds no record of them (the live test overwrites the
+untracked `target/builder-live/failed.json`), so their outcomes and causes
+are unproven.
