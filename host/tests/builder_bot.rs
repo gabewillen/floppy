@@ -754,11 +754,14 @@ fn the_builder_repairs_an_invalid_draft_fixes_it_simulates_it_and_reports_done()
         "each test runs its own invocation, so nothing an earlier one queued counts: {report}"
     );
 
-    // One plan, two drafts (the second with the first one's diagnostics),
-    // one decision.
-    let received = mock.received();
-    let designs = chat_requests(&received, "topology_plan");
-    let authors = chat_requests(&received, "scxml_draft");
+    assert_repair_requests(&mock.received());
+}
+
+/// The repair run's requests: one plan, two drafts (the second with the
+/// first one's diagnostics, draft, and tests), one decision.
+fn assert_repair_requests(received: &[Received]) {
+    let designs = chat_requests(received, "topology_plan");
+    let authors = chat_requests(received, "scxml_draft");
     assert_eq!(designs.len(), 1);
     assert_eq!(authors.len(), 2);
     assert_eq!(designs[0].user_input()["spec"], SPEC);
