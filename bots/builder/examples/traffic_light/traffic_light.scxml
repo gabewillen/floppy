@@ -1,0 +1,45 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript" initial="idle">
+  <state id="idle">
+    <onentry>
+      <send event="light.red" target="#_parent"/>
+    </onentry>
+    <transition target="green"/>
+  </state>
+  <state id="green">
+    <onentry>
+      <send event="light.green" target="#_parent"/>
+      <send event="timer.green" delay="5s"/>
+    </onentry>
+    <onexit>
+      <!-- Cancel the green timer if leaving early -->
+    </onexit>
+    <transition event="timer.green" target="yellow"/>
+    <transition event="ped.button" event:schema='{"type":"object"}' target="yellow"/>
+  </state>
+  <state id="yellow">
+    <onentry>
+      <send event="light.yellow" target="#_parent"/>
+      <send event="timer.yellow" delay="2s"/>
+    </onentry>
+    <onexit>
+      <!-- Cancel yellow timer if leaving early -->
+    </onexit>
+    <transition event="timer.yellow" target="red"/>
+  </state>
+  <state id="red">
+    <onentry>
+      <send event="light.red" target="#_parent"/>
+    </onentry>
+    <transition target="walk"/>
+  </state>
+  <state id="walk">
+    <onentry>
+      <send event="walk.on" target="#_parent"/>
+      <send event="timer.walk" delay="4s"/>
+    </onentry>
+    <onexit>
+      <!-- Cancel walk timer if leaving early -->
+    </onexit>
+    <transition event="timer.walk" target="green"/>
+  </state>
+</scxml>

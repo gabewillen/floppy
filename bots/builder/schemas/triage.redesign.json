@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "triage.redesign",
+  "description": "Redesign: plan the topology again, then author a new draft, because the plan itself looks wrong.",
+  "type": "object",
+  "additionalProperties": false
+}

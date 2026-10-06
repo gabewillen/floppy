@@ -1,0 +1,85 @@
+[
+  {
+    "events": [],
+    "expect_done": false,
+    "expect_events": [
+      "light.red",
+      "light.green",
+      "light.yellow",
+      "light.red",
+      "walk.on",
+      "light.green"
+    ],
+    "name": "normal cycle, no button pressed",
+    "settle_ms": 13000
+  },
+  {
+    "events": [
+      {
+        "data": "{}",
+        "delay_ms": 3000,
+        "name": "ped.button"
+      }
+    ],
+    "expect_done": false,
+    "expect_events": [
+      "light.red",
+      "light.green",
+      "light.yellow",
+      "light.red",
+      "walk.on",
+      "light.green"
+    ],
+    "name": "button pressed early in green",
+    "settle_ms": 10000
+  },
+  {
+    "events": [
+      {
+        "data": "{}",
+        "delay_ms": 4500,
+        "name": "ped.button"
+      }
+    ],
+    "expect_done": false,
+    "expect_events": [
+      "light.red",
+      "light.green",
+      "light.yellow",
+      "light.red",
+      "walk.on",
+      "light.green"
+    ],
+    "name": "button pressed near green end",
+    "settle_ms": 11000
+  },
+  {
+    "events": [
+      {
+        "data": "{}",
+        "delay_ms": 2000,
+        "name": "ped.button"
+      },
+      {
+        "data": "{}",
+        "delay_ms": 9000,
+        "name": "ped.button"
+      }
+    ],
+    "expect_done": false,
+    "expect_events": [
+      "light.red",
+      "light.green",
+      "light.yellow",
+      "light.red",
+      "walk.on",
+      "light.green",
+      "light.yellow",
+      "light.red",
+      "walk.on",
+      "light.green"
+    ],
+    "name": "two button presses in separate cycles",
+    "settle_ms": 22000
+  }
+]

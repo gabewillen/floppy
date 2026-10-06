@@ -1,0 +1,8 @@
+[
+  {
+    "event": "ped.button",
+    "schema": {
+      "type": "object"
+    }
+  }
+]

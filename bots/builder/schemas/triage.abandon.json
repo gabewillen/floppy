@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "triage.abandon",
+  "description": "Give up: the specification cannot be built as an SCXML machine, so report builder.failed.",
+  "type": "object",
+  "additionalProperties": false
+}

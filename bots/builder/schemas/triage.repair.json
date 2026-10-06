@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "triage.repair",
+  "description": "Repair the current draft: author it again from the same plan with the diagnostics of the failed attempt.",
+  "type": "object",
+  "additionalProperties": false
+}

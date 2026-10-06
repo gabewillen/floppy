@@ -1,0 +1,245 @@
+{
+  "attempts": 1,
+  "decisions": [],
+  "failures": 0,
+  "fixes_applied": 0,
+  "history": [],
+  "plan": {
+    "events": [
+      {
+        "description": "request to cross (pedestrian button pressed)",
+        "direction": "input",
+        "name": "ped.button"
+      },
+      {
+        "description": "output to indicate red light",
+        "direction": "output",
+        "name": "light.red"
+      },
+      {
+        "description": "output to indicate yellow light",
+        "direction": "output",
+        "name": "light.yellow"
+      },
+      {
+        "description": "output to indicate green light",
+        "direction": "output",
+        "name": "light.green"
+      },
+      {
+        "description": "output to indicate walk signal",
+        "direction": "output",
+        "name": "walk.on"
+      },
+      {
+        "description": "timer event for green light duration",
+        "direction": "internal",
+        "name": "timer.green"
+      },
+      {
+        "description": "timer event for yellow light duration",
+        "direction": "internal",
+        "name": "timer.yellow"
+      },
+      {
+        "description": "timer event for walk signal duration",
+        "direction": "internal",
+        "name": "timer.walk"
+      }
+    ],
+    "name": "traffic_light_with_ped_button",
+    "states": [
+      {
+        "id": "idle",
+        "kind": "atomic",
+        "parent": "",
+        "purpose": "initial state before light sequence starts"
+      },
+      {
+        "id": "green",
+        "kind": "atomic",
+        "parent": "",
+        "purpose": "green light is on"
+      },
+      {
+        "id": "yellow",
+        "kind": "atomic",
+        "parent": "",
+        "purpose": "yellow light is on"
+      },
+      {
+        "id": "red",
+        "kind": "atomic",
+        "parent": "",
+        "purpose": "red light is on, preceding walk signal"
+      },
+      {
+        "id": "walk",
+        "kind": "atomic",
+        "parent": "",
+        "purpose": "pedestrian walk signal active"
+      }
+    ],
+    "summary": "The state machine cycles through green, yellow, red, and walk states, emitting outputs on every light change and every walk signal. When the button is pressed during green, it ends green early and proceeds to yellow. Outputs are sent for each transition. Timers enforce the duration of each state except walk, which ends on its own timer.",
+    "transitions": [
+      {
+        "description": "start the sequence",
+        "event": "",
+        "source": "idle",
+        "target": "green"
+      },
+      {
+        "description": "emit green light and start green timer",
+        "event": "",
+        "source": "green",
+        "target": "green"
+      },
+      {
+        "description": "if green timer expires without button, go to yellow",
+        "event": "timer.green",
+        "source": "green",
+        "target": "yellow"
+      },
+      {
+        "description": "if button pressed during green, end green early and go to yellow",
+        "event": "ped.button",
+        "source": "green",
+        "target": "yellow"
+      },
+      {
+        "description": "emit yellow light and start yellow timer",
+        "event": "",
+        "source": "yellow",
+        "target": "yellow"
+      },
+      {
+        "description": "when yellow timer expires, go to red",
+        "event": "timer.yellow",
+        "source": "yellow",
+        "target": "red"
+      },
+      {
+        "description": "emit red light and immediately go to walk",
+        "event": "",
+        "source": "red",
+        "target": "walk"
+      },
+      {
+        "description": "emit walk signal and start walk timer",
+        "event": "",
+        "source": "walk",
+        "target": "walk"
+      },
+      {
+        "description": "when walk timer expires, go to green and cycle resumes",
+        "event": "timer.walk",
+        "source": "walk",
+        "target": "green"
+      }
+    ]
+  },
+  "simulation": [
+    {
+      "done": false,
+      "error": null,
+      "expect_done": false,
+      "expected": [
+        "light.red",
+        "light.green",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "light.green"
+      ],
+      "name": "normal cycle, no button pressed",
+      "observed": [
+        "light.red",
+        "light.green",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "light.green"
+      ],
+      "passed": true
+    },
+    {
+      "done": false,
+      "error": null,
+      "expect_done": false,
+      "expected": [
+        "light.red",
+        "light.green",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "light.green"
+      ],
+      "name": "button pressed early in green",
+      "observed": [
+        "light.red",
+        "light.green",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "light.green"
+      ],
+      "passed": true
+    },
+    {
+      "done": false,
+      "error": null,
+      "expect_done": false,
+      "expected": [
+        "light.red",
+        "light.green",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "light.green"
+      ],
+      "name": "button pressed near green end",
+      "observed": [
+        "light.red",
+        "light.green",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "light.green"
+      ],
+      "passed": true
+    },
+    {
+      "done": false,
+      "error": null,
+      "expect_done": false,
+      "expected": [
+        "light.red",
+        "light.green",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "light.green",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "light.green"
+      ],
+      "name": "two button presses in separate cycles",
+      "observed": [
+        "light.red",
+        "light.green",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "light.green",
+        "light.yellow",
+        "light.red",
+        "walk.on",
+        "light.green",
+        "light.yellow"
+      ],
+      "passed": true
+    }
+  ],
+  "warnings": 0
+}

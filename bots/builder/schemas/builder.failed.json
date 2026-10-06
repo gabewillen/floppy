@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "builder.failed",
+  "description": "The builder bot could not build a machine that validates and passes its simulation.",
+  "type": "object",
+  "properties": {
+    "reason": {"enum": ["invalid-request", "attempts-exhausted", "abandoned"]},
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {"enum": ["request", "generate", "draft", "validate", "simulate", "timeout"]},
+          "code": {"type": "string"},
+          "message": {"type": "string"}
+        },
+        "required": ["kind", "code", "message"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["reason", "diagnostics"],
+  "additionalProperties": false
+}

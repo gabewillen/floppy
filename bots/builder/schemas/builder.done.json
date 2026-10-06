@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "builder.done",
+  "description": "The builder bot built an SCXML machine that validates and passes its own simulation.",
+  "type": "object",
+  "properties": {
+    "scxml": {"type": "string", "minLength": 1},
+    "schemas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {"event": {"type": "string"}, "schema": {"type": ["object", "boolean"]}},
+        "required": ["event", "schema"],
+        "additionalProperties": false
+      }
+    },
+    "tests": {"type": "array", "items": {"type": "object"}},
+    "report": {
+      "type": "object",
+      "properties": {
+        "attempts": {"type": "integer", "minimum": 1},
+        "failures": {"type": "integer", "minimum": 0},
+        "fixes_applied": {"type": "integer", "minimum": 0},
+        "warnings": {"type": "integer", "minimum": 0},
+        "plan": {"type": "object"},
+        "decisions": {"type": "array", "items": {"type": "string"}},
+        "history": {"type": "array", "items": {"type": "object"}},
+        "simulation": {"type": "array", "items": {"type": "object"}}
+      },
+      "required": ["attempts", "failures", "fixes_applied", "warnings", "plan", "decisions", "history", "simulation"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["scxml", "schemas", "tests", "report"],
+  "additionalProperties": false
+}
