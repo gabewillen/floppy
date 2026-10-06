@@ -37,7 +37,7 @@ use nemobot_host::config::{CONFIG_FORMAT, Config};
 use nemobot_host::env_file::Values;
 use nemobot_host::packages::Packages;
 use nemobot_host::runtime::{ClockMode, Egress, SessionHandle, SessionSpec, SessionStatus};
-use scxml_host_wasmtime::SessionOutput;
+use scxml_host_wasmtime::{ScriptedEvent, SessionOutput};
 use sha2::{Digest as _, Sha256};
 
 const SERVICE_URI: &str = "https://github.com/stateforward/nemobot/services/generate@v0.1.0";
@@ -153,9 +153,32 @@ struct Received {
     body: Vec<u8>,
 }
 
-const TEXT_REPLY: &str = r#"{"id":"c","object":"chat.completion","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Hello from the fake backend!"}}]}"#;
-const JSON_REPLY: &str = r#"{"choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"{\"score\":41,\"answer\":\"yes\"}"}}]}"#;
-const MISMATCH_REPLY: &str = r#"{"choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"{\"answer\":\"yes\"}"}}]}"#;
+/// A streamed Chat Completions answer (server-sent events, as the generate
+/// service asks for) carrying `content`, split in two deltas.
+fn streamed(content: &str) -> String {
+    let middle = content.chars().count() / 2;
+    let head: String = content.chars().take(middle).collect();
+    let tail: String = content.chars().skip(middle).collect();
+    let chunk = |delta: serde_json::Value, finish: Option<&str>| {
+        serde_json::json!({
+            "object": "chat.completion.chunk",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+        })
+    };
+    [
+        chunk(
+            serde_json::json!({"role": "assistant", "content": ""}),
+            None,
+        ),
+        chunk(serde_json::json!({"content": head}), None),
+        chunk(serde_json::json!({"content": tail}), None),
+        chunk(serde_json::json!({}), Some("stop")),
+    ]
+    .iter()
+    .map(|chunk| format!("data: {chunk}\n\n"))
+    .chain(std::iter::once("data: [DONE]\n\n".to_owned()))
+    .collect()
+}
 
 /// A deterministic fake Chat Completions backend on 127.0.0.1: the first
 /// path segment picks the scripted answer (`/text`, `/json`, `/mismatch`,
@@ -212,14 +235,18 @@ impl Mock {
                     body,
                 });
                 let (status, answer) = match target.as_str() {
-                    "/text/v1/chat/completions" => ("200 OK", TEXT_REPLY),
-                    "/json/v1/chat/completions" => ("200 OK", JSON_REPLY),
-                    "/mismatch/v1/chat/completions" => ("200 OK", MISMATCH_REPLY),
+                    "/text/v1/chat/completions" => {
+                        ("200 OK", streamed("Hello from the fake backend!"))
+                    }
+                    "/json/v1/chat/completions" => {
+                        ("200 OK", streamed(r#"{"score":41,"answer":"yes"}"#))
+                    }
+                    "/mismatch/v1/chat/completions" => ("200 OK", streamed(r#"{"answer":"yes"}"#)),
                     "/fail/v1/chat/completions" => (
                         "500 Internal Server Error",
-                        r#"{"error":{"message":"boom"}}"#,
+                        r#"{"error":{"message":"boom"}}"#.to_owned(),
                     ),
-                    _ => ("404 Not Found", "{}"),
+                    _ => ("404 Not Found", "{}".to_owned()),
                 };
                 let _ = write!(
                     stream,
@@ -403,7 +430,7 @@ fn a_text_generation_posts_the_canonical_request_and_emits_the_reply() {
     );
     assert_eq!(
         String::from_utf8(received[0].body.clone()).expect("UTF-8"),
-        r#"{"messages":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"model":"mock-model"}"#,
+        r#"{"messages":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"model":"mock-model","stream":true}"#,
         "the request body is canonical JSON"
     );
 }
@@ -592,6 +619,119 @@ fn a_grant_to_an_unbound_package_or_one_without_env_slots_fails_closed() {
 /// `OpenAI`'s base URL, the live run's config default (never compiled into
 /// the component).
 const OPENAI_BASE_URL_DEFAULT: &str = "https://api.openai.com/v1";
+
+/// A backend that streams its answer forever: it accepts one connection,
+/// reads the request, answers a chunked `text/event-stream` head, writes one
+/// chunk every 20 ms until a write fails, and reports when it saw the
+/// client close the connection.
+struct Stall {
+    origin: String,
+    requested: std::sync::mpsc::Receiver<()>,
+    closed: std::sync::mpsc::Receiver<Instant>,
+}
+
+impl Stall {
+    fn start() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("the stall binds a loopback port");
+        let origin = format!("http://{}", listener.local_addr().expect("an address"));
+        let (requested_tx, requested) = std::sync::mpsc::channel();
+        let (closed_tx, closed) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("the service connects");
+            let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
+            let mut length = 0;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).is_err() || line == "\r\n" || line.is_empty() {
+                    break;
+                }
+                if let Some((name, value)) = line.trim_end().split_once(':')
+                    && name.eq_ignore_ascii_case("content-length")
+                {
+                    length = value.trim().parse().unwrap_or(0);
+                }
+            }
+            let mut body = vec![0; length];
+            reader
+                .read_exact(&mut body)
+                .expect("the request body is read");
+            let mut writer = stream.try_clone().expect("the stream clones");
+            writer
+                .write_all(b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\n\r\n")
+                .expect("the head is written");
+            requested_tx.send(()).expect("the test waits");
+            let streaming = std::thread::spawn(move || {
+                let event =
+                    b"data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"token \"}}]}\n\n";
+                let framed = [format!("{:x}\r\n", event.len()).as_bytes(), event, b"\r\n"].concat();
+                while writer.write_all(&framed).is_ok() {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+            });
+            // The client sends nothing more: the next read ends when it
+            // closes the connection.
+            let mut rest = [0_u8; 64];
+            while matches!(reader.read(&mut rest), Ok(read) if read > 0) {}
+            closed_tx.send(Instant::now()).expect("the test waits");
+            streaming.join().expect("the streaming thread ends");
+        });
+        Self {
+            origin,
+            requested,
+            closed,
+        }
+    }
+}
+
+/// Leaving the invoking state cancels the generate invocation (SCXML 6.4),
+/// and the host closes its streaming request's connection at once, while
+/// the session keeps running: the backend sees the close and stops
+/// generating, so no more tokens are produced for a cancelled call.
+#[test]
+fn leaving_the_invoking_state_closes_the_streaming_model_call() {
+    let stall = Stall::start();
+    let env = env_file("stall", &format!("{}/v1", stall.origin));
+    let config = config(&env, &["OPENAI_API_KEY", "OPENAI_BASE_URL"]);
+    let document = format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       version="1.0" datamodel="ecmascript" initial="ask">
+  <state id="ask">
+    <invoke id="gen" type="{SERVICE_URI}" env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
+      {TEXT_PARAMS}
+    </invoke>
+    <transition event="generate.result"><log label="reply" expr="_event.data.text"/></transition>
+    <transition event="leave" target="away"/>
+  </state>
+  <state id="away">
+    <onentry><log label="away" expr="'left'"/></onentry>
+    <transition event="stop" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>"#
+    );
+    let handle = open(&config, &document);
+    stall
+        .requested
+        .recv_timeout(Duration::from_secs(60))
+        .expect("the model call reaches the backend");
+    std::thread::sleep(Duration::from_millis(100));
+    let left = Instant::now();
+    handle
+        .send(ScriptedEvent::named("leave"))
+        .expect("leave is delivered");
+    let closed = stall
+        .closed
+        .recv_timeout(Duration::from_secs(5))
+        .expect("the backend sees the connection close within 5 s of the cancel");
+    assert!(closed.duration_since(left) < Duration::from_secs(5));
+    handle
+        .send(ScriptedEvent::named("stop"))
+        .expect("the session is still running");
+    let records = until_closed(&handle, Duration::from_secs(30));
+    assert_eq!(logs(&records), labelled(&[("away", "left")]), "{records:?}");
+    assert!(finished(&records));
+}
 
 /// The `scxml` extension package (it declares no env slot).
 fn scxml_extension() -> serde_json::Value {

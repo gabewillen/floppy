@@ -105,8 +105,9 @@ the topology. `design` and `author` each arm `builder.timeout` after
 `triage` after `decision_timeout_ms` (60 s), tagged with the stage run
 (`stage_run`) and cancelled on exit. A timeout that fires while the call is
 in flight leaves the state, which cancels the invocation: the service is
-cancelled and its late answer reaches no one. The host's own request
-timeout (600 s) is only a backstop. The simulation is bounded the same way:
+cancelled, the host closes the request's streaming connection at once (so
+the backend stops sending tokens), and no answer reaches anyone. The host's
+own request timeout (600 s) is only a backstop. The simulation is bounded the same way:
 `simulate-timeout` is a delayed send cancelled on exit that fires after
 `max_tests * sim_test_cap_ms` plus 60 s, longer than the longest simulation
 `validate` admits (8 tests of at most 120 s each).

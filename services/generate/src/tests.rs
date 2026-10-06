@@ -10,16 +10,38 @@ fn parse(parameters: &[(&str, Data)]) -> Result<Generation, &'static str> {
     parse_parameters(parameters.iter().map(|(name, value)| (*name, value)))
 }
 
-fn reply(content: &str) -> Vec<u8> {
+/// A server-sent-event stream of `chunks`, then `data: [DONE]`.
+fn stream(chunks: &[Json]) -> Vec<u8> {
+    chunks
+        .iter()
+        .map(|chunk| format!("data: {chunk}\n\n"))
+        .chain(std::iter::once("data: [DONE]\n\n".to_owned()))
+        .collect::<String>()
+        .into_bytes()
+}
+
+/// One chunk whose first choice carries `delta` and `finish_reason`.
+fn chunk(delta: &Json, finish_reason: Option<&str>) -> Json {
     serde_json::json!({
-        "choices": [{
-            "index": 0,
-            "finish_reason": "stop",
-            "message": { "role": "assistant", "content": content },
-        }],
+        "object": "chat.completion.chunk",
+        "choices": [{ "index": 0, "delta": delta, "finish_reason": finish_reason }],
     })
-    .to_string()
-    .into_bytes()
+}
+
+/// A streamed reply of `content`, split in two deltas after a role chunk.
+fn reply(content: &str) -> Vec<u8> {
+    let middle = content.chars().count() / 2;
+    let head: String = content.chars().take(middle).collect();
+    let tail: String = content.chars().skip(middle).collect();
+    stream(&[
+        chunk(
+            &serde_json::json!({ "role": "assistant", "content": "" }),
+            None,
+        ),
+        chunk(&serde_json::json!({ "content": head }), None),
+        chunk(&serde_json::json!({ "content": tail }), None),
+        chunk(&serde_json::json!({}), Some("stop")),
+    ])
 }
 
 #[expect(
@@ -55,7 +77,14 @@ fn a_prompt_with_a_system_message_builds_the_canonical_request() {
     );
     assert_eq!(
         String::from_utf8(request.body).expect("UTF-8"),
-        r#"{"messages":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"model":"mock-model"}"#
+        r#"{"messages":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"model":"mock-model","stream":true}"#
+    );
+    assert_eq!(
+        request.headers[2],
+        (
+            "accept".to_owned(),
+            vec![Part::Literal("text/event-stream".into())]
+        )
     );
 }
 
@@ -238,35 +267,83 @@ fn every_failure_has_its_closed_code() {
         failed(ok(b"{}".to_vec())),
         Emitted::failed(FailureCode::Malformed)
     );
-    let choice = |choice: Json| {
-        serde_json::json!({ "choices": [choice] })
-            .to_string()
-            .into_bytes()
-    };
     assert_eq!(
-        failed(ok(choice(serde_json::json!({
-            "finish_reason": "length",
-            "message": {"content": "cut"}
-        })))),
+        failed(ok(stream(&[
+            chunk(&serde_json::json!({ "content": "cut" }), None),
+            chunk(&serde_json::json!({}), Some("length")),
+        ]))),
         Emitted::failed(FailureCode::Truncated)
     );
     assert_eq!(
-        failed(ok(choice(serde_json::json!({
-            "finish_reason": "content_filter",
-            "message": {"content": null}
-        })))),
+        failed(ok(stream(&[chunk(
+            &serde_json::json!({}),
+            Some("content_filter")
+        )]))),
         Emitted::failed(FailureCode::Filtered)
     );
     assert_eq!(
-        failed(ok(choice(serde_json::json!({
-            "finish_reason": "stop",
-            "message": {"content": null, "refusal": "no"}
-        })))),
+        failed(ok(stream(&[
+            chunk(&serde_json::json!({ "refusal": "n" }), None),
+            chunk(&serde_json::json!({ "refusal": "o" }), Some("stop")),
+        ]))),
         Emitted::failed(FailureCode::Refusal)
     );
     assert_eq!(
         Emitted::failed(FailureCode::Unconfigured).data,
         r#"{"code":"unconfigured"}"#
+    );
+}
+
+#[test]
+fn a_stream_is_joined_in_order_up_to_done() {
+    // CRLF lines, comments, other fields, a usage chunk without choices, and
+    // a multi-line data event are all read as server-sent events.
+    let body = concat!(
+        ": keep-alive\r\n\r\n",
+        "event: message\r\n",
+        "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hel\"}}]}\r\n\r\n",
+        "data: {\"choices\":[{\"index\":0,\r\n",
+        "data: \"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}]}\r\n\r\n",
+        "data: {\"choices\":[],\"usage\":{\"total_tokens\":3}}\r\n\r\n",
+        "data: [DONE]\r\n\r\n",
+        "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ignored\"}}]}\r\n\r\n",
+    );
+    assert_eq!(reply_text(body.as_bytes()), Ok("Hello".to_owned()));
+    // A multi-byte character split across chunks survives.
+    assert_eq!(
+        reply_text(&reply("héllo wörld")),
+        Ok("héllo wörld".to_owned())
+    );
+}
+
+#[test]
+fn a_stream_that_is_cut_short_or_malformed_is_never_a_reply() {
+    let content = chunk(&serde_json::json!({ "content": "partial" }), None);
+    let without_done = format!("data: {content}\n\n").into_bytes();
+    assert_eq!(reply_text(&without_done), Err(FailureCode::Malformed));
+    assert_eq!(
+        reply_text(b"data: not json\n\ndata: [DONE]\n\n"),
+        Err(FailureCode::Malformed)
+    );
+    assert_eq!(
+        reply_text(&stream(&[
+            serde_json::json!({ "error": { "message": "boom" } })
+        ])),
+        Err(FailureCode::Malformed)
+    );
+    assert_eq!(
+        reply_text(&stream(&[chunk(&serde_json::json!({}), Some("stop"))])),
+        Err(FailureCode::Malformed),
+        "a stream without content"
+    );
+    assert_eq!(reply_text(&[0xff, 0xfe]), Err(FailureCode::Malformed));
+    // A non-streamed completion is not a stream.
+    let completion = serde_json::json!({
+        "choices": [{ "index": 0, "finish_reason": "stop", "message": { "content": "hi" } }],
+    });
+    assert_eq!(
+        reply_text(completion.to_string().as_bytes()),
+        Err(FailureCode::Malformed)
     );
 }
 

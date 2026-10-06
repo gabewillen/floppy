@@ -64,7 +64,7 @@
 //! # The request
 //!
 //! `POST {base}/chat/completions` with `authorization: Bearer <apikey>`,
-//! `content-type: application/json`, `accept: application/json`, and a body
+//! `content-type: application/json`, `accept: text/event-stream`, and a body
 //! that is canonical JSON ([`scxml_event_schema::canonical_json`]: compact,
 //! members sorted by key), so one request always produces the same bytes
 //! ([`build_request`]):
@@ -72,21 +72,38 @@
 //! ```json
 //! {"messages":[{"content":"…","role":"system"},{"content":"…","role":"user"}],
 //!  "model":"…",
-//!  "response_format":{"json_schema":{"name":"result","schema":{…},"strict":false},"type":"json_schema"}}
+//!  "response_format":{"json_schema":{"name":"result","schema":{…},"strict":false},"type":"json_schema"},
+//!  "stream":true}
 //! ```
 //!
 //! The request never blocks the session: `start` hands it to the host with
 //! `outbound-http.begin`, and the `wake` the host calls when it settled takes
-//! the outcome (`outbound-http.take`). `cancel` drops the service's state;
-//! the host abandons the request.
+//! the outcome (`outbound-http.take`). `cancel` drops the service's state,
+//! and the host abandons the request: an embedder whose deferred transport
+//! is scxml.rs's `ThreadedServiceHttp` (as `nemobot-host`'s is) closes its
+//! connection at once.
+//!
+//! The request streams (`"stream": true`, server-sent events) so that
+//! closing the connection can stop the generation on the backend: a
+//! streaming backend notices the closed connection while it is still
+//! writing tokens, while a non-streaming one may finish (and bill) the whole
+//! generation before it writes anything. `OpenAI`'s API reference documents
+//! the stream's format and that an interrupted stream may not deliver its
+//! final usage chunk; it does not document that a disconnect stops
+//! generation or billing (that is reported by its users, not guaranteed),
+//! and the prompt's tokens are billed whenever the request was accepted.
 //!
 //! # The reply
 //!
-//! The reply is `choices[0].message.content`, which must be a string; a
-//! `refusal`, a `finish_reason` of `length` or `content_filter`, or a body
-//! without that shape is a failure ([`reply_text`]). With a schema the text
-//! is parsed as JSON and checked against the compiled schema
-//! ([`structured_value`]).
+//! The reply is the text the stream carries ([`reply_text`]): every
+//! `data:` event up to `data: [DONE]` is a chunk, and the
+//! `choices[0].delta.content` of the chunks are joined in order (a chunk
+//! without choices, such as a usage chunk, adds nothing). A refusal
+//! (`choices[0].delta.refusal`), a `finish_reason` of `length` or
+//! `content_filter`, an `error` chunk, a stream without `[DONE]` or without
+//! content, or a body that is not such a stream is a failure. With a schema
+//! the whole text is parsed as JSON and checked against the compiled schema
+//! only once the stream ended ([`structured_value`]).
 //!
 //! # Bounds
 //!
@@ -505,8 +522,8 @@ pub fn parse_parameters<'a>(
 
 /// The Chat Completions request: `POST {base_url}/chat/completions` (the
 /// `baseurl` slot's reference) with the `apikey` slot's reference as a bearer
-/// key and a canonical JSON body: `messages`, `model`, and, with a schema,
-/// `response_format`.
+/// key and a canonical JSON body: `messages`, `model`, `stream` (`true`), and,
+/// with a schema, `response_format`.
 #[must_use]
 pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Request {
     let mut body = Map::new();
@@ -521,6 +538,7 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
             .collect(),
     );
     body.insert("model".into(), generation.model.clone().into());
+    body.insert("stream".into(), Json::Bool(true));
     if let Some(schema) = &generation.schema {
         body.insert(
             "response_format".into(),
@@ -550,46 +568,99 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
             ),
             (
                 "accept".into(),
-                vec![Part::Literal("application/json".into())],
+                vec![Part::Literal("text/event-stream".into())],
             ),
         ],
         body: canonical_json(&Json::Object(body)).into_bytes(),
     }
 }
 
-/// The reply text of a Chat Completions result: `choices[0].message.content`.
+/// The reply text of a streamed Chat Completions result: the
+/// `choices[0].delta.content` of every `data:` chunk before `data: [DONE]`,
+/// joined in order.
+///
+/// The body is server-sent events: lines ending in `\n` (or `\r\n`), an
+/// event's `data:` lines joined with `\n`, a blank line ending the event;
+/// comment lines (`:`) and other fields are ignored.
 ///
 /// # Errors
 ///
-/// The failure code when the body is not such a result
-/// ([`FailureCode::Malformed`]), the first choice was cut short
-/// ([`FailureCode::Truncated`]) or filtered ([`FailureCode::Filtered`]), or
-/// the message carries a refusal ([`FailureCode::Refusal`]).
+/// [`FailureCode::Malformed`] when the body is not such a stream (not
+/// UTF-8, a chunk that is not a JSON object, an `error` chunk, no
+/// `[DONE]`, or no content), [`FailureCode::Truncated`] or
+/// [`FailureCode::Filtered`] for a `finish_reason` of `length` or
+/// `content_filter`, and [`FailureCode::Refusal`] when the stream carries a
+/// refusal.
 pub fn reply_text(body: &[u8]) -> Result<String, FailureCode> {
-    let value: Json = serde_json::from_slice(body).map_err(|_| FailureCode::Malformed)?;
-    let choice = value
-        .get("choices")
-        .and_then(Json::as_array)
-        .and_then(|choices| choices.first())
-        .ok_or(FailureCode::Malformed)?;
-    match choice.get("finish_reason").and_then(Json::as_str) {
+    let text = std::str::from_utf8(body).map_err(|_| FailureCode::Malformed)?;
+    let mut content: Option<String> = None;
+    let mut refusal = String::new();
+    let mut finish: Option<String> = None;
+    let mut done = false;
+    let mut data: Option<String> = None;
+    // A final event without its blank line still counts.
+    for line in text.split('\n').chain(std::iter::once("")) {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        if line.is_empty() {
+            let Some(event) = data.take() else {
+                continue;
+            };
+            if event == "[DONE]" {
+                done = true;
+                break;
+            }
+            let chunk: Json = serde_json::from_str(&event).map_err(|_| FailureCode::Malformed)?;
+            if !chunk.is_object() || chunk.get("error").is_some() {
+                return Err(FailureCode::Malformed);
+            }
+            let Some(choice) = chunk
+                .get("choices")
+                .and_then(Json::as_array)
+                .and_then(|choices| choices.first())
+            else {
+                continue;
+            };
+            if let Some(reason) = choice.get("finish_reason").and_then(Json::as_str) {
+                finish = Some(reason.to_owned());
+            }
+            let delta = choice.get("delta");
+            if let Some(part) = delta
+                .and_then(|delta| delta.get("content"))
+                .and_then(Json::as_str)
+            {
+                content.get_or_insert_with(String::new).push_str(part);
+            }
+            if let Some(part) = delta
+                .and_then(|delta| delta.get("refusal"))
+                .and_then(Json::as_str)
+            {
+                refusal.push_str(part);
+            }
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("data:") {
+            let value = value.strip_prefix(' ').unwrap_or(value);
+            match &mut data {
+                Some(event) => {
+                    event.push('\n');
+                    event.push_str(value);
+                }
+                None => data = Some(value.to_owned()),
+            }
+        }
+    }
+    if !done {
+        return Err(FailureCode::Malformed);
+    }
+    match finish.as_deref() {
         Some("length") => return Err(FailureCode::Truncated),
         Some("content_filter") => return Err(FailureCode::Filtered),
         _ => {}
     }
-    let message = choice.get("message").ok_or(FailureCode::Malformed)?;
-    if message
-        .get("refusal")
-        .and_then(Json::as_str)
-        .is_some_and(|refusal| !refusal.is_empty())
-    {
+    if !refusal.is_empty() {
         return Err(FailureCode::Refusal);
     }
-    message
-        .get("content")
-        .and_then(Json::as_str)
-        .map(str::to_owned)
-        .ok_or(FailureCode::Malformed)
+    content.ok_or(FailureCode::Malformed)
 }
 
 /// The structured reply: `text` parsed as JSON, admitted by `schema`.

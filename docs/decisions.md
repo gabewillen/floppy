@@ -11,8 +11,8 @@ reopening one needs the maintainer. All are dated 2026-10-06.
 | Kind | squashed `git subtree` |
 | Source repository | local scxml.rs (`stateforward/scxml.rs`) |
 | Source branch | `feat/invoke-services` |
-| Source commit | `5eb077c4b` ("Let invoked services make slow outbound requests without blocking the session"), on top of `18fce591` ("Fail an unbound literal invoke type when its invoke starts, not at session start") |
-| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d"), then `070aa258` ("Squashed 'scxml.rs/' changes from fe7d555d..dd18cd11"), then `0a20ad2b` ("Squashed 'scxml.rs/' changes from dd18cd11..2bf0dd55"), then `bf96cbf9` ("Squashed 'scxml.rs/' changes from 2bf0dd55..ebc051ae"), then `a2aaf0da` ("Squashed 'scxml.rs/' changes from ebc051ae1..5eb077c4b") |
+| Source commit | `14c4b8e97` ("Delete the openai namespace: model calls are invoked services"), on top of `968095dd` ("Give invoked services deferred requests in scxml-cli run") and `50d622d7` ("Close a deferred service request's connection when its instance is cancelled") |
+| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d"), then `070aa258` ("Squashed 'scxml.rs/' changes from fe7d555d..dd18cd11"), then `0a20ad2b` ("Squashed 'scxml.rs/' changes from dd18cd11..2bf0dd55"), then `bf96cbf9` ("Squashed 'scxml.rs/' changes from 2bf0dd55..ebc051ae"), then `a2aaf0da` ("Squashed 'scxml.rs/' changes from ebc051ae1..5eb077c4b"), then `56069d18` ("Squashed 'scxml.rs/' changes from 5eb077c4b..14c4b8e97") |
 | Update | `git subtree pull --prefix scxml.rs <scxml.rs> feat/invoke-services --squash`, after the change lands upstream |
 
 ## Decisions
@@ -49,7 +49,14 @@ reopening one needs the maintainer. All are dated 2026-10-06.
   it off the session thread (`ThreadedServiceHttp`), and the outcome reaches
   the instance through `wake` (`LiveSession::deliver_service_responses`). A
   cancelled instance abandons its requests, so a `builder.timeout` in the
-  invoking state preempts a model call in flight. A logical-clock session
+  invoking state preempts a model call in flight; since scxml.rs
+  `50d622d7` the transport also closes each abandoned request's connection
+  at once (SCXML 6.4's existing cancel; no new WIT or public name), and
+  `services/generate` streams (`"stream": true`) so the backend can stop
+  generating when it sees the close. scxml.rs `968095dd` gives `scxml-cli
+  run` the same transport, and `14c4b8e9` deletes scxml.rs's `openai`
+  namespace (model calls inside executable content), which
+  `services/generate` replaces. A logical-clock session
   never moves its clock past a pending request. `nemobot-host` gives
   services this deferred transport only, and extensions no transport.
 - D5 and D13 (2026-10-06): "candidates are the enabled transitions" is
