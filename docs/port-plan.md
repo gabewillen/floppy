@@ -96,9 +96,11 @@ phase 7; until then every backend is selected by its `env:baseurl` slot.
   interface and no outbound transport; `nemobot-host` refuses extension
   packages that declare a WASI permission, and grants to extension URIs.
   Every effect is an invoked service.
-- A cancelled service's request is abandoned, not interrupted: the
-  transport thread runs until the response or its own timeout (600 s in
-  `nemobot-host`), and the outcome is dropped.
+- A cancelled service's request that is still resolving its host or
+  opening its TCP connection ends only within the connect timeout (10 s;
+  nothing is sent). Once connected, cancellation closes the connection at
+  once. Whether the backend then stops generating and billing is up to the
+  backend: `OpenAI` documents neither (see `services/generate`).
 - `nemobot-host` produces the consent listing (`Packages::consent`) but no
   binary shows it yet: showing it before running belongs to the CLI of
   phase 2, which is not started.

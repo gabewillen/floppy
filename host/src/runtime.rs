@@ -10,11 +10,13 @@
 //! the deterministic logical clock ([`ClockMode::Logical`]).
 //!
 //! Invoked services make their slow requests (model calls) without blocking
-//! the session: the host hands each to a [`ThreadedServiceHttp`] transport,
-//! the session keeps processing events and timers, and when a request
-//! settles the transport's callback puts [`Ingress::ServiceResponse`] on the
-//! ingress channel, where the session thread delivers it
-//! (`LiveSession::deliver_service_responses`). On the logical clock a
+//! the session: the host hands each to scxml.rs's [`ThreadedServiceHttp`]
+//! transport, the session keeps processing events and timers, and when a
+//! request settles the transport's callback puts [`Ingress::ServiceResponse`]
+//! on the ingress channel, where the session thread delivers it
+//! (`LiveSession::deliver_service_responses`). When the invocation is
+//! cancelled (its invoking state exits) the transport closes the request's
+//! connection at once, so its thread ends and the backend stops streaming. On the logical clock a
 //! pending request holds the clock: every deadline fires only once no
 //! request is in flight (`LiveSession::run_until_idle` stops early), so a
 //! deterministic run sees each answer before any later timer. Extension
@@ -33,9 +35,9 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use scxml_host_wasmtime::{
-    DocumentKind, EmbeddedDocument, ExtensionHttp, LiveClock, LiveHttp, LiveSession, LiveStatus,
-    MachineScripts, ScriptedEvent, ServiceHttp, SessionEmbedder, SessionHost, SessionHostError,
-    SessionOpen, SessionOutput, ThreadedServiceHttp, WallClock,
+    DocumentKind, EmbeddedDocument, LiveClock, LiveHttp, LiveSession, LiveStatus, MachineScripts,
+    ScriptedEvent, ServiceHttp, SessionEmbedder, SessionHost, SessionHostError, SessionOpen,
+    SessionOutput, ThreadedServiceHttp, WallClock,
 };
 
 use crate::compile::Compiled;
@@ -71,8 +73,9 @@ pub struct SessionSpec {
 
 /// The total time of one service request through the outbound transport: a
 /// backstop only. A bot bounds its model calls in its topology (a
-/// `<send delay>` timeout in the invoking state cancels the invocation), so
-/// this is set well above any timeout a bot uses.
+/// `<send delay>` timeout in the invoking state cancels the invocation, and
+/// the transport then closes the request's connection at once), so this is
+/// set well above any timeout a bot uses.
 pub const SERVICE_REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// One input to the session thread.
@@ -206,7 +209,6 @@ impl Binding {
                 scxml_host_wasmtime::ExtensionHttpClient::new(config).map_err(|error| {
                     session_error(format!("the outbound HTTP client is invalid: {error}"))
                 })?;
-            let client: Arc<dyn ExtensionHttp> = Arc::new(client);
             let transport = ThreadedServiceHttp::new(
                 client,
                 scxml_host_wasmtime::DEFAULT_SERVICE_HTTP_IN_FLIGHT,
