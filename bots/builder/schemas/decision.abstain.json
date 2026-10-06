@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "decision.abstain",
+  "description": "The decision service took no event: nothing was offered, the backend declined, or the probability of the chosen event was below the threshold.",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "enum": [
+        "no-candidates",
+        "declined",
+        "below-threshold"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false
+}

@@ -12,6 +12,10 @@
   then finishes. The event:schema contracts below are inline copies of
   schemas/*.json (an invoked child is compiled at run time and gets no schema
   files); the builder_bot test (tests/tests/builder_bot.rs) keeps them equal.
+  The events of the generate and decision services (generate.result,
+  generate.failed, decision.abstain, decision.failed) are described here
+  too, on the transitions that take them: a service package declares no
+  event contract.
 
   intake -> design (an invoked generate service: topology plan) -> author
   (an invoked generate service: draft SCXML + event schemas + test scripts)
@@ -171,6 +175,9 @@
         <assign location="gen_failure" expr="_event.name === 'generate.failed' ? _event.data.code : gen_failure"/>
       </finalize>
     </invoke>
+    <!-- The two events of the generate service; <finalize> records them. -->
+    <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service: text without a requested schema, or the JSON value that satisfies the requested schema.","oneOf":[{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},{"type":"object","properties":{"json":true},"required":["json"],"additionalProperties":false}]}'/>
+    <transition event="generate.failed" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.failed","description":"The generation failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}'/>
     <transition event="done.invoke" cond="_event.invokeid === gen_id &amp;&amp; plan !== null" target="author">
       <assign location="mode" expr="'author'"/>
     </transition>
@@ -218,6 +225,9 @@
         <assign location="gen_failure" expr="_event.name === 'generate.failed' ? _event.data.code : gen_failure"/>
       </finalize>
     </invoke>
+    <!-- The two events of the generate service; <finalize> records them. -->
+    <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service: text without a requested schema, or the JSON value that satisfies the requested schema.","oneOf":[{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},{"type":"object","properties":{"json":true},"required":["json"],"additionalProperties":false}]}'/>
+    <transition event="generate.failed" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.failed","description":"The generation failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}'/>
     <transition event="done.invoke" cond="_event.invokeid === gen_id &amp;&amp; draft !== null" target="validate">
       <assign location="scxml_text" expr="draft.scxml"/>
       <assign location="fix_passes" expr="0"/>
@@ -428,10 +438,10 @@
       <assign location="failure_reason" expr="'abandoned'"/>
       <assign location="decisions" expr="decisions.concat(['triage.abandon'])"/>
     </transition>
-    <transition event="decision.abstain" cond="_event.invokeid === decision_id" target="fallback">
+    <transition event="decision.abstain" cond="decision_id !== null &amp;&amp; _event.invokeid === decision_id" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"decision.abstain","description":"The decision service took no event: nothing was offered, the backend declined, or the probability of the chosen event was below the threshold.","type":"object","properties":{"reason":{"enum":["no-candidates","declined","below-threshold"]},"confidence":{"type":"number","minimum":0,"maximum":1}},"required":["reason"],"additionalProperties":false}' target="fallback">
       <assign location="decisions" expr="decisions.concat(['fallback:abstain'])"/>
     </transition>
-    <transition event="decision.failed" cond="_event.invokeid === decision_id" target="fallback">
+    <transition event="decision.failed" cond="decision_id !== null &amp;&amp; _event.invokeid === decision_id" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"decision.failed","description":"The decision failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","schema-mismatch"]}},"required":["code"],"additionalProperties":false}' target="fallback">
       <assign location="decisions" expr="decisions.concat(['fallback:unavailable'])"/>
     </transition>
     <transition event="builder.timeout" cond="!_event.invokeid &amp;&amp; _event.data !== null &amp;&amp; typeof _event.data === 'object' &amp;&amp; _event.data.run === stage_run" target="fallback">

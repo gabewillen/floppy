@@ -702,7 +702,8 @@ fn builder_scxml_validates_clean_with_its_packages() {
 }
 
 /// Every `event:schema` of builder.scxml is an inline copy of
-/// `schemas/<event>.json`, and every schema file is used.
+/// `schemas/<event>.json` (an event taken in two states carries the same
+/// copy in both), and every schema file is used.
 #[test]
 fn builder_inline_event_schemas_equal_the_schema_files() {
     let source = builder_source();
@@ -728,10 +729,9 @@ fn builder_inline_event_schemas_equal_the_schema_files() {
         if let (Some(schema), Some(event)) = (schema, event) {
             let value: Json =
                 serde_json::from_str(&schema.value).expect("every inline schema is JSON");
-            assert!(
-                inline.insert(event.clone(), value).is_none(),
-                "one schema per event: {event}"
-            );
+            if let Some(previous) = inline.insert(event.clone(), value.clone()) {
+                assert_eq!(previous, value, "one schema per event: {event}");
+            }
         }
     });
     let mut files = BTreeMap::new();

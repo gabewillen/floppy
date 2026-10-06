@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "decision.failed",
+  "description": "The decision failed; code names why (closed).",
+  "type": "object",
+  "properties": {
+    "code": {
+      "enum": [
+        "unconfigured",
+        "transport",
+        "status",
+        "malformed",
+        "schema-mismatch"
+      ]
+    }
+  },
+  "required": [
+    "code"
+  ],
+  "additionalProperties": false
+}

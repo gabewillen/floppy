@@ -91,7 +91,7 @@ intake -> design -> author -> validate -> simulate -> package -> done
   `triage.abandon`. The decision service
   (`https://github.com/stateforward/nemobot/services/decision@v0.1.0`),
   invoked with that menu and the failure state, picks one, validates its
-  data against the menu's schema, and emits it.
+  data against the menu's schema, and returns it.
 * `fallback`: the cond-based triage when the decision is unavailable (no
   `TYPESAFE_API_KEY` granted or a backend failure: `decision.failed`,
   `error.execution`, or `error.communication`), times out
