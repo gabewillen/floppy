@@ -131,7 +131,7 @@ pub const CODES: &[CodeDoc] = &[
     ),
     doc!(
         "COMP004", "error", "package", "a literal `<invoke type>` names an invoked service no service package binds",
-        why: "an invoked service runs only in the Wasm service component its host binds to the exact type URI; compiling a document whose literal service type no `--service-package` binds would produce a machine whose session start fails closed, so the compiler rejects it instead. A `typeexpr` is evaluated at run time and is not judged",
+        why: "an invoked service runs only in the Wasm service component its host binds to the exact type URI; compiling a document whose literal service type no `--service-package` binds would produce a machine whose `<invoke>` raises error.execution when it starts, so the compiler rejects it instead. A `typeexpr` is evaluated at run time and is not judged",
         help: "bind the service with its package manifest (`scxml-cli compile --service-package MANIFEST.json`), or correct the URI to one a bound package declares",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"><invoke type=\"https://stateforward.org/scxml/services/echo\"/></state></scxml>",
         fixed: "the same document compiled with `--service-package components/scxml-service-example/package/echo.service.json`",

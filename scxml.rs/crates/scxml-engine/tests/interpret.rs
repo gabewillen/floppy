@@ -103,6 +103,9 @@ struct Mock {
     load_failure: Option<CapabilityErrorKind>,
     /// The service type URIs the mock host binds.
     bound_services: Vec<String>,
+    /// What `load-services` answers (`None`: every bound component loads;
+    /// an unbound type is no load failure, it fails its own `<invoke>`).
+    service_load_failure: Option<CapabilityErrorKind>,
     /// Every service start the host accepted, in order.
     services: Vec<ServiceInvocation>,
 }
@@ -513,14 +516,8 @@ impl SessionCapabilities for Mock {
     fn load_services(&mut self, type_uris: &[String]) -> Result<(), MockError> {
         self.calls
             .push(format!("load-services {}", type_uris.join(" ")));
-        if type_uris
-            .iter()
-            .all(|uri| self.bound_services.contains(uri))
-        {
-            Ok(())
-        } else {
-            Err(fail(CapabilityErrorKind::Unavailable))
-        }
+        self.service_load_failure
+            .map_or(Ok(()), |kind| Err(fail(kind)))
     }
 
     fn start_service(
@@ -2278,15 +2275,40 @@ fn an_unbound_or_malformed_service_type_raises_error_execution() {
 }
 
 #[test]
-fn an_unbound_literal_service_type_fails_the_session_start() {
-    let mut session = Session::new(
+fn an_unbound_literal_service_type_raises_error_execution_at_invocation_start() {
+    // SCXML 6.4: invocation is a runtime action. A literal type no host
+    // binds loads nothing at session start; its `<invoke>` fails when it
+    // starts, exactly like an unbound `typeexpr`.
+    let session = Session::started(
         service_machine(&format!(r#"<invoke type="{ECHO}"/>"#)),
         Mock::default(),
+    );
+    assert_eq!(session.active(), ["exec"]);
+    assert!(session.caps.services.is_empty());
+    assert!(
+        session
+            .caps
+            .calls
+            .iter()
+            .any(|call| call.starts_with("start-service")),
+        "{:?}",
+        session.caps.calls
+    );
+}
+
+#[test]
+fn a_failed_service_load_fails_the_session_start() {
+    let mut caps = Mock::default();
+    caps.bound_services.push(ECHO.into());
+    caps.service_load_failure = Some(CapabilityErrorKind::Other);
+    let mut session = Session::new(
+        service_machine(&format!(r#"<invoke type="{ECHO}"/>"#)),
+        caps,
     );
     let failure = session
         .start()
         .expect_err("load-services fails the start closed");
-    assert_eq!(failure.error.kind, CapabilityErrorKind::Unavailable);
+    assert_eq!(failure.error.kind, CapabilityErrorKind::Other);
     assert_eq!(*session.engine.status(), EngineStatus::Ready);
 }
 

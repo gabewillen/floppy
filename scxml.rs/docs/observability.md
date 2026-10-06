@@ -127,7 +127,11 @@ Invoked services add the Wasmtime host's boundary spans
 `service-start` (per `start-service`, including the instance's `type-uri`
 check and `start`), `service-send` (per event delivered to a service),
 `service-wake` (per due wakeup), `service-cancel` (per cancelled service),
-and `service-http-fetch` (per `outbound-http` request a service makes), and
+`service-http-fetch` (per blocking `outbound-http.fetch` a service makes),
+`service-http-begin` (per deferred `outbound-http.begin`, on the session
+thread), `service-http-request` (per deferred request `ThreadedServiceHttp`
+performs, off the session thread), and `session-service-response` (per
+delivery of settled deferred requests to a live session), and
 the CLI's `scxml.cli.read-service-package` and, for repository services,
 `scxml.cli.resolve-service-package` and `scxml.cli.resolve-service-component`;
 each records only its closed

@@ -865,6 +865,24 @@ impl RunSessions {
         }
     }
 
+    /// The live invoked service whose instance id is `instance`, if it is
+    /// still in the run.
+    fn service_key(&self, instance: u64) -> Option<SessionKey> {
+        self.handles.iter().find_map(|(key, handle)| match handle {
+            SessionHandle::Service(service) if service.instance() == instance => Some(*key),
+            SessionHandle::Service(_) | SessionHandle::Machine(_) => None,
+        })
+    }
+
+    /// Whether a live invoked service waits for a deferred request in
+    /// flight.
+    fn services_awaiting(&self) -> bool {
+        self.handles.values().any(|handle| match handle {
+            SessionHandle::Service(service) => service.awaiting(),
+            SessionHandle::Machine(_) => false,
+        })
+    }
+
     /// Whether `key` is an invoked service.
     fn is_service(&self, key: SessionKey) -> bool {
         matches!(self.handles.get(&key), Some(SessionHandle::Service(_)))
@@ -1848,6 +1866,59 @@ impl RunEngine {
     ) -> Result<(), RunFailure> {
         self.scheduler
             .communication_error(&mut self.sessions, key, Some(send_id))
+    }
+
+    /// Hands each settled deferred request to its instance, when that
+    /// instance is still live and waiting for it, and runs that instance's
+    /// `wake` (one boundary span each); an outcome no live instance waits
+    /// for is dropped. Returns how many outcomes were delivered. The caller
+    /// drains afterwards: what the wakes emitted or completed is queued on
+    /// the invoking sessions.
+    ///
+    /// # Errors
+    ///
+    /// A host failure of a service call.
+    pub(crate) fn deliver_service_responses(
+        &mut self,
+        settled: Vec<crate::service_http::Settled>,
+    ) -> Result<usize, RunFailure> {
+        let mut delivered = 0_usize;
+        for item in settled {
+            let Some(key) = self.sessions.service_key(item.instance) else {
+                continue;
+            };
+            let accepted = self
+                .sessions
+                .service(key)
+                .is_some_and(|service| service.settle(item.ticket, item.outcome));
+            if !accepted {
+                continue;
+            }
+            delivered = delivered.saturating_add(1);
+            self.sessions.with_invoked_sessions(
+                self.scheduler.invoked_sessions_mut(),
+                |sessions| {
+                    sessions.service_call(
+                        key,
+                        scxml_telemetry::Operation::HostWasmtimeServiceWake,
+                        crate::service::ServiceHandle::wake,
+                    )
+                },
+            )?;
+        }
+        Ok(delivered)
+    }
+
+    /// Whether the run waits for a deferred service request: one in flight
+    /// for a live instance, or one settled and not yet delivered.
+    pub(crate) fn awaiting_service_responses(&self) -> bool {
+        self.sessions.services_awaiting()
+            || self
+                .shared
+                .http
+                .service_responses
+                .as_ref()
+                .is_some_and(|responses| responses.has_settled())
     }
 
     /// Queues `event` on the external queue of the session `key`; `false`

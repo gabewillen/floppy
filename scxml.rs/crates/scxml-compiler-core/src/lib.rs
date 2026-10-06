@@ -476,8 +476,9 @@ impl<R: SchemaResolver, B: SchemaValidator> Compiler<R, B> {
 /// `COMP004` for every literal `<invoke type>` naming an invoked service
 /// ([`scxml_types::is_service_type_uri`]) that no bound service package
 /// declares: at the type's value. The service would run only in a bound
-/// service component, so the document fails closed instead of producing a
-/// machine whose session start fails.
+/// service component, so a compile given the run's bindings fails closed
+/// instead of producing a machine whose `<invoke>` would raise
+/// `error.execution` when it starts.
 fn unbound_service_diagnostics(
     document: &scxml_syntax::Document,
     bound: &std::collections::BTreeSet<String>,
@@ -507,7 +508,7 @@ fn unbound_service_diagnostics(
             )
             .with_category(DiagnosticCategory::Package)
             .with_primary_message("no service component is bound to execute this")
-            .with_note("an invoked service runs only in the service component its host binds to the exact type URI; compiling without a binding would produce a machine whose session start fails closed")
+            .with_note("an invoked service runs only in the service component its host binds to the exact type URI; compiling without a binding would produce a machine whose `<invoke>` raises error.execution when it starts")
             .with_help("bind the service with its package manifest (`scxml-cli compile --service-package MANIFEST.json`), or correct the URI to one a bound package declares")
             .with_spec_reference("SCXML 1.0 §6.4 <invoke>"),
         );

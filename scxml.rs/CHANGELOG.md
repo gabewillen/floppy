@@ -73,15 +73,36 @@ hard cutover.
   `machine-capabilities.load-services` and `start-service`, the
   `invocation-message.failed` case, and the telemetry operation `wake`.
   Machine IR lists the literal service types (`invoke_types`, omitted when
-  empty) and the machine loads them at session start, failing closed. The
+  empty) and the machine loads them at session start: a bound component
+  that does not load fails the start closed, while a type no service binds
+  is judged only when its `<invoke>` starts, raising `error.execution`
+  (SCXML 6.4: invocation is a runtime action), whether literal or
+  `typeexpr`. The
   service package manifest `stateforward.scxml.service-package/v1` and the
   CLI's `--service-package`, `--service-component`, and
   `--service-component-sha256`; validator codes `SCXML093` (a literal type
   that is neither SCXML nor an absolute service URI) and `SCXML094` (no
   package binds it), and compiler code `COMP004`. The example echo and
   timer service ships as `components/scxml-service-example`. The browser
-  host binds no service and fails closed; snapshots of a run holding a live
+  host binds no service, so every service `<invoke>` raises
+  `error.execution` when it starts; snapshots of a run holding a live
   service are refused.
+- Deferred outbound HTTP for invoked services: `outbound-http.begin` and
+  `take` (WIT `@0.2.0`, unreleased, additive) let a service make a slow
+  request without blocking the session. The Wasmtime host admits the request
+  as `fetch` does, hands it to the embedder's `ServiceHttp` transport
+  (`ServiceComponents::with_deferred_http`; `ThreadedServiceHttp` runs a
+  blocking `ExtensionHttp` on a thread per request, bounded in flight), and
+  calls the instance's `wake` when the outcome is delivered
+  (`LiveSession::deliver_service_responses`, woken through
+  `LiveHttp::on_service_response`). A cancelled instance abandons its
+  requests; at most `MAX_SERVICE_PENDING_REQUESTS` (16) per instance; only
+  live sessions that neither record nor replay deliver outcomes, and a
+  logical one's `run_until_idle` stops while a request is in flight
+  (`LiveSession::awaiting_service_responses`). Extension components cannot
+  `begin`. New telemetry operations `service-http-begin`,
+  `service-http-request`, and `session-service-response`. The echo example's
+  `defer` event uses it.
 - Declared WASI permissions: extension and service package manifests take
   an optional `wasi-permissions` list (omitted when empty; a sorted, bounded
   list from the closed vocabulary `wasi:clocks`, `wasi:filesystem` with a
@@ -101,8 +122,9 @@ hard cutover.
   `--grant URI=PERMISSION[=VALUE]` (`snapshot run`, `run`), lists every
   package's declared permissions (`= WASI:`) before running, and refuses
   `--record`/`--replay` for a package that declares any (`[record-wasi]`).
-  Extension components still get no WASI interface: the host refuses an
-  extension package that declares one. The example
+  Extension components get no WASI interface, by rule: extension elements
+  are synchronous executable content, and I/O-bound work belongs in invoked
+  services, so the host refuses an extension package that declares one. The example
   `components/scxml-service-files` declares `wasi:filesystem` and reads and
   writes its granted mount.
 - `env` slots for invoked services: an invoked service's `<invoke>` binds

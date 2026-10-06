@@ -403,10 +403,10 @@ pub struct ExtensionPackage {
     /// reach (canonicalized like an [`crate::HttpAllowlist`]); binding the
     /// package consents to them.
     pub http_origins: Vec<String>,
-    /// The WASI interfaces its extension component may import. This host
-    /// links no WASI interface into extension components, so a binding
-    /// whose package declares any fails closed
-    /// ([`ArtifactError::WasiExtensionUnsupported`]).
+    /// The WASI interfaces its extension component may import. Extension
+    /// elements are synchronous executable content and WASI belongs to
+    /// invoked services, so a binding whose package declares any fails
+    /// closed ([`ArtifactError::WasiExtensionUnsupported`]).
     pub wasi_permissions: Vec<scxml_types::WasiPermission>,
     /// The schema bytes (at most [`MAX_NAMESPACE_SCHEMA_BYTES`]).
     pub schema: Vec<u8>,
@@ -640,10 +640,11 @@ impl ExtensionComponents {
 /// fewer than [`MAX_EXTENSION_COMPONENTS`] bindings, and no declared WASI
 /// permission.
 ///
-/// Extension components get no WASI interface in this release: their store
-/// data lends the executing session's state (which is not `Send`), and
-/// `wasmtime-wasi` links only into `Send` store data, so a package that
-/// declares one is refused ([`ArtifactError::WasiExtensionUnsupported`])
+/// Extension components get no WASI interface, by rule: an extension element
+/// is executable content, run synchronously inside a microstep, and
+/// anything asynchronous, I/O-bound, or long-running belongs in an invoked
+/// service, the only component WASI is linked into. A package that declares
+/// a WASI permission is refused ([`ArtifactError::WasiExtensionUnsupported`])
 /// rather than run without it.
 pub(crate) fn check_binding<'a>(
     package: &ExtensionPackage,
@@ -1826,11 +1827,9 @@ impl ExtensionStoreData {
 
 /// Performs one `outbound-http` request for a granted caller (an extension
 /// component during `execute`, or an invoked service during an export
-/// call): substitutes `references`, checks the WIT bounds, canonicalizes the
-/// URL, admits it only to `allow` or an origin a reference's value supplied
-/// entirely (else calls `refused` with the origin and refuses it), and sends
-/// it through `transport` (none: refused with `unavailable`). The error
-/// carries the span's closed category.
+/// call): [`admit_request`], then sends it through `transport` and checks
+/// the response ([`settle_response`]). The error carries the span's closed
+/// category.
 pub(crate) fn fetch_admitted(
     request: outbound_http::HttpRequest,
     references: &[(u32, String)],
@@ -1838,20 +1837,45 @@ pub(crate) fn fetch_admitted(
     transport: Option<&dyn ExtensionHttp>,
     refused: impl FnOnce(&str),
 ) -> Result<outbound_http::HttpResponse, (ComponentError, ErrorCategory)> {
+    let request = admit_request(request, references, allow, transport.is_some(), refused)?;
+    let Some(transport) = transport else {
+        return Err(no_transport());
+    };
+    settle_response(transport.fetch(&request))
+}
+
+/// The refusal of a caller the host grants no transport.
+pub(crate) fn no_transport() -> (ComponentError, ErrorCategory) {
+    (
+        component_error(
+            ErrorCode::Unavailable,
+            "the host offers this component no outbound HTTP",
+        ),
+        ErrorCategory::Unsupported,
+    )
+}
+
+/// Admits one `outbound-http` request before anything is sent: substitutes
+/// `references`, checks the WIT bounds, refuses it when the caller has no
+/// transport (`has_transport`), canonicalizes the URL, and admits it only to
+/// `allow` or an origin a reference's value supplied entirely (else calls
+/// `refused` with the origin and refuses it). Returns the canonical request
+/// a transport sends exactly.
+pub(crate) fn admit_request(
+    request: outbound_http::HttpRequest,
+    references: &[(u32, String)],
+    allow: &crate::HttpAllowlist,
+    has_transport: bool,
+    refused: impl FnOnce(&str),
+) -> Result<ExtensionHttpRequest, (ComponentError, ErrorCategory)> {
     let substituted =
         substitute(request, references).map_err(|error| (error, ErrorCategory::InvalidInput))?;
     let supplied_origin = substituted.supplied_origin.clone();
     let request =
         checked_http_request(substituted).map_err(|error| (error, ErrorCategory::InvalidInput))?;
-    let Some(transport) = transport else {
-        return Err((
-            component_error(
-                ErrorCode::Unavailable,
-                "the host offers this component no outbound HTTP",
-            ),
-            ErrorCategory::Unsupported,
-        ));
-    };
+    if !has_transport {
+        return Err(no_transport());
+    }
     if !admitted(&request.url, allow, supplied_origin.as_ref()) {
         if let Some(url) = crate::allowlist::parse_http_url(&request.url) {
             refused(&url.origin().ascii_serialization());
@@ -1864,7 +1888,17 @@ pub(crate) fn fetch_admitted(
             ErrorCategory::InvalidInput,
         ));
     }
-    let response = transport.fetch(&request).map_err(|failure| match failure {
+    Ok(request)
+}
+
+/// What one admitted request's transport outcome becomes for the caller: a
+/// response within the status range and the response-body bound, or the
+/// `outbound-http` failure (`unavailable` for a refusal or transport
+/// failure, `payload-too-large` for an oversized body).
+pub(crate) fn settle_response(
+    outcome: Result<ExtensionHttpResponse, ExtensionHttpFailure>,
+) -> Result<outbound_http::HttpResponse, (ComponentError, ErrorCategory)> {
+    let response = outcome.map_err(|failure| match failure {
         ExtensionHttpFailure::NotAllowed => (
             component_error(
                 ErrorCode::Unavailable,
@@ -1926,6 +1960,22 @@ impl outbound_http::Host for ExtensionStoreData {
                 Err(error)
             }
         }
+    }
+
+    /// Executable content is synchronous: an extension component never
+    /// starts a deferred request.
+    fn begin(&mut self, _request: outbound_http::HttpRequest) -> Result<u64, ComponentError> {
+        Err(component_error(
+            ErrorCode::Unavailable,
+            "deferred outbound HTTP is offered to invoked services only",
+        ))
+    }
+
+    fn take(
+        &mut self,
+        _ticket: u64,
+    ) -> Option<Result<outbound_http::HttpResponse, ComponentError>> {
+        None
     }
 }
 

@@ -123,10 +123,10 @@ disagree are in [spec-errata.md](spec-errata.md).
   invoked sessions. Proven by
   `hosts/scxml-host-wasmtime/tests/service_invoke.rs` with the echo and timer
   example (`components/scxml-service-example`) and by the engine tests in
-  `crates/scxml-engine/tests/interpret.rs`. Gaps of this first slice: a
-  literal type no host binds fails the session start closed and an unbound
-  `typeexpr` raises `error.execution`, types are bound only by exact
-  URI, and a repository service URI (`.../services/<name>@<tag>`) is
+  `crates/scxml-engine/tests/interpret.rs`. Gaps of this first slice: types are bound only by exact
+  URI (an `<invoke>` of a type no host binds, literal or `typeexpr`, raises
+  `error.execution` when it starts, as SCXML 6.4 makes invocation a runtime
+  action; the session start is unaffected), and a repository service URI (`.../services/<name>@<tag>`) is
   resolved only for a literal `<invoke type>` (a `typeexpr` naming one is not
   resolved, and no shipped component answers a repository service URI, so
   `crates/scxml-cli/tests/repository_services.rs` proves resolution,
@@ -135,11 +135,21 @@ disagree are in [spec-errata.md](spec-errata.md).
   holding a live invoked service is refused (`unavailable`;
   `scxml.session-snapshot/v2` cannot represent one); child
   documents compiled at run time by the compiler component are not checked
-  for unbound service types (`COMP004`), which then fail their session start
-  instead; the validator and compiler components' WIT requests carry no
+  for unbound service types (`COMP004`), whose `<invoke>` then raises
+  `error.execution` when it starts; the validator and compiler components' WIT requests carry no
   service packages, so the validator component reports every literal
   service type as unbound (`SCXML094`, a warning); and the browser host binds no service (`load-services` and
   `start-service` answer `unavailable`).
+- Deferred service requests (`outbound-http.begin`/`take`, outcomes
+  delivered through `wake`) run only in live sessions that neither record
+  nor replay, through the embedder's `ServiceHttp` transport
+  (`ServiceComponents::with_deferred_http`). Proven by the `service_invoke`
+  deferred tests (a held request does not block events, a logical session's
+  clock waits for it, a cancelled service abandons it, a recording session
+  refuses it). Gaps: the CLI grants services only the blocking `fetch`
+  (`begin` is refused there), batch runs refuse `begin`, the transport is not
+  interrupted when an instance abandons a request (its own timeouts bound
+  it), and the browser host offers neither.
 - Package event contracts: a service or extension package may declare the
   events its component emits and accepts with JSON Schemas (`events`). The
   Wasmtime host enforces a service's contract on every `emit` (a mismatch
@@ -164,10 +174,10 @@ disagree are in [spec-errata.md](spec-errata.md).
   session start closed otherwise. Proven by the `service_invoke` tests with
   `components/scxml-service-files` (a granted read-write mount is read and
   written, a read-only mount refuses the write, an ungranted or undeclared
-  permission and an undeclared WASI import fail closed). Gaps: extension
-  components get no WASI interface (the host refuses an extension package
-  that declares one: its store data is not `Send`, which `wasmtime-wasi`
-  requires); `wasi:cli`, `wasi:http`, and UDP are not grantable; individual
+  permission and an undeclared WASI import fail closed). By rule, not as a gap,
+  extension components get no WASI interface (the host refuses an extension
+  package that declares one: extension elements are synchronous executable
+  content, and I/O-bound work belongs in invoked services). Gaps: `wasi:cli`, `wasi:http`, and UDP are not grantable; individual
   WASI calls get no span of their own (the service's export-call spans cover
   them); a run binding a package that declares any permission cannot be
   recorded or replayed; and the browser host links no WASI interface.

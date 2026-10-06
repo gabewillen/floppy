@@ -181,6 +181,13 @@ pub use service::{
     ServiceEvents, ServicePackage,
 };
 #[cfg(feature = "wasmtime")]
+mod service_http;
+#[cfg(feature = "wasmtime")]
+pub use service_http::{
+    DEFAULT_SERVICE_HTTP_IN_FLIGHT, MAX_SERVICE_HTTP_IN_FLIGHT, MAX_SERVICE_PENDING_REQUESTS,
+    ServiceHttp, ServiceHttpInFlightInvalid, ServiceHttpOutcome, ThreadedServiceHttp,
+};
+#[cfg(feature = "wasmtime")]
 mod wasi;
 #[cfg(feature = "wasmtime")]
 pub use scxml_types::{FilesystemAccess, WasiInterface, WasiPermission};
@@ -381,8 +388,9 @@ pub enum ArtifactError {
     /// A component imports a WASI interface its package does not declare
     /// (or the run does not grant).
     WasiImportUndeclared,
-    /// An extension package declares WASI permissions: this host links no
-    /// WASI interface into extension components.
+    /// An extension package declares WASI permissions: extension elements
+    /// are synchronous executable content, and WASI is linked only into
+    /// invoked services.
     WasiExtensionUnsupported,
     /// A service package's declared event contract is malformed: an
     /// invalid or repeated event name, more than 64 events in one list
@@ -439,7 +447,7 @@ impl std::fmt::Display for ArtifactError {
                 "the component imports a WASI interface its package does not declare"
             }
             Self::WasiExtensionUnsupported => {
-                "this host links no WASI interface into extension components, so an extension package may not declare WASI permissions"
+                "extension elements are synchronous executable content and WASI belongs to invoked services, so an extension package may not declare WASI permissions"
             }
             Self::EventContractInvalid => {
                 "the service package's declared event contract is malformed"

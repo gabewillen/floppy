@@ -369,12 +369,15 @@ The full list, with evidence, is in
   session), its async sessions do not take the `http` option, and it runs no
   extension components.
 - Invoked services (`<invoke type>` other than SCXML) run only under the
-  Wasmtime session host, bound by exact type URI (`--service-package`); they
-  get no `env` slot references yet, a session holding one cannot be
-  snapshotted, and the browser host binds none (it fails closed). Declared
-  WASI permissions are linked (when granted) into service components only:
-  an extension package that declares one is refused, and `wasi:cli`,
-  `wasi:http`, and UDP are not grantable.
+  Wasmtime session host, bound by exact type URI (`--service-package`); a
+  session holding one cannot be snapshotted, the browser host binds none (a
+  service `<invoke>` there raises `error.execution` when it starts), and
+  deferred requests (`outbound-http.begin`) run only in live sessions that
+  neither record nor replay (not in the CLI). Declared WASI permissions are
+  linked (when granted) into service components only, by rule (an extension
+  package that declares one is refused: extension elements are synchronous
+  executable content), and `wasi:cli`, `wasi:http`, and UDP are not
+  grantable.
 - Repository namespaces are GitHub repositories only.
 - An `event:schema` references only files relative to the document; child
   documents compiled when invoked and the browser host get no schema files.
