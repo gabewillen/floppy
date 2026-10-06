@@ -1,0 +1,33 @@
+# Decisions
+
+Decisions the maintainer made for the mosfet to nemobot port. Each is settled;
+reopening one needs the maintainer. All are dated 2026-10-06.
+
+## scxml.rs subtree
+
+| Field | Value |
+| --- | --- |
+| Prefix | `scxml.rs/` |
+| Kind | squashed `git subtree` |
+| Source repository | local scxml.rs (`stateforward/scxml.rs`) |
+| Source branch | `feat/invoke-services` |
+| Source commit | `9971c05abdc3f9a9b4d2367ab71f256bfd6075ba` ("Resolve repository services from services/<name>@<tag> like repository namespaces") |
+| Squash commit here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05") |
+| Update | `git subtree pull --prefix scxml.rs <scxml.rs> feat/invoke-services --squash`, after the change lands upstream |
+
+## Decisions
+
+| # | Date | Decision |
+| --- | --- | --- |
+| D1 | 2026-10-06 | mosfet (a Python bot runtime: hsm state machines plus Starlark behaviors) is ported to nemobot, powered by scxml.rs (the Rust/Wasm SCXML engine). |
+| D2 | 2026-10-06 | scxml.rs gains custom `<invoke type="<service URI>">` services: Wasm components of the `invoked-service` world. Slice 1 is done on `feat/invoke-services` (commits `c0cbd9b5`, `6470c5b5`): the `service-invocation` WIT, `invoked-service-host` (`emit`, `complete`, `set-wakeup`, `now-ms`), `load-services`/`start-service`, `invocation-message.failed`, the engine branch, IR `invoke_types`, `SCXML093`/`SCXML094`/`COMP004`, the `stateforward.scxml.service-package/v1` manifest, the host's `service.rs`, the CLI's `--service-package`/`--service-component`/`--service-component-sha256`, the echo example `components/scxml-service-example`, and removal of the `scxml-invoked-service` scaffold. Slice 2 (WASI permissions, grants, event contracts, repository services) followed on the same branch. |
+| D3 | 2026-10-06 | Versions stay at WIT `@0.2.0` and Machine IR `5` (0.2.0 is unreleased; repository practice). No bump. |
+| D4 | 2026-10-06 | Wasm components (extensions and services) may declare any WASI permission in their manifest; the user accepts it at use time (the CLI lists it before running; an ungranted permission fails closed before the first macrostep). scxml.rs's "no WASI" rule becomes "no WASI interface beyond what the manifest declares and the run grants". Packages declaring effectful permissions refuse `--record`/`--replay`, following the outbound-HTTP precedent. |
+| D5 | 2026-10-06 | Event contracts use scxml.rs's existing `event:schema` vocabulary, which stays metadata-only in the engine. Enforcement comes from the `decision` namespace (candidates are the enabled transitions with their `event_schema`, read via `session-snapshot-host`; rank; fill data to the schema; validate before raising) and from package-declared schemas checked at external boundaries (service emit). |
+| D6 | 2026-10-06 | mosfet's attachment protocol is not ported: invoke lifecycle covers attach and detach. Devices become services (later). Domain event names (`bot.*`, `bot.ability.*`, `phone.*`) stay byte-for-byte from mosfet. |
+| D7 | 2026-10-06 | nemobot is a git repository and Cargo workspace. scxml.rs is a squashed git subtree at `nemobot/scxml.rs` carrying `feat/invoke-services`. Every canonical namespace and service lives as a crate in nemobot: `namespaces/{scxml,generate,decision}`, `services/{memory,speech}` (later), `host/`, `bots/builder/`. Repository URIs: `https://github.com/stateforward/nemobot/namespaces/<name>@<tag>` and `https://github.com/stateforward/nemobot/services/<name>@<tag>`. |
+| D8 | 2026-10-06 | The `scxml` namespace is named exactly `scxml` (never `scxml-toolchain`). Its `validate` element wraps the existing validator; documents bind it with a prefix other than `scxml` (for example `sx`). |
+| D9 | 2026-10-06 | The builder bot is the first bot. It builds SCXML only (no Rust). It is an SCXML machine used through `<invoke type="scxml" src="...">` and events (`builder.request` to `builder.done` or `builder.failed`); a CLI comes later. Loop: intake spec, design, author SCXML (with event schemas and test event scripts), `sx:validate`, apply machine-applicable fixes or feed diagnostics back to `generate`, bounded retries modelled as states, simulate by invoking the draft as a child (`<invoke type="scxml">` with `<content>`) and sending test events through `#_<invokeid>`, package, done. Retries and timeouts live in the topology (`<send delay>`), never ad hoc. |
+| D10 | 2026-10-06 | Interim model backends: `generate` uses OpenAI (`OPENAI_API_KEY`, optional `OPENAI_BASE_URL`); `decision` uses TypeSafe `system_one` (`TYPESAFE_API_KEY`). NVIDIA (Nemotron through an OpenAI-compatible API) and CLM become the defaults later, so backends stay pluggable through `env:baseurl`. Keys live in mosfet's `.env` and are used only through env files and `env` slots: never printed, logged, copied, or committed. |
+| D11 | 2026-10-06 | Memory is SQLite first, then PGlite (not in the first night's scope). |
+| D12 | 2026-10-06 | Git work is local commits only: no push, no pull requests, no remotes, no branches beyond the named ones. Each repository's AGENTS.md/CONTRIBUTING.md is followed; scxml.rs's rules are normative (fail closed, no unwrap/panic on reachable paths, wasm-only resource bounds, hard cutovers, canonical outputs, thin hosts, Wasm components behind versioned WIT). |
