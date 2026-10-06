@@ -1,0 +1,18 @@
+[package]
+name = "nemobot-decision"
+description = "The `decision` namespace: ranked choice among enabled transitions, filled and validated against their event schemas, as a Wasm extension component"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+
+[lints]
+workspace = true

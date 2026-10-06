@@ -1,0 +1,58 @@
+[workspace]
+members = [
+    "namespaces/scxml",
+    "namespaces/generate",
+    "namespaces/decision",
+]
+# scxml.rs is a squashed subtree with its own workspace, lockfile, and proof
+# matrix; nemobot depends on its crates by path and never absorbs it.
+exclude = ["scxml.rs"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+license = "Apache-2.0 OR MIT"
+authors = ["Stateforward contributors"]
+repository = "https://github.com/stateforward/nemobot"
+homepage = "https://github.com/stateforward/nemobot"
+readme = "README.md"
+# Nothing is published to crates.io; nemobot ships as source plus the Wasm
+# components built from this workspace.
+publish = false
+
+[workspace.lints.rust]
+# `deny` rather than `forbid` so the namespace component crates can inherit
+# these lints once they link wit-bindgen glue (as scxml.rs's components do);
+# every crate root still carries `#![forbid(unsafe_code)]`.
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+[profile.dev]
+debug = 1
+incremental = true
+
+# Dependencies (Wasmtime and Cranelift above all) are optimized in debug and
+# test builds, as in scxml.rs: the host tests compile and run components
+# through them.
+[profile.dev.package."*"]
+debug = 0
+opt-level = 3
+
+[profile.test]
+debug = 1
+incremental = true
+
+[profile.test.package."*"]
+debug = 0
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
