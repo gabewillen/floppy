@@ -13,7 +13,7 @@ human or an AI coding agent. MUST, SHOULD, and MAY are used as in RFC 2119.
 - The nemobot Cargo workspace MUST exclude `scxml.rs` and depend on its crates by path; it MUST NOT absorb scxml.rs's workspace, lockfile, or members.
 - The workspace MUST remain on Rust `1.98`, edition `2024`, and Cargo resolver `3` (matching scxml.rs) unless an explicit reviewed migration changes all authoritative metadata and proof together. `Cargo.lock` MUST remain committed; shared dependencies MUST resolve to the versions scxml.rs's `Cargo.lock` pins (it was seeded from it).
 - Canonical extension namespaces live as crates under `namespaces/<name>/`, canonical invoked services under `services/<name>/`, bots as SCXML documents under `bots/<name>/`, and the integration tests (which drive `scx`) under `tests/`. Their repository URIs MUST be exactly `https://github.com/stateforward/nemobot/namespaces/<name>@<tag>` and `https://github.com/stateforward/nemobot/services/<name>@<tag>`.
-- The SCXML authoring namespace MUST be named exactly `scxml` (never `scxml-toolchain` or another variant); documents MUST bind it with a prefix other than `scxml` (for example `sx`).
+- The SCXML authoring namespace is scxml.rs's `scx` namespace (`https://github.com/stateforward/scxml.rs/namespaces/scx`, `<scx:validate>`), which `scx` embeds; documents bind it with the prefix `scx`, and nemobot MUST NOT ship its own copy.
 - Versions of scxml.rs contracts MUST stay at WIT `@0.2.0` and Machine IR `5` until scxml.rs releases a change; nemobot MUST NOT bump them on its own.
 
 ## Components
@@ -33,7 +33,7 @@ human or an AI coding agent. MUST, SHOULD, and MAY are used as in RFC 2119.
 - A bot MUST be an SCXML document; its abilities MUST be invoked children (`<invoke type="scxml">`) or invoked services, and its devices MUST be invoked services. mosfet's attachment protocol MUST NOT be ported: invoke lifecycle covers attach and detach.
 - Domain event names (`bot.*`, `bot.ability.*`, `phone.*`) MUST stay byte-for-byte as mosfet names them.
 - Retries, timeouts, and bounded loops MUST be modelled in the topology (states, `<send delay>`, counters in the data model), never in ad hoc host or component code. A timeout on an invoked service MUST be able to preempt it: arm it in the invoking state and leave that state when it fires, which cancels the invocation.
-- The builder bot builds SCXML only (never Rust): its drafts MUST pass `sx:validate` and a simulation as an invoked child before it ends in its final state `done`.
+- The builder bot builds SCXML only (never Rust): its drafts MUST pass `scx:validate` and a simulation as an invoked child before it ends in its final state `done`.
 
 ## Engineering
 

@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "tests",
-    "namespaces/scxml",
     "namespaces/decision",
     "services/generate",
     "services/decision",

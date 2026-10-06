@@ -17,7 +17,7 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | Path | What |
 | --- | --- |
 | `scxml.rs/` | scxml.rs as a squashed git subtree (see [docs/decisions.md](docs/decisions.md) for the source commit) |
-| `namespaces/{scxml,decision}/` | canonical extension namespaces (Wasm components; synchronous executable content: `sx:validate`, `decision:menu`) |
+| `namespaces/decision/` | the canonical extension namespace (a Wasm component; synchronous executable content: `decision:menu`); the builder's `scx:validate` is scxml.rs's embedded `scx` namespace |
 | `services/{generate,decision}/` | canonical invoked services (Wasm components: model generation, decisions) |
 | `bots/builder/` | the builder bot: its SCXML document (`builder.scx`), schemas, and saved live examples |
 | `tests/` | `nemobot-tests`: integration tests that run the bots, namespaces, and services through `scx run` |

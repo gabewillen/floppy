@@ -23,7 +23,7 @@
 
   intake -> design (an invoked generate service: topology plan) -> author
   (an invoked generate service: draft SCXML + event schemas + test scripts)
-  -> validate (the draft contract, then sx:validate; machine-applicable
+  -> validate (the draft contract, then scx:validate; machine-applicable
   fixes through apply_fixes, at most 2 passes per draft) -> simulate (each
   test script drives the draft as an invoked child with its own invoke id)
   -> done. Every failure goes through retry_gate, which counts it
@@ -47,7 +47,7 @@
 
   The draft contract: drafts are model-written and run as invoked children
   of this session, which would inherit every namespace package and env
-  value the run binds. validate therefore refuses, before sx:validate's
+  value the run binds. validate therefore refuses, before scx:validate's
   verdict counts, a draft that has a document type declaration (so no
   entity can hide markup), declares a namespace other than SCXML and event,
   mentions xmlns anywhere but such a declaration, or holds an invoke or
@@ -59,14 +59,15 @@
   is read too), and a forbidden pattern inside a comment or CDATA section
   is refused too.
 
-  Bindings: the scxml and decision namespace packages and the generate and
-  decision service packages, resolved from their repository URIs; the env
+  Bindings: the scx namespace (built into scx), and the decision namespace
+  package and the generate and decision service packages, resolved from their
+  repository URIs; the env
   attributes below scope OPENAI_API_KEY and OPENAI_BASE_URL to the generate
   service's invokes and TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
   decision service's.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:sx="https://github.com/stateforward/nemobot/namespaces/scxml@v0.1.0"
+       xmlns:scx="https://github.com/stateforward/scxml.rs/namespaces/scx"
        xmlns:decision="https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -262,7 +263,7 @@
       <assign location="schema_errors" expr="[]"/>
       <assign location="contract_errors" expr="(function (text) { var errors = []; var add = function (message) { if (errors.length &lt; 20) { errors.push({kind: &#x27;draft&#x27;, code: &#x27;draft-contract&#x27;, message: message}); } }; var allowed = [&#x27;http://www.w3.org/2005/07/scxml&#x27;, &#x27;https://github.com/stateforward/scxml.rs/namespaces/event&#x27;]; if (/&lt;!(?:DOCTYPE|ENTITY|ATTLIST|ELEMENT|NOTATION)/i.test(text)) { add(&#x27;the draft has a document type declaration; drafts must declare no DTD, entity, or attribute default&#x27;); } var match = null; var declarations = /xmlns(?::[^ \t\r\n=]*)?[ \t\r\n]*=[ \t\r\n]*(?:&quot;([^&quot;]*)&quot;|&#x27;([^&#x27;]*)&#x27;)/g; while ((match = declarations.exec(text)) !== null) { var uri = match[1] !== undefined ? match[1] : match[2]; if (allowed.indexOf(uri) &lt; 0) { add(&#x27;the draft declares the namespace &#x27; + JSON.stringify(uri.slice(0, 200)) + &#x27;; only the SCXML namespace and the event namespace are allowed&#x27;); } } if (/xmlns/.test(text.replace(declarations, &#x27;&#x27;))) { add(&#x27;the draft has an xmlns the contract cannot read; drafts declare namespaces only as xmlns or xmlns:prefix with a quoted URI&#x27;); } if (/&lt;[ \t\r\n]*(?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?invoke/.test(text)) { add(&#x27;the draft holds an invoke element; drafts must not invoke anything&#x27;); } if (/&lt;[ \t\r\n]*(?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?script/.test(text)) { add(&#x27;the draft holds a script element; drafts must not use script&#x27;); } if (/[ \t\r\n](?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?(?:src|srcexpr)[ \t\r\n]*=/.test(text)) { add(&#x27;the draft has a src or srcexpr attribute; drafts must load nothing&#x27;); } if (/[ \t\r\n](?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?typeexpr[ \t\r\n]*=/.test(text)) { add(&#x27;the draft has a typeexpr attribute; drafts must name no processor or invoke type by expression&#x27;); } var types = [&#x27;internal&#x27;, &#x27;external&#x27;, &#x27;deep&#x27;, &#x27;shallow&#x27;, &#x27;http://www.w3.org/TR/scxml/#SCXMLEventProcessor&#x27;]; var typed = /[ \t\r\n](?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?type[ \t\r\n]*=[ \t\r\n]*(?:&quot;([^&quot;]*)&quot;|&#x27;([^&#x27;]*)&#x27;)/g; while ((match = typed.exec(text)) !== null) { var value = match[1] !== undefined ? match[1] : match[2]; if (types.indexOf(value) &lt; 0) { add(&#x27;the draft has the type &#x27; + JSON.stringify(value.slice(0, 200)) + &#x27;; drafts send only through the SCXML Event I/O Processor&#x27;); } } return errors; })(scxml_text)"/>
       <assign location="parsed_schemas" expr="draft.schemas.map(function (s) { var value = null; try { value = JSON.parse(s.schema); } catch (e) { value = null; } if (value === null || (typeof value !== 'object' &amp;&amp; typeof value !== 'boolean') || Array.isArray(value)) { schema_errors.push({kind: 'draft', code: 'schema-not-json', message: 'the schemas entry of ' + JSON.stringify(s.event) + ' is not a JSON Schema object as JSON text: ' + JSON.stringify(String(s.schema).slice(0, 200))}); } return {event: s.event, schema: value}; })"/>
-      <sx:validate location="report" expr="scxml_text" name="draft.scx"
+      <scx:validate location="report" expr="scxml_text" name="draft.scx"
                    applyfixes="machine-applicable" fixedlocation="fixed"/>
     </onentry>
     <transition cond="report !== null &amp;&amp; contract_errors.length &gt; 0" target="retry_gate">

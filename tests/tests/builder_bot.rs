@@ -4,7 +4,7 @@
 //! their repository URIs (the test cache `scripts/build-components.sh`
 //! published), its `env` attributes scope the values, and it ends in the
 //! final state `done` or `failed`, whose `<donedata>` `scx run` prints in its
-//! `done` record. The session binds the real `scxml` and `decision`
+//! `done` record. The session binds the real `scx` (embedded in `scx`) and `decision`
 //! extension components and the real `generate` and `decision` service
 //! components; the services talk to one deterministic fake backend on
 //! 127.0.0.1 (Chat Completions and `TypeSafe` `system_one`; nothing reaches
@@ -235,7 +235,7 @@ fn fixable_draft() -> String {
 }
 
 /// A draft that breaks the draft contract: red invokes a nested machine
-/// from a string, which `sx:validate` does not look inside.
+/// from a string, which `scx:validate` does not look inside.
 fn smuggling_draft() -> String {
     draft(&traffic_light(&green_separate(), "red").replace(
         "<transition event=\"light.timer\" target=\"green\"/>",

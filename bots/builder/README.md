@@ -75,7 +75,7 @@ intake -> design -> author -> validate -> simulate -> done
   machine finishes). A repair sees the failed draft, its tests, and the
   diagnostics.
 * `validate`: the draft must keep the draft contract (below); its schemas
-  must parse; `sx:validate` with
+  must parse; `scx:validate` with
   `applyfixes="machine-applicable"`; when the fixes change the text,
   `apply_fixes` takes them and validates again (at most 2 passes per draft);
   otherwise the error diagnostics feed back to `author`.
@@ -131,7 +131,7 @@ own request timeout (600 s) is only a backstop. The simulation is bounded the sa
 
 Drafts are model output, and a draft runs as an invoked child of the
 builder's session, which would inherit every namespace package and `env`
-value the run binds. So `validate` refuses, before `sx:validate`'s verdict
+value the run binds. So `validate` refuses, before `scx:validate`'s verdict
 counts, a draft that has a document type declaration (so no entity can
 hide markup), declares a namespace other than SCXML and `event`, mentions
 `xmlns` anywhere but such a declaration, or holds an `invoke` or `script`
@@ -148,7 +148,7 @@ section is refused too.
 
 Everything a run needs is in the document:
 
-* Its namespaces (`scxml`, `decision`) and its `<invoke type>`s (`generate`,
+* Its `decision` namespace and its `<invoke type>`s (`generate`,
   `decision`) are repository URIs
   (`https://github.com/stateforward/nemobot/namespaces/<name>@v0.1.0`,
   `.../services/<name>@v0.1.0`), which `scx` resolves from its
@@ -159,8 +159,10 @@ Everything a run needs is in the document:
   (`env:apikey`, `env:baseurl`), and `TYPESAFE_API_KEY` and
   `TYPESAFE_BASE_URL` only to the decision service's. `scx run` lists each
   variable and the `<invoke>`s it goes to before running (names only).
-* `sx:validate` runs within scxml.rs's default extension call fuel
-  (`namespaces/scxml`), so no flag raises it.
+* `scx:validate` is scxml.rs's `scx` namespace
+  (`https://github.com/stateforward/scxml.rs/namespaces/scx`), which `scx`
+  embeds, so it needs no package and no fetch, and it runs within the
+  default extension call fuel.
 
 No backend URL is compiled into a component, so each base URL comes from
 the env file, or, with a bare `--env NAME`, from the calling shell

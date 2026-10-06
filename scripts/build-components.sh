@@ -5,7 +5,9 @@
 # Usage: sh scripts/build-components.sh [--artifacts-dir DIR] [--cache-dir DIR] [--session-only]
 #
 # 1. The scxml.rs session components a `scx run` session links (machine,
-#    compiler, the three data models, both I/O processors, clock), built and
+#    compiler, the three data models, both I/O processors, clock) and the
+#    `scx` namespace's component (`<scx:validate>`), which `scx` embeds too,
+#    built and
 #    verified by the subtree's own scxml.rs/scripts/verify-wasm-capabilities.sh
 #    into DIR/scxml: the release `scx` embeds when it is built with
 #    SCXML_WASM_ARTIFACTS_DIR=DIR/scxml (README.md, "Running a bot"). Its
@@ -42,8 +44,8 @@ expected_wasm_tools='wasm-tools 1.244.0'
 expected_wasi_virt='wasi-virt 0.2.0'
 expected_wasi_virt_source='https://github.com/bytecodealliance/WASI-Virt'
 expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
-session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock'
-namespace_components='nemobot_scxml nemobot_decision'
+session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scx'
+namespace_components='nemobot_decision'
 service_components='nemobot_service_generate nemobot_service_decision'
 
 usage() {
@@ -90,14 +92,6 @@ mkdir -p "$artifacts_dir"
 # outbound-http. Every model call is an invoked service.
 expected_imports() {
     case "$1" in
-        # <sx:validate>: reads its source through the data model and assigns
-        # the report there; no execution-host, outbound-http, or snapshot.
-        nemobot_scxml)
-            printf '%s\n' \
-                'stateforward:scxml/types@0.2.0' \
-                'stateforward:scxml/telemetry@0.2.0' \
-                'stateforward:scxml/data-model-host@0.2.0'
-            ;;
         # <decision:menu>: reads the transitions through the session
         # snapshot, evaluates their guards through the data model, and
         # assigns the menu there; no execution-host or outbound-http.
@@ -203,10 +197,7 @@ build_component() {
     test -f "$raw" || { echo "missing release component artifact: $raw" >&2; exit 1; }
     virt_input=$raw
     case "$component" in
-        nemobot_scxml|nemobot_decision|nemobot_service_generate|nemobot_service_decision)
-        # <sx:validate> links the scxml.rs validator, whose bundled XML
-        # Schema backend seeds ahash from wasi:random/random and whose
-        # `event` schema checks use std's RandomState (insecure-seed);
+        nemobot_decision|nemobot_service_generate|nemobot_service_decision)
         # <decision:menu> compiles each offered schema, the generate service
         # checks structured output, and the decision service checks the
         # menu's schemas and the filled event data with the same `event`
