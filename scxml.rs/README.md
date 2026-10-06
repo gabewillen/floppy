@@ -99,14 +99,15 @@ cargo install --locked --git https://github.com/bytecodealliance/WASI-Virt --rev
 
 Build and verify the release session components first: `scx` embeds them
 (its build reads `target/wasm-artifacts/release`, checks each component
-against the manifest, and fails rather than building without them). The
+against the manifest, and fails rather than building without them), with the
+`scx` namespace's component it embeds too. The
 example extension component is built too, for the namespace examples:
 
 ```console
 sh scripts/verify-wasm-capabilities.sh \
   scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
   scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_extension_example \
-  scxml_compiler scxml_machine
+  scxml_compiler scxml_machine scx
 RELEASE="$PWD/target/wasm-artifacts/release"
 MANIFEST_SHA256=$( (sha256sum "$RELEASE/manifest.tsv" 2>/dev/null \
   || shasum -a 256 "$RELEASE/manifest.tsv") | cut -d ' ' -f 1)
@@ -256,7 +257,11 @@ its outbound requests to the origins the package declares or a base URL the
 run supplies.
 See [executable-content-extensions.md](docs/executable-content-extensions.md),
 the [`env` vocabulary](namespaces/env/README.md), and the
-[example extension](components/scxml-extension-example).
+[example extension](components/scxml-extension-example). `scx` itself ships
+one extension namespace, [`scx`](namespaces/scx/README.md)
+(`<scx:validate>`: the validator as executable content, for machines that
+check SCXML they write), embedded in the binary so documents use it with no
+flag or fetch.
 
 **Event data schemas.** `event:schema` on a `<transition>`, `<send>`,
 `<raise>`, or `<donedata>` describes the event data it handles or creates
@@ -319,6 +324,7 @@ policy is the "Versioning policy" section of
 | [Session snapshots](docs/session-snapshot.md) | the snapshot and diff documents and the `snapshot` commands |
 | [Executable content extensions](docs/executable-content-extensions.md) | writing an extension component, `env` slots, loading an element from a repository |
 | [`event` vocabulary](namespaces/event/README.md) | JSON Schemas for event data (`event:schema`, `event:schemaexpr`): resolution, references, snapshots, and validator codes |
+| [`scx` namespace](namespaces/scx/README.md) | `<scx:validate>`: the validator as an extension element, embedded in `scx` |
 | [Wasm script components](docs/wasm-scripts.md) | `<script src>` backed by a Wasm component |
 | [Implementation-defined choices and limits](docs/limits.md) | where SCXML leaves a choice to the platform, fuel, and resource bounds |
 | [Observability](docs/observability.md) | OpenTelemetry spans, measurements, and cardinality |

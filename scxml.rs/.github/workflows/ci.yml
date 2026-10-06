@@ -51,7 +51,7 @@ jobs:
       - run: RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
       - run: RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --all-features --locked
       - run: cargo test -p scxml-wit --locked
-      - run: cargo clippy --locked --target wasm32-wasip2 -p scxml-telemetry -p scxml-validator-xsd -p scxml-clock -p scxml-compiler -p scxml-data-model-ecmascript -p scxml-data-model-null -p scxml-data-model-xpath -p scxml-ioprocessor-scxml -p scxml-ioprocessor-basichttp -p scxml-machine -p scxml-extension-example -p scxml-reporter-rustc -p scxml-reporter-sarif -p scxml-script-example -p scxml-service-example -p scxml-service-files -p scxml-snapshot-codec -p scxml-validator -- -D warnings
+      - run: cargo clippy --locked --target wasm32-wasip2 -p scxml-telemetry -p scxml-validator-xsd -p scxml-clock -p scxml-compiler -p scxml-data-model-ecmascript -p scxml-data-model-null -p scxml-data-model-xpath -p scxml-ioprocessor-scxml -p scxml-ioprocessor-basichttp -p scxml-machine -p scxml-extension-example -p scxml-reporter-rustc -p scxml-reporter-sarif -p scxml-script-example -p scxml-service-example -p scxml-service-files -p scxml-snapshot-codec -p scxml-validator -p scx -- -D warnings
       - run: cargo check -p scxml-host-wasmtime --features wasmtime --locked
       - run: cargo test -p scxml-host-wasmtime --features wasmtime,http --locked
         timeout-minutes: 75
@@ -150,7 +150,7 @@ jobs:
           sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
             scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
             scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine \
-            scxml_extension_example
+            scxml_extension_example scx
           echo "MANIFEST_SHA256=$(sha256sum "$RELEASE/manifest.tsv" | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
           echo "EXTENSION_SHA256=$(sha256sum "$RELEASE/scxml_extension_example.virtualized.wasm" | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
       # The canonical release identity is this job's build (docs/conformance.md,

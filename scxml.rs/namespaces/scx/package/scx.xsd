@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML Schema of the `scx` extension namespace (namespaces/scx). It
+  governs structure only; the extension component governs what the element
+  does. Bind it with the prefix `scx`.
+
+  scx:validate     location (required), expr | one scx:content child (exactly
+                  one at run time), name, applyfixes="machine-applicable"
+                  with fixedlocation (both or neither), and scx:eventschema
+                  children
+  scx:content      the document as text (typically CDATA); no elements
+  scx:eventschema  uri (required), and the schema as text or expr (exactly
+                  one at run time)
+
+  The element takes no `env` slot: the package declares none.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:scx="https://github.com/stateforward/scxml.rs/namespaces/scx"
+           targetNamespace="https://github.com/stateforward/scxml.rs/namespaces/scx"
+           elementFormDefault="qualified">
+  <xs:element name="validate">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="scx:content" minOccurs="0"/>
+        <xs:element ref="scx:eventschema" minOccurs="0" maxOccurs="64"/>
+      </xs:sequence>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="expr" type="xs:string"/>
+      <xs:attribute name="name" type="xs:string"/>
+      <xs:attribute name="applyfixes">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:enumeration value="machine-applicable"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name="fixedlocation" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="content">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:string"/>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="eventschema">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:string">
+          <xs:attribute name="uri" type="xs:string" use="required"/>
+          <xs:attribute name="expr" type="xs:string"/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

@@ -2558,6 +2558,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "scx"
+version = "0.2.0"
+dependencies = [
+ "scxml-event-schema",
+ "scxml-reporting",
+ "scxml-syntax",
+ "scxml-types",
+ "scxml-validator-core",
+ "scxml-validator-xsd",
+ "serde_json",
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
 name = "scxml-bench"
 version = "0.2.0"
 dependencies = [
