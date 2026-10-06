@@ -169,6 +169,7 @@ struct Binding {
     manifest_sha256: String,
     fuel: u64,
     max_commands: u64,
+    extension_call_fuel: u64,
     outbound_http: bool,
     packages: Packages,
     values: Values,
@@ -189,7 +190,11 @@ impl Binding {
         };
         let extensions = self
             .packages
-            .extension_components(&self.values, http.as_ref())?;
+            .extension_components(&self.values, http.as_ref())?
+            .with_call_fuel(self.extension_call_fuel)
+            .map_err(|error| {
+                session_error(format!("the extension call fuel is invalid: {error}"))
+            })?;
         let services = self
             .packages
             .service_components(&self.values, http.as_ref())?;
@@ -226,6 +231,7 @@ impl SessionHandle {
             manifest_sha256: config.components.manifest_sha256.clone(),
             fuel: config.fuel,
             max_commands: config.max_commands,
+            extension_call_fuel: config.extension_call_fuel,
             outbound_http: config.outbound_http,
             packages,
             values,

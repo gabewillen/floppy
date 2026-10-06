@@ -23,7 +23,8 @@
 //!   ],
 //!   "outbound-http": true,
 //!   "fuel": 1000000000,
-//!   "max-commands": 100000
+//!   "max-commands": 100000,
+//!   "extension-call-fuel": 1000000000
 //! }
 //! ```
 //!
@@ -44,6 +45,11 @@
 //!   an `env` value supplies entirely); `false` refuses every request.
 //! * `fuel` and `max-commands` (optional, non-zero): the store fuel of every
 //!   session call and the engine command budget of each call.
+//! * `extension-call-fuel` (optional, non-zero; scxml.rs's
+//!   `DEFAULT_EXTENSION_CALL_FUEL`, 100 million, without it): the instruction
+//!   fuel cap of one extension component call. `<sx:validate>` links the
+//!   whole validator and its bundled XSD set, so a session that uses the
+//!   `scxml` namespace needs more (namespaces/scxml documents how much).
 //!
 //! Relative paths resolve against the config file's directory. Unknown fields
 //! and unknown permissions are refused.
@@ -135,6 +141,8 @@ pub struct Config {
     pub fuel: u64,
     /// Engine command budget of each session call.
     pub max_commands: u64,
+    /// Instruction fuel cap of one extension component call.
+    pub extension_call_fuel: u64,
 }
 
 #[derive(Deserialize)]
@@ -158,6 +166,8 @@ struct RawConfig {
     fuel: Option<u64>,
     #[serde(default)]
     max_commands: Option<u64>,
+    #[serde(default)]
+    extension_call_fuel: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -191,6 +201,15 @@ struct RawGrant {
 
 fn config_error(message: impl Into<String>) -> HostFailure {
     HostFailure::new(FailureKind::Config, message)
+}
+
+/// An optional non-zero budget field, or its default.
+fn positive(value: Option<u64>, field: &str, default: u64) -> Result<u64, HostFailure> {
+    match value {
+        Some(0) => Err(config_error(format!("field `{field}` must be positive"))),
+        Some(value) => Ok(value),
+        None => Ok(default),
+    }
 }
 
 fn is_sha256_hex(value: &str) -> bool {
@@ -319,16 +338,13 @@ impl Config {
             .enumerate()
             .map(|(index, grant)| Self::grant(base, index, grant))
             .collect::<Result<Vec<_>, _>>()?;
-        let fuel = match raw.fuel {
-            Some(0) => return Err(config_error("field `fuel` must be positive")),
-            Some(fuel) => fuel,
-            None => scxml_host_wasmtime::DEFAULT_FUEL,
-        };
-        let max_commands = match raw.max_commands {
-            Some(0) => return Err(config_error("field `max-commands` must be positive")),
-            Some(commands) => commands,
-            None => DEFAULT_MAX_COMMANDS,
-        };
+        let fuel = positive(raw.fuel, "fuel", scxml_host_wasmtime::DEFAULT_FUEL)?;
+        let max_commands = positive(raw.max_commands, "max-commands", DEFAULT_MAX_COMMANDS)?;
+        let extension_call_fuel = positive(
+            raw.extension_call_fuel,
+            "extension-call-fuel",
+            scxml_host_wasmtime::DEFAULT_EXTENSION_CALL_FUEL,
+        )?;
         Ok(Self {
             components,
             env_file,
@@ -339,6 +355,7 @@ impl Config {
             outbound_http: raw.outbound_http.unwrap_or(true),
             fuel,
             max_commands,
+            extension_call_fuel,
         })
     }
 
@@ -469,12 +486,16 @@ mod tests {
         assert!(config.outbound_http, "outbound HTTP defaults on");
         assert_eq!(config.fuel, scxml_host_wasmtime::DEFAULT_FUEL);
         assert_eq!(config.max_commands, DEFAULT_MAX_COMMANDS);
+        assert_eq!(
+            config.extension_call_fuel,
+            scxml_host_wasmtime::DEFAULT_EXTENSION_CALL_FUEL
+        );
     }
 
     #[test]
     fn packages_and_grants_parse() {
         let config = parse(&minimal(&format!(
-            r#","env-file":"/x/.env","env":["OPENAI_API_KEY"],"services":[{{"manifest":"s.json","component-sha256":"{DIGEST}"}}],"grants":[{{"uri":"u","permission":"wasi:filesystem","mount":"data","directory":"d"}},{{"uri":"u","permission":"wasi:sockets/tcp","connect":["127.0.0.1:80"]}}],"outbound-http":false,"max-commands":7"#
+            r#","env-file":"/x/.env","env":["OPENAI_API_KEY"],"services":[{{"manifest":"s.json","component-sha256":"{DIGEST}"}}],"grants":[{{"uri":"u","permission":"wasi:filesystem","mount":"data","directory":"d"}},{{"uri":"u","permission":"wasi:sockets/tcp","connect":["127.0.0.1:80"]}}],"outbound-http":false,"max-commands":7,"extension-call-fuel":9"#
         )))
         .expect("valid");
         assert_eq!(config.env_file.as_deref(), Some(Path::new("/x/.env")));
@@ -489,6 +510,7 @@ mod tests {
         );
         assert!(!config.outbound_http);
         assert_eq!(config.max_commands, 7);
+        assert_eq!(config.extension_call_fuel, 9);
     }
 
     #[test]
@@ -499,6 +521,10 @@ mod tests {
             (r#","env-file":"e","env":["A","A"]"#, "twice"),
             (r#","env-file":"e","env":["1A"]"#, "not a variable name"),
             (r#","fuel":0"#, "`fuel` must be positive"),
+            (
+                r#","extension-call-fuel":0"#,
+                "`extension-call-fuel` must be positive",
+            ),
             (
                 r#","grants":[{"uri":"u","permission":"wasi:http"}]"#,
                 "not a known WASI permission",
