@@ -90,10 +90,10 @@ oracles, and how to reproduce the baselines;
 The Rust toolchain (1.98 with `rustfmt`, `clippy`, and the `wasm32-wasip2`
 target) is pinned by [`rust-toolchain.toml`](rust-toolchain.toml) and
 installed by `rustup` on first use. Building the Wasm components also needs
-`wasm-tools 1.240.0` and `wasi-virt` at a pinned revision:
+`wasm-tools 1.244.0` and `wasi-virt` at a pinned revision:
 
 ```console
-cargo install --locked wasm-tools@1.240.0
+cargo install --locked wasm-tools@1.244.0
 cargo install --locked --git https://github.com/bytecodealliance/WASI-Virt --rev 448f6df8f688cee5d6995e96b1ffc31f9bf00742 wasi-virt
 ```
 
@@ -369,14 +369,12 @@ The full list, with evidence, is in
   extension components.
 - Invoked services (`<invoke type>` other than SCXML) run only under the
   Wasmtime session host, bound by exact type URI (`--service-package`); a
-  session holding one cannot be snapshotted, the browser host binds none (a
-  service `<invoke>` there raises `error.execution` when it starts), and
-  deferred requests (`outbound-http.begin`) run only in live sessions that
-  neither record nor replay (not in the CLI). Declared WASI permissions are
-  linked (when granted) into service components only, by rule (an extension
-  package that declares one is refused: extension elements are synchronous
-  executable content), and `wasi:cli`, `wasi:http`, and UDP are not
-  grantable.
+  session holding one cannot be snapshotted, and the browser host binds none
+  (a service `<invoke>` there raises `error.execution` when it runs). WASI
+  is linked into service components only, by rule (extension elements are
+  synchronous executable content), as each component's own `wasi:*` imports
+  with the runtime resources the run grants (`--dir`, `--wasi`); `wasi:cli`,
+  `wasi:http`, and UDP are never linked.
 - Repository namespaces are GitHub repositories only.
 - An `event:schema` references only files relative to the document; child
   documents compiled when invoked and the browser host get no schema files.

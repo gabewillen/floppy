@@ -123,23 +123,23 @@ prompts, model names, and log messages are never attributes or metric labels.
 ## Invoked services
 
 Invoked services add the Wasmtime host's boundary spans
-`scxml.host-wasmtime.service-load` (per `load-services` call),
-`service-start` (per `start-service`, including the instance's `type-uri`
-check and `start`), `service-send` (per event delivered to a service),
-`service-wake` (per due wakeup), `service-cancel` (per cancelled service),
-`service-http-fetch` (per blocking `outbound-http.fetch` a service makes),
-`service-http-begin` (per deferred `outbound-http.begin`, on the session
-thread), `service-http-request` (per deferred request `ThreadedServiceHttp`
-performs, off the session thread), and `session-service-response` (per
-delivery of settled deferred requests to a live session), and
+`scxml.host-wasmtime.service-start` (per invocation started through
+`machine-capabilities.start-invocation`: the component instantiated and its
+`invoked-service-api.invoke` called), `service-send` (per event delivered to
+an invocation's `events` stream), `service-wait-until` (per firing of an
+invocation's due timers, `wasi:clocks/monotonic-clock`), `service-cancel`
+(per cancelled invocation), `service-http-fetch` (per `outbound-http.fetch`
+a service makes, from admission to its response), `service-http-request`
+(per admitted request the embedder's transport performs), and
+`session-http-response` (per delivery of a service's HTTP response to a
+live session), and
 the CLI's `scxml.cli.read-service-package` and, for repository services,
 `scxml.cli.resolve-service-package` and `scxml.cli.resolve-service-component`;
 each records only its closed
 outcome and signal event (and, on failure, its closed error category).
 Service guest signals carry the fixed `scxml.module` value
-`invoked-service` and the guest's closed WIT operation enum, which gains
-`wake`. Service type URIs, invoke ids, events, payloads, URLs, and slot
-names are never attributes or metric labels; the set of labels stays closed.
+`invoked-service` and the guest's closed WIT operation enum. Service type
+URIs, invoke ids, events, payloads, URLs, and slot names are never attributes or metric labels; the set of labels stays closed.
 
 ## Validation
 

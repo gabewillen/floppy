@@ -58,12 +58,11 @@ scxml-cli compile namespaces/event/examples/order.scxml --output order.scxml-ir.
 
 ## Metadata only
 
-The attributes never change how a document executes. (An invoked service's
-package may declare its own event contract with the same schemas, which the
-session host does enforce at the service's boundaries, and against which the
-validator checks a document's `event:schema`: `SCXML095`, `SCXML096`; see
-[docs/invoked-services.md](../../docs/invoked-services.md#event-contracts).
-That changes nothing here: a document's own attributes stay metadata.) Transition selection,
+The attributes never change how a document executes. (The schemas of the
+events an invoked service sends live here too, on the transitions that
+handle them; a service package declares no events; see
+[docs/invoked-services.md](../../docs/invoked-services.md#event-schemas).)
+Transition selection,
 `<send>`, `<raise>`, and `<donedata>` behave exactly as without them: no
 event data is checked against a schema, no event is added, and a schema
 never raises `error.execution`. The engine copies them only into session

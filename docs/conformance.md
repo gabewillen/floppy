@@ -903,7 +903,7 @@ and the example extension component,
 with the reproducible release flags of `scripts/reproducible-wasm-env.sh`)
 in the official `rust:1.98.0-bookworm` image pinned by digest and forced to
 `linux/amd64` (emulated on other architectures), with the
-`rust-toolchain.toml` toolchain, `wasm-tools` `1.240.0`, and `wasi-virt` at
+`rust-toolchain.toml` toolchain, `wasm-tools` `1.244.0`, and `wasi-virt` at
 the workflow's pinned revision. It snapshots the working tree into the
 container, writes the verified artifacts and `manifest.tsv` to
 `--artifacts-dir`, and prints the manifest SHA-256 and the example

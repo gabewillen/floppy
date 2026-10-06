@@ -20,14 +20,14 @@ Rust 1.98, `rustfmt`, `clippy`, and `wasm32-wasip2` are pinned by
 `rust-toolchain.toml`.
 
 Component packaging and validation additionally require exact tool identities:
-`wasm-tools 1.240.0`, `cargo-deny 0.20.2`, and `wasi-virt 0.2.0` built from
+`wasm-tools 1.244.0`, `cargo-deny 0.20.2`, and `wasi-virt 0.2.0` built from
 upstream WASI-Virt revision `448f6df8f688cee5d6995e96b1ffc31f9bf00742`.
 Several upstream WASI-Virt commits report version `0.2.0`, and the checked-in
 IRP baselines bind the exact component bytes that revision emits, so the
 revision, not the version, is the pin. Install them locally with:
 
 ```console
-cargo install --locked wasm-tools@1.240.0 cargo-deny@0.20.2
+cargo install --locked wasm-tools@1.244.0 cargo-deny@0.20.2
 cargo install --locked --git https://github.com/bytecodealliance/WASI-Virt --rev 448f6df8f688cee5d6995e96b1ffc31f9bf00742 wasi-virt
 ```
 
@@ -340,8 +340,9 @@ runs never set them. Review the diff before committing.
 `scripts/verify-wasm-capabilities.sh` owns the closed component inventory,
 including the XPath data model and the example invoked-service guest. It performs the
 locked release `wasm32-wasip2` build, deterministic deny-by-default
-virtualization, Component Model validation, exact import checks, and artifact
-manifest hashing. Adding or removing a component requires changing that single
+virtualization, Component Model validation (`wasm-tools validate --features
+component-model,cm-async`: the WIT uses Component Model async functions),
+exact import checks, and artifact manifest hashing. Adding or removing a component requires changing that single
 inventory and its import allowlist; the unsafe verifier independently rejects
 inventory drift.
 
@@ -591,7 +592,7 @@ Boundaries per crate, which new code follows:
 | `scxml-cli run` | `run` (one span per command); the host's live-session spans cover each call |
 | `scxml-host-wasmtime` live sessions | `session-open`, `session-send`, `session-advance` (only when a deadline fires or a logical drain runs; never per wait), `session-receive-http` (only when an inbound message reaches a session's queue), `session-communication-error` (only when owed events are delivered), `session-close`, and the existing `session-snapshot`; no attribute beyond the closed operation and outcome labels |
 | `scxml-host-wasmtime` extension components | `extension-http-fetch` (one per `outbound-http` request an extension component makes, on the session thread, a child of the `execute` call); only the closed outcome event and error category (`invalid-input` for a malformed or refused request, `unsupported` when no transport is granted, `platform` for a transport failure or an oversized response); never a URL, host, header, body, status, prompt, or model; each `session-snapshot-host.snapshot` an extension component calls is one `session-snapshot` span (the checkpoint snapshot's operation) with only its closed signal event and error category, plus the `snapshot-bytes` measurement, never the document |
-| `scxml-host-wasmtime` invoked services | `service-load` (one per `load-services` call), `service-start`, `service-send`, `service-wake`, `service-cancel` (one per export call the host makes on a service, on the session thread), `service-http-fetch` (one per blocking `outbound-http.fetch` a service makes), `service-http-begin` (one per deferred `outbound-http.begin`, on the session thread), `service-http-request` (one per deferred request `ThreadedServiceHttp` performs, off the session thread), and `session-service-response` (one per delivery of settled deferred requests); only the closed outcome event and error category; never a type URI, invoke id, event, payload, or URL |
+| `scxml-host-wasmtime` invoked services | `service-start` (one per invocation started), `service-send` (one per event delivered to an invocation's `events` stream), `service-wait-until` (one per firing of an invocation's due timers), `service-cancel` (one per cancelled invocation), `service-http-fetch` (one per `outbound-http.fetch` a service makes, from admission to its response), `service-http-request` (one per admitted request the embedder's transport performs), and `session-http-response` (one per delivery of a service's HTTP response to a live session); only the closed outcome event and error category; never a type URI, invoke id, event, payload, or URL |
 | `scxml-host-wasmtime` `http` feature | `basichttp-network-post` (one per outbound request, on its worker thread, parented to the issuing send) `basichttp-listener-request` (one per inbound connection), `basichttp-listener-accept` (one per failed `accept`), and `basichttp-listener-connection` (one per accepted connection dropped or not kept); only the closed outcome event and error category; never a URL, host, port, path, header, status, or body |
 
 ### Trace propagation through events

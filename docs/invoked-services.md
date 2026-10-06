@@ -1,26 +1,123 @@
 # Invoked services
 
 An `<invoke>` whose `type` is neither absent nor the SCXML type (SCXML 6.4)
-names an *invoked service*: a leaf invocation with no machine, run by the
-Wasm component (WIT world `stateforward:scxml/invoked-service@0.2.0`) the
-host binds to that exact type URI. The machine evaluates the `<invoke>` and
-hands the service a `service-invocation`; the service `emit`s events to its
-invoking session, `complete`s with `done.invoke.<id>` data, asks for `wake`s
-on the session's logical clock, receives the events the session sends to
-`#_<invokeid>` (or autoforwards), and is `cancel`led when the invoking state
-exits first. A service that traps or fails is retired, and its invoking
-session receives `error.communication` with the invoke id.
+names an *invoked service*: an external service run by the Wasm component
+(WIT world `stateforward:scxml/invoked-service@0.2.0`) the host binds to that
+exact type URI. The machine evaluates the `<invoke>` and asks the host to
+start it (`machine-capabilities.start-invocation` with
+`invocation.service(invoke-request)`); the host instantiates the component
+and calls its one export, a WASI 0.3 / Component Model async function:
+
+```wit
+world invoked-service {
+  import wasi:clocks/monotonic-clock@0.3.0;
+  import outbound-http;
+  import telemetry;
+  export invoked-service-api;
+}
+
+interface invoked-service-api {
+  invoke: async func(request: invoke-request, events: stream<event>)
+    -> result<tuple<stream<event>, future<result<option<data-value>, component-error>>>, component-error>;
+}
+```
+
+- **`request`** (`invoke-request`) carries the `invoke-id`, the `type-uri`
+  exactly as authored or evaluated, the evaluated `source` (`src`/`srcexpr`;
+  data for the service, which nothing loads), `content`, `parameters`
+  (`<param>` and `namelist`, SCXML 6.4.2), the `<invoke>`'s `env`
+  `attributes` (`list<extension-attribute>`), the slot `references` the host
+  bound (`list<slot-reference>`; see below), and the `trace-context`.
+- **`events`** carries every event the invoking session sends to the
+  invocation (`<send target="#_<invokeid>">`) and every event it
+  autoforwards (`<invoke autoforward="true">`), in order.
+- **The returned stream** carries the events the service sends to its
+  invoking session. Each reaches the session's external queue stamped with
+  the invoke id (the host sets `invokeid`, sets `origintype` to the invoke
+  type, and the event runs the invocation's `<finalize>` first).
+- **The returned future** resolves when the service is done: `ok(data)` is
+  `done.invoke.<id>` carrying `data`, after every event returned before it;
+  `err`, a trap (fuel exhaustion included), or a returned event outside the
+  `types.event` bounds is the invocation's `communication-error` message
+  (the session raises `error.communication` with the invoke id, and no
+  `done.invoke` follows).
+- **Rejecting `invoke`** (it returns an error, traps, or the component
+  cannot be instantiated) fails the `<invoke>`: the session raises
+  `error.execution`.
 
 Invocation is a runtime action (SCXML 6.4), so a type the host does not
-bind is judged when its `<invoke>` starts, never earlier: an `<invoke>` of a
-type no service component is bound to, whether literal or given by
-`typeexpr`, raises `error.execution` when it starts, and a session whose
-document names such a type literally starts and runs normally until then.
-The session start (`machine-capabilities.load-services`) fails closed only
-when a *bound* service component does not load (it does not compile,
-imports an undeclared WASI interface, or a declared permission is not
-granted). A compile given the run's service packages still refuses a
-literal type none of them declares (`COMP004`).
+bind is judged when its `<invoke>` runs, never earlier: an `<invoke>` of a
+type no service component is bound to, literal or given by `typeexpr`,
+raises `error.execution` when it runs, and the document still validates
+(`SCXML094` is a warning), compiles, and runs normally until then.
+
+## Cancellation
+
+When the invoking state exits first, or the invoking session ends, the
+invocation is cancelled (SCXML 6.4): the host cancels the `invoke` subtask
+and drops the invocation's store, so nothing the service returns afterwards
+reaches the session and no `done.invoke` follows. The connection of every
+request still in flight is closed at once, so its transport thread ends and
+a server streaming its answer sees the connection close (proved within 2 s
+by the `service_invoke` and `live_run` tests). A service has nothing to
+release.
+
+## Execution and determinism
+
+Each invocation runs on a thread of its own, with its own instance in its
+own store, driven by wasmtime's async event loop (`Store::run_concurrent`,
+`invoke` called with `call_concurrent`). The session hands each input to
+the invocation (its start, an event, its due timers, an HTTP response) with
+the session's logical time, and waits until the invocation's event loop has
+nothing left to run, so what the service returns is applied at the same
+point of every run.
+
+The service's `wasi:clocks/monotonic-clock@0.3.0` is served from the
+session's *logical* clock: its marks are logical milliseconds since the
+session opened, in nanoseconds, with a resolution of 1 ms. A `wait-for` or
+`wait-until` completes when the session's scheduler reaches its deadline, in
+order with every delayed `<send>` of the run.
+
+Bounds: between two inputs the invocation runs at most the configured fuel
+(`ServiceComponents::with_call_fuel`), and returns at most 1024 events of at
+most 4 MiB in all; past either the invocation fails like a trap. At most 16
+requests of one invocation are in flight at once; one more is answered
+`capacity-exhausted`. These are amplification guards and apply on every
+build.
+
+## Outbound HTTP
+
+`outbound-http.fetch` is an `async func`: a service's call suspends only the
+calling task, never the session, and the service's other tasks (reading
+`events`, a timer) go on. The host substitutes the slot references, admits
+the request only to an origin or URL prefix the service package declares
+(`http-origins`) or to an origin a reference's value supplies entirely, and
+then:
+
+- in a batch run, performs it through the embedder's transport
+  (`ServiceComponents::with_outbound_http`);
+- in a live session, performs it on a transport thread of its own and
+  delivers the response later as an external input
+  (`LiveSession::deliver_http_responses`; in `scxml-cli run`, a `call` with
+  cause `http-response`). A logical-clock live session never moves its
+  clock past a request in flight: its response is the next thing that
+  happens.
+
+Without a transport every request fails with `unavailable`. The echo
+example's `fetch` event GETs the URL its `endpoint` slot references and
+returns `echo.fetched` carrying the status.
+
+## Record and replay
+
+A service's HTTP responses are recorded inputs: `--record` writes one
+`http-response` record per response (its time, the invocation's lineage of
+invoke ids, the request's number within the invocation, and the status and
+body or the transport failure), and `--replay` delivers each from the log
+without the network ([live-session.md](live-session.md#replay-log)).
+Timers run on the logical clock, so a run with services, including services
+that import WASI interfaces, records and replays. What a service reads
+through its WASI resources (a preopened directory, a socket) is not
+recorded: a replay needs the same ones.
 
 ## Service packages
 
@@ -38,13 +135,37 @@ binds a namespace ([executable-content-extensions.md](executable-content-extensi
 | `wit-world`, `wit-version` | `stateforward:scxml/invoked-service`, `0.2.0` |
 | `http-origins` | the origins or URL prefixes its `outbound-http` requests may reach (binding consents to them) |
 | `env-slots` | the `env` slots an `<invoke>` of it may bind |
-| `wasi-permissions` | optional: the WASI interfaces its component may import ([WASI permissions](executable-content-extensions.md#wasi-permissions)) |
-| `events` | optional: its event contract ([Event contracts](#event-contracts)) |
 
 Unknown fields and values fail closed when the manifest is read. The CLI
 binds a package with `--service-package MANIFEST.json` and authenticates its
 component with `--service-component-sha256 URI=HEX`
-([cli.md](cli.md#flags-and-exit-status)).
+([cli.md](cli.md#flags-and-exit-status)); a host binds it with
+`ServiceComponents::bind`.
+
+## WASI imports and resources
+
+A manifest declares no WASI. The WASI interfaces a service may use are its
+component's own `wasi:*` imports, read when the service is bound. Clocks,
+randomness, and the `wasi:io` interfaces need no grant. Only runtime
+resources do, named after wasmtime CLI's options and scoped to the
+service's exact type URI (`ServiceComponents::with_wasi(uri, WasiOptions {
+dirs, inherit_network, allow_ip_name_lookup })`, or the CLI flags):
+
+| Import | Grant | What |
+|---|---|---|
+| `wasi:filesystem` | `--dir URI=HOST::GUEST` | preopens `HOST` read-write at the absolute guest path `GUEST` (repeatable) |
+| `wasi:sockets/tcp` | `--wasi URI=inherit-network` | TCP connections may reach any address (wasmtime's `-S inherit-network`) |
+| `wasi:sockets/ip-name-lookup` | `--wasi URI=allow-ip-name-lookup` | name lookup (wasmtime's `-S allow-ip-name-lookup`) |
+
+Everything fails closed when the service is bound, before anything runs:
+an import without its grant (`ArtifactError::WasiResourceUngranted`), a
+grant whose interface the component does not import (`WasiGrantUndeclared`),
+a `wasi:*` import the host never links, such as `wasi:cli` or `wasi:http`
+(`WasiImportUndeclared`), and a grant outside its bounds
+(`WasiGrantInvalid`). Extension components get no WASI
+([executable-content-extensions.md](executable-content-extensions.md#wasi)).
+[`components/scxml-service-files`](../components/scxml-service-files)
+imports `wasi:filesystem` and runs only with `--dir URI=HOST::/workspace`.
 
 ## Loading a service from a repository
 
@@ -65,33 +186,33 @@ so a document needs no flag to bind it:
   `namespaces/` URI never a repository service; any other path is an
   ordinary service type URI.
 - **The layout.** The manifest is `services/<name>/package/<name>.service.json`;
-  its optional `schema-artifact` and every `events` schema file are plain
-  relative paths beside it; the component is the release asset the
-  manifest's `service-artifact` names (a plain asset name), listed in the
-  release's `SHA256SUMS`.
+  its optional `schema-artifact` is a plain relative path beside it; the
+  component is the release asset the manifest's `service-artifact` names (a
+  plain asset name), listed in the release's `SHA256SUMS`.
 - **When it loads.** Only a literal `<invoke type>` that no
   `--service-package` binds is resolved (a `typeexpr` is never resolved: it
   runs only against what the run binds). `validate` and `compile` (and the
   compile step of `snapshot run` and `run`) resolve the package: the tag to a
-  commit through the GitHub API, then the manifest, its schema, and its event
-  schemas at that commit, each checked against the digest the manifest
-  declares. `snapshot run` and `run` then resolve the component from the
-  release, authenticated by its `SHA256SUMS` entry, and bind it before the
-  session starts. Any failure fails closed: validation stops, or the command
-  fails before anything runs. The host acquires nothing.
+  commit through the GitHub API, then the manifest and its schema at that
+  commit, each checked against the digest the manifest declares. `snapshot
+  run` and `run` then resolve the component from the release, authenticated
+  by its `SHA256SUMS` entry, and bind it before the session starts. Any
+  failure fails closed: validation stops, or the command fails before
+  anything runs. The host acquires nothing.
 - **The cache, offline, network bounds, and telemetry** are the repository
   namespaces' exactly: the same content-addressed cache and `--cache-dir`,
   the URI pinned on first use (`stateforward.scxml.service-cache/v1`: the
   URI, commit, manifest digest, and, once read, the component digest; the
-  pinned manifest pins its schema and event schema digests), `--offline`,
-  HTTPS only with loopback HTTP for explicit mirror bases, bounded redirects,
-  timeouts, and bodies, no retry, no ambient credentials, and the CLI spans
+  pinned manifest pins its schema digest), `--offline`, HTTPS only with
+  loopback HTTP for explicit mirror bases, bounded redirects, timeouts, and
+  bodies, no retry, no ambient credentials, and the CLI spans
   `scxml.cli.resolve-service-package` and `scxml.cli.resolve-service-component`
   with closed outcomes only.
 - **Importing is consent.** The CLI lists each repository service with its
   release tag and pinned commit (`= version: release <tag> (commit <commit>),
-  package <version>`), its declared origins, slots, WASI permissions, and
-  events, before anything runs.
+  package <version>`), its declared origins and slots, the WASI interfaces
+  its component imports (`= WASI imports:`), and the WASI resources the run
+  grants it (`= WASI resources:`), before anything runs.
 
 ## Values are references: `env` slots
 
@@ -111,17 +232,18 @@ the variable whose value the host binds, in the host's `env` vocabulary
   expression the machine evaluates, with no current event, when the
   `<invoke>` runs (a failure, or a result that is not a string, raises
   `error.execution` and the service never starts). Machine IR carries the
-  bindings on the invoke (`env`, sorted by slot, omitted when empty), and the
-  machine hands them to the host in `service-invocation.env` (names only).
+  attributes on the invoke (`attributes`, sorted by local name, omitted when
+  empty), and the machine hands them to the host in
+  `invoke-request.attributes` (`env:<slot>expr` as `env:<slot>` with its
+  value; names only).
 - The host binds each slot whose variable the run holds a value for to a
-  fresh opaque reference, numbered per invocation, and hands them to the
-  service's `start`. **Unlike an extension element's per-call references, a
-  service's references live for the whole invocation**: every later `send`,
-  `wake`, and `cancel` of that one instance may use them, only inside its own
-  `outbound-http` requests, which the host admits only to an origin the
-  package declares or one a reference's value supplies entirely. No other
-  instance, invocation, or element ever receives them, and they end when the
-  instance is dropped.
+  fresh opaque reference, numbered per invocation, in
+  `invoke-request.references`. **Unlike an extension element's per-call
+  references, a service's references live for the whole invocation**, only
+  inside its own `outbound-http` requests, which the host admits only to an
+  origin the package declares or one a reference's value supplies entirely.
+  No other invocation or element ever receives them, and they end when the
+  invocation's store is dropped.
 - Every value is granted to exact package URIs (`EnvVariable`; the CLI's
   `--env NAME@URI`): a variable granted only to other packages is treated
   exactly like one the run holds no value for.
@@ -135,135 +257,28 @@ the variable whose value the host binds, in the host's `env` vocabulary
   type's slots against its bound package (`SCXML083`, with a "did you mean"
   fix); a `typeexpr`'s slots only for their syntax.
 - The CLI supplies the run's values to services exactly as to extension
-  elements (`--env`, `--env-file`), and their outbound transport only when
-  the run is not recorded or replayed. The echo example declares the slot
-  `endpoint`: its `fetch` event GETs the URL that slot's value supplies.
+  elements (`--env`, `--env-file`). The echo example declares the slot
+  `endpoint`.
 
-## Slow requests without blocking the session
+## Event schemas
 
-`outbound-http.fetch` blocks the service's export call, and so the session,
-until the response arrives. A slow request (a model call, for example) uses
-the deferred pair instead:
-
-- `outbound-http.begin(request)` substitutes and admits the request exactly
-  as `fetch` does (the same bounds, declared origins, and slot references),
-  hands it to the embedder's deferred transport, and returns a ticket at
-  once. The invoking session keeps processing events and timers, so a
-  `<send delay>` timeout in the invoking state can preempt the request: when
-  the state exits, the service is cancelled and its requests are abandoned
-  (their outcomes are dropped when they arrive). `ThreadedServiceHttp` (the
-  deferred transport of feature `http`) also closes each abandoned request's
-  connection at once, so its thread stops waiting and ends, and a server
-  streaming its answer sees the connection close (a request still resolving
-  its host or connecting is never sent, and ends within the client's connect
-  timeout). The same holds when a service completes or is retired with a
-  request in flight, and when its session closes.
-- When the request settles, the host calls the instance's `wake` (also the
-  timer's wakeup call) at the session's current time; the service reads the
-  outcome with `outbound-http.take(ticket)`, which answers it once, and
-  `none` while the request is still in flight.
-- At most 16 requests of one instance are in flight or untaken
-  (`MAX_SERVICE_PENDING_REQUESTS`, an amplification guard on every build);
-  the next `begin` fails with `capacity-exhausted`.
-- Only a live session that neither records nor replays delivers outcomes
-  ([live-session.md](live-session.md)); in a batch run, a recording or
-  replaying session, or without a deferred transport
-  (`ServiceComponents::with_deferred_http`), `begin` fails with
-  `unavailable`. A logical-clock live session never moves its clock past a
-  pending request (`run_until_idle` returns while one is outstanding).
-- Extension components cannot `begin`: executable content is synchronous.
-
-The echo example's `defer` event GETs its `endpoint` this way and emits
-`echo.fetched` from the `wake` that delivers the outcome.
-
-## Event contracts
-
-A package may declare the events its service emits and the events it
-accepts, each with a JSON Schema for the event's data:
-
-```json
-"events": {
-  "emits": [
-    { "name": "echo.reply", "schema-artifact": "events.json#/$defs/Reply", "schema-sha256": "<64 hex>" }
-  ],
-  "accepts": [
-    { "name": "echo.say", "schema-artifact": "events.json#/$defs/Say", "schema-sha256": "<64 hex>" }
-  ]
-}
-```
-
-- `name` is an exact event name: an SCXML event name of at most 256 bytes
-  with no `*` and no empty `.`-separated token. Each list holds at most 64
-  entries, strictly sorted by name. A present `events` field declares at
-  least one event; a package with none omits it.
-- `schema-artifact` names a JSON file relative to the manifest (a relative
-  path at or below the manifest's directory, percent-encoded like a URI
-  path), optionally with a JSON Pointer fragment; `schema-sha256` is the
-  SHA-256 of the file's bytes, so entries naming the same file carry the
-  same digest.
-- Every command that reads the manifest reads each file (at most 4 MiB),
-  checks its digest, and resolves each schema exactly like an
-  `event:schema` reference: the same dialects (2020-12 by default, 2019-09,
-  draft-07), no fetching, the same JSON Pointer bundling rules, and the
-  same canonical JSON ([namespaces/event](../namespaces/event/README.md)).
-  Any failure fails the command closed.
-- The CLI lists the contract with the package's consent lines:
-  `= events: emits echo.reply; accepts echo.say`.
-
-### What the host enforces
-
-The Wasmtime session host compiles a bound service's contract once
-(`ServicePackage::events`, `ServiceComponents::bind`; a malformed contract
-fails the binding with `ArtifactError::EventContractInvalid`) and checks it
-at the service's two external boundaries. A declared contract is closed: an
-event it does not list fails like a schema mismatch.
-
-| Boundary | Check | On mismatch |
-|---|---|---|
-| the service `emit`s an event | the name is in `emits` and its schema admits the data | the emit is invalid: the host retires the service, and the invoking session receives `error.communication` with the invoke id (no `done.invoke`) |
-| the invoking session's `<send target="#_<invokeid>">` | the name is in `accepts` and its schema admits the data | the `<send>` raises `error.execution` (a delayed send is checked when it is sent, and again when it falls due, when a mismatch makes it undeliverable: `error.communication` with its send id) |
-
-Event data is checked as JSON: no data and `null` are `null`; numbers,
-strings, booleans, arrays, and objects are themselves; XML data is admitted
-only by the boolean schema `true`. Autoforwarded events are delivered
-unchecked (an autoforward is not a `<send>` and has no failure to raise).
-A service without a contract is not schema-checked: its emits pass with any
-event name and data. The embedder consented to that by binding a package
-that declares no contract, and the emits are still bounded as below.
-
-### Emit bounds
-
-Every emitted event must be within the `types.event` bounds (96 KiB in
-all). One export call (`start`, `send`, `wake`, or `cancel`) emits at most
-1024 events (`MAX_SERVICE_EMITS_PER_CALL`) of at most 4 MiB of cumulative
-event bytes (`MAX_SERVICE_EMITTED_BYTES_PER_CALL`); the emit past either
-bound fails with `capacity-exhausted` and is invalid like a contract
-mismatch (an invalid emit during `start` fails the `<invoke>` with
-`error.execution` instead). These are amplification guards (lifting a guest
-buffer into host memory is not fuel-metered), so they apply on every build.
-
-A document's own `event:schema` attributes never take part: they stay
+A package declares no events. The schemas of the events a service sends
+live in the document itself: an `event:schema` on each transition that
+handles them ([namespaces/event](../namespaces/event/README.md)). They stay
 metadata only, and `event_schemas_never_change_execution`
-(`hosts/scxml-host-wasmtime/tests/session_snapshot.rs`) still proves that a
+(`hosts/scxml-host-wasmtime/tests/session_snapshot.rs`) proves that a
 machine with them runs exactly as without them.
 
-### What the validator checks
+## What the validator checks
 
-Given the service packages (`--service-package`), the validator
-cross-checks every transition in the state that invokes a bound service with
-a contract, or in a descendant of that state, that names a declared emitted
-event exactly among its descriptors:
+- `SCXML093` (warning): the literal `<invoke type>` is a platform-specific
+  value, not a URI. SCXML 6.4.1 allows platform-specific types, but a
+  service package binds by an exact absolute URI, so on a host built from
+  this repository the `<invoke>` raises `error.execution` when it runs.
+- `SCXML094` (warning): no given service package binds the literal type
+  URI; without a bound package the `<invoke>` raises `error.execution` when
+  it runs (invocation is a runtime action).
+- `SCXML083` and `SCXML084`: `env` slots (above).
 
-- `SCXML095` (error): its `event:schema` is neither the package's schema for
-  the event (compared as canonical resolved JSON, so formatting and key order
-  do not matter) nor `true`. The `maybe-incorrect` fix replaces it with the
-  package's schema.
-- `SCXML096` (note): it has no `event:schema`. The `maybe-incorrect` fix
-  inserts the package's schema, declaring the `event` namespace on the
-  transition when no prefix for it is in scope.
-
-Compatibility is identity, not JSON Schema subsumption. `event:schemaexpr`,
-descriptors that only prefix the event name (`svc`, `svc.*`, `*`),
-`<invoke typeexpr>`, and services whose package the validator was not given
-are not judged. `scxml-cli --explain SCXML095` and `--explain SCXML096` give
-each rule with an example.
+`compile` never rejects an unbound type. `scxml-cli --explain SCXML093` and
+`--explain SCXML094` give each rule with an example.

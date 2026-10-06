@@ -328,10 +328,7 @@ keeps JSON and SARIF stderr clean) lists, on standard error, each bound
 element's namespace, version (release tag and pinned commit, or package
 version and manifest), declared outbound origins, the slots the document
 binds with the variables they name, noting each one the run holds no value
-granted to that namespace for with the `--env NAME@URI` flag that adds it, and its declared WASI permissions
-(`= WASI:`; the Wasmtime host refuses an extension package that declares any
-in this release), and, when its manifest declares an event contract, the
-events it emits and accepts (`= events:`).
+granted to that namespace for with the `--env NAME@URI` flag that adds it.
 A literal `<invoke type>` of exactly
 `https://github.com/OWNER/REPO/services/NAME@TAG` that no `--service-package`
 binds is a repository service: it is resolved, verified, cached, and pinned
@@ -347,47 +344,43 @@ for `validate`, `compile`, `snapshot run`, and `run`: a
 `schema-artifact` and `schema-sha256` (both a string or both `null`; a named
 schema is read relative to the manifest and verified against its digest),
 `wit-world` (`stateforward:scxml/invoked-service`), `wit-version`,
-`http-origins`, and `env-slots`, and the optional `wasi-permissions`
-(omitted when empty: a sorted list of `{"interface":"wasi:clocks"}`,
-`{"interface":"wasi:filesystem","mount":M,"access":"read-only"|"read-write"}`,
-`wasi:random`, `wasi:sockets/ip-name-lookup`, or `wasi:sockets/tcp` entries;
-see [executable-content-extensions.md](executable-content-extensions.md#wasi-permissions)),
-and the optional `events` (omitted when empty: the events the service emits
-and accepts, each with a JSON Schema file relative to the manifest and its
-SHA-256, resolved like an `event:schema` reference; see
-[invoked-services.md](invoked-services.md#event-contracts));
-unknown fields, interfaces, and values are rejected. `validate` warns
-on a literal `<invoke type>` no package binds (`SCXML094`) and `compile`
-rejects it (`COMP004`); a malformed literal type is `SCXML093`. `snapshot run`
-and `run` execute each bound service's component (`service-artifact` relative
-to the manifest, or `--service-component URI=PATH`), authenticated by the
-required `--service-component-sha256 URI=HEX`, and list each bound service's
-URI, version, declared origins, slots, WASI permissions (with what the
-run grants each), and declared events (`= events:`) before running. `--grant URI=PERMISSION[=VALUE]`
-(repeatable; `snapshot run` and `run`) grants one declared WASI permission
-to the service bound to exactly `URI`: `wasi:clocks`, `wasi:random`, and
-`wasi:sockets/ip-name-lookup` take no value, `wasi:filesystem=MOUNT=DIR`
-maps a declared mount to an existing host directory (the component sees it
-at `/MOUNT`), and `wasi:sockets/tcp=IP:PORT[,IP:PORT]...` lists at most 32
-addresses the component may connect to. Every declared permission must be
-granted and every grant must name a declared permission of a bound
-service, or the command fails before anything runs; the host links nothing
-else, and a component importing an undeclared WASI interface fails its
-session start. `run` refuses `--record` and `--replay` when a bound package
-declares any WASI permission (`[record-wasi]`). A run holding a live
-service cannot be snapshotted (the snapshot is refused). A `--record` log
-binds each service's URI and component SHA-256, and `--replay` refuses a
-run whose services differ (`[replay-identity-mismatch]`). A `run` that
-neither records nor replays also gives services deferred requests
-(`outbound-http.begin`/`take`,
-[invoked-services.md](invoked-services.md#slow-requests-without-blocking-the-session)):
-each runs off the session thread through `ThreadedServiceHttp` (a 10 s
-connect and 120 s total timeout, at most 64 in flight), the session keeps
-taking input meanwhile, and the outcome is delivered by its own call (cause
-`service-response`); on `--clock logical` no delayed send fires while a
-request is in flight. Leaving the invoking state cancels the service and
-closes its request's connection at once. `snapshot run`, `--record`, and
-`--replay` refuse `begin` (`unavailable`).
+`http-origins`, and `env-slots`; unknown fields and values are rejected
+(a manifest declares no WASI and no events). `validate` warns on a literal
+`<invoke type>` no package binds (`SCXML094`), and on a literal type that is
+a platform-specific value rather than a URI (`SCXML093`); `compile` rejects
+neither, and the `<invoke>` raises `error.execution` when it runs (SCXML 6.4:
+invocation is a runtime action). `snapshot run` and `run` execute each bound
+service's component (`service-artifact` relative to the manifest, or
+`--service-component URI=PATH`), authenticated by the required
+`--service-component-sha256 URI=HEX`, and list each bound service's URI,
+version, declared origins, slots, the WASI interfaces its component imports
+(`= WASI imports:`), and the WASI resources the run grants it
+(`= WASI resources:`) before running.
+A service's WASI interfaces are its component's own `wasi:*` imports; only
+runtime resources need a grant, with wasmtime CLI's option names scoped to
+the service bound to exactly `URI` (up to the first `=`; `snapshot run` and
+`run`, repeatable): `--dir URI=HOST::GUEST` preopens `HOST` read-write at the
+absolute guest path `GUEST` for a component importing `wasi:filesystem`,
+`--wasi URI=inherit-network` lets `wasi:sockets/tcp` connect to any address,
+and `--wasi URI=allow-ip-name-lookup` allows `wasi:sockets/ip-name-lookup`.
+An import without its grant, a grant without its import, and a `wasi:*`
+import the host never links (`wasi:cli`, `wasi:http`) fail closed when the
+service is bound, before anything runs
+([invoked-services.md](invoked-services.md#wasi-imports-and-resources)).
+A run holding a live service cannot be snapshotted (the snapshot is
+refused). A `--record` log binds each service's URI and component SHA-256,
+and `--replay` refuses a run whose services differ
+(`[replay-identity-mismatch]`). A service's `outbound-http.fetch` suspends
+only the calling task, never the session
+([invoked-services.md](invoked-services.md#outbound-http)): `run` performs
+each request on a transport thread of its own (a 10 s connect and 120 s
+total timeout, at most 16 in flight per invocation), the session keeps
+taking input meanwhile, and the response is delivered by its own call
+(cause `http-response`); on `--clock logical` no delayed send fires while a
+request is in flight. `--record` records each response and `--replay`
+delivers it from the log without the network, for services that import
+WASI interfaces too. Leaving the invoking state cancels the invocation
+(SCXML 6.4) and closes its request's connection at once.
 ## `run`
 
 `run` keeps one live session of a document open through the same components

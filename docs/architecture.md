@@ -421,10 +421,11 @@ session. Invoked child documents compile against the host's bound packages.
 A namespace a session's document uses that no binding names is loaded when the
 session starts (`machine-capabilities.load-extensions`) through the embedder's
 `ExtensionResolver`, or the start fails closed. Extension components import no
-WASI interface (the host refuses a package that declares one; WASI
-permissions a package declares and the run grants are linked into
-invoked-service components only, through `wasmtime-wasi` inside the host
-adapter) and never receive a secret: an element names the variable for
+WASI interface (the host links none into them; WASI is linked into
+invoked-service components only, as each component's own `wasi:*` imports
+with the runtime resources the run grants, through `wasmtime-wasi` inside
+the host adapter; see [invoked-services.md](invoked-services.md)) and never
+receive a secret: an element names the variable for
 one of its slots with an attribute in the host's `env` vocabulary
 (`https://github.com/stateforward/scxml.rs/namespaces/env`: `env:<slot>="NAME"` or `env:<slot>expr`), the
 host hands the component an opaque reference valid for that `execute` call,
@@ -502,10 +503,13 @@ clock), `snapshot`, `take_outputs`, and `close`. `record` and `apply` log
 and replay a session. `SessionOpen::http` (`LiveHttp`) gives it a
 BasicHTTP network: a `PublicUrl` base for every location, an
 `OutboundHttp` transport (the `http` feature's allowlisted `NetworkClient`,
-or the embedder's own), and a wake callback; `receive_http` delivers one
-inbound message from any server (the `http` feature's `BasicHttpListener`
-is a minimal built-in one), and `deliver_communication_errors` delivers
-the `error.communication` owed for sends that failed after acceptance.
+or the embedder's own), and the `on_communication_error` and
+`on_http_response` callbacks; `receive_http` delivers one inbound message
+from any server (the `http` feature's `BasicHttpListener` is a minimal
+built-in one), `deliver_communication_errors` delivers the
+`error.communication` owed for sends that failed after acceptance, and
+`deliver_http_responses` delivers the HTTP responses of invoked services'
+`outbound-http.fetch` requests.
 `SessionHost::run` (batch) drives the same engine through the same stepwise
 scheduler calls with the logical clock unbounded, and always uses the
 deterministic in-process loopback.
