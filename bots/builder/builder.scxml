@@ -64,7 +64,7 @@
     <data id="spec" expr="''"/>
     <data id="constraints" expr="[]"/>
     <data id="max_attempts" expr="3"/>
-    <data id="model" expr="'gpt-4o-mini'"/>
+    <data id="model" expr="'gpt-6-luna'"/>
     <!-- The work. -->
     <data id="plan" expr="null"/>
     <data id="previous_plan" expr="null"/>
@@ -116,7 +116,7 @@
       <assign location="spec" expr="_event.data.spec"/>
       <assign location="constraints" expr="_event.data.constraints === undefined ? [] : _event.data.constraints"/>
       <assign location="max_attempts" expr="_event.data.max_attempts === undefined ? 3 : _event.data.max_attempts"/>
-      <assign location="model" expr="_event.data.model === undefined ? 'gpt-4o-mini' : _event.data.model"/>
+      <assign location="model" expr="_event.data.model === undefined ? 'gpt-6-luna' : _event.data.model"/>
     </transition>
     <transition event="builder.request" target="failed">
       <assign location="failure_reason" expr="'invalid-request'"/>

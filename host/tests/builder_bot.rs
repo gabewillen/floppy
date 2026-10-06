@@ -1313,7 +1313,7 @@ const TYPESAFE_BASE_URL_DEFAULT: &str = "https://api.typesafe.ai";
 
 /// Builds the spec with the real `generate` (and `decision`) backends on the
 /// wall clock (`NEMOBOT_LIVE_ENV_FILE`; `NEMOBOT_LIVE_MODEL`, default
-/// `gpt-4o-mini`). Writes the produced bot under `target/builder-live/` and
+/// `gpt-6-luna`). Writes the produced bot under `target/builder-live/` and
 /// prints only pass or fail and counts.
 #[test]
 #[ignore = "makes real model calls; needs NEMOBOT_LIVE_ENV_FILE"]
@@ -1321,7 +1321,7 @@ fn live_builder_through_an_env_file() {
     let Some(path) = std::env::var_os("NEMOBOT_LIVE_ENV_FILE").map(PathBuf::from) else {
         panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets OPENAI_API_KEY");
     };
-    let model = std::env::var("NEMOBOT_LIVE_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
+    let model = std::env::var("NEMOBOT_LIVE_MODEL").unwrap_or_else(|_| "gpt-6-luna".into());
     let mut granted = vec!["OPENAI_API_KEY"];
     grant_if_set(&path, &mut granted, "TYPESAFE_API_KEY");
     let mut defaults = json!({"OPENAI_BASE_URL": OPENAI_BASE_URL_DEFAULT});

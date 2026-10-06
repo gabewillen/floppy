@@ -563,7 +563,7 @@ fn a_grant_to_an_unbound_package_or_one_without_env_slots_fails_closed() {
 const OPENAI_BASE_URL_DEFAULT: &str = "https://api.openai.com/v1";
 
 /// One real structured generation through an env file
-/// (`NEMOBOT_LIVE_ENV_FILE`; `NEMOBOT_LIVE_MODEL`, default `gpt-4o-mini`).
+/// (`NEMOBOT_LIVE_ENV_FILE`; `NEMOBOT_LIVE_MODEL`, default `gpt-6-luna`).
 /// Prints nothing but pass or fail.
 #[test]
 #[ignore = "makes one real model call; needs NEMOBOT_LIVE_ENV_FILE"]
@@ -571,7 +571,7 @@ fn live_generate_through_an_env_file() {
     let Some(path) = std::env::var_os("NEMOBOT_LIVE_ENV_FILE").map(PathBuf::from) else {
         panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets OPENAI_API_KEY");
     };
-    let model = std::env::var("NEMOBOT_LIVE_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
+    let model = std::env::var("NEMOBOT_LIVE_MODEL").unwrap_or_else(|_| "gpt-6-luna".into());
     // No backend URL is compiled in: the run's config supplies OpenAI's as
     // a non-secret default the file may override. The failure names the
     // kind only, never a value.

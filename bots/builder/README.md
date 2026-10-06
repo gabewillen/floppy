@@ -17,7 +17,7 @@ it with events (decision D9 in [../../docs/decisions.md](../../docs/decisions.md
 
 | Event | Direction | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | to the builder | `{spec, constraints?, max_attempts?, model?}`: the specification, extra constraints (strings), the failure budget (1 to 8, default 3), the `generate` model (default `gpt-4o-mini`) |
+| `builder.request` | to the builder | `{spec, constraints?, max_attempts?, model?}`: the specification, extra constraints (strings), the failure budget (1 to 8, default 3), the `generate` model (default `gpt-6-luna`) |
 | `builder.done` | to `#_parent` | `{scxml, schemas, tests, report}`: the built document, its input event schemas (`{event, schema}`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
 | `builder.failed` | to `#_parent` | `{reason, diagnostics}`: `invalid-request`, `attempts-exhausted`, or `abandoned`, with the last diagnostics (`{kind, code, message}`) |
 
