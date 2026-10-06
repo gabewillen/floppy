@@ -1,5 +1,5 @@
 error[SCXML081]: state ID `sxxxxxxxxxxxxxxxxxxxxxxx…` is 1,025 bytes, more than the 1,024 a state name may have
- --> tests/ui/scxml081-state-id-over-name-bound.scxml:5:14
+ --> tests/ui/scxml081-state-id-over-name-bound.scx:5:14
   |
 5 |   <final id="sxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...
   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 1,025 bytes
@@ -9,4 +9,4 @@ error[SCXML081]: state ID `sxxxxxxxxxxxxxxxxxxxxxxx…` is 1,025 bytes, more tha
   = spec: SCXML 1.0 §3.14 IDs
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML081`.
+For more information about this error, try `scx --explain SCXML081`.

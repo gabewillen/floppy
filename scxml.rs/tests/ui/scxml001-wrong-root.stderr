@@ -1,5 +1,5 @@
 error[SCXML001]: root element must be `scxml` in the W3C SCXML namespace
- --> tests/ui/scxml001-wrong-root.scxml:1:2
+ --> tests/ui/scxml001-wrong-root.scx:1:2
   |
 1 | <statechart xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
   |  ^^^^^^^^^^ this is not the W3C SCXML root
@@ -9,7 +9,7 @@ error[SCXML001]: root element must be `scxml` in the W3C SCXML namespace
   = spec: SCXML 1.0 §3.2 <scxml>
 
 error[XSD-cvc-elt.1]: `<statechart>` is not an SCXML 1.0 element
- --> tests/ui/scxml001-wrong-root.scxml:1:2
+ --> tests/ui/scxml001-wrong-root.scx:1:2
   |
 1 | <statechart xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
   |  ^^^^^^^^^^ unknown element
@@ -23,4 +23,4 @@ error[XSD-cvc-elt.1]: `<statechart>` is not an SCXML 1.0 element
 
 diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
 Some diagnostics have detailed explanations: SCXML001, XSD-cvc-elt.1.
-For more information about a diagnostic, try `scxml-cli --explain SCXML001`.
+For more information about a diagnostic, try `scx --explain SCXML001`.

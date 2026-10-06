@@ -1,5 +1,5 @@
 warning[SCXML060]: `+` adds numbers in XPath, so adding the string 'Hello, ' yields `NaN`
- --> tests/ui/scxml060-xpath-string-addition.scxml:5:45
+ --> tests/ui/scxml060-xpath-string-addition.scx:5:45
   |
 5 |       <log label="greeting" expr="'Hello, ' + $name + '!'"/>
   |                                   ----------------------- this sum is `NaN`
@@ -15,5 +15,5 @@ help: join the strings with `concat()`
   |                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML060`.
-validated tests/ui/scxml060-xpath-string-addition.scxml
+For more information about this diagnostic, try `scx --explain SCXML060`.
+validated tests/ui/scxml060-xpath-string-addition.scx

@@ -1,5 +1,5 @@
 error[SCXML006]: initial state `strat` does not exist
- --> tests/ui/scxml006-unknown-initial.scxml:1:71
+ --> tests/ui/scxml006-unknown-initial.scx:1:71
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="strat">
   |                                                                       ^^^^^ unknown initial state
@@ -15,4 +15,4 @@ help: a state with a similar name exists: `start`
   |                                                                       ~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML006`.
+For more information about this error, try `scx --explain SCXML006`.

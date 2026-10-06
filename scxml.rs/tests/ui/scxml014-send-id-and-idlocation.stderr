@@ -1,5 +1,5 @@
 error[SCXML014]: send ID cannot use both `id` and `idlocation`
- --> tests/ui/scxml014-send-id-and-idlocation.scxml:3:42
+ --> tests/ui/scxml014-send-id-and-idlocation.scx:3:42
   |
 3 | ...onentry><send event="t" id="s1" idlocation="sid" delay="1s"/><cancel sen...
   |                            ^^^^^^^ ---------------- conflicting attribute
@@ -15,7 +15,7 @@ help: keep `id` and remove `idlocation`
 3 + ...<send event="t" id="s1" delay="1s"/><cancel sendi...
 
 error[SCXML008]: cancel cannot use both `sendid` and `sendidexpr`
- --> tests/ui/scxml014-send-id-and-idlocation.scxml:3:87
+ --> tests/ui/scxml014-send-id-and-idlocation.scx:3:87
   |
 3 | ...id" delay="1s"/><cancel sendid="s1" sendidexpr="sid"/></onentry><transition ...
   |                            ^^^^^^^^^^^ ---------------- conflicting attribute
@@ -32,4 +32,4 @@ help: keep `sendid` and remove `sendidexpr`
 
 diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
 Some diagnostics have detailed explanations: SCXML008, SCXML014.
-For more information about a diagnostic, try `scxml-cli --explain SCXML008`.
+For more information about a diagnostic, try `scx --explain SCXML008`.

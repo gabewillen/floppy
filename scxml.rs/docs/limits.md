@@ -31,7 +31,7 @@ with the known open defects under its "Known limitations (pending)".
   location is `http://basichttp.loopback.invalid/sessions/<_sessionid>/basichttp`,
   which only the host's in-process loopback answers (`.invalid` never
   resolves), so no external entity can use it there; a live session with
-  `scxml-cli run --http-listen` (or a browser `http.location`) advertises an
+  `scx run --http-listen` (or a browser `http.location`) advertises an
   address external clients reach (`<base>/sessions/<_sessionid>/basichttp`).
   The SCXML processor's own location, `#_scxml_<sessionid>`, likewise reaches
   only the sessions listed above.
@@ -41,7 +41,7 @@ with the known open defects under its "Known limitations (pending)".
   `<data id>` child of `_event/data`.
 - **`_sessionid` of a session.** SCXML 1.0 §5.10 has the processor bind
   "the system-generated id for the current SCXML session". The host chooses
-  the root's id (`scxml-cli run --session-id`, default `session`; the browser
+  the root's id (`scx run --session-id`, default `session`; the browser
   host's default `machine-session`), and names each invoked session
   `<root id>.<n>`, `n` counting the sessions the run invoked in the order
   they start; ids are unique within one run, the only scope `#_scxml_`
@@ -205,7 +205,7 @@ Processor." The bounds below are this implementation's, not the
 specification's, and **they apply only to wasm builds**: the shipped
 components (validator, compiler, machine, clock, data models, I/O
 processors) are wasm builds and keep them. Every native build, including
-`scxml-cli`, the Wasmtime session host, `scxml-scheduler`, and any native
+`scx`, the Wasmtime session host, `scxml-scheduler`, and any native
 build of the workspace crates, has none of its own: a resource bound is
 declared through `scxml_types::wasm_bound`, which is the bound on `wasm32`
 and `usize::MAX` natively, and the native-only host and CLI caps are
@@ -243,7 +243,7 @@ one of them is treated as follows:
   `event:schema` over the 1 MiB string bound (`SCXML069`), and a JSON
   Pointer extraction that would bundle more than 256 referenced values
   (`SCXML092`). The native
-  `scxml-cli` validates and compiles a document of any size and reports
+  `scx` validates and compiles a document of any size and reports
   these codes for no size bound; it reports `SCXML028` only when graph
   analysis work grows faster than the machine (below).
 - **ECMAScript bounds inside the language**: loop iterations (100,000 per

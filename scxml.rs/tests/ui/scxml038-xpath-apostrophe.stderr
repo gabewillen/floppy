@@ -1,5 +1,5 @@
 warning[SCXML038]: xpath syntax error in `expr`: the string literal ends early at this `'`
- --> tests/ui/scxml038-xpath-apostrophe.scxml:8:28
+ --> tests/ui/scxml038-xpath-apostrophe.scx:8:28
   |
 8 |     <onentry><log expr="'it's done'"/></onentry>
   |                         ----------- while parsing this `expr`
@@ -15,5 +15,5 @@ help: delimit the string with `"`
   |                         ~~~~~~~~~~~~~~~~~~~~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-xpath-apostrophe.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-xpath-apostrophe.scx

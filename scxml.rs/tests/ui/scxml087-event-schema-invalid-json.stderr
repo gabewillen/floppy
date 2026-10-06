@@ -1,5 +1,5 @@
 error[SCXML087]: the inline schema of `<transition>` is not JSON: invalid JSON at line 1, column 33: expected value
- --> tests/ui/scxml087-event-schema-invalid-json.scxml:6:63
+ --> tests/ui/scxml087-event-schema-invalid-json.scx:6:63
   |
 6 |                 event:schema='{"type": "object", "required": [id]}'/>
   |                                                               ^ invalid JSON
@@ -9,4 +9,4 @@ error[SCXML087]: the inline schema of `<transition>` is not JSON: invalid JSON a
   = spec: RFC 8259 The JavaScript Object Notation (JSON) Data Interchange Format
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML087`.
+For more information about this error, try `scx --explain SCXML087`.

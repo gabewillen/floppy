@@ -1,5 +1,5 @@
 warning[SCXML034]: transition on `start` in `idle` can never be selected
- --> tests/ui/scxml034-same-events-no-reorder.scxml:4:24
+ --> tests/ui/scxml034-same-events-no-reorder.scx:4:24
   |
 3 |     <transition event="start" target="running"/>
   |      ---------- this earlier transition has no `cond` and always matches first
@@ -14,7 +14,7 @@ help: remove the unreachable transition
 4 -     <transition event="start" target="failed"/>
 
 warning[SCXML034]: eventless transition in `running` can never be selected
- --> tests/ui/scxml034-same-events-no-reorder.scxml:9:6
+ --> tests/ui/scxml034-same-events-no-reorder.scx:9:6
   |
 8 |     <transition target="done"/>
   |      ---------- this earlier transition has no `cond` and always matches first
@@ -29,5 +29,5 @@ help: remove the unreachable transition
 9 -     <transition target="running"/>
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML034`.
-validated tests/ui/scxml034-same-events-no-reorder.scxml
+For more information about this diagnostic, try `scx --explain SCXML034`.
+validated tests/ui/scxml034-same-events-no-reorder.scx

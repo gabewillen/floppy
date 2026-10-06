@@ -1,5 +1,5 @@
 error[SCXML082]: `<raise>` event name `exxxxxxxxxxxxxxxxxxxxxxx…` is 1,025 bytes, more than the 1,024 an event name may have
- --> tests/ui/scxml082-names-over-name-bound.scxml:4:21
+ --> tests/ui/scxml082-names-over-name-bound.scx:4:21
   |
 4 |       <raise event="exxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...
   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 1,025 bytes
@@ -9,7 +9,7 @@ error[SCXML082]: `<raise>` event name `exxxxxxxxxxxxxxxxxxxxxxx…` is 1,025 byt
   = spec: SCXML 1.0 §4.2 <raise>
 
 error[SCXML082]: `<invoke>` ID `ixxxxxxxxxxxxxxxxxxxxxxx…` is 1,013 bytes, so the `done.invoke.` event it raises is 1,025 bytes, more than the 1,024 an event name may have
- --> tests/ui/scxml082-names-over-name-bound.scxml:6:17
+ --> tests/ui/scxml082-names-over-name-bound.scx:6:17
   |
 6 |     <invoke id="ixxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...
   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `done.invoke.` and these 1,013 bytes make 1,025
@@ -19,4 +19,4 @@ error[SCXML082]: `<invoke>` ID `ixxxxxxxxxxxxxxxxxxxxxxx…` is 1,013 bytes, so 
   = spec: SCXML 1.0 §6.4 <invoke>
 
 diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
-For more information about this error, try `scxml-cli --explain SCXML082`.
+For more information about this error, try `scx --explain SCXML082`.

@@ -1,5 +1,5 @@
 error[SCXML068]: this compiler cannot lower `<x:note>` from namespace `urn:example:ext` inside `<log>`
- --> tests/ui/scxml068-foreign-leaf-children.scxml:5:23
+ --> tests/ui/scxml068-foreign-leaf-children.scx:5:23
   |
 5 |       <log label="l"><x:note>reviewed</x:note></log>
   |        ---            ^^^^^^ element from another namespace
@@ -14,7 +14,7 @@ help: remove `<x:note>`
 5 +       <log label="l"></log>
 
 error[SCXML068]: this compiler cannot lower `<x:note>` from namespace `urn:example:ext` inside `<cancel>`
- --> tests/ui/scxml068-foreign-leaf-children.scxml:6:27
+ --> tests/ui/scxml068-foreign-leaf-children.scx:6:27
   |
 6 |       <cancel sendid="s"><x:note>reviewed</x:note></cancel>
   |        ------             ^^^^^^ element from another namespace
@@ -29,7 +29,7 @@ help: remove `<x:note>`
 6 +       <cancel sendid="s"></cancel>
 
 error[SCXML068]: this compiler cannot lower `<x:note>` from namespace `urn:example:ext` inside `<param>`
- --> tests/ui/scxml068-foreign-leaf-children.scxml:7:49
+ --> tests/ui/scxml068-foreign-leaf-children.scx:7:49
   |
 7 |       <send event="e"><param name="p" expr="1"><x:note>reviewed</x:note></param></send>
   |                        -----                    ^^^^^^ element from another namespace
@@ -44,7 +44,7 @@ help: remove `<x:note>`
 7 +       <send event="e"><param name="p" expr="1"></param></send>
 
 error[SCXML068]: this compiler cannot lower `<x:note>` from namespace `urn:example:ext` inside `<script>`
- --> tests/ui/scxml068-foreign-leaf-children.scxml:8:16
+ --> tests/ui/scxml068-foreign-leaf-children.scx:8:16
   |
 8 |       <script><x:note>reviewed</x:note></script>
   |        ------  ^^^^^^ element from another namespace
@@ -59,4 +59,4 @@ help: remove `<x:note>`
 8 +       <script></script>
 
 diagnostic summary: 4 error(s), 0 warning(s), 0 note(s), 4 total
-For more information about this error, try `scxml-cli --explain SCXML068`.
+For more information about this error, try `scx --explain SCXML068`.

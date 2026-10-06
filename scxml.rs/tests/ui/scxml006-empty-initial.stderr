@@ -1,5 +1,5 @@
 error[SCXML006]: `initial` on `<scxml>` names no state
- --> tests/ui/scxml006-empty-initial.scxml:1:62
+ --> tests/ui/scxml006-empty-initial.scx:1:62
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="">
   |                                                              ^^^^^^^^^^ empty initial state list
@@ -13,7 +13,7 @@ help: enter `a`, the first child state
   |                                                                       +
 
 error[SCXML006]: `initial` on `<state>` names no state
- --> tests/ui/scxml006-empty-initial.scxml:2:17
+ --> tests/ui/scxml006-empty-initial.scx:2:17
   |
 2 |   <state id="a" initial=" ">
   |                 ^^^^^^^^^^^ empty initial state list
@@ -27,4 +27,4 @@ help: enter `a1`, the first child state
   |                          ~~
 
 diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
-For more information about this error, try `scxml-cli --explain SCXML006`.
+For more information about this error, try `scx --explain SCXML006`.

@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.3.2.2]: attribute `type` is not allowed on `<state>`
- --> tests/ui/xsd-state-type-final.scxml:2:74
+ --> tests/ui/xsd-state-type-final.scx:2:74
   |
 2 |   <state id="a"><transition event="go" target="f"/></state><state id="f" type="final"/>
   |                                                                          ^^^^ unknown attribute
@@ -14,4 +14,4 @@ help: write the state as `<final>`
 2 +   <state id="a"><transition event="go" target="f"/></state><final id="f"/>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.3.2.2`.
+For more information about this error, try `scx --explain XSD-cvc-complex-type.3.2.2`.

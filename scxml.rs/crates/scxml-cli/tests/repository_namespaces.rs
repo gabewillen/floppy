@@ -109,11 +109,11 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 fn cli(args: &[String]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_scxml-cli"))
+    Command::new(env!("CARGO_BIN_EXE_scx"))
         .args(args)
         .env("NO_COLOR", "1")
         .output()
-        .expect("scxml-cli must run")
+        .expect("scx must run")
 }
 
 fn text(bytes: &[u8]) -> String {

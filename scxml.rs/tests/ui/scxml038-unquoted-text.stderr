@@ -1,5 +1,5 @@
 warning[SCXML038]: ecmascript syntax error in `expr`: unexpected `world` after a complete expression
- --> tests/ui/scxml038-unquoted-text.scxml:2:53
+ --> tests/ui/scxml038-unquoted-text.scx:2:53
   |
 2 | ...ry><log label="x" expr="hello world"/></onentry><transition...
   |                            ----------- while parsing this `expr`
@@ -15,5 +15,5 @@ help: quote the text as a string literal
   |                            ~~~~~~~~~~~~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-unquoted-text.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-unquoted-text.scx

@@ -1,5 +1,5 @@
 warning[SCXML058]: `In()` names `bb`, which is not a state of this machine
- --> tests/ui/scxml058-in-unknown-state-id.scxml:8:37
+ --> tests/ui/scxml058-in-unknown-state-id.scx:8:37
   |
 8 |     <transition event="go" cond="In('bb')" target="b"/>
   |                                  -------- in this `cond` on `<transition>`
@@ -14,5 +14,5 @@ help: use the state ID `b`
   |                                      ~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML058`.
-validated tests/ui/scxml058-in-unknown-state-id.scxml
+For more information about this diagnostic, try `scx --explain SCXML058`.
+validated tests/ui/scxml058-in-unknown-state-id.scx

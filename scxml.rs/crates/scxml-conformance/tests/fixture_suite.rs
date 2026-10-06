@@ -238,7 +238,7 @@ fn official_runner_does_not_fall_back_to_synthetic_expectations() {
     suite_manifest.cases[0].expected = ExpectedOutcome::FinalState {
         state: "done".into(),
     };
-    let source_path = root.join("cases/pass-final.scxml");
+    let source_path = root.join("cases/pass-final.scx");
     let source = fs::read_to_string(&source_path).expect("synthetic source must be readable");
     let suite = LoadedSuite {
         manifest_path,
@@ -653,7 +653,7 @@ fn report_validation_rejects_oversized_strings_and_collections() {
 fn prepared_corpus_rejects_tampered_artifacts() {
     let directory = std::env::temp_dir().join(format!("scxml-tamper-{}", std::process::id()));
     copy_directory(manifest().parent().expect("manifest parent"), &directory);
-    fs::write(directory.join("cases/pass-final.scxml"), "<tampered/>")
+    fs::write(directory.join("cases/pass-final.scx"), "<tampered/>")
         .expect("tampered fixture must be writable");
     assert_eq!(
         load_suite(&directory.join("corpus.json")).unwrap_err().code,
@@ -715,7 +715,7 @@ fn suite_loader_bounds_source_dependency_and_resource_reads() {
     for kind in ["source", "dependency", "resource"] {
         let directory = fixture_copy(&format!("scxml-{kind}-size"));
         let relative = match kind {
-            "source" => PathBuf::from("cases/pass-final.scxml"),
+            "source" => PathBuf::from("cases/pass-final.scx"),
             "dependency" => PathBuf::from("dependencies/oversized.xml"),
             "resource" => PathBuf::from("resources/oversized.txt"),
             _ => unreachable!("test exhaustively names bounded file kinds"),

@@ -1,5 +1,5 @@
 error[SCXML055]: `<raise>` inside `<finalize>` raises an event, which `<finalize>` must not do
- --> tests/ui/scxml055-raise-in-finalize.scxml:8:77
+ --> tests/ui/scxml055-raise-in-finalize.scx:8:77
   |
 8 |     <invoke type="http://www.w3.org/TR/scxml/" src="child.scxml"><finalize><raise event="x"/></finalize></invoke>
   |                                                                   --------  ^^^^^ `<raise>` is not allowed here
@@ -15,4 +15,4 @@ help: remove the `<raise>` element
 8 +     <invoke type="http://www.w3.org/TR/scxml/" src="child.scxml"><finalize></finalize></invoke>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML055`.
+For more information about this error, try `scx --explain SCXML055`.

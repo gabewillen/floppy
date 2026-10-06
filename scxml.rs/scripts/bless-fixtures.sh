@@ -3,7 +3,7 @@
 #
 # Usage: sh scripts/bless-fixtures.sh [--ui] [--validator-rules] [--trace-fixture] [--session-snapshot] [--all]
 #
-#   --ui               tests/ui snapshots (scxml-cli `ui` test)
+#   --ui               tests/ui snapshots (scx `ui` test)
 #   --validator-rules  the generated diagnostic-code table in
 #                      docs/validator-rules.md (scxml-validator-core)
 #   --trace-fixture    the shared Wasmtime/browser trace fixture

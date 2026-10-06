@@ -1,5 +1,5 @@
 error[XML001]: `<else if …>` is not SCXML: a conditional branch is the single element `<elseif>`
- --> tests/ui/xml001-else-if.scxml:7:8
+ --> tests/ui/xml001-else-if.scx:7:8
   |
 7 |       <else if cond="x === 2"/>
   |        ^^^^^^^ write `elseif` as one word
@@ -13,4 +13,4 @@ help: use `<elseif>`
   |        ~~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

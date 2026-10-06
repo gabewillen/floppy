@@ -1,5 +1,5 @@
 warning[SCXML079]: `cond` on `<transition>` is not an `In('stateID')` predicate, the only condition the null data model supports
- --> tests/ui/scxml079-null-expressions.scxml:3:28
+ --> tests/ui/scxml079-null-expressions.scx:3:28
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="s">
   |                                                                         ---- the null data model is selected here
@@ -16,7 +16,7 @@ help: select the ECMAScript data model
   |                                                                         ~~~~~~~~~~
 
 warning[SCXML079]: the null data model defines no value-expression language, but `<send>` uses `delayexpr`
- --> tests/ui/scxml079-null-expressions.scxml:4:30
+ --> tests/ui/scxml079-null-expressions.scx:4:30
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="s">
   |                                                                         ---- the null data model is selected here
@@ -37,5 +37,5 @@ help: select the ECMAScript data model
   |                                                                         ~~~~~~~~~~
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML079`.
-validated tests/ui/scxml079-null-expressions.scxml
+For more information about this diagnostic, try `scx --explain SCXML079`.
+validated tests/ui/scxml079-null-expressions.scx

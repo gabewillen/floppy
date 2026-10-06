@@ -404,13 +404,13 @@ case " $components " in
     *" scxml_machine "*)
         template="$proof_dir/scxml_machine.virtualized.wasm"
         template_digest=$(sha256_file "$template")
-        fixture="$workspace/tests/fixtures/representative-machine.scxml"
+        fixture="$workspace/tests/fixtures/representative-machine.scx"
         ir="$packaged_dir/representative-machine.scxml-ir.json"
         packaged="$packaged_dir/representative-machine.component.wasm"
         report="$packaged_dir/representative-machine.component.report.json"
         mkdir -p "$packaged_dir"
-        cargo build --locked -p scxml-cli
-        cli="$target_root/debug/scxml-cli"
+        cargo build --locked -p scxml-cli --no-default-features
+        cli="$target_root/debug/scx"
         package() {
             "$cli" compile "$fixture" --policy off --artifact component-wasm \
                 --machine-template "$template" --machine-template-sha256 "$template_digest" \
@@ -466,11 +466,11 @@ case "$has_machine$has_script" in
         template_digest=$(sha256_file "$template")
         script="$proof_dir/scxml_script_example.virtualized.wasm"
         script_digest=$(sha256_file "$script")
-        fixture="$workspace/tests/fixtures/script-machine.scxml"
+        fixture="$workspace/tests/fixtures/script-machine.scx"
         scripted_dir="$proof_dir/scripted"
         mkdir -p "$scripted_dir"
-        cargo build --locked -p scxml-cli
-        cli="$target_root/debug/scxml-cli"
+        cargo build --locked -p scxml-cli --no-default-features
+        cli="$target_root/debug/scx"
         pinned_ir="$scripted_dir/script-machine.scxml-ir.json"
         runtime_ir="$scripted_dir/script-machine.runtime.scxml-ir.json"
         scripted="$scripted_dir/script-machine.component.wasm"

@@ -1,5 +1,5 @@
 warning[SCXML034]: transition on `go.fast` in `a` can never be selected
- --> tests/ui/scxml034-shadowed-transition.scxml:4:24
+ --> tests/ui/scxml034-shadowed-transition.scx:4:24
   |
 3 |     <transition event="go" target="b"/>
   |      ---------- this earlier transition has no `cond` and always matches first
@@ -20,7 +20,7 @@ help: remove the unreachable transition
 4 -     <transition event="go.fast" target="c"/>
 
 warning[SCXML029]: final state `c` can never become active
- --> tests/ui/scxml034-shadowed-transition.scxml:7:14
+ --> tests/ui/scxml034-shadowed-transition.scx:7:14
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
   |                                                                       - the <scxml> root enters `a` by default
@@ -35,5 +35,5 @@ warning[SCXML029]: final state `c` can never become active
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
 Some diagnostics have detailed explanations: SCXML029, SCXML034.
-For more information about a diagnostic, try `scxml-cli --explain SCXML029`.
-validated tests/ui/scxml034-shadowed-transition.scxml
+For more information about a diagnostic, try `scx --explain SCXML029`.
+validated tests/ui/scxml034-shadowed-transition.scx

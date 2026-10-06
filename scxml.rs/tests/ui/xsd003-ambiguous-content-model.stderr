@@ -1,5 +1,5 @@
 error[XSD003]: schema compilation failed: Schema structural error: UPA violation: elements 'a' and 'a' conflict at state 6 (constraint: cos-nonambig)
- --> tests/ui/xsd003-ambiguous-content-model.scxml:2:2
+ --> tests/ui/xsd003-ambiguous-content-model.scx:2:2
   |
 2 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" xmlns:c="urn:example:custom" initial="a">
   |  ^^^^^
@@ -9,4 +9,4 @@ error[XSD003]: schema compilation failed: Schema structural error: UPA violation
   = spec: XML Schema 1.0 Part 1 §5 Schemas and Namespaces: Access and Composition
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD003`.
+For more information about this error, try `scx --explain XSD003`.

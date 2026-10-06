@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.4]: `<if>` is missing required attribute `cond`
- --> tests/ui/xsd-missing-required-cond.scxml:4:8
+ --> tests/ui/xsd-missing-required-cond.scx:4:8
   |
 4 |       <if><log expr="'never'"/></if>
   |        ^^ missing `cond`
@@ -14,4 +14,4 @@ help: add the required `cond` attribute
   |          +++++++++
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.4`.
+For more information about this error, try `scx --explain XSD-cvc-complex-type.4`.

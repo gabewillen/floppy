@@ -1,5 +1,5 @@
 error[SCXML016]: invoke declares three sources: `src`, `srcexpr`, and inline `<content>`
- --> tests/ui/scxml016-invoke-three-sources.scxml:3:26
+ --> tests/ui/scxml016-invoke-three-sources.scx:3:26
   |
 3 | ...   <invoke type="scxml" src="child.scxml" srcexpr="'child.scxml'"><content><scxml xmlns="http://ww...
   |                            ^^^^^^^^^^^^^^^^^ -----------------------  ------- third source
@@ -12,4 +12,4 @@ error[SCXML016]: invoke declares three sources: `src`, `srcexpr`, and inline `<c
   = spec: SCXML 1.0 §6.4 <invoke>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML016`.
+For more information about this error, try `scx --explain SCXML016`.

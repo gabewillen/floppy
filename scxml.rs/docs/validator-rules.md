@@ -77,7 +77,7 @@ remaining `COMP001` after a clean validation is the 16 MiB bound on encoded
 Machine IR, which exists only after lowering; `compile` then reports it at
 the root element with a note, and every other `COMP001` names the element
 lowering rejected. Machine IR bounds apply to wasm builds only (the shipped
-compiler and machine components): a native `scxml-cli compile` lowers a
+compiler and machine components): a native `scx compile` lowers a
 document of any size, and the same test proves that natively lowering
 accepts every bound fixture, `validate` reports no `SCXML069`, and `compile`
 reports no `COMP001`.
@@ -126,7 +126,7 @@ one state or of one target set) spends it. On wasm builds (the validator
 component) one machine graph also holds at most 65,536 nodes, 65,536
 transitions, and 131,072 target references, and the budget is at most
 8,000,000 units. Exceeding any bound yields a single fail-closed `SCXML028`
-error and no partial graph findings; the native `scxml-cli` analyzes a machine
+error and no partial graph findings; the native `scx` analyzes a machine
 of any size whose analysis is not super-linear.
 
 | Code | Severity | What it proves |
@@ -159,7 +159,7 @@ note that its expressions were not checked. The component contract is `stateforw
 implemented by the ECMAScript provider with Boa's parser and by the XPath
 provider with the bundled XPath 1.0 parser (both parse only, never evaluated),
 and explicitly declined (`unavailable`) by the null provider. The native
-`scxml-cli` links both checkers. ECMAScript conditions and values are parsed
+`scx` links both checkers. ECMAScript conditions and values are parsed
 exactly as the ECMAScript data model evaluates them (parenthesized, one
 trailing `;` tolerated); XPath conditions, values, and locations are parsed as
 XPath 1.0 expressions with the SCXML `In()` extension, a location must be an
@@ -168,7 +168,7 @@ because the XPath data model defines no script language (SCXML CR 2014 §C.3.9,
 §C.3.11). Issue offsets map
 through XML character/entity references and CDATA to exact source bytes. At
 most 16,384 fragments and 4 MiB of expression text are checked per document
-(`SCXML041`; wasm builds only, the native `scxml-cli` checks every fragment) and
+(`SCXML041`; wasm builds only, the native `scx` checks every fragment) and
 at most 4 issues are reported per fragment.
 
 | Code | Severity | What it proves |
@@ -177,7 +177,7 @@ at most 4 issues are reported per fragment.
 | `SCXML079` | warning | Under `datamodel="null"`, an expression: a value expression (`expr`, `*expr`, `array`; §B.1.4 "There is no value expression language."), a location, `namelist`, or `<foreach item/index>` (§B.1.3), or a `cond` other than `In('stateID')` (§B.1.2), with the ID single- or double-quoted, non-empty, and free of XML white space (#x20, #x9, #xD, #xA) and backslashes, and optional XML white space around `In`, `(`, and the call, exactly as the null data-model component evaluates it. An unquoted `In(s)` gets its own finding at the argument with a quoting fix (machine-applicable when `s` names a state, maybe-incorrect to the nearest state ID otherwise). One finding per element (other expressions on it are secondary labels), with maybe-incorrect removal and switch-to-`ecmascript` fixes. It is a warning because §5.9.4 defines the run-time outcome of an ill-formed expression (`error.execution`; a condition is then false), so the document compiles. |
 | `SCXML038` | warning | With a checker (a warning because SCXML 1.0 §5.9.4 lets the processor "wait and place 'error.execution' in the internal event queue at runtime when the expressions are evaluated", which this toolchain does, so the document compiles): a `cond`, value expression, or `<script>` does not parse. The primary span is the exact failing token. Operator habits from another language are all reported, each at its own token, when repairing every one of them makes the fragment parse: XPath `==`/`===` (to `=`), `!==` (to `!=`), `&&` (to `and`), `||` (to `or`), `%` (to `mod`), and uppercase `AND`/`OR`/`DIV`/`MOD` get machine-applicable fixes, and `!x` and `not x` a maybe-incorrect `not(x)`; ECMAScript `and`/`or` get machine-applicable `&amp;&amp;`/`||`, and `not x` a maybe-incorrect `!x` (`!` binds tighter than a comparison). The lints of a fragment that parses (`SCXML056`, `SCXML057`, `SCXML059`, `SCXML060`) and the side-effect analysis (`SCXML074`-`SCXML077`) run on the repaired fragment too, so applying every repair reveals no unreported finding. When the repairs together do not make the fragment parse, the checker's first issue is worded instead. ECMAScript: unquoted prose in a value (including `:`, `…`, emoji, or `@`), an apostrophe that ends a string early, a stray `=` after a comparison (`x === = 3`), an assignment to a non-assignable left side (`typeof x = 'y'`), `x.0`/`x.1` and `x.0.name` (in a value or a location; the message echoes the source `.0`), a `#` Markdown heading or shell comment (quoted as text in a value, `//` in a `<script>`), a private name such as `x.#y`, and a `let`/`const`/`var` declaration get targeted help and maybe-incorrect fixes (quoting, `\'`, one comparison operator, `===`, `x[0]`, `//`, `x.y`); a comment-only value, a statement keyword (`if`, `for`, `return`) in a value or condition, an unterminated string or template literal (labeled at its opening quote), and a character the lexer rejects get targeted help. XPath: a space inside `>=`, a trailing argument comma, a missing `,` between function arguments (`concat('a' $b)`), an apostrophe that ends a string early, a `fn:` prefix on a core function, and unknown functions (`length()` to `string-length()` or `count()`, typos by bounded nearest match) get maybe-incorrect fixes; unclosed `(`/`[` label their opener, arity errors state the accepted count, and a `<script>` is reported as unsupported with a removal fix. |
 | `SCXML039` | warning | With a checker (a warning because SCXML 1.0 defines the run-time outcome: §5.9.2 "If a location expression cannot be evaluated to yield a valid location, the SCXML processor MUST place the error 'error.execution' in the internal event queue", and §4.6 for a `<foreach item>` that "does not specify a legal variable name"): a location is not assignable (ECMAScript: not a variable name or property access, and an ECMAScript reserved word such as `class` is named as one; XPath: not an expression that can select nodes, with `$var`/`$var/child` advice). A reserved word as a `<foreach item/index>` gets a maybe-incorrect rename (`classItem`), and a comma-separated `namelist` token a machine-applicable comma-to-space fix. A `<foreach item/index>` that starts with a digit gets a maybe-incorrect prefix fix: `_1x` under XPath (an NCName; the help never suggests `$`), `item1x` under ECMAScript. Any ECMAScript identifier is a legal loop variable (SCXML 1.0 §B.2.11: "The legal values for the 'item' attribute are legal ECMAScript variable names"), including one that starts with `_` or contains non-ASCII letters. A location that names a `<data id>` no expression can name (`location="retry-count"`) names that declaration as the root cause (a secondary label and the `SCXML061` rename). Under XPath, a `<foreach item/index>` written as `$name` when nothing declares `name` (`item="$it"`, a location assigning to an undeclared variable instead of binding one) is one finding at the `$` with a machine-applicable fix that removes it; the uses `$it` in the loop are not also `SCXML056`. With `<data id="it"/>` declared, `item="$it"` is a legal location and is not reported. |
-| `SCXML040` | error | With a checker: the checker declined a fragment over the data model's bound. On every build, the nesting bounds, which guard the native stack (ECMAScript: at most 128 structural nesting units, where each open bracket costs 8, so 16 brackets, 15 inside a value expression; XPath: 32 levels of parentheses, predicates, or function arguments, and a 128-deep expression tree); on wasm builds only, the size bounds (ECMAScript: 16 KiB expressions, 64 KiB scripts; XPath: 16 KiB expressions and 4,096 tree nodes), so the native `scxml-cli` reports `SCXML040` for nesting only. Both providers decline a bound instead of reporting a syntax error, so a bound is never `SCXML038`. The data model applies the same bound when it evaluates the fragment, so it would be rejected at run time and `compile` refuses the document. |
+| `SCXML040` | error | With a checker: the checker declined a fragment over the data model's bound. On every build, the nesting bounds, which guard the native stack (ECMAScript: at most 128 structural nesting units, where each open bracket costs 8, so 16 brackets, 15 inside a value expression; XPath: 32 levels of parentheses, predicates, or function arguments, and a 128-deep expression tree); on wasm builds only, the size bounds (ECMAScript: 16 KiB expressions, 64 KiB scripts; XPath: 16 KiB expressions and 4,096 tree nodes), so the native `scx` reports `SCXML040` for nesting only. Both providers decline a bound instead of reporting a syntax error, so a bound is never `SCXML038`. The data model applies the same bound when it evaluates the fragment, so it would be rejected at run time and `compile` refuses the document. |
 | `SCXML041` | error | With a checker: the document exceeds the expression-checking bound; checking stops fail-closed. |
 | `SCXML042` | warning (lint) | With a checker: an expression attribute is present but empty. A blank `<log expr>` lowers as the absent attribute (log without a value), so its removal fix is machine-applicable; any other empty expression, including `<transition cond>`, is still evaluated as an invalid expression and raises `error.execution` (a condition is then false), so its removal is maybe-incorrect and offered only when the attribute is optional (never `<if>`/`<elseif> cond`, `<assign>`, `<foreach array/item>`, or the only `<param>` value source); the help is worded for the element. |
 | `SCXML044` | error | The `datamodel` value (its schema value, white space collapsed: `datamodel=" xpath "` is `xpath`) is not one this project recognizes (`ecmascript`, `null`, `xpath`); no expression could be evaluated or checked. Offers a maybe-incorrect typo fix. |
@@ -255,7 +255,7 @@ boundary cannot establish:
   not enforced across SCXML identifiers.
 - Expression syntax is checked for `datamodel="ecmascript"` and
   `datamodel="xpath"`, and only when that data model's checker is linked. The
-  native `scxml-cli` links both data-model crates' parse-only `check_syntax`
+  native `scx` links both data-model crates' parse-only `check_syntax`
   directly for both `validate` and `compile`. The `scxml-validator` Wasm
   component imports the `expression-syntax` interface of its world, which
   names one supported data model per request. The Wasmtime host's
@@ -542,7 +542,7 @@ toolchain can process (SCXML 1.0 Appendix A.2: "There is no conformance
 requirement with respect to performance characteristics of the SCXML 1.0
 Processor"). Resource bounds apply to wasm builds only
 (`scxml_types::wasm_bound`): the validator and compiler components report
-them, and the native `scxml-cli` never reports `SCXML027`, `SCXML041`,
+them, and the native `scx` never reports `SCXML027`, `SCXML041`,
 `SCXML069`, or `COMP001`, nor `SCXML028`, `SCXML040`, `XML002`, or `XSD006`
 for a size bound. What stays on every build guards against amplification or
 the native stack rather than bounding a resource: the XML depth (256), the
@@ -556,9 +556,9 @@ processor does not support. `SCXML074` is the processor's own way of
 meeting SCXML 1.0 §4.7.3 ("The SCXML processor MUST ensure that <log> has no
 side-effects on document interpretation"), not a document constraint.
 
-`scxml-cli --explain CODE` prints the long form of any code below (what, why,
+`scx --explain CODE` prints the long form of any code below (what, why,
 how to fix, an erroneous and a corrected example, and the specification link).
-Every example that is a complete document is validated as `scxml-cli validate`
+Every example that is a complete document is validated as `scx validate`
 validates it (bundled schema, both expression checkers) by
 `crates/scxml-validator-core/tests/explain_examples.rs`: the erroneous example
 must emit its code and the corrected example must produce no diagnostic of any

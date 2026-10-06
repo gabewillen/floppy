@@ -1,5 +1,5 @@
 error[SCXML015]: send with `content` cannot also use `namelist`
- --> tests/ui/scxml015-send-content-and-namelist.scxml:4:26
+ --> tests/ui/scxml015-send-content-and-namelist.scx:4:26
   |
 4 |       <send event="ping" namelist="x">
   |                          ^^^^^^^^^^^^ namelist conflicts with content
@@ -11,4 +11,4 @@ error[SCXML015]: send with `content` cannot also use `namelist`
   = spec: SCXML 1.0 §6.2 <send>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML015`.
+For more information about this error, try `scx --explain SCXML015`.

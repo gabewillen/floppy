@@ -1,4 +1,4 @@
-//! `scxml-cli snapshot run|show|check|diff`: read-only session snapshots
+//! `scx snapshot run|show|check|diff`: read-only session snapshots
 //! (`scxml.session-snapshot/v2`) for inspection by people and LLMs.
 //!
 //! `show`, `check`, and `diff` read documents through the natively linked
@@ -189,7 +189,6 @@ pub const RUN_OPTIONS: &[&str] = &[
     "--wasi",
     "--env",
     "--env-file",
-    "--extension-call-fuel",
     "--offline",
     "--cache-dir",
     "--github-api-base",
@@ -386,9 +385,8 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
             "--extension-component-sha256" | "--service-component-sha256" => "URI=HEX",
             "--dir" => "URI=HOST::GUEST",
             "--wasi" => "URI=inherit-network or URI=allow-ip-name-lookup",
-            "--env" => "NAME@URI or NAME@URI=VALUE",
+            "--env" => "NAME or NAME=VALUE",
             "--env-file" => "PATH",
-            "--extension-call-fuel" => "N",
             flag if crate::repository::RepositoryFlags::expects(flag).is_some() => {
                 crate::repository::RepositoryFlags::expects(flag).unwrap_or("a value")
             }
@@ -400,7 +398,7 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
             _ => "URI=PATH",
         },
     )?;
-    let document = one_operand(&parsed.operands, "snapshot run", "DOC.scxml")?;
+    let document = one_operand(&parsed.operands, "snapshot run", "DOC.scx")?;
     let mut components_dir = None;
     let mut manifest = None;
     let mut events = Vec::new();
@@ -469,8 +467,7 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
         (None, Some(dir)) => Output::Dir(dir),
         (None, None) => Output::Stdout,
     };
-    let components = ComponentArgs::resolve(components_dir, manifest)
-        .map_err(|error| error.replace("conformance run", "snapshot run"))?;
+    let components = ComponentArgs::resolve(components_dir, manifest)?;
     Ok(RunArgs {
         document,
         components,
@@ -617,7 +614,7 @@ fn decode_or_report(path: &Path, bytes: &[u8]) -> Result<scxml_snapshot::Documen
         let shown = path.display().to_string();
         DecodeFailure {
             rendered: format!(
-                "{}For more information about this error, try `scxml-cli --explain SNAP-{}`.\n",
+                "{}For more information about this error, try `scx --explain SNAP-{}`.\n",
                 render_issue(&shown, &error, bytes),
                 error.code.as_str()
             ),
@@ -697,7 +694,7 @@ fn check(path: &Path, format: Format) -> Result<(), Box<dyn std::error::Error>> 
             if let Some(first) = issues.first() {
                 writeln!(
                     stderr,
-                    "For more information about an error, try `scxml-cli --explain SNAP-{}`.",
+                    "For more information about an error, try `scx --explain SNAP-{}`.",
                     first.code.as_str()
                 )?;
             }
@@ -769,9 +766,16 @@ fn run(args: &RunArgs) -> Result<(), Box<dyn std::error::Error>> {
         &args.namespaces.repository,
     )?;
     args.services.check(&services.packages)?;
-    let values = args.namespaces.values()?;
-    crate::mask::install(&crate::extensions::HeldValue::pairs(&values));
+    let values = args.namespaces.values(&packages.slot_uses)?;
+    crate::mask::install(
+        &crate::extensions::HeldValue::pairs(&values),
+        &crate::extensions::declared_origins(&packages, &services.packages),
+    );
     crate::extensions::write_notes(&packages.summary(Some(&values)));
+    crate::extensions::write_notes(&crate::extensions::env_summary(
+        &packages.slot_uses,
+        &values,
+    ));
     crate::extensions::write_notes(&crate::services::summary(
         &services.packages,
         Some(&args.services),
@@ -850,30 +854,65 @@ pub(crate) mod host {
     use super::Points;
     use super::{CheckpointDocument, RunArgs};
 
-    /// Documents for `<invoke src>` and runtime scripts: exact `--resource
-    /// URI=PATH` matches, read as bounded regular files.
+    /// Documents for `<invoke src>`, `<data src>`, and runtime scripts:
+    /// exact `--resource URI=PATH` matches, read as bounded regular files;
+    /// otherwise an `<invoke src>` at or below the running document's
+    /// directory, under exactly the rules of an `event:schema` file reference
+    /// (`crate::event_schemas`: relative, no scheme, query, fragment, `.` or
+    /// `..` segment, percent-decoded, a regular file that does not resolve
+    /// outside the directory through a symbolic link).
     #[cfg(feature = "wasmtime")]
     pub(crate) struct ResourceDocuments {
         pub(crate) resources: Vec<(String, std::path::PathBuf)>,
+        /// The running document's directory, canonicalized; `None` when it
+        /// cannot be, so only `--resource` documents load.
+        pub(crate) directory: Option<std::path::PathBuf>,
+    }
+
+    #[cfg(feature = "wasmtime")]
+    impl ResourceDocuments {
+        /// `resources`, and the directory of `document` for sibling
+        /// `<invoke src>` documents.
+        pub(crate) fn new(
+            resources: Vec<(String, std::path::PathBuf)>,
+            document: &std::path::Path,
+        ) -> Self {
+            Self {
+                resources,
+                directory: crate::event_schemas::document_directory(document),
+            }
+        }
     }
 
     #[cfg(feature = "wasmtime")]
     impl scxml_host_wasmtime::SessionEmbedder for ResourceDocuments {
         fn document(
             &self,
-            _kind: scxml_host_wasmtime::DocumentKind,
+            kind: scxml_host_wasmtime::DocumentKind,
             uri: &str,
         ) -> Option<scxml_host_wasmtime::EmbeddedDocument> {
-            let path = self
+            if let Some(path) = self
                 .resources
                 .iter()
                 .find(|(name, _)| name == uri)
-                .map(|(_, path)| path)?;
-            let bytes = crate::read_source(path).ok()?;
+                .map(|(_, path)| path)
+            {
+                let bytes = crate::read_source(path).ok()?;
+                let text = String::from_utf8(bytes).ok()?;
+                return Some(scxml_host_wasmtime::EmbeddedDocument {
+                    text,
+                    media_type: media_type_of(path).map(str::to_owned),
+                });
+            }
+            if kind != scxml_host_wasmtime::DocumentKind::Invocation {
+                return None;
+            }
+            let directory = self.directory.as_deref()?;
+            let bytes = crate::event_schemas::read_reference(directory, uri)?;
             let text = String::from_utf8(bytes).ok()?;
             Some(scxml_host_wasmtime::EmbeddedDocument {
                 text,
-                media_type: media_type_of(path).map(str::to_owned),
+                media_type: None,
             })
         }
 
@@ -902,7 +941,7 @@ pub(crate) mod host {
     }
 
     /// Compiles the document canonically (the same validator and
-    /// expression stack as `scxml-cli compile`) and returns the lowered
+    /// expression stack as `scx compile`) and returns the lowered
     /// Machine IR bytes and the linked data model's name.
     #[cfg(feature = "wasmtime")]
     pub(crate) fn compile(
@@ -980,17 +1019,13 @@ pub(crate) mod host {
     ) -> Result<Vec<CheckpointDocument>, Box<dyn std::error::Error>> {
         use std::rc::Rc;
 
-        use scxml_host_wasmtime::{
-            ScriptedEvent, SessionHost, SessionRun, SnapshotPoints, SnapshotRequest,
-        };
+        use scxml_host_wasmtime::{ScriptedEvent, SessionRun, SnapshotPoints, SnapshotRequest};
 
         let (ir_bytes, data_model) = compile(&args.document, &packages.all(), &services.packages)?;
-        let host = SessionHost::from_release_dir(
-            &args.components.dir,
-            &args.components.manifest_sha256,
-            scxml_host_wasmtime::DEFAULT_FUEL,
-        )?;
-        let values = args.namespaces.values()?;
+        let host = args
+            .components
+            .session_host(scxml_host_wasmtime::DEFAULT_FUEL)?;
+        let values = args.namespaces.values(&packages.slot_uses)?;
         let (services, _imports) = args.services.components(services, &values, true)?;
         let (extensions, _notes) = extensions(&args.namespaces, packages, &values, true)?;
         let host = host
@@ -1009,9 +1044,10 @@ pub(crate) mod host {
             session_id: "session",
             events: &events,
             external_client: None,
-            embedder: Rc::new(ResourceDocuments {
-                resources: args.resources.clone(),
-            }),
+            embedder: Rc::new(ResourceDocuments::new(
+                args.resources.clone(),
+                &args.document,
+            )),
             // No host-imposed command budget: resource limits apply to the
             // Wasm components only, whose own per-call command bound stops
             // every machine call.
@@ -1138,11 +1174,6 @@ pub(crate) mod host {
         let mut extensions = ExtensionComponents::new()
             .with_values(crate::extensions::HeldValue::environment(values)?)
             .with_observer(std::sync::Arc::clone(&observer) as _);
-        if let Some(fuel) = flags.call_fuel {
-            extensions = extensions
-                .with_call_fuel(fuel)
-                .map_err(|error| format!("--extension-call-fuel: {error}"))?;
-        }
         if outbound {
             extensions = extensions.with_outbound_http(std::sync::Arc::new(
                 scxml_host_wasmtime::ExtensionHttpClient::new(
@@ -1201,7 +1232,7 @@ pub(crate) mod host {
     pub fn available() -> Result<(), Box<dyn std::error::Error>> {
         Err(
             "[wasmtime-disabled] snapshot run executes only through the shipped components \
-             under Wasmtime; rebuild scxml-cli with --features wasmtime. No document was \
+             under Wasmtime; rebuild scx with --features wasmtime. No document was \
              executed"
                 .into(),
         )
@@ -1319,11 +1350,14 @@ mod tests {
             let error = run_args(extra).expect_err("rejected");
             assert!(error.contains(needle), "{extra:?}: {error}");
         }
-        let error = parse(&args(&["run", "a.scxml"])).expect_err("components are required");
-        assert!(
-            error.contains("snapshot run requires --components DIR"),
-            "{error}"
-        );
+        let error = parse(&args(&[
+            "run",
+            "a.scx",
+            "--components-manifest-sha256",
+            "x",
+        ]))
+        .expect_err("one override flag alone");
+        assert!(error.contains("together"), "{error}");
     }
 
     #[test]
@@ -1386,7 +1420,7 @@ mod tests {
 
     #[test]
     fn run_output_goes_to_numbered_files_or_one_destination() {
-        let dir = std::env::temp_dir().join(format!("scxml-cli-snapshot-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("scx-snapshot-{}", std::process::id()));
         let documents = [
             CheckpointDocument {
                 checkpoint: 0,

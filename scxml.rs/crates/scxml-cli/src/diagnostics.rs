@@ -93,10 +93,10 @@ pub fn explain_footer(artifact: &ArtifactEnvelope) -> Option<String> {
         .all(|diagnostic| diagnostic.severity == scxml_reporting::Severity::Error);
     let noun = if only_errors { "error" } else { "diagnostic" };
     Some(if codes.len() == 1 {
-        format!("For more information about this {noun}, try `scxml-cli --explain {first}`.\n")
+        format!("For more information about this {noun}, try `scx --explain {first}`.\n")
     } else {
         format!(
-            "Some diagnostics have detailed explanations: {list}.\nFor more information about a diagnostic, try `scxml-cli --explain {first}`.\n"
+            "Some diagnostics have detailed explanations: {list}.\nFor more information about a diagnostic, try `scx --explain {first}`.\n"
         )
     })
 }

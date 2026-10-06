@@ -1,5 +1,5 @@
 warning[SCXML042]: empty `expr` on `<log>` is treated as absent
- --> tests/ui/scxml042-empty-expression.scxml:4:29
+ --> tests/ui/scxml042-empty-expression.scx:4:29
   |
 4 |       <log label="finished" expr=""/>
   |                             ^^^^^^^ empty expression
@@ -14,5 +14,5 @@ help: remove the empty `expr`
 4 +       <log label="finished"/>
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML042`.
-validated tests/ui/scxml042-empty-expression.scxml
+For more information about this diagnostic, try `scx --explain SCXML042`.
+validated tests/ui/scxml042-empty-expression.scx

@@ -1,5 +1,5 @@
 error[SCXML019]: history must contain exactly one transition
- --> tests/ui/scxml019-history-without-transition.scxml:3:6
+ --> tests/ui/scxml019-history-without-transition.scx:3:6
   |
 3 |     <history id="h"/>
   |      ^^^^^^^ found 0 transition children
@@ -9,4 +9,4 @@ error[SCXML019]: history must contain exactly one transition
   = spec: SCXML 1.0 §3.10 <history>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML019`.
+For more information about this error, try `scx --explain SCXML019`.

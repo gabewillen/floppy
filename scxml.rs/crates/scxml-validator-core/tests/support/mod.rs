@@ -1,6 +1,6 @@
 //! Test adapter shared by the integration tests: the ECMAScript data
 //! model's parse-only side-effect analysis in the validator's terms, as
-//! `scxml-cli` links it.
+//! `scx` links it.
 
 use scxml_validator_core::ExternalScripts;
 use scxml_validator_core::{

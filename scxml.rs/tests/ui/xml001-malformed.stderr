@@ -1,5 +1,5 @@
 error[XML001]: mismatched end tag: expected `</state>`, found `</stat>`
- --> tests/ui/xml001-malformed.scxml:4:5
+ --> tests/ui/xml001-malformed.scx:4:5
   |
 2 |   <state id="a">
   |    ----- unclosed `<state>` starts here
@@ -16,4 +16,4 @@ help: rename the end tag to `</state>`
   |     ~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

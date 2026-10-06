@@ -3,7 +3,7 @@
     reason = "integration-test crate; test functions are self-describing"
 )]
 
-//! `scxml-cli run` end to end through the shipped components (`wasmtime`
+//! `scx run` end to end through the shipped components (`wasmtime`
 //! feature): the binary is spawned, newline-delimited JSON goes to its
 //! standard input, and its standard-output records and exit status are
 //! checked, including end of input, real delayed sends, record and replay
@@ -97,7 +97,7 @@ fn document(directory: &Path, body: &str) -> PathBuf {
 
 fn command(document: &Path, extra: &[&str]) -> Command {
     let (dir, digest) = release();
-    let mut command = Command::new(env!("CARGO_BIN_EXE_scxml-cli"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_scx"));
     command
         .arg("run")
         .arg(document)
@@ -114,14 +114,14 @@ fn run(document: &Path, extra: &[&str], input: &str) -> Output {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("scxml-cli must start");
+        .expect("scx must start");
     child
         .stdin
         .take()
         .expect("stdin is piped")
         .write_all(input.as_bytes())
         .expect("input is writable");
-    child.wait_with_output().expect("scxml-cli must finish")
+    child.wait_with_output().expect("scx must finish")
 }
 
 fn parse_records(output: &Output) -> Vec<serde_json::Value> {
@@ -271,6 +271,72 @@ fn a_failing_step_fails_the_session_with_exit_one() {
     assert!(stderr(&output).contains("error["), "{}", stderr(&output));
 }
 
+/// An `<invoke src>` at or below the document's directory loads with no
+/// `--resource` (the rules of an `event:schema` file reference); one that
+/// leaves the directory (`..`), or names an absolute path, does not load, so
+/// its `<invoke>` raises `error.execution` (SCXML 6.4).
+#[test]
+fn an_invoke_src_beside_the_document_loads_without_a_resource() {
+    let directory = scratch("invoke-src");
+    fs::create_dir_all(directory.join("children")).expect("a child directory");
+    fs::write(
+        directory.join("children/child.scx"),
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><final id="f"/></scxml>"#,
+    )
+    .expect("the child is writable");
+    let outside = directory.parent().expect("a parent").join("outside.scx");
+    fs::write(
+        &outside,
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><final id="f"/></scxml>"#,
+    )
+    .expect("the outside document is writable");
+    let body = |src: &str| {
+        format!(
+            r#"<state id="s0"><invoke type="scxml" src="{src}"/><transition event="done.invoke" target="done"/><transition event="error.execution" target="failed"/></state><final id="done"><donedata><content expr="'done'"/></donedata></final><final id="failed"><donedata><content expr="'failed'"/></donedata></final>"#
+        )
+    };
+    let loaded = run(
+        &document(&directory, &body("children/child.scx")),
+        &["--clock", "logical", "--on-eof", "close"],
+        "",
+    );
+    let records = parse_records(&loaded);
+    let done = records
+        .iter()
+        .find(|record| record["type"] == "done")
+        .unwrap_or_else(|| panic!("{records:?}\n{}", stderr(&loaded)));
+    assert_eq!(done["data"], "done", "{records:?}");
+    for refused in [
+        "../outside.scx",
+        "./children/child.scx",
+        "children/child.scx#x",
+    ] {
+        let output = run(
+            &document(&directory, &body(refused)),
+            &["--clock", "logical", "--on-eof", "close"],
+            "",
+        );
+        let records = parse_records(&output);
+        let done = records
+            .iter()
+            .find(|record| record["type"] == "done")
+            .unwrap_or_else(|| panic!("{refused}: {records:?}\n{}", stderr(&output)));
+        assert_eq!(done["data"], "failed", "{refused}: {records:?}");
+    }
+    let absolute = run(
+        &document(&directory, &body(&outside.display().to_string())),
+        &["--clock", "logical", "--on-eof", "close"],
+        "",
+    );
+    let records = parse_records(&absolute);
+    assert!(
+        records
+            .iter()
+            .any(|record| record["type"] == "done" && record["data"] == "failed"),
+        "{records:?}"
+    );
+}
+
 #[test]
 fn a_recorded_run_replays_its_records_and_snapshots_byte_for_byte() {
     let directory = scratch("replay");
@@ -285,7 +351,7 @@ fn a_recorded_run_replays_its_records_and_snapshots_byte_for_byte() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("scxml-cli must start");
+        .expect("scx must start");
     let mut stdin = child.stdin.take().expect("stdin is piped");
     stdin
         .write_all(b"{\"name\":\"ping\"}\n{\"type\":\"snapshot\"}\n")
@@ -296,7 +362,7 @@ fn a_recorded_run_replays_its_records_and_snapshots_byte_for_byte() {
         .write_all(b"{\"name\":\"stop\"}\n")
         .expect("input is writable");
     drop(stdin);
-    let live = child.wait_with_output().expect("scxml-cli must finish");
+    let live = child.wait_with_output().expect("scx must finish");
     assert_eq!(live.status.code(), Some(0), "{}", stderr(&live));
     let live_records = parse_records(&live);
     assert!(
@@ -420,17 +486,14 @@ fn a_replay_with_a_different_service_component_is_refused() {
 fn usage_errors_exit_two_before_anything_runs() {
     let directory = scratch("usage");
     let doc = document(&directory, DELAYED);
-    let output = Command::new(env!("CARGO_BIN_EXE_scxml-cli"))
+    let output = Command::new(env!("CARGO_BIN_EXE_scx"))
         .arg("run")
         .arg(&doc)
+        .args(["--components", "release"])
         .output()
-        .expect("scxml-cli must run");
+        .expect("scx must run");
     assert_eq!(output.status.code(), Some(2));
-    assert!(
-        stderr(&output).contains("run requires --components DIR"),
-        "{}",
-        stderr(&output)
-    );
+    assert!(stderr(&output).contains("together"), "{}", stderr(&output));
     assert!(output.stdout.is_empty());
     let output = run(&doc, &["--clock", "sundial"], "");
     assert_eq!(output.status.code(), Some(2));
@@ -450,7 +513,7 @@ fn sigterm_closes_the_session_gracefully() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("scxml-cli must start");
+        .expect("scx must start");
     let stdout = child.stdout.take().expect("stdout is piped");
     let mut lines = BufReader::new(stdout).lines();
     // Wait until the session is open and its start step is reported.
@@ -468,7 +531,7 @@ fn sigterm_closes_the_session_gracefully() {
     let rest: Vec<serde_json::Value> = lines
         .map(|line| serde_json::from_str(&line.expect("readable")).expect("JSON"))
         .collect();
-    let status = child.wait().expect("scxml-cli exits");
+    let status = child.wait().expect("scx exits");
     assert_eq!(status.code(), Some(143));
     assert_eq!(kinds(&rest), ["log", "closed"]);
     assert_eq!(rest[0]["label"], "exit");
@@ -495,7 +558,7 @@ fn serve(document: &Path, extra: &[&str]) -> std::process::Child {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("scxml-cli must start")
+        .expect("scx must start")
 }
 
 /// Waits for `child` to exit, killing it after `limit`.
@@ -508,7 +571,7 @@ fn finish(mut child: std::process::Child, limit: Duration) -> Output {
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-    child.wait_with_output().expect("scxml-cli must finish")
+    child.wait_with_output().expect("scx must finish")
 }
 
 #[test]
@@ -876,7 +939,7 @@ fn fetch_binding(endpoint: &str) -> Vec<String> {
         "--service-component-sha256".into(),
         format!("{ECHO}={digest}"),
         "--env".into(),
-        format!("ENDPOINT@{ECHO}={endpoint}"),
+        format!("ENDPOINT={endpoint}"),
     ]
 }
 
@@ -958,7 +1021,7 @@ fn a_service_fetch_never_blocks_the_session() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("scxml-cli must start");
+        .expect("scx must start");
     let mut stdin = child.stdin.take().expect("stdin is piped");
     let mut stdout = BufReader::new(child.stdout.take().expect("stdout is piped"));
     stdin
@@ -981,7 +1044,7 @@ fn a_service_fetch_never_blocks_the_session() {
     drop(stdin);
     let mut rest = String::new();
     std::io::Read::read_to_string(&mut stdout, &mut rest).expect("stdout is readable");
-    let output = child.wait_with_output().expect("scxml-cli must finish");
+    let output = child.wait_with_output().expect("scx must finish");
     server.join().expect("the server ends");
     let text = format!("{}{rest}", lines.concat());
     let records: Vec<serde_json::Value> = text
@@ -1038,7 +1101,7 @@ fn leaving_the_invoking_state_closes_the_request_connection() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("scxml-cli must start");
+        .expect("scx must start");
     let mut stdin = child.stdin.take().expect("stdin is piped");
     stdin
         .write_all(b"{\"name\":\"fetch\"}\n")
@@ -1063,7 +1126,7 @@ fn leaving_the_invoking_state_closes_the_request_connection() {
         .write_all(b"{\"type\":\"close\"}\n")
         .expect("input is writable");
     drop(stdin);
-    let output = child.wait_with_output().expect("scxml-cli must finish");
+    let output = child.wait_with_output().expect("scx must finish");
     server.join().expect("the server ends");
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     let records = parse_records(&output);

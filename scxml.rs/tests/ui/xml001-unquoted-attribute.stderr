@@ -1,5 +1,5 @@
 error[XML001]: attribute value must be enclosed in quotes
- --> tests/ui/xml001-unquoted-attribute.scxml:2:13
+ --> tests/ui/xml001-unquoted-attribute.scx:2:13
   |
 2 |   <state id=a><transition event="go" target="b"/></state>
   |             ^ unquoted attribute value
@@ -13,4 +13,4 @@ help: quote the attribute value
   |             ~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

@@ -1,5 +1,5 @@
 warning[SCXML042]: empty `cond` on `<if>` is still evaluated and cannot produce a value
- --> tests/ui/scxml042-empty-if-condition.scxml:2:30
+ --> tests/ui/scxml042-empty-if-condition.scx:2:30
   |
 2 | ...ate id="a"><onentry><if cond=" "><log expr="1"/></if></o...
   |                            ^^^^^^^^ empty expression
@@ -10,5 +10,5 @@ warning[SCXML042]: empty `cond` on `<if>` is still evaluated and cannot produce 
   = spec: SCXML 1.0 §5.9 Expressions
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML042`.
-validated tests/ui/scxml042-empty-if-condition.scxml
+For more information about this diagnostic, try `scx --explain SCXML042`.
+validated tests/ui/scxml042-empty-if-condition.scx

@@ -1,5 +1,5 @@
 error[SCXML089]: the fragment of `event:schema` does not select a schema in schema file `event-schemas/order.json`: the JSON Pointer `/$defs/Ordr` names no value
- --> tests/ui/scxml089-bad-pointer.scxml:5:83
+ --> tests/ui/scxml089-bad-pointer.scx:5:83
   |
 5 |     <transition event="order" target="done" event:schema="event-schemas/order.json#/$defs/Ordr"/>
   |                                                                                   ^^^^^^^^^^^^ names no value
@@ -13,4 +13,4 @@ help: select member `Order`
   |                                                                                           ~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML089`.
+For more information about this error, try `scx --explain SCXML089`.

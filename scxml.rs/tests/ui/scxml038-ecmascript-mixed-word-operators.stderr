@@ -1,5 +1,5 @@
 warning[SCXML038]: ecmascript syntax error in `cond`: `or` is not an ECMAScript operator
- --> tests/ui/scxml038-ecmascript-mixed-word-operators.scxml:8:43
+ --> tests/ui/scxml038-ecmascript-mixed-word-operators.scx:8:43
   |
 8 |     <transition event="go" cond="x &gt; 1 or x &lt; 0 and y" target="b"/>
   |                                  -------------------------- while parsing this `cond`
@@ -15,7 +15,7 @@ help: use `||`
   |                                           ~~
 
 warning[SCXML038]: ecmascript syntax error in `cond`: `and` is not an ECMAScript operator
- --> tests/ui/scxml038-ecmascript-mixed-word-operators.scxml:8:55
+ --> tests/ui/scxml038-ecmascript-mixed-word-operators.scx:8:55
   |
 8 |     <transition event="go" cond="x &gt; 1 or x &lt; 0 and y" target="b"/>
   |                                  -------------------------- while parsing this `cond`
@@ -31,7 +31,7 @@ help: use `&&`
   |                                                       ~~~~~~~~~~
 
 warning[SCXML038]: ecmascript syntax error in `cond`: `and` is not an ECMAScript operator
- --> tests/ui/scxml038-ecmascript-mixed-word-operators.scxml:9:43
+ --> tests/ui/scxml038-ecmascript-mixed-word-operators.scx:9:43
   |
 9 |     <transition event="wait" cond="x == 1 and not ready" target="b"/>
   |                                    -------------------- while parsing this `cond`
@@ -47,7 +47,7 @@ help: use `&&`
   |                                           ~~~~~~~~~~
 
 warning[SCXML038]: ecmascript syntax error in `cond`: `not` is not an ECMAScript operator
- --> tests/ui/scxml038-ecmascript-mixed-word-operators.scxml:9:47
+ --> tests/ui/scxml038-ecmascript-mixed-word-operators.scx:9:47
   |
 9 |     <transition event="wait" cond="x == 1 and not ready" target="b"/>
   |                                    -------------------- while parsing this `cond`
@@ -63,5 +63,5 @@ help: use `!`
   |                                               ~
 
 diagnostic summary: 0 error(s), 4 warning(s), 0 note(s), 4 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-ecmascript-mixed-word-operators.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-ecmascript-mixed-word-operators.scx

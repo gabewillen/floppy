@@ -4,7 +4,7 @@ A live session keeps one root SCXML session (and the sessions it invokes)
 alive between calls. Each external event is processed to a stable configuration when it
 arrives, and delayed `<send>`s fire when their deadline comes due. Two
 surfaces expose it: the Wasmtime host API (`SessionHost::open`, in
-`hosts/scxml-host-wasmtime`) and the `scxml-cli run` command. Both execute
+`hosts/scxml-host-wasmtime`) and the `scx run` command. Both execute
 only through the shipped components, like every other run.
 
 Nothing here adds to SCXML. A document behaves exactly as SCXML 1.0 and its
@@ -264,21 +264,20 @@ through its WASI resources. Replay must supply the same ones.
 ## The `run` command
 
 ```console
-cargo run --release -p scxml-cli --features wasmtime -- run machine.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+cargo run --release -p scxml-cli --features wasmtime -- run machine.scx \
   --record session.ndjson
 {"name":"go","data":{"order":42}}
 {"type":"snapshot"}
 ```
 
-`scxml-cli run DOC` compiles DOC as `snapshot run` does and opens one live
+`scx run DOC` compiles DOC as `snapshot run` does and opens one live
 session. It reads newline-delimited JSON inputs on standard input and writes
 one JSON record per line on standard output. Standard error carries
 diagnostics only, in rustc style (`error[code]: …`, `warning[code]: stdin
 line N: …`).
 
 It takes the same component, `--resource`, `--extension-package`,
-`--extension-component`, `--extension-component-sha256`, `--extension-call-fuel`, `--env`,
+`--extension-component`, `--extension-component-sha256`, `--env`,
 `--env-file`, and repository namespace (`--offline`, `--cache-dir`,
 `--github-*`) flags as `snapshot run`, plus these (with `--record` or
 `--replay` extension components get no outbound HTTP: a replay log does not
@@ -308,9 +307,9 @@ of accepted requests that failed later runs as a call with cause
 answers every ping at the reply address it carries):
 
 ```console
-scxml-cli run pong.scxml --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+scx run pong.scx \
   --session-id a --http-listen 8401 --http-allow http://127.0.0.1:8402 < /dev/null &
-scxml-cli run ping.scxml --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+scx run ping.scx \
   --session-id b --http-listen 8402 --http-allow http://127.0.0.1:8401 < /dev/null
 {"type":"opened","session":"b","clock":"wall","ioprocessors":{"basichttp":{"location":"http://127.0.0.1:8402/sessions/b/basichttp"},…}}
 {"type":"call","cause":"start","at_ms":0,"status":"running","configuration":["waiting"],"next_deadline_ms":null,"commands":0}
@@ -320,10 +319,10 @@ scxml-cli run ping.scxml --components "$RELEASE" --components-manifest-sha256 "$
 {"type":"closed","reason":"done","status":"finished","cancelled_sends":0,"cancelled_children":0}
 ```
 
-where `ping.scxml` sends
+where `ping.scx` sends
 `<send event="ping" type="basichttp" target="http://127.0.0.1:8401/sessions/a/basichttp">`
 with a `reply` parameter of `_ioprocessors['basichttp'].location`, and
-`pong.scxml` answers with
+`pong.scx` answers with
 `<send event="pong" type="basichttp" targetexpr="_event.data.reply">`
 (the full documents are in
 [cli.md](cli.md#basichttp-between-two-processes)). Any HTTP client can
@@ -429,7 +428,7 @@ under the session's single `session-run` span:
 | `scxml.host-wasmtime.basichttp-listener-accept` | one failed `accept` of the built-in listener (`http` feature): `input-read` for a connection that failed before it was accepted, `platform` for a listener failure, after which the listener waits (10 ms, doubling to 1 s) before accepting again |
 | `scxml.host-wasmtime.basichttp-listener-connection` | one connection the built-in listener accepted but could not serve or keep as configured (`http` feature): `platform` with the `input-rejected` event for a connection dropped unanswered (a socket mode or timeout it could not set, a thread it could not start); `platform` with no event for a connection served on a thread the listener could not keep (a poisoned thread list), which stopping the listener does not wait for |
 | `scxml.host-wasmtime.session-snapshot` | one snapshot (unchanged) |
-| `scxml.cli.run` | one `scxml-cli run` |
+| `scxml.cli.run` | one `scx run` |
 
 An advance that fires nothing emits no span, so waiting costs no telemetry.
 No attribute carries a session id, event name, target, URL, host, header,

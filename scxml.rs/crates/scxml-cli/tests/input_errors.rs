@@ -1,4 +1,4 @@
-//! `scxml-cli validate` on input it cannot read as a document: a missing
+//! `scx validate` on input it cannot read as a document: a missing
 //! file names its path, and bytes that are not UTF-8 are one located
 //! `XML001` diagnostic in every output format (an agent that parses
 //! `--format json` or `sarif` always receives a report).
@@ -17,11 +17,11 @@ fn workspace_root() -> PathBuf {
 }
 
 fn validate(root: &Path, relative: &str, format: &str) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_scxml-cli"))
+    Command::new(env!("CARGO_BIN_EXE_scx"))
         .current_dir(root)
         .args(["validate", relative, "--format", format])
         .output()
-        .expect("scxml-cli must run")
+        .expect("scx must run")
 }
 
 #[test]

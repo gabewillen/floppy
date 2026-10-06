@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.3.2.2]: attribute `evnt` is not allowed on `<transition>`
- --> tests/ui/xsd-unknown-attribute-typo.scxml:3:17
+ --> tests/ui/xsd-unknown-attribute-typo.scx:3:17
   |
 3 |     <transition evnt="go" target="b"/>
   |                 ^^^^ unknown attribute
@@ -14,4 +14,4 @@ help: `<transition>` has an attribute with a similar name: `event`
   |                 ~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.3.2.2`.
+For more information about this error, try `scx --explain XSD-cvc-complex-type.3.2.2`.

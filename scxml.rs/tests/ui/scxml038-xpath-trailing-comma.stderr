@@ -1,5 +1,5 @@
 warning[SCXML038]: xpath syntax error in `expr`: trailing `,` before `)`
- --> tests/ui/scxml038-xpath-trailing-comma.scxml:8:44
+ --> tests/ui/scxml038-xpath-trailing-comma.scx:8:44
   |
 8 |     <onentry><log expr="concat('n=', $count, )"/></onentry>
   |                         ---------------------- while parsing this `expr`
@@ -15,5 +15,5 @@ help: remove the trailing `,`
 8 +     <onentry><log expr="concat('n=', $count)"/></onentry>
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-xpath-trailing-comma.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-xpath-trailing-comma.scx

@@ -471,7 +471,7 @@ fn unbound_namespace_diagnostic(document: &scxml_syntax::Document, namespace: &s
     .with_primary_message("no extension component is bound to execute this")
     .with_note("extension-namespace elements execute only in the namespace's extension component; compiling without a verified package binding would silently drop them")
     .with_help(
-        "bind the namespace with its package manifest (`scxml-cli compile --extension-package MANIFEST.json`), or remove its elements",
+        "bind the namespace with its package manifest (`scx compile --extension-package MANIFEST.json`), or remove its elements",
     )
     .with_spec_reference("SCXML 1.0 §4.10 Extensibility of Executable Content");
     if let (Some(usage), Some(declaration)) = (usage, declaration)

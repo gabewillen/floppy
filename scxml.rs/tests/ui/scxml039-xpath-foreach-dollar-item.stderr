@@ -1,5 +1,5 @@
 warning[SCXML039]: `<foreach item>` names the variable `it`, which is written without `$`
- --> tests/ui/scxml039-xpath-foreach-dollar-item.scxml:5:38
+ --> tests/ui/scxml039-xpath-foreach-dollar-item.scx:5:38
   |
 5 |       <foreach array="$list/a" item="$it" index="$i">
   |                                      ^ `$` is not part of the name
@@ -15,7 +15,7 @@ help: remove the `$`
 5 +       <foreach array="$list/a" item="it" index="$i">
 
 warning[SCXML039]: `<foreach index>` names the variable `i`, which is written without `$`
- --> tests/ui/scxml039-xpath-foreach-dollar-item.scxml:5:50
+ --> tests/ui/scxml039-xpath-foreach-dollar-item.scx:5:50
   |
 5 |       <foreach array="$list/a" item="$it" index="$i">
   |                                                  ^ `$` is not part of the name
@@ -31,5 +31,5 @@ help: remove the `$`
 5 +       <foreach array="$list/a" item="$it" index="i">
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML039`.
-validated tests/ui/scxml039-xpath-foreach-dollar-item.scxml
+For more information about this diagnostic, try `scx --explain SCXML039`.
+validated tests/ui/scxml039-xpath-foreach-dollar-item.scx

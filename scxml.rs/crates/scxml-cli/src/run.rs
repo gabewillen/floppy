@@ -1,4 +1,4 @@
-//! `scxml-cli run`: one long-lived live session of a document over
+//! `scx run`: one long-lived live session of a document over
 //! newline-delimited JSON (`docs/live-session.md`, "The `run` command").
 //!
 //! Standard input carries one input per line (an event, a snapshot request,
@@ -42,7 +42,6 @@ pub const RUN_OPTIONS: &[&str] = &[
     "--wasi",
     "--env",
     "--env-file",
-    "--extension-call-fuel",
     "--offline",
     "--cache-dir",
     "--github-api-base",
@@ -207,9 +206,9 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
             "--extension-component-sha256" | "--service-component-sha256" => "URI=HEX",
             "--dir" => "URI=HOST::GUEST",
             "--wasi" => "URI=inherit-network or URI=allow-ip-name-lookup",
-            "--env" => "NAME@URI or NAME@URI=VALUE",
+            "--env" => "NAME or NAME=VALUE",
             "--env-file" => "PATH",
-            "--fuel" | "--max-commands" | "--extension-call-fuel" => "N",
+            "--fuel" | "--max-commands" => "N",
             "--session-id" => "NAME",
             "--clock" => "wall or logical",
             "--snapshot-on" => "call, done, or never",
@@ -226,7 +225,7 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
             _ => "URI=PATH",
         },
     )?;
-    let document = crate::snapshot::one_operand(&parsed.operands, "run", "DOC.scxml")?;
+    let document = crate::snapshot::one_operand(&parsed.operands, "run", "DOC.scx")?;
     let mut components_dir = None;
     let mut manifest = None;
     let mut resources = Vec::new();
@@ -343,8 +342,7 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
                 .into(),
         );
     }
-    let components = ComponentArgs::resolve(components_dir, manifest)
-        .map_err(|error| error.replace("conformance run", "run"))?;
+    let components = ComponentArgs::resolve(components_dir, manifest)?;
     Ok(RunArgs {
         document,
         components,
@@ -384,7 +382,7 @@ const DEFAULT_FUEL: u64 = 1_000_000_000;
 pub fn execute(_args: &RunArgs) -> Result<(), Box<dyn std::error::Error>> {
     Err(
         "[wasmtime-disabled] run executes only through the shipped components under \
-         Wasmtime; rebuild scxml-cli with --features wasmtime. No document was executed"
+         Wasmtime; rebuild scx with --features wasmtime. No document was executed"
             .into(),
     )
 }
@@ -480,7 +478,7 @@ mod live {
         Applied, BasicHttpListener, CommunicationSender, HttpAllowlist, HttpClientConfig,
         InboundHttp, InputRecord, ListenerConfig, ListenerHandle, LiveCallResult, LiveClock,
         LiveHttp, LiveSession, LiveStatus, NetworkClient, PublicUrl, RunFailure, ScriptedEvent,
-        SessionHost, SessionHostError, SessionOpen, SessionOutput, WallClock,
+        SessionHostError, SessionOpen, SessionOutput, WallClock,
     };
     use scxml_snapshot::Options;
     use scxml_types::{
@@ -2064,9 +2062,16 @@ mod live {
             &args.namespaces.repository,
         )?;
         args.services.check(&services.packages)?;
-        let values = args.namespaces.values()?;
-        crate::mask::install(&crate::extensions::HeldValue::pairs(&values));
+        let values = args.namespaces.values(&packages.slot_uses)?;
+        crate::mask::install(
+            &crate::extensions::HeldValue::pairs(&values),
+            &crate::extensions::declared_origins(&packages, &services.packages),
+        );
         crate::extensions::write_notes(&packages.summary(Some(&values)));
+        crate::extensions::write_notes(&crate::extensions::env_summary(
+            &packages.slot_uses,
+            &values,
+        ));
         let (ir, data_model) =
             crate::snapshot::host::compile(&args.document, &packages.all(), &services.packages)?;
         let mut namespaces = Vec::new();
@@ -2090,7 +2095,7 @@ mod live {
         namespaces.sort();
         let mut identity = Identity {
             ir_sha256: format!("{:x}", Sha256::digest(&ir)),
-            components_manifest_sha256: args.components.manifest_sha256.clone(),
+            components_manifest_sha256: args.components.manifest_sha256().to_owned(),
             session_id: args.session_id.clone(),
             max_commands: args.max_commands,
             fuel: args.fuel,
@@ -2122,11 +2127,7 @@ mod live {
             Some(&args.services),
             Some(&service_imports),
         ));
-        let host = SessionHost::from_release_dir(
-            &args.components.dir,
-            &args.components.manifest_sha256,
-            identity.fuel,
-        )?;
+        let host = args.components.session_host(identity.fuel)?;
         // A replay log does not record extension components' responses, so a
         // recorded or replayed session gets no extension transport: every
         // extension request is refused, the same way in both.
@@ -2190,9 +2191,10 @@ mod live {
             machine_ir: &ir,
             data_model: data_model.as_deref(),
             session_id: &identity.session_id,
-            embedder: Rc::new(crate::snapshot::host::ResourceDocuments {
-                resources: args.resources.clone(),
-            }),
+            embedder: Rc::new(crate::snapshot::host::ResourceDocuments::new(
+                args.resources.clone(),
+                &args.document,
+            )),
             max_commands: identity.max_commands,
             clock,
             record: args.record.is_some(),
@@ -2513,7 +2515,15 @@ mod tests {
             let error = args(extra).expect_err("rejected");
             assert!(error.contains(expected), "{extra:?}: {error}");
         }
-        let error = parse(&["doc.scxml".to_owned()]).expect_err("components are required");
-        assert!(error.contains("run requires --components DIR"), "{error}");
+        let parsed =
+            parse(&["doc.scx".to_owned()]).expect("the embedded components are the default");
+        assert_eq!(parsed.components, ComponentArgs::Embedded);
+        let error = parse(&[
+            "doc.scx".to_owned(),
+            "--components".to_owned(),
+            "dir".to_owned(),
+        ])
+        .expect_err("one override flag alone");
+        assert!(error.contains("together"), "{error}");
     }
 }

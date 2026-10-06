@@ -1,5 +1,5 @@
 error[SCXML001]: `http://www.w3.org/2005/07/scxml/` is not the SCXML namespace
- --> tests/ui/scxml001-near-miss-namespace.scxml:1:15
+ --> tests/ui/scxml001-near-miss-namespace.scx:1:15
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml/" version="1.0" initial="a">
   |  -----        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ near miss of the SCXML namespace URI
@@ -15,4 +15,4 @@ help: use the exact SCXML namespace URI
   |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML001`.
+For more information about this error, try `scx --explain SCXML001`.

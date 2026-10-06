@@ -1,5 +1,5 @@
 error[SCXML003]: identifier `1st` is not an XML NCName
- --> tests/ui/scxml003-ecmascript-data-id-not-ncname.scxml:3:15
+ --> tests/ui/scxml003-ecmascript-data-id-not-ncname.scx:3:15
   |
 3 |     <data id="1st" expr="0"/>
   |               ^^^ invalid NCName
@@ -16,7 +16,7 @@ help: rename the variable to `v1st` here and in 1 reference
   |                                ~~~~
 
 error[SCXML003]: identifier `max tries` is not an XML NCName
- --> tests/ui/scxml003-ecmascript-data-id-not-ncname.scxml:4:15
+ --> tests/ui/scxml003-ecmascript-data-id-not-ncname.scx:4:15
   |
 4 |     <data id="max tries" expr="3"/>
   |               ^^^^^^^^^ invalid NCName
@@ -30,7 +30,7 @@ help: rename the variable to `maxTries`
   |               ~~~~~~~~
 
 error[SCXML003]: identifier `$price` is not an XML NCName
- --> tests/ui/scxml003-ecmascript-data-id-not-ncname.scxml:5:15
+ --> tests/ui/scxml003-ecmascript-data-id-not-ncname.scx:5:15
   |
 5 |     <data id="$price" expr="10"/>
   |               ^^^^^^ invalid NCName
@@ -47,7 +47,7 @@ help: rename the variable to `price` here and in 1 reference
   |                                   ~~~~~
 
 warning[SCXML038]: ecmascript syntax error in `expr`: a number is immediately followed by a letter, `$`, or `_`
- --> tests/ui/scxml003-ecmascript-data-id-not-ncname.scxml:9:33
+ --> tests/ui/scxml003-ecmascript-data-id-not-ncname.scx:9:33
   |
 9 |       <log label="first" expr="1st"/>
   |                                --- while parsing this `expr`
@@ -60,4 +60,4 @@ warning[SCXML038]: ecmascript syntax error in `expr`: a number is immediately fo
 
 diagnostic summary: 3 error(s), 1 warning(s), 0 note(s), 4 total
 Some diagnostics have detailed explanations: SCXML003, SCXML038.
-For more information about a diagnostic, try `scxml-cli --explain SCXML003`.
+For more information about a diagnostic, try `scx --explain SCXML003`.

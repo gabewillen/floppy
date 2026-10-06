@@ -154,7 +154,7 @@ mod tests {
         assert!(parse(&distinct, &shell).is_err());
         let long = format!("A={}\n", "x".repeat(MAX_VALUE_BYTES + 1));
         assert!(parse(&long, &shell).is_err());
-        let dir = std::env::temp_dir().join(format!("scxml-cli-env-file-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("scx-env-file-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("temporary directory");
         let big = dir.join("big.env");
         std::fs::write(

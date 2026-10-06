@@ -1,5 +1,5 @@
 error[XML001]: unescaped `<` in the value of attribute `cond`
- --> tests/ui/xml001-attribute-less-than.scxml:3:48
+ --> tests/ui/xml001-attribute-less-than.scx:3:48
   |
 3 |   <state id="a"><transition event="go" cond="x < 3" target="f"/></state><final id="f"/>
   |                                                ^ a literal `<` is not allowed in an attribute value
@@ -13,4 +13,4 @@ help: escape `<` as `&lt;`
   |                                                ~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

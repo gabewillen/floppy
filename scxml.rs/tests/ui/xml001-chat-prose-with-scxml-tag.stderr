@@ -1,5 +1,5 @@
 error[XML001]: chat text and Markdown fences around the SCXML document
-  --> tests/ui/xml001-chat-prose-with-scxml-tag.scxml:1:1
+  --> tests/ui/xml001-chat-prose-with-scxml-tag.scx:1:1
    |
  1 | Here is the <scxml> state machine you asked for:
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ not part of the XML document
@@ -22,4 +22,4 @@ help: keep only the SCXML document
  8 - ```
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

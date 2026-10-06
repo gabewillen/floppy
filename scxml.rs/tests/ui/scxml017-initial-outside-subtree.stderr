@@ -1,5 +1,5 @@
 error[SCXML017]: initial state `q` is not a descendant of this element
- --> tests/ui/scxml017-initial-outside-subtree.scxml:2:26
+ --> tests/ui/scxml017-initial-outside-subtree.scx:2:26
   |
 2 |   <state id="p" initial="q">
   |                          ^ initial target escapes its containing state
@@ -12,4 +12,4 @@ error[SCXML017]: initial state `q` is not a descendant of this element
   = spec: SCXML 1.0 §3.3 <state>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML017`.
+For more information about this error, try `scx --explain SCXML017`.

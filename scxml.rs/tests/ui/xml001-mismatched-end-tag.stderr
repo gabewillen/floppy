@@ -1,5 +1,5 @@
 error[XML001]: mismatched end tag: expected `</transition>`, found `</state>`
- --> tests/ui/xml001-mismatched-end-tag.scxml:4:5
+ --> tests/ui/xml001-mismatched-end-tag.scx:4:5
   |
 3 |     <transition event="go" target="b">
   |      ---------- unclosed `<transition>` starts here
@@ -15,4 +15,4 @@ help: self-close `<transition>`
   |                                      ~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

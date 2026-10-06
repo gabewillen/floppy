@@ -27,7 +27,7 @@ macOS `sandbox-exec` isolation, as for the W3C corpus):
 
 ```console
 for model in ecmascript xpath; do
-  scxml-cli conformance prepare --manifest namespaces/event/irp/manifest.xml \
+  scx conformance prepare --manifest namespaces/event/irp/manifest.xml \
     --source-dir namespaces/event/irp/sources --templates tests/conformance/w3c-irp/templates \
     --datamodel "$model" --cache namespaces/event/irp \
     --output "namespaces/event/irp/prepared/$model" \
@@ -40,7 +40,7 @@ in the `irp-components` snippet of
 [CONTRIBUTING.md](../../../CONTRIBUTING.md)):
 
 ```console
-scxml-cli conformance run --corpus namespaces/event/irp/prepared/xpath \
+scx conformance run --corpus namespaces/event/irp/prepared/xpath \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
   --canonical-baseline namespaces/event/irp/baselines/xpath.scxml-report.json
 ```

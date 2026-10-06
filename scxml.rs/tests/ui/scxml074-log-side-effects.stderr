@@ -1,5 +1,5 @@
 error[SCXML074]: `expr` on `<log>` has a side effect
- --> tests/ui/scxml074-log-side-effects.scxml:9:32
+ --> tests/ui/scxml074-log-side-effects.scx:9:32
   |
 9 |       <log label="tries" expr="tries++"/>
   |                                ^^^^^ changes `tries`, which is outside the expression
@@ -11,7 +11,7 @@ error[SCXML074]: `expr` on `<log>` has a side effect
   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 error[SCXML074]: `expr` on `<log>` has a side effect
-  --> tests/ui/scxml074-log-side-effects.scxml:10:31
+  --> tests/ui/scxml074-log-side-effects.scx:10:31
    |
  6 |   <script>function remember(v) { seen.push(v); return v; }</script>
    |                                  ------------ `remember` calls the mutating `push` here
@@ -26,7 +26,7 @@ error[SCXML074]: `expr` on `<log>` has a side effect
    = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 error[SCXML074]: `expr` on `<log>` has a side effect
-  --> tests/ui/scxml074-log-side-effects.scxml:11:31
+  --> tests/ui/scxml074-log-side-effects.scx:11:31
    |
 11 |       <log label="roll" expr="Math.random()"/>
    |                               ^^^^^^^^^^^^^ `Math.random()` advances the session's random sequence
@@ -38,4 +38,4 @@ error[SCXML074]: `expr` on `<log>` has a side effect
    = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 diagnostic summary: 3 error(s), 0 warning(s), 0 note(s), 3 total
-For more information about this error, try `scxml-cli --explain SCXML074`.
+For more information about this error, try `scx --explain SCXML074`.

@@ -1,5 +1,5 @@
 error[SCXML008]: cancel requires exactly one of `sendid` or `sendidexpr`
- --> tests/ui/scxml008-cancel-without-id.scxml:3:15
+ --> tests/ui/scxml008-cancel-without-id.scx:3:15
   |
 3 |     <onentry><cancel/></onentry>
   |               ^^^^^^ missing send identifier
@@ -13,4 +13,4 @@ help: add the `sendid` of the `<send>` to cancel
   |                     +++++++++++
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML008`.
+For more information about this error, try `scx --explain SCXML008`.

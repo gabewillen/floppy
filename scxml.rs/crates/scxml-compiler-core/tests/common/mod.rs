@@ -1,4 +1,4 @@
-//! The validator and compiler composed exactly as `scxml-cli` composes them:
+//! The validator and compiler composed exactly as `scx` composes them:
 //! the bundled W3C SCXML schema and both parse-only expression checkers.
 
 use std::sync::Arc;
@@ -102,7 +102,7 @@ fn issues<T>(result: Result<Vec<T>, ()>, map: impl Fn(T) -> SyntaxIssue) -> Expr
 
 type CliValidator = Validator<BundledSchemaResolver<MemorySchemaResolver>, XsdSchemaBackend>;
 
-/// The validator `scxml-cli validate` runs.
+/// The validator `scx validate` runs.
 pub fn validator() -> CliValidator {
     Validator::new(
         BundledSchemaResolver::new(MemorySchemaResolver::new()),
@@ -112,14 +112,14 @@ pub fn validator() -> CliValidator {
     .with_expression_checker(Arc::new(XPathChecker))
 }
 
-/// The report `scxml-cli validate` produces for `source`.
+/// The report `scx validate` produces for `source`.
 pub fn validate(source: &str) -> Report {
     validator()
         .validate_source(SOURCE, "case.scxml", source)
         .report
 }
 
-/// `scxml-cli compile` without namespace, script, or service packages, in
+/// `scx compile` without namespace, script, or service packages, in
 /// the default compile-time script resolution.
 pub fn compile(source: &str) -> CompileOutput {
     Compiler::new(validator()).compile(CompileInput {

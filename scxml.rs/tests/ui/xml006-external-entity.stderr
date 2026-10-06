@@ -1,5 +1,5 @@
 error[XML006]: external entities are never read by this parser (XML 1.0 §4.4.3 lets a non-validating processor not include them)
- --> tests/ui/xml006-external-entity.scxml:7:21
+ --> tests/ui/xml006-external-entity.scx:7:21
   |
 7 |     <data id="copy">&secret;</data>
   |                     ^^^^^^^^ this entity is not read
@@ -9,4 +9,4 @@ error[XML006]: external entities are never read by this parser (XML 1.0 §4.4.3 
   = spec: XML 1.0 (Fifth Edition) §4.4 XML Processor Treatment of Entities and References
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML006`.
+For more information about this error, try `scx --explain XML006`.

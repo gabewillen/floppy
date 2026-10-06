@@ -1,5 +1,5 @@
 warning[SCXML039]: `namelist` separates names with spaces, not commas: `a1,b1` is not one location
- --> tests/ui/scxml039-namelist-commas.scxml:3:52
+ --> tests/ui/scxml039-namelist-commas.scx:3:52
   |
 3 | ...end event="t" namelist="a1,b1"/></onentry><transition...
   |                            ^^^^^ comma-separated names
@@ -14,5 +14,5 @@ help: separate the names with spaces
   |                            ~~~~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML039`.
-validated tests/ui/scxml039-namelist-commas.scxml
+For more information about this diagnostic, try `scx --explain SCXML039`.
+validated tests/ui/scxml039-namelist-commas.scx

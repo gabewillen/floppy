@@ -1,5 +1,5 @@
 error[SCXML030]: transition targets `b` and `c` cannot be active at the same time
- --> tests/ui/scxml030-conflicting-targets.scxml:4:40
+ --> tests/ui/scxml030-conflicting-targets.scx:4:40
   |
 2 |   <state id="p" initial="a">
   |    ----- only one child of this state can be active
@@ -20,4 +20,4 @@ help: remove the target `c`, keeping `b`
 4 +       <transition event="go" target="b"/>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML030`.
+For more information about this error, try `scx --explain SCXML030`.

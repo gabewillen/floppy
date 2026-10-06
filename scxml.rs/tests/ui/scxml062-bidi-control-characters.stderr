@@ -1,5 +1,5 @@
 warning[SCXML062]: 2 Unicode bidirectional control characters change how this line is displayed
- --> tests/ui/scxml062-bidi-control-characters.scxml:2:28
+ --> tests/ui/scxml062-bidi-control-characters.scx:2:28
   |
 2 |   <!-- reviewed: access is \u{202E}denied\u{2066} -->
   |                            ^^^^^^^^      -------- U+2066 LEFT-TO-RIGHT ISOLATE
@@ -15,7 +15,7 @@ help: remove the control characters (a comment or CDATA section cannot escape th
 2 +   <!-- reviewed: access is denied -->
 
 warning[SCXML062]: 3 Unicode bidirectional control characters change how this line is displayed
- --> tests/ui/scxml062-bidi-control-characters.scxml:5:19
+ --> tests/ui/scxml062-bidi-control-characters.scx:5:19
   |
 5 |       <log label="\u{2066}admin\u{2069}" expr="'user \u{202E}'"/>
   |                   ^^^^^^^^     --------              -------- U+202E RIGHT-TO-LEFT OVERRIDE
@@ -32,5 +32,5 @@ help: write the control characters as character references
   |                   ~~~~~~~~     ~~~~~~~~              ~~~~~~~~
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML062`.
-validated tests/ui/scxml062-bidi-control-characters.scxml
+For more information about this diagnostic, try `scx --explain SCXML062`.
+validated tests/ui/scxml062-bidi-control-characters.scx

@@ -1,5 +1,5 @@
 warning[SCXML038]: ecmascript syntax error in `expr`: `#` does not start a comment or a heading in an ECMAScript expression
- --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:5:18
+ --> tests/ui/scxml038-ecmascript-lexer-wording.scx:5:18
   |
 5 |       <log expr="# Retry loop"/>
   |                  ^ not valid ECMAScript here
@@ -15,7 +15,7 @@ help: quote the text as a string literal
   |                  ~~~~~~~~~~~~~~
 
 warning[SCXML038]: ecmascript syntax error in `expr`: `@` is not an ECMAScript operator or name character
- --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:6:20
+ --> tests/ui/scxml038-ecmascript-lexer-wording.scx:6:20
   |
 6 |       <log expr="x @ y"/>
   |                  ----- while parsing this `expr`
@@ -31,7 +31,7 @@ help: quote the text as a string literal
   |                  ~~~~~~~
 
 warning[SCXML038]: ecmascript syntax error in `expr`: `…` can appear only inside a string literal in ECMAScript
- --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:7:26
+ --> tests/ui/scxml038-ecmascript-lexer-wording.scx:7:26
   |
 7 |       <log expr="Starting…"/>
   |                  --------- while parsing this `expr`
@@ -47,7 +47,7 @@ help: quote the text as a string literal
   |                  ~~~~~~~~~~~
 
 warning[SCXML038]: ecmascript syntax error in `expr`: `😀` can appear only inside a string literal in ECMAScript
- --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:8:18
+ --> tests/ui/scxml038-ecmascript-lexer-wording.scx:8:18
   |
 8 |       <log expr="😀 hi"/>
   |                  ^^ unexpected character
@@ -63,7 +63,7 @@ help: quote the text as a string literal
   |                  ~~~~~~~
 
 warning[SCXML038]: ecmascript syntax error in `expr`: unexpected `:` after a complete expression
- --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:9:23
+ --> tests/ui/scxml038-ecmascript-lexer-wording.scx:9:23
   |
 9 |       <log expr="Error: failed"/>
   |                  ------------- while parsing this `expr`
@@ -79,7 +79,7 @@ help: quote the text as a string literal
   |                  ~~~~~~~~~~~~~~~
 
 warning[SCXML038]: ecmascript syntax error in `expr`: unterminated string literal
-  --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:10:20
+  --> tests/ui/scxml038-ecmascript-lexer-wording.scx:10:20
    |
 10 |       <log expr="it's done"/>
    |                  --------- while parsing this `expr`
@@ -95,7 +95,7 @@ help: quote the text as a string literal
    |                  ~~~~~~~~~~~~~~~~~~~~~
 
 warning[SCXML038]: ecmascript syntax error in `expr`: `#secret` is a private class member name, which only code inside its class can use
-  --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:11:20
+  --> tests/ui/scxml038-ecmascript-lexer-wording.scx:11:20
    |
 11 |       <log expr="x.#secret"/>
    |                  --------- while parsing this `expr`
@@ -111,7 +111,7 @@ help: use the public property `secret`
 11 +       <log expr="x.secret"/>
 
 warning[SCXML038]: ecmascript syntax error in `expr`: the value is only a comment, not an expression
-  --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:12:18
+  --> tests/ui/scxml038-ecmascript-lexer-wording.scx:12:18
    |
 12 |       <log expr="// counts attempts"/>
    |                  ^^ a comment, not a value
@@ -123,7 +123,7 @@ warning[SCXML038]: ecmascript syntax error in `expr`: the value is only a commen
    = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 warning[SCXML038]: ecmascript syntax error in `expr`: unterminated template literal
-  --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:13:18
+  --> tests/ui/scxml038-ecmascript-lexer-wording.scx:13:18
    |
 13 |       <log expr="`total"/>
    |                  ^ string starts here
@@ -135,7 +135,7 @@ warning[SCXML038]: ecmascript syntax error in `expr`: unterminated template lite
    = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 warning[SCXML038]: ecmascript syntax error in `<script>`: `#` does not start a comment in ECMAScript
-  --> tests/ui/scxml038-ecmascript-lexer-wording.scxml:15:9
+  --> tests/ui/scxml038-ecmascript-lexer-wording.scx:15:9
    |
 14 |         <script>
    |  _______________-
@@ -155,5 +155,5 @@ help: start the comment with `//`
    |         ~~
 
 diagnostic summary: 0 error(s), 10 warning(s), 0 note(s), 10 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-ecmascript-lexer-wording.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-ecmascript-lexer-wording.scx

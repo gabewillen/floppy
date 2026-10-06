@@ -19,7 +19,7 @@
 //! `--extension-component-sha256 HEX` is the trusted SHA-256 of the example
 //! extension component in DIR, which the namespace suites bind. Every flag is required, each at
 //! most once, and any other argument is rejected. The settings are read
-//! only from these flags, as `scxml-cli conformance run` reads them.
+//! only from these flags, as `scx conformance run` reads them.
 
 #![forbid(unsafe_code)]
 

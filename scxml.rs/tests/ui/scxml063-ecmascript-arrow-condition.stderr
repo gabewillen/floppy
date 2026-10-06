@@ -1,5 +1,5 @@
 warning[SCXML063]: `cond` on `<transition>` is an arrow function, so it is always true
- --> tests/ui/scxml063-ecmascript-arrow-condition.scxml:4:40
+ --> tests/ui/scxml063-ecmascript-arrow-condition.scx:4:40
   |
 4 |     <transition event="go" cond="total => 1" target="b"/>
   |                                        ^^ `=>` makes an arrow function
@@ -14,7 +14,7 @@ help: compare with `>=`
   |                                        ~~
 
 warning[SCXML063]: `cond` on `<transition>` is an arrow function, so it is always true
- --> tests/ui/scxml063-ecmascript-arrow-condition.scxml:5:43
+ --> tests/ui/scxml063-ecmascript-arrow-condition.scx:5:43
   |
 5 |     <transition event="go2" cond="(total) =>  total + 1" target="b"/>
   |                                           ^^ `=>` makes an arrow function
@@ -29,7 +29,7 @@ help: compare with `>=`
   |                                           ~~
 
 warning[SCXML063]: `cond` on `<transition>` is an arrow function, so it is always true
- --> tests/ui/scxml063-ecmascript-arrow-condition.scxml:7:42
+ --> tests/ui/scxml063-ecmascript-arrow-condition.scx:7:42
   |
 7 |     <transition event="go4" cond="(a, b) => a" target="b"/>
   |                                          ^^ `=>` makes an arrow function
@@ -40,5 +40,5 @@ warning[SCXML063]: `cond` on `<transition>` is an arrow function, so it is alway
   = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 diagnostic summary: 0 error(s), 3 warning(s), 0 note(s), 3 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML063`.
-validated tests/ui/scxml063-ecmascript-arrow-condition.scxml
+For more information about this diagnostic, try `scx --explain SCXML063`.
+validated tests/ui/scxml063-ecmascript-arrow-condition.scx

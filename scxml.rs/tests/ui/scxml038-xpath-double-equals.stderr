@@ -1,5 +1,5 @@
 warning[SCXML038]: xpath syntax error in `cond`: `==` is not an XPath operator
- --> tests/ui/scxml038-xpath-double-equals.scxml:8:41
+ --> tests/ui/scxml038-xpath-double-equals.scx:8:41
   |
 8 |     <transition event="go" cond="$count == 3" target="b"/>
   |                                  ----------- while parsing this `cond`
@@ -15,5 +15,5 @@ help: compare with `=`
   |                                         ~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-xpath-double-equals.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-xpath-double-equals.scx

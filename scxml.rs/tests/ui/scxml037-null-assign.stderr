@@ -1,5 +1,5 @@
 error[SCXML037]: the null data model does not support `<assign>`
- --> tests/ui/scxml037-null-assign.scxml:3:15
+ --> tests/ui/scxml037-null-assign.scx:3:15
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idle" datamodel="null">
   |                                                                                        ---- the null data model is selected here
@@ -20,4 +20,4 @@ help: select the ECMAScript data model
   |                                                                                        ~~~~~~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML037`.
+For more information about this error, try `scx --explain SCXML037`.

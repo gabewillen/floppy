@@ -1,6 +1,6 @@
 //! The check that a measured or pinned document is one `compile` accepts:
 //! the bundled W3C SCXML schema and the semantic and data-model rules, as
-//! `scxml-cli validate` runs them (expression syntax aside, which the data
+//! `scx validate` runs them (expression syntax aside, which the data
 //! model checks again when it runs the document).
 
 use scxml_compiler_core::has_errors;

@@ -13,10 +13,12 @@ categories.workspace = true
 publish.workspace = true
 
 [features]
-default = []
-# Links the Wasmtime component host so `conformance run` can execute
-# (components-only execution), and `run` the BasicHTTP network of live
-# sessions (`--http-allow`, `--http-listen`).
+default = ["wasmtime"]
+# Links the Wasmtime component host so `run`, `snapshot run`, and
+# `conformance run` can execute (components-only execution), and `run` the
+# BasicHTTP network of live sessions (`--http-allow`, `--http-listen`). It
+# also embeds the authenticated release session components (build.rs), so
+# building it needs them built first (`scripts/verify-wasm-capabilities.sh`).
 wasmtime = [
     "scxml-conformance/wasmtime",
     "dep:scxml-host-wasmtime",
@@ -51,6 +53,13 @@ url.workspace = true
 # operating system's trust store, no cookies, proxies, or bundled roots.
 rustls = { workspace = true, optional = true }
 ureq = { workspace = true, optional = true }
+
+[[bin]]
+name = "scx"
+path = "src/main.rs"
+
+[build-dependencies]
+sha2.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 signal-hook = { workspace = true, optional = true }

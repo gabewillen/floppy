@@ -369,8 +369,9 @@ pub enum ArtifactError {
     /// opened.
     WasiGrantInvalid,
     /// A service component imports a `wasi:*` interface the host never
-    /// links (such as `wasi:cli` or `wasi:http`).
-    WasiImportUndeclared,
+    /// links (such as `wasi:cli` or `wasi:http`): Wasmtime's unknown import
+    /// (`wasmtime::UnknownImportError`), refused before instantiation.
+    UnknownImport,
     /// A service component imports a WASI interface whose runtime resource
     /// (a preopened directory, TCP addresses, or name lookup) the run does
     /// not grant.
@@ -415,7 +416,7 @@ impl std::fmt::Display for ArtifactError {
                 "the run grants a WASI resource no bound service component imports"
             }
             Self::WasiGrantInvalid => "a WASI grant is malformed or its directory cannot be opened",
-            Self::WasiImportUndeclared => {
+            Self::UnknownImport => {
                 "the service component imports a WASI interface this host never links"
             }
             Self::WasiResourceUngranted => {

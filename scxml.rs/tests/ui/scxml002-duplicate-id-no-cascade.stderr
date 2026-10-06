@@ -1,5 +1,5 @@
 error[SCXML002]: duplicate identifier `a`
- --> tests/ui/scxml002-duplicate-id-no-cascade.scxml:4:14
+ --> tests/ui/scxml002-duplicate-id-no-cascade.scx:4:14
   |
 2 |   <state id="a"><transition event="go" target="b"/></state>
   |              - first declared here
@@ -12,4 +12,4 @@ error[SCXML002]: duplicate identifier `a`
   = spec: SCXML 1.0 §3.14 IDs
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML002`.
+For more information about this error, try `scx --explain SCXML002`.

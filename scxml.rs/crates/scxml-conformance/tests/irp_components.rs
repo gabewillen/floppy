@@ -391,7 +391,7 @@ fn a_delayed_basichttp_send_is_dispatched_when_due_through_the_components() {
             .with_schema_mode(SchemaMode::Off),
     );
     let lowered = compiler.compile(CompileInput {
-        source_name: "delayed-basichttp.scxml".into(),
+        source_name: "delayed-basichttp.scx".into(),
         source: source.into(),
         packages: Vec::new(),
         package_schemas: Vec::new(),

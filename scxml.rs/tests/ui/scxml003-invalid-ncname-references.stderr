@@ -1,5 +1,5 @@
 error[SCXML006]: initial state `1st` does not exist
- --> tests/ui/scxml003-invalid-ncname-references.scxml:1:71
+ --> tests/ui/scxml003-invalid-ncname-references.scx:1:71
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="1st state">
   |                                                                       ^^^ one piece of the reference `1st state`
@@ -11,7 +11,7 @@ error[SCXML006]: initial state `1st` does not exist
   = spec: SCXML 1.0 §3.14 IDs
 
 error[SCXML006]: initial state `state` does not exist
- --> tests/ui/scxml003-invalid-ncname-references.scxml:1:75
+ --> tests/ui/scxml003-invalid-ncname-references.scx:1:75
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="1st state">
   |                                                                           ^^^^^ one piece of the reference `1st state`
@@ -23,7 +23,7 @@ error[SCXML006]: initial state `state` does not exist
   = spec: SCXML 1.0 §3.14 IDs
 
 error[SCXML003]: identifier `1st state` is not an XML NCName
- --> tests/ui/scxml003-invalid-ncname-references.scxml:2:14
+ --> tests/ui/scxml003-invalid-ncname-references.scx:2:14
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="1st state">
   |                                                                       --------- referenced here
@@ -42,4 +42,4 @@ help: rename to the valid NCName `_1st_state` and update its reference
 
 diagnostic summary: 3 error(s), 0 warning(s), 0 note(s), 3 total
 Some diagnostics have detailed explanations: SCXML003, SCXML006.
-For more information about a diagnostic, try `scxml-cli --explain SCXML003`.
+For more information about a diagnostic, try `scx --explain SCXML003`.

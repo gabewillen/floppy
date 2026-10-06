@@ -1,5 +1,5 @@
 warning[SCXML033]: <parallel> `p` has only one region
- --> tests/ui/scxml033-single-region-parallel.scxml:2:4
+ --> tests/ui/scxml033-single-region-parallel.scx:2:4
   |
 2 |   <parallel id="p">
   |    ^^^^^^^^ a parallel state with one child runs nothing in parallel
@@ -18,5 +18,5 @@ help: change `<parallel>` to `<state>`
   |     ~~~~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML033`.
-validated tests/ui/scxml033-single-region-parallel.scxml
+For more information about this diagnostic, try `scx --explain SCXML033`.
+validated tests/ui/scxml033-single-region-parallel.scx

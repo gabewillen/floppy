@@ -50,8 +50,8 @@
     await data.dispose();
 
     // The child URL exists only at runtime: `srcexpr` over the data model.
-    const child = await (await fetch(`${base}async-child.scxml`)).text();
-    const childIr = await compile(child, 'async-child.scxml');
+    const child = await (await fetch(`${base}async-child.scx`)).text();
+    const childIr = await compile(child, 'async-child.scx');
     const parentIr = await compile(
       `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="outer">
          <datamodel><data id="base" expr="'${base}'"/><data id="name" expr="'child'"/></datamodel>

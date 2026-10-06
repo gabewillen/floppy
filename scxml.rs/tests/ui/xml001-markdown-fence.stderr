@@ -1,5 +1,5 @@
 error[XML001]: Markdown code fence around the XML document
- --> tests/ui/xml001-markdown-fence.scxml:1:1
+ --> tests/ui/xml001-markdown-fence.scx:1:1
   |
 1 | ```xml
   | ^^^^^^ a code fence is Markdown, not XML
@@ -22,4 +22,4 @@ help: remove the Markdown code fences
 3 + </scxml>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

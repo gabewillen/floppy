@@ -1,5 +1,5 @@
 error[SCXML019]: history must contain exactly one transition, but has 2
- --> tests/ui/scxml019-history-two-transitions.scxml:2:72
+ --> tests/ui/scxml019-history-two-transitions.scx:2:72
   |
 2 | ...l="a1"><history id="h"><transition target="a1"/><transition target="a2"/></history>...
   |                            ----------               ^^^^^^^^^^ extra transition
@@ -15,4 +15,4 @@ help: keep only the first transition
 2 + ...ransition target="a1"/></history><state id="a1"><...
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML019`.
+For more information about this error, try `scx --explain SCXML019`.

@@ -1,5 +1,5 @@
 warning[SCXML024]: state `saved` has no outgoing transition and may never exit
- --> tests/ui/scxml024-parallel-region-stuck.scxml:5:8
+ --> tests/ui/scxml024-parallel-region-stuck.scx:5:8
   |
 5 |       <state id="saved"/>
   |        ^^^^^ non-final atomic state has no exit
@@ -9,7 +9,7 @@ warning[SCXML024]: state `saved` has no outgoing transition and may never exit
   = spec: SCXML 1.0 §3.3 <state>
 
 warning[SCXML024]: state `spinner` has no outgoing transition and may never exit
- --> tests/ui/scxml024-parallel-region-stuck.scxml:7:6
+ --> tests/ui/scxml024-parallel-region-stuck.scx:7:6
   |
 7 |     <state id="spinner"/>
   |      ^^^^^ non-final atomic state has no exit
@@ -19,5 +19,5 @@ warning[SCXML024]: state `spinner` has no outgoing transition and may never exit
   = spec: SCXML 1.0 §3.3 <state>
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML024`.
-validated tests/ui/scxml024-parallel-region-stuck.scxml
+For more information about this diagnostic, try `scx --explain SCXML024`.
+validated tests/ui/scxml024-parallel-region-stuck.scx

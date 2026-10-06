@@ -293,7 +293,7 @@ fn documents(data_model: &str) -> Vec<PathBuf> {
 }
 
 /// Validates every prepared document of one corpus with both expression
-/// checkers linked (as `scxml-cli` does) and compares the findings with the
+/// checkers linked (as `scx` does) and compares the findings with the
 /// pinned inventory.
 fn check_corpus(
     data_model: &str,

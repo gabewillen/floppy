@@ -1,5 +1,5 @@
 warning[SCXML057]: `count` selects a child element named `count`, not the variable `$count`
- --> tests/ui/scxml057-xpath-location-without-dollar.scxml:8:47
+ --> tests/ui/scxml057-xpath-location-without-dollar.scx:8:47
   |
 8 |     <transition event="inc"><assign location="count" expr="$count + 1"/></transition>
   |                                               ^^^^^ relative path from `<datamodel>`
@@ -14,5 +14,5 @@ help: use `$count`
   |                                               ~~~~~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML057`.
-validated tests/ui/scxml057-xpath-location-without-dollar.scxml
+For more information about this diagnostic, try `scx --explain SCXML057`.
+validated tests/ui/scxml057-xpath-location-without-dollar.scx

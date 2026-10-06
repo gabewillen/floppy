@@ -488,7 +488,7 @@ fn trace_fixture(
 ) -> serde_json::Value {
     serde_json::json!({
         "schema": "stateforward.machine-trace/v1",
-        "source": "tests/fixtures/representative-machine.scxml",
+        "source": "tests/fixtures/representative-machine.scx",
         "ir-sha256": format!("{:x}", Sha256::digest(ir)),
         "session-id": SESSION_ID,
         "events": EVENTS,

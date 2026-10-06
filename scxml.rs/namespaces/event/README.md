@@ -14,12 +14,12 @@ other `namespaces/<name>` URI.
 | Path | What |
 |---|---|
 | `package/event.xsd` | the schema, for readers and tools that resolve a namespace to a schema (it declares the two attributes as strings; the validator does not load it) |
-| `examples/order.scxml` | a machine with a file schema and JSON Pointer, and inline schemas on a `<send>`, a transition, and a `<donedata>` |
+| `examples/order.scx` | a machine with a file schema and JSON Pointer, and inline schemas on a `<send>`, a transition, and a `<donedata>` |
 | `examples/schemas/order.json` | the schema file the example references |
 
 ```sh
-scxml-cli validate namespaces/event/examples/order.scxml
-scxml-cli compile namespaces/event/examples/order.scxml --output order.scxml-ir.json
+scx validate namespaces/event/examples/order.scx
+scx compile namespaces/event/examples/order.scx --output order.scxml-ir.json
 ```
 
 ## The attributes
@@ -141,7 +141,7 @@ of `18446744073709551616`) is read, compared, and embedded as the nearest
   digest that does not match its schema or a schema that is not canonical.
 - **Session snapshot** (`scxml.session-snapshot/v2`): each listed transition
   carries the same `event_schema` object
-  ([docs/session-snapshot.md](../../docs/session-snapshot.md)); `scxml-cli
+  ([docs/session-snapshot.md](../../docs/session-snapshot.md)); `scx
   snapshot show` prints `schema sha256:<12 hex>` or `schemaexpr \`…\``. A
   snapshot evaluates no expression, so an `event:schemaexpr` appears
   unevaluated. The snapshot lists only transitions; the schemas of
@@ -165,7 +165,7 @@ of `18446744073709551616`) is read, compared, and embedded as the nearest
 - `SCXML091`: an unsupported `$schema` dialect.
 - `SCXML092`: a reference the compiler cannot keep.
 
-An `event` attribute is never `SCXML068`. `scxml-cli --explain SCXML085`
+An `event` attribute is never `SCXML068`. `scx --explain SCXML085`
 through `--explain SCXML092` give each rule with an example.
 
 ## Statements

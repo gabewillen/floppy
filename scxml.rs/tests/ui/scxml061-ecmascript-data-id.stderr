@@ -1,5 +1,5 @@
 warning[SCXML061]: `retry-count` is not an ECMAScript identifier: it contains `-`
-  --> tests/ui/scxml061-ecmascript-data-id.scxml:3:15
+  --> tests/ui/scxml061-ecmascript-data-id.scx:3:15
    |
  3 |     <data id="retry-count" expr="0"/>
    |               ^^^^^^^^^^^ `-` cannot appear in an identifier
@@ -24,7 +24,7 @@ help: rename the variable to `retryCount` here and in 4 references
    |                                             ~~~~~~~~~~
 
 warning[SCXML061]: `class` is an ECMAScript reserved word, not an identifier
- --> tests/ui/scxml061-ecmascript-data-id.scxml:4:15
+ --> tests/ui/scxml061-ecmascript-data-id.scx:4:15
   |
 4 |     <data id="class" expr="'gold'"/>
   |               ^^^^^ reserved word
@@ -39,7 +39,7 @@ help: rename the variable to `classValue`
   |               ~~~~~~~~~~
 
 warning[SCXML061]: `max.tries` is not an ECMAScript identifier: it contains `.`
- --> tests/ui/scxml061-ecmascript-data-id.scxml:5:15
+ --> tests/ui/scxml061-ecmascript-data-id.scx:5:15
   |
 5 |     <data id="max.tries" expr="3"/>
   |               ^^^^^^^^^ `.` cannot appear in an identifier
@@ -54,7 +54,7 @@ help: rename the variable to `maxTries`
   |               ~~~~~~~~
 
 error[SCXML073]: `<data id>` `_total` begins with `_`
- --> tests/ui/scxml061-ecmascript-data-id.scxml:6:15
+ --> tests/ui/scxml061-ecmascript-data-id.scx:6:15
   |
 6 |     <data id="_total" expr="0"/>
   |               ^^^^^^ reserved for system variables
@@ -68,7 +68,7 @@ help: rename the declaration to `total`
   |               ~~~~~
 
 warning[SCXML039]: `location` is not an assignable ecmascript location: `retry-count` is not an ECMAScript variable name
-  --> tests/ui/scxml061-ecmascript-data-id.scxml:10:25
+  --> tests/ui/scxml061-ecmascript-data-id.scx:10:25
    |
  3 |     <data id="retry-count" expr="0"/>
    |               ----------- declared here with a name that is not a variable name
@@ -83,4 +83,4 @@ warning[SCXML039]: `location` is not an assignable ecmascript location: `retry-c
 
 diagnostic summary: 1 error(s), 4 warning(s), 0 note(s), 5 total
 Some diagnostics have detailed explanations: SCXML039, SCXML061, SCXML073.
-For more information about a diagnostic, try `scxml-cli --explain SCXML039`.
+For more information about a diagnostic, try `scx --explain SCXML039`.

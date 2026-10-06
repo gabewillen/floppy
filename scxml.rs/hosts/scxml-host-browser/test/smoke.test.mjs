@@ -4,7 +4,7 @@
 // loads; only the core-module loader differs (file reads instead of fetch).
 //
 // Inputs (set by scripts/verify-browser-host.sh):
-//   SCXML_BROWSER_IR   lowered IR of tests/fixtures/representative-machine.scxml
+//   SCXML_BROWSER_IR   lowered IR of tests/fixtures/representative-machine.scx
 //                      compiled by the CLI.
 // The expected trace and the ordered data-model calls come from the shared
 // fixture tests/fixtures/representative-machine.trace.json, which the
@@ -49,7 +49,7 @@ const fixture = JSON.parse(
 const irPath = process.env.SCXML_BROWSER_IR;
 assert.ok(
   irPath,
-  'SCXML_BROWSER_IR must name the CLI-compiled lowered IR of tests/fixtures/representative-machine.scxml; ' +
+  'SCXML_BROWSER_IR must name the CLI-compiled lowered IR of tests/fixtures/representative-machine.scx; ' +
     'run `sh scripts/verify-browser-host.sh` from the repository root (README.md, "Tests")',
 );
 const ir = new Uint8Array(await readFile(irPath));
@@ -212,8 +212,8 @@ test('data-model component failures surface as typed host errors, never raw trap
 
 test('in-browser compilation emits the same IR bytes as the CLI', async () => {
   const compiler = await createCompiler({ loadCoreModule });
-  const source = await readFile(join(workspace, 'tests/fixtures/representative-machine.scxml'), 'utf8');
-  const result = await compiler.compile(source, { sourceName: 'representative-machine.scxml' });
+  const source = await readFile(join(workspace, 'tests/fixtures/representative-machine.scx'), 'utf8');
+  const result = await compiler.compile(source, { sourceName: 'representative-machine.scx' });
   assert.equal(result.status, 'emitted');
   assert.equal(sha256(result.ir), sha256(ir));
 

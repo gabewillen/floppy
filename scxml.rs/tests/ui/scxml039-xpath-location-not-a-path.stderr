@@ -1,5 +1,5 @@
 warning[SCXML039]: `location` is not an assignable xpath location: `3` selects no node, so nothing can be assigned to it
- --> tests/ui/scxml039-xpath-location-not-a-path.scxml:8:47
+ --> tests/ui/scxml039-xpath-location-not-a-path.scx:8:47
   |
 8 |     <transition event="inc"><assign location="3" expr="1"/></transition>
   |                                               ^ not a location
@@ -10,5 +10,5 @@ warning[SCXML039]: `location` is not an assignable xpath location: `3` selects n
   = spec: SCXML CR 2014 §C.3 The XPath Data Model
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML039`.
-validated tests/ui/scxml039-xpath-location-not-a-path.scxml
+For more information about this diagnostic, try `scx --explain SCXML039`.
+validated tests/ui/scxml039-xpath-location-not-a-path.scx

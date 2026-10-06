@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.2.3]: `<final>` cannot contain character data
- --> tests/ui/xsd-character-data-ogham-space-mark-lax-content.scxml:5:61
+ --> tests/ui/xsd-character-data-ogham-space-mark-lax-content.scx:5:61
   |
 5 |       <final xmlns="http://www.w3.org/2005/07/scxml" id="q">&#x1680;</final>
   |        -----                                                ^^^^^^^^ unexpected text
@@ -15,4 +15,4 @@ help: remove the stray text
 5 +       <final xmlns="http://www.w3.org/2005/07/scxml" id="q"></final>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.2.3`.
+For more information about this error, try `scx --explain XSD-cvc-complex-type.2.3`.

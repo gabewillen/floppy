@@ -1,5 +1,5 @@
 error[SCXML091]: the inline schema of `<transition>` uses an unsupported JSON Schema dialect: unsupported `$schema` `http://json-schema.org/draft-04/schema#`
- --> tests/ui/scxml091-event-schema-dialect.scxml:6:43
+ --> tests/ui/scxml091-event-schema-dialect.scx:6:43
   |
 6 |                 event:schema='{"$schema": "http://json-schema.org/draft-04/schema#", "type": "object"}'/>
   |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsupported `$schema`
@@ -9,4 +9,4 @@ error[SCXML091]: the inline schema of `<transition>` uses an unsupported JSON Sc
   = spec: JSON Schema 2020-12 Core
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML091`.
+For more information about this error, try `scx --explain SCXML091`.

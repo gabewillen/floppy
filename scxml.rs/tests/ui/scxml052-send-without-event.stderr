@@ -1,5 +1,5 @@
 error[SCXML052]: `<send>` to the SCXML event processor names no event
- --> tests/ui/scxml052-send-without-event.scxml:2:27
+ --> tests/ui/scxml052-send-without-event.scx:2:27
   |
 2 |   <state id="a"><onentry><send target="#_internal"/></onentry><transition event="go" target="f"/></state><final id="f"/>
   |                           ^^^^ neither `event` nor `eventexpr` is present
@@ -14,4 +14,4 @@ help: add the `event` to deliver
   |                            ++++++++++
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML052`.
+For more information about this error, try `scx --explain SCXML052`.

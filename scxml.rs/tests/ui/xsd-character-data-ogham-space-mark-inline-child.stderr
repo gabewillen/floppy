@@ -1,5 +1,5 @@
 error[XSD-cvc-complex-type.2.3]: `<state>` cannot contain character data
- --> tests/ui/xsd-character-data-ogham-space-mark-inline-child.scxml:7:25
+ --> tests/ui/xsd-character-data-ogham-space-mark-inline-child.scx:7:25
   |
 7 |           <state id="c">&#x1680;<transition event="go" target="d"/></state>
   |            -----        ^^^^^^^^ unexpected text
@@ -15,4 +15,4 @@ help: remove the stray text
 7 +           <state id="c"><transition event="go" target="d"/></state>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-complex-type.2.3`.
+For more information about this error, try `scx --explain XSD-cvc-complex-type.2.3`.

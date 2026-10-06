@@ -1,5 +1,5 @@
 error[SCXML003]: identifier `…` is not an XML NCName
- --> tests/ui/scxml003-ecmascript-data-id-placeholder.scxml:3:15
+ --> tests/ui/scxml003-ecmascript-data-id-placeholder.scx:3:15
   |
 3 |     <data id="…" expr="1"/>
   |               ^ invalid NCName
@@ -9,4 +9,4 @@ error[SCXML003]: identifier `…` is not an XML NCName
   = spec: SCXML 1.0 §3.14 IDs
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML003`.
+For more information about this error, try `scx --explain SCXML003`.

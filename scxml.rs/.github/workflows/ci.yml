@@ -41,6 +41,9 @@ jobs:
       - name: Install the pinned wasi-virt revision
         run: cargo install --locked --git https://github.com/bytecodealliance/WASI-Virt --rev 448f6df8f688cee5d6995e96b1ffc31f9bf00742 wasi-virt
       - run: cargo fmt --all --check
+      # `scx` embeds the release session components (crates/scxml-cli/build.rs
+      # reads target/wasm-artifacts/release), so they are built first.
+      - run: sh scripts/verify-wasm-capabilities.sh
       - run: cargo check --workspace --all-targets --locked
       - run: cargo test --workspace --all-targets --locked
       - run: cargo test --workspace --doc --locked
@@ -67,7 +70,7 @@ jobs:
       - name: Check published format-version and conformance-digest drift
         run: cargo test -p scxml-conformance --test published_contract_docs --locked
       # The path users run: every applicable official IRP document compiles
-      # through `scxml-cli compile`, whose validator links the ECMAScript and
+      # through `scx compile`, whose validator links the ECMAScript and
       # XPath expression checkers the conformance runner's compiler does not
       # (docs/conformance.md, "Validator-linked compile gate").
       - name: Compile every applicable official IRP case through the validator-linked CLI
@@ -122,6 +125,8 @@ jobs:
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/irp-components
       RELEASE: ${{ github.workspace }}/target/irp-components/wasm-artifacts/irp-components
+      # The release `scx` embeds (crates/scxml-cli/build.rs).
+      SCXML_WASM_ARTIFACTS_DIR: ${{ github.workspace }}/target/irp-components/wasm-artifacts/irp-components
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -170,9 +175,8 @@ jobs:
         run: |
           cargo build --release --locked -p scxml-cli --features wasmtime
           for model in ecmascript xpath; do
-            "$CARGO_TARGET_DIR/release/scxml-cli" conformance run \
+            "$CARGO_TARGET_DIR/release/scx" conformance run \
               --corpus "tests/conformance/w3c-irp/prepared/$model" \
-              --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
               --canonical-baseline "tests/conformance/w3c-irp/baselines/$model.scxml-report.json"
           done
       # Each repository namespace's own suite (docs/conformance.md,
@@ -187,7 +191,7 @@ jobs:
             packages=''
             if [ -n "${suite#*:}" ]; then packages=$EXAMPLE_PACKAGE; fi
             for model in ecmascript xpath; do
-              "$CARGO_TARGET_DIR/release/scxml-cli" conformance run \
+              "$CARGO_TARGET_DIR/release/scx" conformance run \
                 --corpus "namespaces/$name/irp/prepared/$model" \
                 --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" $packages \
                 --canonical-baseline "namespaces/$name/irp/baselines/$model.scxml-report.json"
@@ -199,15 +203,14 @@ jobs:
       - name: Prove session-snapshot collection over both corpora
         run: |
           for model in ecmascript xpath; do
-            "$CARGO_TARGET_DIR/release/scxml-cli" conformance run \
+            "$CARGO_TARGET_DIR/release/scx" conformance run \
               --corpus "tests/conformance/w3c-irp/prepared/$model" \
-              --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
               --snapshot-every-checkpoint \
               --canonical-baseline "tests/conformance/w3c-irp/baselines/$model.scxml-report.json"
           done
-      # `scxml-cli snapshot run` end to end: the shared fixtures' checkpoint
+      # `scx snapshot run` end to end: the shared fixtures' checkpoint
       # documents, every failure exit, and the snapshot proof's gates; and
-      # `scxml-cli run` live sessions (records, exits, signals, replay).
+      # `scx run` live sessions (records, exits, signals, replay).
       - name: Run the snapshot and live CLI end to end through the components
         run: |
           SCXML_COMPONENTS_DIR="$RELEASE" SCXML_COMPONENTS_MANIFEST_SHA256="$MANIFEST_SHA256" \

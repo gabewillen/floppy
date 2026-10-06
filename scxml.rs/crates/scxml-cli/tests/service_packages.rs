@@ -23,7 +23,7 @@ fn workspace() -> PathBuf {
 }
 
 fn cli(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_scxml-cli"))
+    Command::new(env!("CARGO_BIN_EXE_scx"))
         .args(args)
         .current_dir(workspace())
         .output()
@@ -44,7 +44,7 @@ fn document(dir: &Path) -> PathBuf {
 
 fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "scxml-cli-service-packages-{}-{name}",
+        "scx-service-packages-{}-{name}",
         std::process::id()
     ));
     std::fs::create_dir_all(&dir).expect("the scratch directory is created");

@@ -1,5 +1,5 @@
 error[SCXML022]: initial transition target `q` is not a descendant of its parent
-  --> tests/ui/scxml022-initial-escapes-parent.scxml:4:27
+  --> tests/ui/scxml022-initial-escapes-parent.scx:4:27
    |
  4 |       <transition target="q"/>
    |                           ^ target is outside the permitted subtree
@@ -12,4 +12,4 @@ error[SCXML022]: initial transition target `q` is not a descendant of its parent
    = spec: SCXML 1.0 §3.6 <initial>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML022`.
+For more information about this error, try `scx --explain SCXML022`.

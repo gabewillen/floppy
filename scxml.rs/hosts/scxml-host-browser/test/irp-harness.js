@@ -1,5 +1,5 @@
 // Runs one prepared official W3C IRP case through the browser host, the way
-// the Wasmtime session host runs it for `scxml-cli conformance run`
+// the Wasmtime session host runs it for `scx conformance run`
 // (crates/scxml-conformance/src/wasm.rs): compile the prepared document,
 // link the data model the document names, start, deliver the case's
 // scripted events, then deliver every delayed send and cross-session

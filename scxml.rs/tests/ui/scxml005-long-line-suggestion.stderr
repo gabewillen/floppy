@@ -1,5 +1,5 @@
 error[SCXML005]: transition target `runing` does not exist
- --> tests/ui/scxml005-long-line-suggestion.scxml:2:268
+ --> tests/ui/scxml005-long-line-suggestion.scx:2:268
   |
 2 | ...n event="start" target="runing"/><transition event="st...
   |                            ^^^^^^ unknown target identifier
@@ -15,4 +15,4 @@ help: a state with a similar name exists: `running`
   |                            ~~~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML005`.
+For more information about this error, try `scx --explain SCXML005`.

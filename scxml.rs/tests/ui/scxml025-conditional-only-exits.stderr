@@ -1,5 +1,5 @@
 warning[SCXML025]: state `a` has only conditional eventless exits
- --> tests/ui/scxml025-conditional-only-exits.scxml:2:4
+ --> tests/ui/scxml025-conditional-only-exits.scx:2:4
   |
 2 |   <state id="a">
   |    ^^^^^ the state may remain active when every exit condition is false
@@ -9,5 +9,5 @@ warning[SCXML025]: state `a` has only conditional eventless exits
   = spec: SCXML 1.0 §3.5 <transition>
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML025`.
-validated tests/ui/scxml025-conditional-only-exits.scxml
+For more information about this diagnostic, try `scx --explain SCXML025`.
+validated tests/ui/scxml025-conditional-only-exits.scx

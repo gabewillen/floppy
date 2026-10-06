@@ -1,5 +1,5 @@
 warning[SCXML072]: transition target `l1` is listed twice
- --> tests/ui/scxml030-nested-and-repeated-targets.scxml:5:46
+ --> tests/ui/scxml030-nested-and-repeated-targets.scx:5:46
   |
 5 |         <transition event="again" target="l1 l1"/>
   |                                           -- ^^ listed again here
@@ -16,7 +16,7 @@ help: remove the repeated `l1`
 5 +         <transition event="again" target="l1"/>
 
 error[SCXML030]: transition targets `left` and `l1` are nested: `left` contains `l1`
- --> tests/ui/scxml030-nested-and-repeated-targets.scxml:6:47
+ --> tests/ui/scxml030-nested-and-repeated-targets.scx:6:47
   |
 6 |         <transition event="nest" target="left l1"/>
   |                                          ---- ^^ nested with `left`
@@ -38,4 +38,4 @@ help: remove the target `left`, keeping `l1`
 
 diagnostic summary: 1 error(s), 1 warning(s), 0 note(s), 2 total
 Some diagnostics have detailed explanations: SCXML030, SCXML072.
-For more information about a diagnostic, try `scxml-cli --explain SCXML030`.
+For more information about a diagnostic, try `scx --explain SCXML030`.

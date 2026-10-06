@@ -1,5 +1,5 @@
 warning[SCXML057]: `_event.data.ok` is one element name that contains dots, not a member access
- --> tests/ui/scxml057-xpath-event-member-access.scxml:8:34
+ --> tests/ui/scxml057-xpath-event-member-access.scx:8:34
   |
 8 |     <transition event="go" cond="_event.data.ok" target="b"/>
   |                                  ^^^^^^^^^^^^^^ relative path from `<datamodel>`
@@ -14,5 +14,5 @@ help: use `$_event/data/ok`
   |                                  ~~~~~~~~~~~~~~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML057`.
-validated tests/ui/scxml057-xpath-event-member-access.scxml
+For more information about this diagnostic, try `scx --explain SCXML057`.
+validated tests/ui/scxml057-xpath-event-member-access.scx

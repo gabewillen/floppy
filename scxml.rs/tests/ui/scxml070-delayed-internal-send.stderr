@@ -1,5 +1,5 @@
 error[SCXML070]: a `<send>` to `#_internal` cannot use `delay`
- --> tests/ui/scxml070-delayed-internal-send.scxml:4:46
+ --> tests/ui/scxml070-delayed-internal-send.scx:4:46
   |
 4 |       <send event="tick" target="#_internal" delay="1s"/>
   |                          ------------------- ^^^^^^^^^^ a delay is not allowed here
@@ -15,4 +15,4 @@ help: remove `delay`
 4 +       <send event="tick" target="#_internal"/>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML070`.
+For more information about this error, try `scx --explain SCXML070`.

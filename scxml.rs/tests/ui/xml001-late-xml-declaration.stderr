@@ -1,5 +1,5 @@
 error[XML001]: XML declaration is not at the start of the document
- --> tests/ui/xml001-late-xml-declaration.scxml:3:1
+ --> tests/ui/xml001-late-xml-declaration.scx:3:1
   |
 3 | <?xml version="1.0"?>
   | ^^^^^^^^^^^^^^^^^^^^^ `<?xml …?>` is only allowed as the very first bytes of the document
@@ -13,4 +13,4 @@ help: remove the whitespace before the XML declaration
 2 - 
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain XML001`.
+For more information about this error, try `scx --explain XML001`.

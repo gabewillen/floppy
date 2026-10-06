@@ -75,7 +75,7 @@ disagree are in [spec-errata.md](spec-errata.md).
   that evidence.
 - The machine component embeds no tables: it loads compiler-produced IR
   through `ir-source`. `scripts/verify-wasm-capabilities.sh` packages the
-  representative fixture `tests/fixtures/representative-machine.scxml`
+  representative fixture `tests/fixtures/representative-machine.scx`
   (compound, parallel, deep history, internal raise, ECMAScript `In()`
   conditions and log expressions) through the CLI, checks byte determinism,
   `wasm-tools validate`, and the import/export allowlist, and the Wasmtime host
@@ -244,12 +244,12 @@ disagree are in [spec-errata.md](spec-errata.md).
   beyond limits the embedder set fails as that `<invoke>`'s `error.execution`,
   as in the browser host. One cooperative executor (`scxml-scheduler`) runs the
   root session and every session it invoked, for batch and live runs alike. Live
-  sessions (`SessionHost::open`, `scxml-cli run`) report a finished root's
+  sessions (`SessionHost::open`, `scx run`) report a finished root's
   completion with the evaluated `<donedata>` of its top-level final state
   (`SessionOutput::Done`, the CLI's `done` record; SCXML 5.5: the processor
   "SHOULD return the data to the environment in an implementation-dependent
   manner"), and reach the network only through a configured `LiveHttp`
-  (`scxml-cli run --http-allow`/`--http-listen`), which `--record` and
+  (`scx run --http-allow`/`--http-listen`), which `--record` and
   `--replay` cover; outbound requests carry no W3C trace headers, and the built-in
   listener frames bodies by `Content-Length` only (no chunked requests, one
   request per connection); the CLI accepts no trace carrier on its inputs and
@@ -347,7 +347,7 @@ In detail:
   outbound HTTP: every request is refused the same way in both), and carry no
   W3C trace headers. A slow request belongs in an invoked service, whose
   `fetch` suspends only its own task, never the session.
-- The BasicHTTP network of live sessions (`LiveHttp`, `scxml-cli run
+- The BasicHTTP network of live sessions (`LiveHttp`, `scx run
   --http-allow`/`--http-listen`): outbound requests carry no W3C trace headers (so `_event.raw` at a
   receiver never depends on telemetry) and their response bodies are never
   read; the built-in listener accepts only `Content-Length`-framed bodies

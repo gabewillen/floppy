@@ -1,6 +1,6 @@
 //! Canonical long-form documentation for every stable diagnostic code.
 //!
-//! This table is the single source of truth for `scxml-cli --explain CODE`,
+//! This table is the single source of truth for `scx --explain CODE`,
 //! the generated code table in `docs/validator-rules.md`, the SARIF
 //! `tool.driver.rules` metadata, and the default `note:`/`help:` attached by
 //! the validator's precision pass when a producing rule did not supply its
@@ -104,8 +104,8 @@ macro_rules! family {
 pub const CODES: &[CodeDoc] = &[
     doc!(
         "COMP001", "error", "internal", "the validated document could not be lowered to Machine IR",
-        why: "the compiler lowers only constructs whose semantics the engine implements and fails closed instead of dropping anything; `validate` reports every structural rejection lowering makes (with its own code, span, and fix), so after a clean validation only a bound measured on the lowered machine, the 16 MiB encoded Machine IR, remains. Machine IR bounds apply to wasm builds only (the shipped compiler component); a native `scxml-cli compile` lowers a document of any size, and only the `u32` index width of the IR format limits it",
-        help: "reduce the machine below the named bound, for example by splitting it into machines it invokes, or compile with the native `scxml-cli`; a document that validates cleanly but fails with any other `COMP001` is a validator gap worth reporting",
+        why: "the compiler lowers only constructs whose semantics the engine implements and fails closed instead of dropping anything; `validate` reports every structural rejection lowering makes (with its own code, span, and fix), so after a clean validation only a bound measured on the lowered machine, the 16 MiB encoded Machine IR, remains. Machine IR bounds apply to wasm builds only (the shipped compiler component); a native `scx compile` lowers a document of any size, and only the `u32` index width of the IR format limits it",
+        help: "reduce the machine below the named bound, for example by splitting it into machines it invokes, or compile with the native `scx`; a document that validates cleanly but fails with any other `COMP001` is a validator gap worth reporting",
         bad: "a validator-clean document with tens of thousands of states whose encoded Machine IR exceeds 16 MiB",
         fixed: "the same behavior split across a parent machine and child machines it `<invoke>`s, each under the bound",
         checked: false,
@@ -374,7 +374,7 @@ pub const CODES: &[CodeDoc] = &[
     ),
     doc!(
         "SCXML027", "error", "semantic", "inline `<scxml>` documents nest deeper than the validation budget",
-        why: "each `<invoke><content><scxml>` is validated as an independent machine; the nesting depth is bounded (64 roots) so hostile input cannot exhaust the validator. The bound applies to wasm builds only (the shipped validator and compiler components); the native `scxml-cli` has no such bound and never reports this code",
+        why: "each `<invoke><content><scxml>` is validated as an independent machine; the nesting depth is bounded (64 roots) so hostile input cannot exhaust the validator. The bound applies to wasm builds only (the shipped validator and compiler components); the native `scx` has no such bound and never reports this code",
         help: "reduce inline nesting or invoke deeper machines by `src` as separately validated documents",
         bad: "<scxml …><state><invoke><content><scxml …> … (65 levels) …",
         fixed: "<invoke src=\"child.scxml\"/>",
@@ -482,7 +482,7 @@ pub const CODES: &[CodeDoc] = &[
     ),
     doc!(
         "SCXML040", "error", "semantic", "an expression exceeds the data model's size or nesting bound",
-        why: "the data-model syntax capability declines fragments beyond its size or nesting bound (the ECMAScript provider: 16 KiB expressions, 64 KiB scripts, at most 128 structural nesting units, where each open bracket costs 8, so 16 brackets, 15 inside a value expression) instead of risking its parser stack; the data model applies the same bound when it evaluates the fragment, so the fragment would be rejected at run time and `compile` refuses the document. The size bounds apply to wasm builds only (the shipped validator and data-model components; the native `scxml-cli` checks fragments of any size); the nesting bound guards the parser's native stack and applies to every build",
+        why: "the data-model syntax capability declines fragments beyond its size or nesting bound (the ECMAScript provider: 16 KiB expressions, 64 KiB scripts, at most 128 structural nesting units, where each open bracket costs 8, so 16 brackets, 15 inside a value expression) instead of risking its parser stack; the data model applies the same bound when it evaluates the fragment, so the fragment would be rejected at run time and `compile` refuses the document. The size bounds apply to wasm builds only (the shipped validator and data-model components; the native `scx` checks fragments of any size); the nesting bound guards the parser's native stack and applies to every build",
         help: "split the expression or script into smaller parts, assigning intermediate results to variables (`<data>` or `<assign>`)",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\"><final id=\"f\"><onentry><log expr=\"((((((((((((((((1))))))))))))))))\"/></onentry></final></scxml>",
         fixed: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\"><datamodel><data id=\"inner\" expr=\"((((((((1))))))))\"/></datamodel><final id=\"f\"><onentry><log expr=\"((((((((inner))))))))\"/></onentry></final></scxml>",
@@ -491,7 +491,7 @@ pub const CODES: &[CodeDoc] = &[
     ),
     doc!(
         "SCXML041", "error", "semantic", "a document has too many expressions for bounded syntax checking",
-        why: "expression checking is bounded to 16,384 fragments and 4 MiB of expression text per document; beyond that the remaining expressions are unchecked, so the validator fails closed. The bound applies to wasm builds only (the shipped validator and compiler components); the native `scxml-cli` has no such bound and never reports this code",
+        why: "expression checking is bounded to 16,384 fragments and 4 MiB of expression text per document; beyond that the remaining expressions are unchecked, so the validator fails closed. The bound applies to wasm builds only (the shipped validator and compiler components); the native `scx` has no such bound and never reports this code",
         help: "split the document into smaller machines",
         bad: "<scxml …> … more than 16,384 expressions … </scxml>",
         fixed: "several smaller documents",
@@ -689,7 +689,7 @@ pub const CODES: &[CodeDoc] = &[
     ),
     doc!(
         "SCXML069", "error", "semantic", "the document exceeds a Machine IR bound",
-        why: "Machine IR has fixed bounds so lowering and execution stay bounded: 65 nested states, 64 levels of `<if>`/`<foreach>` nesting, 32 levels of inline XML, 10,000 child nodes, attributes, targets, event descriptors, names, branches, or data declarations per element or scope, 100,000 targets across a machine's multi-target sets, and 1 MiB per string; they are far above any hand-written machine, and `compile` rejects a document over them. These bounds apply to wasm builds only (the shipped validator and compiler components); the native `scxml-cli` has no such bound and never reports this code",
+        why: "Machine IR has fixed bounds so lowering and execution stay bounded: 65 nested states, 64 levels of `<if>`/`<foreach>` nesting, 32 levels of inline XML, 10,000 child nodes, attributes, targets, event descriptors, names, branches, or data declarations per element or scope, 100,000 targets across a machine's multi-target sets, and 1 MiB per string; they are far above any hand-written machine, and `compile` rejects a document over them. These bounds apply to wasm builds only (the shipped validator and compiler components); the native `scx` has no such bound and never reports this code",
         help: "flatten the structure, split large lists or scopes, move a deep or large part into a machine it invokes, or load large data with `src`",
         bad: "a `<state>` nested 66 states deep (65 is the most the compiler lowers)",
         fixed: "the same behavior with the deep part in a child machine the state `<invoke>`s",
@@ -914,7 +914,7 @@ pub const CODES: &[CodeDoc] = &[
     ),
     doc!(
         "SCXML094", "warning", "package", "no service package binds a literal `<invoke type>`",
-        why: "an invoked service runs only in the service component its host binds to the exact type URI; the validator was given the service packages the run binds, and none declares this URI. Invocation is a runtime action (SCXML 6.4): the document compiles and runs, and this `<invoke>` raises `error.execution` when it runs unless the running host binds the type. Reported only when the validator is given its service packages (`scxml-cli validate` always is: none by default)",
+        why: "an invoked service runs only in the service component its host binds to the exact type URI; the validator was given the service packages the run binds, and none declares this URI. Invocation is a runtime action (SCXML 6.4): the document compiles and runs, and this `<invoke>` raises `error.execution` when it runs unless the running host binds the type. Reported only when the validator is given its service packages (`scx validate` always is: none by default)",
         help: "bind the service with its package manifest (`--service-package MANIFEST.json`), or correct the URI to one a bound package declares",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"><invoke type=\"https://stateforward.org/scxml/services/echo\"/></state></scxml>",
         fixed: "the same document validated with `--service-package components/scxml-service-example/package/echo.service.json`",
@@ -932,7 +932,7 @@ pub const CODES: &[CodeDoc] = &[
     ),
     doc!(
         "XML002", "error", "syntax", "the document exceeds a configured XML resource limit",
-        why: "the validator bounds source bytes (8 MiB), nesting depth (256), parser events, nodes, and attributes so untrusted input cannot exhaust memory or time; XML 1.0 sets no such limits, so these are validator limits documented in docs/validator-rules.md. The size and count limits apply to wasm builds only (the shipped validator component); the native `scxml-cli` bounds only the nesting depth, which also guards its stack, and entity expansion",
+        why: "the validator bounds source bytes (8 MiB), nesting depth (256), parser events, nodes, and attributes so untrusted input cannot exhaust memory or time; XML 1.0 sets no such limits, so these are validator limits documented in docs/validator-rules.md. The size and count limits apply to wasm builds only (the shipped validator component); the native `scx` bounds only the nesting depth, which also guards its stack, and entity expansion",
         help: "split the machine into smaller documents, reduce nesting, or validate with larger explicit limits",
         bad: "<a><a><a> … nested deeper than 256 elements … </a></a></a>",
         fixed: "a document within the configured depth and size limits",
@@ -980,7 +980,7 @@ pub const CODES: &[CodeDoc] = &[
         why: "under the `strict` policy every non-built-in namespace must be structurally validated; the SCXML namespace uses the bundled W3C schema by default, extension namespaces need an explicit schema",
         help: "register the namespace's XSD with `--schema URI=PATH`, correct the namespace URI, or use `--policy lax`",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" xmlns:x=\"urn:example:x\" version=\"1.0\"><final id=\"f\"><onentry><x:act/></onentry></final></scxml>",
-        fixed: "scxml-cli validate machine.scxml --schema urn:example:x=x.xsd",
+        fixed: "scx validate machine.scxml --schema urn:example:x=x.xsd",
         checked: false,
         spec: "SCXML 1.0 §4.10 Extensibility of Executable Content", url: "https://www.w3.org/TR/scxml/#extensibility",
     ),

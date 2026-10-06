@@ -1,5 +1,5 @@
 warning[SCXML056]: `$cuont` is not a declared XPath variable
- --> tests/ui/scxml056-xpath-undeclared-variable-typo.scxml:8:34
+ --> tests/ui/scxml056-xpath-undeclared-variable-typo.scx:8:34
   |
 8 |     <transition event="go" cond="$cuont &gt; 3" target="b"/>
   |                                  ^^^^^^ undeclared variable
@@ -15,5 +15,5 @@ help: use the declared variable `$count`
   |                                   ~~~~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML056`.
-validated tests/ui/scxml056-xpath-undeclared-variable-typo.scxml
+For more information about this diagnostic, try `scx --explain SCXML056`.
+validated tests/ui/scxml056-xpath-undeclared-variable-typo.scx

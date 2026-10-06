@@ -1,5 +1,5 @@
 error[SCXML044]: unknown data model `ecmascipt`
- --> tests/ui/scxml044-unknown-datamodel.scxml:1:85
+ --> tests/ui/scxml044-unknown-datamodel.scx:1:85
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="ecmascipt">
   |                                                                                     ^^^^^^^^^ not a data model this validator recognizes
@@ -13,4 +13,4 @@ help: use the `ecmascript` data model
   |                                                                                     ~~~~~~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML044`.
+For more information about this error, try `scx --explain SCXML044`.

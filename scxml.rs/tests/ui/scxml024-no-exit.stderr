@@ -1,5 +1,5 @@
 warning[SCXML024]: state `stuck` has no outgoing transition and may never exit
- --> tests/ui/scxml024-no-exit.scxml:2:4
+ --> tests/ui/scxml024-no-exit.scx:2:4
   |
 2 |   <state id="stuck"/>
   |    ^^^^^ non-final atomic state has no exit
@@ -9,5 +9,5 @@ warning[SCXML024]: state `stuck` has no outgoing transition and may never exit
   = spec: SCXML 1.0 §3.3 <state>
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML024`.
-validated tests/ui/scxml024-no-exit.scxml
+For more information about this diagnostic, try `scx --explain SCXML024`.
+validated tests/ui/scxml024-no-exit.scx

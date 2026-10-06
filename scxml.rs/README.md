@@ -97,47 +97,45 @@ cargo install --locked wasm-tools@1.244.0
 cargo install --locked --git https://github.com/bytecodealliance/WASI-Virt --rev 448f6df8f688cee5d6995e96b1ffc31f9bf00742 wasi-virt
 ```
 
+Build and verify the release session components first: `scx` embeds them
+(its build reads `target/wasm-artifacts/release`, checks each component
+against the manifest, and fails rather than building without them). The
+example extension component is built too, for the namespace examples:
+
+```console
+sh scripts/verify-wasm-capabilities.sh \
+  scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
+  scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_extension_example \
+  scxml_compiler scxml_machine
+RELEASE="$PWD/target/wasm-artifacts/release"
+MANIFEST_SHA256=$( (sha256sum "$RELEASE/manifest.tsv" 2>/dev/null \
+  || shasum -a 256 "$RELEASE/manifest.tsv") | cut -d ' ' -f 1)
+scx() { cargo run --release --locked -p scxml-cli -- "$@"; }
+```
+
 Validate and compile a small document. Validation runs XML well-formedness,
 the bundled official W3C SCXML 1.0 XSD, and the semantic rules:
 
 ```console
 mkdir -p target
-cat > target/hello.scxml <<'EOF'
+cat > target/hello.scx <<'EOF'
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="ready">
   <state id="ready"><transition event="finish" target="done"/></state>
   <final id="done"/>
 </scxml>
 EOF
-cargo run -p scxml-cli -- validate target/hello.scxml
-cargo run -p scxml-cli -- compile target/hello.scxml --output target/hello.scxml-ir.json
+scx validate target/hello.scx
+scx compile target/hello.scx --output target/hello.scxml-ir.json
 ```
 
-Build and verify the release components, and take the digest of their
-manifest (`sha256sum`, or `shasum` where it is missing):
+Run the document as a live session: events go in as newline-delimited JSON,
+and one JSON record per line comes out. `--record` writes a log that
+`--replay` reproduces record for record:
 
 ```console
-RELEASE="$PWD/target/wasm-artifacts/quickstart"
-sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
-  scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
-  scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_extension_example \
-  scxml_compiler scxml_machine
-MANIFEST_SHA256=$( (sha256sum "$RELEASE/manifest.tsv" 2>/dev/null \
-  || shasum -a 256 "$RELEASE/manifest.tsv") | cut -d ' ' -f 1)
-```
-
-Commands that execute a document need the CLI built with the `wasmtime`
-feature; the `scxml` shell function below runs it. Run the document as a live
-session: events go in as newline-delimited JSON, and one JSON record per line
-comes out. `--record` writes a log that `--replay` reproduces record for
-record:
-
-```console
-scxml() { cargo run --release --locked -p scxml-cli --features wasmtime -- "$@"; }
-printf '%s\n' '{"name":"finish"}' | scxml run target/hello.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+printf '%s\n' '{"name":"finish"}' | scx run target/hello.scx \
   --record target/hello.live.ndjson
-scxml run target/hello.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+scx run target/hello.scx \
   --replay target/hello.live.ndjson
 ```
 
@@ -145,18 +143,16 @@ Take a session snapshot at every checkpoint and diff the first and last
 (`snapshot diff` exits 1 when the documents differ, as these do):
 
 ```console
-scxml snapshot run target/hello.scxml \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+scx snapshot run target/hello.scx \
   --event finish --every --output-dir target/hello-snapshots
-scxml snapshot diff target/hello-snapshots/0000.snapshot.json target/hello-snapshots/0002.snapshot.json
+scx snapshot diff target/hello-snapshots/0000.snapshot.json target/hello-snapshots/0002.snapshot.json
 ```
 
 Run the checked-in W3C IRP corpus (offline) through the same components and
 compare it with the checked-in baseline:
 
 ```console
-scxml conformance run \
-  --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
+scx conformance run \
   --corpus tests/conformance/w3c-irp/prepared/ecmascript \
   --canonical-baseline tests/conformance/w3c-irp/baselines/ecmascript.scxml-report.json
 ```
@@ -214,13 +210,13 @@ each component, its WIT contract, and the hosts in detail.
 
 **Validator diagnostics and reporters.** Diagnostics carry stable codes,
 exact byte spans, notes, help, specification references, and rustc-style
-fixes with applicability. `scxml-cli validate` renders them like rustc, or
+fixes with applicability. `scx validate` renders them like rustc, or
 emits the canonical JSON report or SARIF 2.1.0 for editors and agent repair
-loops; `scxml-cli --explain CODE` explains any code. See
+loops; `scx --explain CODE` explains any code. See
 [validator-rules.md](docs/validator-rules.md) and
 [cli.md](docs/cli.md#validator-diagnostics-and-reporters).
 
-**Live sessions with record and replay.** `scxml-cli run` keeps one session
+**Live sessions with record and replay.** `scx run` keeps one session
 (and every session it invokes) open, processes each input event to a stable
 configuration, and fires delayed sends at their wall-clock deadline. A
 recorded run replays record for record on a logical clock. Rust embedders get the
@@ -316,10 +312,10 @@ policy is the "Versioning policy" section of
 | Document | Covers |
 | --- | --- |
 | [Architecture](docs/architecture.md) | the pipeline, every component and WIT package, data models, validation and extension packages, hosts |
-| [Command-line interface](docs/cli.md) | every `scxml-cli` command with examples, flags, and exit statuses |
+| [Command-line interface](docs/cli.md) | every `scx` command with examples, flags, and exit statuses |
 | [Conformance](docs/conformance.md) | the official IRP pipeline, preparation, oracles, baselines, and digests |
 | [Validator rules](docs/validator-rules.md) | every diagnostic code and its specification basis |
-| [Live sessions](docs/live-session.md) | `scxml-cli run`, its JSON protocol, record and replay, BasicHTTP networking, the host API |
+| [Live sessions](docs/live-session.md) | `scx run`, its JSON protocol, record and replay, BasicHTTP networking, the host API |
 | [Session snapshots](docs/session-snapshot.md) | the snapshot and diff documents and the `snapshot` commands |
 | [Executable content extensions](docs/executable-content-extensions.md) | writing an extension component, `env` slots, loading an element from a repository |
 | [`event` vocabulary](namespaces/event/README.md) | JSON Schemas for event data (`event:schema`, `event:schemaexpr`): resolution, references, snapshots, and validator codes |
@@ -412,7 +408,7 @@ that reference for that crate only.
 The vendored official W3C SCXML 1.0 XML Schema set under
 [`crates/scxml-validator-xsd/schemas/w3c-scxml-1.0`](crates/scxml-validator-xsd/schemas/w3c-scxml-1.0)
 is compiled into `scxml-validator-xsd`'s `BundledSchemaResolver`, and so into
-the validator Wasm component (`scxml_validator.wasm`) and the `scxml-cli`
+the validator Wasm component (`scxml_validator.wasm`) and the `scx`
 binary, which both use that resolver. The compiler component does not embed
 it: it validates only against schemas its caller supplies. The schema set
 is third-party material under the W3C notice reproduced in

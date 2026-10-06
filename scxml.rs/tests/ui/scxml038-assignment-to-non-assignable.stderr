@@ -1,5 +1,5 @@
 warning[SCXML038]: ecmascript syntax error in `cond`: the left side of `=` cannot be assigned to
- --> tests/ui/scxml038-assignment-to-non-assignable.scxml:8:53
+ --> tests/ui/scxml038-assignment-to-non-assignable.scx:8:53
   |
 8 |     <transition event="go" cond="typeof _event.data = 'object'" target="b"/>
   |                                  ----------------------------- while parsing this `cond`
@@ -15,5 +15,5 @@ help: compare with `===`
   |                                                     ~~~
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-assignment-to-non-assignable.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-assignment-to-non-assignable.scx

@@ -1,5 +1,5 @@
 error[SCXML006]: initial state `waiting` does not exist
- --> tests/ui/scxml003-invalid-ncname.scxml:1:71
+ --> tests/ui/scxml003-invalid-ncname.scx:1:71
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="waiting room">
   |                                                                       ^^^^^^^ one piece of the reference `waiting room`
@@ -11,7 +11,7 @@ error[SCXML006]: initial state `waiting` does not exist
   = spec: SCXML 1.0 §3.14 IDs
 
 error[SCXML006]: initial state `room` does not exist
- --> tests/ui/scxml003-invalid-ncname.scxml:1:79
+ --> tests/ui/scxml003-invalid-ncname.scx:1:79
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="waiting room">
   |                                                                               ^^^^ one piece of the reference `waiting room`
@@ -23,7 +23,7 @@ error[SCXML006]: initial state `room` does not exist
   = spec: SCXML 1.0 §3.14 IDs
 
 error[SCXML003]: identifier `waiting room` is not an XML NCName
- --> tests/ui/scxml003-invalid-ncname.scxml:2:14
+ --> tests/ui/scxml003-invalid-ncname.scx:2:14
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="waiting room">
   |                                                                       ------------ referenced here
@@ -42,4 +42,4 @@ help: rename to the valid NCName `waiting_room` and update its reference
 
 diagnostic summary: 3 error(s), 0 warning(s), 0 note(s), 3 total
 Some diagnostics have detailed explanations: SCXML003, SCXML006.
-For more information about a diagnostic, try `scxml-cli --explain SCXML003`.
+For more information about a diagnostic, try `scx --explain SCXML003`.

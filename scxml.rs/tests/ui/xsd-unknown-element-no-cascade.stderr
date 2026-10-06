@@ -1,5 +1,5 @@
 error[XSD-cvc-elt.1]: `<lgo>` is not an SCXML 1.0 element
- --> tests/ui/xsd-unknown-element-no-cascade.scxml:3:15
+ --> tests/ui/xsd-unknown-element-no-cascade.scx:3:15
   |
 3 |     <onentry><lgo expr="'hi'"/></onentry>
   |               ^^^ unknown element
@@ -13,7 +13,7 @@ help: an SCXML element with a similar name exists: `<log>`
   |               ~~~
 
 error[XSD-cvc-elt.1]: `<transiton>` is not an SCXML 1.0 element
- --> tests/ui/xsd-unknown-element-no-cascade.scxml:4:6
+ --> tests/ui/xsd-unknown-element-no-cascade.scx:4:6
   |
 4 |     <transiton event="go" target="b"/>
   |      ^^^^^^^^^ unknown element
@@ -27,4 +27,4 @@ help: an SCXML element with a similar name exists: `<transition>`
   |      ~~~~~~~~~~
 
 diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
-For more information about this error, try `scxml-cli --explain XSD-cvc-elt.1`.
+For more information about this error, try `scx --explain XSD-cvc-elt.1`.

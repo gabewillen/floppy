@@ -98,7 +98,7 @@ then:
   (`ServiceComponents::with_outbound_http`);
 - in a live session, performs it on a transport thread of its own and
   delivers the response later as an external input
-  (`LiveSession::deliver_http_responses`; in `scxml-cli run`, a `call` with
+  (`LiveSession::deliver_http_responses`; in `scx run`, a `call` with
   cause `http-response`). A logical-clock live session never moves its
   clock past a request in flight: its response is the next thing that
   happens.
@@ -161,7 +161,7 @@ Everything fails closed when the service is bound, before anything runs:
 an import without its grant (`ArtifactError::WasiResourceUngranted`), a
 grant whose interface the component does not import (`WasiGrantUndeclared`),
 a `wasi:*` import the host never links, such as `wasi:cli` or `wasi:http`
-(`WasiImportUndeclared`), and a grant outside its bounds
+(`UnknownImport`), and a grant outside its bounds
 (`WasiGrantInvalid`). Extension components get no WASI
 ([executable-content-extensions.md](executable-content-extensions.md#wasi)).
 [`components/scxml-service-files`](../components/scxml-service-files)
@@ -244,8 +244,9 @@ the variable whose value the host binds, in the host's `env` vocabulary
   origin the package declares or one a reference's value supplies entirely.
   No other invocation or element ever receives them, and they end when the
   invocation's store is dropped.
-- Every value is granted to exact package URIs (`EnvVariable`; the CLI's
-  `--env NAME@URI`): a variable granted only to other packages is treated
+- Every value is granted to exact package URIs (`EnvVariable`; the CLI
+  grants a variable to the service type URI of each `<invoke>` whose `env`
+  attribute names it): a variable granted only to other packages is treated
   exactly like one the run holds no value for.
 - A variable the run holds no value for leaves its slot absent; the service
   decides what that means. A slot the package does not declare, one slot
@@ -280,5 +281,5 @@ machine with them runs exactly as without them.
   it runs (invocation is a runtime action).
 - `SCXML083` and `SCXML084`: `env` slots (above).
 
-`compile` never rejects an unbound type. `scxml-cli --explain SCXML093` and
+`compile` never rejects an unbound type. `scx --explain SCXML093` and
 `--explain SCXML094` give each rule with an example.

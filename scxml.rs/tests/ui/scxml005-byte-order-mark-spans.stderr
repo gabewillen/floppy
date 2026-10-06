@@ -1,5 +1,5 @@
 error[SCXML006]: initial state `idel` does not exist
- --> tests/ui/scxml005-byte-order-mark-spans.scxml:1:71
+ --> tests/ui/scxml005-byte-order-mark-spans.scx:1:71
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idel">
   |                                                                       ^^^^ unknown initial state
@@ -15,7 +15,7 @@ help: a state with a similar name exists: `idle`
   |                                                                       ~~~~
 
 error[SCXML005]: transition target `dnoe` does not exist
- --> tests/ui/scxml005-byte-order-mark-spans.scxml:3:36
+ --> tests/ui/scxml005-byte-order-mark-spans.scx:3:36
   |
 3 |     <transition event="go" target="dnoe"/>
   |                                    ^^^^ unknown target identifier
@@ -33,4 +33,4 @@ help: a state with a similar name exists: `done`
 
 diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
 Some diagnostics have detailed explanations: SCXML005, SCXML006.
-For more information about a diagnostic, try `scxml-cli --explain SCXML005`.
+For more information about a diagnostic, try `scx --explain SCXML005`.

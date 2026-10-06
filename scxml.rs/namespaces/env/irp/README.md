@@ -33,7 +33,7 @@ macOS `sandbox-exec` isolation, as for the W3C corpus):
 
 ```console
 for model in ecmascript xpath; do
-  scxml-cli conformance prepare --manifest namespaces/env/irp/manifest.xml \
+  scx conformance prepare --manifest namespaces/env/irp/manifest.xml \
     --source-dir namespaces/env/irp/sources --templates tests/conformance/w3c-irp/templates \
     --datamodel "$model" --cache namespaces/env/irp \
     --output "namespaces/env/irp/prepared/$model" \
@@ -46,7 +46,7 @@ and check a run against its baseline (`$RELEASE`, `$MANIFEST_SHA256`, and
 [CONTRIBUTING.md](../../../CONTRIBUTING.md)):
 
 ```console
-scxml-cli conformance run --corpus namespaces/env/irp/prepared/xpath \
+scx conformance run --corpus namespaces/env/irp/prepared/xpath \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
   --extension-package components/scxml-extension-example/package/example.extension.json \
   --extension-component-sha256 "https://stateforward.org/scxml/example=$EXTENSION_SHA256" \

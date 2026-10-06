@@ -87,7 +87,7 @@ exact `src` attribute value, with the §5.8 rejection note:
 
 ```text
 error[COMP003]: no script package supplies `src` URI `example.wasm`
-  --> tests/fixtures/script-machine.scxml:16:20
+  --> tests/fixtures/script-machine.scx:16:20
    |
 16 |       <script src="example.wasm"/>
    |                    ^^^^^^^^^^^^ unresolved script source
@@ -97,7 +97,7 @@ error[COMP003]: no script package supplies `src` URI `example.wasm`
 ```
 
 ```sh
-scxml-cli compile machine.scxml --output machine.scxml-ir.json \
+scx compile machine.scx --output machine.scxml-ir.json \
   --script example.wasm=build/example.wasm --script-sha256 example.wasm=<hex>
 ```
 

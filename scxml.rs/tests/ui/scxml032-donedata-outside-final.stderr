@@ -1,5 +1,5 @@
 error[SCXML032]: `<donedata>` is only allowed in `<final>`, not in `<state>`
- --> tests/ui/scxml032-donedata-outside-final.scxml:3:6
+ --> tests/ui/scxml032-donedata-outside-final.scx:3:6
   |
 2 |   <state id="s">
   |    ----- parent declared here
@@ -14,4 +14,4 @@ help: remove this `<donedata>`
 3 -     <donedata/>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML032`.
+For more information about this error, try `scx --explain SCXML032`.

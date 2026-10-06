@@ -1,5 +1,5 @@
 warning[SCXML059]: the predicate `[0]` selects no node: XPath positions start at 1
- --> tests/ui/scxml059-xpath-zero-position.scxml:5:35
+ --> tests/ui/scxml059-xpath-zero-position.scx:5:35
   |
 5 |       <assign location="$list/item[0]" expr="5"/>
   |                         ------------- in this `location`
@@ -15,7 +15,7 @@ help: select the first node with `[1]`
   |                                    ~
 
 warning[SCXML059]: the predicate `[0]` selects no node: XPath positions start at 1
- --> tests/ui/scxml059-xpath-zero-position.scxml:7:44
+ --> tests/ui/scxml059-xpath-zero-position.scx:7:44
   |
 7 |     <transition event="go" cond="$list/item[0] = 1" target="b"/>
   |                                  ----------------- in this `cond`
@@ -31,5 +31,5 @@ help: select the first node with `[1]`
   |                                             ~
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML059`.
-validated tests/ui/scxml059-xpath-zero-position.scxml
+For more information about this diagnostic, try `scx --explain SCXML059`.
+validated tests/ui/scxml059-xpath-zero-position.scx

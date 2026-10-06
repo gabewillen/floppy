@@ -1,5 +1,5 @@
 error[SCXML030]: transition targets `left` and `right` cannot be active at the same time
- --> tests/ui/scxml030-removal-would-strand-a-state.scxml:3:41
+ --> tests/ui/scxml030-removal-would-strand-a-state.scx:3:41
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idle">
   |  ----- only one child of this state can be active
@@ -17,4 +17,4 @@ error[SCXML030]: transition targets `left` and `right` cannot be active at the s
   = spec: SCXML 1.0 §3.5 <transition>
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML030`.
+For more information about this error, try `scx --explain SCXML030`.

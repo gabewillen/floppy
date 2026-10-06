@@ -1,6 +1,6 @@
 //! Rustc-style UI snapshot tests for the validator.
 //!
-//! Every `tests/ui/<case>.scxml` is validated through the real CLI binary in
+//! Every `tests/ui/<case>.scx` is validated through the real CLI binary in
 //! three formats and compared byte-for-byte with its snapshots:
 //!
 //! - `<case>.stderr`: rustc-style human rendering (no color);
@@ -34,7 +34,7 @@ use std::process::{Command, Output};
 use scxml_reporting::explain;
 use scxml_reporting::{Applicability, ArtifactEnvelope, decode_canonical};
 
-/// Codes that cannot be produced by `scxml-cli validate` on a document; each
+/// Codes that cannot be produced by `scx validate` on a document; each
 /// is covered by a unit test at its producer instead.
 /// The resource bounds behind these codes apply to wasm builds only
 /// (`scxml_types::wasm_bound`); the native CLI never emits them, and
@@ -91,14 +91,12 @@ fn cases(root: &Path) -> Vec<String> {
         .expect("tests/ui must exist")
         .filter_map(|entry| {
             let path = entry.expect("tests/ui entry must be readable").path();
-            (path.extension().and_then(|extension| extension.to_str()) == Some("scxml")).then(
-                || {
-                    path.file_stem()
-                        .and_then(|stem| stem.to_str())
-                        .expect("UI case names must be UTF-8")
-                        .to_owned()
-                },
-            )
+            (path.extension().and_then(|extension| extension.to_str()) == Some("scx")).then(|| {
+                path.file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .expect("UI case names must be UTF-8")
+                    .to_owned()
+            })
         })
         .collect();
     cases.sort();
@@ -116,14 +114,14 @@ fn case_args(source: &str) -> Vec<String> {
 }
 
 fn run(root: &Path, relative: &str, args: &[String], format: &str) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_scxml-cli"))
+    Command::new(env!("CARGO_BIN_EXE_scx"))
         .current_dir(root)
         .arg("validate")
         .arg(relative)
         .args(args)
         .args(["--format", format])
         .output()
-        .expect("scxml-cli must run")
+        .expect("scx must run")
 }
 
 fn compare(path: &Path, actual: &[u8], failures: &mut Vec<String>) {
@@ -211,7 +209,7 @@ fn check_snapshots(
     args: &[String],
     failures: &mut Vec<String>,
 ) -> ArtifactEnvelope {
-    let relative = format!("tests/ui/{case}.scxml");
+    let relative = format!("tests/ui/{case}.scx");
     let human = run(root, &relative, args, "human");
     let human_again = run(root, &relative, args, "human");
     assert_eq!(
@@ -298,7 +296,7 @@ fn check_rustfix(
     let fixed_dir = root.join("target/ui-rustfix");
     fs::create_dir_all(&fixed_dir).expect("rustfix scratch directory must be creatable");
     mirror_schema_files(root, &fixed_dir);
-    let fixed_path = fixed_dir.join(format!("{case}.scxml"));
+    let fixed_path = fixed_dir.join(format!("{case}.scx"));
     fs::write(&fixed_path, &fixed_source).expect("fixed source must be writable");
     let fixed_relative = fixed_path
         .strip_prefix(root)
@@ -423,7 +421,7 @@ fn check_each_fix_round_trip(
                 let end = usize::try_from(*end).expect("span fits usize");
                 fixed.replace_range(start..end, replacement);
             }
-            let path = fixed_dir.join(format!("{case}-{diagnostic_index}-{fix_index}.scxml"));
+            let path = fixed_dir.join(format!("{case}-{diagnostic_index}-{fix_index}.scx"));
             fs::write(&path, &fixed).expect("fixed source must be writable");
             let relative = path
                 .strip_prefix(root)
@@ -508,7 +506,7 @@ fn check_generated_budget_cases(root: &Path, observed_codes: &mut BTreeSet<Strin
     let directory = root.join("target/ui-generated");
     fs::create_dir_all(&directory).expect("generated UI directory must be creatable");
     for (code, source) in generated_budget_cases() {
-        let path = directory.join(format!("{code}.scxml"));
+        let path = directory.join(format!("{code}.scx"));
         fs::write(&path, source).expect("generated UI case must be writable");
         let relative = path
             .strip_prefix(root)
@@ -571,7 +569,7 @@ fn ui_snapshots_round_trips_and_code_coverage() {
     let cases = cases(&root);
     assert!(!cases.is_empty(), "tests/ui must contain cases");
     for case in &cases {
-        let source = fs::read_to_string(root.join(format!("tests/ui/{case}.scxml")))
+        let source = fs::read_to_string(root.join(format!("tests/ui/{case}.scx")))
             .expect("UI case must be UTF-8");
         let args = case_args(&source);
         let report = check_snapshots(&root, case, &args, &mut failures);

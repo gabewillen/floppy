@@ -427,7 +427,7 @@ mod guest {
                     .with_event_schema_resources(event_schemas)
                     // The request carries no service packages, so no
                     // invoked-service type is bound: a literal one is
-                    // `SCXML094`, exactly as `scxml-cli validate` reports
+                    // `SCXML094`, exactly as `scx validate` reports
                     // it without `--service-package`.
                     .with_services(std::collections::BTreeMap::new());
                 // The linked expression-syntax capability is explicit; a

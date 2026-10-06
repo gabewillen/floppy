@@ -18,7 +18,7 @@ body:
     attributes:
       label: Surface
       options:
-        - scxml-cli
+        - scx
         - Wasmtime host (scxml-host-wasmtime)
         - Browser host (scxml-host-browser)
         - Validator diagnostics

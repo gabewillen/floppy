@@ -371,12 +371,12 @@ looks like this:
 ## CLI
 
 ```text
-scxml-cli snapshot run DOC.scxml --components DIR --components-manifest-sha256 HEX
+scx snapshot run DOC.scx [--components DIR --components-manifest-sha256 HEX]
     [--event NAME]... [--at N]... | [--every] [--exclude SECTION]...
     [--trace-context strip|preserve] [--output FILE | --output-dir DIR] [--resource URI=PATH]...
-scxml-cli snapshot show SNAP.json [--format human|json] [--color always|never]
-scxml-cli snapshot check SNAP.json [--format human|json]
-scxml-cli snapshot diff A.json B.json [--format human|json] [--include-trace-context] [--color always|never]
+scx snapshot show SNAP.json [--format human|json] [--color always|never]
+scx snapshot check SNAP.json [--format human|json]
+scx snapshot diff A.json B.json [--format human|json] [--include-trace-context] [--color always|never]
 ```
 
 - **`run`** compiles DOC and runs it through the shipped components under
@@ -395,6 +395,12 @@ scxml-cli snapshot diff A.json B.json [--format human|json] [--include-trace-con
   `application/xml`, RFC 7303 §9.1), which the ECMAScript data model reads
   as the indication SCXML B.2.1 lets it interpret `<data src>` content by;
   any other file, `.txt` included, carries none and is read by content.
+  An `<invoke src>` no `--resource` names loads from the document's own
+  directory when it is a path an `event:schema` file reference may be
+  (relative, no scheme, query, fragment, `.` or `..` segment,
+  percent-decoded, a regular file that does not resolve outside the
+  directory through a symbolic link); anything else needs `--resource`.
+  `run` loads them the same way.
 - **`show`** renders one view per session: identity, status,
   configuration, history, variables, queues, pending sends as `due +Nms`,
   transitions with their previews, and children. `--format json` re-emits the
@@ -435,7 +441,7 @@ is the document or diff bytes, unchanged.
 
 Every failure carries a closed code and an optional RFC 6901 pointer. The
 pointer is built only from fixed keys and indices, is at most 256 bytes, and
-never contains a name or payload. `scxml-cli --explain SNAP-<code>` prints
+never contains a name or payload. `scx --explain SNAP-<code>` prints
 the long form of each code.
 
 | Code | Meaning |
@@ -479,7 +485,7 @@ batch run reports each failed checkpoint snapshot beside the documents it
 took (`SessionOutcome::snapshot_failures`), and a live session's
 `snapshot` answers the failure and the session goes on. The Wasmtime host
 fails a run only when a requested checkpoint is never reached
-(`unreached`). `scxml-cli snapshot run` sorts and deduplicates
+(`unreached`). `scx snapshot run` sorts and deduplicates
 its `--at` ordinals, so their order on the command line does not matter;
 strictly ascending ordinals are a precondition only of the Wasmtime host's Rust
 `SnapshotPoints::At` API, which fails a run whose list is not.
@@ -500,7 +506,7 @@ id, state id, pointer, or code ever appears as a telemetry attribute.
 
 ## Parity fixtures
 
-The shared fixtures in `tests/fixtures/session-snapshot` (`<name>.scxml`
+The shared fixtures in `tests/fixtures/session-snapshot` (`<name>.scx`
 plus `<name>.ops.json`, with goldens in `golden/<name>/` and diffs in
 `diff/<name>/`) run on both hosts. Their scripted-input vocabulary is
 deliberately narrow: `start` first and exactly once, `send`, `advance`, and

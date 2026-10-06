@@ -1,5 +1,5 @@
 warning[SCXML038]: xpath syntax error in `cond`: `!` is not an XPath operator
- --> tests/ui/scxml038-xpath-bang-negation.scxml:8:34
+ --> tests/ui/scxml038-xpath-bang-negation.scx:8:34
   |
 8 |     <transition event="go" cond="!$done" target="b"/>
   |                                  ^ syntax error
@@ -15,5 +15,5 @@ help: negate with `not()`
   |                                  ~~~~     +
 
 diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML038`.
-validated tests/ui/scxml038-xpath-bang-negation.scxml
+For more information about this diagnostic, try `scx --explain SCXML038`.
+validated tests/ui/scxml038-xpath-bang-negation.scx

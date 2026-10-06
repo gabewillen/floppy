@@ -3,7 +3,7 @@ element `https://stateforward.org/scxml/example`
   = outbound HTTP: none
   = env slots: tokn <- API_TOKEN
 error[SCXML083]: `<example:fetch>` has no `env` slot `tokn`
-  --> tests/ui/scxml083-env-slot-typo.scxml:11:76
+  --> tests/ui/scxml083-env-slot-typo.scx:11:76
    |
 11 |       <example:fetch url="https://api.example/v1/items" location="outcome" env:tokn="API_TOKEN"/>
    |                                                                            ^^^^^^^^^^^^^^^^^^^^ not a slot its package declares
@@ -17,4 +17,4 @@ help: bind the declared slot `token`
    |                                                                                ~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
-For more information about this error, try `scxml-cli --explain SCXML083`.
+For more information about this error, try `scx --explain SCXML083`.

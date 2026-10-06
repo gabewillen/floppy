@@ -267,7 +267,7 @@ fn default_fuel_sizing_workloads() {
         ),
         (
             "representative machine start".to_owned(),
-            include_str!("../../../tests/fixtures/representative-machine.scxml").to_owned(),
+            include_str!("../../../tests/fixtures/representative-machine.scx").to_owned(),
             Vec::new(),
         ),
         (

@@ -1,5 +1,5 @@
 warning[SCXML079]: `In(r2)` passes `r2` unquoted, but the null data model takes the state ID as a quoted string
- --> tests/ui/scxml079-null-in-unquoted.scxml:3:52
+ --> tests/ui/scxml079-null-in-unquoted.scx:3:52
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="p">
   |                                                                         ---- the null data model is selected here
@@ -16,7 +16,7 @@ help: quote the state ID `'r2'`
   |                                                    ~~~~
 
 warning[SCXML079]: `In(r3)` passes `r3` unquoted, but the null data model takes the state ID as a quoted string
- --> tests/ui/scxml079-null-in-unquoted.scxml:4:52
+ --> tests/ui/scxml079-null-in-unquoted.scx:4:52
   |
 1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="p">
   |                                                                         ---- the null data model is selected here
@@ -33,5 +33,5 @@ help: use the quoted state ID `'r1'`
   |                                                    ~~~~
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
-For more information about this diagnostic, try `scxml-cli --explain SCXML079`.
-validated tests/ui/scxml079-null-in-unquoted.scxml
+For more information about this diagnostic, try `scx --explain SCXML079`.
+validated tests/ui/scxml079-null-in-unquoted.scx
