@@ -6,6 +6,27 @@ env file named by `NEMOBOT_LIVE_ENV_FILE`
 Each variable was granted only to its own package: `OPENAI_*` to `generate`,
 and `TYPESAFE_*` to `decision`.
 
+## 2026-10-06, streamed and cancellable model calls, model `gpt-6-luna`
+
+The runs used nemobot commit `847e7960` (subtree scxml.rs `14c4b8e9`):
+`services/generate` streams its Chat Completions request (`"stream": true`)
+and joins the chunks before it validates, and the host's
+`ThreadedServiceHttp` closes a cancelled invocation's connection.
+`OPENAI_*` was granted to the generate service and `TYPESAFE_*` to the
+decision service.
+
+| Test | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| `generate_service live_generate_through_an_env_file` | `gpt-6-luna` | pass | 1 | strict structured output through `generate.result`, now from a streamed reply |
+| `builder_bot live_builder_through_an_env_file` | `gpt-6-luna` (generate service), TypeSafe `system_one` (decision triage) | pass | 1 of 3 | `builder.done` on attempt 3 of 4, after 2 failures (`validate` / `SCXML070`: a `<send>` to `#_internal` with `delay`; then `simulate` / `test-failed` in `button_ends_green_early`), 0 machine fixes, 0 warnings, triage decisions `triage.repair` twice; plan `pedestrian_traffic_light` (8 states); all four of its tests passed in simulation |
+
+The builder's output was written to `target/builder-live/` and is not
+committed. Nothing in the tests was changed to make them pass. The
+cancellation itself is proven offline, against a backend that streams
+forever (`generate_service leaving_the_invoking_state_closes_the_streaming_model_call`,
+and scxml.rs's `service_invoke` and `live_run` tests); no live call was
+cancelled.
+
 ## 2026-10-06, model calls as invoked services, model `gpt-6-luna`
 
 The runs used nemobot commit `d5728e9b` (code at `813d57c8`): `generate`
