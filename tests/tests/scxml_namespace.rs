@@ -1,7 +1,7 @@
-//! Integration test of the `scxml` namespace through `scxml-cli run`: a
-//! session binds the real `nemobot_scxml` extension component (with the
-//! extension call fuel `<sx:validate>` needs), validates a broken draft
-//! with `<sx:validate>`, branches on the report, applies the
+//! Integration test of the `scxml` namespace through `scx run`: a session
+//! binds the real `nemobot_scxml` extension component (resolved from its
+//! repository URI, under scxml.rs's default extension call fuel), validates
+//! a broken draft with `<sx:validate>`, branches on the report, applies the
 //! machine-applicable fixes, and validates the fixed text again.
 
 #![allow(
@@ -13,22 +13,11 @@ mod support;
 
 use std::time::Duration;
 
-use support::{Finished, components, logs, run_document};
+use support::{Finished, logs, run_document};
 
-/// The extension call fuel the namespace documents for `<sx:validate>`.
-const EXTENSION_CALL_FUEL: &str = "1000000000";
-
-/// Runs `document` with the session components and the `scxml` package.
+/// Runs `document`; its `sx` namespace resolves from its repository URI.
 fn open(name: &str, document: &str) -> Finished {
-    let components = components();
-    let mut args = components.session_args();
-    args.extend(components.namespace("scxml"));
-    // <sx:validate> runs the whole validator in one call.
-    args.extend([
-        "--extension-call-fuel".to_owned(),
-        EXTENSION_CALL_FUEL.to_owned(),
-    ]);
-    run_document(name, document, &args, &[], Duration::from_secs(120))
+    run_document(name, document, &[], &[], Duration::from_secs(120))
 }
 
 /// The builder's validate step in miniature: the draft's only error has a
@@ -47,7 +36,7 @@ const VALIDATE_AND_REPAIR: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scx
   <transition event="error.execution" target="errored"><log label="error" expr="JSON.stringify(_event.data)"/></transition>
   <state id="check">
     <onentry>
-      <sx:validate location="report" name="draft.scxml"
+      <sx:validate location="report" name="draft.scx"
                    applyfixes="machine-applicable" fixedlocation="fixed">
         <sx:content><![CDATA[
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
@@ -79,7 +68,7 @@ const VALIDATE_AND_REPAIR: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scx
 
 #[test]
 fn a_session_validates_a_broken_draft_branches_on_the_report_and_repairs_it() {
-    let finished = open("validate.scxml", VALIDATE_AND_REPAIR);
+    let finished = open("validate.scx", VALIDATE_AND_REPAIR);
     let records = &finished.records;
     let logs = logs(records);
     let expected: Vec<(String, String)> = [
@@ -100,7 +89,7 @@ fn a_session_validates_a_broken_draft_branches_on_the_report_and_repairs_it() {
 #[test]
 fn a_malformed_element_raises_error_execution() {
     let finished = open(
-        "malformed.scxml",
+        "malformed.scx",
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:sx="https://github.com/stateforward/nemobot/namespaces/scxml@v0.1.0"
        version="1.0" datamodel="ecmascript" initial="check">

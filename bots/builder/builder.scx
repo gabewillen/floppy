@@ -1,17 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   The nemobot builder bot: builds one SCXML machine (never Rust) from a
-  natural-language specification. Invoke it as a child and talk to it with
-  events:
+  natural-language specification. Run it directly with scx run, giving it
+  an env file and the builder.request on standard input (README.md,
+  "Running"), or invoke it as a child and send it the request:
 
-    <invoke id="builder" type="scxml" src="builder.scxml"/>
+    <invoke id="builder" type="scxml" src="builder.scx"/>
     <send event="builder.request" target="#_builder"><content expr="..."/></send>
 
-  It answers its invoker (#_parent) with exactly one of builder.done
-  {scxml, schemas, tests, report} or builder.failed {reason, diagnostics},
-  then finishes. The event:schema contracts below are inline copies of
-  schemas/*.json (an invoked child is compiled at run time and gets no schema
-  files); the builder_bot test (tests/tests/builder_bot.rs) keeps them equal.
+  It ends in exactly one of two top-level final states, whose <donedata>
+  carries the result: done {scxml, schemas, tests, report} or failed
+  {reason, diagnostics}. Run directly, scx run prints that data in its done
+  record; invoked, the parent receives it as done.invoke.<id> (SCXML 6.4).
+  Progress goes to <log>, labelled with the stage. The event:schema
+  contracts below are inline copies of schemas/*.json (an invoked child is
+  compiled at run time and gets no schema files); the builder_bot test
+  (tests/tests/builder_bot.rs) keeps them equal.
   The events of the generate and decision services (generate.result,
   generate.failed, decision.abstain, decision.failed) are described here
   too, on the transitions that take them: a service package declares no
@@ -22,7 +26,7 @@
   -> validate (the draft contract, then sx:validate; machine-applicable
   fixes through apply_fixes, at most 2 passes per draft) -> simulate (each
   test script drives the draft as an invoked child with its own invoke id)
-  -> package -> done. Every failure goes through retry_gate, which counts it
+  -> done. Every failure goes through retry_gate, which counts it
   and gives up after max_attempts; triage then reads its enabled
   event:schema transitions with decision:menu and invokes the decision
   service to pick one (repair while there is a plan, redesign, abandon).
@@ -56,10 +60,10 @@
   is refused too.
 
   Bindings: the scxml and decision namespace packages and the generate and
-  decision service packages; the env slots OPENAI_API_KEY and
-  OPENAI_BASE_URL (the generate service) and TYPESAFE_API_KEY and
-  TYPESAFE_BASE_URL (the decision service); an extension call fuel large
-  enough for sx:validate (namespaces/scxml).
+  decision service packages, resolved from their repository URIs; the env
+  attributes below scope OPENAI_API_KEY and OPENAI_BASE_URL to the generate
+  service's invokes and TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
+  decision service's.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:sx="https://github.com/stateforward/nemobot/namespaces/scxml@v0.1.0"
@@ -155,6 +159,7 @@
       <assign location="plan" expr="null"/>
       <assign location="gen_failure" expr="null"/>
       <assign location="stage_run" expr="stage_run + 1"/>
+      <log label="design" expr="(previous_plan === null ? 'planning' : 'replanning') + ' the topology; failures ' + failures + ' of ' + max_attempts"/>
       <send id="design-timeout" event="builder.timeout" delayexpr="generate_timeout_ms + 'ms'">
         <param name="run" expr="stage_run"/>
       </send>
@@ -201,6 +206,7 @@
   <state id="author">
     <onentry>
       <assign location="attempt" expr="attempt + 1"/>
+      <log label="author" expr="mode + ' draft, attempt ' + attempt"/>
       <assign location="previous_tests" expr="draft === null ? null : draft.tests"/>
       <assign location="draft" expr="null"/>
       <assign location="gen_failure" expr="null"/>
@@ -250,12 +256,13 @@
        scripts are within bounds. -->
   <state id="validate">
     <onentry>
+      <log label="validate" expr="'validating the draft'"/>
       <assign location="report" expr="null"/>
       <assign location="fixed" expr="null"/>
       <assign location="schema_errors" expr="[]"/>
       <assign location="contract_errors" expr="(function (text) { var errors = []; var add = function (message) { if (errors.length &lt; 20) { errors.push({kind: &#x27;draft&#x27;, code: &#x27;draft-contract&#x27;, message: message}); } }; var allowed = [&#x27;http://www.w3.org/2005/07/scxml&#x27;, &#x27;https://github.com/stateforward/scxml.rs/namespaces/event&#x27;]; if (/&lt;!(?:DOCTYPE|ENTITY|ATTLIST|ELEMENT|NOTATION)/i.test(text)) { add(&#x27;the draft has a document type declaration; drafts must declare no DTD, entity, or attribute default&#x27;); } var match = null; var declarations = /xmlns(?::[^ \t\r\n=]*)?[ \t\r\n]*=[ \t\r\n]*(?:&quot;([^&quot;]*)&quot;|&#x27;([^&#x27;]*)&#x27;)/g; while ((match = declarations.exec(text)) !== null) { var uri = match[1] !== undefined ? match[1] : match[2]; if (allowed.indexOf(uri) &lt; 0) { add(&#x27;the draft declares the namespace &#x27; + JSON.stringify(uri.slice(0, 200)) + &#x27;; only the SCXML namespace and the event namespace are allowed&#x27;); } } if (/xmlns/.test(text.replace(declarations, &#x27;&#x27;))) { add(&#x27;the draft has an xmlns the contract cannot read; drafts declare namespaces only as xmlns or xmlns:prefix with a quoted URI&#x27;); } if (/&lt;[ \t\r\n]*(?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?invoke/.test(text)) { add(&#x27;the draft holds an invoke element; drafts must not invoke anything&#x27;); } if (/&lt;[ \t\r\n]*(?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?script/.test(text)) { add(&#x27;the draft holds a script element; drafts must not use script&#x27;); } if (/[ \t\r\n](?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?(?:src|srcexpr)[ \t\r\n]*=/.test(text)) { add(&#x27;the draft has a src or srcexpr attribute; drafts must load nothing&#x27;); } if (/[ \t\r\n](?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?typeexpr[ \t\r\n]*=/.test(text)) { add(&#x27;the draft has a typeexpr attribute; drafts must name no processor or invoke type by expression&#x27;); } var types = [&#x27;internal&#x27;, &#x27;external&#x27;, &#x27;deep&#x27;, &#x27;shallow&#x27;, &#x27;http://www.w3.org/TR/scxml/#SCXMLEventProcessor&#x27;]; var typed = /[ \t\r\n](?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?type[ \t\r\n]*=[ \t\r\n]*(?:&quot;([^&quot;]*)&quot;|&#x27;([^&#x27;]*)&#x27;)/g; while ((match = typed.exec(text)) !== null) { var value = match[1] !== undefined ? match[1] : match[2]; if (types.indexOf(value) &lt; 0) { add(&#x27;the draft has the type &#x27; + JSON.stringify(value.slice(0, 200)) + &#x27;; drafts send only through the SCXML Event I/O Processor&#x27;); } } return errors; })(scxml_text)"/>
       <assign location="parsed_schemas" expr="draft.schemas.map(function (s) { var value = null; try { value = JSON.parse(s.schema); } catch (e) { value = null; } if (value === null || (typeof value !== 'object' &amp;&amp; typeof value !== 'boolean') || Array.isArray(value)) { schema_errors.push({kind: 'draft', code: 'schema-not-json', message: 'the schemas entry of ' + JSON.stringify(s.event) + ' is not a JSON Schema object as JSON text: ' + JSON.stringify(String(s.schema).slice(0, 200))}); } return {event: s.event, schema: value}; })"/>
-      <sx:validate location="report" expr="scxml_text" name="draft.scxml"
+      <sx:validate location="report" expr="scxml_text" name="draft.scx"
                    applyfixes="machine-applicable" fixedlocation="fixed"/>
     </onentry>
     <transition cond="report !== null &amp;&amp; contract_errors.length &gt; 0" target="retry_gate">
@@ -297,6 +304,7 @@
   <state id="simulate" initial="sim_next">
     <onentry>
       <assign location="simulation" expr="simulation + 1"/>
+      <log label="simulate" expr="draft.tests.length + ' test script(s)'"/>
       <send id="simulate-timeout" event="builder.timeout" delayexpr="(max_tests * sim_test_cap_ms + 60000) + 'ms'">
         <param name="run" expr="simulation"/>
       </send>
@@ -383,7 +391,7 @@
     </state>
 
     <state id="sim_verdict">
-      <transition cond="sim_results.every(function (r) { return r.passed; })" target="package"/>
+      <transition cond="sim_results.every(function (r) { return r.passed; })" target="done"/>
       <transition target="retry_gate">
         <assign location="diagnostics" expr="sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return {kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + r.error)}; })"/>
       </transition>
@@ -395,6 +403,7 @@
     <onentry>
       <assign location="failures" expr="failures + 1"/>
       <assign location="attempt_log" expr="attempt_log.concat([{failure: failures, attempt: attempt, diagnostics: diagnostics.slice(0, 5)}])"/>
+      <log label="retry_gate" expr="'failure ' + failures + ' of ' + max_attempts + (diagnostics.length &gt; 0 ? ': ' + diagnostics[0].kind + ' ' + diagnostics[0].code : '')"/>
     </onentry>
     <transition cond="failures &gt;= max_attempts" target="failed">
       <assign location="failure_reason" expr="'attempts-exhausted'"/>
@@ -409,6 +418,7 @@
     <onentry>
       <assign location="stage_run" expr="stage_run + 1"/>
       <decision:menu location="menu"/>
+      <log label="triage" expr="'choosing among ' + menu.length + ' option(s)'"/>
       <send id="triage-timeout" event="builder.timeout" delayexpr="decision_timeout_ms + 'ms'">
         <param name="run" expr="stage_run"/>
       </send>
@@ -426,7 +436,7 @@
       <assign location="mode" expr="'repair'"/>
       <assign location="decisions" expr="decisions.concat(['triage.repair'])"/>
     </transition>
-    <!-- Repair needs a plan (builder.done reports it); without one, a
+    <!-- Repair needs a plan (the done data reports it); without one, a
          triage.repair (never offered then) redesigns. -->
     <transition event="triage.repair" target="design">
       <assign location="decisions" expr="decisions.concat(['triage.repair'])"/>
@@ -434,7 +444,7 @@
     <transition event="triage.redesign" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"triage.redesign","description":"Redesign: plan the topology again, then author a new draft, because the plan itself looks wrong.","type":"object","additionalProperties":false}' target="design">
       <assign location="decisions" expr="decisions.concat(['triage.redesign'])"/>
     </transition>
-    <transition event="triage.abandon" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"triage.abandon","description":"Give up: the specification cannot be built as an SCXML machine, so report builder.failed.","type":"object","additionalProperties":false}' target="failed">
+    <transition event="triage.abandon" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"triage.abandon","description":"Give up: the specification cannot be built as an SCXML machine, so end in the final state failed.","type":"object","additionalProperties":false}' target="failed">
       <assign location="failure_reason" expr="'abandoned'"/>
       <assign location="decisions" expr="decisions.concat(['triage.abandon'])"/>
     </transition>
@@ -464,22 +474,23 @@
     </transition>
   </state>
 
-  <state id="package">
+  <!-- The two outcomes. Run directly, scx run prints the donedata in its
+       done record; invoked, the parent gets it as done.invoke.<id>. -->
+  <final id="done">
     <onentry>
-      <send event="builder.done" target="#_parent" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"builder.done","description":"The builder bot built an SCXML machine that validates and passes its own simulation.","type":"object","properties":{"scxml":{"type":"string","minLength":1},"schemas":{"type":"array","items":{"type":"object","properties":{"event":{"type":"string"},"schema":{"type":["object","boolean"]}},"required":["event","schema"],"additionalProperties":false}},"tests":{"type":"array","items":{"type":"object"}},"report":{"type":"object","properties":{"attempts":{"type":"integer","minimum":1},"failures":{"type":"integer","minimum":0},"fixes_applied":{"type":"integer","minimum":0},"warnings":{"type":"integer","minimum":0},"plan":{"type":"object"},"decisions":{"type":"array","items":{"type":"string"}},"history":{"type":"array","items":{"type":"object"}},"simulation":{"type":"array","items":{"type":"object"}}},"required":["attempts","failures","fixes_applied","warnings","plan","decisions","history","simulation"],"additionalProperties":false}},"required":["scxml","schemas","tests","report"],"additionalProperties":false}'>
-        <content expr="({scxml: scxml_text, schemas: parsed_schemas, tests: draft.tests, report: {attempts: attempt, failures: failures, fixes_applied: fixes_applied, warnings: warnings, plan: plan, decisions: decisions, history: attempt_log, simulation: sim_results}})"/>
-      </send>
+      <log label="done" expr="'built ' + (plan === null ? 'a machine' : plan.name) + ' in ' + attempt + ' attempt(s)'"/>
     </onentry>
-    <transition target="done"/>
-  </state>
-
-  <final id="done"/>
+    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"done","description":"The donedata of the final state done of the builder bot: an SCXML machine that validates and passes its own simulation.","type":"object","properties":{"scxml":{"type":"string","minLength":1},"schemas":{"type":"array","items":{"type":"object","properties":{"event":{"type":"string"},"schema":{"type":["object","boolean"]}},"required":["event","schema"],"additionalProperties":false}},"tests":{"type":"array","items":{"type":"object"}},"report":{"type":"object","properties":{"attempts":{"type":"integer","minimum":1},"failures":{"type":"integer","minimum":0},"fixes_applied":{"type":"integer","minimum":0},"warnings":{"type":"integer","minimum":0},"plan":{"type":"object"},"decisions":{"type":"array","items":{"type":"string"}},"history":{"type":"array","items":{"type":"object"}},"simulation":{"type":"array","items":{"type":"object"}}},"required":["attempts","failures","fixes_applied","warnings","plan","decisions","history","simulation"],"additionalProperties":false}},"required":["scxml","schemas","tests","report"],"additionalProperties":false}'>
+      <content expr="({scxml: scxml_text, schemas: parsed_schemas, tests: draft.tests, report: {attempts: attempt, failures: failures, fixes_applied: fixes_applied, warnings: warnings, plan: plan, decisions: decisions, history: attempt_log, simulation: sim_results}})"/>
+    </donedata>
+  </final>
 
   <final id="failed">
     <onentry>
-      <send event="builder.failed" target="#_parent" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"builder.failed","description":"The builder bot could not build a machine that validates and passes its simulation.","type":"object","properties":{"reason":{"enum":["invalid-request","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","simulate","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}}},"required":["reason","diagnostics"],"additionalProperties":false}'>
-        <content expr="({reason: failure_reason, diagnostics: diagnostics.map(function (d) { return {kind: d.kind, code: d.code, message: d.message}; })})"/>
-      </send>
+      <log label="failed" expr="failure_reason"/>
     </onentry>
+    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"failed","description":"The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation.","type":"object","properties":{"reason":{"enum":["invalid-request","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","simulate","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}}},"required":["reason","diagnostics"],"additionalProperties":false}'>
+      <content expr="({reason: failure_reason, diagnostics: diagnostics.map(function (d) { return {kind: d.kind, code: d.code, message: d.message}; })})"/>
+    </donedata>
   </final>
 </scxml>

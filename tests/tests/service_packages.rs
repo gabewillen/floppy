@@ -1,5 +1,5 @@
 //! Integration test of service binding and WASI resources through
-//! `scxml-cli run` (decision D15): a service may use exactly the `wasi:*`
+//! `scx run` (decision D15): a service may use exactly the `wasi:*`
 //! interfaces its component imports, and the run grants their runtime
 //! resources with wasmtime CLI's option names scoped to the service URI
 //! (`--dir URI=HOST::GUEST`). An imported resource the run does not grant,
@@ -13,6 +13,8 @@
 //! verifies scxml.rs's example components (the echo service, which imports
 //! no WASI interface but the logical clock, and the files service, which
 //! imports `wasi:filesystem`) into `target/test-service-packages/scxml`.
+//! Their type URIs are not repository URIs, so they are bound with the
+//! explicit `--service-package` flags.
 
 #![allow(
     missing_docs,
@@ -26,7 +28,7 @@ use std::process::Command;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use support::{Components, Run, components, logs, output, workspace, write};
+use support::{Components, Run, logs, output, workspace, write};
 
 const ECHO_URI: &str = "https://stateforward.org/scxml/services/echo";
 const FILES_URI: &str = "https://stateforward.org/scxml/services/files";
@@ -95,12 +97,11 @@ fn workspace_grant(uri: &str) -> Vec<String> {
 /// A document that uses no package.
 const IDLE: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="s"><state id="s"/></scxml>"#;
 
-/// `scxml-cli run` of `document` with the session components and `bindings`,
+/// `scx run` of `document` with the embedded session components and `bindings`,
 /// no input.
 fn run_with(bindings: &[Vec<String>], document: &str) -> support::Output {
-    let path = write(&support::unique_scratch("packages"), "doc.scxml", document);
+    let path = write(&support::unique_scratch("packages"), "doc.scx", document);
     let mut args = vec!["run".to_owned()];
-    args.extend(components().session_args());
     args.extend(bindings.iter().flatten().cloned());
     args.extend([
         "--clock".to_owned(),
@@ -196,9 +197,8 @@ fn a_grant_for_an_interface_the_component_does_not_import_fails_closed() {
 /// Starts a live session of `document` with `bindings` on the logical
 /// clock.
 fn start(bindings: &[Vec<String>], document: &str) -> Run {
-    let path = write(&support::unique_scratch("packages"), "doc.scxml", document);
-    let mut args = components().session_args();
-    args.extend(bindings.iter().flatten().cloned());
+    let path = write(&support::unique_scratch("packages"), "doc.scx", document);
+    let mut args: Vec<String> = bindings.iter().flatten().cloned().collect();
     args.extend([
         "--clock".to_owned(),
         "logical".to_owned(),

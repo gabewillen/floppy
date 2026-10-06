@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "builder.failed",
-  "description": "The builder bot could not build a machine that validates and passes its simulation.",
+  "title": "failed",
+  "description": "The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation.",
   "type": "object",
   "properties": {
     "reason": {"enum": ["invalid-request", "attempts-exhausted", "abandoned"]},

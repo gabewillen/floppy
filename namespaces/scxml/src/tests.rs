@@ -80,12 +80,12 @@ fn the_package_binds_the_exact_uri_schema_digest_and_world() {
 #[test]
 fn a_valid_draft_reports_no_error_in_the_canonical_report() {
     let validation =
-        validate("draft.scxml", VALID, EventSchemaResources::new()).expect("a valid draft reports");
+        validate("draft.scx", VALID, EventSchemaResources::new()).expect("a valid draft reports");
     let value = report(&validation.report);
     assert_eq!(errors(&value), 0, "{}", validation.report);
     assert_eq!(value["version"], "scxml.report/v3");
     assert_eq!(value["kind"], "validator");
-    assert_eq!(value["validator"]["source_name"], "draft.scxml");
+    assert_eq!(value["validator"]["source_name"], "draft.scx");
     assert_eq!(value["validator"]["source_text"], VALID);
     assert!(
         scxml_event_schema::is_canonical_json(&validation.report),
@@ -105,7 +105,7 @@ fn a_valid_draft_reports_no_error_in_the_canonical_report() {
 
 #[test]
 fn a_broken_draft_reports_its_code_span_and_help() {
-    let validation = validate("draft.scxml", MISSING_TARGET, EventSchemaResources::new())
+    let validation = validate("draft.scx", MISSING_TARGET, EventSchemaResources::new())
         .expect("a broken draft reports");
     let value = report(&validation.report);
     assert_eq!(errors(&value), 1);
@@ -138,7 +138,7 @@ fn a_broken_draft_reports_its_code_span_and_help() {
 #[test]
 fn machine_applicable_fixes_are_applied_and_the_fixed_text_validates() {
     let validation =
-        validate("draft.scxml", COMMAS, EventSchemaResources::new()).expect("the draft reports");
+        validate("draft.scx", COMMAS, EventSchemaResources::new()).expect("the draft reports");
     let value = report(&validation.report);
     assert_eq!(errors(&value), 1, "{}", validation.report);
     assert_eq!(
@@ -147,14 +147,14 @@ fn machine_applicable_fixes_are_applied_and_the_fixed_text_validates() {
     );
     let fixed = apply_machine_applicable(&validation.artifact).expect("the fixes apply");
     assert_eq!(fixed, COMMAS.replace("go,stop", "go stop"));
-    let again = validate("draft.scxml", &fixed, EventSchemaResources::new())
+    let again = validate("draft.scx", &fixed, EventSchemaResources::new())
         .expect("the fixed draft reports");
     assert_eq!(errors(&report(&again.report)), 0, "{}", again.report);
 }
 
 #[test]
 fn a_draft_without_machine_applicable_fixes_is_unchanged() {
-    let validation = validate("draft.scxml", MISSING_TARGET, EventSchemaResources::new())
+    let validation = validate("draft.scx", MISSING_TARGET, EventSchemaResources::new())
         .expect("the draft reports");
     assert_eq!(
         apply_machine_applicable(&validation.artifact).expect("nothing to apply"),
@@ -164,7 +164,7 @@ fn a_draft_without_machine_applicable_fixes_is_unchanged() {
 
 #[test]
 fn an_unsupplied_event_schema_file_is_reported_not_read() {
-    let validation = validate("draft.scxml", SCHEMA_REFERENCE, EventSchemaResources::new())
+    let validation = validate("draft.scx", SCHEMA_REFERENCE, EventSchemaResources::new())
         .expect("the draft reports");
     assert_eq!(codes(&report(&validation.report)), ["SCXML088"]);
 }
@@ -172,8 +172,7 @@ fn an_unsupplied_event_schema_file_is_reported_not_read() {
 #[test]
 fn a_supplied_event_schema_file_resolves() {
     let resources = BTreeMap::from([("events.json".to_owned(), EVENTS.as_bytes().to_vec())]);
-    let validation =
-        validate("draft.scxml", SCHEMA_REFERENCE, resources).expect("the draft reports");
+    let validation = validate("draft.scx", SCHEMA_REFERENCE, resources).expect("the draft reports");
     assert_eq!(
         errors(&report(&validation.report)),
         0,
@@ -184,7 +183,7 @@ fn a_supplied_event_schema_file_resolves() {
 
 #[test]
 fn malformed_xml_is_a_report_not_a_failure() {
-    let validation = validate("draft.scxml", "<scxml", EventSchemaResources::new())
+    let validation = validate("draft.scx", "<scxml", EventSchemaResources::new())
         .expect("malformed XML reports");
     let value = report(&validation.report);
     assert!(errors(&value) >= 1);

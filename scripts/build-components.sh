@@ -2,13 +2,13 @@
 # Builds and verifies nemobot's Wasm components for wasm32-wasip2, the way
 # scxml.rs builds its own (scxml.rs/scripts/verify-wasm-capabilities.sh).
 #
-# Usage: sh scripts/build-components.sh [--artifacts-dir DIR] [--session-only]
+# Usage: sh scripts/build-components.sh [--artifacts-dir DIR] [--cache-dir DIR] [--session-only]
 #
-# 1. The scxml.rs session components a `scxml-cli run` session links
-#    (machine, compiler, the three data models, both I/O processors, clock),
-#    built and verified by the subtree's own
-#    scxml.rs/scripts/verify-wasm-capabilities.sh into DIR/scxml, whose
-#    manifest.tsv SHA-256 is the run's `--components-manifest-sha256`. Its
+# 1. The scxml.rs session components a `scx run` session links (machine,
+#    compiler, the three data models, both I/O processors, clock), built and
+#    verified by the subtree's own scxml.rs/scripts/verify-wasm-capabilities.sh
+#    into DIR/scxml: the release `scx` embeds when it is built with
+#    SCXML_WASM_ARTIFACTS_DIR=DIR/scxml (README.md, "Running a bot"). Its
 #    CARGO_TARGET_DIR is target/scxml.rs (never the subtree's own target
 #    directory).
 # 2. Unless --session-only: every nemobot namespace component and invoked
@@ -21,10 +21,18 @@
 #    WASI interface is retained). DIR/namespaces and DIR/services receive
 #    each `<component>.virtualized.wasm` and a `components.tsv` with their
 #    sizes and SHA-256 digests.
-# 3. Unless --session-only: DIR/components.args, a scxml-cli argument file
-#    (`scxml-cli run @DIR/components.args ...`) that binds the session
-#    components and every package above to its verified component by
-#    SHA-256.
+# 3. Unless --session-only: publishes every package above into scxml.rs's
+#    repository-package cache (`scx --cache-dir`, default
+#    ${XDG_CACHE_HOME:-$HOME/.cache}/scxml/extensions), exactly as `scx`'s
+#    resolver stores a release it fetched: the manifest, schema, and
+#    verified component bytes content-addressed under sha256/<hex>, and the
+#    URI pinned in index/<sha256 of the URI>.json to this checkout's commit
+#    and those digests. A document's repository URIs
+#    (https://github.com/stateforward/nemobot/namespaces/<name>@<tag> and
+#    .../services/<name>@<tag>) then resolve from the cache with no flag and
+#    no network, and every run re-verifies the bytes against the pins; the
+#    documents never change. This is a local mirror: it replaces whatever the
+#    cache pinned for those URIs.
 #
 # DIR defaults to target/components. Tool identities are checked by the
 # scxml.rs script; this script checks them again before building namespaces.
@@ -39,11 +47,12 @@ namespace_components='nemobot_scxml nemobot_decision'
 service_components='nemobot_service_generate nemobot_service_decision'
 
 usage() {
-    echo "usage: build-components.sh [--artifacts-dir DIR] [--session-only]" >&2
+    echo "usage: build-components.sh [--artifacts-dir DIR] [--cache-dir DIR] [--session-only]" >&2
     exit 2
 }
 
 artifacts_dir=''
+cache_dir=''
 session_only=false
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -51,6 +60,12 @@ while [ "$#" -gt 0 ]; do
             [ "$#" -ge 2 ] && [ -n "$2" ] || usage
             [ -z "$artifacts_dir" ] || usage
             artifacts_dir=$2
+            shift 2
+            ;;
+        --cache-dir)
+            [ "$#" -ge 2 ] && [ -n "$2" ] || usage
+            [ -z "$cache_dir" ] || usage
+            cache_dir=$2
             shift 2
             ;;
         --session-only)
@@ -239,39 +254,83 @@ build_component() {
 build_kind namespaces $namespace_components
 build_kind services $service_components
 
-# 3. DIR/components.args: a scxml-cli argument file (`scxml-cli run @FILE`,
-# one argument per line) that binds the session components and every
-# package above to the components just verified, each authenticated by its
-# SHA-256 (the trust anchors scxml-cli requires; the manifests are not).
-# Bots add their own argument file (bots/<name>/<name>.args) for the rest.
-package_args() {
-    flag=$1
-    uri_field=$2
-    manifest_path=$3
-    component_path=$4
-    uri=$(sed -n "s/.*\"$uri_field\": *\"\([^\"]*\)\".*/\1/p" "$manifest_path")
-    [ -n "$uri" ] || { echo "no $uri_field in $manifest_path" >&2; exit 1; }
-    printf '%s-package\n%s\n' "$flag" "$manifest_path"
-    printf '%s-component\n%s=%s\n' "$flag" "$uri" "$component_path"
-    printf '%s-component-sha256\n%s=%s\n' "$flag" "$uri" "$(sha256_file "$component_path")"
+# 3. Publish every package into the repository-package cache (scxml.rs
+# crates/scxml-cli/src/repository.rs, "Trust and the cache": objects under
+# sha256/<hex>, the pinned entry under index/<sha256 of the URI>.json in its
+# canonical form). The commit is this checkout's.
+if [ -z "$cache_dir" ]; then
+    if [ -n "${XDG_CACHE_HOME:-}" ]; then
+        cache_dir="$XDG_CACHE_HOME/scxml/extensions"
+    else
+        cache_dir="$HOME/.cache/scxml/extensions"
+    fi
+fi
+case "$cache_dir" in
+    /*) ;;
+    *) cache_dir="$(pwd -P)/$cache_dir" ;;
+esac
+commit=$(git -C "$workspace" rev-parse HEAD)
+case "$commit" in
+    *[!0-9a-f]*|'') echo "not a git commit: $commit" >&2; exit 1 ;;
+esac
+[ "${#commit}" -eq 40 ] || { echo "not a 40-hex git commit: $commit" >&2; exit 1; }
+mkdir -p "$cache_dir/sha256" "$cache_dir/index"
+
+# Stores PATH content-addressed and prints its digest.
+publish_object() {
+    digest=$(sha256_file "$1")
+    if [ ! -f "$cache_dir/sha256/$digest" ]; then
+        cp "$1" "$cache_dir/sha256/$digest.tmp"
+        mv "$cache_dir/sha256/$digest.tmp" "$cache_dir/sha256/$digest"
+    fi
+    printf '%s\n' "$digest"
 }
-args_file="$artifacts_dir/components.args"
-args_tmp="$args_file.tmp"
-{
-    printf -- '--components\n%s\n' "$artifacts_dir/scxml"
-    printf -- '--components-manifest-sha256\n%s\n' "$session_manifest_sha256"
-    for component in $namespace_components; do
-        name=${component#nemobot_}
-        package_args --extension namespace-uri \
-            "$workspace/namespaces/$name/package/$name.extension.json" \
-            "$artifacts_dir/namespaces/$component.virtualized.wasm"
-    done
-    for component in $service_components; do
-        name=${component#nemobot_service_}
-        package_args --service service-uri \
-            "$workspace/services/$name/package/$name.service.json" \
-            "$artifacts_dir/services/$component.virtualized.wasm"
-    done
-} > "$args_tmp"
-mv "$args_tmp" "$args_file"
-printf 'components-args path=%s\n' "$args_file"
+
+# Prints the string value of FIELD in the manifest at PATH ("" for null).
+manifest_field() {
+    sed -n "s/.*\"$2\": *\"\([^\"]*\)\".*/\1/p" "$1"
+}
+
+# Writes the pinned entry of URI (canonical bytes) atomically.
+publish_entry() {
+    uri=$1
+    entry_tmp="$cache_dir/index/entry.tmp"
+    printf '%s' "$uri" > "$entry_tmp"
+    key=$(sha256_file "$entry_tmp")
+    cat > "$entry_tmp"
+    mv "$entry_tmp" "$cache_dir/index/$key.json"
+}
+
+for component in $namespace_components; do
+    name=${component#nemobot_}
+    manifest="$workspace/namespaces/$name/package/$name.extension.json"
+    uri=$(manifest_field "$manifest" namespace-uri)
+    schema="$workspace/namespaces/$name/package/$(manifest_field "$manifest" schema-artifact)"
+    [ -n "$uri" ] && [ -f "$schema" ] || { echo "malformed manifest: $manifest" >&2; exit 1; }
+    manifest_sha256=$(publish_object "$manifest")
+    schema_sha256=$(publish_object "$schema")
+    test "$schema_sha256" = "$(manifest_field "$manifest" schema-sha256)" || {
+        echo "schema digest mismatch: $manifest" >&2
+        exit 1
+    }
+    component_sha256=$(publish_object "$artifacts_dir/namespaces/$component.virtualized.wasm")
+    printf '{\n  "format": "stateforward.scxml.extension-cache/v1",\n  "namespace-uri": "%s",\n  "commit": "%s",\n  "manifest-sha256": "%s",\n  "schema-sha256": "%s",\n  "component-sha256": "%s"\n}\n' \
+        "$uri" "$commit" "$manifest_sha256" "$schema_sha256" "$component_sha256" | publish_entry "$uri"
+    printf 'published %s component-sha256=%s\n' "$uri" "$component_sha256"
+done
+for component in $service_components; do
+    name=${component#nemobot_service_}
+    manifest="$workspace/services/$name/package/$name.service.json"
+    uri=$(manifest_field "$manifest" service-uri)
+    [ -n "$uri" ] || { echo "malformed manifest: $manifest" >&2; exit 1; }
+    schema_artifact=$(manifest_field "$manifest" schema-artifact)
+    if [ -n "$schema_artifact" ]; then
+        publish_object "$workspace/services/$name/package/$schema_artifact" > /dev/null
+    fi
+    manifest_sha256=$(publish_object "$manifest")
+    component_sha256=$(publish_object "$artifacts_dir/services/$component.virtualized.wasm")
+    printf '{\n  "format": "stateforward.scxml.service-cache/v1",\n  "service-uri": "%s",\n  "commit": "%s",\n  "manifest-sha256": "%s",\n  "component-sha256": "%s"\n}\n' \
+        "$uri" "$commit" "$manifest_sha256" "$component_sha256" | publish_entry "$uri"
+    printf 'published %s component-sha256=%s\n' "$uri" "$component_sha256"
+done
+printf 'package-cache path=%s commit=%s\n' "$cache_dir" "$commit"

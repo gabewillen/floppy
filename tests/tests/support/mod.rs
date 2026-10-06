@@ -1,17 +1,21 @@
-//! What every test shares: the components, the `scxml-cli` binary, and one
-//! `scxml-cli run` process driven over its standard input and output
-//! (scxml.rs `docs/live-session.md`, "The `run` command").
+//! What every test shares: the components, the `scx` binary, and one
+//! `scx run` process driven over its standard input and output (scxml.rs
+//! `docs/live-session.md`, "The `run` command").
 //!
 //! * [`components`] runs `scripts/build-components.sh` once per test binary
-//!   into `target/test-components` (the session components, every namespace
-//!   and service component, and `components.args`). Test binaries run one
-//!   after another, so they share the directory.
-//! * [`cli`] builds `scxml-cli` (feature `wasmtime`) once per test binary
-//!   from the `scxml.rs/` subtree into `target/scxml-cli` (not
-//!   `target/scxml.rs`, where the subtree's component script builds its own
-//!   `scxml-cli` without that feature).
-//! * [`Run`] is one `scxml-cli run` process: inputs go to its standard
-//!   input as JSON lines, and its records come back one per line.
+//!   into `target/test-components`: the session components, every namespace
+//!   and service component, and the packages published into the test's own
+//!   repository-package cache (`target/test-components/package-cache`).
+//!   Test binaries run one after another, so they share the directory.
+//! * [`cli`] builds `scx` once per test binary from the `scxml.rs/` subtree
+//!   into `target/scx`, embedding the session components just built
+//!   (`SCXML_WASM_ARTIFACTS_DIR`).
+//! * [`command`] runs `scx` from the workspace root; `run`, `validate`, and
+//!   `compile` get `--cache-dir` (the test cache) and `--offline`, so every
+//!   document's repository URIs resolve from what the build published and
+//!   nothing is fetched.
+//! * [`Run`] is one `scx run` process: inputs go to its standard input as
+//!   JSON lines, and its records come back one per line.
 
 #![allow(
     dead_code,
@@ -28,10 +32,9 @@ use std::time::{Duration, Instant};
 use serde_json::Value as Json;
 use sha2::{Digest as _, Sha256};
 
-/// The variables the bots' argument files grant. The child process never
-/// inherits them: `scxml-cli` falls back to the calling shell's value of a
-/// granted variable, and a test grants values only through its env file
-/// (or sets one explicitly).
+/// The variables the bots' documents name. The child process never inherits
+/// them, so a test supplies values only through its env file (or an
+/// explicit `--env NAME=VALUE`).
 pub const GRANTED: [&str; 4] = [
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",
@@ -56,36 +59,17 @@ pub fn sha256_file(path: &Path) -> String {
 pub struct Components {
     /// The artifacts directory.
     pub dir: PathBuf,
-    /// The session components' directory.
+    /// The session components' directory (the release `scx` embeds).
     pub session: PathBuf,
-    /// The trusted SHA-256 of its `manifest.tsv`.
-    pub manifest_sha256: String,
+    /// The repository-package cache the build published every package into.
+    pub cache: PathBuf,
 }
 
 impl Components {
-    /// `DIR/components.args`, which binds every package to its component.
-    pub fn args_file(&self) -> PathBuf {
-        self.dir.join("components.args")
-    }
-
-    /// `@DIR/components.args`.
-    pub fn args(&self) -> String {
-        format!("@{}", self.args_file().display())
-    }
-
-    /// The session component flags alone.
-    pub fn session_args(&self) -> Vec<String> {
-        vec![
-            "--components".into(),
-            self.session.display().to_string(),
-            "--components-manifest-sha256".into(),
-            self.manifest_sha256.clone(),
-        ]
-    }
-
-    /// The flags binding one package: `kind` is `extension` or `service`,
-    /// `manifest` the manifest path, `uri` its exact URI, and `component`
-    /// the component path (its SHA-256 is computed here).
+    /// The flags binding one package explicitly (for packages that are not
+    /// repository packages): `kind` is `extension` or `service`, `manifest`
+    /// the manifest path, `uri` its exact URI, and `component` the component
+    /// path (its SHA-256 is computed here).
     pub fn package_args(kind: &str, manifest: &Path, uri: &str, component: &Path) -> Vec<String> {
         vec![
             format!("--{kind}-package"),
@@ -95,30 +79,6 @@ impl Components {
             format!("--{kind}-component-sha256"),
             format!("{uri}={}", sha256_file(component)),
         ]
-    }
-
-    /// The flags binding the nemobot namespace `name`.
-    pub fn namespace(&self, name: &str) -> Vec<String> {
-        Self::package_args(
-            "extension",
-            &workspace().join(format!("namespaces/{name}/package/{name}.extension.json")),
-            &format!("https://github.com/stateforward/nemobot/namespaces/{name}@v0.1.0"),
-            &self
-                .dir
-                .join(format!("namespaces/nemobot_{name}.virtualized.wasm")),
-        )
-    }
-
-    /// The flags binding the nemobot service `name`.
-    pub fn service(&self, name: &str) -> Vec<String> {
-        Self::package_args(
-            "service",
-            &workspace().join(format!("services/{name}/package/{name}.service.json")),
-            &service_uri(name),
-            &self
-                .dir
-                .join(format!("services/nemobot_service_{name}.virtualized.wasm")),
-        )
     }
 }
 
@@ -132,45 +92,43 @@ pub fn components() -> &'static Components {
     static COMPONENTS: OnceLock<Components> = OnceLock::new();
     COMPONENTS.get_or_init(|| {
         let dir = workspace().join("target/test-components");
+        let cache = dir.join("package-cache");
         let status = Command::new("sh")
             .arg(workspace().join("scripts/build-components.sh"))
             .arg("--artifacts-dir")
             .arg(&dir)
+            .arg("--cache-dir")
+            .arg(&cache)
             .current_dir(workspace())
             .status()
             .expect("the build script runs");
         assert!(status.success(), "the component proof must pass");
-        let session = dir.join("scxml");
         Components {
-            manifest_sha256: sha256_file(&session.join("manifest.tsv")),
-            session,
+            session: dir.join("scxml"),
+            cache,
             dir,
         }
     })
 }
 
-/// The `scxml-cli` binary (feature `wasmtime`), built from the subtree.
+/// The `scx` binary, built from the subtree with the session components
+/// [`components`] built embedded.
 pub fn cli() -> &'static Path {
     static CLI: OnceLock<PathBuf> = OnceLock::new();
     CLI.get_or_init(|| {
-        let target = workspace().join("target/scxml-cli");
+        let session = &components().session;
+        let target = workspace().join("target/scx");
         let status = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
-            .args([
-                "build",
-                "--locked",
-                "-p",
-                "scxml-cli",
-                "--features",
-                "wasmtime",
-            ])
+            .args(["build", "--locked", "-p", "scxml-cli"])
             .current_dir(workspace().join("scxml.rs"))
             .env("CARGO_TARGET_DIR", &target)
+            .env("SCXML_WASM_ARTIFACTS_DIR", session)
             .env_remove("RUSTFLAGS")
             .env_remove("CARGO_ENCODED_RUSTFLAGS")
             .status()
             .expect("cargo runs");
-        assert!(status.success(), "scxml-cli must build");
-        target.join("debug/scxml-cli")
+        assert!(status.success(), "scx must build");
+        target.join("debug/scx")
     })
 }
 
@@ -191,21 +149,29 @@ pub fn write(dir: &Path, name: &str, text: &str) -> PathBuf {
     path
 }
 
-/// A `scxml-cli` command run from the workspace root, without the granted
-/// variables of the calling shell.
+/// A `scx` command run from the workspace root, without the bots'
+/// variables from the calling shell; `run`, `validate`, and `compile`
+/// resolve repository packages from the test cache only.
 pub fn command(args: &[String]) -> Command {
     let mut command = Command::new(cli());
-    command
-        .args(args)
-        .current_dir(workspace())
-        .env("NO_COLOR", "1");
+    command.args(args);
+    if args
+        .first()
+        .is_some_and(|first| matches!(first.as_str(), "run" | "validate" | "compile"))
+    {
+        command
+            .arg("--cache-dir")
+            .arg(&components().cache)
+            .arg("--offline");
+    }
+    command.current_dir(workspace()).env("NO_COLOR", "1");
     for name in GRANTED {
         command.env_remove(name);
     }
     command
 }
 
-/// One finished `scxml-cli` command.
+/// One finished `scx` command.
 pub struct Output {
     /// Its exit status.
     pub status: ExitStatus,
@@ -215,12 +181,12 @@ pub struct Output {
     pub stderr: String,
 }
 
-/// Runs `scxml-cli` with `args` to completion (no standard input).
+/// Runs `scx` with `args` to completion (no standard input).
 pub fn output(args: &[String]) -> Output {
     let output = command(args)
         .stdin(Stdio::null())
         .output()
-        .expect("scxml-cli runs");
+        .expect("scx runs");
     Output {
         status: output.status,
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -228,7 +194,7 @@ pub fn output(args: &[String]) -> Output {
     }
 }
 
-/// One `scxml-cli run` process.
+/// One `scx run` process.
 pub struct Run {
     child: Child,
     stdin: Option<ChildStdin>,
@@ -237,7 +203,7 @@ pub struct Run {
     stderr: Option<std::thread::JoinHandle<String>>,
 }
 
-/// One finished `scxml-cli run` process.
+/// One finished `scx run` process.
 pub struct Finished {
     /// Every record it wrote, in order.
     pub records: Vec<Json>,
@@ -248,7 +214,7 @@ pub struct Finished {
 }
 
 impl Run {
-    /// Starts `scxml-cli run` with `args` (the document among them) and the
+    /// Starts `scx run` with `args` (the document among them) and the
     /// extra environment `env`.
     pub fn start(args: &[String], env: &[(&str, &str)]) -> Self {
         let mut full = vec!["run".to_owned()];
@@ -262,7 +228,7 @@ impl Run {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .expect("scxml-cli run starts");
+            .expect("scx run starts");
         let stdout = child.stdout.take().expect("stdout is piped");
         let mut stderr = child.stderr.take().expect("stderr is piped");
         let (sender, records) = mpsc::channel();
@@ -346,7 +312,7 @@ impl Run {
                     .take()
                     .and_then(|handle| handle.join().ok())
                     .unwrap_or_default();
-                panic!("scxml-cli run did not end within {limit:?}; stderr:\n{stderr}");
+                panic!("scx run did not end within {limit:?}; stderr:\n{stderr}");
             }
             std::thread::sleep(Duration::from_millis(50));
         };

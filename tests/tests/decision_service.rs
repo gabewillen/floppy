@@ -1,22 +1,23 @@
-//! Integration test of a decision through `scxml-cli run`: the `decision` namespace's
+//! Integration test of a decision through `scx run`: the `decision` namespace's
 //! `<decision:menu>` reads the session snapshot and writes the machine's
 //! three enabled `event:schema` transitions as the canonical menu, and the
 //! `decision` service, invoked with that menu, asks a deterministic fake
 //! `TypeSafe` `system_one` backend on 127.0.0.1 (nothing reaches the
 //! network) off the session thread, fills the chosen event's data from
 //! grounded options, validates it against the menu's schema, and returns it;
-//! the machine's transition fires with that data. The key and base URL
-//! reach the run only through `--env` scopes and an `--env-file`; the component
-//! holds slot references and the host substitutes the values into the
-//! admitted request.
+//! the machine's transition fires with that data. Both packages resolve from
+//! their repository URIs. The key and base URL reach the run only through an
+//! `--env-file`, and only the `<invoke>` whose `env` attributes name them
+//! receives them; the component holds slot references and the host
+//! substitutes the values into the admitted request.
 //!
 //! The ignored `live_decision_through_an_env_file` test makes one real call:
 //! `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p nemobot-tests --test
-//! decision_service -- --ignored`. It grants `TYPESAFE_API_KEY` (the file
-//! must set it) and `TYPESAFE_BASE_URL` (the file's value, else `TypeSafe`'s, given as
-//! the calling shell's value: no backend URL is compiled into the
-//! component), and reports pass or fail and the final state reached; no
-//! value is ever printed.
+//! decision_service -- --ignored`. The file must set `TYPESAFE_API_KEY`;
+//! `TYPESAFE_BASE_URL` is the file's value, else `TypeSafe`'s, given as the
+//! calling shell's value through `--env TYPESAFE_BASE_URL` (no backend URL is
+//! compiled into the component). It reports pass or fail and the final state
+//! reached; no value is ever printed.
 
 #![allow(
     missing_docs,
@@ -32,28 +33,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::{Map, Value as Json, json};
-use support::{Finished, components, labelled, logs, run_document, scratch, service_uri};
+use support::{Finished, labelled, logs, run_document, scratch, service_uri};
 
 const NAMESPACE_URI: &str = "https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0";
 /// The fake key (not a secret): the mock checks it arrives as the bearer.
 const FAKE_KEY: &str = "ts-nemobot-fake";
 
-/// The flags binding the session components, the `decision` namespace and
-/// service, granting `env` to the service, with `env_file` supplying the
-/// values.
-fn args(env_file: &Path, env: &[&str]) -> Vec<String> {
-    let components = components();
-    let mut args = components.session_args();
-    args.extend(components.namespace("decision"));
-    args.extend(components.service("decision"));
-    for name in env {
-        args.extend([
-            "--env".to_owned(),
-            format!("{name}@{}", service_uri("decision")),
-        ]);
-    }
-    args.extend(["--env-file".to_owned(), env_file.display().to_string()]);
-    args
+/// The flags of a run whose values come from `env_file`.
+fn args(env_file: &Path) -> Vec<String> {
+    vec!["--env-file".to_owned(), env_file.display().to_string()]
 }
 
 /// One request the mock received.
@@ -191,31 +179,35 @@ impl Mock {
     }
 }
 
-/// Writes an env file holding the fake key and `base_url` for one test.
-fn env_file(test: &str, base_url: &str) -> PathBuf {
+/// Writes an env file holding the fake key and `base_url` for one test,
+/// each only when `env` names its variable.
+fn env_file(test: &str, base_url: &str, env: &[&str]) -> PathBuf {
     let path = scratch("decision-env").join(format!("{test}.env"));
-    std::fs::write(
-        &path,
-        format!("TYPESAFE_API_KEY={FAKE_KEY}\nTYPESAFE_BASE_URL={base_url}\n"),
-    )
-    .expect("the env file is writable");
+    let key = format!("TYPESAFE_API_KEY={FAKE_KEY}\n");
+    let base = format!("TYPESAFE_BASE_URL={base_url}\n");
+    let mut contents = String::new();
+    if env.contains(&"TYPESAFE_API_KEY") {
+        contents.push_str(&key);
+    }
+    if env.contains(&"TYPESAFE_BASE_URL") {
+        contents.push_str(&base);
+    }
+    std::fs::write(&path, contents).expect("the env file is writable");
     path
 }
 
 /// Runs `document` with `args` to its end, checking the consent listing
 /// names both packages, the service's origin, and its slots.
 fn open(args: &[String], document: &str, env: &[(&str, &str)], limit: Duration) -> Finished {
-    let finished = run_document("decision.scxml", document, args, env, limit);
+    let finished = run_document("decision.scx", document, args, env, limit);
     let consent = &finished.stderr;
     assert!(
-        consent.contains(&format!("element `{NAMESPACE_URI}`"))
+        (!document.contains(NAMESPACE_URI)
+            || consent.contains(&format!("element `{NAMESPACE_URI}`")))
             && consent.contains(&format!("service `{}`", service_uri("decision")))
-            // A run whose base URL value is the origin itself (the live
-            // run's TypeSafe default) sees it masked, as scxml-cli masks
-            // every held value in the text it writes.
-            && (consent.contains("outbound HTTP: https://api.typesafe.ai")
-                || (env.iter().any(|(_, value)| *value == TYPESAFE_BASE_URL_DEFAULT)
-                    && consent.contains("outbound HTTP: [masked]")))
+            // The declared origin is public: it is listed even when a run
+            // value equals it (the live run's TypeSafe default).
+            && consent.contains("outbound HTTP: https://api.typesafe.ai")
             && consent.contains("env slots: apikey, baseurl"),
         "the consent listing names the package, its origin, and its slots: {consent}"
     );
@@ -281,9 +273,9 @@ const CHOOSE: &str = r#"<param name="state" expr="order"/>"#;
 
 fn run(route: &str, test: &str, env: &[&str]) -> (Vec<Json>, Mock) {
     let mock = Mock::start();
-    let env_path = env_file(test, &format!("{}/{route}", mock.origin));
+    let env_path = env_file(test, &format!("{}/{route}", mock.origin), env);
     let finished = open(
-        &args(&env_path, env),
+        &args(&env_path),
         &document(CHOOSE),
         &[],
         Duration::from_secs(60),
@@ -400,8 +392,8 @@ fn without_a_granted_key_nothing_is_sent() {
 #[test]
 fn classify_returns_every_labels_probability() {
     let mock = Mock::start();
-    let env_path = env_file("classify", &format!("{}/classify", mock.origin));
-    let args = args(&env_path, &BOTH);
+    let env_path = env_file("classify", &format!("{}/classify", mock.origin), &BOTH);
+    let args = args(&env_path);
     let document = format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
@@ -448,8 +440,10 @@ fn live_decision_through_an_env_file() {
     // value, which the env file's overrides.
     let params = r#"<param name="state" expr="order"/>
       <param name="instructions" expr="'A customer paid for order A-1 and asked for fast delivery. Choose what to do with the order.'"/>"#;
+    let mut args = args(&path);
+    args.extend(["--env".to_owned(), "TYPESAFE_BASE_URL".to_owned()]);
     let records = open(
-        &args(&path, &BOTH),
+        &args,
         &document(params),
         &[("TYPESAFE_BASE_URL", TYPESAFE_BASE_URL_DEFAULT)],
         Duration::from_secs(120),

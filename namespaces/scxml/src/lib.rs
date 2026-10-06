@@ -18,7 +18,7 @@
 //!   and `validator` with `source_name`, `source_text`, `counts`, and every
 //!   diagnostic with its code, severity, category, spans, notes, help, spec
 //!   references, and fixes with their applicability). Its JSON value is
-//!   exactly that of the canonical report bytes `scxml-cli validate --format
+//!   exactly that of the canonical report bytes `scx validate --format
 //!   json` writes for the same text, written with members sorted by key (the
 //!   form a data-model `json-object` takes).
 //! * the document text, exactly one of:
@@ -44,7 +44,7 @@
 //!   fixed text again to see what remains.
 //!
 //! Without packages the validator binds no extension namespace and no
-//! invoked-service type, exactly as `scxml-cli validate` without
+//! invoked-service type, exactly as `scx validate` without
 //! `--extension-package` or `--service-package`: a draft that uses either is
 //! reported (no schema for its namespace; `SCXML094` for a literal service
 //! type). The data model's expression-syntax checker is a separate component
@@ -71,13 +71,12 @@
 //! `scxml.report/v3` caps the canonical report at 32 MiB).
 //!
 //! One `execute` call runs the whole validator, the bundled XSD set
-//! included, so it needs far more instruction fuel than scxml.rs's default
-//! extension call cap (100 million): a small draft takes about 200 million.
-//! A run that binds this package passes `scxml-cli run --extension-call-fuel`
-//! (1 billion is ample for drafts of a few hundred lines; the builder's
-//! `bots/builder/builder.args` does); an exhausted call
-//! is `error.execution` and retires the instance for the rest of the
-//! session.
+//! included: about 166 million instructions for a two-state draft and 214
+//! million for a 1.2 KiB model-written one, most of it compiling the W3C
+//! SCXML 1.0 XSD set. scxml.rs's default extension call cap
+//! (`DEFAULT_EXTENSION_CALL_FUEL`, one billion) covers it, so a run needs no
+//! fuel flag; an exhausted call is `error.execution` and retires the
+//! instance for the rest of the session.
 //!
 //! # Telemetry
 //!
@@ -123,7 +122,7 @@ pub const NAMESPACE_TAG: &str = "v0.1.0";
 pub const NAMESPACE_URI: &str = "https://github.com/stateforward/nemobot/namespaces/scxml@v0.1.0";
 
 /// The report's `source_name` when the element names none.
-pub const DEFAULT_SOURCE_NAME: &str = "draft.scxml";
+pub const DEFAULT_SOURCE_NAME: &str = "draft.scx";
 
 /// The only `applyfixes` value: the applicability of the fixes applied.
 pub const APPLY_MACHINE_APPLICABLE: &str = "machine-applicable";

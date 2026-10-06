@@ -1,41 +1,56 @@
 # builder
 
 The builder bot builds SCXML documents (never Rust). It is itself an SCXML
-machine, [`builder.scxml`](builder.scxml), used by invoking it and talking to
-it with events (decision D9 in [../../docs/decisions.md](../../docs/decisions.md)):
+machine, [`builder.scx`](builder.scx) (decision D9 in
+[../../docs/decisions.md](../../docs/decisions.md)). Run it directly, with the
+request on standard input:
+
+```console
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
+  scx run --env-file .env bots/builder/builder.scx
+```
+
+or invoke it as a child and send it the request; it ends with one of two
+final states and its parent receives that state's done data as
+`done.invoke.<id>` (SCXML 6.4):
 
 ```xml
-<invoke id="builder" type="scxml" src="builder.scxml"/>
+<invoke id="builder" type="scxml" src="builder.scx"/>
 <send event="builder.request" target="#_builder">
   <content expr="({spec: 'a traffic light with a pedestrian button'})"/>
 </send>
-<transition event="builder.done" .../>
-<transition event="builder.failed" .../>
+<transition event="done.invoke.builder" .../>
 ```
 
 ## Contract
 
-| Event | Direction | Data ([`schemas/`](schemas)) |
+| What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | to the builder | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?}`: the specification, extra constraints (strings), the failure budget (1 to 8, default 3), the generate service's model (default `gpt-6-luna`), and the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000) |
-| `builder.done` | to `#_parent` | `{scxml, schemas, tests, report}`: the built document, its input event schemas (`{event, schema}`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
-| `builder.failed` | to `#_parent` | `{reason, diagnostics}`: `invalid-request`, `attempts-exhausted`, or `abandoned`, with the last diagnostics (`{kind, code, message}`) |
+| `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?}`: the specification, extra constraints (strings), the failure budget (1 to 8, default 3), the generate service's model (default `gpt-6-luna`), and the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000) |
+| final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, tests, report}`: the built document, its input event schemas (`{event, schema}`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
+| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics}`: `invalid-request`, `attempts-exhausted`, or `abandoned`, with the last diagnostics (`{kind, code, message}`) |
 
-The builder answers exactly once and then finishes. `intake` has no timeout:
-the invoker owns the builder's lifetime (cancel the invoke to stop it).
+The builder answers exactly once, by finishing. Run directly, `scx run`
+prints the done data in its `done` record and exits 0; invoked, the parent
+gets it as the data of `done.invoke.<id>`. Progress goes to `<log>`, each
+record labelled with the stage (`design`, `author`, `validate`,
+`simulate`, `retry_gate`, `triage`, then `done` or `failed`). `intake` has
+no timeout: the invoker owns the builder's lifetime (cancel the invoke to
+stop it).
 
-`builder.scxml` carries the contracts as inline `event:schema` attributes:
-an invoked child is compiled at run time and receives no schema files (a
-schema reference would reject it), so `schemas/*.json` are the canonical
-files and the `builder_bot` test (`tests/tests/builder_bot.rs`) keeps the
-inline copies equal to them. The engine treats them as metadata only; `intake` checks the
-request with its `cond` and answers `builder.failed` (`invalid-request`)
-otherwise.
+`builder.scx` carries the contracts as inline `event:schema` attributes
+(on the transitions that take an event, and on each final state's
+`<donedata>`): an invoked child is compiled at run time and receives no
+schema files (a schema reference would reject it), so `schemas/*.json` are
+the canonical files and the `builder_bot` test
+(`tests/tests/builder_bot.rs`) keeps the inline copies equal to them. The
+engine treats them as metadata only; `intake` checks the request with its
+`cond` and ends in `failed` (`invalid-request`) otherwise.
 
 ## Topology
 
 ```
-intake -> design -> author -> validate -> simulate -> package -> done
+intake -> design -> author -> validate -> simulate -> done
                        ^          |  ^        |
                        |     apply_fixes      |
                        |          v           v
@@ -80,7 +95,7 @@ intake -> design -> author -> validate -> simulate -> package -> done
   its invocation is cancelled, dropped), and a control event an earlier run
   left on the queue (for example the `sim.drive` of a run whose invocation
   failed to start) is dropped.
-* `package`: sends `builder.done`.
+* `done`: a final state whose `<donedata>` carries the result.
 * `retry_gate`: every failure (generation, draft, validation, simulation,
   timeout) passes through it; it counts the failure and fails the build at
   `max_attempts`, so every loop is bounded.
@@ -131,47 +146,47 @@ section is refused too.
 
 ## Bindings
 
-A session that runs the builder binds the `scxml` and `decision` namespace
-packages and the `generate` and `decision` service packages (each to its
-verified component: `components.args`, which `scripts/build-components.sh`
-writes), and [`builder.args`](builder.args) adds the rest:
+Everything a run needs is in the document:
 
-| Argument | Why |
-| --- | --- |
-| `--resource builder.scxml=bots/builder/builder.scxml` | the document `parent.scxml`'s `<invoke src="builder.scxml">` loads |
-| `--extension-call-fuel 1000000000` | `sx:validate` runs the whole validator in one extension call (see `namespaces/scxml`) |
-| `--env OPENAI_API_KEY@<generate URI>`, `--env OPENAI_BASE_URL@<generate URI>` | the generate service's `env:apikey` and `env:baseurl` slots |
-| `--env TYPESAFE_API_KEY@<decision URI>`, `--env TYPESAFE_BASE_URL@<decision URI>` | the decision service's slots |
+* Its namespaces (`scxml`, `decision`) and its `<invoke type>`s (`generate`,
+  `decision`) are repository URIs
+  (`https://github.com/stateforward/nemobot/namespaces/<name>@v0.1.0`,
+  `.../services/<name>@v0.1.0`), which `scx` resolves from its
+  repository-package cache: `scripts/build-components.sh` publishes the
+  locally built packages there (README, "Running a bot").
+* Its `env` attributes scope the variables: `OPENAI_API_KEY` and
+  `OPENAI_BASE_URL` go only to the generate service's `<invoke>`s
+  (`env:apikey`, `env:baseurl`), and `TYPESAFE_API_KEY` and
+  `TYPESAFE_BASE_URL` only to the decision service's. `scx run` lists each
+  variable and the `<invoke>`s it goes to before running (names only).
+* `sx:validate` runs within scxml.rs's default extension call fuel
+  (`namespaces/scxml`), so no flag raises it.
 
 No backend URL is compiled into a component, so each base URL comes from
-the env file or, when the file does not set it, from the calling shell
-(`scxml-cli` takes a granted variable's value from its `--env-file`, else
-from the shell). A variable neither sets holds no value, so its slot is
-absent: without `TYPESAFE_API_KEY` the builder triages with its fallback.
-Drafts are validated without packages, so a built machine uses no extension
-namespace or service.
+the env file, or, with a bare `--env NAME`, from the calling shell
+(`scx` takes a variable's value from `--env NAME=VALUE`, else its
+`--env-file`, else, for a bare `--env NAME`, the shell). A variable no source
+sets holds no value, so its slot is absent: without `TYPESAFE_API_KEY` (or
+`TYPESAFE_BASE_URL`) the builder triages with its fallback. Drafts are
+validated without packages, so a built machine uses no extension namespace
+or service.
 
 ## Running
 
-The builder answers its invoker (`#_parent`), so it runs as the child of
-[`parent.scxml`](parent.scxml), which invokes it with `autoforward="true"`
-(every external event reaches the builder) and logs its one answer
-(`builder.done` or `builder.failed`, data as JSON) before it finishes. From
-the repository root, after `sh scripts/build-components.sh` and with
-`scxml-cli` built with `--features wasmtime` (see the
+From the repository root, after `sh scripts/build-components.sh` and with
+`scx` installed from the subtree (see the
 [README](../../README.md#running-a-bot)):
 
 ```console
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
-  OPENAI_BASE_URL=https://api.openai.com/v1 TYPESAFE_BASE_URL=https://api.typesafe.ai \
-  scxml-cli run @target/components/components.args @bots/builder/builder.args \
-    --env-file .env bots/builder/parent.scxml
+  scx run --env-file .env bots/builder/builder.scx
 ```
 
-Standard output carries one JSON record per line; the answer is the `log`
-record labelled `builder.done` or `builder.failed`, and the run exits 0 once
-the parent finishes. The two base URLs on the command line are defaults the
-env file's values override.
+Standard output carries one JSON record per line: `log` records with the
+progress, then the `done` record whose `data` is the result, and the run
+exits 0. When the env file sets no base URL, give a default from the shell
+(the env file's value still wins): `OPENAI_BASE_URL=https://api.openai.com/v1
+scx run --env OPENAI_BASE_URL --env-file .env bots/builder/builder.scx`.
 
 ## Proof
 
@@ -181,7 +196,7 @@ Chat Completions and `system_one` backend on 127.0.0.1: an invalid first
 draft (`SCXML005`) goes back to `author` through `triage.repair`, the second
 draft's only error is fixed by its machine-applicable fix, and the fixed
 draft runs its two test scripts as two invoked children (distinct invoke
-ids) before `builder.done`; the repair request carries the failed draft and
+ids) before the builder ends in `done`; the repair request carries the failed draft and
 its tests. Other cases cover a redesign that sends the plan it replaces,
 a failed redesign keeping that plan, `triage.repair` not being offered
 without a plan, a draft that breaks the draft contract never running (also
@@ -202,7 +217,7 @@ draft contract, per-test invoke ids, the simulation timeouts), so its
 `report.json` has no per-test `invokeid`. The traffic_light example is
 model output, kept as built: for example its `onexit` handlers do not
 cancel the phase timers, which its tests do not detect. The first live
-`builder.done` of the current builder is
+successful build of the current builder is
 [`examples/traffic_light_luna`](examples/traffic_light_luna) (2026-10-06,
 `gpt-6-luna`; three attempts, two `triage.repair` decisions).
 [docs/live-proof.md](../../docs/live-proof.md) records that run and every

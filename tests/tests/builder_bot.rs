@@ -1,10 +1,10 @@
-//! Harness of the builder bot (`bots/builder/builder.scxml`), run exactly
-//! as its README says: `scxml-cli run @<components>/components.args
-//! @bots/builder/builder.args bots/builder/parent.scxml`. The parent
-//! invokes the builder as a child (`<invoke type="scxml"
-//! src="builder.scxml" autoforward="true">`), so the `builder.request` on
-//! standard input reaches it, and finishes on `builder.done` or
-//! `builder.failed`. The session binds the real `scxml` and `decision`
+//! Harness of the builder bot (`bots/builder/builder.scx`), run exactly as
+//! its README says: `scx run --env-file <file> bots/builder/builder.scx`,
+//! with the `builder.request` on standard input. Its packages resolve from
+//! their repository URIs (the test cache `scripts/build-components.sh`
+//! published), its `env` attributes scope the values, and it ends in the
+//! final state `done` or `failed`, whose `<donedata>` `scx run` prints in its
+//! `done` record. The session binds the real `scxml` and `decision`
 //! extension components and the real `generate` and `decision` service
 //! components; the services talk to one deterministic fake backend on
 //! 127.0.0.1 (Chat Completions and `TypeSafe` `system_one`; nothing reaches
@@ -16,13 +16,12 @@
 //!
 //! The ignored `live_builder_through_an_env_file` test builds the same spec
 //! with the real backends: `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p
-//! nemobot-tests --test builder_bot -- --ignored`. The builder's argument
-//! file grants `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `TYPESAFE_API_KEY`, and
-//! `TYPESAFE_BASE_URL`; the values are the file's, and the base URLs fall
-//! back to `OpenAI`'s and `TypeSafe`'s, given as the calling shell's values
-//! (no backend URL is compiled into a component). It writes the produced
-//! bot under `target/builder-live/`, and prints pass or fail and counts
-//! only; no value is ever printed.
+//! nemobot-tests --test builder_bot -- --ignored`. The values are the
+//! file's; the base URLs fall back to `OpenAI`'s and `TypeSafe`'s, given as
+//! the calling shell's values through `--env OPENAI_BASE_URL --env
+//! TYPESAFE_BASE_URL` (no backend URL is compiled into a component). It
+//! writes the produced bot under `target/builder-live/`, and prints pass or
+//! fail and counts only; no value is ever printed.
 
 #![allow(
     missing_docs,
@@ -39,7 +38,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value as Json, json};
-use support::{Run, components, output, scratch, workspace, write};
+use support::{Run, output, scratch, workspace, write};
 
 /// The fake keys (not secrets): the mock checks they arrive as bearers.
 const FAKE_OPENAI_KEY: &str = "sk-nemobot-fake";
@@ -51,65 +50,75 @@ fn builder_dir() -> PathBuf {
 }
 
 fn builder_source() -> String {
-    std::fs::read_to_string(builder_dir().join("builder.scxml")).expect("builder.scxml is readable")
+    std::fs::read_to_string(builder_dir().join("builder.scx")).expect("builder.scx is readable")
 }
 
-/// The flags of the builder's README command: the packages bound to the
-/// verified components, the builder's own argument file (or `args_file`),
-/// and the parent document.
-fn builder_args(args_file: &Path, clock: &str) -> Vec<String> {
+/// The builder document the README runs.
+fn builder_document() -> PathBuf {
+    PathBuf::from("bots/builder/builder.scx")
+}
+
+/// The flags of the builder's README command on `clock`, running
+/// `document` (the builder, or a variant of it).
+fn builder_args(document: &Path, clock: &str) -> Vec<String> {
     vec![
-        components().args(),
-        format!("@{}", args_file.display()),
         "--clock".to_owned(),
         clock.to_owned(),
-        "bots/builder/parent.scxml".to_owned(),
+        document.display().to_string(),
     ]
 }
 
-/// Starts the builder with `env_file` and sends it `request`.
+/// Starts `document` with `env_file` and sends it `request`.
 fn start(
-    args_file: &Path,
+    document: &Path,
     clock: &str,
     env_file: &Path,
     request: &Json,
     env: &[(&str, &str)],
 ) -> Run {
-    let mut args = builder_args(args_file, clock);
+    let mut args = builder_args(document, clock);
     args.extend(["--env-file".to_owned(), env_file.display().to_string()]);
+    // The base URLs fall back to the calling shell's values (`env`).
+    for (name, _) in env {
+        args.extend(["--env".to_owned(), (*name).to_owned()]);
+    }
     let mut run = Run::start(&args, env);
     run.event("builder.request", request);
     run.end_input();
     run
 }
 
-/// The root session's logs (the parent's; the builder logs nothing).
-fn logs(records: &[Json]) -> Vec<(String, String)> {
-    let root: Vec<Json> = records
-        .iter()
-        .filter(|record| record.get("parent").is_none())
-        .cloned()
-        .collect();
-    support::logs(&root)
-}
-
 fn finished(records: &[Json]) -> bool {
     support::finished(records)
 }
 
-/// The one answer the parent logged: its label and its JSON data.
+/// The builder's answer: the final state it ended in (`done` or `failed`,
+/// its last progress `log` label) and that state's done data (the root's
+/// `done` record).
 fn answer(records: &[Json]) -> (String, Json) {
-    let logs = logs(records);
-    let [(label, text)] = logs.as_slice() else {
-        panic!("the parent logs exactly one answer: {logs:?}");
-    };
-    (
-        label.clone(),
-        serde_json::from_str(text).unwrap_or_else(|_| Json::String(text.clone())),
-    )
+    let root: Vec<&Json> = records
+        .iter()
+        .filter(|record| record.get("parent").is_none())
+        .collect();
+    let done = root
+        .iter()
+        .find(|record| record["type"] == "done")
+        .unwrap_or_else(|| panic!("the builder finished with done data: {records:?}"));
+    let label = root
+        .iter()
+        .filter(|record| record["type"] == "log")
+        .filter_map(|record| record["label"].as_str())
+        .next_back()
+        .expect("the builder logs its final state")
+        .to_owned();
+    assert!(
+        matches!(label.as_str(), "done" | "failed"),
+        "the last progress log names the final state: {label}"
+    );
+    (label, done["data"].clone())
 }
 
-/// `scxml-cli validate` of `path` with `bindings`: the exit status and the
+/// `scx validate` of `path` with `bindings`: the exit status and the
 /// diagnostics.
 fn validate(path: &Path, bindings: &[String]) -> support::Output {
     let mut args = vec!["validate".to_owned(), path.display().to_string()];
@@ -129,21 +138,6 @@ fn compiles(name: &str, scxml: &str) -> bool {
         dir.join("out.scxml-ir.json").display().to_string(),
     ]);
     compiled.status.success()
-}
-
-/// The package manifests of the builder's bindings (validation reads no
-/// component).
-fn package_manifests() -> Vec<String> {
-    vec![
-        "--extension-package".to_owned(),
-        "namespaces/scxml/package/scxml.extension.json".to_owned(),
-        "--extension-package".to_owned(),
-        "namespaces/decision/package/decision.extension.json".to_owned(),
-        "--service-package".to_owned(),
-        "services/generate/package/generate.service.json".to_owned(),
-        "--service-package".to_owned(),
-        "services/decision/package/decision.service.json".to_owned(),
-    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -601,8 +595,8 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>) {
 }
 
 /// Writes an env file holding the fake keys and base URLs of `env` (the
-/// builder's argument file grants all four; a variable the file does not
-/// set holds no value, so its slot is absent).
+/// builder's document names all four; a variable the file does not set
+/// holds no value, so its slot is absent).
 fn env_file(
     test: &str,
     mock: &Mock,
@@ -631,29 +625,17 @@ fn env_file(
 
 const ALL: [&str; 4] = support::GRANTED;
 
-fn builder_args_file() -> PathBuf {
-    builder_dir().join("builder.args")
-}
-
 fn run(mock: &Mock, test: &str, route: &str, env: &[&str], request: &Json) -> Vec<Json> {
     run_deciding(mock, test, route, "typesafe", env, request)
 }
 
-/// [`run`] with `builder` as the text of `builder.scxml`: the builder's
-/// argument file, copied with its `--resource` pointing at that text.
+/// [`run`] with `builder` as the text of the builder document, run from a
+/// scratch file.
 fn run_builder(mock: &Mock, test: &str, route: &str, builder: &str, request: &Json) -> Vec<Json> {
     let dir = scratch("builder-variant");
-    let document = write(&dir, &format!("{test}.scxml"), builder);
-    let shipped = std::fs::read_to_string(builder_args_file()).expect("builder.args is readable");
-    let resource = "builder.scxml=bots/builder/builder.scxml";
-    assert!(shipped.lines().any(|line| line == resource), "{shipped}");
-    let args_file = write(
-        &dir,
-        &format!("{test}.args"),
-        &shipped.replace(resource, &format!("builder.scxml={}", document.display())),
-    );
+    let document = write(&dir, &format!("{test}.scx"), builder);
     let env = env_file(test, mock, route, "typesafe", &ALL);
-    start(&args_file, "logical", &env, request, &[])
+    start(&document, "logical", &env, request, &[])
         .finish(Duration::from_mins(5))
         .records
 }
@@ -669,7 +651,7 @@ fn run_deciding(
 ) -> Vec<Json> {
     let env = env_file(test, mock, route, decision_route, env);
     let finished =
-        start(&builder_args_file(), "logical", &env, request, &[]).finish(Duration::from_mins(5));
+        start(&builder_document(), "logical", &env, request, &[]).finish(Duration::from_mins(5));
     assert!(
         !finished.records.is_empty(),
         "the session ran: {}",
@@ -689,30 +671,31 @@ fn chat_requests<'a>(received: &'a [Received], schema: &str) -> Vec<&'a Received
 // The document itself.
 
 #[test]
-fn builder_scxml_validates_clean_with_its_packages() {
-    let validated = validate(&builder_dir().join("builder.scxml"), &package_manifests());
+fn builder_validates_clean_with_its_repository_packages() {
+    let validated = validate(&builder_dir().join("builder.scx"), &[]);
     assert!(validated.status.success(), "{}", validated.stderr);
     assert!(
         validated
             .stderr
             .contains("diagnostic summary: 0 error(s), 0 warning(s), 0 note(s)"),
-        "builder.scxml validates without an error, a warning, or a note: {}",
+        "builder.scx validates without an error, a warning, or a note: {}",
         validated.stderr
     );
 }
 
-/// Every `event:schema` of builder.scxml is an inline copy of
+/// Every `event:schema` of builder.scx is an inline copy of
 /// `schemas/<event>.json` (an event taken in two states carries the same
-/// copy in both), and every schema file is used.
+/// copy in both) or, on a final state's `<donedata>`, of
+/// `schemas/<final state id>.json`, and every schema file is used.
 #[test]
 fn builder_inline_event_schemas_equal_the_schema_files() {
     let source = builder_source();
     let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
         scxml_syntax::SourceId::new(1),
-        "builder.scxml",
+        "builder.scx",
         source.as_str(),
     ))
-    .expect("builder.scxml is XML");
+    .expect("builder.scx is XML");
     let mut inline = BTreeMap::new();
     document.root.visit(&mut |element| {
         let schema = element.attributes.iter().find(|attribute| {
@@ -731,6 +714,30 @@ fn builder_inline_event_schemas_equal_the_schema_files() {
                 serde_json::from_str(&schema.value).expect("every inline schema is JSON");
             if let Some(previous) = inline.insert(event.clone(), value.clone()) {
                 assert_eq!(previous, value, "one schema per event: {event}");
+            }
+        }
+        if element.name.local_name == "final"
+            && let Some(id) = element.attribute("id")
+        {
+            for child in &element.children {
+                let scxml_syntax::Node::Element(donedata) = child else {
+                    continue;
+                };
+                if donedata.name.local_name != "donedata" {
+                    continue;
+                }
+                let schema = donedata
+                    .attributes
+                    .iter()
+                    .find(|attribute| {
+                        attribute.name.namespace_uri.as_deref()
+                            == Some(scxml_event_schema::EVENT_NAMESPACE_URI)
+                            && attribute.name.local_name == scxml_event_schema::SCHEMA_ATTRIBUTE
+                    })
+                    .expect("each final state's donedata carries its schema");
+                let value: Json =
+                    serde_json::from_str(&schema.value).expect("every inline schema is JSON");
+                inline.insert(id.value.clone(), value);
             }
         }
     });
@@ -755,7 +762,7 @@ fn builder_inline_event_schemas_equal_the_schema_files() {
 fn the_saved_live_examples_validate() {
     for example in ["traffic_light", "traffic_light_luna"] {
         let validated = validate(
-            &builder_dir().join(format!("examples/{example}/traffic_light.scxml")),
+            &builder_dir().join(format!("examples/{example}/traffic_light.scx")),
             &[],
         );
         assert!(
@@ -786,7 +793,7 @@ fn the_builder_repairs_an_invalid_draft_fixes_it_simulates_it_and_reports_done()
     );
     assert!(finished(&records), "{records:?}");
     let (label, done) = answer(&records);
-    assert_eq!(label, "builder.done", "{done}");
+    assert_eq!(label, "done", "{done}");
 
     // The draft that came back validates on its own, and it is the
     // machine-fixed text of the second draft.
@@ -796,7 +803,7 @@ fn the_builder_repairs_an_invalid_draft_fixes_it_simulates_it_and_reports_done()
         "{scxml}"
     );
     assert!(
-        compiles("traffic_light.scxml", scxml),
+        compiles("traffic_light.scx", scxml),
         "the built machine validates and compiles"
     );
     assert_eq!(
@@ -903,7 +910,7 @@ fn assert_repair_requests(received: &[Received]) {
 fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
     let mock = Mock::start();
     let env = env_file("timeout", &mock, "slow", "redesign", &ALL);
-    let mut args = builder_args(&builder_args_file(), "wall");
+    let mut args = builder_args(&builder_document(), "wall");
     args.extend(["--env-file".to_owned(), env.display().to_string()]);
     let mut run = Run::start(&args, &[]);
     // The clock of the assertions below starts once the session is open.
@@ -919,7 +926,7 @@ fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
     records.extend(run.finish(Duration::from_mins(3)).records);
     assert!(finished(&records), "{records:?}");
     let (label, done) = answer(&records);
-    assert_eq!(label, "builder.done", "{done}");
+    assert_eq!(label, "done", "{done}");
     let report = &done["report"];
     assert_eq!(
         report["history"][0]["diagnostics"][0]["code"], "design-timeout",
@@ -970,7 +977,7 @@ fn the_builder_gives_up_after_max_attempts_with_the_fallback_triage() {
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
-    assert_eq!(label, "builder.failed", "{failed}");
+    assert_eq!(label, "failed", "{failed}");
     assert_eq!(failed["reason"], "attempts-exhausted");
     assert_eq!(failed["diagnostics"][0]["kind"], "validate");
     assert_eq!(failed["diagnostics"][0]["code"], "SCXML005");
@@ -999,7 +1006,7 @@ fn a_redesign_sends_the_previous_plan() {
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
-    assert_eq!(label, "builder.failed", "{failed}");
+    assert_eq!(label, "failed", "{failed}");
     let received = mock.received();
     let designs = chat_requests(&received, "topology_plan");
     assert_eq!(designs.len(), 2, "one design, then the redesign");
@@ -1028,7 +1035,7 @@ fn a_failed_redesign_keeps_the_previous_plan() {
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
-    assert_eq!(label, "builder.failed", "{failed}");
+    assert_eq!(label, "failed", "{failed}");
     let received = mock.received();
     let designs = chat_requests(&received, "topology_plan");
     assert_eq!(designs.len(), 3, "a design, a failed redesign, a redesign");
@@ -1061,7 +1068,7 @@ fn repair_is_not_offered_without_a_plan() {
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
-    assert_eq!(label, "builder.failed", "{failed}");
+    assert_eq!(label, "failed", "{failed}");
     assert_eq!(failed["reason"], "attempts-exhausted");
     assert_eq!(failed["diagnostics"][0]["code"], "design-failed");
     let received = mock.received();
@@ -1104,7 +1111,7 @@ fn a_draft_that_breaks_the_draft_contract_never_runs() {
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
-    assert_eq!(label, "builder.failed", "{failed}");
+    assert_eq!(label, "failed", "{failed}");
     assert_eq!(failed["reason"], "attempts-exhausted");
     assert_eq!(failed["diagnostics"][0]["kind"], "draft");
     assert_eq!(failed["diagnostics"][0]["code"], "draft-contract");
@@ -1135,7 +1142,7 @@ fn a_non_ascii_prefix_or_an_entity_does_not_get_past_the_draft_contract() {
         );
         assert!(finished(&records), "{route}: {records:?}");
         let (label, failed) = answer(&records);
-        assert_eq!(label, "builder.failed", "{route}: {failed}");
+        assert_eq!(label, "failed", "{route}: {failed}");
         assert_eq!(
             failed["diagnostics"][0]["code"], "draft-contract",
             "{route}: {failed}"
@@ -1182,7 +1189,7 @@ fn a_candidates_control_event_names_are_recorded_as_outputs() {
     );
     assert!(finished(&records), "{records:?}");
     let (label, done) = answer(&records);
-    assert_eq!(label, "builder.done", "{done}");
+    assert_eq!(label, "done", "{done}");
     let simulation = done
         .pointer("/report/simulation/0/observed")
         .cloned()
@@ -1204,7 +1211,7 @@ fn a_cancelled_candidates_builder_timeout_does_not_end_the_simulation() {
     let records = run(&mock, "stale", "stale", &ALL, &json!({"spec": SPEC}));
     assert!(finished(&records), "{records:?}");
     let (label, done) = answer(&records);
-    assert_eq!(label, "builder.done", "{done}");
+    assert_eq!(label, "done", "{done}");
     let report = &done["report"];
     assert_eq!(report["failures"], 1, "{report}");
     let diagnostics = report["history"][0]["diagnostics"]
@@ -1222,7 +1229,7 @@ fn a_cancelled_candidates_builder_timeout_does_not_end_the_simulation() {
 
 /// The `sim.drive` of a test whose candidate fails to start is not taken by
 /// the next test: that test's `ping` is sent once. The builder here is
-/// `builder.scxml` with its first test's invocation content replaced by a
+/// `builder.scx` with its first test's invocation content replaced by a
 /// text that is no SCXML document (a validated draft gives no way to make
 /// the child's start fail).
 #[test]
@@ -1244,7 +1251,7 @@ fn a_failed_invocations_sim_drive_does_not_drive_the_next_test() {
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
-    assert_eq!(label, "builder.failed", "{failed}");
+    assert_eq!(label, "failed", "{failed}");
     let diagnostics = failed["diagnostics"]
         .as_array()
         .expect("the failure's diagnostics");
@@ -1272,7 +1279,7 @@ fn an_invalid_request_is_answered_with_builder_failed() {
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
-    assert_eq!(label, "builder.failed");
+    assert_eq!(label, "failed");
     assert_eq!(failed["reason"], "invalid-request");
     assert_eq!(failed["diagnostics"][0]["kind"], "request");
     assert!(mock.received().is_empty(), "nothing is generated");
@@ -1299,7 +1306,7 @@ fn live_builder_through_an_env_file() {
     };
     let model = std::env::var("NEMOBOT_LIVE_MODEL").unwrap_or_else(|_| "gpt-6-luna".into());
     let finished = start(
-        &builder_args_file(),
+        &builder_document(),
         "wall",
         &path,
         &json!({
@@ -1317,36 +1324,37 @@ fn live_builder_through_an_env_file() {
         ],
     )
     .finish(Duration::from_mins(30));
-    let logs = logs(&finished.records);
     let out = workspace().join("target/builder-live");
     std::fs::create_dir_all(&out).expect("the output directory is creatable");
-    let pass = match logs.as_slice() {
-        [(label, text)] if label == "builder.done" => {
-            let done: Json = serde_json::from_str(text).expect("builder.done data is JSON");
-            let scxml = done["scxml"].as_str().unwrap_or_default().to_owned();
-            let valid = compiles("traffic_light.scxml", &scxml);
-            std::fs::write(out.join("traffic_light.scxml"), &scxml).expect("writable");
+    let (label, data) = answer(&finished.records);
+    let pass = if label == "done" {
+        {
+            let scxml = data["scxml"].as_str().unwrap_or_default().to_owned();
+            let valid = compiles("traffic_light.scx", &scxml);
+            std::fs::write(out.join("traffic_light.scx"), &scxml).expect("writable");
             for member in ["schemas", "tests", "report"] {
                 std::fs::write(
                     out.join(format!("{member}.json")),
-                    serde_json::to_string_pretty(&done[member]).expect("JSON"),
+                    serde_json::to_string_pretty(&data[member]).expect("JSON"),
                 )
                 .expect("writable");
             }
             println!(
                 "live builder: attempts {}, failures {}, fixes {}, decisions {}",
-                done["report"]["attempts"],
-                done["report"]["failures"],
-                done["report"]["fixes_applied"],
-                done["report"]["decisions"]
+                data["report"]["attempts"],
+                data["report"]["failures"],
+                data["report"]["fixes_applied"],
+                data["report"]["decisions"]
             );
             valid
         }
-        [(label, text)] if label == "builder.failed" => {
-            std::fs::write(out.join("failed.json"), text).expect("writable");
-            false
-        }
-        _ => false,
+    } else {
+        std::fs::write(
+            out.join("failed.json"),
+            serde_json::to_string_pretty(&data).expect("JSON"),
+        )
+        .expect("writable");
+        false
     };
     println!("live builder: {}", if pass { "pass" } else { "fail" });
     assert!(pass, "the live build did not pass");
