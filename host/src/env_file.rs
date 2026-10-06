@@ -125,19 +125,12 @@ impl Values {
         self.entries.iter().map(|(name, _)| name.as_str())
     }
 
-    /// Hands the values to the session host's environment (references only
-    /// ever reach components).
-    ///
-    /// # Errors
-    ///
-    /// [`FailureKind::EnvFile`] when the host refuses a name or value.
-    pub fn environment(&self) -> Result<scxml_host_wasmtime::ExtensionEnvironment, HostFailure> {
-        scxml_host_wasmtime::ExtensionEnvironment::new(self.entries.clone()).map_err(|error| {
-            HostFailure::new(
-                FailureKind::EnvFile,
-                format!("the session host refuses the granted variables: {error}"),
-            )
-        })
+    /// The `(name, value)` entries, for scoping into the session host's
+    /// environment ([`crate::packages::Packages`]); never formatted.
+    pub(crate) fn entries(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.entries
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
     }
 }
 

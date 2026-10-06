@@ -108,9 +108,10 @@ phase 7; until then every backend is selected by its `env:baseurl` slot.
 - `nemobot-host` binds packages only from local files its config names; it
   does not resolve repository namespaces or services (the CLI's resolver does).
 - Sessions are not recorded or replayed.
-- A run's `env` grant is one flat list: every bound package (and every
-  child session an `<invoke type="scxml">` compiles at run time, which
-  inherits the parent's packages) can name any granted variable in any of
-  its slots. The builder refuses drafts that could use this (its draft
-  contract), but scoping each granted variable to the package URIs it is
-  for, in the nemobot config, is still open.
+- Each granted `env` variable is scoped to the package URIs the config
+  lists for it (`env: [{"name", "packages"}]`); a slot of any other
+  package that names it is absent, exactly like an unheld value. The scope
+  is by package URI, so a child session an `<invoke type="scxml">` compiles
+  at run time (which inherits the parent's packages) reaches a variable
+  through those packages' elements too; the builder's draft contract still
+  refuses drafts that use foreign namespaces.

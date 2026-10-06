@@ -37,6 +37,7 @@ use scxml_host_wasmtime::SessionOutput;
 use sha2::{Digest as _, Sha256};
 
 const NAMESPACE_URI: &str = "https://github.com/stateforward/nemobot/namespaces/generate@v0.1.0";
+const DECISION_URI: &str = "https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0";
 /// The fake key (not a secret): the mock checks it arrives as the bearer.
 const FAKE_KEY: &str = "sk-nemobot-fake";
 
@@ -52,12 +53,11 @@ fn sha256_file(path: &Path) -> String {
 }
 
 /// The verified artifacts: the session components' directory and manifest
-/// digest, and the generate component and its digest.
+/// digest, and the namespace components' directory.
 struct Artifacts {
     components: PathBuf,
     manifest_sha256: String,
-    component: PathBuf,
-    component_sha256: String,
+    namespaces: PathBuf,
 }
 
 fn artifacts() -> &'static Artifacts {
@@ -73,26 +73,60 @@ fn artifacts() -> &'static Artifacts {
             .expect("the build script runs");
         assert!(status.success(), "the component proof must pass");
         let components = dir.join("scxml");
-        let component = dir.join("namespaces/nemobot_generate.virtualized.wasm");
         Artifacts {
             manifest_sha256: sha256_file(&components.join("manifest.tsv")),
-            component_sha256: sha256_file(&component),
             components,
-            component,
+            namespaces: dir.join("namespaces"),
         }
     })
 }
 
-/// A config binding the generate package, granting `env` from `env_file`.
+/// A config binding the generate package, granting `env` from `env_file` to
+/// the generate namespace.
 fn config(env_file: &Path, env: &[&str]) -> Config {
     config_with_defaults(env_file, env, &serde_json::json!({}))
 }
 
 /// [`config`] with non-secret `env-defaults`.
 fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &serde_json::Value) -> Config {
+    let grants: Vec<(&str, &[&str])> = env
+        .iter()
+        .map(|name| (*name, [NAMESPACE_URI].as_slice()))
+        .collect();
+    let text = config_text(env_file, &grants, defaults, &["generate"]);
+    Config::parse(text.as_bytes(), &PathBuf::from("/")).expect("the test config is valid")
+}
+
+/// The config text binding the `namespaces` packages and granting each
+/// `(name, packages)` from `env_file`.
+fn config_text(
+    env_file: &Path,
+    grants: &[(&str, &[&str])],
+    defaults: &serde_json::Value,
+    namespaces: &[&str],
+) -> String {
     let artifacts = artifacts();
-    let package = workspace().join("namespaces/generate/package/generate.extension.json");
-    let text = serde_json::json!({
+    let extensions: Vec<serde_json::Value> = namespaces
+        .iter()
+        .map(|name| {
+            let component = artifacts
+                .namespaces
+                .join(format!("nemobot_{name}.virtualized.wasm"));
+            serde_json::json!({
+                "manifest": workspace()
+                    .join(format!("namespaces/{name}/package/{name}.extension.json"))
+                    .display()
+                    .to_string(),
+                "component": component.display().to_string(),
+                "component-sha256": sha256_file(&component),
+            })
+        })
+        .collect();
+    let env: Vec<serde_json::Value> = grants
+        .iter()
+        .map(|(name, packages)| serde_json::json!({"name": name, "packages": packages}))
+        .collect();
+    serde_json::json!({
         "format": CONFIG_FORMAT,
         "components": {
             "dir": artifacts.components.display().to_string(),
@@ -101,15 +135,10 @@ fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &serde_json::Va
         "env-file": env_file.display().to_string(),
         "env": env,
         "env-defaults": defaults,
-        "extensions": [{
-            "manifest": package.display().to_string(),
-            "component": artifacts.component.display().to_string(),
-            "component-sha256": artifacts.component_sha256,
-        }],
+        "extensions": extensions,
         "outbound-http": true,
     })
-    .to_string();
-    Config::parse(text.as_bytes(), &PathBuf::from("/")).expect("the test config is valid")
+    .to_string()
 }
 
 /// One request the mock received.
@@ -218,7 +247,7 @@ fn env_file(test: &str, base_url: &str) -> PathBuf {
 
 fn open(config: &Config, document: &str) -> SessionHandle {
     let packages = Packages::load(config).expect("the generate package binds");
-    let consent = packages.consent(&Values::none());
+    let consent = packages.consent();
     assert!(
         consent.contains(NAMESPACE_URI)
             && consent.contains("http-origins: https://api.openai.com")
@@ -230,7 +259,7 @@ fn open(config: &Config, document: &str) -> SessionHandle {
             .env_file
             .as_deref()
             .expect("the config names an env file"),
-        &config.env,
+        &config.env_names(),
         &config.env_defaults,
         &|_| None,
     )
@@ -444,6 +473,91 @@ fn without_a_granted_key_nothing_is_sent() {
     assert!(mock.received().is_empty(), "no request without a key");
 }
 
+#[test]
+fn the_consent_lists_each_variable_and_the_packages_it_is_granted_to() {
+    let env = env_file("listing", "http://127.0.0.1:9/v1");
+    let text = config_text(
+        &env,
+        &[
+            ("OPENAI_API_KEY", &[NAMESPACE_URI, DECISION_URI]),
+            ("OPENAI_BASE_URL", &[NAMESPACE_URI]),
+        ],
+        &serde_json::json!({}),
+        &["generate", "decision"],
+    );
+    let config = Config::parse(text.as_bytes(), &PathBuf::from("/")).expect("valid");
+    let consent = Packages::load(&config).expect("both bind").consent();
+    assert!(
+        consent.ends_with(&format!(
+            "env granted:\n  OPENAI_API_KEY -> {NAMESPACE_URI}, {DECISION_URI}\n  OPENAI_BASE_URL -> {NAMESPACE_URI}\n"
+        )),
+        "{consent}"
+    );
+    assert!(!consent.contains(FAKE_KEY), "names only: {consent}");
+}
+
+#[test]
+fn a_key_granted_only_to_another_package_is_absent_and_nothing_is_sent() {
+    let mock = Mock::start();
+    let env = env_file("out-of-scope", &format!("{}/text/v1", mock.origin));
+    // The key is granted to the decision namespace only: the generate
+    // element's apikey slot names it, gets no reference, and is absent
+    // exactly as if the run held no value.
+    let text = config_text(
+        &env,
+        &[
+            ("OPENAI_API_KEY", &[DECISION_URI]),
+            ("OPENAI_BASE_URL", &[NAMESPACE_URI]),
+        ],
+        &serde_json::json!({}),
+        &["generate", "decision"],
+    );
+    let config = Config::parse(text.as_bytes(), &PathBuf::from("/")).expect("valid");
+    let handle = open(&config, &document(TEXT_ELEMENT, "reply"));
+    let records = until_closed(&handle, Duration::from_secs(60));
+    assert_eq!(
+        logs(&records),
+        labelled(&[("final", "failed-unassigned")]),
+        "{records:?}"
+    );
+    assert!(
+        mock.received().is_empty(),
+        "no request without an in-scope key"
+    );
+}
+
+#[test]
+fn a_grant_to_an_unbound_package_or_one_without_env_slots_fails_closed() {
+    let env = env_file("unknown-package", "http://127.0.0.1:9/v1");
+    for (packages, namespaces, expected) in [
+        (
+            [DECISION_URI].as_slice(),
+            ["generate"].as_slice(),
+            "which no bound package has",
+        ),
+        (
+            ["https://github.com/stateforward/nemobot/namespaces/scxml@v0.1.0"].as_slice(),
+            ["generate", "scxml"].as_slice(),
+            "declares no env slot",
+        ),
+    ] {
+        let text = config_text(
+            &env,
+            &[("OPENAI_API_KEY", packages)],
+            &serde_json::json!({}),
+            namespaces,
+        );
+        let config = Config::parse(text.as_bytes(), &PathBuf::from("/")).expect("valid");
+        let failure = Packages::load(&config).expect_err("an unknown scope fails closed");
+        assert_eq!(failure.kind(), nemobot_host::FailureKind::Config);
+        assert!(
+            failure.message().contains(expected),
+            "{}",
+            failure.message()
+        );
+    }
+}
+
 /// `OpenAI`'s base URL, the live run's config default (never compiled into
 /// the component).
 const OPENAI_BASE_URL_DEFAULT: &str = "https://api.openai.com/v1";
@@ -466,7 +580,9 @@ fn live_generate_through_an_env_file() {
         &["OPENAI_API_KEY", "OPENAI_BASE_URL"],
         &serde_json::json!({"OPENAI_BASE_URL": OPENAI_BASE_URL_DEFAULT}),
     );
-    if let Err(failure) = Values::granted(&path, &config.env, &config.env_defaults, &|_| None) {
+    if let Err(failure) =
+        Values::granted(&path, &config.env_names(), &config.env_defaults, &|_| None)
+    {
         panic!(
             "the env file must set OPENAI_API_KEY ({:?})",
             failure.kind()

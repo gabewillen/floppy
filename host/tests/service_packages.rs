@@ -157,7 +157,7 @@ fn a_granted_service_binds_and_the_consent_lists_its_permission_and_grant() {
     packages
         .service_components(&Values::none(), None)
         .expect("the session host accepts the services and the grant");
-    let consent = packages.consent(&Values::none());
+    let consent = packages.consent();
     let files_line = consent
         .lines()
         .find(|line| line.starts_with("  wasi: "))

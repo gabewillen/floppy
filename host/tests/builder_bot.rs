@@ -99,8 +99,18 @@ fn artifacts() -> &'static Artifacts {
     })
 }
 
+/// The package each variable is granted to: `OPENAI_*` to `generate`, every
+/// other (`TYPESAFE_*`) to `decision`.
+fn scope(name: &str) -> &'static str {
+    if name.starts_with("OPENAI_") {
+        "https://github.com/stateforward/nemobot/namespaces/generate@v0.1.0"
+    } else {
+        "https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0"
+    }
+}
+
 /// A config binding the `scxml`, `generate`, and `decision` packages,
-/// granting `env` from `env_file`.
+/// granting `env` from `env_file`, each variable to its [`scope`].
 fn config(env_file: &Path, env: &[&str]) -> Config {
     config_with_defaults(env_file, env, &json!({}))
 }
@@ -128,7 +138,10 @@ fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &Json) -> Confi
             "manifest-sha256": artifacts.manifest_sha256,
         },
         "env-file": env_file.display().to_string(),
-        "env": env,
+        "env": env
+            .iter()
+            .map(|name| json!({"name": name, "packages": [scope(name)]}))
+            .collect::<Vec<_>>(),
         "env-defaults": defaults,
         "extensions": [extension("scxml"), extension("generate"), extension("decision")],
         "outbound-http": true,
@@ -173,7 +186,7 @@ fn open_builder(config: &Config, clock: ClockMode, builder: String) -> SessionHa
             .env_file
             .as_deref()
             .expect("the config names an env file"),
-        &config.env,
+        &config.env_names(),
         &config.env_defaults,
         &|_| None,
     )

@@ -11,8 +11,8 @@ reopening one needs the maintainer. All are dated 2026-10-06.
 | Kind | squashed `git subtree` |
 | Source repository | local scxml.rs (`stateforward/scxml.rs`) |
 | Source branch | `feat/invoke-services` |
-| Source commit | `2bf0dd5520fd912e5915ac96f64b1d6f103c984b` ("Print only variable names in ExtensionEnvironment's Debug and state the extension WASI refusal in AGENTS.md") |
-| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d"), then `070aa258` ("Squashed 'scxml.rs/' changes from fe7d555d..dd18cd11"), then `0a20ad2b` ("Squashed 'scxml.rs/' changes from dd18cd11..2bf0dd55") |
+| Source commit | `ebc051ae110bf9de6a328c9c9bbb47cd7b5b0ed3` ("Scope env values to the package URIs they are granted to") |
+| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d"), then `070aa258` ("Squashed 'scxml.rs/' changes from fe7d555d..dd18cd11"), then `0a20ad2b` ("Squashed 'scxml.rs/' changes from dd18cd11..2bf0dd55"), then `bf96cbf9` ("Squashed 'scxml.rs/' changes from 2bf0dd55..ebc051ae") |
 | Update | `git subtree pull --prefix scxml.rs <scxml.rs> feat/invoke-services --squash`, after the change lands upstream |
 
 ## Decisions
@@ -66,3 +66,15 @@ reopening one needs the maintainer. All are dated 2026-10-06.
   example `{"OPENAI_BASE_URL": "https://api.openai.com/v1"}`) that the env
   file's value overrides. The manifests' `http-origins` stay as the
   consented origins.
+- Env scoping (2026-10-06, approved by the maintainer as overnight decision
+  4): each granted variable in a nemobot config names the exact package URIs
+  (extension namespaces or services) allowed to receive it
+  (`"env": [{"name": "OPENAI_API_KEY", "packages": ["<generate URI>"]}]`).
+  The scope is enforced by scxml.rs's session host (`EnvVariable`,
+  `ExtensionEnvironment` on `feat/invoke-services`), so a slot reference to
+  a variable not granted to its element's or `<invoke>`'s package is absent
+  exactly like an unheld value. A grant to an unbound package, or to one
+  that declares no `env` slot, fails closed when the packages bind; the
+  consent listing shows each variable and its packages (names only). The
+  scxml.rs CLI's `--env` became `--env NAME@URI[=VALUE]` in the same hard
+  cutover, with no unscoped form.

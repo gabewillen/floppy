@@ -89,7 +89,8 @@ fn artifacts() -> &'static Artifacts {
     })
 }
 
-/// A config binding the decision package, granting `env` from `env_file`.
+/// A config binding the decision package, granting `env` from `env_file` to
+/// the decision namespace.
 fn config(env_file: &Path, env: &[&str]) -> Config {
     config_with_defaults(env_file, env, &json!({}))
 }
@@ -105,7 +106,10 @@ fn config_with_defaults(env_file: &Path, env: &[&str], defaults: &Json) -> Confi
             "manifest-sha256": artifacts.manifest_sha256,
         },
         "env-file": env_file.display().to_string(),
-        "env": env,
+        "env": env
+            .iter()
+            .map(|name| json!({"name": name, "packages": [NAMESPACE_URI]}))
+            .collect::<Vec<_>>(),
         "env-defaults": defaults,
         "extensions": [{
             "manifest": package.display().to_string(),
@@ -267,7 +271,7 @@ fn env_file(test: &str, base_url: &str) -> PathBuf {
 
 fn open(config: &Config, document: &str) -> SessionHandle {
     let packages = Packages::load(config).expect("the decision package binds");
-    let consent = packages.consent(&Values::none());
+    let consent = packages.consent();
     assert!(
         consent.contains(NAMESPACE_URI)
             && consent.contains("http-origins: https://api.typesafe.ai")
@@ -279,7 +283,7 @@ fn open(config: &Config, document: &str) -> SessionHandle {
             .env_file
             .as_deref()
             .expect("the config names an env file"),
-        &config.env,
+        &config.env_names(),
         &config.env_defaults,
         &|_| None,
     )
@@ -542,7 +546,9 @@ fn live_choose_through_an_env_file() {
         &BOTH,
         &json!({"TYPESAFE_BASE_URL": TYPESAFE_BASE_URL_DEFAULT}),
     );
-    if let Err(failure) = Values::granted(&path, &config.env, &config.env_defaults, &|_| None) {
+    if let Err(failure) =
+        Values::granted(&path, &config.env_names(), &config.env_defaults, &|_| None)
+    {
         panic!(
             "the env file must set TYPESAFE_API_KEY ({:?})",
             failure.kind()

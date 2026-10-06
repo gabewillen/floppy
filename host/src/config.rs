@@ -7,7 +7,12 @@
 //!   "format": "stateforward.nemobot.config/v1",
 //!   "components": { "dir": "target/scxml-components", "manifest-sha256": "<hex>" },
 //!   "env-file": "../mosfet/mosfet.py/.env",
-//!   "env": ["OPENAI_API_KEY", "OPENAI_BASE_URL"],
+//!   "env": [
+//!     { "name": "OPENAI_API_KEY",
+//!       "packages": ["https://github.com/stateforward/nemobot/namespaces/generate@v0.1.0"] },
+//!     { "name": "OPENAI_BASE_URL",
+//!       "packages": ["https://github.com/stateforward/nemobot/namespaces/generate@v0.1.0"] }
+//!   ],
 //!   "env-defaults": { "OPENAI_BASE_URL": "https://api.openai.com/v1" },
 //!   "extensions": [
 //!     { "manifest": "namespaces/generate/package/generate.extension.json",
@@ -32,9 +37,13 @@
 //! * `components`: a `scxml.rs/scripts/verify-wasm-capabilities.sh` artifacts
 //!   directory and the trusted SHA-256 of its `manifest.tsv` (required).
 //! * `env-file` (optional) and `env`: the run grants exactly the variables
-//!   `env` names, read from `env-file` (Docker `--env-file` format); `env`
-//!   without `env-file` is refused, and the process environment is never read
-//!   for them.
+//!   `env` names, read from `env-file` (Docker `--env-file` format), each to
+//!   exactly the package URIs (extension namespace URIs or service type URIs)
+//!   its `packages` lists. An element or `<invoke>` of any other package that
+//!   names the variable gets no reference: its slot is absent, exactly like
+//!   an unheld value. `env` without `env-file` is refused, the process
+//!   environment is never read for them, and every listed package must be
+//!   bound and declare an `env` slot (checked when the packages bind).
 //! * `env-defaults` (optional): non-secret values (such as a backend's base
 //!   URL) for granted variables the env file does not set; the env file's
 //!   value wins. Every name must be one `env` grants, and no key or other
@@ -128,6 +137,17 @@ pub struct UriGrant {
     pub grant: Grant,
 }
 
+/// One granted variable and the exact package URIs it is granted to.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EnvGrant {
+    /// The variable name.
+    pub name: String,
+    /// The exact package URIs (extension namespace or service type URIs)
+    /// whose elements or `<invoke>`s may reference it: non-empty, distinct,
+    /// in config order.
+    pub packages: Vec<String>,
+}
+
 /// One checked nemobot config.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
@@ -135,8 +155,9 @@ pub struct Config {
     pub components: Components,
     /// The env file the granted variables come from.
     pub env_file: Option<PathBuf>,
-    /// The variables the run grants, in config order, distinct.
-    pub env: Vec<String>,
+    /// The variables the run grants and their packages, in config order,
+    /// distinct by name.
+    pub env: Vec<EnvGrant>,
     /// Non-secret defaults for granted variables the env file does not set
     /// (`Debug` shows names only, like every [`Values`]).
     pub env_defaults: Values,
@@ -164,7 +185,7 @@ struct RawConfig {
     #[serde(default)]
     env_file: Option<String>,
     #[serde(default)]
-    env: Vec<String>,
+    env: Vec<RawEnvGrant>,
     #[serde(default)]
     env_defaults: std::collections::BTreeMap<String, String>,
     #[serde(default)]
@@ -181,6 +202,13 @@ struct RawConfig {
     max_commands: Option<u64>,
     #[serde(default)]
     extension_call_fuel: Option<u64>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+struct RawEnvGrant {
+    name: String,
+    packages: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -360,21 +388,38 @@ impl Config {
     /// The granted variables (`env`) and their non-secret defaults
     /// (`env-defaults`), checked.
     fn env(
-        raw_env: Vec<String>,
+        raw_env: Vec<RawEnvGrant>,
         raw_defaults: std::collections::BTreeMap<String, String>,
         has_env_file: bool,
-    ) -> Result<(Vec<String>, Values), HostFailure> {
-        let mut env: Vec<String> = Vec::with_capacity(raw_env.len());
-        for name in raw_env {
+    ) -> Result<(Vec<EnvGrant>, Values), HostFailure> {
+        let mut env: Vec<EnvGrant> = Vec::with_capacity(raw_env.len());
+        for (index, RawEnvGrant { name, packages }) in raw_env.into_iter().enumerate() {
             if !crate::env_file::is_name(&name) {
-                return Err(config_error(
-                    "field `env` lists a name that is not a variable name ([A-Za-z_][A-Za-z0-9_]*)",
-                ));
+                return Err(config_error(format!(
+                    "field `env[{index}].name` is not a variable name ([A-Za-z_][A-Za-z0-9_]*)"
+                )));
             }
-            if env.contains(&name) {
-                return Err(config_error(format!("field `env` lists `{name}` twice")));
+            if env.iter().any(|granted| granted.name == name) {
+                return Err(config_error(format!("field `env` grants `{name}` twice")));
             }
-            env.push(name);
+            if packages.is_empty() {
+                return Err(config_error(format!(
+                    "field `env[{index}].packages` must list at least one package URI"
+                )));
+            }
+            for (position, uri) in packages.iter().enumerate() {
+                if uri.is_empty() {
+                    return Err(config_error(format!(
+                        "field `env[{index}].packages` lists an empty URI"
+                    )));
+                }
+                if packages.iter().take(position).any(|seen| seen == uri) {
+                    return Err(config_error(format!(
+                        "field `env[{index}].packages` lists `{uri}` twice"
+                    )));
+                }
+            }
+            env.push(EnvGrant { name, packages });
         }
         if !env.is_empty() && !has_env_file {
             return Err(config_error(
@@ -383,7 +428,7 @@ impl Config {
         }
         let mut defaults = Vec::with_capacity(raw_defaults.len());
         for (name, value) in raw_defaults {
-            if !env.contains(&name) {
+            if !env.iter().any(|granted| granted.name == name) {
                 return Err(config_error(format!(
                     "field `env-defaults` names `{name}`, which `env` does not grant"
                 )));
@@ -480,6 +525,17 @@ impl Config {
     }
 }
 
+impl Config {
+    /// The granted variable names, in config order.
+    #[must_use]
+    pub fn env_names(&self) -> Vec<String> {
+        self.env
+            .iter()
+            .map(|granted| granted.name.clone())
+            .collect()
+    }
+}
+
 impl Grant {
     /// The grant as the session host takes it.
     #[must_use]
@@ -538,10 +594,18 @@ mod tests {
     #[test]
     fn packages_and_grants_parse() {
         let config = parse(&minimal(&format!(
-            r#","env-file":"/x/.env","env":["OPENAI_API_KEY"],"services":[{{"manifest":"s.json","component-sha256":"{DIGEST}"}}],"grants":[{{"uri":"u","permission":"wasi:filesystem","mount":"data","directory":"d"}},{{"uri":"u","permission":"wasi:sockets/tcp","connect":["127.0.0.1:80"]}}],"outbound-http":false,"max-commands":7,"extension-call-fuel":9"#
+            r#","env-file":"/x/.env","env":[{{"name":"OPENAI_API_KEY","packages":["urn:a","urn:b"]}}],"services":[{{"manifest":"s.json","component-sha256":"{DIGEST}"}}],"grants":[{{"uri":"u","permission":"wasi:filesystem","mount":"data","directory":"d"}},{{"uri":"u","permission":"wasi:sockets/tcp","connect":["127.0.0.1:80"]}}],"outbound-http":false,"max-commands":7,"extension-call-fuel":9"#
         )))
         .expect("valid");
         assert_eq!(config.env_file.as_deref(), Some(Path::new("/x/.env")));
+        assert_eq!(
+            config.env,
+            [EnvGrant {
+                name: "OPENAI_API_KEY".into(),
+                packages: vec!["urn:a".into(), "urn:b".into()],
+            }]
+        );
+        assert_eq!(config.env_names(), ["OPENAI_API_KEY"]);
         assert_eq!(config.env_defaults, Values::none());
         assert_eq!(config.services[0].manifest, Path::new("/base/s.json"));
         assert_eq!(config.services[0].component, None);
@@ -560,7 +624,7 @@ mod tests {
     #[test]
     fn env_defaults_name_granted_variables_and_debug_shows_names_only() {
         let config = parse(&minimal(
-            r#","env-file":"e","env":["KEY","BASE"],"env-defaults":{"BASE":"https://api.example.invalid/v1"}"#,
+            r#","env-file":"e","env":[{"name":"KEY","packages":["urn:a"]},{"name":"BASE","packages":["urn:a"]}],"env-defaults":{"BASE":"https://api.example.invalid/v1"}"#,
         ))
         .expect("valid");
         assert_eq!(config.env_defaults.names().collect::<Vec<_>>(), ["BASE"]);
@@ -574,15 +638,45 @@ mod tests {
     fn invalid_configs_are_refused() {
         for (extra, expected) in [
             (r#","unknown":1"#, "unknown field"),
-            (r#","env":["A"]"#, "needs `env-file`"),
-            (r#","env-file":"e","env":["A","A"]"#, "twice"),
-            (r#","env-file":"e","env":["1A"]"#, "not a variable name"),
             (
-                r#","env-file":"e","env":["A"],"env-defaults":{"B":"x"}"#,
+                r#","env":[{"name":"A","packages":["urn:a"]}]"#,
+                "needs `env-file`",
+            ),
+            (
+                r#","env-file":"e","env":[{"name":"A","packages":["urn:a"]},{"name":"A","packages":["urn:b"]}]"#,
+                "grants `A` twice",
+            ),
+            (
+                r#","env-file":"e","env":[{"name":"1A","packages":["urn:a"]}]"#,
+                "not a variable name",
+            ),
+            (r#","env-file":"e","env":["A"]"#, "the config is invalid"),
+            (
+                r#","env-file":"e","env":[{"name":"A"}]"#,
+                "missing field `packages`",
+            ),
+            (
+                r#","env-file":"e","env":[{"name":"A","packages":["urn:a"],"scope":1}]"#,
+                "unknown field",
+            ),
+            (
+                r#","env-file":"e","env":[{"name":"A","packages":[]}]"#,
+                "at least one package URI",
+            ),
+            (
+                r#","env-file":"e","env":[{"name":"A","packages":[""]}]"#,
+                "empty URI",
+            ),
+            (
+                r#","env-file":"e","env":[{"name":"A","packages":["urn:a","urn:a"]}]"#,
+                "lists `urn:a` twice",
+            ),
+            (
+                r#","env-file":"e","env":[{"name":"A","packages":["urn:a"]}],"env-defaults":{"B":"x"}"#,
                 "`env` does not grant",
             ),
             (
-                r#","env-file":"e","env":["A"],"env-defaults":{"A":""}"#,
+                r#","env-file":"e","env":[{"name":"A","packages":["urn:a"]}],"env-defaults":{"A":""}"#,
                 "must be non-empty",
             ),
             (r#","fuel":0"#, "`fuel` must be positive"),

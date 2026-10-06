@@ -23,7 +23,7 @@ use scxml_validator_core::{
     ServicePackageManifest,
 };
 
-use crate::config::{Config, PackageRef, UriGrant};
+use crate::config::{Config, EnvGrant, PackageRef, UriGrant};
 use crate::env_file::Values;
 use crate::telemetry::{Operation, observe};
 use crate::{FailureKind, HostFailure};
@@ -67,6 +67,7 @@ pub struct Packages {
     /// Service packages, in config order.
     pub services: Vec<Service>,
     grants: Vec<UriGrant>,
+    env: Vec<EnvGrant>,
 }
 
 fn package_error(message: impl Into<String>) -> HostFailure {
@@ -294,7 +295,9 @@ impl Packages {
     /// # Errors
     ///
     /// [`FailureKind::Package`] for a package that cannot be read, verified,
-    /// or authenticated, or a URI bound twice; [`FailureKind::Grant`] for a
+    /// or authenticated, or a URI bound twice; [`FailureKind::Config`] for an
+    /// `env` grant to a package URI no bound package has, or to one whose
+    /// package declares no `env` slot; [`FailureKind::Grant`] for a
     /// grant that names no bound service or no permission it declares, a
     /// declared permission the config does not grant, or a grant to an
     /// extension package (the scxml.rs session host links no WASI interface
@@ -331,9 +334,84 @@ impl Packages {
             extensions,
             services,
             grants: config.grants.clone(),
+            env: config.env.clone(),
         };
+        packages.check_env()?;
         packages.check_grants()?;
         Ok(packages)
+    }
+
+    /// Every `env` grant names bound packages that declare an `env` slot.
+    fn check_env(&self) -> Result<(), HostFailure> {
+        for EnvGrant { name, packages } in &self.env {
+            for uri in packages {
+                let slots = self
+                    .extensions
+                    .iter()
+                    .find(|extension| &extension.manifest.namespace_uri == uri)
+                    .map(|extension| &extension.manifest.env_slots)
+                    .or_else(|| {
+                        self.services
+                            .iter()
+                            .find(|service| &service.manifest.service_uri == uri)
+                            .map(|service| &service.manifest.env_slots)
+                    });
+                match slots {
+                    None => {
+                        return Err(HostFailure::new(
+                            FailureKind::Config,
+                            format!(
+                                "field `env` grants `{name}` to `{uri}`, which no bound package has"
+                            ),
+                        ));
+                    }
+                    Some(slots) if slots.is_empty() => {
+                        return Err(HostFailure::new(
+                            FailureKind::Config,
+                            format!(
+                                "field `env` grants `{name}` to `{uri}`, whose package declares no env slot"
+                            ),
+                        ));
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The run's values as the session host takes them: each granted
+    /// variable `values` holds, scoped to exactly the package URIs the config
+    /// grants it to.
+    ///
+    /// # Errors
+    ///
+    /// [`FailureKind::EnvFile`] for a value the config grants to no package
+    /// (fail closed) or a name or value the host refuses.
+    fn environment(
+        &self,
+        values: &Values,
+    ) -> Result<scxml_host_wasmtime::ExtensionEnvironment, HostFailure> {
+        let mut variables = Vec::new();
+        for (name, value) in values.entries() {
+            let Some(granted) = self.env.iter().find(|granted| granted.name == name) else {
+                return Err(HostFailure::new(
+                    FailureKind::EnvFile,
+                    format!("the run holds `{name}`, which the config grants to no package"),
+                ));
+            };
+            variables.push(scxml_host_wasmtime::EnvVariable::new(
+                name,
+                value,
+                granted.packages.iter().cloned(),
+            ));
+        }
+        scxml_host_wasmtime::ExtensionEnvironment::new(variables).map_err(|error| {
+            HostFailure::new(
+                FailureKind::EnvFile,
+                format!("the session host refuses the granted variables: {error}"),
+            )
+        })
     }
 
     fn check_grants(&self) -> Result<(), HostFailure> {
@@ -409,10 +487,11 @@ impl Packages {
 
     /// What binding consents to, one line per package and declaration: its
     /// URI, version, declared outbound origins, `env` slots, and WASI
-    /// permissions with what the config grants them, and the variables the
-    /// run grants (names only). An embedder shows it before running.
+    /// permissions with what the config grants them, and each variable the
+    /// run grants with the package URIs it is granted to (names only, never
+    /// a value). An embedder shows it before running.
     #[must_use]
-    pub fn consent(&self, values: &Values) -> String {
+    pub fn consent(&self) -> String {
         let mut lines: Vec<String> = Vec::new();
         let list = |items: &[String]| {
             if items.is_empty() {
@@ -456,8 +535,14 @@ impl Packages {
                 ));
             }
         }
-        let names: Vec<String> = values.names().map(str::to_owned).collect();
-        lines.push(format!("env granted: {}\n", list(&names)));
+        if self.env.is_empty() {
+            lines.push("env granted: none\n".to_owned());
+        } else {
+            lines.push("env granted:\n".to_owned());
+            for EnvGrant { name, packages } in &self.env {
+                lines.push(format!("  {name} -> {}\n", packages.join(", ")));
+            }
+        }
         lines.concat()
     }
 
@@ -525,7 +610,7 @@ impl Packages {
         values: &Values,
         http: Option<&Arc<dyn ExtensionHttp>>,
     ) -> Result<ExtensionComponents, HostFailure> {
-        let mut components = ExtensionComponents::new().with_values(values.environment()?);
+        let mut components = ExtensionComponents::new().with_values(self.environment(values)?);
         if let Some(http) = http {
             components = components.with_outbound_http(Arc::clone(http));
         }
@@ -564,7 +649,7 @@ impl Packages {
             })?;
         }
         let mut components = ServiceComponents::new()
-            .with_values(values.environment()?)
+            .with_values(self.environment(values)?)
             .with_wasi_grants(grants);
         if let Some(http) = http {
             components = components.with_outbound_http(Arc::clone(http));
@@ -634,7 +719,7 @@ mod tests {
     fn an_empty_config_binds_nothing_and_consents_to_nothing() {
         let packages = Packages::default();
         assert!(!packages.declares_wasi());
-        assert_eq!(packages.consent(&Values::none()), "env granted: none\n");
+        assert_eq!(packages.consent(), "env granted: none\n");
         assert!(packages.bound_services().is_empty());
     }
 }
