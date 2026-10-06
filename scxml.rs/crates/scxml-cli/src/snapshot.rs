@@ -185,7 +185,8 @@ pub const RUN_OPTIONS: &[&str] = &[
     "--service-package",
     "--service-component",
     "--service-component-sha256",
-    "--grant",
+    "--dir",
+    "--wasi",
     "--env",
     "--env-file",
     "--extension-call-fuel",
@@ -383,7 +384,8 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
             "--components-manifest-sha256" => "HEX",
             "--extension-package" | "--service-package" => "MANIFEST.json",
             "--extension-component-sha256" | "--service-component-sha256" => "URI=HEX",
-            "--grant" => "URI=PERMISSION[=VALUE]",
+            "--dir" => "URI=HOST::GUEST",
+            "--wasi" => "URI=inherit-network or URI=allow-ip-name-lookup",
             "--env" => "NAME@URI or NAME@URI=VALUE",
             "--env-file" => "PATH",
             "--extension-call-fuel" => "N",
@@ -773,6 +775,7 @@ fn run(args: &RunArgs) -> Result<(), Box<dyn std::error::Error>> {
     crate::extensions::write_notes(&crate::services::summary(
         &services.packages,
         Some(&args.services),
+        None,
     ));
     let documents = host::run(args, &packages, &services)?;
     write_documents(&args.output, &documents)
@@ -946,7 +949,6 @@ pub(crate) mod host {
             package_schemas,
             scripts: Vec::new(),
             script_resolution: ScriptResolution::Compile,
-            service_types: Some(crate::services::bound_types(services)),
             event_schemas,
         };
         let result = std::thread::scope(|scope| {
@@ -989,7 +991,7 @@ pub(crate) mod host {
             scxml_host_wasmtime::DEFAULT_FUEL,
         )?;
         let values = args.namespaces.values()?;
-        let services = args.services.components(services, &values, true, false)?;
+        let (services, _imports) = args.services.components(services, &values, true)?;
         let (extensions, _notes) = extensions(&args.namespaces, packages, &values, true)?;
         let host = host
             .with_extension_components(extensions)?

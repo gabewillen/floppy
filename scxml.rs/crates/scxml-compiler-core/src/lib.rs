@@ -48,7 +48,6 @@
 //!     package_schemas: Vec::new(),
 //!     scripts: Vec::new(),
 //!     script_resolution: ScriptResolution::Compile,
-//!     service_types: None,
 //!     event_schemas: std::collections::BTreeMap::new(),
 //! });
 //! assert!(!output.validation.report.has_errors());
@@ -175,13 +174,6 @@ pub struct CompileInput {
     pub scripts: Vec<ScriptPackage>,
     /// How `<script src>` references are resolved.
     pub script_resolution: ScriptResolution,
-    /// The invoked-service type URIs the caller's service packages bind.
-    /// `Some`: every literal `<invoke type>` naming an invoked service must
-    /// be one of them (`COMP004` otherwise). `None`: literal service types
-    /// are not judged here and fail closed when a session starts
-    /// (`machine-capabilities.load-services`); the compiler component, which
-    /// compiles invoked child documents at run time, passes `None`.
-    pub service_types: Option<std::collections::BTreeSet<String>>,
     /// The bytes of each schema file the document's `event:schema`
     /// attributes reference, keyed by the reference's resource part as
     /// authored (the value before `#`); the caller reads them relative to
@@ -383,22 +375,6 @@ impl<R: SchemaResolver, B: SchemaValidator> Compiler<R, B> {
                 };
             }
         };
-        if let Some(bound) = &input.service_types {
-            let unbound = unbound_service_diagnostics(document, bound);
-            if !unbound.is_empty() {
-                span.event(SignalEvent::InputRejected);
-                span.fail(ErrorCategory::Validation);
-                let mut validation = validation;
-                for diagnostic in unbound {
-                    validation.report.push(diagnostic);
-                }
-                validation.report.sort();
-                return CompileOutput {
-                    validation,
-                    artifact: None,
-                };
-            }
-        }
         if validation.report.has_errors() {
             span.fail(ErrorCategory::Validation);
             return CompileOutput {
@@ -471,49 +447,6 @@ impl<R: SchemaResolver, B: SchemaValidator> Compiler<R, B> {
             }
         }
     }
-}
-
-/// `COMP004` for every literal `<invoke type>` naming an invoked service
-/// ([`scxml_types::is_service_type_uri`]) that no bound service package
-/// declares: at the type's value. The service would run only in a bound
-/// service component, so a compile given the run's bindings fails closed
-/// instead of producing a machine whose `<invoke>` would raise
-/// `error.execution` when it starts.
-fn unbound_service_diagnostics(
-    document: &scxml_syntax::Document,
-    bound: &std::collections::BTreeSet<String>,
-) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-    document.root.visit(&mut |element| {
-        if !element.name.is(Some(SCXML_NAMESPACE), "invoke") {
-            return;
-        }
-        let Some(attribute) = element.attributes.iter().find(|attribute| {
-            attribute.name.namespace_uri.is_none() && attribute.name.local_name == "type"
-        }) else {
-            return;
-        };
-        if !scxml_types::is_service_type_uri(&attribute.value) || bound.contains(&attribute.value)
-        {
-            return;
-        }
-        diagnostics.push(
-            Diagnostic::error(
-                "COMP004",
-                format!(
-                    "invoked service `{}` has no service package",
-                    safe_value(&attribute.value)
-                ),
-                attribute.value_span,
-            )
-            .with_category(DiagnosticCategory::Package)
-            .with_primary_message("no service component is bound to execute this")
-            .with_note("an invoked service runs only in the service component its host binds to the exact type URI; compiling without a binding would produce a machine whose `<invoke>` raises error.execution when it starts")
-            .with_help("bind the service with its package manifest (`scxml-cli compile --service-package MANIFEST.json`), or correct the URI to one a bound package declares")
-            .with_spec_reference("SCXML 1.0 §6.4 <invoke>"),
-        );
-    });
-    diagnostics
 }
 
 /// `COMP002` for a used extension namespace with no extension package: at the

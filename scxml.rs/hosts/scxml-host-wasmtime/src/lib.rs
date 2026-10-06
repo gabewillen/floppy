@@ -175,26 +175,11 @@ pub use extension::{
 #[cfg(feature = "wasmtime")]
 mod service;
 #[cfg(feature = "wasmtime")]
-pub use service::{
-    DEFAULT_SERVICE_CALL_FUEL, MAX_SERVICE_COMPONENTS, MAX_SERVICE_EMITS_PER_CALL,
-    MAX_SERVICE_EMITTED_BYTES_PER_CALL, MAX_SERVICE_EVENTS, ServiceComponents, ServiceEventSchema,
-    ServiceEvents, ServicePackage,
-};
-#[cfg(feature = "wasmtime")]
-mod service_http;
-#[cfg(feature = "http")]
-pub use service_http::ThreadedServiceHttp;
-#[cfg(feature = "wasmtime")]
-pub use service_http::{
-    DEFAULT_SERVICE_HTTP_IN_FLIGHT, MAX_SERVICE_HTTP_IN_FLIGHT, MAX_SERVICE_PENDING_REQUESTS,
-    ServiceHttp, ServiceHttpInFlightInvalid, ServiceHttpOutcome,
-};
+pub use service::{ServiceComponents, ServicePackage};
 #[cfg(feature = "wasmtime")]
 mod wasi;
 #[cfg(feature = "wasmtime")]
-pub use scxml_types::{FilesystemAccess, WasiInterface, WasiPermission};
-#[cfg(feature = "wasmtime")]
-pub use wasi::{MAX_WASI_GRANTED_PACKAGES, MAX_WASI_TCP_ADDRESSES, WasiGrant, WasiGrants};
+pub use wasi::WasiOptions;
 #[cfg(feature = "wasmtime")]
 mod basichttp;
 #[cfg(feature = "wasmtime")]
@@ -377,28 +362,19 @@ pub enum ArtifactError {
     /// within its byte bound, the SCXML or XML namespace, or one already
     /// bound, or exceeded the binding count.
     NamespaceBinding,
-    /// A package's declared `wasi-permissions` list is not canonical.
-    WasiPermissionsInvalid,
-    /// A package declares a WASI permission the run does not grant.
-    WasiPermissionUngranted,
-    /// The run grants a WASI permission the package does not declare, or
-    /// grants to a URI no package binds.
+    /// The run grants a WASI resource whose interface the service
+    /// component does not import, or grants to a URI no package binds.
     WasiGrantUndeclared,
-    /// A WASI grant is malformed (mount name, empty directory or address
-    /// list, a duplicate, past a bound) or its directory cannot be opened.
+    /// A WASI grant is outside its bounds, or its directory cannot be
+    /// opened.
     WasiGrantInvalid,
-    /// A component imports a WASI interface its package does not declare
-    /// (or the run does not grant).
+    /// A service component imports a `wasi:*` interface the host never
+    /// links (such as `wasi:cli` or `wasi:http`).
     WasiImportUndeclared,
-    /// An extension package declares WASI permissions: extension elements
-    /// are synchronous executable content, and WASI is linked only into
-    /// invoked services.
-    WasiExtensionUnsupported,
-    /// A service package's declared event contract is malformed: an
-    /// invalid or repeated event name, more than 64 events in one list
-    /// (`MAX_SERVICE_EVENTS`), or a schema that is not canonical resolved
-    /// JSON Schema.
-    EventContractInvalid,
+    /// A service component imports a WASI interface whose runtime resource
+    /// (a preopened directory, TCP addresses, or name lookup) the run does
+    /// not grant.
+    WasiResourceUngranted,
 }
 
 impl std::fmt::Display for ArtifactError {
@@ -435,24 +411,15 @@ impl std::fmt::Display for ArtifactError {
             Self::NamespaceBinding => {
                 "an extension component must bind one distinct absolute namespace URI other than the SCXML and XML namespaces, within the binding bounds"
             }
-            Self::WasiPermissionsInvalid => {
-                "the package's declared WASI permissions are not a canonical list"
-            }
-            Self::WasiPermissionUngranted => {
-                "the package declares a WASI permission the run does not grant"
-            }
             Self::WasiGrantUndeclared => {
-                "the run grants a WASI permission no bound package declares"
+                "the run grants a WASI resource no bound service component imports"
             }
             Self::WasiGrantInvalid => "a WASI grant is malformed or its directory cannot be opened",
             Self::WasiImportUndeclared => {
-                "the component imports a WASI interface its package does not declare"
+                "the service component imports a WASI interface this host never links"
             }
-            Self::WasiExtensionUnsupported => {
-                "extension elements are synchronous executable content and WASI belongs to invoked services, so an extension package may not declare WASI permissions"
-            }
-            Self::EventContractInvalid => {
-                "the service package's declared event contract is malformed"
+            Self::WasiResourceUngranted => {
+                "the service component imports a WASI interface whose resource the run does not grant"
             }
         })
     }
@@ -1107,6 +1074,10 @@ pub fn component_engine(config: &WasmtimeHostConfig) -> Result<wasmtime::Engine,
     }
     let mut wasmtime_config = wasmtime::Config::new();
     wasmtime_config.wasm_component_model(true);
+    // The Component Model async ABI (WASI 0.3): invoked services export an
+    // `async func` and every component that imports `outbound-http` imports
+    // its `async func fetch`.
+    wasmtime_config.wasm_component_model_async(true);
     wasmtime_config.consume_fuel(true);
     wasmtime_config.max_wasm_stack(config.max_wasm_stack_bytes);
     // Every linear memory is exactly its size, one read-write mapping

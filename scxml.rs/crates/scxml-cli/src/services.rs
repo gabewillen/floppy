@@ -9,33 +9,34 @@
 //!   package consents to them), and the `env` slots it accepts. A schema
 //!   artifact, when named, is read relative to the manifest and checked
 //!   against its digest. `validate` reports a literal `<invoke type>` no
-//!   package binds (`SCXML094`); `compile` rejects it (`COMP004`).
+//!   package binds (`SCXML094`); invoking it is a runtime action, so the
+//!   document still compiles and its `<invoke>` raises `error.execution` when
+//!   it runs.
 //! * `snapshot run` and `run` execute each bound service's component,
 //!   resolved relative to the manifest (`service-artifact`) or by
 //!   `--service-component URI=PATH`, and authenticated by the SHA-256 in
 //!   `--service-component-sha256 URI=HEX` (required for every package; the
 //!   manifest is not a trust anchor).
-//! * A package may declare WASI permissions (`wasi-permissions`): the WASI
-//!   interfaces its component may import. `snapshot run` and `run` link only
-//!   those the run grants with `--grant URI=PERMISSION[=VALUE]`
-//!   (`wasi:clocks`, `wasi:random`, and `wasi:sockets/ip-name-lookup` take no
-//!   value; `wasi:filesystem=MOUNT=DIR` maps a declared mount to an existing
-//!   host directory; `wasi:sockets/tcp=IP:PORT[,IP:PORT]...` lists the
-//!   addresses it may connect to). Every declared permission must be granted
-//!   and every grant must name a declared permission of a bound service,
-//!   checked before anything runs. A run that declares any WASI permission
-//!   cannot be recorded or replayed (`--record`, `--replay`): its effects
-//!   and inputs are outside the log.
+//! * The WASI interfaces a service may use are its component's own imports.
+//!   Only runtime resources need a grant, with wasmtime CLI's option names
+//!   scoped to the service's exact type URI (up to the first `=`):
+//!   `--dir URI=HOST::GUEST` preopens a host directory at its absolute guest
+//!   path for a component that imports `wasi:filesystem`;
+//!   `--wasi URI=inherit-network` lets a component that imports
+//!   `wasi:sockets/tcp` connect to any address (wasmtime's
+//!   `-S inherit-network`); and `--wasi URI=allow-ip-name-lookup` allows
+//!   `wasi:sockets/ip-name-lookup`.
+//!   An import whose resource is not granted, a grant whose interface the
+//!   component does not import, and a `wasi:*` import the host never links
+//!   (`wasi:cli`, `wasi:http`) fail closed when the service is bound, before
+//!   anything runs.
 //! * Every command that reads a document lists, per bound service, its type
-//!   URI, version, declared outbound origins, declared slots, and declared
-//!   WASI permissions (with what the run grants each): what binding it
-//!   consents to.
+//!   URI, version, declared outbound origins, declared slots, and the
+//!   resources the run grants it; `snapshot run` and `run` also list the
+//!   WASI interfaces its component imports: what binding it consents to.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::net::SocketAddr;
 use std::path::{Component, Path, PathBuf};
-
-use scxml_types::{WasiInterface, WasiPermission};
 
 use scxml_telemetry::{ErrorCategory, Module, Operation, observe};
 use scxml_validator_core::ServicePackageManifest;
@@ -70,9 +71,6 @@ pub(crate) struct ServicePackage {
     pub(crate) origin: ServiceOrigin,
     /// The verified manifest.
     pub(crate) manifest: ServicePackageManifest,
-    /// The manifest's declared event contract, every schema verified and
-    /// resolved.
-    pub(crate) events: scxml_validator_core::DeclaredEvents,
 }
 
 impl ServicePackage {
@@ -111,35 +109,8 @@ impl ServicePackage {
             wit_version: manifest.wit_version.clone(),
             http_origins: manifest.http_origins.clone(),
             env_slots: manifest.env_slots.clone(),
-            wasi_permissions: manifest.wasi_permissions.clone(),
-            events: scxml_host_wasmtime::ServiceEvents {
-                emits: host_events(&self.events.emits),
-                accepts: host_events(&self.events.accepts),
-            },
         }
     }
-}
-
-/// Declared events as the session host binds them.
-#[cfg(feature = "wasmtime")]
-fn host_events(
-    events: &[scxml_validator_core::DeclaredEvent],
-) -> Vec<scxml_host_wasmtime::ServiceEventSchema> {
-    events
-        .iter()
-        .map(|event| scxml_host_wasmtime::ServiceEventSchema {
-            name: event.name.clone(),
-            schema: event.schema.clone(),
-        })
-        .collect()
-}
-
-/// Whether any of `packages` declares a WASI permission.
-#[cfg(any(feature = "wasmtime", test))]
-pub(crate) fn declares_wasi(packages: &[ServicePackage]) -> bool {
-    packages
-        .iter()
-        .any(|package| !package.manifest.wasi_permissions.is_empty())
 }
 
 /// Reads and verifies every `--service-package` manifest.
@@ -200,12 +171,9 @@ fn load_one(path: &Path) -> Result<ServicePackage, Box<dyn std::error::Error>> {
     manifest
         .verify(schema.as_deref())
         .map_err(|error| format!("service package `{shown}` does not verify: {error}"))?;
-    let events = crate::extensions::load_package_events(path, &manifest.events, "service package")
-        .map_err(|error| format!("service package `{shown}` does not verify: {error}"))?;
     Ok(ServicePackage {
         origin: ServiceOrigin::Manifest(path.to_path_buf()),
         manifest,
-        events,
     })
 }
 
@@ -264,39 +232,30 @@ pub(crate) fn resolve(
     })
 }
 
-/// The exact service type URIs `packages` bind (for `SCXML094` and
-/// `COMP004`).
-pub(crate) fn bound_types(packages: &[ServicePackage]) -> BTreeSet<String> {
-    packages
-        .iter()
-        .map(|package| package.manifest.service_uri.clone())
-        .collect()
-}
-
-/// What the validator knows of each bound service, by exact type URI: its
-/// declared `env` slots and event contract.
-pub(crate) fn bound_services(
-    packages: &[ServicePackage],
-) -> BTreeMap<String, scxml_validator_core::BoundService> {
+/// The `env` slots each bound service's package declares, by exact type
+/// URI (for `SCXML094` and `SCXML083` on `<invoke>`).
+pub(crate) fn bound_services(packages: &[ServicePackage]) -> BTreeMap<String, Vec<String>> {
     packages
         .iter()
         .map(|package| {
             (
                 package.manifest.service_uri.clone(),
-                scxml_validator_core::BoundService {
-                    env_slots: package.manifest.env_slots.clone(),
-                    events: package.events.clone(),
-                },
+                package.manifest.env_slots.clone(),
             )
         })
         .collect()
 }
 
 /// What binding each service consents to: its type URI, version, declared
-/// outbound origins, declared slots, and declared WASI permissions, each
-/// with what `grants` (the run's, when it runs the services) grants it.
-/// Never an `env` value.
-pub(crate) fn summary(packages: &[ServicePackage], grants: Option<&ServiceFlags>) -> Vec<String> {
+/// outbound origins, and declared slots; the WASI resources `flags` (the
+/// run's, when it runs the services) grant it; and, when `imports` holds
+/// them (the components were read), the WASI interfaces its component
+/// imports. Never an `env` value.
+pub(crate) fn summary(
+    packages: &[ServicePackage],
+    flags: Option<&ServiceFlags>,
+    imports: Option<&BTreeMap<String, Vec<String>>>,
+) -> Vec<String> {
     packages
         .iter()
         .map(|package| {
@@ -308,31 +267,6 @@ pub(crate) fn summary(packages: &[ServicePackage], grants: Option<&ServiceFlags>
                     items.join(", ")
                 }
             };
-            let wasi: Vec<String> = manifest
-                .wasi_permissions
-                .iter()
-                .map(|permission| {
-                    let granted = grants.map(|flags| {
-                        flags
-                            .grants
-                            .iter()
-                            .find(|(uri, grant)| {
-                                uri == &manifest.service_uri && grant.covers(permission)
-                            })
-                            .map(|(_, grant)| grant)
-                    });
-                    match granted {
-                        None => permission.describe(),
-                        Some(Some(grant)) => format!("{} <- {}", permission.describe(), grant.value()),
-                        Some(None) => format!(
-                            "{} (not granted: add --grant {}={})",
-                            permission.describe(),
-                            manifest.service_uri,
-                            grant_hint(permission)
-                        ),
-                    }
-                })
-                .collect();
             let version = match &package.origin {
                 ServiceOrigin::Manifest(path) => format!(
                     "package {} from --service-package {}",
@@ -344,169 +278,90 @@ pub(crate) fn summary(packages: &[ServicePackage], grants: Option<&ServiceFlags>
                     manifest.package_version
                 ),
             };
+            let uri = &manifest.service_uri;
+            let wasi = imports
+                .and_then(|imports| imports.get(uri))
+                .map(|names| {
+                    let wasi: Vec<String> = names
+                        .iter()
+                        .filter(|name| name.starts_with("wasi:"))
+                        .cloned()
+                        .collect();
+                    format!("\n  = WASI imports: {}", list(&wasi))
+                })
+                .unwrap_or_default();
+            let granted = flags
+                .and_then(|flags| flags.wasi.get(uri))
+                .map_or_else(|| "none".to_owned(), WasiFlags::describe);
             format!(
-                "service `{}`\n  = version: {}\n  = outbound HTTP: {}\n  = env slots: {}\n  = WASI: {}{}",
-                manifest.service_uri,
-                version,
+                "service `{uri}`\n  = version: {version}\n  = outbound HTTP: {}\n  = env slots: {}{wasi}\n  = WASI resources: {granted}",
                 list(&manifest.http_origins),
                 list(&manifest.env_slots),
-                list(&wasi),
-                crate::extensions::events_line(&package.events).unwrap_or_default(),
             )
         })
         .collect()
 }
 
-/// The `--grant` value that would grant `permission` (with placeholders).
-fn grant_hint(permission: &WasiPermission) -> String {
-    match permission {
-        WasiPermission::Filesystem { mount, .. } => format!("wasi:filesystem={mount}=DIR"),
-        WasiPermission::SocketsTcp => "wasi:sockets/tcp=IP:PORT".to_owned(),
-        other => other.interface().name().to_owned(),
-    }
-}
-
-/// Maximum `--grant` flags of one run.
-const MAX_GRANTS: usize = 64;
-
-/// One `--grant` of one service URI.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum Grant {
-    /// `wasi:clocks`, `wasi:random`, or `wasi:sockets/ip-name-lookup`.
-    Plain(WasiInterface),
-    /// `wasi:filesystem=MOUNT=DIR`.
-    Filesystem {
-        /// The declared mount.
-        mount: String,
-        /// The host directory.
-        directory: PathBuf,
-    },
-    /// `wasi:sockets/tcp=IP:PORT[,IP:PORT]...`.
-    Tcp(Vec<SocketAddr>),
-}
-
-impl Grant {
-    /// Parses `PERMISSION[=VALUE]`.
-    fn parse(text: &str) -> Result<Self, String> {
-        let (name, value) = match text.split_once('=') {
-            Some((name, value)) => (name, Some(value)),
-            None => (text, None),
-        };
-        let interface = WasiInterface::from_name(name).ok_or_else(|| {
-            format!(
-                "--grant names an unknown WASI permission `{}` (the permissions are {})",
-                name.escape_debug(),
-                WasiInterface::ALL.map(WasiInterface::name).join(", ")
-            )
-        })?;
-        match (interface, value) {
-            (
-                WasiInterface::Clocks | WasiInterface::Random | WasiInterface::SocketsIpNameLookup,
-                None,
-            ) => Ok(Self::Plain(interface)),
-            (
-                WasiInterface::Clocks | WasiInterface::Random | WasiInterface::SocketsIpNameLookup,
-                Some(_),
-            ) => Err(format!("--grant {name} takes no value")),
-            (WasiInterface::Filesystem, Some(value)) => match value.split_once('=') {
-                Some((mount, directory))
-                    if scxml_types::is_wasi_mount(mount) && !directory.is_empty() =>
-                {
-                    Ok(Self::Filesystem {
-                        mount: mount.to_owned(),
-                        directory: PathBuf::from(directory),
-                    })
-                }
-                _ => Err(
-                    "--grant URI=wasi:filesystem=MOUNT=DIR requires a declared mount name ([a-z][a-z0-9-]*) and a directory"
-                        .into(),
-                ),
-            },
-            (WasiInterface::SocketsTcp, Some(value)) => {
-                let addresses = value
-                    .split(',')
-                    .map(str::parse::<SocketAddr>)
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|_| {
-                        "--grant URI=wasi:sockets/tcp=IP:PORT[,IP:PORT]... requires socket addresses (a bracketed IPv6 address for IPv6)".to_owned()
-                    })?;
-                if addresses.len() > MAX_TCP_GRANT_ADDRESSES {
-                    return Err(format!(
-                        "--grant wasi:sockets/tcp lists more than {MAX_TCP_GRANT_ADDRESSES} addresses"
-                    ));
-                }
-                Ok(Self::Tcp(addresses))
-            }
-            (WasiInterface::Filesystem | WasiInterface::SocketsTcp, None) => Err(format!(
-                "--grant {name} requires a value ({})",
-                if interface == WasiInterface::Filesystem {
-                    "wasi:filesystem=MOUNT=DIR"
-                } else {
-                    "wasi:sockets/tcp=IP:PORT[,IP:PORT]..."
-                }
-            )),
-        }
-    }
-
-    /// The interface it grants.
-    const fn interface(&self) -> WasiInterface {
-        match self {
-            Self::Plain(interface) => *interface,
-            Self::Filesystem { .. } => WasiInterface::Filesystem,
-            Self::Tcp(_) => WasiInterface::SocketsTcp,
-        }
-    }
-
-    fn key(&self) -> (WasiInterface, Option<&str>) {
-        match self {
-            Self::Filesystem { mount, .. } => (self.interface(), Some(mount)),
-            _ => (self.interface(), None),
-        }
-    }
-
-    /// Whether it grants exactly `permission`.
-    fn covers(&self, permission: &WasiPermission) -> bool {
-        self.key() == permission.key()
-    }
-
-    /// What it grants, for the consent listing.
-    fn value(&self) -> String {
-        match self {
-            Self::Plain(_) => "granted".to_owned(),
-            Self::Filesystem { directory, .. } => directory.display().to_string(),
-            Self::Tcp(addresses) => addresses
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(", "),
-        }
-    }
-
-    /// The grant as the host takes it.
-    #[cfg(feature = "wasmtime")]
-    fn host(&self) -> scxml_host_wasmtime::WasiGrant {
-        match self {
-            Self::Plain(WasiInterface::Clocks) => scxml_host_wasmtime::WasiGrant::Clocks,
-            Self::Plain(WasiInterface::Random) => scxml_host_wasmtime::WasiGrant::Random,
-            Self::Plain(_) => scxml_host_wasmtime::WasiGrant::SocketsIpNameLookup,
-            Self::Filesystem { mount, directory } => scxml_host_wasmtime::WasiGrant::Filesystem {
-                mount: mount.clone(),
-                directory: directory.clone(),
-            },
-            Self::Tcp(addresses) => scxml_host_wasmtime::WasiGrant::SocketsTcp {
-                connect: addresses.clone(),
-            },
-        }
-    }
-}
-
-/// Maximum addresses of one `wasi:sockets/tcp` grant: the host's
-/// `MAX_WASI_TCP_ADDRESSES`, restated so `--grant` is checked the same way
-/// with or without the `wasmtime` feature.
-const MAX_TCP_GRANT_ADDRESSES: usize = 32;
-
+/// Each bound service component's imports, by service URI.
 #[cfg(feature = "wasmtime")]
-const _: () = assert!(MAX_TCP_GRANT_ADDRESSES == scxml_host_wasmtime::MAX_WASI_TCP_ADDRESSES);
+type Imports = BTreeMap<String, Vec<String>>;
+
+/// Maximum `--dir` and `--wasi` flags of one run.
+const MAX_WASI_FLAGS: usize = 64;
+
+/// The WASI runtime resources a run grants one service (`--dir` and
+/// `--wasi`, wasmtime CLI's option names).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct WasiFlags {
+    /// `--dir URI=HOST::GUEST`: each host directory and its guest path.
+    dirs: Vec<(PathBuf, String)>,
+    /// `--wasi URI=inherit-network`.
+    inherit_network: bool,
+    /// `--wasi URI=allow-ip-name-lookup`.
+    allow_ip_name_lookup: bool,
+}
+
+impl WasiFlags {
+    /// What it grants, for the consent listing.
+    fn describe(&self) -> String {
+        let mut parts: Vec<String> = self
+            .dirs
+            .iter()
+            .map(|(host, guest)| format!("--dir {}::{guest}", host.display()))
+            .collect();
+        if self.inherit_network {
+            parts.push("inherit-network".to_owned());
+        }
+        if self.allow_ip_name_lookup {
+            parts.push("allow-ip-name-lookup".to_owned());
+        }
+        if parts.is_empty() {
+            "none".to_owned()
+        } else {
+            parts.join(", ")
+        }
+    }
+
+    /// The resources as the session host takes them.
+    #[cfg(feature = "wasmtime")]
+    fn host(&self) -> scxml_host_wasmtime::WasiOptions {
+        scxml_host_wasmtime::WasiOptions {
+            dirs: self.dirs.clone(),
+            inherit_network: self.inherit_network,
+            allow_ip_name_lookup: self.allow_ip_name_lookup,
+        }
+    }
+}
+
+/// `value` split at its first `=` into a non-empty URI and the rest.
+fn split_first(value: &str, usage: &str) -> Result<(String, String), String> {
+    match value.split_once('=') {
+        Some((uri, rest)) if !uri.is_empty() && !rest.is_empty() => {
+            Ok((uri.to_owned(), rest.to_owned()))
+        }
+        _ => Err(usage.to_owned()),
+    }
+}
 
 /// `artifact` inside the manifest's directory: a relative path of plain
 /// components only, so a manifest cannot reach outside its own tree.
@@ -534,17 +389,20 @@ pub(crate) struct ServiceFlags {
     pub(crate) packages: Vec<PathBuf>,
     components: BTreeMap<String, PathBuf>,
     digests: BTreeMap<String, String>,
-    /// `--grant` flags, by service URI, in order.
-    grants: Vec<(String, Grant)>,
+    /// `--dir` and `--wasi` flags, by service URI.
+    wasi: BTreeMap<String, WasiFlags>,
+    /// `--dir` and `--wasi` flags given so far.
+    wasi_flags: usize,
 }
 
 impl ServiceFlags {
     /// The flags this module owns, each taking one value.
-    pub(crate) const FLAGS: [&'static str; 4] = [
+    pub(crate) const FLAGS: [&'static str; 5] = [
         "--service-package",
         "--service-component",
         "--service-component-sha256",
-        "--grant",
+        "--dir",
+        "--wasi",
     ];
 
     /// Records one flag.
@@ -585,24 +443,34 @@ impl ServiceFlags {
                 }
                 Ok(())
             }
-            "--grant" => {
-                // The URI ends where the permission (`=wasi:`) begins.
-                let Some(at) = value.find("=wasi:").filter(|at| *at > 0) else {
-                    return Err("--grant requires URI=PERMISSION[=VALUE] (for example URI=wasi:filesystem=MOUNT=DIR)".into());
+            "--dir" => {
+                const USAGE: &str = "--dir requires URI=HOST::GUEST (wasmtime's --dir HOST::GUEST, scoped to a service URI), GUEST an absolute path";
+                let (uri, dir) = split_first(value, USAGE)?;
+                let (host, guest) = dir.rsplit_once("::").ok_or(USAGE)?;
+                if host.is_empty() || !guest.starts_with('/') {
+                    return Err(USAGE.into());
+                }
+                self.count_wasi()?;
+                let flags = self.wasi.entry(uri).or_default();
+                if flags.dirs.iter().any(|(_, seen)| seen == guest) {
+                    return Err("--dir names one guest path twice for one URI".into());
+                }
+                flags.dirs.push((PathBuf::from(host), guest.to_owned()));
+                Ok(())
+            }
+            "--wasi" => {
+                const USAGE: &str = "--wasi requires URI=inherit-network or URI=allow-ip-name-lookup (wasmtime's -S options, scoped to a service URI)";
+                let (uri, option) = split_first(value, USAGE)?;
+                self.count_wasi()?;
+                let flags = self.wasi.entry(uri).or_default();
+                let granted = match option.as_str() {
+                    "inherit-network" => &mut flags.inherit_network,
+                    "allow-ip-name-lookup" => &mut flags.allow_ip_name_lookup,
+                    _ => return Err(USAGE.into()),
                 };
-                let (uri, permission) = value.split_at(at);
-                let grant = Grant::parse(permission.get(1..).unwrap_or_default())?;
-                if self
-                    .grants
-                    .iter()
-                    .any(|(bound, granted)| bound == uri && granted.key() == grant.key())
-                {
-                    return Err("--grant was given twice for one URI and permission".into());
+                if std::mem::replace(granted, true) {
+                    return Err(format!("--wasi {option} was given twice for one URI"));
                 }
-                if self.grants.len() >= MAX_GRANTS {
-                    return Err(format!("--grant is limited to {MAX_GRANTS} flags"));
-                }
-                self.grants.push((uri.to_owned(), grant));
                 Ok(())
             }
             other => Err(format!("unknown option `{other}`")),
@@ -643,67 +511,35 @@ impl ServiceFlags {
                 package.manifest.service_uri
             ));
         }
-        for (uri, grant) in &self.grants {
-            let Some(package) = packages
+        for (uri, flags) in &self.wasi {
+            if !packages
                 .iter()
-                .find(|package| &package.manifest.service_uri == uri)
-            else {
-                return Err(format!(
-                    "--grant names `{uri}`, which is not the service URI of any --service-package\n  = help: only invoked services get WASI permissions in this release"
-                ));
-            };
-            if !package
-                .manifest
-                .wasi_permissions
-                .iter()
-                .any(|permission| grant.covers(permission))
+                .any(|package| &package.manifest.service_uri == uri)
             {
                 return Err(format!(
-                    "--grant gives `{uri}` {}, which its service package `{}` does not declare\n  = help: a run grants only what a package declares in `wasi-permissions`",
-                    grant.interface().name(),
-                    package.label()
+                    "`{uri}` is not the service URI of any bound service\n  = help: --dir and --wasi grant WASI resources to a bound service URI exactly"
                 ));
             }
-            if let Grant::Filesystem { directory, .. } = grant
-                && !std::fs::metadata(directory).is_ok_and(|metadata| metadata.is_dir())
+            if let Some((host, _)) = flags
+                .dirs
+                .iter()
+                .find(|(host, _)| !std::fs::metadata(host).is_ok_and(|metadata| metadata.is_dir()))
             {
-                return Err(format!(
-                    "--grant {uri}=wasi:filesystem: `{}` is not a directory",
-                    directory.display()
-                ));
-            }
-        }
-        for package in packages {
-            let uri = &package.manifest.service_uri;
-            if let Some(permission) = package.manifest.wasi_permissions.iter().find(|permission| {
-                !self
-                    .grants
-                    .iter()
-                    .any(|(granted, grant)| granted == uri && grant.covers(permission))
-            }) {
-                return Err(format!(
-                    "service package `{}` declares {}, which the run does not grant\n  = help: grant it with --grant {uri}={}",
-                    package.label(),
-                    permission.describe(),
-                    grant_hint(permission)
-                ));
+                return Err(format!("--dir {uri}={}: not a directory", host.display()));
             }
         }
         Ok(())
     }
 
-    /// The run's grants as the host takes them.
-    ///
-    /// # Errors
-    ///
-    /// A grant the host refuses (checked like [`Self::check`]).
-    #[cfg(feature = "wasmtime")]
-    fn host_grants(&self) -> Result<scxml_host_wasmtime::WasiGrants, Box<dyn std::error::Error>> {
-        let mut grants = scxml_host_wasmtime::WasiGrants::new();
-        for (uri, grant) in &self.grants {
-            grants = grants.grant(uri, grant.host())?;
+    /// Counts one more `--dir` or `--wasi` flag.
+    fn count_wasi(&mut self) -> Result<(), String> {
+        if self.wasi_flags >= MAX_WASI_FLAGS {
+            return Err(format!(
+                "--dir and --wasi are limited to {MAX_WASI_FLAGS} flags"
+            ));
         }
-        Ok(grants)
+        self.wasi_flags = self.wasi_flags.saturating_add(1);
+        Ok(())
     }
 
     /// The run's service identity for a `--record`/`--replay` log: each
@@ -743,13 +579,11 @@ impl ServiceFlags {
 
     /// Reads, authenticates, and binds every package's service component,
     /// with the run's values for the services' `env` slots (references
-    /// only) and, when `outbound` is true, the outbound transport each
-    /// service's admitted requests go through (none: every request is
-    /// refused). When `deferred` is also true (a live run that neither
-    /// records nor replays), services also get the deferred transport of
-    /// `outbound-http.begin`: a `ThreadedServiceHttp`, which performs each
-    /// request on a thread of its own and closes its connection when the
-    /// instance that began it is cancelled.
+    /// only), the WASI resources `--dir` and `--wasi` grant, and, when
+    /// `outbound` is true, the outbound transport each service's admitted
+    /// requests go through (none: every request is refused; a replay
+    /// answers them from its log instead). Returns the bound components and
+    /// each component's imports, by service URI, for the consent listing.
     ///
     /// # Errors
     ///
@@ -761,9 +595,9 @@ impl ServiceFlags {
         resolved: &Services,
         values: &[crate::extensions::HeldValue],
         outbound: bool,
-        deferred: bool,
-    ) -> Result<scxml_host_wasmtime::ServiceComponents, Box<dyn std::error::Error>> {
+    ) -> Result<(scxml_host_wasmtime::ServiceComponents, Imports), Box<dyn std::error::Error>> {
         let packages = &resolved.packages;
+        let mut imports = BTreeMap::new();
         let mut services = scxml_host_wasmtime::ServiceComponents::new()
             .with_values(crate::extensions::HeldValue::environment(values)?);
         if outbound {
@@ -773,18 +607,9 @@ impl ServiceFlags {
                 )
                 .map_err(|error| format!("[extension-http-invalid] {error}"))?,
             ));
-            if deferred {
-                let client = scxml_host_wasmtime::ExtensionHttpClient::new(
-                    scxml_host_wasmtime::ExtensionHttpConfig::new(),
-                )
-                .map_err(|error| format!("[extension-http-invalid] {error}"))?;
-                let transport = scxml_host_wasmtime::ThreadedServiceHttp::new(
-                    client,
-                    scxml_host_wasmtime::DEFAULT_SERVICE_HTTP_IN_FLIGHT,
-                )
-                .map_err(|error| format!("[extension-http-invalid] {error}"))?;
-                services = services.with_deferred_http(std::sync::Arc::new(transport));
-            }
+        }
+        for (uri, flags) in &self.wasi {
+            services = services.with_wasi(uri, flags.host());
         }
         for package in packages {
             let uri = &package.manifest.service_uri;
@@ -803,6 +628,7 @@ impl ServiceFlags {
                 .map_err(|error| {
                     format!("repository service `{uri}`: its component is rejected: {error}")
                 })?;
+                imports.insert(uri.clone(), component.imports()?);
                 services = services.bind(fetched.package.host_package(), &component)?;
                 continue;
             }
@@ -833,9 +659,10 @@ impl ServiceFlags {
                     path.display()
                 )
             })?;
+            imports.insert(uri.clone(), component.imports()?);
             services = services.bind(package.host_package(), &component)?;
         }
-        Ok(services.with_wasi_grants(self.host_grants()?))
+        Ok((services, imports))
     }
 }
 
@@ -861,14 +688,17 @@ mod tests {
     fn the_example_package_loads_and_lists_its_consent() {
         let packages = load(&[example()]).expect("the example manifest verifies");
         assert_eq!(
-            bound_types(&packages),
-            BTreeSet::from(["https://stateforward.org/scxml/services/echo".to_owned()])
+            bound_services(&packages),
+            BTreeMap::from([(
+                "https://stateforward.org/scxml/services/echo".to_owned(),
+                vec!["endpoint".to_owned()]
+            )])
         );
-        let summary = summary(&packages, None).join("\n");
+        let summary = summary(&packages, None, None).join("\n");
         assert!(summary.contains("service `https://stateforward.org/scxml/services/echo`"));
         assert!(summary.contains("= outbound HTTP: none"));
         assert!(summary.contains("= env slots: endpoint"));
-        assert!(summary.contains("= WASI: none"));
+        assert!(summary.contains("= WASI resources: none"));
         assert!(
             packages[0]
                 .component_path()
@@ -907,53 +737,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod event_tests {
-    use super::*;
-
-    /// A temporary package directory: a service manifest declaring events
-    /// and the schema file they name.
-    fn package(schema: &[u8], declared: &[u8]) -> (PathBuf, PathBuf) {
-        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        let dir = std::env::temp_dir().join(format!(
-            "scxml-cli-service-events-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&dir).expect("temporary directory");
-        std::fs::write(dir.join("events.json"), schema).expect("schema file");
-        let digest = scxml_event_schema::sha256_hex(declared);
-        let manifest = format!(
-            r#"{{"format":"stateforward.scxml.service-package/v1","service-uri":"urn:example:echo","package-version":"1","service-artifact":"echo.wasm","schema-artifact":null,"schema-sha256":null,"wit-world":"stateforward:scxml/invoked-service","wit-version":"0.2.0","http-origins":[],"env-slots":[],"events":{{"emits":[{{"name":"echo.reply","schema-artifact":"events.json#/$defs/Reply","schema-sha256":"{digest}"}}],"accepts":[{{"name":"echo.say","schema-artifact":"events.json","schema-sha256":"{digest}"}}]}}}}"#
-        );
-        let path = dir.join("echo.service.json");
-        std::fs::write(&path, manifest).expect("manifest");
-        (dir, path)
-    }
-
-    const SCHEMA: &[u8] = br#"{"$defs":{"Reply":{"type":"string"}}}"#;
-
-    #[test]
-    fn declared_event_schemas_are_verified_resolved_and_listed() {
-        let (dir, path) = package(SCHEMA, SCHEMA);
-        let packages = load(std::slice::from_ref(&path)).expect("verifies");
-        let reply = packages[0].events.emitted("echo.reply").expect("declared");
-        assert_eq!(reply.schema, r#"{"type":"string"}"#);
-        let listing = summary(&packages, None).join("\n");
-        assert!(
-            listing.contains("= events: emits echo.reply; accepts echo.say"),
-            "{listing}"
-        );
-        std::fs::remove_dir_all(dir).expect("cleanup");
-
-        let (dir, path) = package(br#"{"$defs":{"Reply":{"type":"number"}}}"#, SCHEMA);
-        let error = load(&[path]).expect_err("the file does not match its digest");
-        assert!(error.to_string().contains("schema-sha256"), "{error}");
-        std::fs::remove_dir_all(dir).expect("cleanup");
-    }
-}
-
-#[cfg(test)]
-mod grant_tests {
+mod wasi_tests {
     use super::*;
 
     const FILES: &str = "https://stateforward.org/scxml/services/files";
@@ -964,120 +748,101 @@ mod grant_tests {
         .expect("the files manifest verifies")
     }
 
-    fn flags(grants: &[String]) -> Result<ServiceFlags, String> {
+    fn flags(grants: &[(&str, String)]) -> Result<ServiceFlags, String> {
         let mut flags = ServiceFlags::default();
         flags.accept(
             "--service-component-sha256",
             &format!("{FILES}={}", "a".repeat(64)),
         )?;
-        for grant in grants {
-            flags.accept("--grant", grant)?;
+        for (flag, value) in grants {
+            flags.accept(flag, value)?;
         }
         Ok(flags)
     }
 
     #[test]
-    fn a_declared_permission_must_be_granted_with_an_existing_directory() {
+    fn dir_and_wasi_flags_grant_resources_to_bound_services_and_are_listed() {
         let packages = files();
-        assert!(declares_wasi(&packages));
-        let ungranted = flags(&[]).expect("no grant parses");
-        let error = ungranted.check(&packages).expect_err("ungranted");
-        assert!(
-            error.contains("declares wasi:filesystem (mount `workspace`, read-write)"),
-            "{error}"
-        );
-        assert!(
-            error.contains(&format!("--grant {FILES}=wasi:filesystem=workspace=DIR")),
-            "{error}"
-        );
-        let listing = summary(&packages, Some(&ungranted)).join("\n");
-        assert!(listing.contains("(not granted: add --grant"), "{listing}");
-
         let directory = std::env::temp_dir();
-        let granted = flags(&[format!(
-            "{FILES}=wasi:filesystem=workspace={}",
-            directory.display()
+        let granted = flags(&[(
+            "--dir",
+            format!("{FILES}={}::/workspace", directory.display()),
         )])
         .expect("parses");
         assert_eq!(granted.check(&packages), Ok(()));
-        let listing = summary(&packages, Some(&granted)).join("\n");
+        let imports = BTreeMap::from([(
+            FILES.to_owned(),
+            vec![
+                "stateforward:scxml/types@0.2.0".to_owned(),
+                "wasi:filesystem/types@0.2.9".to_owned(),
+            ],
+        )]);
+        let listing = summary(&packages, Some(&granted), Some(&imports)).join("\n");
+        assert!(
+            listing.contains("= WASI imports: wasi:filesystem/types@0.2.9"),
+            "{listing}"
+        );
         assert!(
             listing.contains(&format!(
-                "= WASI: wasi:filesystem (mount `workspace`, read-write) <- {}",
+                "= WASI resources: --dir {}::/workspace",
                 directory.display()
             )),
             "{listing}"
         );
-
         let missing =
-            flags(&[format!("{FILES}=wasi:filesystem=workspace=/no/such/dir")]).expect("parses");
+            flags(&[("--dir", format!("{FILES}=/no/such/dir::/workspace"))]).expect("parses");
         assert!(
             missing
                 .check(&packages)
                 .expect_err("no directory")
                 .contains("not a directory")
         );
+        let unbound = flags(&[(
+            "--wasi",
+            "urn:example:other=allow-ip-name-lookup".to_owned(),
+        )])
+        .expect("parses");
+        assert!(unbound.check(&packages).is_err());
     }
 
     #[test]
-    fn grants_must_name_a_declared_permission_of_a_bound_service() {
-        let packages = files();
-        let directory = std::env::temp_dir();
-        let workspace = format!("{FILES}=wasi:filesystem=workspace={}", directory.display());
-        for extra in [
-            format!("{FILES}=wasi:clocks"),
-            format!("{FILES}=wasi:filesystem=other={}", directory.display()),
-            "urn:example:other=wasi:random".to_owned(),
-        ] {
-            let flags = flags(&[workspace.clone(), extra.clone()]).expect("parses");
-            assert!(flags.check(&packages).is_err(), "{extra}");
-        }
-    }
-
-    #[test]
-    fn grant_syntax_is_closed() {
-        for bad in [
-            "wasi:clocks",
-            "=wasi:clocks",
-            "urn:x=wasi:http/outgoing-handler",
-            "urn:x=wasi:clocks=1",
-            "urn:x=wasi:filesystem",
-            "urn:x=wasi:filesystem=Bad=/tmp",
-            "urn:x=wasi:filesystem=ok=",
-            "urn:x=wasi:sockets/tcp",
-            "urn:x=wasi:sockets/tcp=localhost:80",
-            "urn:x=random",
+    fn dir_and_wasi_syntax_is_closed() {
+        for (flag, bad) in [
+            ("--dir", "/tmp::/workspace"),
+            ("--dir", "urn:x=/tmp"),
+            ("--dir", "urn:x=/tmp::workspace"),
+            ("--dir", "urn:x=::/workspace"),
+            ("--wasi", "urn:x"),
+            ("--wasi", "urn:x=tcp"),
+            ("--wasi", "urn:x=tcp=127.0.0.1:80"),
+            ("--wasi", "urn:x=inherit-network=y"),
+            ("--wasi", "urn:x=allow-ip-name-lookup=y"),
         ] {
             assert!(
-                ServiceFlags::default().accept("--grant", bad).is_err(),
-                "{bad}"
+                ServiceFlags::default().accept(flag, bad).is_err(),
+                "{flag} {bad}"
             );
         }
         let mut flags = ServiceFlags::default();
         flags
-            .accept("--grant", "urn:x=wasi:sockets/tcp=127.0.0.1:80,[::1]:443")
-            .expect("tcp addresses");
-        assert_eq!(
-            flags.grants,
-            [(
-                "urn:x".to_owned(),
-                Grant::Tcp(vec![
-                    "127.0.0.1:80".parse().expect("v4"),
-                    "[::1]:443".parse().expect("v6")
-                ])
-            )]
-        );
+            .accept("--wasi", "urn:x=inherit-network")
+            .expect("inherit-network");
         assert!(
             flags
-                .accept("--grant", "urn:x=wasi:sockets/tcp=127.0.0.1:81")
-                .is_err(),
-            "one permission once per URI"
+                .wasi
+                .get("urn:x")
+                .is_some_and(|flags| flags.inherit_network)
         );
-        let many = vec!["127.0.0.1:1"; 33].join(",");
         assert!(
-            ServiceFlags::default()
-                .accept("--grant", &format!("urn:y=wasi:sockets/tcp={many}"))
-                .is_err()
+            flags.accept("--wasi", "urn:x=inherit-network").is_err(),
+            "once per URI"
+        );
+        flags
+            .accept("--dir", "urn:x=/tmp::/a")
+            .expect("one directory");
+        assert!(
+            flags.accept("--dir", "urn:x=/var::/a").is_err(),
+            "one guest path once per URI"
         );
     }
 }

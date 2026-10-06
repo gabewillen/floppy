@@ -214,13 +214,10 @@ fn download_path(asset: &str) -> String {
     format!("/dl/{REPO}/releases/download/v0.1.0/{asset}")
 }
 
-const EVENTS: &str = r#"{"$defs":{"Tick":{"type":"integer"}}}"#;
-
 /// The repository service's manifest, naming `service_uri`.
 fn manifest(service_uri: &str) -> String {
     format!(
-        r#"{{"format":"stateforward.scxml.service-package/v1","service-uri":"{service_uri}","package-version":"0.1.0","service-artifact":"{ASSET}","schema-artifact":null,"schema-sha256":null,"wit-world":"stateforward:scxml/invoked-service","wit-version":"0.2.0","http-origins":[],"env-slots":["endpoint"],"events":{{"emits":[{{"name":"echo.tick","schema-artifact":"events.json#/$defs/Tick","schema-sha256":"{}"}}],"accepts":[]}}}}"#,
-        sha256(EVENTS.as_bytes())
+        r#"{{"format":"stateforward.scxml.service-package/v1","service-uri":"{service_uri}","package-version":"0.1.0","service-artifact":"{ASSET}","schema-artifact":null,"schema-sha256":null,"wit-world":"stateforward:scxml/invoked-service","wit-version":"0.2.0","http-origins":[],"env-slots":["endpoint"]}}"#
     )
 }
 
@@ -236,7 +233,6 @@ fn github(manifest_text: &str) -> Server {
         format!(r#"{{"ref":"refs/tags/v0.1.0","object":{{"type":"commit","sha":"{COMMIT}"}}}}"#),
     );
     server.body(&raw_path("echo.service.json"), manifest_text.to_owned());
-    server.body(&raw_path("events.json"), EVENTS);
     server.body(
         &download_path("SHA256SUMS"),
         format!("{}  {ASSET}\n", sha256(&release.echo)),
@@ -262,28 +258,17 @@ fn repository(server: &Server, cache: &Path) -> Vec<String> {
     ]
 }
 
-/// A document invoking the repository service, written to `directory`;
-/// `tick` is the `echo.tick` transition's extra attributes.
-fn document_with(directory: &Path, tick: &str) -> String {
+/// A document invoking the repository service, written to `directory`.
+fn document(directory: &Path) -> String {
     let path = directory.join("service.scxml");
     fs::write(
         &path,
         format!(
-            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript" initial="s"><state id="s"><invoke type="{SERVICE_URI}" id="echo"/><transition event="echo.tick" {tick}/><transition event="done.invoke.echo" target="f"/></state><final id="f"/></scxml>"#
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript" initial="s"><state id="s"><invoke type="{SERVICE_URI}" id="echo"/><transition event="echo.tick" event:schema='{{"type":"integer"}}'/><transition event="done.invoke.echo" target="f"/></state><final id="f"/></scxml>"#
         ),
     )
     .expect("the document is written");
     path.display().to_string()
-}
-
-/// The document with an `echo.tick` schema the package's contradicts.
-fn document(directory: &Path) -> String {
-    document_with(directory, r#"event:schema='{"type":"string"}'"#)
-}
-
-/// The document with the package's own `echo.tick` schema: it compiles.
-fn runnable(directory: &Path) -> String {
-    document_with(directory, r#"event:schema='{"type":"integer"}'"#)
 }
 
 fn validate(document: &str, extra: &[String]) -> Output {
@@ -318,8 +303,8 @@ fn validate_resolves_the_package_at_its_commit_and_then_runs_offline() {
     let flags = repository(&server, &cache);
     let first = validate(&source, &flags);
     let stderr = text(&first.stderr);
-    // The package resolved (no SCXML094), lists its consent, and its event
-    // contract judges the document (SCXML095).
+    // The package resolved (no SCXML094) and lists its consent.
+    assert!(first.status.success(), "{stderr}");
     assert!(!stderr.contains("SCXML094"), "{stderr}");
     assert!(
         stderr.contains(&format!(
@@ -327,17 +312,11 @@ fn validate_resolves_the_package_at_its_commit_and_then_runs_offline() {
         )),
         "{stderr}"
     );
-    assert!(
-        stderr.contains("= events: emits echo.tick; accepts none"),
-        "{stderr}"
-    );
-    assert!(stderr.contains("error[SCXML095]"), "{stderr}");
     assert_eq!(
         server.requests(),
         [
             format!("GET /api/repos/{REPO}/git/ref/tags/v0.1.0 HTTP/1.1"),
             format!("GET {} HTTP/1.1", raw_path("echo.service.json")),
-            format!("GET {} HTTP/1.1", raw_path("events.json")),
         ],
         "the tag resolves to its commit, the package comes from that commit, and validation never reaches the release"
     );
@@ -355,12 +334,6 @@ fn validate_resolves_the_package_at_its_commit_and_then_runs_offline() {
         entry.contains(&format!("\"commit\": \"{COMMIT}\"")),
         "{entry}"
     );
-    assert!(
-        cache
-            .join("sha256")
-            .join(sha256(EVENTS.as_bytes()))
-            .exists()
-    );
     let before = server.requests().len();
     let mut offline = flags.clone();
     offline.push("--offline".into());
@@ -374,21 +347,18 @@ fn a_run_binds_the_release_component_authenticated_by_its_sha256sums() {
     let server = github(&manifest(SERVICE_URI));
     let directory = scratch("run");
     let cache = directory.join("cache");
-    let source = runnable(&directory);
+    let source = document(&directory);
     let output = directory.join("final.snapshot.json");
     let flags = repository(&server, &cache);
 
     let run = snapshot_run(&source, &output, &flags);
     let stderr = text(&run.stderr);
     // The release's bytes were authenticated and bound to the repository
-    // URI; the example component answers its own fixed type URI, so the
-    // host's check of the bound component fails the run closed.
-    assert!(!run.status.success(), "{stderr}");
-    assert!(
-        stderr.contains("service-component-uri-mismatch"),
-        "{stderr}"
-    );
-    assert!(!output.exists());
+    // URI, and the session ran (the example component rejects a type URI
+    // other than its own when `invoke` runs, which raises error.execution
+    // in the session: invocation is a runtime action).
+    assert!(run.status.success(), "{stderr}");
+    let snapshot = fs::read(&output).expect("the final snapshot is written");
     let requests = server.requests();
     assert!(
         requests.ends_with(&[
@@ -400,16 +370,13 @@ fn a_run_binds_the_release_component_authenticated_by_its_sha256sums() {
     );
     assert!(cache.join("sha256").join(sha256(&release().echo)).exists());
 
-    // Pinned: the offline run reaches the same check from the cache alone.
+    // Pinned: the offline run runs the same session from the cache alone.
     let before = server.requests().len();
     let mut offline = flags.clone();
     offline.push("--offline".into());
     let again = snapshot_run(&source, &output, &offline);
-    assert!(
-        text(&again.stderr).contains("service-component-uri-mismatch"),
-        "{}",
-        text(&again.stderr)
-    );
+    assert!(again.status.success(), "{}", text(&again.stderr));
+    assert_eq!(fs::read(&output).expect("written again"), snapshot);
     assert_eq!(server.requests().len(), before);
 
     // A tampered cached component fails closed before anything runs.
@@ -451,7 +418,7 @@ fn a_package_that_does_not_name_itself_exactly_or_an_unlisted_component_fails_cl
         format!("{}  other.wasm\n", "0".repeat(64)),
     );
     let directory = scratch("sums");
-    let source = runnable(&directory);
+    let source = document(&directory);
     let run = snapshot_run(
         &source,
         &directory.join("final.snapshot.json"),
@@ -485,7 +452,6 @@ fn offline_without_the_cache_fails_closed_and_a_bound_uri_is_never_fetched() {
     // A `--service-package` that binds the URI wins: nothing is fetched.
     let package = directory.join("package");
     fs::create_dir_all(&package).expect("package directory");
-    fs::write(package.join("events.json"), EVENTS).expect("events");
     fs::write(package.join("echo.service.json"), manifest(SERVICE_URI)).expect("manifest");
     let mut bound = repository(&server, &directory.join("cache"));
     bound.push("--service-package".into());

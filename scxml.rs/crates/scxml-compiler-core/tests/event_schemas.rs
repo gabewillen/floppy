@@ -24,7 +24,6 @@ fn compile_with(source: &str, files: &[(&str, &str)]) -> CompileOutput {
         package_schemas: Vec::new(),
         scripts: Vec::new(),
         script_resolution: ScriptResolution::Compile,
-        service_types: None,
         event_schemas: files
             .iter()
             .map(|(uri, text)| ((*uri).to_owned(), text.as_bytes().to_vec()))

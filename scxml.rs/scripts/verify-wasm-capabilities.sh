@@ -1,7 +1,10 @@
 #!/bin/sh
 set -eu
 
-expected_wasm_tools='wasm-tools 1.240.0'
+# The release whose wasmparser (0.244) matches wasmtime 49 and wit-bindgen
+# 0.51: it reads the Component Model async ABI (WASI 0.3) that invoked
+# services export and `outbound-http.fetch` uses.
+expected_wasm_tools='wasm-tools 1.244.0'
 expected_wasi_virt='wasi-virt 0.2.0'
 
 # Compare only `<name> <version>`: prebuilt release binaries append
@@ -152,18 +155,18 @@ expected_imports() {
         # Every data model answers `In()` through execution-host (the null
         # data model's only condition, SCXML B.1).
         scxml_data_model_ecmascript|scxml_data_model_null|scxml_data_model_xpath) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/execution-host@0.2.0' ;;
-        # The example service reaches its invoking session only through
-        # invoked-service-host, and the network only through the
-        # host-admitted outbound-http request its `endpoint` slot's
-        # reference supplies.
-        scxml_service_example) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/invoked-service-host@0.2.0' 'stateforward:scxml/outbound-http@0.2.0' ;;
-        # The files example keeps exactly the WASI interfaces of the one
-        # permission its package declares (wasi:filesystem): the filesystem
-        # interfaces, the wasi:io interfaces they use, and wasi:clocks/
-        # wall-clock for its `datetime` type alone (checked by
-        # check_wasi_types_only_imports below). wasi:cli and the monotonic
-        # clock are denied by a composed provider.
-        scxml_service_files) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/invoked-service-host@0.2.0' 'wasi:io/poll@0.2.9' 'wasi:clocks/wall-clock@0.2.9' 'wasi:io/error@0.2.9' 'wasi:io/streams@0.2.9' 'wasi:filesystem/types@0.2.9' 'wasi:filesystem/preopens@0.2.9' ;;
+        # The example service reaches the session's logical clock only
+        # through its world's wasi:clocks/monotonic-clock@0.3.0, and the
+        # network only through the host-admitted outbound-http request its
+        # `endpoint` slot's reference supplies.
+        scxml_service_example) printf '%s\n' 'wasi:clocks/types@0.3.0' 'wasi:clocks/monotonic-clock@0.3.0' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/outbound-http@0.2.0' 'stateforward:scxml/telemetry@0.2.0' ;;
+        # The files example keeps exactly the WASI interfaces of the
+        # filesystem it imports: the filesystem interfaces, the wasi:io
+        # interfaces they use, and wasi:clocks/wall-clock for its `datetime`
+        # type alone (checked by check_wasi_types_only_imports below).
+        # wasi:cli and the 0.2 monotonic clock are denied by a composed
+        # provider.
+        scxml_service_files) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'wasi:io/poll@0.2.9' 'wasi:clocks/wall-clock@0.2.9' 'wasi:io/error@0.2.9' 'wasi:io/streams@0.2.9' 'wasi:filesystem/types@0.2.9' 'wasi:filesystem/preopens@0.2.9' ;;
         scxml_ioprocessor_scxml) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml-clock/types@0.2.0' 'stateforward:scxml-clock/clock-api@0.2.0' ;;
         # BasicHTTP reaches the network only through the embedder-supplied
         # http-transport capability; wasi:sockets and wasi:http are denied.
@@ -270,9 +273,9 @@ check_wasi_types_only_imports() {
     done
 }
 
-# Example components that declare WASI permissions are not host-bundled
+# Example components that import a WASI resource are not host-bundled
 # either: an embedder binds them by SHA-256 (authenticate_service_component)
-# with its own grants, so manifest.tsv does not list them.
+# with the resources it grants, so manifest.tsv does not list them.
 caller_authenticated=' scxml_service_files '
 in_manifest() {
     case "$caller_authenticated" in
@@ -337,7 +340,7 @@ for component in $components; do
         virt_input=$seeded
     fi
     if [ "$component" = scxml_service_files ]; then
-        # This component declares wasi:filesystem and keeps those imports for
+        # This component imports wasi:filesystem and keeps those imports for
         # the host: a wasi-virt adapter would virtualize the filesystem too
         # (read-only), so the standard library's other WASI imports
         # (wasi:cli and the monotonic clock) are satisfied by the pinned
@@ -352,11 +355,12 @@ for component in $components; do
         wasi-virt "$virt_input" -o "$repeat"
     fi
     cmp -s "$virtualized" "$repeat" || { echo "non-deterministic wasi-virt output: $component" >&2; exit 1; }
-    wasm-tools validate --features component-model "$virtualized"
+    wasm-tools validate --features component-model,cm-async "$virtualized"
     world=$(wasm-tools component wit "$virtualized")
     imports=$(printf '%s\n' "$world" | sed -n 's/^  import \(.*\);$/\1/p')
-    # A component may keep only a WASI interface its allowlist names (only
-    # the files example, whose package declares wasi:filesystem, does).
+    # A component may keep only a WASI interface its allowlist names (the
+    # example service its world's logical clock, and the files example the
+    # filesystem it imports).
     allowed_wasi=$(expected_imports "$component" | grep -E '^wasi:' || true)
     if printf '%s\n' "$imports" | grep -E '^wasi:' | grep -Fxv "$allowed_wasi" | grep -q .; then
         echo "virtualized component retains a WASI capability: $component" >&2
@@ -419,7 +423,7 @@ case " $components " in
         package "$packaged_dir/component.determinism-check.wasm" "$packaged_dir/report.determinism-check.json"
         cmp -s "$packaged" "$packaged_dir/component.determinism-check.wasm" || { echo "non-deterministic packaged component" >&2; exit 1; }
         cmp -s "$report" "$packaged_dir/report.determinism-check.json" || { echo "non-deterministic packaged report" >&2; exit 1; }
-        wasm-tools validate --features component-model "$packaged"
+        wasm-tools validate --features component-model,cm-async "$packaged"
         world=$(wasm-tools component wit "$packaged")
         imports=$(printf '%s\n' "$world" | sed -n 's/^  import \(.*\);$/\1/p')
         exports=$(printf '%s\n' "$world" | sed -n 's/^  export \(.*\);$/\1/p')
@@ -488,7 +492,7 @@ case "$has_machine$has_script" in
         cmp -s "$scripted" "$scripted_dir/component.determinism-check.wasm" || { echo "non-deterministic scripted component" >&2; exit 1; }
         cmp -s "$scripted_report" "$scripted_dir/report.determinism-check.json" || { echo "non-deterministic scripted report" >&2; exit 1; }
         rm -f "$scripted_dir"/*.determinism-check.*
-        wasm-tools validate --features component-model "$scripted"
+        wasm-tools validate --features component-model,cm-async "$scripted"
         world=$(wasm-tools component wit "$scripted")
         imports=$(printf '%s\n' "$world" | sed -n 's/^  import \(.*\);$/\1/p')
         exports=$(printf '%s\n' "$world" | sed -n 's/^  export \(.*\);$/\1/p')

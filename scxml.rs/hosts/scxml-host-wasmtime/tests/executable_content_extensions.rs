@@ -126,7 +126,6 @@ fn package(namespace_uri: &str) -> ExtensionPackage {
         wit_version: "0.2.0".into(),
         env_slots: vec!["url".into(), "token".into()],
         http_origins: Vec::new(),
-        wasi_permissions: Vec::new(),
         schema,
     }
 }

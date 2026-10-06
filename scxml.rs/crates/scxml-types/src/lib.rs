@@ -20,14 +20,6 @@
 
 use std::fmt;
 
-pub mod wasi;
-
-pub use wasi::{
-    FilesystemAccess, MAX_WASI_MOUNT_BYTES, MAX_WASI_PERMISSIONS, WasiInterface, WasiPermission,
-    WasiPermissionError, check_wasi_permissions, is_wasi_mount, wasi_permissions_canonical_field,
-    wasi_permissions_from_json,
-};
-
 /// An implementation resource bound that applies only to wasm builds.
 ///
 /// Returns `bound` when compiled for `wasm32` (the shipped components, whose
@@ -1111,8 +1103,7 @@ pub fn is_scxml_invoke_type(value: &str) -> bool {
 }
 
 /// Largest invoked-service type URI in bytes: a format bound of the WIT
-/// `service-invocation.type-uri` and the Machine IR's `invoke_types`, so it
-/// applies on every build.
+/// `invoke-request.type-uri`, so it applies on every build.
 pub const MAX_SERVICE_TYPE_URI_BYTES: usize = 4_096;
 
 /// Whether one exact `<invoke>` type value names an invoked service: not an

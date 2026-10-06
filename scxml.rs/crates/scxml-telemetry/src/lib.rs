@@ -407,27 +407,23 @@ pub enum Operation {
     /// Performs one outbound HTTP request an extension component made
     /// through the host-granted `outbound-http` capability.
     HostWasmtimeExtensionHttpFetch,
-    /// Checks that a session's literal invoked-service type URIs are bound
-    /// at session start (`machine-capabilities.load-services`).
-    HostWasmtimeServiceLoad,
-    /// Instantiates, identity-checks, and starts one invoked service
-    /// (`machine-capabilities.start-service`).
+    /// Starts one invocation of an invoked service: instantiates its
+    /// component and calls its `invoked-service-api.invoke`
+    /// (`machine-capabilities.start-invocation`).
     HostWasmtimeServiceStart,
-    /// Delivers one event to an invoked service (`invoked-service-api.send`).
+    /// Delivers one event to an invoked service's `events` stream.
     HostWasmtimeServiceSend,
-    /// Runs one due wakeup of an invoked service (`invoked-service-api.wake`).
-    HostWasmtimeServiceWake,
-    /// Cancels and drops one invoked service (`invoked-service-api.cancel`).
+    /// Fires an invoked service's due timers
+    /// (`wasi:clocks/monotonic-clock.wait-until`).
+    HostWasmtimeServiceWaitUntil,
+    /// Cancels one invoked service (SCXML 6.4): cancels its `invoke`
+    /// subtask and drops its store.
     HostWasmtimeServiceCancel,
-    /// Performs one outbound HTTP request an invoked service made through
-    /// the host-granted `outbound-http` capability.
+    /// One outbound HTTP request an invoked service made through the
+    /// host-granted `outbound-http.fetch`, from admission to its response.
     HostWasmtimeServiceHttpFetch,
-    /// Admits one deferred outbound HTTP request an invoked service began
-    /// (`outbound-http.begin`) and hands it to the embedder's transport, on
-    /// the session thread.
-    HostWasmtimeServiceHttpBegin,
-    /// Performs one deferred invoked-service request through the threaded
-    /// transport, off the session thread.
+    /// Performs one invoked service's admitted request through the
+    /// embedder's transport.
     HostWasmtimeServiceHttpRequest,
     /// Instantiates and links one data-model component.
     HostWasmtimeDataModelInstantiate,
@@ -459,9 +455,9 @@ pub enum Operation {
     /// that failed after they were accepted, and processes them to
     /// a stable configuration.
     HostWasmtimeSessionCommunicationError,
-    /// Delivers the settled deferred requests of invoked services to their
-    /// instances (`wake`) and processes them to a stable configuration.
-    HostWasmtimeSessionServiceResponse,
+    /// Delivers the HTTP response of one invoked service's request to its
+    /// invocation and processes it to a stable configuration.
+    HostWasmtimeSessionHttpResponse,
     /// Performs one outbound `BasicHTTP` POST over the network, off the
     /// session thread.
     HostWasmtimeBasicHttpNetworkPost,
@@ -533,9 +529,7 @@ impl Operation {
             Self::HostWasmtimeSessionCommunicationError => {
                 "scxml.host-wasmtime.session-communication-error"
             }
-            Self::HostWasmtimeSessionServiceResponse => {
-                "scxml.host-wasmtime.session-service-response"
-            }
+            Self::HostWasmtimeSessionHttpResponse => "scxml.host-wasmtime.session-http-response",
             Self::HostWasmtimeBasicHttpNetworkPost => "scxml.host-wasmtime.basichttp-network-post",
             Self::HostWasmtimeBasicHttpListenerRequest => {
                 "scxml.host-wasmtime.basichttp-listener-request"
@@ -651,13 +645,11 @@ impl Operation {
             Self::HostWasmtimeExtensionExecute => "scxml.host-wasmtime.extension-execute",
             Self::HostWasmtimeExtensionShutdown => "scxml.host-wasmtime.extension-shutdown",
             Self::HostWasmtimeExtensionHttpFetch => "scxml.host-wasmtime.extension-http-fetch",
-            Self::HostWasmtimeServiceLoad => "scxml.host-wasmtime.service-load",
             Self::HostWasmtimeServiceStart => "scxml.host-wasmtime.service-start",
             Self::HostWasmtimeServiceSend => "scxml.host-wasmtime.service-send",
-            Self::HostWasmtimeServiceWake => "scxml.host-wasmtime.service-wake",
+            Self::HostWasmtimeServiceWaitUntil => "scxml.host-wasmtime.service-wait-until",
             Self::HostWasmtimeServiceCancel => "scxml.host-wasmtime.service-cancel",
             Self::HostWasmtimeServiceHttpFetch => "scxml.host-wasmtime.service-http-fetch",
-            Self::HostWasmtimeServiceHttpBegin => "scxml.host-wasmtime.service-http-begin",
             Self::HostWasmtimeServiceHttpRequest => "scxml.host-wasmtime.service-http-request",
             Self::HostWasmtimeDataModelInstantiate => "scxml.host-wasmtime.data-model-instantiate",
             Self::HostWasmtimeBasicHttpInstantiate => "scxml.host-wasmtime.basichttp-instantiate",

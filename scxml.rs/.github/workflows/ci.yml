@@ -35,7 +35,7 @@ jobs:
           targets: wasm32-wasip2
       - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2
         with:
-          tool: cargo-deny@0.20.2,wasm-tools@1.240.0
+          tool: cargo-deny@0.20.2,wasm-tools@1.244.0
       # The IRP baselines bind the exact component bytes wasi-virt emits, and
       # several upstream commits report version 0.2.0, so pin the revision.
       - name: Install the pinned wasi-virt revision
@@ -102,7 +102,7 @@ jobs:
           targets: wasm32-wasip2
       - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2
         with:
-          tool: wasm-tools@1.240.0
+          tool: wasm-tools@1.244.0
       # The IRP baselines bind the exact component bytes wasi-virt emits, and
       # several upstream commits report version 0.2.0, so pin the revision.
       - name: Install the pinned wasi-virt revision
@@ -132,7 +132,7 @@ jobs:
           targets: wasm32-wasip2
       - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2
         with:
-          tool: wasm-tools@1.240.0
+          tool: wasm-tools@1.244.0
       # The IRP baselines bind the exact component bytes wasi-virt emits, and
       # several upstream commits report version 0.2.0, so pin the revision.
       - name: Install the pinned wasi-virt revision
@@ -226,7 +226,7 @@ jobs:
           targets: wasm32-wasip2
       - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2
         with:
-          tool: wasm-tools@1.240.0
+          tool: wasm-tools@1.244.0
       # The IRP baselines bind the exact component bytes wasi-virt emits, and
       # several upstream commits report version 0.2.0, so pin the revision.
       - name: Install the pinned wasi-virt revision
@@ -269,7 +269,7 @@ jobs:
           targets: wasm32-wasip2
       - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2
         with:
-          tool: wasm-tools@1.240.0
+          tool: wasm-tools@1.244.0
       # The IRP baselines bind the exact component bytes wasi-virt emits, and
       # several upstream commits report version 0.2.0, so pin the revision.
       - name: Install the pinned wasi-virt revision

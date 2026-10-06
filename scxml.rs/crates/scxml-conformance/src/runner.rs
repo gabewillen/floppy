@@ -390,7 +390,6 @@ where
         // diagnostics).
         scripts: Vec::new(),
         script_resolution: scxml_compiler_core::ScriptResolution::Runtime,
-        service_types: None,
         // A namespace case's `event:schema` files are its declared,
         // integrity-checked dependencies at or below its start document's
         // directory, keyed relative to that directory, as the document

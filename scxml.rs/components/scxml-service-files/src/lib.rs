@@ -1,27 +1,27 @@
-//! Example invoked-service component (SCXML 6.4) that declares a WASI
-//! permission: `wasi:filesystem` for one read-write mount, `workspace`
-//! (`package/files.service.json`).
+//! Example invoked-service component (SCXML 6.4) that imports
+//! `wasi:filesystem`.
 //!
-//! It proves the declared-and-granted WASI path end to end: the session host
-//! links `wasi:filesystem` into it only when the run grants a directory for
-//! the `workspace` mount, which the component sees at `/workspace`.
+//! It proves the WASI resource path end to end: its component imports
+//! `wasi:filesystem`, so the session host links it only when the run grants
+//! a preopened directory (`--dir URI=HOST::/workspace`), which the component
+//! sees at `/workspace`.
 //!
-//! * `start` reads the text parameters `seed` (a file name to read) and
+//! * `invoke` reads the text parameters `seed` (a file name to read) and
 //!   `name` and `text` (a file name to write and its text), each optional; it
 //!   reads `/workspace/<seed>`, writes `text` to `/workspace/<name>`, and
-//!   completes with the JSON object `{"seed":TEXT-OR-NULL,"wrote":BYTES-OR-NULL}`.
-//!   An invalid parameter or a failed filesystem call rejects the start (the
+//!   resolves its future at once with the JSON object
+//!   `{"seed":TEXT-OR-NULL,"wrote":BYTES-OR-NULL}`, returning no event. An
+//!   invalid parameter or a failed filesystem call rejects the start (the
 //!   `<invoke>` fails with `error.execution`).
-//! * `send`, `wake`, and `cancel` do nothing (it completes in `start`).
 //!
 //! It uses `std::fs`. The standard library also imports `wasi:cli` and
-//! `wasi:clocks/monotonic-clock`, which `scripts/verify-wasm-capabilities.sh`
+//! `wasi:clocks/monotonic-clock@0.2`, which `scripts/verify-wasm-capabilities.sh`
 //! satisfies with a composed deny-all provider (`wasi-cli-deny.wat`; a
 //! `wasi-virt` adapter would virtualize the filesystem too, read-only), so the
-//! released component imports exactly the interfaces of its declared
-//! permission: `wasi:filesystem/types`, `wasi:filesystem/preopens`, the
+//! released component imports exactly its world's interfaces and the
+//! filesystem's: `wasi:filesystem/types`, `wasi:filesystem/preopens`, the
 //! `wasi:io` interfaces they use, and `wasi:clocks/wall-clock` for its
-//! `datetime` type alone.
+//! `datetime` type.
 //!
 //! The decisions are the portable [`FilesRequest`] and [`completion`],
 //! tested natively.
@@ -173,68 +173,87 @@ mod guest {
     wit_bindgen::generate!({
         world: "invoked-service",
         path: "../../crates/scxml-wit/wit/scxml",
+        // The world's `wasi:clocks` interfaces too.
+        generate_all,
     });
 
     use std::io::{Read as _, Write as _};
 
     use exports::stateforward::scxml::invoked_service_api::Guest;
-    use stateforward::scxml::invoked_service_host;
-    use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
+    use stateforward::scxml::telemetry::{self, Operation, Outcome};
     use stateforward::scxml::types::{
-        ComponentError, DataValue, ErrorCode, ErrorVersion, Event, ServiceInvocation, SlotReference,
+        ComponentError, DataValue, ErrorCode, ErrorVersion, Event, InvokeRequest,
     };
 
     use super::{FilesError, FilesRequest, Parameter};
 
+    /// The service's result: `ok` with its done data, or its error.
+    type Done = Result<Option<DataValue>, ComponentError>;
+
     struct Component;
 
+    #[allow(
+        clippy::unused_async_trait_impl,
+        reason = "the WIT `invoke` is an `async func`; it returns once its tasks are spawned"
+    )]
     impl Guest for Component {
-        fn type_uri() -> String {
-            telemetry::event(
-                Operation::TypeUri,
-                SignalEvent::TransformationCompleted,
+        async fn invoke(
+            request: InvokeRequest,
+            _events: wit_bindgen::StreamReader<Event>,
+        ) -> Result<
+            (
+                wit_bindgen::StreamReader<Event>,
+                wit_bindgen::FutureReader<Done>,
+            ),
+            ComponentError,
+        > {
+            let result = run(&request);
+            telemetry::observe(
+                Operation::Start,
+                match &result {
+                    Ok(_) => Outcome::Ok,
+                    Err(failure) if failure.code == ErrorCode::InvalidInput => Outcome::Rejected,
+                    Err(_) => Outcome::Failed,
+                },
+                None,
                 None,
             );
-            super::FILES_SERVICE_URI.to_owned()
+            let data = result?;
+            // No event; the future resolves at once with the result.
+            let (returned, returned_reader) = wit_stream::new::<Event>();
+            drop(returned);
+            let (done, done_reader) = wit_future::new::<Done>(|| {
+                Err(error(
+                    ErrorCode::Platform,
+                    "the service ended without a result",
+                ))
+            });
+            wit_bindgen::spawn(async move {
+                let _ = done.write(Ok(Some(DataValue::JsonObject(data)))).await;
+            });
+            Ok((returned_reader, done_reader))
         }
+    }
 
-        fn start(
-            request: ServiceInvocation,
-            _references: Vec<SlotReference>,
-        ) -> Result<(), ComponentError> {
-            observed(Operation::Start, || {
-                if request.type_uri != super::FILES_SERVICE_URI {
-                    return Err(error(ErrorCode::InvalidInput, "service type URI differs"));
-                }
-                let files = FilesRequest::from_parameters(request.parameters.iter().map(|entry| {
-                    let value = match &entry.value {
-                        DataValue::Text(text) => Parameter::Text(text),
-                        _ => Parameter::Other,
-                    };
-                    (entry.name.as_str(), value)
-                }))
-                .map_err(files_error)?;
-                let seed = files.seed.as_deref().map(read).transpose()?;
-                let wrote = match &files.write {
-                    Some((name, text)) => Some(write(name, text)?),
-                    None => None,
-                };
-                let data = super::completion(seed.as_deref(), wrote);
-                invoked_service_host::complete(Some(&DataValue::JsonObject(data)))
-            })
+    /// Reads and writes as the request asks; the completion data.
+    fn run(request: &InvokeRequest) -> Result<String, ComponentError> {
+        if request.type_uri != super::FILES_SERVICE_URI {
+            return Err(error(ErrorCode::InvalidInput, "service type URI differs"));
         }
-
-        fn send(_event: Event) -> Result<(), ComponentError> {
-            observed(Operation::Send, || Ok(()))
-        }
-
-        fn wake() -> Result<(), ComponentError> {
-            observed(Operation::Wake, || Ok(()))
-        }
-
-        fn cancel() -> Result<(), ComponentError> {
-            observed(Operation::Cancel, || Ok(()))
-        }
+        let files = FilesRequest::from_parameters(request.parameters.iter().map(|entry| {
+            let value = match &entry.value {
+                DataValue::Text(text) => Parameter::Text(text),
+                _ => Parameter::Other,
+            };
+            (entry.name.as_str(), value)
+        }))
+        .map_err(files_error)?;
+        let seed = files.seed.as_deref().map(read).transpose()?;
+        let wrote = match &files.write {
+            Some((name, text)) => Some(write(name, text)?),
+            None => None,
+        };
+        Ok(super::completion(seed.as_deref(), wrote))
     }
 
     fn filesystem() -> ComponentError {
@@ -276,30 +295,6 @@ mod guest {
             code,
             detail: Some(detail.to_owned()),
         }
-    }
-
-    /// One export call's closed telemetry: its outcome and one event.
-    fn observed<T>(
-        operation: Operation,
-        body: impl FnOnce() -> Result<T, ComponentError>,
-    ) -> Result<T, ComponentError> {
-        let result = body();
-        let outcome = match &result {
-            Ok(_) => Outcome::Ok,
-            Err(failure) if failure.code == ErrorCode::InvalidInput => Outcome::Rejected,
-            Err(_) => Outcome::Failed,
-        };
-        telemetry::observe(operation, outcome, None, None);
-        telemetry::event(
-            operation,
-            if result.is_ok() {
-                SignalEvent::TransformationCompleted
-            } else {
-                SignalEvent::InputRejected
-            },
-            None,
-        );
-        result
     }
 
     export!(Component);

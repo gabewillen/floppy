@@ -175,7 +175,7 @@ impl CallBudget {
 
     /// Starts an outermost host call with the full configured fuel and
     /// copy allowance.
-    fn start(&self) {
+    pub(crate) fn start(&self) {
         let fuel = self.fuel();
         self.remaining.store(fuel, Ordering::Relaxed);
         self.copies_left

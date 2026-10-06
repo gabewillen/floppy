@@ -397,7 +397,6 @@ fn a_delayed_basichttp_send_is_dispatched_when_due_through_the_components() {
         package_schemas: Vec::new(),
         scripts: Vec::new(),
         script_resolution: ScriptResolution::Runtime,
-        service_types: None,
         event_schemas: std::collections::BTreeMap::new(),
     });
     let artifact = lowered

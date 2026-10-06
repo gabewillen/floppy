@@ -16,7 +16,6 @@ publish.workspace = true
 default = []
 wasmtime = [
     "dep:rayon",
-    "dep:scxml-event-schema",
     "dep:scxml-scheduler",
     "dep:scxml-script",
     "dep:scxml-snapshot",
@@ -24,6 +23,7 @@ wasmtime = [
     "dep:sha2",
     "dep:url",
     "dep:wasmtime",
+    "dep:wasmparser",
     "dep:wasmtime-wasi",
 ]
 # The BasicHTTP network of live sessions (SCXML C.2): an allowlisted
@@ -42,9 +42,6 @@ opentelemetry.workspace = true
 opentelemetry_sdk.workspace = true
 rayon = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
-# Package-declared event contracts of invoked services: compiled once per
-# binding, checked at the service's emit and send boundaries.
-scxml-event-schema = { workspace = true, optional = true }
 scxml-scheduler = { workspace = true, optional = true }
 scxml-script = { workspace = true, optional = true }
 scxml-snapshot = { workspace = true, optional = true }
@@ -54,6 +51,9 @@ sha2 = { workspace = true, optional = true }
 ureq = { workspace = true, optional = true }
 url = { workspace = true, optional = true }
 wasmtime = { workspace = true, optional = true }
+# Reads an invoked-service component's own imports when it is bound (its
+# WASI interfaces), without compiling it.
+wasmparser = { workspace = true, optional = true }
 wasmtime-wasi = { workspace = true, optional = true }
 
 [dev-dependencies]

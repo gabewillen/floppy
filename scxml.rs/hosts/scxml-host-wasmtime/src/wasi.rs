@@ -1,181 +1,90 @@
-//! Declared and granted WASI permissions of invoked-service components.
+//! The WASI interfaces an invoked-service component imports, and the
+//! runtime resources the embedder grants it.
 //!
-//! Nothing WASI is ambient. A service package may declare WASI 0.2
-//! interfaces (`wasi-permissions`, [`scxml_types::wasi`]); the embedder
-//! grants each of them for this run ([`WasiGrants`]); and the host links
-//! into that component's linker exactly the declared **and** granted
-//! interfaces, with the grant's value (a directory, a connect allowlist):
+//! Nothing WASI is ambient, and nothing is declared in a package manifest:
+//! what a service component may use is what it imports.
 //!
-//! * **Plan** — [`WasiPlan::new`] pairs every declared permission with its
-//!   grant: a declared permission without a grant
-//!   ([`ArtifactError::WasiPermissionUngranted`]) and a grant the package does
-//!   not declare ([`ArtifactError::WasiGrantUndeclared`]) both fail the binding
-//!   closed, before any session starts.
-//! * **Imports** — [`WasiPlan::check_imports`] refuses a component that
-//!   imports a `wasi:` interface the plan does not link
-//!   ([`ArtifactError::WasiImportUndeclared`]); the only exception is an
-//!   interface a linked one names for its types alone (`wasi:filesystem`
-//!   uses `wasi:clocks/wall-clock.datetime`, `wasi:sockets/tcp` uses
-//!   `wasi:clocks/monotonic-clock.duration`), which the host links as an
-//!   empty instance, so the component can call nothing through it. The
-//!   session host runs this check when it loads the service at session start
-//!   (before the first macrostep) and again before every instantiation.
-//! * **Linking** — [`WasiPlan::add_to_linker`] adds the planned interfaces
-//!   (and the `wasi:io` interfaces they need) from `wasmtime-wasi`'s
-//!   synchronous bindings, once each; nothing else. `wasi:cli`, `wasi:http`,
-//!   and UDP are never linked.
-//! * **Context** — [`WasiPlan::context`] builds one instance's context:
-//!   each granted directory preopened at `/<mount>` with the declared
-//!   access, TCP connections admitted only to the granted addresses (and the
-//!   implicit wildcard bind a connect performs; listening, accepting, and UDP
-//!   are refused), name lookup only when granted. Clocks and randomness are
-//!   the host's.
+//! * **Imports** — [`WasiPlan::new`] reads the component's own `wasi:*`
+//!   imports (its world's `wasi:clocks/monotonic-clock@0.3.0`, which the host
+//!   runs on the session's logical clock, is linked by the service world and
+//!   is not part of the plan). Clocks (`wasi:clocks/wall-clock`,
+//!   `wasi:clocks/monotonic-clock`), randomness (`wasi:random/*`), and the
+//!   `wasi:io` interfaces need no grant. Every other `wasi:*` interface,
+//!   such as `wasi:cli` or `wasi:http`, is never linked: a component that
+//!   imports one is refused ([`ArtifactError::WasiImportUndeclared`]).
+//! * **Resources** — only runtime resources need a grant, named after
+//!   wasmtime CLI's options ([`WasiOptions`]): `wasi:filesystem` needs at
+//!   least one preopened directory (`--dir HOST::GUEST`), `wasi:sockets/tcp`
+//!   the addresses its connections may reach (`-S tcp`), and
+//!   `wasi:sockets/ip-name-lookup` `-S allow-ip-name-lookup`. A component
+//!   importing one without its grant is refused
+//!   ([`ArtifactError::WasiResourceUngranted`]), and so is a grant whose
+//!   interface the component does not import
+//!   ([`ArtifactError::WasiGrantUndeclared`]). The session host plans every
+//!   binding when it is bound, before any session starts.
+//! * **Linking** — [`WasiPlan::add_to_linker`] adds exactly the planned
+//!   interfaces from `wasmtime-wasi`'s WASI 0.2 synchronous bindings (the
+//!   interfaces a `wasm32-wasip2` guest imports), once each. `wasi:cli`,
+//!   `wasi:http`, and UDP are never linked.
+//! * **Context** — [`WasiPlan::context`] builds one invocation's context:
+//!   each granted directory preopened at its guest path, read-write (as
+//!   wasmtime's `--dir`), TCP connections admitted only to the granted
+//!   addresses (and the implicit wildcard bind a connect performs;
+//!   listening, accepting, and UDP are refused), name lookup only when
+//!   granted. Clocks and randomness are the host's.
 //!
 //! Telemetry: no span of its own. Planning failures surface through the
-//! binding's error, import and link failures through the enclosing
-//! `service-load` or `service-start` span, and WASI calls run inside the
-//! service's export-call spans.
+//! binding's error, and WASI calls run inside the invocation's spans.
 
-use std::collections::BTreeMap;
-use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
 
-use scxml_types::{FilesystemAccess, WasiInterface, WasiPermission};
 use wasmtime::component::{HasData, Linker, ResourceTable};
 use wasmtime_wasi::sockets::SocketAddrUse;
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiView};
 
 use crate::{ArtifactError, HostError};
 
-/// Maximum addresses one `wasi:sockets/tcp` grant admits.
-pub const MAX_WASI_TCP_ADDRESSES: usize = 32;
-/// Maximum package URIs one [`WasiGrants`] grants to.
-pub const MAX_WASI_GRANTED_PACKAGES: usize = 64;
+/// Maximum preopened directories and TCP addresses of one [`WasiOptions`].
+const MAX_WASI_OPTION_ITEMS: usize = 32;
+/// Maximum bytes of one guest path.
+const MAX_WASI_GUEST_PATH_BYTES: usize = 1_024;
 
-/// The WASI package version of the interfaces this host links
-/// (`wasmtime-wasi`'s; a component importing an older 0.2 version is linked
-/// by semver compatibility).
-const WASI_VERSION: &str = "0.2.12";
-
-/// One grant the embedder gives one package for one declared permission.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum WasiGrant {
-    /// `wasi:clocks`.
-    Clocks,
-    /// `wasi:filesystem` for one declared mount: the host directory the
-    /// component sees at `/<mount>`.
-    Filesystem {
-        /// The declared mount name.
-        mount: String,
-        /// The host directory behind it.
-        directory: PathBuf,
-    },
-    /// `wasi:random`.
-    Random,
-    /// `wasi:sockets/ip-name-lookup`.
-    SocketsIpNameLookup,
-    /// `wasi:sockets/tcp`: the remote addresses the component may connect
-    /// to (at most [`MAX_WASI_TCP_ADDRESSES`], at least one).
-    SocketsTcp {
-        /// The admitted remote addresses.
-        connect: Vec<SocketAddr>,
-    },
-}
-
-impl WasiGrant {
-    /// The interface it grants.
-    #[must_use]
-    pub const fn interface(&self) -> WasiInterface {
-        match self {
-            Self::Clocks => WasiInterface::Clocks,
-            Self::Filesystem { .. } => WasiInterface::Filesystem,
-            Self::Random => WasiInterface::Random,
-            Self::SocketsIpNameLookup => WasiInterface::SocketsIpNameLookup,
-            Self::SocketsTcp { .. } => WasiInterface::SocketsTcp,
-        }
-    }
-
-    /// The mount name, for a filesystem grant.
-    #[must_use]
-    pub fn mount(&self) -> Option<&str> {
-        match self {
-            Self::Filesystem { mount, .. } => Some(mount),
-            _ => None,
-        }
-    }
-
-    fn key(&self) -> (WasiInterface, Option<&str>) {
-        (self.interface(), self.mount())
-    }
-
-    fn is_valid(&self) -> bool {
-        match self {
-            Self::Filesystem { mount, directory } => {
-                scxml_types::is_wasi_mount(mount) && !directory.as_os_str().is_empty()
-            }
-            Self::SocketsTcp { connect } => {
-                !connect.is_empty() && connect.len() <= MAX_WASI_TCP_ADDRESSES
-            }
-            Self::Clocks | Self::Random | Self::SocketsIpNameLookup => true,
-        }
-    }
-}
-
-/// The run's WASI grants, by exact package URI (a service type URI).
+/// The runtime resources the embedder grants one invoked service's
+/// component, named after wasmtime CLI's options.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct WasiGrants {
-    grants: BTreeMap<String, Vec<WasiGrant>>,
+pub struct WasiOptions {
+    /// `--dir HOST::GUEST`: each host directory, preopened read-write at
+    /// its absolute guest path (at most 32, each guest path once).
+    pub dirs: Vec<(PathBuf, String)>,
+    /// `-S inherit-network`: TCP connections may reach any address;
+    /// without it, TCP is denied.
+    pub inherit_network: bool,
+    /// `-S allow-ip-name-lookup`.
+    pub allow_ip_name_lookup: bool,
 }
 
-impl WasiGrants {
-    /// No grant: a package that declares a WASI permission fails its binding.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Grants `grant` to the package bound to exactly `uri`.
-    ///
-    /// # Errors
-    ///
-    /// [`HostError::Artifact`] [`ArtifactError::WasiGrantInvalid`]: an
-    /// invalid mount name or empty directory, a TCP grant with no address
-    /// or more than [`MAX_WASI_TCP_ADDRESSES`], the same interface (or
-    /// mount) granted twice to one URI, or more than
-    /// [`MAX_WASI_GRANTED_PACKAGES`] URIs.
-    pub fn grant(mut self, uri: &str, grant: WasiGrant) -> Result<Self, HostError> {
-        let invalid = || HostError::from(ArtifactError::WasiGrantInvalid);
-        if !grant.is_valid()
-            || (!self.grants.contains_key(uri) && self.grants.len() >= MAX_WASI_GRANTED_PACKAGES)
-        {
-            return Err(invalid());
-        }
-        let entries = self.grants.entry(uri.to_owned()).or_default();
-        if entries.len() >= scxml_types::MAX_WASI_PERMISSIONS
-            || entries.iter().any(|granted| granted.key() == grant.key())
-        {
-            return Err(invalid());
-        }
-        entries.push(grant);
-        Ok(self)
-    }
-
-    /// The grants to exactly `uri`.
-    #[must_use]
-    pub fn for_uri(&self, uri: &str) -> &[WasiGrant] {
-        self.grants.get(uri).map_or(&[], Vec::as_slice)
-    }
-
-    /// Every URI granted to, in order.
-    pub fn uris(&self) -> impl Iterator<Item = &str> {
-        self.grants.keys().map(String::as_str)
-    }
-
-    /// Whether nothing is granted.
+impl WasiOptions {
+    /// Whether it grants nothing.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.grants.is_empty()
+        self.dirs.is_empty() && !self.inherit_network && !self.allow_ip_name_lookup
+    }
+
+    /// Whether every entry is within its bounds: guest paths absolute,
+    /// distinct, and bounded, no empty host path, and at most 32
+    /// directories.
+    pub(crate) fn is_valid(&self) -> bool {
+        self.dirs.len() <= MAX_WASI_OPTION_ITEMS
+            && self.dirs.iter().enumerate().all(|(index, (host, guest))| {
+                !host.as_os_str().is_empty()
+                    && guest.starts_with('/')
+                    && guest.len() <= MAX_WASI_GUEST_PATH_BYTES
+                    && !guest.contains('\0')
+                    && self
+                        .dirs
+                        .get(..index)
+                        .is_some_and(|before| before.iter().all(|(_, seen)| seen != guest))
+            })
     }
 }
 
@@ -199,7 +108,33 @@ enum Unit {
     IpNameLookup,
 }
 
+/// The resource a unit needs granted.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Resource {
+    Dirs,
+    Tcp,
+    IpNameLookup,
+}
+
 impl Unit {
+    const ALL: [Self; 15] = [
+        Self::IoError,
+        Self::IoPoll,
+        Self::IoStreams,
+        Self::WallClock,
+        Self::MonotonicClock,
+        Self::Random,
+        Self::RandomInsecure,
+        Self::RandomInsecureSeed,
+        Self::FilesystemTypes,
+        Self::FilesystemPreopens,
+        Self::Network,
+        Self::InstanceNetwork,
+        Self::TcpCreateSocket,
+        Self::Tcp,
+        Self::IpNameLookup,
+    ];
+
     /// The unversioned interface name a component imports.
     const fn name(self) -> &'static str {
         match self {
@@ -221,60 +156,35 @@ impl Unit {
         }
     }
 
-    /// The units one interface links, and the units it names for types
-    /// only.
-    const fn of(interface: WasiInterface) -> (&'static [Self], &'static [Self]) {
-        match interface {
-            WasiInterface::Clocks => (&[Self::WallClock, Self::MonotonicClock, Self::IoPoll], &[]),
-            WasiInterface::Random => (
-                &[Self::Random, Self::RandomInsecure, Self::RandomInsecureSeed],
-                &[],
-            ),
-            WasiInterface::Filesystem => (
-                &[
-                    Self::FilesystemTypes,
-                    Self::FilesystemPreopens,
-                    Self::IoError,
-                    Self::IoPoll,
-                    Self::IoStreams,
-                ],
-                &[Self::WallClock],
-            ),
-            WasiInterface::SocketsTcp => (
-                &[
-                    Self::Network,
-                    Self::InstanceNetwork,
-                    Self::TcpCreateSocket,
-                    Self::Tcp,
-                    Self::IoError,
-                    Self::IoPoll,
-                    Self::IoStreams,
-                ],
-                &[Self::MonotonicClock],
-            ),
-            WasiInterface::SocketsIpNameLookup => (
-                &[
-                    Self::Network,
-                    Self::InstanceNetwork,
-                    Self::IpNameLookup,
-                    Self::IoPoll,
-                ],
-                &[],
-            ),
+    /// The resource it needs granted, if any.
+    const fn resource(self) -> Option<Resource> {
+        match self {
+            Self::FilesystemTypes | Self::FilesystemPreopens => Some(Resource::Dirs),
+            Self::TcpCreateSocket | Self::Tcp => Some(Resource::Tcp),
+            Self::IpNameLookup => Some(Resource::IpNameLookup),
+            _ => None,
         }
     }
 }
 
-/// The declared-and-granted WASI permissions of one bound package.
+/// Whether `import` is the invoked-service world's own logical-clock
+/// import (`wasi:clocks/monotonic-clock@0.3.0` and the `wasi:clocks/types`
+/// it uses), which the service linker provides outside the plan.
+pub(crate) fn is_world_clock(import: &str) -> bool {
+    matches!(
+        import,
+        "wasi:clocks/monotonic-clock@0.3.0" | "wasi:clocks/types@0.3.0"
+    )
+}
+
+/// The WASI interfaces one bound service's component imports, and what the
+/// run grants them.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct WasiPlan {
-    /// Every declared permission with its grant, in canonical order.
-    entries: Vec<(WasiPermission, WasiGrant)>,
-    /// Every link unit, sorted and distinct.
+    /// Every unit the component imports, sorted and distinct.
     linked: Vec<Unit>,
-    /// The units named for types only that no grant links, sorted and
-    /// distinct.
-    carried: Vec<Unit>,
+    /// The granted resources.
+    options: WasiOptions,
 }
 
 /// The `wasi:io` host state is the instance's resource table.
@@ -284,7 +194,7 @@ impl HasData for IoTable {
     type Data<'a> = &'a mut ResourceTable;
 }
 
-/// One instance's WASI state: its context and its resource table.
+/// One invocation's WASI state: its context and its resource table.
 pub(crate) struct WasiState {
     ctx: WasiCtx,
     table: ResourceTable,
@@ -307,105 +217,56 @@ impl WasiState {
 }
 
 impl WasiPlan {
-    /// Pairs every permission in `declared` with exactly one grant in
-    /// `granted`.
+    /// Plans the WASI interfaces in `imports` (a component's top-level
+    /// import names) with `options`.
     ///
     /// # Errors
     ///
-    /// [`ArtifactError::WasiPermissionsInvalid`] for a non-canonical
-    /// declared list, [`ArtifactError::WasiPermissionUngranted`] for a
-    /// declared permission no grant covers, and
-    /// [`ArtifactError::WasiGrantUndeclared`] for a grant no declared
-    /// permission names.
-    pub(crate) fn new(
-        declared: &[WasiPermission],
-        granted: &[WasiGrant],
-    ) -> Result<Self, HostError> {
-        scxml_types::check_wasi_permissions(declared)
-            .map_err(|_| HostError::from(ArtifactError::WasiPermissionsInvalid))?;
-        if granted.iter().any(|grant| {
-            !declared
-                .iter()
-                .any(|permission| permission.key() == grant.key())
-        }) {
-            return Err(ArtifactError::WasiGrantUndeclared.into());
+    /// [`ArtifactError::WasiGrantInvalid`] for options outside their bounds,
+    /// [`ArtifactError::WasiImportUndeclared`] for a `wasi:*` import this
+    /// host never links, [`ArtifactError::WasiResourceUngranted`] for an
+    /// imported interface whose resource `options` does not grant, and
+    /// [`ArtifactError::WasiGrantUndeclared`] for a granted resource no
+    /// import uses.
+    pub(crate) fn new(imports: &[String], options: &WasiOptions) -> Result<Self, HostError> {
+        if !options.is_valid() {
+            return Err(ArtifactError::WasiGrantInvalid.into());
         }
-        let mut entries = Vec::with_capacity(declared.len());
         let mut linked = Vec::new();
-        let mut carried = Vec::new();
-        for permission in declared {
-            let grant = granted
-                .iter()
-                .find(|grant| grant.key() == permission.key())
-                .ok_or(ArtifactError::WasiPermissionUngranted)?;
-            entries.push((permission.clone(), grant.clone()));
-            let (units, types) = Unit::of(permission.interface());
-            linked.extend_from_slice(units);
-            carried.extend_from_slice(types);
+        for import in imports {
+            if !import.starts_with("wasi:") || is_world_clock(import) {
+                continue;
+            }
+            let interface = import
+                .split_once('@')
+                .map_or(import.as_str(), |(interface, _)| interface);
+            let unit = Unit::ALL
+                .into_iter()
+                .find(|unit| unit.name() == interface)
+                .ok_or(ArtifactError::WasiImportUndeclared)?;
+            linked.push(unit);
         }
         linked.sort_unstable();
         linked.dedup();
-        carried.sort_unstable();
-        carried.dedup();
-        carried.retain(|unit| linked.binary_search(unit).is_err());
+        let uses = |resource: Resource| linked.iter().any(|unit| unit.resource() == Some(resource));
+        for (resource, granted) in [
+            (Resource::Dirs, !options.dirs.is_empty()),
+            (Resource::Tcp, options.inherit_network),
+            (Resource::IpNameLookup, options.allow_ip_name_lookup),
+        ] {
+            match (uses(resource), granted) {
+                (true, false) => return Err(ArtifactError::WasiResourceUngranted.into()),
+                (false, true) => return Err(ArtifactError::WasiGrantUndeclared.into()),
+                _ => {}
+            }
+        }
         Ok(Self {
-            entries,
             linked,
-            carried,
+            options: options.clone(),
         })
     }
 
-    /// Refuses `component` when it imports a `wasi:` interface this plan
-    /// does not link, unless the plan names it for its types alone and the
-    /// component imports no function or resource from it. Imports outside
-    /// `wasi:` are the component world's, checked by the linker.
-    ///
-    /// # Errors
-    ///
-    /// [`ArtifactError::WasiImportUndeclared`].
-    pub(crate) fn check_imports(
-        &self,
-        engine: &wasmtime::Engine,
-        component: &wasmtime::component::Component,
-    ) -> Result<(), HostError> {
-        use wasmtime::component::types::ComponentItem;
-
-        let undeclared = || HostError::from(ArtifactError::WasiImportUndeclared);
-        for (name, item) in component.component_type().imports(engine) {
-            if !name.starts_with("wasi:") {
-                continue;
-            }
-            let interface = name
-                .split_once('@')
-                .map_or(name, |(interface, _)| interface);
-            if self.linked.iter().any(|unit| unit.name() == interface) {
-                continue;
-            }
-            if !self.carried.iter().any(|unit| unit.name() == interface) {
-                return Err(undeclared());
-            }
-            let ComponentItem::ComponentInstance(instance) = item.ty else {
-                return Err(undeclared());
-            };
-            if instance.exports(engine).any(|(_, export)| {
-                matches!(
-                    export.ty,
-                    ComponentItem::ComponentFunc(_)
-                        | ComponentItem::CoreFunc(_)
-                        | ComponentItem::Resource(_)
-                        | ComponentItem::Component(_)
-                        | ComponentItem::ComponentInstance(_)
-                        | ComponentItem::Module(_)
-                )
-            }) {
-                return Err(undeclared());
-            }
-        }
-        Ok(())
-    }
-
-    /// Adds exactly the planned interfaces to `linker` (each once), and an
-    /// empty instance for each interface named for types only.
+    /// Adds exactly the planned interfaces to `linker`, each once.
     ///
     /// # Errors
     ///
@@ -464,15 +325,12 @@ impl WasiPlan {
                 }
             }
         }
-        for unit in &self.carried {
-            linker.instance(&format!("{}@{WASI_VERSION}", unit.name()))?;
-        }
         Ok(())
     }
 
-    /// One instance's WASI state: every granted directory preopened at
-    /// `/<mount>` with its declared access, TCP connects admitted only to the
-    /// granted addresses, name lookup only when granted.
+    /// One invocation's WASI state: every granted directory preopened
+    /// read-write at its guest path, TCP to any address only under
+    /// `inherit-network`, name lookup only when granted.
     ///
     /// # Errors
     ///
@@ -480,45 +338,19 @@ impl WasiPlan {
     /// opened.
     pub(crate) fn context(&self) -> Result<WasiState, HostError> {
         let mut builder = WasiCtxBuilder::new();
-        let mut connect: Vec<SocketAddr> = Vec::new();
-        let mut lookup = false;
-        for (permission, grant) in &self.entries {
-            match (permission, grant) {
-                (
-                    WasiPermission::Filesystem { mount, access },
-                    WasiGrant::Filesystem { directory, .. },
-                ) => {
-                    let perms = match access {
-                        FilesystemAccess::ReadOnly => FsPerms::ReadOnly,
-                        FilesystemAccess::ReadWrite => FsPerms::ReadWrite,
-                    };
-                    builder
-                        .preopened_dir(directory, format!("/{mount}"), perms)
-                        .map_err(|_| HostError::from(ArtifactError::WasiGrantInvalid))?;
-                }
-                (WasiPermission::SocketsTcp, WasiGrant::SocketsTcp { connect: granted }) => {
-                    connect.extend_from_slice(granted);
-                }
-                (WasiPermission::SocketsIpNameLookup, WasiGrant::SocketsIpNameLookup) => {
-                    lookup = true;
-                }
-                _ => {}
-            }
+        for (host, guest) in &self.options.dirs {
+            builder
+                .preopened_dir(host, guest, FsPerms::ReadWrite)
+                .map_err(|_| HostError::from(ArtifactError::WasiGrantInvalid))?;
         }
-        let connect: Arc<[SocketAddr]> = Arc::from(connect);
+        let network = self.options.inherit_network;
         builder
-            .allow_tcp(!connect.is_empty())
+            .allow_tcp(network)
             .allow_udp(false)
-            .allow_ip_name_lookup(lookup)
-            .socket_addr_check(move |address, usage| {
-                let admitted = match usage {
-                    SocketAddrUse::TcpConnect => connect.contains(&address),
-                    // The implicit bind a connect performs.
-                    SocketAddrUse::TcpBind => {
-                        !connect.is_empty() && address.ip().is_unspecified() && address.port() == 0
-                    }
-                    _ => false,
-                };
+            .allow_ip_name_lookup(self.options.allow_ip_name_lookup)
+            .socket_addr_check(move |_, usage| {
+                let admitted =
+                    network && matches!(usage, SocketAddrUse::TcpConnect | SocketAddrUse::TcpBind);
                 Box::pin(async move { admitted })
             });
         Ok(WasiState {
@@ -528,174 +360,166 @@ impl WasiPlan {
     }
 }
 
+/// The top-level import names of one component, read without compiling it.
+///
+/// # Errors
+///
+/// [`HostError::Component`] `component-imports-unreadable` for bytes that
+/// are not a component.
+pub(crate) fn component_imports(bytes: &[u8]) -> Result<Vec<String>, HostError> {
+    let unreadable = || HostError::Component("component-imports-unreadable".into());
+    let mut depth = 0_usize;
+    let mut imports = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+        match payload.map_err(|_| unreadable())? {
+            wasmparser::Payload::ModuleSection { .. }
+            | wasmparser::Payload::ComponentSection { .. } => {
+                depth = depth.saturating_add(1);
+            }
+            wasmparser::Payload::End(_) => depth = depth.saturating_sub(1),
+            wasmparser::Payload::ComponentImportSection(reader) if depth == 0 => {
+                for import in reader {
+                    imports.push(import.map_err(|_| unreadable())?.name.name.to_owned());
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(imports)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn workspace(access: FilesystemAccess) -> WasiPermission {
-        WasiPermission::Filesystem {
-            mount: "workspace".into(),
-            access,
-        }
-    }
-
-    fn directory() -> WasiGrant {
-        WasiGrant::Filesystem {
-            mount: "workspace".into(),
-            directory: std::env::temp_dir(),
-        }
-    }
-
-    fn refusal(declared: &[WasiPermission], granted: &[WasiGrant]) -> ArtifactError {
-        match WasiPlan::new(declared, granted) {
+    fn refusal(imports: &[&str], options: &WasiOptions) -> ArtifactError {
+        let imports: Vec<String> = imports.iter().map(|import| (*import).to_owned()).collect();
+        match WasiPlan::new(&imports, options) {
             Err(HostError::Artifact(error)) => error,
             Err(other) => panic!("unexpected failure: {other}"),
             Ok(_) => panic!("the plan must be refused"),
         }
     }
 
-    #[test]
-    fn nothing_declared_plans_nothing() {
-        let plan = WasiPlan::new(&[], &[]).expect("an empty plan");
-        assert_eq!(plan, WasiPlan::default());
+    fn plan(imports: &[&str], options: &WasiOptions) -> WasiPlan {
+        let imports: Vec<String> = imports.iter().map(|import| (*import).to_owned()).collect();
+        WasiPlan::new(&imports, options).expect("planned")
     }
 
-    #[test]
-    fn every_declared_permission_needs_exactly_its_grant() {
-        let declared = [workspace(FilesystemAccess::ReadWrite)];
-        assert_eq!(
-            refusal(&declared, &[]),
-            ArtifactError::WasiPermissionUngranted
-        );
-        assert_eq!(
-            refusal(&declared, &[directory(), WasiGrant::Random]),
-            ArtifactError::WasiGrantUndeclared
-        );
-        let other_mount = WasiGrant::Filesystem {
-            mount: "other".into(),
-            directory: std::env::temp_dir(),
-        };
-        assert_eq!(
-            refusal(&declared, &[other_mount]),
-            ArtifactError::WasiGrantUndeclared
-        );
-        assert_eq!(
-            refusal(&[WasiPermission::Random, WasiPermission::Clocks], &[]),
-            ArtifactError::WasiPermissionsInvalid,
-            "a non-canonical declaration is refused before any grant is read"
-        );
-    }
-
-    #[test]
-    fn a_filesystem_grant_links_its_interfaces_and_carries_the_clock_types() {
-        let plan = WasiPlan::new(&[workspace(FilesystemAccess::ReadOnly)], &[directory()])
-            .expect("granted");
-        assert_eq!(
-            plan.linked,
-            [
-                Unit::IoError,
-                Unit::IoPoll,
-                Unit::IoStreams,
-                Unit::FilesystemTypes,
-                Unit::FilesystemPreopens
-            ]
-        );
-        assert_eq!(plan.carried, [Unit::WallClock]);
-        // Granting the clocks too links the wall clock instead of carrying
-        // its types.
-        let plan = WasiPlan::new(
-            &[
-                WasiPermission::Clocks,
-                workspace(FilesystemAccess::ReadOnly),
-            ],
-            &[directory(), WasiGrant::Clocks],
-        )
-        .expect("granted");
-        assert!(plan.carried.is_empty());
-        assert!(plan.linked.contains(&Unit::WallClock));
-        assert!(plan.linked.contains(&Unit::MonotonicClock));
-    }
-
-    #[test]
-    fn sockets_share_their_network_interfaces() {
-        let plan = WasiPlan::new(
-            &[
-                WasiPermission::SocketsIpNameLookup,
-                WasiPermission::SocketsTcp,
-            ],
-            &[
-                WasiGrant::SocketsTcp {
-                    connect: vec![SocketAddr::from(([127, 0, 0, 1], 80))],
-                },
-                WasiGrant::SocketsIpNameLookup,
-            ],
-        )
-        .expect("granted");
-        assert_eq!(
-            plan.linked
-                .iter()
-                .filter(|unit| **unit == Unit::Network)
-                .count(),
-            1
-        );
-        assert_eq!(plan.carried, [Unit::MonotonicClock]);
-        assert!(plan.context().is_ok());
-    }
-
-    #[test]
-    fn grants_are_bounded_and_unique() {
-        let address = SocketAddr::from(([127, 0, 0, 1], 80));
-        let invalid = |result: Result<WasiGrants, HostError>| {
-            matches!(
-                result,
-                Err(HostError::Artifact(ArtifactError::WasiGrantInvalid))
-            )
-        };
-        assert!(invalid(WasiGrants::new().grant(
-            "urn:x",
-            WasiGrant::SocketsTcp {
-                connect: Vec::new()
-            }
-        )));
-        assert!(invalid(WasiGrants::new().grant(
-            "urn:x",
-            WasiGrant::SocketsTcp {
-                connect: vec![address; MAX_WASI_TCP_ADDRESSES + 1]
-            }
-        )));
-        assert!(invalid(WasiGrants::new().grant(
-            "urn:x",
-            WasiGrant::Filesystem {
-                mount: "Bad".into(),
-                directory: std::env::temp_dir()
-            }
-        )));
-        assert!(invalid(
-            WasiGrants::new()
-                .grant("urn:x", WasiGrant::Random)
-                .and_then(|grants| grants.grant("urn:x", WasiGrant::Random))
-        ));
-        let mut grants = WasiGrants::new();
-        for index in 0..MAX_WASI_GRANTED_PACKAGES {
-            grants = grants
-                .grant(&format!("urn:x:{index}"), WasiGrant::Random)
-                .expect("within the bound");
+    fn dir() -> WasiOptions {
+        WasiOptions {
+            dirs: vec![(std::env::temp_dir(), "/workspace".into())],
+            ..WasiOptions::default()
         }
-        assert!(invalid(grants.grant("urn:x:last", WasiGrant::Random)));
+    }
+
+    #[test]
+    fn the_world_clock_and_non_wasi_imports_plan_nothing() {
+        let planned = plan(
+            &[
+                "wasi:clocks/monotonic-clock@0.3.0",
+                "wasi:clocks/types@0.3.0",
+                "stateforward:scxml/outbound-http@0.2.0",
+            ],
+            &WasiOptions::default(),
+        );
+        assert!(planned.linked.is_empty());
+    }
+
+    #[test]
+    fn clocks_and_randomness_need_no_grant_and_cli_is_never_linked() {
+        let planned = plan(
+            &["wasi:clocks/wall-clock@0.2.9", "wasi:random/random@0.2.9"],
+            &WasiOptions::default(),
+        );
+        assert!(!planned.linked.is_empty());
+        assert_eq!(
+            refusal(&["wasi:cli/environment@0.2.9"], &WasiOptions::default()),
+            ArtifactError::WasiImportUndeclared
+        );
+        assert_eq!(
+            refusal(
+                &["wasi:http/outgoing-handler@0.2.9"],
+                &WasiOptions::default()
+            ),
+            ArtifactError::WasiImportUndeclared
+        );
+    }
+
+    #[test]
+    fn runtime_resources_need_exactly_their_grant() {
+        let filesystem = [
+            "wasi:filesystem/types@0.2.9",
+            "wasi:filesystem/preopens@0.2.9",
+        ];
+        assert_eq!(
+            refusal(&filesystem, &WasiOptions::default()),
+            ArtifactError::WasiResourceUngranted
+        );
+        assert!(plan(&filesystem, &dir()).context().is_ok());
+        assert_eq!(
+            refusal(&["wasi:random/random@0.2.9"], &dir()),
+            ArtifactError::WasiGrantUndeclared
+        );
+        let tcp = WasiOptions {
+            inherit_network: true,
+            ..WasiOptions::default()
+        };
+        assert_eq!(
+            refusal(&["wasi:sockets/tcp@0.2.9"], &WasiOptions::default()),
+            ArtifactError::WasiResourceUngranted
+        );
+        assert!(plan(&["wasi:sockets/tcp@0.2.9"], &tcp).context().is_ok());
+        let lookup = WasiOptions {
+            allow_ip_name_lookup: true,
+            ..WasiOptions::default()
+        };
+        assert_eq!(
+            refusal(&["wasi:random/random@0.2.9"], &lookup),
+            ArtifactError::WasiGrantUndeclared
+        );
+        assert!(
+            !plan(&["wasi:sockets/ip-name-lookup@0.2.9"], &lookup)
+                .linked
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn options_are_bounded_and_guest_paths_distinct() {
+        let mut twice = dir();
+        twice.dirs.push((std::env::temp_dir(), "/workspace".into()));
+        assert!(!twice.is_valid());
+        let relative = WasiOptions {
+            dirs: vec![(std::env::temp_dir(), "workspace".into())],
+            ..WasiOptions::default()
+        };
+        assert!(!relative.is_valid());
+        let many = WasiOptions {
+            dirs: (0..=MAX_WASI_OPTION_ITEMS)
+                .map(|index| (std::env::temp_dir(), format!("/d{index}")))
+                .collect(),
+            ..WasiOptions::default()
+        };
+        assert!(!many.is_valid());
+        assert_eq!(
+            refusal(&["wasi:filesystem/preopens@0.2.9"], &many),
+            ArtifactError::WasiGrantInvalid
+        );
     }
 
     #[test]
     fn a_missing_directory_fails_the_context_closed() {
-        let plan = WasiPlan::new(
-            &[workspace(FilesystemAccess::ReadWrite)],
-            &[WasiGrant::Filesystem {
-                mount: "workspace".into(),
-                directory: std::env::temp_dir().join("scxml-host-wasi-no-such-directory"),
-            }],
-        )
-        .expect("planned");
+        let missing = WasiOptions {
+            dirs: vec![(
+                std::env::temp_dir().join("scxml-host-wasi-no-such-directory"),
+                "/workspace".into(),
+            )],
+            ..WasiOptions::default()
+        };
+        let planned = plan(&["wasi:filesystem/preopens@0.2.9"], &missing);
         assert!(matches!(
-            plan.context(),
+            planned.context(),
             Err(HostError::Artifact(ArtifactError::WasiGrantInvalid))
         ));
     }

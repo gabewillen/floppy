@@ -119,10 +119,6 @@ const NOT_SELF_CHECKING: &[(&str, &str)] = &[
     ("COMP001", "produced only by `compile` lowering"),
     ("COMP002", "produced only by `compile` package binding"),
     (
-        "COMP004",
-        "produced only by `compile` service binding; the compiler's explain examples check it",
-    ),
-    (
         "COMP003",
         "produced only by `compile` script-package pinning",
     ),
@@ -184,14 +180,6 @@ const NOT_SELF_CHECKING: &[(&str, &str)] = &[
     (
         "SCXML094",
         "the example needs the validator's bound service types; the validator's invoke type tests cover it",
-    ),
-    (
-        "SCXML095",
-        "the example needs a bound service package declaring an event contract; the validator's service event tests cover it",
-    ),
-    (
-        "SCXML096",
-        "the example needs a bound service package declaring an event contract; the validator's service event tests cover it",
     ),
     ("XSD002", "the example is a schema, not an SCXML document"),
     ("XSD003", "the example is a schema, not an SCXML document"),

@@ -2,7 +2,6 @@ element `https://stateforward.org/scxml/example`
   = version: package 0.2.0 from --extension-package components/scxml-extension-example/package/example.extension.json
   = outbound HTTP: none
   = env slots: tokn <- API_TOKEN
-  = WASI: none
 error[SCXML083]: `<example:fetch>` has no `env` slot `tokn`
   --> tests/ui/scxml083-env-slot-typo.scxml:11:76
    |

@@ -94,9 +94,6 @@ pub(crate) struct SessionRecord {
     return_data: Option<WitDataValue>,
     /// The carrier of the session's finishing batch, for its `done.invoke`.
     done_trace_context: Option<WitTraceContext>,
-    /// An invoked service's compiled event contract (its package's
-    /// `events`), checked on every `<send>` addressed to it.
-    contract: Option<std::sync::Arc<crate::service::ServiceContract>>,
 }
 
 /// Every session of a run by key, and the running ones by `_sessionid`.
@@ -135,43 +132,8 @@ impl SessionTable {
                 finished: false,
                 return_data: None,
                 done_trace_context: None,
-                contract: None,
             },
         );
-    }
-
-    /// Attaches the invoked service `key`'s event contract.
-    pub(crate) fn set_contract(
-        &mut self,
-        key: SessionKey,
-        contract: Option<std::sync::Arc<crate::service::ServiceContract>>,
-    ) {
-        if let Some(record) = self.records.get_mut(&key) {
-            record.contract = contract;
-        }
-    }
-
-    /// Whether the session `key` accepts `event` sent to it: always, unless
-    /// it is an invoked service whose event contract does not declare the
-    /// event's name with a schema that admits its data.
-    pub(crate) fn accepts(&self, key: SessionKey, event: &WitEvent) -> bool {
-        let Some(contract) = self
-            .records
-            .get(&key)
-            .and_then(|record| record.contract.as_ref())
-        else {
-            return true;
-        };
-        crate::session::native_event(event.clone())
-            .is_ok_and(|event| contract.admits_accept(event.name.as_str(), &event.data))
-    }
-
-    /// Whether any session of the run is an invoked service with an event
-    /// contract.
-    pub(crate) fn any_contract(&self) -> bool {
-        self.records
-            .values()
-            .any(|record| record.contract.is_some())
     }
 
     /// Removes the session `key`.
@@ -218,9 +180,9 @@ impl SessionTable {
         }
     }
 
-    /// Records that the invoked service `key` was retired: it runs nothing
-    /// more and no invocation address answers for it.
-    fn service_retired(&mut self, key: SessionKey) {
+    /// Records that the invoked service `key` failed: it runs nothing more
+    /// and no invocation address answers for it.
+    fn service_failed(&mut self, key: SessionKey) {
         if let Some(record) = self.records.get_mut(&key) {
             record.finished = true;
         }
@@ -248,11 +210,12 @@ pub(crate) enum DeferredRequest {
         handle: Box<MachineHandle>,
         context: InvocationContext,
     },
-    /// Start the registered invoked service `child`.
+    /// Start the invocation of the registered invoked service `child`.
     StartService {
         child: SessionKey,
-        handle: Box<crate::service::ServiceHandle>,
-        request: crate::bindings::stateforward::scxml::types::ServiceInvocation,
+        request: Box<crate::bindings::stateforward::scxml::types::InvokeRequest>,
+        /// The invoking session's execution context.
+        execution_context: Context,
     },
     /// Cancel the session `child`, whose cancellation began.
     Cancel { child: SessionKey },
@@ -743,7 +706,7 @@ pub(crate) fn settle(
 }
 
 /// One session of the run as the host holds it: an SCXML machine session,
-/// or an invoked service (a leaf invocation with no machine, SCXML 6.4).
+/// or an invoked service (SCXML 6.4).
 pub(crate) enum SessionHandle {
     /// A machine session (the root, or an invoked SCXML session).
     Machine(Box<MachineHandle>),
@@ -752,12 +715,13 @@ pub(crate) enum SessionHandle {
 }
 
 /// One due item of a session on the shared logical clock: a delayed send
-/// of a machine session, or the wakeup of an invoked service.
+/// of a machine session, or the timers of an invoked service
+/// (`wasi:clocks/monotonic-clock.wait-until`).
 pub(crate) enum RunDue {
     /// A machine session's due delayed send.
     Send(Box<DelayedSend>),
-    /// An invoked service's due wakeup.
-    Wake,
+    /// An invoked service's due timers.
+    Timers,
 }
 
 /// The run's sessions as the executor sees them: every machine session and
@@ -775,6 +739,10 @@ pub(crate) struct RunSessions {
     shared: Rc<RunShared>,
     core: Rc<HostCore>,
     root_id: String,
+    /// How the run carries out its invoked services' requests.
+    requests: crate::service::RequestMode,
+    /// The last run-unique invocation id handed out.
+    last_invocation: u64,
 }
 
 /// A machine call addressed an invoked service: a host defect.
@@ -857,25 +825,16 @@ impl RunSessions {
         Ok(handle)
     }
 
-    /// The invoked service `key`, when `key` is one.
-    fn service(&mut self, key: SessionKey) -> Option<&mut crate::service::ServiceHandle> {
-        match self.handles.get_mut(&key) {
-            Some(SessionHandle::Service(handle)) => Some(handle),
-            Some(SessionHandle::Machine(_)) | None => None,
-        }
-    }
-
-    /// The live invoked service whose instance id is `instance`, if it is
-    /// still in the run.
-    fn service_key(&self, instance: u64) -> Option<SessionKey> {
+    /// The live invoked service whose run-unique invocation id is
+    /// `invocation`, if it is still in the run.
+    fn service_key(&self, invocation: u64) -> Option<SessionKey> {
         self.handles.iter().find_map(|(key, handle)| match handle {
-            SessionHandle::Service(service) if service.instance() == instance => Some(*key),
+            SessionHandle::Service(service) if service.invocation() == invocation => Some(*key),
             SessionHandle::Service(_) | SessionHandle::Machine(_) => None,
         })
     }
 
-    /// Whether a live invoked service waits for a deferred request in
-    /// flight.
+    /// Whether a live invoked service waits for the response of a request.
     fn services_awaiting(&self) -> bool {
         self.handles.values().any(|handle| match handle {
             SessionHandle::Service(service) => service.awaiting(),
@@ -888,72 +847,70 @@ impl RunSessions {
         matches!(self.handles.get(&key), Some(SessionHandle::Service(_)))
     }
 
-    /// The clock an invoked service's call sees.
-    fn service_clock(&self) -> crate::service::ServiceClock {
-        crate::service::ServiceClock {
-            now: self.now,
-            start_epoch_ms: self.shared.start_epoch_ms,
-        }
-    }
-
-    /// Applies what one export call of the invoked service `key` produced,
-    /// in order: each emitted event onto its invoking session's queue
-    /// (ignored once that session began cancelling it), then its completion
+    /// Applies what one input left of the invoked service `key`, in order:
+    /// each returned event onto its invoking session's queue (ignored once
+    /// that session began cancelling it), then its completion
     /// (`done.invoke`, queued by the executor after those events) or its
-    /// retirement (`failed`, and no `done.invoke`: its cancellation begins).
+    /// failure (`communication-error`, and no `done.invoke`: its
+    /// cancellation begins).
     fn apply_service_step(&mut self, key: SessionKey, step: crate::service::ServiceStep) {
+        use crate::service::ReportState;
+        let failed = matches!(step.state, ReportState::Failed | ReportState::Rejected);
         {
             let mut invoked_sessions = self.shared.invoked_sessions.borrow_mut();
             for event in step.events {
                 invoked_sessions.push_to_parent(key, Invoked::Event(event));
             }
-            if matches!(step.outcome, crate::service::ServiceOutcome::Failed) {
-                invoked_sessions.push_to_parent(key, Invoked::Failed);
+            if failed {
+                invoked_sessions.push_to_parent(key, Invoked::CommunicationError);
                 invoked_sessions.begin_cancel(key);
             }
             invoked_sessions.touch(key);
         }
-        match step.outcome {
-            crate::service::ServiceOutcome::Running => {}
-            crate::service::ServiceOutcome::Completed(data) => {
+        match step.state {
+            ReportState::Running => {}
+            ReportState::Done(data) => {
                 self.shared
                     .sessions
                     .borrow_mut()
                     .service_completed(key, data);
             }
-            crate::service::ServiceOutcome::Failed => {
-                self.shared.sessions.borrow_mut().service_retired(key);
+            ReportState::Failed | ReportState::Rejected => {
+                self.shared.sessions.borrow_mut().service_failed(key);
             }
         }
     }
 
-    /// Runs one export call of the invoked service `key` as one host call
-    /// (its own fuel budget) inside a boundary span, and applies its step.
-    fn service_call(
+    /// Hands one input to the invoked service `key` as one host call inside
+    /// a boundary span, and applies what it left.
+    fn service_input(
         &mut self,
         key: SessionKey,
         operation: scxml_telemetry::Operation,
-        call: impl FnOnce(
+        input: impl FnOnce(
             &mut crate::service::ServiceHandle,
-            crate::service::ServiceClock,
-        ) -> crate::service::ServiceStep,
+            u64,
+            &crate::service::RequestMode,
+        ) -> Option<crate::service::ServiceStep>,
     ) -> Result<(), RunFailure> {
         let span = scxml_telemetry::observe(scxml_telemetry::Module::HostWasmtime, operation);
-        let clock = self.service_clock();
-        let core = Rc::clone(&self.core);
-        let step = core.call_budget.hold(|| {
-            self.service(key)
-                .map(|service| call(service, clock))
-                .ok_or_else(session_missing)
-        });
-        let step = match step {
-            Ok(step) => step,
-            Err(failure) => {
+        let now = self.now;
+        let requests = self.requests.clone();
+        let step = match self.handles.get_mut(&key) {
+            Some(SessionHandle::Service(service)) => input(service, now, &requests),
+            Some(SessionHandle::Machine(_)) | None => {
                 span.fail(scxml_telemetry::ErrorCategory::Harness);
-                return Err(failure);
+                return Err(session_missing());
             }
         };
-        if matches!(step.outcome, crate::service::ServiceOutcome::Failed) {
+        let Some(step) = step else {
+            span.event(scxml_telemetry::SignalEvent::InputRejected);
+            return Ok(());
+        };
+        if matches!(
+            step.state,
+            crate::service::ReportState::Failed | crate::service::ReportState::Rejected
+        ) {
             span.event(scxml_telemetry::SignalEvent::InputRejected);
             span.fail(scxml_telemetry::ErrorCategory::Execution);
         } else {
@@ -963,36 +920,53 @@ impl RunSessions {
         Ok(())
     }
 
-    /// The start of the invoked service `child` for `request`: its handle
-    /// joins the run, its `start` runs, and its step applies. A rejected or
-    /// trapping start fails that `<invoke>` (`invalid-input`) and the
-    /// service is dropped.
+    /// The start of the invocation of the invoked service `child` for
+    /// `request`: its thread starts and calls `invoke`, its handle joins the
+    /// run, and the start's report applies. A rejected start fails that
+    /// `<invoke>` (`invalid-input`) and the service is dropped.
     fn start_service(
         &mut self,
         child: SessionKey,
-        handle: Box<crate::service::ServiceHandle>,
-        request: &crate::bindings::stateforward::scxml::types::ServiceInvocation,
+        request: crate::bindings::stateforward::scxml::types::InvokeRequest,
+        execution_context: &Context,
     ) -> Result<(), ComponentError> {
-        self.handles.insert(child, SessionHandle::Service(handle));
-        self.shared.touch(child);
-        let clock = self.service_clock();
-        let started = self
-            .service(child)
-            .map(|service| service.start(request, clock));
-        match started {
-            Some(Ok(step)) => {
-                self.apply_service_step(child, step);
-                Ok(())
-            }
-            Some(Err(rejected)) => {
+        self.last_invocation = self.last_invocation.saturating_add(1);
+        let http_offered = !matches!(self.requests, crate::service::RequestMode::None);
+        let started = self.core.start_service(
+            request,
+            self.now,
+            self.last_invocation,
+            http_offered,
+            execution_context,
+        );
+        let (mut handle, report) = match started {
+            Ok(Some(Ok(started))) => started,
+            Ok(Some(Err(rejected))) => {
                 self.drop_sessions(child);
-                Err(rejected)
+                return Err(rejected);
             }
-            None => {
+            Ok(None) => {
                 self.drop_sessions(child);
-                Err(fatal(&self.shared, session_missing()))
+                return Err(crate::component::component_error(
+                    ErrorCode::Unavailable,
+                    "no service component is bound to this invoke type",
+                ));
             }
+            Err(error) => {
+                self.drop_sessions(child);
+                return Err(fatal(&self.shared, RunFailure::Host(error)));
+            }
+        };
+        let step = handle.settle(Some(report), self.now, &self.requests);
+        if matches!(step.state, crate::service::ReportState::Rejected) {
+            self.drop_sessions(child);
+            return Err(invalid_input("the invoked service rejected its start"));
         }
+        self.handles
+            .insert(child, SessionHandle::Service(Box::new(handle)));
+        self.shared.touch(child);
+        self.apply_service_step(child, step);
+        Ok(())
     }
 
     /// The links of the session `key`, its clock moved to the shared clock.
@@ -1063,16 +1037,16 @@ impl RunSessions {
                 match request {
                     DeferredRequest::StartService {
                         child,
-                        handle,
                         request,
+                        execution_context,
                     } => {
-                        // A service is a leaf: its start runs here, and the
-                        // suspended call continues at once.
+                        // A service runs no machine: its start runs here,
+                        // and the suspended call continues at once.
                         let span = scxml_telemetry::observe(
                             scxml_telemetry::Module::HostWasmtime,
                             scxml_telemetry::Operation::HostWasmtimeServiceStart,
                         );
-                        let outcome = self.start_service(child, handle, &request);
+                        let outcome = self.start_service(child, *request, &execution_context);
                         outcome.span_end(&span);
                         drop(span);
                         self.shared.touch(current);
@@ -1113,12 +1087,10 @@ impl RunSessions {
                             ),
                         });
                         if service {
-                            // A service's own `cancel` runs here (unless it
-                            // completed or was retired); it is then dropped.
-                            let clock = self.service_clock();
-                            if let Some(service) = self.service(child) {
-                                service.cancel(clock);
-                            }
+                            // SCXML 6.4: dropping its handle cancels the
+                            // `invoke` subtask and drops its store (below,
+                            // with the session), and no `done.invoke`
+                            // follows.
                         } else if !self.is_finished(child) {
                             self.shared.touch(child);
                             current = child;
@@ -1166,8 +1138,7 @@ impl RunSessions {
                 drop(handle);
                 self.drop_sessions(child);
             }
-            Some(DeferredRequest::StartService { child, handle, .. }) => {
-                drop(handle);
+            Some(DeferredRequest::StartService { child, .. }) => {
                 self.drop_sessions(child);
             }
             Some(DeferredRequest::Cancel { .. }) | None => {}
@@ -1352,11 +1323,12 @@ impl Sessions for RunSessions {
     ) -> Result<(), RunFailure> {
         if self.is_service(session) {
             return self.with_invoked_sessions(invoked_sessions, |sessions| match delivery {
-                // `#_<invokeid>` or autoforward (SCXML 6.4).
-                QueuedDelivery::External(event) => sessions.service_call(
+                // `#_<invokeid>` or autoforward (SCXML 6.4): the service's
+                // `events` stream.
+                QueuedDelivery::External(event) => sessions.service_input(
                     session,
                     scxml_telemetry::Operation::HostWasmtimeServiceSend,
-                    |service, clock| service.send(&event, clock),
+                    |service, now, requests| Some(service.send(event, now, requests)),
                 ),
                 QueuedDelivery::FromInvocation { .. } => Err(RunFailure::Harness {
                     code: "service-invocation-message",
@@ -1377,7 +1349,7 @@ impl Sessions for RunSessions {
                             trace_context: None,
                         }))
                     }
-                    Invoked::Failed => InvocationMessage::Failed,
+                    Invoked::CommunicationError => InvocationMessage::CommunicationError,
                 };
                 sessions.command(session, |handle| handle.deliver(&invoke_id, &message))
             }
@@ -1409,7 +1381,7 @@ impl Sessions for RunSessions {
     }
 
     fn next_deadline(&mut self, session: SessionKey) -> Result<Option<u64>, RunFailure> {
-        if let Some(service) = self.service(session) {
+        if let Some(SessionHandle::Service(service)) = self.handles.get(&session) {
             return Ok(service.next_deadline());
         }
         self.session_links(session)?.clock_next_deadline()
@@ -1429,9 +1401,9 @@ impl Sessions for RunSessions {
 
     fn drain_due(&mut self, session: SessionKey) -> Result<Vec<RunDue>, RunFailure> {
         let now = self.now;
-        if let Some(service) = self.service(session) {
+        if let Some(SessionHandle::Service(service)) = self.handles.get_mut(&session) {
             return Ok(if service.take_due(now) {
-                vec![RunDue::Wake]
+                vec![RunDue::Timers]
             } else {
                 Vec::new()
             });
@@ -1451,15 +1423,15 @@ impl Sessions for RunSessions {
         due: RunDue,
     ) -> Result<InvocationDueRoute<String, WitEvent, Option<String>>, RunFailure> {
         let due = match due {
-            // The service's wakeup: its `wake` runs now; what it emits
+            // The service's timers: every one due fires now; what it returns
             // reaches the invoking session's queue.
-            RunDue::Wake => {
+            RunDue::Timers => {
                 return self.with_invoked_sessions(invoked_sessions, |sessions| {
                     sessions
-                        .service_call(
+                        .service_input(
                             session,
-                            scxml_telemetry::Operation::HostWasmtimeServiceWake,
-                            crate::service::ServiceHandle::wake,
+                            scxml_telemetry::Operation::HostWasmtimeServiceWaitUntil,
+                            |service, now, requests| Some(service.timers(now, requests)),
                         )
                         .map(|()| InvocationDueRoute::Dispatched)
                 });
@@ -1484,18 +1456,6 @@ impl Sessions for RunSessions {
         Ok(match route {
             DueRoute::Local(event) => InvocationDueRoute::Local(event),
             DueRoute::Parent(event) => InvocationDueRoute::Parent(event),
-            // A delayed send to an invoked service whose contract does not
-            // admit it is undeliverable when it falls due
-            // (`error.communication`, SCXML 6.2).
-            DueRoute::Invocation(routed)
-                if invoked_sessions
-                    .child(session, &routed.invoke_id)
-                    .is_some_and(|child| {
-                        !self.shared.sessions.borrow().accepts(child, &routed.event)
-                    }) =>
-            {
-                InvocationDueRoute::Undeliverable(due.send_id.clone())
-            }
             DueRoute::Invocation(routed) => {
                 InvocationDueRoute::Invocation(routed.invoke_id, routed.event)
             }
@@ -1686,6 +1646,8 @@ impl RunEngine {
                 shared: Rc::clone(shared),
                 core: Rc::clone(core),
                 root_id: root.session_id.to_owned(),
+                requests: shared.http.service_requests(core.service_http.as_ref()),
+                last_invocation: 0,
             },
             scheduler: Scheduler::with_limits(core.invoke_limits),
             deferred_guard: DeferredGuard(Rc::clone(shared)),
@@ -1868,55 +1830,104 @@ impl RunEngine {
             .communication_error(&mut self.sessions, key, Some(send_id))
     }
 
-    /// Hands each settled deferred request to its instance, when that
-    /// instance is still live and waiting for it, and runs that instance's
-    /// `wake` (one boundary span each); an outcome no live instance waits
-    /// for is dropped. Returns how many outcomes were delivered. The caller
-    /// drains afterwards: what the wakes emitted or completed is queued on
-    /// the invoking sessions.
+    /// Hands each settled request of an invoked service to its invocation,
+    /// when it is still in the run and waits for it (one boundary span
+    /// each); a response no live invocation waits for is dropped. Returns
+    /// what each delivered response was, for the record: the invoke ids
+    /// from the root to its invocation, its request id, and its outcome.
+    /// The caller drains afterwards: what the invocations returned is
+    /// queued on the invoking sessions.
     ///
     /// # Errors
     ///
-    /// A host failure of a service call.
-    pub(crate) fn deliver_service_responses(
+    /// A host failure of a delivery.
+    pub(crate) fn deliver_http_responses(
         &mut self,
-        settled: Vec<crate::service_http::Settled>,
-    ) -> Result<usize, RunFailure> {
-        let mut delivered = 0_usize;
+        settled: Vec<crate::service::Settled>,
+    ) -> Result<Vec<super::RecordedResponse>, RunFailure> {
+        let mut delivered = Vec::new();
         for item in settled {
-            let Some(key) = self.sessions.service_key(item.instance) else {
+            let Some(key) = self.sessions.service_key(item.invocation) else {
                 continue;
             };
-            let accepted = self
-                .sessions
-                .service(key)
-                .is_some_and(|service| service.settle(item.ticket, item.outcome));
-            if !accepted {
+            let Some(path) = self.session_path(key) else {
                 continue;
-            }
-            delivered = delivered.saturating_add(1);
+            };
+            let request = item.request;
+            let outcome = item.outcome.clone();
+            let mut answered = false;
             self.sessions.with_invoked_sessions(
                 self.scheduler.invoked_sessions_mut(),
                 |sessions| {
-                    sessions.service_call(
+                    sessions.service_input(
                         key,
-                        scxml_telemetry::Operation::HostWasmtimeServiceWake,
-                        crate::service::ServiceHandle::wake,
+                        scxml_telemetry::Operation::HostWasmtimeServiceHttpFetch,
+                        |service, now, requests| {
+                            let step = service.respond(request, item.outcome, now, requests);
+                            answered = step.is_some();
+                            step
+                        },
                     )
                 },
             )?;
+            if answered {
+                delivered.push(super::RecordedResponse {
+                    path,
+                    request,
+                    outcome,
+                });
+            }
         }
         Ok(delivered)
     }
 
-    /// Whether the run waits for a deferred service request: one in flight
-    /// for a live instance, or one settled and not yet delivered.
-    pub(crate) fn awaiting_service_responses(&self) -> bool {
+    /// Delivers one recorded response to the invoked service at `path` (a
+    /// replay); `false` when no live invocation of that lineage waits for
+    /// that request.
+    ///
+    /// # Errors
+    ///
+    /// A host failure of the delivery.
+    pub(crate) fn deliver_recorded_response(
+        &mut self,
+        response: &super::RecordedResponse,
+    ) -> Result<bool, RunFailure> {
+        let Some(key) = self.sessions.handles.keys().copied().find(|key| {
+            self.sessions.is_service(*key)
+                && self
+                    .scheduler
+                    .invoked_sessions()
+                    .has_path(*key, &response.path)
+        }) else {
+            return Ok(false);
+        };
+        let mut answered = false;
+        let outcome = response.outcome.clone();
+        let request = response.request;
+        self.sessions
+            .with_invoked_sessions(self.scheduler.invoked_sessions_mut(), |sessions| {
+                sessions.service_input(
+                    key,
+                    scxml_telemetry::Operation::HostWasmtimeServiceHttpFetch,
+                    |service, now, requests| {
+                        let step = service.respond(request, outcome, now, requests);
+                        answered = step.is_some();
+                        step
+                    },
+                )
+            })?;
+        Ok(answered)
+    }
+
+    /// Whether the run waits for the response of an invoked service's
+    /// request: one in flight (or awaited from the record), or one settled
+    /// and not yet delivered.
+    pub(crate) fn awaiting_http_responses(&self) -> bool {
         self.sessions.services_awaiting()
             || self
                 .shared
                 .http
-                .service_responses
+                .http_responses
                 .as_ref()
                 .is_some_and(|responses| responses.has_settled())
     }

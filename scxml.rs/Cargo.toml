@@ -90,12 +90,16 @@ opentelemetry_sdk = { version = "0.33.0", default-features = false, features = [
 # components are only ever compiled in-process from authenticated bytes.
 # `call-hook` lets the session host charge every store one host call reaches
 # to that call's single fuel budget (hosts/scxml-host-wasmtime/src/call_budget.rs).
-wasmtime = { version = "49.0.2", default-features = false, features = ["call-hook", "component-model", "cranelift", "parallel-compilation", "runtime", "std"] }
-# `scxml-host-wasmtime` only: the WASI 0.2 host interfaces a service
-# component's package declares and the run grants (wasi:clocks, wasi:random,
-# wasi:filesystem, wasi:sockets). Only `p2` (no preview 1 or 3); the host
-# links each granted interface individually, never the whole command world.
-wasmtime-wasi = { version = "49.0.2", default-features = false, features = ["p2"] }
+# `component-model-async` is the Component Model async ABI (WASI 0.3) that
+# invoked services export and `outbound-http.fetch` uses.
+wasmtime = { version = "49.0.2", default-features = false, features = ["call-hook", "component-model", "component-model-async", "cranelift", "parallel-compilation", "runtime", "std"] }
+# `scxml-host-wasmtime` only: `p3` for the WASI 0.3 `wasi:clocks` bindings
+# the invoked-service world imports (the host implements them on the
+# session's logical clock), and `p2` for the WASI 0.2 interfaces a
+# `wasm32-wasip2` service component may import (wasi:clocks, wasi:random,
+# wasi:filesystem, wasi:sockets), each linked individually, never the whole
+# command world. No preview 1.
+wasmtime-wasi = { version = "49.0.2", default-features = false, features = ["p2", "p3"] }
 # The version wasmtime's parallel compilation already uses: the session host
 # asks it whether the current thread is a pool worker (which must never wait
 # on another thread's compilation), and a test races hosts on a small pool.

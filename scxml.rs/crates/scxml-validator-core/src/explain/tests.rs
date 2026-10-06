@@ -51,10 +51,6 @@ const PRODUCER_SOURCES: &[(&str, &str)] = &[
         include_str!("../invoke_types.rs"),
     ),
     (
-        "validator-core/service_events.rs",
-        include_str!("../service_events.rs"),
-    ),
-    (
         "validator-core/text_direction.rs",
         include_str!("../text_direction.rs"),
     ),

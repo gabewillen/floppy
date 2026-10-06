@@ -76,11 +76,13 @@ pub enum Invoked<E, V> {
     /// The invoked session reached a top-level final state: the invoking
     /// session receives `done.invoke.<id>` carrying its return data, if any.
     Done(Option<V>),
-    /// The invocation failed after it started (an invoked service that was
-    /// retired): the invoking session receives `error.communication`
-    /// carrying the invoke id. The caller begins the invocation's
-    /// cancellation right after queueing it, so no `done.invoke` follows.
-    Failed,
+    /// The invocation failed after it started (an invoked service whose
+    /// future resolved `err`, that trapped, or that returned an invalid
+    /// event): the invoking session receives `error.communication` carrying
+    /// the invoke id (WIT `invocation-message.communication-error`). The
+    /// caller begins the invocation's cancellation right after queueing it,
+    /// so no `done.invoke` follows.
+    CommunicationError,
 }
 
 /// One entry of a session's external event queue.

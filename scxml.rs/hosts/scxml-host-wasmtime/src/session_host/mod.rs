@@ -484,10 +484,8 @@ pub(crate) struct HostCore {
     /// use; each invocation instantiates its own.
     services: Vec<ServiceEntry>,
     /// The transport admitted service requests go through (none: refused).
-    service_http: Option<Arc<dyn crate::extension::ExtensionHttp>>,
-    /// The deferred transport of invoked services (`outbound-http.begin`).
-    service_deferred_http: Option<Arc<dyn crate::service_http::ServiceHttp>>,
-    /// Fuel cap of one service export call.
+    pub(crate) service_http: Option<Arc<dyn crate::extension::ExtensionHttp>>,
+    /// The fuel an invocation may run between two inputs.
     service_call_fuel: u64,
     /// The values services' `env` slots may reference.
     service_values: crate::ExtensionEnvironment,
@@ -500,28 +498,32 @@ pub(crate) struct HostCore {
     pub(crate) invoke_limits: InvokeLimits,
 }
 
-/// One bound invoked service: its package, its component (compiled on first
-/// use), its declared-and-granted WASI plan, and the linker of its stores
-/// (built on first use from that plan).
-pub(crate) struct ServiceEntry {
-    package: crate::ServicePackage,
-    contract: Option<std::sync::Arc<crate::service::ServiceContract>>,
-    component: LazyComponent,
-    wasi: crate::wasi::WasiPlan,
-    linker: OnceCell<wasmtime::component::Linker<crate::service::ServiceStoreData>>,
+/// One HTTP response an invoked service received, as a live session records
+/// it ([`InputRecord::HttpResponse`]).
+pub(crate) struct RecordedResponse {
+    /// The invoke ids from the root to the invocation.
+    pub(crate) path: Vec<String>,
+    /// The request's number within its invocation.
+    pub(crate) request: u64,
+    /// The response, or the transport's failure.
+    pub(crate) outcome: Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure>,
 }
 
-impl ServiceEntry {
-    fn linker(
-        &self,
-        engine: &wasmtime::Engine,
-    ) -> Result<&wasmtime::component::Linker<crate::service::ServiceStoreData>, HostError> {
-        if let Some(linker) = self.linker.get() {
-            return Ok(linker);
-        }
-        let linker = crate::service::service_linker(engine, &self.wasi)?;
-        Ok(self.linker.get_or_init(|| linker))
-    }
+/// A started invocation and the report of its start, or the component's
+/// rejection of the start.
+type ServiceStart = Result<
+    (crate::service::ServiceHandle, crate::service::Report),
+    crate::bindings::stateforward::scxml::types::ComponentError,
+>;
+
+/// One bound invoked service: its package, its component (compiled on first
+/// use), the WASI plan of its imports, and its pre-instantiation (built on
+/// first use from that plan).
+pub(crate) struct ServiceEntry {
+    package: crate::ServicePackage,
+    component: LazyComponent,
+    wasi: crate::wasi::WasiPlan,
+    pre: OnceCell<crate::service::ServicePre>,
 }
 
 impl HostCore {
@@ -715,67 +717,74 @@ impl HostCore {
 
     /// Whether a service component is bound to exactly `type_uri`.
     pub(crate) fn binds_service(&self, type_uri: &str) -> bool {
-        self.service(type_uri).is_some()
-    }
-
-    fn service(&self, type_uri: &str) -> Option<&ServiceEntry> {
         self.services
             .iter()
-            .find(|entry| entry.package.service_uri == type_uri)
+            .any(|entry| entry.package.service_uri == type_uri)
     }
 
-    /// Loads the service bound to exactly `type_uri` without instantiating
-    /// it: compiles its component, refuses a WASI import its plan does not
-    /// link, and pre-instantiates it against its linker (every other import
-    /// must be the world's). `Ok(false)` when no service is bound to it.
+    /// Starts one invocation of the service bound to exactly
+    /// `request.type_uri` at `now_ms` (its component compiled and
+    /// pre-instantiated on first use); `None` when no service is bound to
+    /// it. The inner error rejects the start (`invalid-input`: an `env`
+    /// attribute its package does not admit, or a component that does not
+    /// compile or link against its world and planned WASI interfaces).
     ///
     /// # Errors
     ///
-    /// A compilation or linker failure, or
-    /// [`crate::ArtifactError::WasiImportUndeclared`].
-    pub(crate) fn load_service(&self, type_uri: &str) -> Result<bool, HostError> {
-        let Some(entry) = self.service(type_uri) else {
-            return Ok(false);
-        };
-        let component = entry.component.get(&self.shared)?;
-        entry.wasi.check_imports(&self.engine, component)?;
-        entry.linker(&self.engine)?.instantiate_pre(component)?;
-        Ok(true)
-    }
-
-    /// One new instance of the service bound to exactly `type_uri`, its
-    /// `type-uri` checked; `None` when no service is bound to it.
-    ///
-    /// # Errors
-    ///
-    /// A compilation, linker, or instantiation failure, or a `type-uri`
-    /// that differs from the binding.
-    pub(crate) fn instantiate_service(
+    /// A host failure (a granted directory that cannot be opened, a thread
+    /// that cannot start).
+    pub(crate) fn start_service(
         &self,
-        type_uri: &str,
+        request: crate::bindings::stateforward::scxml::types::InvokeRequest,
+        now_ms: u64,
+        invocation: u64,
+        http_offered: bool,
         execution_context: &opentelemetry::Context,
-        responses: Option<&Arc<crate::service_http::ServiceResponses>>,
-    ) -> Result<Option<crate::service::ServiceHandle>, HostError> {
-        let Some(entry) = self.service(type_uri) else {
+    ) -> Result<Option<ServiceStart>, HostError> {
+        let Some(entry) = self
+            .services
+            .iter()
+            .find(|entry| entry.package.service_uri == request.type_uri)
+        else {
             return Ok(None);
         };
-        let component = entry.component.get(&self.shared)?;
+        let rejected = || {
+            crate::component::component_error(
+                crate::bindings::stateforward::scxml::types::ErrorCode::InvalidInput,
+                "the invoked service's component does not link",
+            )
+        };
+        let pre = if let Some(pre) = entry.pre.get() {
+            pre
+        } else {
+            let Ok(component) = entry.component.get(&self.shared) else {
+                return Ok(Some(Err(rejected())));
+            };
+            let pre = crate::service::service_linker(&self.engine, &entry.wasi)
+                .and_then(|linker| crate::service::service_pre(&linker, component));
+            match pre {
+                Ok(pre) => entry.pre.get_or_init(|| pre),
+                Err(_) => return Ok(Some(Err(rejected()))),
+            }
+        };
         let runtime = crate::service::ServiceRuntime {
-            engine: &self.engine,
-            linker: entry.linker(&self.engine)?,
+            pre,
             config: &self.config,
             providers: &self.providers,
-            call_budget: &self.call_budget,
             package: &entry.package,
-            contract: entry.contract.as_ref(),
             wasi: &entry.wasi,
-            http: self.service_http.as_ref(),
-            deferred: self.service_deferred_http.as_ref(),
-            responses,
+            http_offered,
             values: &self.service_values,
             call_fuel: self.service_call_fuel,
         };
-        crate::service::ServiceHandle::instantiate(component, &runtime, execution_context).map(Some)
+        crate::service::ServiceHandle::start(
+            &runtime,
+            request,
+            now_ms,
+            invocation,
+            execution_context,
+        )
+        .map(Some)
     }
 
     /// The data model named exactly `name`, compiled on first use; `None`
@@ -945,8 +954,7 @@ impl SessionHost {
             namespace_call_fuel: crate::extension::DEFAULT_EXTENSION_CALL_FUEL,
             services: Vec::new(),
             service_http: None,
-            service_deferred_http: None,
-            service_call_fuel: crate::service::DEFAULT_SERVICE_CALL_FUEL,
+            service_call_fuel: crate::DEFAULT_EXTENSION_CALL_FUEL,
             service_values: crate::ExtensionEnvironment::none(),
             digests: snapshot::ComponentDigests {
                 machine: components.machine.sha256(),
@@ -1058,28 +1066,28 @@ impl SessionHost {
     ///
     /// Each component compiles on first use through the process-wide cache.
     /// Every `<invoke>` of a bound type then gets its own instance in its own
-    /// bounded store: the host checks its `type-uri` against the binding
-    /// (a mismatch fails the run with [`RunFailure::Host`]), calls `start`,
-    /// delivers the events the invoking session sends it, wakes it on the
-    /// run's logical clock, and calls `cancel` when the invoking state exits
-    /// first. An `<invoke>` of a type no service binds, literal or
-    /// `typeexpr`, fails when it starts with `error.execution` (SCXML 6.4);
-    /// the session start is unaffected. A service component imports no WASI interface
-    /// beyond what its package declares and the run grants
-    /// ([`crate::ServiceComponents::with_wasi_grants`]): the host links
-    /// exactly those, and refuses a component importing any other WASI
-    /// interface when a session that names its type literally starts (before
-    /// the first macrostep) and before every instantiation. Its requests go
-    /// through the embedder's transport (none by default), admitted only to
-    /// an origin its package declares.
+    /// store, driven by the Component Model async event loop on a thread of
+    /// its own: the host calls its `invoke`, feeds its `events` stream with
+    /// what the invoking session sends it, delivers what it returns, runs its
+    /// timers on the run's logical clock, and cancels it (dropping its store)
+    /// when the invoking state exits first (SCXML 6.4). An `<invoke>` of a
+    /// type no service binds, literal or `typeexpr`, fails when it runs with
+    /// `error.execution`; the session start is unaffected. A service
+    /// component imports no WASI interface beyond what the host links, and
+    /// each runtime resource it imports must be granted
+    /// ([`crate::ServiceComponents::with_wasi`]); both are checked here,
+    /// from the component's own imports. Its requests go through the
+    /// embedder's transport (none by default), admitted only to an origin its
+    /// package declares.
     ///
     /// # Errors
     ///
-    /// A component over the host's byte bound or of the wrong kind; a
-    /// declared WASI permission the grants do not cover
-    /// ([`crate::ArtifactError::WasiPermissionUngranted`]) or a grant no
-    /// bound package declares ([`crate::ArtifactError::WasiGrantUndeclared`]);
-    /// or [`HostError::Component`] (`session-host-shared`) when a run of this
+    /// A component over the host's byte bound or of the wrong kind; a WASI
+    /// import the host never links ([`crate::ArtifactError::WasiImportUndeclared`]),
+    /// an imported resource the run does not grant
+    /// ([`crate::ArtifactError::WasiResourceUngranted`]), or a grant no import
+    /// uses ([`crate::ArtifactError::WasiGrantUndeclared`]); or
+    /// [`HostError::Component`] (`session-host-shared`) when a run of this
     /// host is in progress.
     pub fn with_service_components(
         mut self,
@@ -1090,29 +1098,22 @@ impl SessionHost {
         let crate::service::ServiceParts {
             bindings,
             http,
-            deferred,
             values,
             call_fuel,
         } = services.into_parts()?;
-        for (binding, _) in &bindings {
-            crate::capability_graph::validate_component(
-                &binding.component,
-                binding.component.kind(),
-                &core.config,
-            )?;
+        for (_, component, _) in &bindings {
+            crate::capability_graph::validate_component(component, component.kind(), &core.config)?;
         }
         core.services = bindings
             .into_iter()
-            .map(|(binding, wasi)| ServiceEntry {
-                component: LazyComponent::new(&binding.component),
-                package: binding.package,
-                contract: binding.contract,
+            .map(|(package, component, wasi)| ServiceEntry {
+                component: LazyComponent::new(&component),
+                package,
                 wasi,
-                linker: OnceCell::new(),
+                pre: OnceCell::new(),
             })
             .collect();
         core.service_http = http;
-        core.service_deferred_http = deferred;
         core.service_call_fuel = call_fuel;
         core.service_values = values;
         Ok(self)

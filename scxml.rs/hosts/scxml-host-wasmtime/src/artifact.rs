@@ -334,6 +334,18 @@ impl AuthenticatedComponent {
         &self.bytes
     }
 
+    /// The component's top-level import names (Component Model `import`s,
+    /// such as `wasi:filesystem/types@0.2.9`), read without compiling it:
+    /// what an embedder lists, before running, as the interfaces it may use.
+    ///
+    /// # Errors
+    ///
+    /// [`HostError::Component`] `component-imports-unreadable` for bytes that
+    /// are not a component.
+    pub fn imports(&self) -> Result<Vec<String>, HostError> {
+        crate::wasi::component_imports(&self.bytes)
+    }
+
     /// The SHA-256 of [`Self::bytes`], verified at authentication: the
     /// identity the compiled-component cache keys on.
     pub(crate) fn digest(&self) -> [u8; 32] {
@@ -467,7 +479,7 @@ fn parse_manifest(
     if count == 0 || count > MAX_ARTIFACTS || lines.len() != MANIFEST_HEADER_LINES + count {
         return Err(ArtifactError::ManifestMalformed.into());
     }
-    if lines.get(4) != Some(&"wasm-tools\twasm-tools 1.240.0")
+    if lines.get(4) != Some(&"wasm-tools\twasm-tools 1.244.0")
         || lines.get(5) != Some(&"wasi-virt\twasi-virt 0.2.0")
     {
         return Err(ArtifactError::ManifestMalformed.into());
@@ -647,7 +659,7 @@ mod tests {
     /// entry per kind in `kinds`, each artifact being its own name's bytes.
     fn manifest(kinds: &[ArtifactKind]) -> String {
         let mut text = format!(
-            "schema\tstateforward.wasm-artifacts/v1\nprofile\trelease\ntarget\twasm32-wasip2\nartifact-count\t{}\nwasm-tools\twasm-tools 1.240.0\nwasi-virt\twasi-virt 0.2.0\n",
+            "schema\tstateforward.wasm-artifacts/v1\nprofile\trelease\ntarget\twasm32-wasip2\nartifact-count\t{}\nwasm-tools\twasm-tools 1.244.0\nwasi-virt\twasi-virt 0.2.0\n",
             kinds.len()
         );
         for kind in kinds {

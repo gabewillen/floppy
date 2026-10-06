@@ -40,7 +40,6 @@ fn compile_fixture() -> scxml_compiler_core::CompileOutput {
         package_schemas: Vec::new(),
         scripts: Vec::new(),
         script_resolution: scxml_compiler_core::ScriptResolution::Compile,
-        service_types: None,
         event_schemas: std::collections::BTreeMap::new(),
     })
 }
@@ -62,8 +61,6 @@ fn package(
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION.into(),
             env_slots: Vec::new(),
             http_origins: Vec::new(),
-            wasi_permissions: Vec::new(),
-            events: scxml_validator_core::PackageEvents::default(),
         },
         NamespaceSchemaBinding {
             namespace_uri: namespace_uri.into(),
@@ -98,7 +95,6 @@ fn compile_custom(
         package_schemas,
         scripts: Vec::new(),
         script_resolution: scxml_compiler_core::ScriptResolution::Compile,
-        service_types: None,
         event_schemas: std::collections::BTreeMap::new(),
     })
 }
@@ -250,7 +246,6 @@ fn built_in_xml_namespace_does_not_require_an_extension_package() {
         package_schemas: Vec::new(),
         scripts: Vec::new(),
         script_resolution: scxml_compiler_core::ScriptResolution::Compile,
-        service_types: None,
         event_schemas: std::collections::BTreeMap::new(),
     });
 

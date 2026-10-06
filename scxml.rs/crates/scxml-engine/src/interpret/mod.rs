@@ -12,9 +12,8 @@
 //!
 //! One session is driven by:
 //!
-//! 1. [`load_extensions`] and [`load_services`] (from `start` or
-//!    `start-invoked`), which ask the host to load the extension components
-//!    and the invoked-service components the document names, then
+//! 1. [`load_extensions`] (from `start` or `start-invoked`), which asks the
+//!    host to load the extension components the document uses, then
 //!    [`bind_initial_data`], which initializes the data model, values every early-bound declaration (a
 //!    top-level one an invoking parent passed a parameter for takes that
 //!    value instead, SCXML 6.4.3), and queues the startup `error.execution`
@@ -35,12 +34,11 @@ mod invoke;
 mod send;
 
 pub use capabilities::{
-    BasicHttpSend, CapabilityErrorKind, DocumentKind, EnvBinding, ExtensionExecution,
-    ExtensionSnapshot, ForeachItems, InlineBody, InvocationProgress, InvokedSession,
-    LoadedDocument, Observation, SendDisposition, SendTarget, ServiceInvocation,
-    SessionCapabilities,
+    BasicHttpSend, CapabilityErrorKind, DocumentKind, ExtensionExecution, ExtensionSnapshot,
+    ForeachItems, InlineBody, Invocation, InvocationProgress, InvokeRequest, InvokedSession,
+    LoadedDocument, Observation, SendDisposition, SendTarget, SessionCapabilities,
 };
-pub use data::{bind_initial_data, load_extensions, load_services, requires_data_model};
+pub use data::{bind_initial_data, load_extensions, requires_data_model};
 
 use scxml_compiler_core::XmlNodeIr;
 use scxml_types::{AssignPlacement, AssignSource, DataValue, Event, EventName, TraceContext};

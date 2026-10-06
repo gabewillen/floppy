@@ -50,10 +50,6 @@ const NOT_REACHABLE_FROM_VALIDATE: &[(&str, &str)] = &[
     ("SCXML069", WASM_ONLY_BOUND),
     ("COMP002", "produced only by `compile` package binding"),
     (
-        "COMP004",
-        "produced only by `compile` service binding; covered by compiler-core invoke_types tests",
-    ),
-    (
         "COMP003",
         "produced only by `compile` script-package pinning; covered by compiler-core script_packages tests",
     ),

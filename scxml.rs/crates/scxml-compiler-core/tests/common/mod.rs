@@ -129,7 +129,6 @@ pub fn compile(source: &str) -> CompileOutput {
         package_schemas: Vec::new(),
         scripts: Vec::new(),
         script_resolution: ScriptResolution::Compile,
-        service_types: Some(std::collections::BTreeSet::new()),
         event_schemas: std::collections::BTreeMap::new(),
     })
 }

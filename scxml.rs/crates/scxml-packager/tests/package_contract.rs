@@ -51,7 +51,6 @@ fn lowered(source: &str) -> PlannedArtifact {
         package_schemas: Vec::new(),
         scripts: Vec::new(),
         script_resolution: scxml_compiler_core::ScriptResolution::Compile,
-        service_types: None,
         event_schemas: std::collections::BTreeMap::new(),
     })
     .artifact
@@ -419,7 +418,6 @@ fn lowered_with_scripts(scripts: &[(&str, &[u8])]) -> PlannedArtifact {
             })
             .collect(),
         script_resolution: scxml_compiler_core::ScriptResolution::Compile,
-        service_types: None,
         event_schemas: std::collections::BTreeMap::new(),
     })
     .artifact

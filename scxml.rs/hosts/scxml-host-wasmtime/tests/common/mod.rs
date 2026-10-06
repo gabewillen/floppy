@@ -48,7 +48,6 @@ pub fn example_machine() -> MachineIr {
         data: Vec::new(),
         scripts: Vec::new(),
         extension_namespaces: Vec::new(),
-        invoke_types: Vec::new(),
     }
 }
 

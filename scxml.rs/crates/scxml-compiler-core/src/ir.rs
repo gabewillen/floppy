@@ -612,45 +612,25 @@ pub struct InvokeIr {
     pub autoforward: bool,
     /// Parameters, content, and finalize blocks in document order.
     pub children: Vec<InvokeChildIr>,
-    /// The `env` slots an invoked service's `<invoke>` binds
-    /// (`env:<slot>="NAME"` or `env:<slot>expr="EXPR"`,
-    /// [`scxml_types::ENV_NAMESPACE_URI`]), sorted by slot, each slot once.
-    /// Never on an `<invoke>` whose literal type is an SCXML invoke type.
-    /// Omitted from the encoding when empty.
+    /// The `<invoke>`'s attributes in the `env` namespace
+    /// ([`scxml_types::ENV_NAMESPACE_URI`]) as authored, sorted by local
+    /// name: `env:<slot>="NAME"` names the variable bound to `<slot>`, and
+    /// `env:<slot>expr="EXPR"` a value expression the machine evaluates to
+    /// that name when the `<invoke>` runs; each slot once. Only on an invoked
+    /// service's `<invoke>`. Omitted from the encoding when empty. Names are
+    /// not secrets; no value ever appears in Machine IR.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub env: Vec<EnvSlotIr>,
+    pub attributes: Vec<XmlAttributeIr>,
 }
 
-/// One `env` slot binding of an invoked service's `<invoke>`: the variable
-/// whose value the host binds to the slot as an opaque reference, named
-/// literally or by an expression the machine evaluates when the `<invoke>`
-/// runs. Names are not secrets; no value ever appears in Machine IR.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
-pub enum EnvSlotIr {
-    /// `env:<slot>="NAME"`.
-    Name {
-        /// The slot (an `env-slots` entry).
-        slot: String,
-        /// The variable name.
-        name: String,
-    },
-    /// `env:<slot>expr="EXPR"`.
-    Expr {
-        /// The slot (an `env-slots` entry).
-        slot: String,
-        /// A value expression evaluating to the variable name.
-        expr: String,
-    },
-}
-
-impl EnvSlotIr {
-    /// The slot it binds.
-    #[must_use]
-    pub fn slot(&self) -> &str {
-        match self {
-            Self::Name { slot, .. } | Self::Expr { slot, .. } => slot,
-        }
+/// The `env` slot an `<invoke>` attribute in the `env` namespace binds, and
+/// whether its value is an expression (`env:<slot>expr`) rather than a
+/// variable name (`env:<slot>`).
+#[must_use]
+pub(crate) fn invoke_env_slot(local_name: &str) -> (&str, bool) {
+    match local_name.strip_suffix("expr") {
+        Some(slot) if !slot.is_empty() => (slot, true),
+        _ => (local_name, false),
     }
 }
 
@@ -769,13 +749,6 @@ pub struct MachineIr {
     pub scripts: Vec<ActionBlockIr>,
     /// Exact extension namespaces referenced by the source, sorted by URI.
     pub extension_namespaces: Vec<String>,
-    /// Exact invoked-service type URIs the document names literally
-    /// (`<invoke type>` values that are not an SCXML invoke type, see
-    /// [`scxml_types::is_service_type_uri`]), sorted and unique. The machine
-    /// has the host load them at session start. Omitted from the encoding
-    /// when empty.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub invoke_types: Vec<String>,
 }
 
 impl MachineIr {
@@ -1034,13 +1007,6 @@ impl MachineIr {
         }
         validate_data(&self.data)?;
         validate_action_blocks(&self.scripts)?;
-        // Every literal type is checked here, after every invoke's own
-        // bounds; the list must be exactly the literal service types.
-        if self.invoke_types != literal_service_types(&self.states)? {
-            return Err(LowerError::InvalidStructure(
-                "invoke types must list exactly the literal service type URIs",
-            ));
-        }
         self.validate_script_pins()
     }
 
@@ -2162,32 +2128,6 @@ fn validate_data(data: &[DataIr]) -> Result<(), LowerError> {
     Ok(())
 }
 
-/// The sorted, unique literal `<invoke type>` values of `states` that name
-/// invoked services ([`MachineIr::invoke_types`]).
-///
-/// # Errors
-///
-/// [`LowerError::InvalidStructure`] for a literal type that is neither an
-/// SCXML invoke type nor an absolute service type URI.
-pub(crate) fn literal_service_types(states: &[StateIr]) -> Result<Vec<String>, LowerError> {
-    let mut types = std::collections::BTreeSet::new();
-    for invoke in states.iter().flat_map(|state| &state.invokes) {
-        let Some(type_value) = invoke.type_value.as_deref() else {
-            continue;
-        };
-        if scxml_types::is_scxml_invoke_type(type_value) {
-            continue;
-        }
-        if !scxml_types::is_service_type_uri(type_value) {
-            return Err(LowerError::InvalidStructure(
-                "an invoke type is neither the SCXML type nor an absolute service type URI",
-            ));
-        }
-        types.insert(type_value.to_owned());
-    }
-    Ok(types.into_iter().collect())
-}
-
 fn validate_invokes(invokes: &[InvokeIr]) -> Result<(), LowerError> {
     bounded_count("invokes", invokes.len(), MAX_NESTED_ITEMS)?;
     for invoke in invokes {
@@ -2246,12 +2186,13 @@ fn validate_invokes(invokes: &[InvokeIr]) -> Result<(), LowerError> {
     Ok(())
 }
 
-/// An `<invoke>`'s `env` slot bindings: only on an invoked service's (a
-/// literal type that is not an SCXML invoke type, or a `typeexpr`), sorted by
-/// slot with each slot once, every slot an `env-slots` entry, every literal
-/// name a variable name, every expression bounded.
+/// An `<invoke>`'s `env` attributes: only on an invoked service's (a
+/// literal type that is not an SCXML invoke type, or a `typeexpr`), every one
+/// in the `env` namespace, sorted by local name with each slot once, every
+/// slot an `env-slots` entry, every literal name a variable name, every
+/// expression bounded.
 fn validate_invoke_env(invoke: &InvokeIr) -> Result<(), LowerError> {
-    if invoke.env.is_empty() {
+    if invoke.attributes.is_empty() {
         return Ok(());
     }
     if invoke.typeexpr.is_none()
@@ -2264,31 +2205,37 @@ fn validate_invoke_env(invoke: &InvokeIr) -> Result<(), LowerError> {
             "only an invoked service's invoke binds env slots",
         ));
     }
-    bounded_count("invoke env slots", invoke.env.len(), MAX_NESTED_ITEMS)?;
-    if !invoke
-        .env
-        .windows(2)
-        .all(|pair| matches!(pair, [first, second] if first.slot() < second.slot()))
-    {
+    bounded_count(
+        "invoke env attributes",
+        invoke.attributes.len(),
+        MAX_NESTED_ITEMS,
+    )?;
+    if !invoke.attributes.windows(2).all(
+        |pair| matches!(pair, [first, second] if first.name.local_name < second.name.local_name),
+    ) {
         return Err(LowerError::InvalidStructure(
-            "invoke env slots must be sorted by slot, each slot once",
+            "invoke env attributes must be sorted by local name",
         ));
     }
-    for binding in &invoke.env {
-        if !scxml_validator_core::is_env_slot(binding.slot()) {
+    let mut slots = std::collections::BTreeSet::new();
+    for attribute in &invoke.attributes {
+        if attribute.name.namespace_uri.as_deref() != Some(scxml_types::ENV_NAMESPACE_URI) {
             return Err(LowerError::InvalidStructure(
-                "an invoke env slot is not an env-slots name",
+                "an invoke attribute is not in the env namespace",
             ));
         }
-        match binding {
-            EnvSlotIr::Name { name, .. } => {
-                if !scxml_validator_core::is_env_name(name) {
-                    return Err(LowerError::InvalidStructure(
-                        "an invoke env slot names no valid variable",
-                    ));
-                }
-            }
-            EnvSlotIr::Expr { expr, .. } => bounded_expression("invoke env slot expr", expr)?,
+        let (slot, expression) = invoke_env_slot(&attribute.name.local_name);
+        if !scxml_validator_core::is_env_slot(slot) || !slots.insert(slot) {
+            return Err(LowerError::InvalidStructure(
+                "an invoke env attribute binds no env-slots name, or one slot twice",
+            ));
+        }
+        if expression {
+            bounded_expression("invoke env attribute expr", &attribute.value)?;
+        } else if !scxml_validator_core::is_env_name(&attribute.value) {
+            return Err(LowerError::InvalidStructure(
+                "an invoke env attribute names no valid variable",
+            ));
         }
     }
     Ok(())
@@ -2412,7 +2359,6 @@ mod tests {
             data: Vec::new(),
             scripts: Vec::new(),
             extension_namespaces: Vec::new(),
-            invoke_types: Vec::new(),
         }
     }
 

@@ -73,7 +73,6 @@
 //! #         package_schemas: Vec::new(),
 //! #         scripts: Vec::new(),
 //! #         script_resolution: ScriptResolution::Compile,
-//! #         service_types: None,
 //! #         event_schemas: std::collections::BTreeMap::new(),
 //! #     })
 //! #     .artifact

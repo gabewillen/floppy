@@ -1,6 +1,6 @@
 [package]
 name = "scxml-service-files"
-description = "Example invoked-service Wasm component that declares wasi:filesystem: it reads and writes files in its granted mount"
+description = "Example invoked-service Wasm component that imports wasi:filesystem: it reads and writes files in its preopened directory"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,7 +16,8 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-wit-bindgen.workspace = true
+# The WASI 0.3 async ABI: `invoke` is an `async func`.
+wit-bindgen = { workspace = true, features = ["async", "async-spawn"] }
 
 [dev-dependencies]
 serde_json.workspace = true

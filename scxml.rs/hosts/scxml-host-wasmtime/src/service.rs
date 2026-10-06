@@ -1,113 +1,97 @@
 //! Invoked services (SCXML 6.4) under the session host.
 //!
 //! An `<invoke>` whose type is neither absent nor the SCXML type names an
-//! invoked service: a leaf invocation with no machine, run by the
+//! invoked service: an external service run by the
 //! `stateforward:scxml/invoked-service` component the host binds to that
-//! exact type URI. This module is the host side and stays a thin linker:
+//! exact type. This module is the host side and stays a thin linker:
 //!
 //! * **Binding** — [`ServiceComponents`] binds exact type URIs to
 //!   authenticated service components (release artifacts of kind
 //!   [`ArtifactKind::ServiceExample`], or caller components authenticated by
 //!   SHA-256 through [`crate::authenticate_service_component`]), each with
-//!   its [`ServicePackage`]. An `<invoke>` of a type no service binds, literal
-//!   or given by `typeexpr`, fails when it starts (`error.execution`, SCXML
-//!   6.4); `machine-capabilities.load-services` loads only bound components.
-//! * **Lifecycle** — every invocation gets its own instance in its own
-//!   bounded store: the host checks `type-uri` against the binding, calls
-//!   `start` once, then `send` for each event the invoking session sends to
-//!   `#_<invokeid>` (or autoforwards) and `wake` when its wakeup falls due on
-//!   the run's shared logical clock, and `cancel` when the invoking state
-//!   exits first; then it drops the instance.
-//! * **Host calls** — `invoked-service-host` works only inside one of the
-//!   instance's export calls. `emit` stamps the event `external` with the
-//!   service's type URI as `origin-type`, checks it against the event
-//!   bounds, and the run pushes it onto the invoking session's queue
-//!   (dropped once that session began cancelling the invocation);
-//!   `complete` finishes the service (`done.invoke.<id>` with its data);
-//!   `set-wakeup` asks for one `wake`.
-//! * **Failure** — a trap (fuel exhaustion included), a failed export call
-//!   after `start`, or an invalid `emit` retires the instance: the invoking
-//!   session receives `failed` (`error.communication` with the invoke id)
-//!   and no `done.invoke`. A failed `start` (an invalid `emit` during
-//!   `start` included) fails the `<invoke>` instead.
-//! * **Bounds** — every export call runs under the per-call fuel cap and on
-//!   the session host's per-call budget (`call_budget`), like extension
-//!   components. Each emitted event is within the `types.event` bounds, and
-//!   one export call emits at most [`MAX_SERVICE_EMITS_PER_CALL`] events of
-//!   at most [`MAX_SERVICE_EMITTED_BYTES_PER_CALL`] cumulative bytes; the
-//!   emit past either bound is invalid (`capacity-exhausted`). These two are
-//!   amplification guards and apply on every build. `outbound-http` is deny by default and admits only the
-//!   origins the service package declares, or the origin a reference's
-//!   value supplies entirely. `fetch` blocks the export call (and so the
-//!   session); `begin` and `take` make a slow request without blocking it
-//!   (`crate::service_http`: the embedder's [`crate::ServiceHttp`]
-//!   transport performs it elsewhere, and its outcome arrives through
-//!   `wake`).
+//!   its [`ServicePackage`], and plans each component's own `wasi:*`
+//!   imports against the [`crate::WasiOptions`] the run grants it
+//!   (`crate::wasi`) when it is bound. An `<invoke>` of a type no service
+//!   binds, literal or given by `typeexpr`, fails when it runs
+//!   (`error.execution`, SCXML 6.4: invocation is a runtime action).
+//! * **Invocation** — every invocation gets its own instance in its own
+//!   store, driven by the WASI 0.3 / Component Model async event loop
+//!   (`Store::run_concurrent`) on a thread of its own, and its
+//!   `invoked-service-api.invoke` runs as a subtask
+//!   (`call_concurrent`). The events the invoking session sends to
+//!   `#_<invokeid>` (and autoforwards) feed the `events` stream; the events
+//!   the service returns on its stream reach the invoking session stamped
+//!   with its invoke id; its future resolving `ok` becomes
+//!   `done.invoke.<id>`, and resolving `err`, a trap (fuel exhaustion
+//!   included), or an invalid returned event becomes the invocation's
+//!   `communication-error` message (`error.communication`). A rejected
+//!   `invoke` (it returned an error, trapped, or could not be instantiated)
+//!   fails the `<invoke>` instead (`error.execution`).
+//! * **Determinism** — the session hands each input to the invocation (its
+//!   start, an event, its due timers, an HTTP response) with the session's
+//!   logical time, and waits until the invocation's event loop has nothing
+//!   left to run, so what the service returns is applied at the same point
+//!   of every run. Its `wasi:clocks/monotonic-clock` is the session's
+//!   logical clock (marks in nanoseconds since the session opened, 1 ms
+//!   resolution): a `wait-until` or `wait-for` falls due in order with every
+//!   delayed send of the run.
+//! * **Cancel** — SCXML 6.4: when the invoking state exits first, the host
+//!   cancels the `invoke` subtask and drops the invocation's store (no
+//!   `done.invoke` follows), and the connection of every request still in
+//!   flight is closed.
+//! * **Outbound HTTP** — `outbound-http.fetch` suspends only the calling
+//!   task. The host admits the request in the invocation (the service
+//!   package's declared origins, or an origin a reference's value supplies
+//!   entirely) and hands it to the session: a batch run performs it at
+//!   once through the embedder's transport ([`ServiceComponents::with_outbound_http`]);
+//!   a live session performs it on a transport thread and delivers the
+//!   response later as a recorded external input (`LiveSession::deliver_http_responses`),
+//!   which a replay delivers from its record instead.
+//! * **Bounds** — the invocation runs at most the configured fuel
+//!   ([`ServiceComponents::with_call_fuel`]) between two inputs, and returns
+//!   at most 1024 events of at most 4 MiB in all per input (amplification
+//!   guards, every build): past either the invocation fails.
 //! * **Values and references** — the embedder holds the values of the
 //!   variables a run grants ([`ServiceComponents::with_values`]). A service
-//!   never receives one: for each `env` slot its `<invoke>` binds
-//!   (`service-invocation.env`, `env:<slot>="NAME"` or `env:<slot>expr`)
-//!   that its package declares, the host hands `start` an opaque reference
+//!   never receives one: for each `env` attribute of its `<invoke>`
+//!   (`invoke-request.attributes`) that names a slot its package declares,
+//!   the host fills `invoke-request.references` with an opaque reference
 //!   when it holds a value for the variable granted to the service's type
-//!   URI ([`crate::EnvVariable`]; a name with no value, or one granted only
-//!   to other packages, leaves the slot absent). Unlike an extension element's per-call references, a
-//!   service's references live for the whole invocation: every later export
-//!   call of that instance may use them, and only inside its own admitted
-//!   `outbound-http` requests; no other instance ever receives them. A slot
-//!   its package does not declare, one slot twice, more than
-//!   [`crate::MAX_DECLARED_ITEMS`] slots, or a name that is not a variable
-//!   name rejects the start (the `<invoke>` raises `error.execution`).
-//! * **Event contracts** — a package may declare the events its service
-//!   emits and accepts, each with a resolved JSON Schema for the event's
-//!   data ([`ServiceEvents`]); [`ServiceComponents::bind`] compiles them once
-//!   (`scxml_event_schema::CompiledSchema`). With a contract, every `emit`
-//!   must name a declared emitted event whose schema admits its data, or the
-//!   emit is invalid and retires the instance (the invoking session receives
-//!   `error.communication` with the invoke id); and every `<send>` the
-//!   invoking session addresses to the service must name a declared accepted
-//!   event whose schema admits its data, or the `<send>` raises
-//!   `error.execution` (a delayed one is checked when it is sent, and again
-//!   when it falls due, when a mismatch is `error.communication`).
-//!   Autoforwarded events are delivered unchecked. A service without a
-//!   contract is not schema-checked: its emits pass with any event name and
-//!   data, within the event and per-call bounds above (the package then
-//!   declares nothing to check against, and the embedder that bound it
-//!   consented to it). A document's own `event:schema` attributes
-//!   never take part: they stay metadata only.
-//! * **WASI** — nothing WASI is ambient: each service's linker holds exactly
-//!   the WASI interfaces its package declares and the run grants
-//!   ([`crate::WasiGrants`], `crate::wasi`), and a component importing any
-//!   other WASI interface is refused at session start (`load-services`) and
-//!   before every instantiation.
+//!   URI; the references live for the whole invocation, only inside its own
+//!   admitted `outbound-http` requests.
 //!
-//! Telemetry: one boundary span per load, start, send, wake, cancel, and
+//! Telemetry: one boundary span per start, event, due timers, cancel, and
 //! `outbound-http` request (`scxml.host-wasmtime.service-*`) with closed
 //! labels only; type URIs, invoke ids, events, payloads, and URLs never
 //! become attributes. Guest telemetry imports are recorded under the
 //! `invoked-service` module label.
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::collections::{BTreeMap, VecDeque};
+use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError, mpsc};
+use std::task::{Context as TaskContext, Poll, Wake, Waker};
 
 use opentelemetry::Context;
-use scxml_telemetry::{Module, Operation, SignalEvent};
-use wasmtime::component::{HasSelf, Linker};
+use scxml_telemetry::{ErrorCategory, Module, Operation, SignalEvent};
+use wasmtime::StoreContextMut;
+use wasmtime::component::{
+    Accessor, Destination, FutureConsumer, HasData, HasSelf, Linker, Source, StreamConsumer,
+    StreamProducer, StreamReader, StreamResult, VecBuffer,
+};
 
 use crate::bindings::stateforward::scxml::telemetry;
 use crate::bindings::stateforward::scxml::types::{
-    ComponentError, DataValue as WitDataValue, EnvBinding, ErrorCode, Event as WitEvent,
-    EventType as WitEventType, ServiceInvocation, SlotReference, TraceContext as WitTraceContext,
+    ComponentError, DataValue as WitDataValue, ErrorCode, Event as WitEvent,
+    EventType as WitEventType, ExtensionAttribute, InvokeRequest, SlotReference,
+    TraceContext as WitTraceContext,
 };
-use crate::call_budget::CallBudget;
 use crate::component::{GuestSignal, component_error, record_guest_signal};
 use crate::extension::{ExtensionHttp, outbound_http};
-use crate::memory_growth::MeteredLimits;
-use crate::service_http::{
-    CancelSignal, MAX_SERVICE_PENDING_REQUESTS, ServiceHttp, ServiceResponses,
-};
 use crate::session::{native_event, native_value};
 use crate::{
-    ArtifactError, ArtifactKind, AuthenticatedComponent, HostError, InvalidLimit, LifecycleLease,
+    ArtifactError, ArtifactKind, AuthenticatedComponent, ExtensionHttpFailure,
+    ExtensionHttpRequest, ExtensionHttpResponse, HostError, InvalidLimit, LifecycleLease,
     TelemetryProviders, WasmtimeHostConfig,
 };
 
@@ -119,123 +103,33 @@ mod service_bindings {
             "stateforward:scxml/types": crate::bindings::stateforward::scxml::types,
             "stateforward:scxml/telemetry": crate::bindings::stateforward::scxml::telemetry,
             "stateforward:scxml/outbound-http": crate::extension::outbound_http,
+            "wasi:clocks": wasmtime_wasi::p3::bindings::clocks,
         },
+        require_store_data_send: true,
     });
 }
 
-use service_bindings::stateforward::scxml::invoked_service_host;
+use wasmtime_wasi::p3::bindings::clocks::{monotonic_clock, types as clock_types};
 
-/// Default instruction fuel cap of one service export call (`type-uri`,
-/// `start`, `send`, `wake`, or `cancel`); every call also runs on the session
-/// host's per-call budget.
-pub const DEFAULT_SERVICE_CALL_FUEL: u64 = 100_000_000;
 /// Maximum service type URIs one session host binds.
-pub const MAX_SERVICE_COMPONENTS: usize = 64;
-/// Maximum declared events in each list of a [`ServiceEvents`] (the
-/// manifest bound).
-pub const MAX_SERVICE_EVENTS: usize = 64;
-/// Maximum bytes of one declared event name.
-const MAX_SERVICE_EVENT_NAME_BYTES: usize = 256;
-/// Maximum events one service export call may `emit`.
-///
-/// An amplification guard, so it applies on every build: lifting one guest
-/// buffer into host memory is not fuel-metered, so without it one fuel-capped
-/// call could emit the same bounded event many thousands of times and grow
-/// host memory far beyond the instance's own memory limit.
-pub const MAX_SERVICE_EMITS_PER_CALL: usize = 1_024;
-/// Maximum cumulative bytes of the events one service export call may
-/// `emit` (each event's name, identifiers, origins, data, `raw`, and trace
-/// context, as [`scxml_types::Event::validate`] counts them); an
-/// amplification guard like [`MAX_SERVICE_EMITS_PER_CALL`].
-pub const MAX_SERVICE_EMITTED_BYTES_PER_CALL: usize = 4 * 1_024 * 1_024;
-
-/// One declared event of a service's contract: its exact name and its data
-/// schema as canonical resolved JSON (`scxml_event_schema::Resolved`).
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ServiceEventSchema {
-    /// Exact event name.
-    pub name: String,
-    /// The schema as canonical JSON.
-    pub schema: String,
-}
-
-/// A service package's declared event contract: the events the service
-/// emits and accepts. Empty lists declare no contract (nothing is
-/// checked); any declared event makes the contract closed in that
-/// direction and the other (an event not listed fails the check).
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct ServiceEvents {
-    /// Events the service emits, strictly sorted by name.
-    pub emits: Vec<ServiceEventSchema>,
-    /// Events the service accepts, strictly sorted by name.
-    pub accepts: Vec<ServiceEventSchema>,
-}
-
-/// One bound service's compiled event contract.
-#[derive(Debug)]
-pub(crate) struct ServiceContract {
-    emits: std::collections::BTreeMap<String, scxml_event_schema::CompiledSchema>,
-    accepts: std::collections::BTreeMap<String, scxml_event_schema::CompiledSchema>,
-}
-
-impl ServiceContract {
-    /// The compiled contract of `events`, or `None` when it declares none.
-    ///
-    /// # Errors
-    ///
-    /// [`ArtifactError::EventContractInvalid`].
-    fn compile(events: &ServiceEvents) -> Result<Option<Arc<Self>>, HostError> {
-        if events.emits.is_empty() && events.accepts.is_empty() {
-            return Ok(None);
-        }
-        let compile = |list: &[ServiceEventSchema]| {
-            if list.len() > MAX_SERVICE_EVENTS
-                || !list
-                    .windows(2)
-                    .all(|pair| matches!(pair, [first, second] if first.name < second.name))
-            {
-                return Err(HostError::from(ArtifactError::EventContractInvalid));
-            }
-            list.iter()
-                .map(|event| {
-                    if event.name.len() > MAX_SERVICE_EVENT_NAME_BYTES
-                        || scxml_types::EventName::new(event.name.clone()).is_err()
-                        || event.name.contains('*')
-                        || event.name.split('.').any(str::is_empty)
-                    {
-                        return Err(HostError::from(ArtifactError::EventContractInvalid));
-                    }
-                    let schema = scxml_event_schema::CompiledSchema::new(&event.schema)
-                        .map_err(|_| HostError::from(ArtifactError::EventContractInvalid))?;
-                    Ok((event.name.clone(), schema))
-                })
-                .collect::<Result<std::collections::BTreeMap<_, _>, HostError>>()
-        };
-        Ok(Some(Arc::new(Self {
-            emits: compile(&events.emits)?,
-            accepts: compile(&events.accepts)?,
-        })))
-    }
-
-    /// Whether the service may emit the event `name` carrying `data`.
-    pub(crate) fn admits_emit(&self, name: &str, data: &scxml_types::DataValue) -> bool {
-        self.emits
-            .get(name)
-            .is_some_and(|schema| schema.admits(data))
-    }
-
-    /// Whether the service accepts the event `name` carrying `data`.
-    pub(crate) fn admits_accept(&self, name: &str, data: &scxml_types::DataValue) -> bool {
-        self.accepts
-            .get(name)
-            .is_some_and(|schema| schema.admits(data))
-    }
-}
+const MAX_BOUND_SERVICES: usize = 64;
+/// Maximum events one invocation may return per input. An amplification
+/// guard, so it applies on every build: lifting a guest buffer into host
+/// memory is not fuel-metered.
+const MAX_RETURNED_EVENTS_PER_INPUT: usize = 1_024;
+/// Maximum cumulative bytes of the events one invocation may return per
+/// input (as [`scxml_types::Event::validate`] counts them).
+const MAX_RETURNED_BYTES_PER_INPUT: usize = 4 * 1_024 * 1_024;
+/// Maximum requests of one invocation in flight at once; one more is
+/// answered `capacity-exhausted`. An amplification guard (every build).
+const MAX_REQUESTS_IN_FLIGHT: usize = 16;
+/// Nanoseconds per logical millisecond (the logical clock's resolution).
+const NANOS_PER_MS: u64 = 1_000_000;
 
 /// The declarative package of one bound service (its
 /// `stateforward.scxml.service-package/v1` manifest, already verified by the
-/// embedder): the host binds by `service_uri`, grants `http_origins`, and
-/// links the `wasi_permissions` the run grants.
+/// embedder): the host binds by `service_uri` and grants `http_origins` and
+/// `env_slots`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ServicePackage {
     /// Exact service type URI; the binding key.
@@ -255,22 +149,15 @@ pub struct ServicePackage {
     /// The `env` slots an `<invoke>` of the service may bind; each bound
     /// slot's reference is valid for the whole invocation.
     pub env_slots: Vec<String>,
-    /// The WASI interfaces its component may import (a canonical list,
-    /// [`scxml_types::check_wasi_permissions`]); each must be granted
-    /// ([`ServiceComponents::with_wasi_grants`]) or the binding fails.
-    pub wasi_permissions: Vec<scxml_types::WasiPermission>,
-    /// Its declared event contract, checked at its emit and send
-    /// boundaries; empty declares none.
-    pub events: ServiceEvents,
 }
 
-/// One bound service: its package and component.
+/// One bound service: its package, its component, and the component's
+/// top-level imports.
 #[derive(Clone, Debug)]
-pub(crate) struct ServiceBinding {
-    pub(crate) package: ServicePackage,
-    pub(crate) component: AuthenticatedComponent,
-    /// The compiled event contract; `None` when the package declares none.
-    pub(crate) contract: Option<Arc<ServiceContract>>,
+struct ServiceBinding {
+    package: ServicePackage,
+    component: AuthenticatedComponent,
+    imports: Vec<String>,
 }
 
 /// Invoked-service components one session host links, keyed by exact type
@@ -279,9 +166,8 @@ pub(crate) struct ServiceBinding {
 pub struct ServiceComponents {
     bindings: Vec<ServiceBinding>,
     http: Option<Arc<dyn ExtensionHttp>>,
-    deferred: Option<Arc<dyn ServiceHttp>>,
     values: crate::ExtensionEnvironment,
-    grants: crate::WasiGrants,
+    wasi: BTreeMap<String, crate::WasiOptions>,
     call_fuel: u64,
 }
 
@@ -293,35 +179,39 @@ impl Default for ServiceComponents {
 
 /// What [`ServiceComponents`] hands the session host.
 pub(crate) struct ServiceParts {
-    pub(crate) bindings: Vec<(ServiceBinding, crate::wasi::WasiPlan)>,
+    pub(crate) bindings: Vec<(
+        ServicePackage,
+        AuthenticatedComponent,
+        crate::wasi::WasiPlan,
+    )>,
     pub(crate) http: Option<Arc<dyn ExtensionHttp>>,
-    pub(crate) deferred: Option<Arc<dyn ServiceHttp>>,
     pub(crate) values: crate::ExtensionEnvironment,
     pub(crate) call_fuel: u64,
 }
 
 impl ServiceComponents {
-    /// No bindings, no outbound HTTP, no values, no WASI grant, and
-    /// [`DEFAULT_SERVICE_CALL_FUEL`] per export call.
+    /// No bindings, no outbound HTTP, no values, no WASI resource, and
+    /// [`crate::DEFAULT_EXTENSION_CALL_FUEL`] between two inputs.
     #[must_use]
     pub fn new() -> Self {
         Self {
             bindings: Vec::new(),
             http: None,
-            deferred: None,
             values: crate::ExtensionEnvironment::none(),
-            grants: crate::WasiGrants::new(),
-            call_fuel: DEFAULT_SERVICE_CALL_FUEL,
+            wasi: BTreeMap::new(),
+            call_fuel: crate::DEFAULT_EXTENSION_CALL_FUEL,
         }
     }
 
-    /// The run's WASI grants, by exact service type URI. Every permission a
-    /// bound package declares must be granted, and every grant must name a
-    /// bound package and a permission it declares; otherwise
+    /// The WASI runtime resources the run grants the service bound to
+    /// exactly `uri` (wasmtime CLI's `--dir` and `-S` options), replacing an
+    /// earlier grant to it. Every resource a bound component's imports need
+    /// must be granted, and every grant must name a bound service and a
+    /// resource its component imports; otherwise
     /// [`crate::SessionHost::with_service_components`] fails closed.
     #[must_use]
-    pub fn with_wasi_grants(mut self, grants: crate::WasiGrants) -> Self {
-        self.grants = grants;
+    pub fn with_wasi(mut self, uri: &str, options: crate::WasiOptions) -> Self {
+        self.wasi.insert(uri.to_owned(), options);
         self
     }
 
@@ -336,21 +226,16 @@ impl ServiceComponents {
     /// The transport admitted `outbound-http` requests go through. Without
     /// one (the default) every request is refused with `unavailable`; with
     /// one, the host admits only the origins each service's package
-    /// declares, or the origin a reference's value supplies entirely.
+    /// declares, or the origin a reference's value supplies entirely. A batch
+    /// run performs each request at once; a live session performs it on a
+    /// transport thread of its own and delivers the response as an external
+    /// input. Cancelling the invocation closes the connection of a request
+    /// still in flight when the transport is an
+    /// [`crate::ExtensionHttpClient`]; another transport's own timeouts
+    /// bound it.
     #[must_use]
     pub fn with_outbound_http(mut self, transport: Arc<dyn ExtensionHttp>) -> Self {
         self.http = Some(transport);
-        self
-    }
-
-    /// The transport of deferred requests (`outbound-http.begin`). Without
-    /// one (the default) every `begin` is refused with `unavailable`; with
-    /// one, the host admits each request exactly as `fetch`'s, and only a
-    /// live session that neither records nor replays delivers outcomes
-    /// (elsewhere `begin` is refused too). See `crate::service_http`.
-    #[must_use]
-    pub fn with_deferred_http(mut self, transport: Arc<dyn ServiceHttp>) -> Self {
-        self.deferred = Some(transport);
         self
     }
 
@@ -363,10 +248,9 @@ impl ServiceComponents {
     /// [`ArtifactKind::ServiceExample`] nor [`ArtifactKind::ServiceComponent`]
     /// ([`ArtifactError::ArtifactKindMismatch`]); a URI that is no service
     /// type URI ([`scxml_types::is_service_type_uri`]), bound twice, or past
-    /// [`MAX_SERVICE_COMPONENTS`] bindings; invalid declared origins or
-    /// slots ([`ArtifactError::NamespaceBinding`]); a non-canonical WASI
-    /// permission list ([`ArtifactError::WasiPermissionsInvalid`]); or a
-    /// malformed event contract ([`ArtifactError::EventContractInvalid`]).
+    /// 64 bindings; or invalid declared origins or slots
+    /// ([`ArtifactError::NamespaceBinding`]); and [`HostError::Component`]
+    /// for bytes whose imports cannot be read.
     pub fn bind(
         mut self,
         package: ServicePackage,
@@ -379,7 +263,7 @@ impl ServiceComponents {
             return Err(ArtifactError::ArtifactKindMismatch.into());
         }
         if !scxml_types::is_service_type_uri(&package.service_uri)
-            || self.bindings.len() >= MAX_SERVICE_COMPONENTS
+            || self.bindings.len() >= MAX_BOUND_SERVICES
             || self
                 .bindings
                 .iter()
@@ -394,19 +278,16 @@ impl ServiceComponents {
         {
             return Err(ArtifactError::NamespaceBinding.into());
         }
-        if scxml_types::check_wasi_permissions(&package.wasi_permissions).is_err() {
-            return Err(ArtifactError::WasiPermissionsInvalid.into());
-        }
-        let contract = ServiceContract::compile(&package.events)?;
+        let imports = crate::wasi::component_imports(component.bytes())?;
         self.bindings.push(ServiceBinding {
             package,
             component: component.clone(),
-            contract,
+            imports,
         });
         Ok(self)
     }
 
-    /// Sets the instruction fuel cap of one service export call.
+    /// Sets the instruction fuel an invocation may run between two inputs.
     ///
     /// # Errors
     ///
@@ -432,29 +313,27 @@ impl ServiceComponents {
     /// [`ArtifactError::WasiGrantUndeclared`] for a grant to a URI no
     /// binding names, and every [`crate::wasi::WasiPlan::new`] failure.
     pub(crate) fn into_parts(self) -> Result<ServiceParts, HostError> {
-        if self.grants.uris().any(|uri| {
+        if self.wasi.keys().any(|uri| {
             !self
                 .bindings
                 .iter()
-                .any(|binding| binding.package.service_uri == uri)
+                .any(|binding| binding.package.service_uri == *uri)
         }) {
             return Err(ArtifactError::WasiGrantUndeclared.into());
         }
+        let none = crate::WasiOptions::default();
         let bindings = self
             .bindings
             .into_iter()
             .map(|binding| {
-                let plan = crate::wasi::WasiPlan::new(
-                    &binding.package.wasi_permissions,
-                    self.grants.for_uri(&binding.package.service_uri),
-                )?;
-                Ok((binding, plan))
+                let options = self.wasi.get(&binding.package.service_uri).unwrap_or(&none);
+                let plan = crate::wasi::WasiPlan::new(&binding.imports, options)?;
+                Ok((binding.package, binding.component, plan))
             })
             .collect::<Result<Vec<_>, HostError>>()?;
         Ok(ServiceParts {
             bindings,
             http: self.http,
-            deferred: self.deferred,
             values: self.values,
             call_fuel: self.call_fuel,
         })
@@ -462,539 +341,159 @@ impl ServiceComponents {
 }
 
 /// The linker of one bound service's stores: exactly the `invoked-service`
-/// world's imports and the WASI interfaces `wasi` plans (none when the
-/// package declares none).
+/// world's imports and the WASI interfaces `wasi` plans.
 pub(crate) fn service_linker(
     engine: &wasmtime::Engine,
     wasi: &crate::wasi::WasiPlan,
 ) -> Result<Linker<ServiceStoreData>, HostError> {
     let mut linker = Linker::<ServiceStoreData>::new(engine);
-    service_bindings::InvokedService::add_to_linker::<_, HasSelf<ServiceStoreData>>(
+    crate::bindings::stateforward::scxml::types::add_to_linker::<_, HasSelf<ServiceStoreData>>(
         &mut linker,
         |state| state,
     )?;
+    telemetry::add_to_linker::<_, HasSelf<ServiceStoreData>>(&mut linker, |state| state)?;
+    outbound_http::add_to_linker::<_, HasSelf<ServiceStoreData>>(&mut linker, |state| state)?;
+    clock_types::add_to_linker::<_, LogicalClock>(&mut linker, |state| state)?;
+    monotonic_clock::add_to_linker::<_, LogicalClock>(&mut linker, |state| state)?;
     wasi.add_to_linker(&mut linker)?;
     Ok(linker)
 }
 
-/// Everything one invocation needs to instantiate its service.
+/// One bound service's component, pre-instantiated against its linker.
+pub(crate) type ServicePre = service_bindings::InvokedServicePre<ServiceStoreData>;
+
+/// Pre-instantiates one bound service's component against its linker.
+pub(crate) fn service_pre(
+    linker: &Linker<ServiceStoreData>,
+    component: &wasmtime::component::Component,
+) -> Result<ServicePre, HostError> {
+    let pre = linker.instantiate_pre(component)?;
+    Ok(service_bindings::InvokedServicePre::new(pre)?)
+}
+
+/// The run-wide facts one invocation is started with.
 pub(crate) struct ServiceRuntime<'a> {
-    pub(crate) engine: &'a wasmtime::Engine,
-    pub(crate) linker: &'a Linker<ServiceStoreData>,
+    pub(crate) pre: &'a service_bindings::InvokedServicePre<ServiceStoreData>,
     pub(crate) config: &'a WasmtimeHostConfig,
     pub(crate) providers: &'a TelemetryProviders,
-    pub(crate) call_budget: &'a Arc<CallBudget>,
     pub(crate) package: &'a ServicePackage,
-    /// The package's compiled event contract.
-    pub(crate) contract: Option<&'a Arc<ServiceContract>>,
-    /// The package's declared-and-granted WASI permissions.
+    /// The package's planned WASI interfaces.
     pub(crate) wasi: &'a crate::wasi::WasiPlan,
-    pub(crate) http: Option<&'a Arc<dyn ExtensionHttp>>,
-    /// The deferred transport, when the embedder grants one.
-    pub(crate) deferred: Option<&'a Arc<dyn ServiceHttp>>,
-    /// The run's queue of settled deferred requests; `None` when the run
-    /// delivers none (a batch run, or a recording or replaying session).
-    pub(crate) responses: Option<&'a Arc<ServiceResponses>>,
+    /// Whether the run offers outbound HTTP to services.
+    pub(crate) http_offered: bool,
     /// The values `env` slots may reference.
     pub(crate) values: &'a crate::ExtensionEnvironment,
     pub(crate) call_fuel: u64,
 }
 
-/// The run's clock as one service call sees it.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct ServiceClock {
-    /// The shared logical clock, in ms.
-    pub(crate) now: u64,
-    /// The Unix epoch ms of logical time 0.
-    pub(crate) start_epoch_ms: u64,
+// ---------------------------------------------------------------------------
+// The invocation's shared state: what the session's inputs feed, and what the
+// invocation produces for the session.
+// ---------------------------------------------------------------------------
+
+/// One timer the service waits on (`wait-until` or `wait-for`).
+struct Timer {
+    /// The logical ms it falls due at.
+    deadline: u64,
+    fired: bool,
+    waker: Option<Waker>,
 }
 
-/// One export call in progress inside a service store.
-struct ServiceCall {
-    emitted: Vec<WitEvent>,
-    /// The cumulative bytes of `emitted`.
-    emitted_bytes: usize,
-    /// `complete`'s data, once called.
-    completion: Option<Completion>,
-    /// `set-wakeup`'s last request, once called.
-    wakeup: Option<Wakeup>,
-    /// An `emit` broke the event bounds.
-    invalid_emit: bool,
-    /// The carrier stamped on emitted events that carry none.
-    carrier: Option<WitTraceContext>,
-    clock: ServiceClock,
+/// One request the service waits on (`fetch`).
+#[derive(Default)]
+struct Pending {
+    outcome: Option<Result<outbound_http::HttpResponse, ComponentError>>,
+    waker: Option<Waker>,
 }
 
-/// The data one `complete` call gave.
-struct Completion(Option<WitDataValue>);
-
-/// One `set-wakeup` request.
-#[derive(Clone, Copy)]
-enum Wakeup {
-    /// Wake at this absolute logical ms.
-    At(u64),
-    /// Clear the pending wakeup.
-    Clear,
-}
-
-/// Store data of one service instance.
-pub(crate) struct ServiceStoreData {
-    limits: MeteredLimits,
-    providers: TelemetryProviders,
-    execution_context: Context,
-    guest_spans: crate::guest_spans::GuestSpanTable,
+/// The state shared by one invocation's host functions, its streams, and
+/// its thread.
+#[derive(Default)]
+struct Io {
+    /// The session's logical time, in ms since the session opened.
+    now_ms: u64,
+    /// Events the invoking session sent, not yet read.
+    events: VecDeque<WitEvent>,
+    events_waker: Option<Waker>,
+    /// Events the service returned since the last report, validated and
+    /// stamped.
+    returned: Vec<WitEvent>,
+    returned_bytes: usize,
+    /// A returned event broke its bounds: the invocation fails.
+    invalid: bool,
+    /// The future's value, once resolved.
+    done: Option<Result<Option<WitDataValue>, ComponentError>>,
+    /// Whether `invoke` returned `ok`.
+    started: bool,
+    timers: BTreeMap<u64, Timer>,
+    next_timer: u64,
+    /// Requests admitted since the last report.
+    requests: Vec<(u64, ExtensionHttpRequest)>,
+    pending: BTreeMap<u64, Pending>,
+    next_request: u64,
+    /// The pump refuels the store at its next poll.
+    refuel: bool,
+    pump_waker: Option<Waker>,
+    /// The invoke type, stamped as `origin-type`.
     type_uri: String,
-    allow: crate::HttpAllowlist,
-    http: Option<Arc<dyn ExtensionHttp>>,
-    /// The package's declared `env` slots.
-    env_slots: Vec<String>,
-    /// The package's compiled event contract, checked on every `emit`.
-    contract: Option<Arc<ServiceContract>>,
-    /// The run's values, for binding this invocation's slots at `start`.
-    values: crate::ExtensionEnvironment,
-    /// This invocation's references and the values they stand for, bound
-    /// at `start` and valid until the instance is dropped.
-    references: Vec<(u32, String)>,
-    call: Option<ServiceCall>,
-    /// The deferred transport and the run's queue its outcomes join, when
-    /// both are offered.
-    deferred: Option<(Arc<dyn ServiceHttp>, Arc<ServiceResponses>)>,
-    /// This instance's run-unique id (0 when the run delivers no deferred
-    /// outcome).
-    instance: u64,
-    /// This instance's deferred requests by ticket: `None` while in flight,
-    /// the outcome once delivered and not yet taken.
-    tickets: BTreeMap<u64, Option<Result<outbound_http::HttpResponse, ComponentError>>>,
-    /// The cancellation of each deferred request still in flight, by
-    /// ticket: cancelled when the instance abandons it (it leaves `Live` or
-    /// is dropped), so the transport stops the request.
-    in_flight: BTreeMap<u64, Arc<CancelSignal>>,
-    /// The last ticket issued.
-    last_ticket: u64,
-    /// The time of the last call, for `now-ms` outside one.
-    last_now_ms: u64,
-    /// The instance's WASI context (reachable only through the interfaces
-    /// its plan linked).
-    wasi: crate::wasi::WasiState,
-    _store_lease: LifecycleLease,
+    /// The carrier stamped on returned events that carry none.
+    carrier: Option<WitTraceContext>,
 }
 
-impl Drop for ServiceStoreData {
-    /// An instance dropped with its session abandons its requests.
-    fn drop(&mut self) {
-        self.cancel_in_flight();
-    }
-}
-
-impl wasmtime_wasi::WasiView for ServiceStoreData {
-    fn ctx(&mut self) -> wasmtime_wasi::WasiCtxView<'_> {
-        self.wasi.view()
-    }
-}
-
-/// Lifecycle of one service instance.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Lifecycle {
-    /// Started (or starting); `send` and `wake` are allowed.
-    Live,
-    /// `complete` was called.
-    Completed,
-    /// It trapped, failed a call, or emitted an invalid event.
-    Retired,
-    /// `cancel` was called.
-    Cancelled,
-}
-
-/// What one export call produced, for the run to apply in order: the events
-/// it emitted, then how it left the service.
-#[derive(Debug)]
-pub(crate) struct ServiceStep {
-    /// Validated, stamped events for the invoking session, in emit order.
-    pub(crate) events: Vec<WitEvent>,
-    /// How the call left the service.
-    pub(crate) outcome: ServiceOutcome,
-}
-
-/// How one export call left the service.
-#[derive(Debug)]
-pub(crate) enum ServiceOutcome {
-    /// It runs on.
-    Running,
-    /// It called `complete` with this data.
-    Completed(Option<WitDataValue>),
-    /// It was retired (trap, failed call, or invalid emit).
-    Failed,
-}
-
-/// One invocation's service instance and its pending wakeup.
-pub(crate) struct ServiceHandle {
-    store: wasmtime::Store<ServiceStoreData>,
-    guest: service_bindings::InvokedService,
-    lifecycle: Lifecycle,
-    /// The pending wakeup, in absolute logical ms.
-    wakeup: Option<u64>,
-    call_fuel: u64,
-}
-
-impl ServiceHandle {
-    /// Instantiates the bound component for one invocation in its own bounded
-    /// store and checks its `type-uri` against the binding.
-    ///
-    /// # Errors
-    ///
-    /// [`ArtifactError::WasiImportUndeclared`] for a component importing a
-    /// WASI interface its plan does not link, [`ArtifactError::WasiGrantInvalid`]
-    /// for a granted directory that cannot be opened, a Wasmtime
-    /// instantiation failure (for example a component that imports anything
-    /// else), a trap in `type-uri`, or [`HostError::Component`]
-    /// `service-component-uri-mismatch`.
-    pub(crate) fn instantiate(
-        component: &wasmtime::component::Component,
-        runtime: &ServiceRuntime<'_>,
-        execution_context: &Context,
-    ) -> Result<Self, HostError> {
-        runtime.wasi.check_imports(runtime.engine, component)?;
-        let wasi = runtime.wasi.context()?;
-        let config = &runtime.config.store;
-        let limits = wasmtime::StoreLimitsBuilder::new()
-            .memory_size(config.memory_bytes)
-            .table_elements(config.table_elements)
-            .instances(config.instances)
-            .tables(config.tables)
-            .memories(config.memories)
-            .trap_on_grow_failure(true)
-            .build();
-        let mut store = wasmtime::Store::new(
-            runtime.engine,
-            ServiceStoreData {
-                limits: MeteredLimits::new(limits, Arc::clone(runtime.call_budget)),
-                providers: runtime.providers.clone(),
-                execution_context: execution_context.clone(),
-                guest_spans: crate::guest_spans::GuestSpanTable::new(),
-                type_uri: runtime.package.service_uri.clone(),
-                // Validated when the package was bound.
-                allow: crate::HttpAllowlist::new(&runtime.package.http_origins)
-                    .map_err(|_| HostError::from(ArtifactError::NamespaceBinding))?,
-                http: runtime.http.map(Arc::clone),
-                env_slots: runtime.package.env_slots.clone(),
-                contract: runtime.contract.map(Arc::clone),
-                values: runtime.values.clone(),
-                references: Vec::new(),
-                call: None,
-                deferred: runtime
-                    .deferred
-                    .zip(runtime.responses)
-                    .map(|(transport, responses)| (Arc::clone(transport), Arc::clone(responses))),
-                instance: runtime
-                    .responses
-                    .map_or(0, |responses| responses.instance_id()),
-                tickets: BTreeMap::new(),
-                in_flight: BTreeMap::new(),
-                last_ticket: 0,
-                last_now_ms: 0,
-                wasi,
-                _store_lease: runtime.providers.acquire_store()?,
-            },
-        );
-        store.limiter(|state| &mut state.limits);
-        runtime.call_budget.share(&mut store);
-        store.set_fuel(runtime.call_fuel)?;
-        let guest =
-            service_bindings::InvokedService::instantiate(&mut store, component, runtime.linker)?;
-        store.set_fuel(runtime.call_fuel)?;
-        let type_uri = guest
-            .stateforward_scxml_invoked_service_api()
-            .call_type_uri(&mut store)?;
-        if type_uri != runtime.package.service_uri {
-            return Err(HostError::Component(
-                "service-component-uri-mismatch".into(),
-            ));
-        }
-        Ok(Self {
-            store,
-            guest,
-            lifecycle: Lifecycle::Live,
-            wakeup: None,
-            call_fuel: runtime.call_fuel,
-        })
-    }
-
-    /// `start`: `Ok` with the call's step when the service accepted its
-    /// start (it may already have completed), `Err` when it rejected it,
-    /// trapped, or made an invalid emit during `start` (the `<invoke>` fails
-    /// with `error.execution`; the instance is retired).
-    pub(crate) fn start(
-        &mut self,
-        request: &ServiceInvocation,
-        clock: ServiceClock,
-    ) -> Result<ServiceStep, ComponentError> {
-        let bound = {
-            let data = self.store.data();
-            bind_references(&request.env, &data.type_uri, &data.env_slots, &data.values)
-        };
-        let (slots, references) = match bound {
-            Ok(bound) => bound,
-            Err(rejected) => {
-                self.leave(Lifecycle::Retired);
-                return Err(rejected);
-            }
-        };
-        self.store.data_mut().references = references;
-        let carrier = request.trace_context.clone();
-        let (succeeded, step) = self.call(clock, carrier, |guest, store| {
-            guest
-                .stateforward_scxml_invoked_service_api()
-                .call_start(store, request, &slots)
-        });
-        if succeeded {
-            Ok(step)
-        } else {
-            self.leave(Lifecycle::Retired);
-            Err(component_error(
-                ErrorCode::InvalidInput,
-                "the invoked service rejected its start",
-            ))
+impl Io {
+    fn wake(waker: &mut Option<Waker>) {
+        if let Some(waker) = waker.take() {
+            waker.wake();
         }
     }
 
-    /// `send`: one event the invoking session sent to the service.
-    pub(crate) fn send(&mut self, event: &WitEvent, clock: ServiceClock) -> ServiceStep {
-        let carrier = event.trace_context.clone();
-        self.call(clock, carrier, |guest, store| {
-            guest
-                .stateforward_scxml_invoked_service_api()
-                .call_send(store, event)
-        })
-        .1
-    }
-
-    /// `wake`: the requested wakeup fell due.
-    pub(crate) fn wake(&mut self, clock: ServiceClock) -> ServiceStep {
-        self.call(clock, None, |guest, store| {
-            guest
-                .stateforward_scxml_invoked_service_api()
-                .call_wake(store)
-        })
-        .1
-    }
-
-    /// `cancel`, unless the service completed, was retired, or was already
-    /// cancelled; whatever it returns, the instance takes no further call.
-    pub(crate) fn cancel(&mut self, clock: ServiceClock) {
-        if self.lifecycle != Lifecycle::Live {
+    /// Validates, stamps, and keeps one returned event.
+    fn accept(&mut self, event: WitEvent) {
+        let event = WitEvent {
+            name: event.name,
+            event_type: WitEventType::External,
+            send_id: event.send_id,
+            origin: event.origin,
+            origin_type: Some(self.type_uri.clone()),
+            // The invoking session stamps the invoke id on delivery.
+            invoke_id: None,
+            data: event.data,
+            raw: event.raw,
+            trace_context: event.trace_context.or_else(|| self.carrier.clone()),
+        };
+        let Ok(native) = native_event(event.clone()) else {
+            self.invalid = true;
+            return;
+        };
+        let total = self.returned_bytes.saturating_add(event_bytes(&native));
+        if self.returned.len() >= MAX_RETURNED_EVENTS_PER_INPUT
+            || total > MAX_RETURNED_BYTES_PER_INPUT
+        {
+            self.invalid = true;
             return;
         }
-        let _ = self.call(clock, None, |guest, store| {
-            guest
-                .stateforward_scxml_invoked_service_api()
-                .call_cancel(store)
-        });
-        self.leave(Lifecycle::Cancelled);
+        self.returned_bytes = total;
+        self.returned.push(event);
     }
 
-    /// Leaves `Live` for `lifecycle`: no wakeup is pending any more, and
-    /// every deferred request still in flight is abandoned and cancelled,
-    /// so the transport stops it.
-    fn leave(&mut self, lifecycle: Lifecycle) {
-        self.lifecycle = lifecycle;
-        self.wakeup = None;
-        self.store.data_mut().cancel_in_flight();
-    }
-
-    /// The instance's compiled event contract, when its package declares
-    /// one.
-    pub(crate) fn contract(&self) -> Option<Arc<ServiceContract>> {
-        self.store.data().contract.clone()
-    }
-
-    /// This instance's run-unique id, the key its settled deferred requests
-    /// carry.
-    pub(crate) fn instance(&self) -> u64 {
-        self.store.data().instance
-    }
-
-    /// Hands the settled request `ticket` its outcome; `true` when a live
-    /// instance was waiting for it (its `wake` runs next), `false` when the
-    /// instance completed, was retired or cancelled, or holds no such
-    /// pending ticket (the outcome is dropped).
-    pub(crate) fn settle(
-        &mut self,
-        ticket: u64,
-        outcome: Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure>,
-    ) -> bool {
-        if self.lifecycle != Lifecycle::Live {
-            return false;
-        }
-        let data = self.store.data_mut();
-        data.in_flight.remove(&ticket);
-        match data.tickets.get_mut(&ticket) {
-            Some(slot @ None) => {
-                *slot =
-                    Some(crate::extension::settle_response(outcome).map_err(|(error, _)| error));
-                true
-            }
-            Some(Some(_)) | None => false,
-        }
-    }
-
-    /// Whether this live instance waits for a deferred request in flight.
-    pub(crate) fn awaiting(&self) -> bool {
-        self.lifecycle == Lifecycle::Live && self.store.data().tickets.values().any(Option::is_none)
-    }
-
-    /// The pending wakeup of a live service, in logical ms.
-    pub(crate) const fn next_deadline(&self) -> Option<u64> {
-        match self.lifecycle {
-            Lifecycle::Live => self.wakeup,
-            Lifecycle::Completed | Lifecycle::Retired | Lifecycle::Cancelled => None,
-        }
-    }
-
-    /// Takes the wakeup when it is due at `now`.
-    pub(crate) fn take_due(&mut self, now: u64) -> bool {
-        match self.next_deadline() {
-            Some(deadline) if deadline <= now => {
-                self.wakeup = None;
-                true
-            }
-            _ => false,
-        }
-    }
-
-    /// Runs one export call with the host capabilities open and settles it:
-    /// returns whether the call itself succeeded, and the step the run
-    /// applies. A trap, an error, or an invalid emit retires the instance.
-    fn call(
-        &mut self,
-        clock: ServiceClock,
-        carrier: Option<WitTraceContext>,
-        body: impl FnOnce(
-            &service_bindings::InvokedService,
-            &mut wasmtime::Store<ServiceStoreData>,
-        ) -> wasmtime::Result<Result<(), ComponentError>>,
-    ) -> (bool, ServiceStep) {
-        if self.lifecycle != Lifecycle::Live {
-            return (
-                false,
-                ServiceStep {
-                    events: Vec::new(),
-                    outcome: ServiceOutcome::Running,
-                },
-            );
-        }
-        self.store.data_mut().call = Some(ServiceCall {
-            emitted: Vec::new(),
-            emitted_bytes: 0,
-            completion: None,
-            wakeup: None,
-            invalid_emit: false,
-            carrier,
-            clock,
-        });
-        let result = self
-            .store
-            .set_fuel(self.call_fuel)
-            .and_then(|()| body(&self.guest, &mut self.store));
-        let Some(call) = self.store.data_mut().call.take() else {
-            // Unreachable by construction (only this function sets and takes
-            // the call); fail closed.
-            self.leave(Lifecycle::Retired);
-            return (
-                false,
-                ServiceStep {
-                    events: Vec::new(),
-                    outcome: ServiceOutcome::Failed,
-                },
-            );
-        };
-        let succeeded = matches!(result, Ok(Ok(()))) && !call.invalid_emit;
-        if !succeeded {
-            self.leave(Lifecycle::Retired);
-            return (
-                false,
-                ServiceStep {
-                    events: call.emitted,
-                    outcome: ServiceOutcome::Failed,
-                },
-            );
-        }
-        match call.wakeup {
-            Some(Wakeup::At(at)) => self.wakeup = Some(at),
-            Some(Wakeup::Clear) => self.wakeup = None,
-            None => {}
-        }
-        let outcome = match call.completion {
-            Some(Completion(data)) => {
-                self.leave(Lifecycle::Completed);
-                ServiceOutcome::Completed(data)
-            }
-            None => ServiceOutcome::Running,
-        };
-        (
-            true,
-            ServiceStep {
-                events: call.emitted,
-                outcome,
-            },
-        )
+    /// The earliest deadline of a timer not yet fired.
+    fn next_deadline(&self) -> Option<u64> {
+        self.timers
+            .values()
+            .filter(|timer| !timer.fired)
+            .map(|timer| timer.deadline)
+            .min()
     }
 }
 
-/// One invocation's slot references and the values they stand for.
-type BoundReferences = (Vec<SlotReference>, Vec<(u32, String)>);
+type SharedIo = Arc<Mutex<Io>>;
 
-/// The slot references of one invocation: for each `env` binding (sorted by
-/// slot) whose slot `env_slots` declares, a fresh reference when `values`
-/// holds the variable for `type_uri` (numbered from 1 per invocation, so none
-/// crosses instances); a variable with no value, or one not granted to
-/// `type_uri`, leaves its slot absent.
-///
-/// # Errors
-///
-/// `invalid-input` for more than [`crate::MAX_DECLARED_ITEMS`] bindings, a
-/// slot the package does not declare or bound twice, or a name that is not a
-/// variable name.
-fn bind_references(
-    env: &[EnvBinding],
-    type_uri: &str,
-    env_slots: &[String],
-    values: &crate::ExtensionEnvironment,
-) -> Result<BoundReferences, ComponentError> {
-    let invalid = |detail| Err(component_error(ErrorCode::InvalidInput, detail));
-    if env.len() > crate::MAX_DECLARED_ITEMS {
-        return invalid("the invocation binds more env slots than a package declares");
-    }
-    let mut slots = Vec::new();
-    let mut references = Vec::new();
-    for (index, binding) in env.iter().enumerate() {
-        if !env_slots.contains(&binding.slot) {
-            return invalid("an env slot is not declared by the service's package");
-        }
-        if env
-            .get(..index)
-            .is_some_and(|before| before.iter().any(|seen| seen.slot == binding.slot))
-        {
-            return invalid("the invocation binds one env slot twice");
-        }
-        if !crate::extension::is_env_name(&binding.name) {
-            return invalid("an env slot names no valid variable");
-        }
-        let Some(value) = values.held(type_uri, &binding.name) else {
-            continue;
-        };
-        let reference = u32::try_from(references.len().saturating_add(1))
-            .map_err(|_| component_error(ErrorCode::InvalidInput, "too many env slots"))?;
-        references.push((reference, value.to_owned()));
-        slots.push(SlotReference {
-            slot: binding.slot.clone(),
-            reference,
-        });
-    }
-    Ok((slots, references))
+fn lock(io: &SharedIo) -> std::sync::MutexGuard<'_, Io> {
+    io.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// The bytes one validated event counts toward
-/// [`MAX_SERVICE_EMITTED_BYTES_PER_CALL`]: the same fields
+/// [`MAX_RETURNED_BYTES_PER_INPUT`]: the same fields
 /// [`scxml_types::Event::validate`] bounds (fixed-width data as its width).
 fn event_bytes(event: &scxml_types::Event) -> usize {
     use scxml_types::DataValue;
@@ -1028,239 +527,284 @@ fn event_bytes(event: &scxml_types::Event) -> usize {
     .fold(0, usize::saturating_add)
 }
 
-/// Admits one more emitted event of `bytes` after `count` events of
-/// `emitted_bytes` in the same export call, returning the new cumulative
-/// bytes.
-///
-/// # Errors
-///
-/// `capacity-exhausted` when the event would exceed
-/// [`MAX_SERVICE_EMITS_PER_CALL`] or [`MAX_SERVICE_EMITTED_BYTES_PER_CALL`];
-/// the caller makes the emit invalid, which retires the instance.
-fn admit_emit(count: usize, emitted_bytes: usize, bytes: usize) -> Result<usize, ComponentError> {
-    let total = emitted_bytes.saturating_add(bytes);
-    if count >= MAX_SERVICE_EMITS_PER_CALL || total > MAX_SERVICE_EMITTED_BYTES_PER_CALL {
-        return Err(component_error(
-            ErrorCode::CapacityExhausted,
-            "the export call exceeds the per-call bound on emitted events",
-        ));
-    }
-    Ok(total)
-}
+/// The `events` stream the service reads: what the invoking session sent.
+struct Inbox(SharedIo);
 
-fn unavailable(detail: &'static str) -> ComponentError {
-    component_error(ErrorCode::Unavailable, detail)
-}
+impl<D> StreamProducer<D> for Inbox {
+    type Item = WitEvent;
+    type Buffer = VecBuffer<WitEvent>;
 
-impl ServiceStoreData {
-    /// Admits one deferred request and hands it to the transport; the
-    /// error carries the span's closed category.
-    fn begin_admitted(
-        &mut self,
-        request: outbound_http::HttpRequest,
-    ) -> Result<u64, (ComponentError, scxml_telemetry::ErrorCategory)> {
-        if self.tickets.len() >= MAX_SERVICE_PENDING_REQUESTS {
-            return Err((
-                component_error(
-                    ErrorCode::CapacityExhausted,
-                    "the instance holds as many deferred requests as it may",
-                ),
-                scxml_telemetry::ErrorCategory::Budget,
-            ));
+    fn poll_produce<'a>(
+        self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        _store: StoreContextMut<'a, D>,
+        mut destination: Destination<'a, WitEvent, VecBuffer<WitEvent>>,
+        finish: bool,
+    ) -> Poll<wasmtime::Result<StreamResult>> {
+        let mut io = lock(&self.0);
+        if !io.events.is_empty() {
+            let events: Vec<WitEvent> = io.events.drain(..).collect();
+            destination.set_buffer(events.into());
+            return Poll::Ready(Ok(StreamResult::Completed));
         }
-        let request = crate::extension::admit_request(
-            request,
-            &self.references,
-            &self.allow,
-            self.deferred.is_some(),
-            |_| {},
-        )?;
-        let Some((transport, responses)) = &self.deferred else {
-            return Err(crate::extension::no_transport());
-        };
-        let ticket = self.last_ticket.checked_add(1).ok_or((
-            component_error(
-                ErrorCode::CapacityExhausted,
-                "the instance ran out of tickets",
-            ),
-            scxml_telemetry::ErrorCategory::Budget,
-        ))?;
-        // A ticket is never issued twice, even when the transport refuses
-        // it: the refused request's outcome settles (as a transport failure)
-        // under that ticket, and must match nothing this instance holds.
-        self.last_ticket = ticket;
-        let (outcome, cancel) = responses.outcome(self.instance, ticket);
-        transport.begin(request, outcome).map_err(|_| {
-            (
-                component_error(ErrorCode::Unavailable, "the transport refused the request"),
-                scxml_telemetry::ErrorCategory::Platform,
-            )
-        })?;
-        self.tickets.insert(ticket, None);
-        self.in_flight.insert(ticket, cancel);
-        Ok(ticket)
-    }
-
-    /// Cancels every deferred request still in flight (the instance
-    /// abandons them).
-    fn cancel_in_flight(&mut self) {
-        for cancel in std::mem::take(&mut self.in_flight).into_values() {
-            cancel.cancel();
+        if finish {
+            return Poll::Ready(Ok(StreamResult::Cancelled));
         }
-    }
-
-    /// The open export call, unless the service already completed in it.
-    fn open_call(&mut self) -> Result<&mut ServiceCall, ComponentError> {
-        match self.call.as_mut() {
-            Some(call) if call.completion.is_none() => Ok(call),
-            Some(_) => Err(unavailable("the invoked service already completed")),
-            None => Err(unavailable(
-                "invoked-service host calls are available only during an export call",
-            )),
-        }
+        io.events_waker = Some(cx.waker().clone());
+        Poll::Pending
     }
 }
 
-impl invoked_service_host::Host for ServiceStoreData {
-    fn emit(&mut self, event: WitEvent) -> Result<(), ComponentError> {
-        let type_uri = self.type_uri.clone();
-        let contract = self.contract.clone();
-        let call = self.open_call()?;
-        let event = WitEvent {
-            name: event.name,
-            event_type: WitEventType::External,
-            send_id: event.send_id,
-            origin: event.origin,
-            origin_type: Some(type_uri),
-            // The invoking session stamps the invoke id on delivery.
-            invoke_id: None,
-            data: event.data,
-            raw: event.raw,
-            trace_context: event.trace_context.or_else(|| call.carrier.clone()),
-        };
-        match native_event(event.clone()) {
-            Ok(native) => {
-                // A declared contract is closed: the event must be one the
-                // package declares, with data its schema admits.
-                if let Some(contract) = contract
-                    && !contract.admits_emit(native.name.as_str(), &native.data)
-                {
-                    call.invalid_emit = true;
-                    return Err(component_error(
-                        ErrorCode::InvalidInput,
-                        "the event is not one the service's package declares with data its schema admits",
-                    ));
-                }
-                match admit_emit(call.emitted.len(), call.emitted_bytes, event_bytes(&native)) {
-                    Ok(total) => call.emitted_bytes = total,
-                    Err(error) => {
-                        call.invalid_emit = true;
-                        return Err(error);
-                    }
-                }
-                call.emitted.push(event);
-                Ok(())
+/// The stream of the events the service returns.
+struct Outbox(SharedIo);
+
+impl<D> StreamConsumer<D> for Outbox {
+    type Item = WitEvent;
+
+    fn poll_consume(
+        self: Pin<&mut Self>,
+        _cx: &mut TaskContext<'_>,
+        mut store: StoreContextMut<D>,
+        mut source: Source<'_, WitEvent>,
+        _finish: bool,
+    ) -> Poll<wasmtime::Result<StreamResult>> {
+        let remaining = source.remaining(&mut store);
+        let mut events: Vec<WitEvent> =
+            Vec::with_capacity(remaining.clamp(1, MAX_RETURNED_EVENTS_PER_INPUT));
+        source.read(&mut store, &mut events)?;
+        let mut io = lock(&self.0);
+        for event in events {
+            io.accept(event);
+        }
+        if io.invalid {
+            return Poll::Ready(Ok(StreamResult::Dropped));
+        }
+        Poll::Ready(Ok(StreamResult::Completed))
+    }
+}
+
+/// The future that resolves when the service is done.
+struct Completion(SharedIo);
+
+impl<D> FutureConsumer<D> for Completion {
+    type Item = Result<Option<WitDataValue>, ComponentError>;
+
+    fn poll_consume(
+        self: Pin<&mut Self>,
+        _cx: &mut TaskContext<'_>,
+        mut store: StoreContextMut<D>,
+        mut source: Source<'_, Self::Item>,
+        _finish: bool,
+    ) -> Poll<wasmtime::Result<()>> {
+        let mut value: Option<Self::Item> = None;
+        source.read(&mut store, &mut value)?;
+        let mut io = lock(&self.0);
+        if let Some(value) = value {
+            let value = match value {
+                Ok(Some(data)) if native_value(data.clone()).is_err() => Err(component_error(
+                    ErrorCode::InvalidInput,
+                    "the service's done data is outside the event data bounds",
+                )),
+                value => value,
+            };
+            io.done = Some(value);
+        }
+        Io::wake(&mut io.pump_waker);
+        Poll::Ready(Ok(()))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Store data and host functions.
+// ---------------------------------------------------------------------------
+
+/// Store data of one invocation.
+pub(crate) struct ServiceStoreData {
+    limits: crate::memory_growth::MeteredLimits,
+    providers: TelemetryProviders,
+    execution_context: Context,
+    guest_spans: crate::guest_spans::GuestSpanTable,
+    io: SharedIo,
+    allow: crate::HttpAllowlist,
+    /// This invocation's references and the values they stand for.
+    references: Vec<(u32, String)>,
+    /// Whether the run offers outbound HTTP to services.
+    http_offered: bool,
+    /// The invocation's WASI context (reachable only through the interfaces
+    /// its plan linked).
+    wasi: crate::wasi::WasiState,
+    _store_lease: LifecycleLease,
+}
+
+impl wasmtime_wasi::WasiView for ServiceStoreData {
+    fn ctx(&mut self) -> wasmtime_wasi::WasiCtxView<'_> {
+        self.wasi.view()
+    }
+}
+
+/// The `wasi:clocks/monotonic-clock@0.3.0` the service world imports, on
+/// the session's logical clock.
+struct LogicalClock;
+
+impl HasData for LogicalClock {
+    type Data<'a> = &'a mut ServiceStoreData;
+}
+
+impl clock_types::Host for ServiceStoreData {}
+
+impl monotonic_clock::Host for ServiceStoreData {
+    fn now(&mut self) -> wasmtime::Result<monotonic_clock::Mark> {
+        Ok(lock(&self.io).now_ms.saturating_mul(NANOS_PER_MS))
+    }
+
+    fn get_resolution(&mut self) -> wasmtime::Result<clock_types::Duration> {
+        Ok(NANOS_PER_MS)
+    }
+}
+
+/// Waits until the logical clock reaches `deadline` ms: at once when it
+/// already has, else when the session's clock reaches it.
+async fn logical_wait(io: SharedIo, deadline: u64) {
+    let id = {
+        let mut state = lock(&io);
+        if deadline <= state.now_ms {
+            return;
+        }
+        let id = state.next_timer;
+        state.next_timer = id.saturating_add(1);
+        state.timers.insert(
+            id,
+            Timer {
+                deadline,
+                fired: false,
+                waker: None,
+            },
+        );
+        id
+    };
+    std::future::poll_fn(|cx| {
+        let mut state = lock(&io);
+        match state.timers.get_mut(&id) {
+            Some(timer) if timer.fired => {
+                state.timers.remove(&id);
+                Poll::Ready(())
             }
-            Err(error) => {
-                call.invalid_emit = true;
-                Err(error)
+            Some(timer) => {
+                timer.waker = Some(cx.waker().clone());
+                Poll::Pending
             }
+            None => Poll::Ready(()),
         }
-    }
+    })
+    .await;
+}
 
-    fn complete(&mut self, data: Option<WitDataValue>) -> Result<(), ComponentError> {
-        let call = self.open_call()?;
-        if let Some(value) = &data {
-            native_value(value.clone())?;
-        }
-        call.completion = Some(Completion(data));
+impl<U> monotonic_clock::HostWithStore<U> for LogicalClock {
+    async fn wait_until(
+        accessor: &Accessor<U, Self>,
+        when: monotonic_clock::Mark,
+    ) -> wasmtime::Result<()> {
+        let io = accessor.with(|mut access| Arc::clone(&access.get().io));
+        logical_wait(io, when.div_ceil(NANOS_PER_MS)).await;
         Ok(())
     }
 
-    fn set_wakeup(&mut self, delay_ms: u64) -> Result<(), ComponentError> {
-        let call = self.open_call()?;
-        call.wakeup = Some(if delay_ms == 0 {
-            Wakeup::Clear
-        } else {
-            Wakeup::At(call.clock.now.saturating_add(delay_ms))
-        });
+    async fn wait_for(
+        accessor: &Accessor<U, Self>,
+        how_long: clock_types::Duration,
+    ) -> wasmtime::Result<()> {
+        let io = accessor.with(|mut access| Arc::clone(&access.get().io));
+        let deadline = {
+            let now = lock(&io).now_ms.saturating_mul(NANOS_PER_MS);
+            now.saturating_add(how_long).div_ceil(NANOS_PER_MS)
+        };
+        logical_wait(io, deadline).await;
         Ok(())
-    }
-
-    fn now_ms(&mut self) -> u64 {
-        if let Some(call) = &self.call {
-            self.last_now_ms = call.clock.start_epoch_ms.saturating_add(call.clock.now);
-        }
-        self.last_now_ms
-    }
-}
-
-impl outbound_http::Host for ServiceStoreData {
-    fn fetch(
-        &mut self,
-        request: outbound_http::HttpRequest,
-    ) -> Result<outbound_http::HttpResponse, ComponentError> {
-        if self.call.is_none() {
-            return Err(unavailable(
-                "outbound HTTP is available only during an export call",
-            ));
-        }
-        let span = scxml_telemetry::observe(
-            Module::HostWasmtime,
-            Operation::HostWasmtimeServiceHttpFetch,
-        );
-        match crate::extension::fetch_admitted(
-            request,
-            &self.references,
-            &self.allow,
-            self.http.as_deref(),
-            |_| {},
-        ) {
-            Ok(response) => {
-                span.event(SignalEvent::TransformationCompleted);
-                Ok(response)
-            }
-            Err((error, category)) => {
-                span.event(SignalEvent::InputRejected);
-                span.fail(category);
-                Err(error)
-            }
-        }
-    }
-
-    fn begin(&mut self, request: outbound_http::HttpRequest) -> Result<u64, ComponentError> {
-        if self.call.is_none() {
-            return Err(unavailable(
-                "outbound HTTP is available only during an export call",
-            ));
-        }
-        let span = scxml_telemetry::observe(
-            Module::HostWasmtime,
-            Operation::HostWasmtimeServiceHttpBegin,
-        );
-        match self.begin_admitted(request) {
-            Ok(ticket) => {
-                span.event(SignalEvent::TransformationCompleted);
-                Ok(ticket)
-            }
-            Err((error, category)) => {
-                span.event(SignalEvent::InputRejected);
-                span.fail(category);
-                Err(error)
-            }
-        }
-    }
-
-    fn take(&mut self, ticket: u64) -> Option<Result<outbound_http::HttpResponse, ComponentError>> {
-        self.call.as_ref()?;
-        match self.tickets.get(&ticket) {
-            Some(Some(_)) => self.tickets.remove(&ticket).flatten(),
-            Some(None) | None => None,
-        }
     }
 }
 
 impl crate::bindings::stateforward::scxml::types::Host for ServiceStoreData {}
+
+impl outbound_http::Host for ServiceStoreData {}
+
+impl<U> outbound_http::HostWithStore<U> for HasSelf<ServiceStoreData> {
+    async fn fetch(
+        accessor: &Accessor<U, Self>,
+        request: outbound_http::HttpRequest,
+    ) -> Result<outbound_http::HttpResponse, ComponentError> {
+        // The span covers admission; the transport's own span covers the
+        // request (`service-http-request`), and the response arrives as an
+        // input of the invocation.
+        let admitted = {
+            let span = scxml_telemetry::observe(
+                Module::HostWasmtime,
+                Operation::HostWasmtimeServiceHttpFetch,
+            );
+            let admitted = accessor.with(|mut access| {
+                let data = access.get();
+                crate::extension::admit_request(
+                    request,
+                    &data.references,
+                    &data.allow,
+                    data.http_offered,
+                    |_| {},
+                )
+                .map(|admitted| (admitted, Arc::clone(&data.io)))
+            });
+            let admitted = match admitted {
+                Ok((admitted, io)) => {
+                    let mut state = lock(&io);
+                    if state.pending.len() >= MAX_REQUESTS_IN_FLIGHT {
+                        Err((
+                            component_error(
+                                ErrorCode::CapacityExhausted,
+                                "the invocation has as many requests in flight as it may",
+                            ),
+                            ErrorCategory::Budget,
+                        ))
+                    } else {
+                        let id = state.next_request;
+                        state.next_request = id.saturating_add(1);
+                        state.requests.push((id, admitted));
+                        state.pending.insert(id, Pending::default());
+                        drop(state);
+                        Ok((id, io))
+                    }
+                }
+                Err(rejected) => Err(rejected),
+            };
+            match admitted {
+                Ok(admitted) => {
+                    span.event(SignalEvent::TransformationCompleted);
+                    admitted
+                }
+                Err((error, category)) => {
+                    span.event(SignalEvent::InputRejected);
+                    span.fail(category);
+                    return Err(error);
+                }
+            }
+        };
+        let (id, io) = admitted;
+        std::future::poll_fn(|cx| {
+            let mut state = lock(&io);
+            let Some(pending) = state.pending.get_mut(&id) else {
+                return Poll::Ready(Err(component_error(
+                    ErrorCode::Unavailable,
+                    "the HTTP transport failed",
+                )));
+            };
+            if let Some(outcome) = pending.outcome.take() {
+                state.pending.remove(&id);
+                Poll::Ready(outcome)
+            } else {
+                pending.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        })
+        .await
+    }
+}
 
 impl telemetry::Host for ServiceStoreData {
     fn start(
@@ -1332,45 +876,861 @@ impl telemetry::Host for ServiceStoreData {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{
-        ErrorCode, MAX_SERVICE_EMITS_PER_CALL, MAX_SERVICE_EMITTED_BYTES_PER_CALL, admit_emit,
-        event_bytes,
-    };
+// ---------------------------------------------------------------------------
+// The invocation's thread.
+// ---------------------------------------------------------------------------
 
-    #[test]
-    fn emits_are_bounded_per_call_by_count_and_cumulative_bytes() {
-        assert_eq!(admit_emit(0, 0, 10).map_err(|error| error.code), Ok(10));
-        assert_eq!(
-            admit_emit(MAX_SERVICE_EMITS_PER_CALL - 1, 0, 1).map_err(|error| error.code),
-            Ok(1),
-            "the last admitted emit"
-        );
-        assert_eq!(
-            admit_emit(MAX_SERVICE_EMITS_PER_CALL, 0, 1).map_err(|error| error.code),
-            Err(ErrorCode::CapacityExhausted),
-            "one emit past the count bound"
-        );
-        assert_eq!(
-            admit_emit(1, MAX_SERVICE_EMITTED_BYTES_PER_CALL - 5, 5).map_err(|error| error.code),
-            Ok(MAX_SERVICE_EMITTED_BYTES_PER_CALL),
-            "exactly at the byte bound"
-        );
-        assert_eq!(
-            admit_emit(1, MAX_SERVICE_EMITTED_BYTES_PER_CALL - 5, 6).map_err(|error| error.code),
-            Err(ErrorCode::CapacityExhausted),
-            "one byte past the byte bound"
-        );
-        assert_eq!(
-            admit_emit(1, usize::MAX, 1).map_err(|error| error.code),
-            Err(ErrorCode::CapacityExhausted),
-            "the sum saturates instead of wrapping"
-        );
+/// One input the session hands an invocation.
+enum Input {
+    /// An event sent to `#_<invokeid>` or autoforwarded.
+    Event(Box<WitEvent>),
+    /// The logical clock moved; every timer due by then fires.
+    Timers,
+    /// The response (or transport failure) of the request `id`.
+    Response(u64, Result<outbound_http::HttpResponse, ComponentError>),
+}
+
+/// One input with the session's logical time it is applied at.
+struct Delivery {
+    now_ms: u64,
+    input: Input,
+}
+
+/// What the invocation reports after the start and after each input, once
+/// its event loop has nothing left to run (or it ended).
+pub(crate) struct Report {
+    /// The events it returned, validated and stamped, in order.
+    pub(crate) events: Vec<WitEvent>,
+    /// The requests it made, admitted, in order.
+    pub(crate) requests: Vec<(u64, ExtensionHttpRequest)>,
+    /// Its earliest timer, in logical ms.
+    pub(crate) next_deadline: Option<u64>,
+    /// How it stands.
+    pub(crate) state: ReportState,
+}
+
+/// How an invocation stands after an input.
+#[derive(Debug)]
+pub(crate) enum ReportState {
+    /// It runs on, waiting for the session.
+    Running,
+    /// Its future resolved `ok` with this data (`done.invoke`).
+    Done(Option<WitDataValue>),
+    /// Its future resolved `err`, it trapped, or it returned an invalid
+    /// event, after it started (`communication-error`).
+    Failed,
+    /// Its `invoke` returned an error, trapped, or could not be
+    /// instantiated before returning (`error.execution`).
+    Rejected,
+}
+
+/// A waker that unparks the invocation's thread and notes that it fired.
+struct ThreadWaker {
+    thread: std::thread::Thread,
+    woken: AtomicBool,
+}
+
+impl Wake for ThreadWaker {
+    fn wake(self: Arc<Self>) {
+        self.wake_by_ref();
     }
 
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.woken.store(true, Ordering::SeqCst);
+        self.thread.unpark();
+    }
+}
+
+/// Polls `future` on this thread until it is ready, parking while it is
+/// pending: the executor of calls that complete within the call, such as an
+/// extension component's `execute`.
+pub(crate) fn block_on<F: std::future::Future>(future: F) -> F::Output {
+    let waker = Arc::new(ThreadWaker {
+        thread: std::thread::current(),
+        woken: AtomicBool::new(false),
+    });
+    let task_waker = Waker::from(Arc::clone(&waker));
+    let mut cx = TaskContext::from_waker(&task_waker);
+    let mut future = std::pin::pin!(future);
+    loop {
+        waker.woken.store(false, Ordering::SeqCst);
+        if let Poll::Ready(value) = future.as_mut().poll(&mut cx) {
+            return value;
+        }
+        if !waker.woken.load(Ordering::SeqCst) {
+            std::thread::park();
+        }
+    }
+}
+
+/// Everything the invocation's thread owns.
+struct Invocation {
+    store: wasmtime::Store<ServiceStoreData>,
+    pre: service_bindings::InvokedServicePre<ServiceStoreData>,
+    request: InvokeRequest,
+    io: SharedIo,
+    call_fuel: u64,
+}
+
+/// The body of one invocation's thread: instantiate, call `invoke`, then
+/// apply each delivery and report once the event loop has nothing left to
+/// run, until the service is done or the session cancels it (drops its
+/// sender).
+#[allow(
+    clippy::too_many_lines,
+    reason = "one sequence: instantiate, invoke, pump, then the delivery loop"
+)]
+fn run_invocation(
+    invocation: Invocation,
+    deliveries: &mpsc::Receiver<Delivery>,
+    reports: &mpsc::Sender<Report>,
+) {
+    let Invocation {
+        mut store,
+        pre,
+        request,
+        io,
+        call_fuel,
+    } = invocation;
+    let rejected = |reports: &mpsc::Sender<Report>| {
+        let _ = reports.send(Report {
+            events: Vec::new(),
+            requests: Vec::new(),
+            next_deadline: None,
+            state: ReportState::Rejected,
+        });
+    };
+    if store.set_fuel(call_fuel).is_err() {
+        rejected(reports);
+        return;
+    }
+    let Ok(guest) = block_on(pre.instantiate_async(&mut store)) else {
+        rejected(reports);
+        return;
+    };
+    let pump_io = Arc::clone(&io);
+    let future = store.run_concurrent(async move |accessor| -> wasmtime::Result<bool> {
+        let events = accessor
+            .with(|mut access| StreamReader::new(&mut access, Inbox(Arc::clone(&pump_io))))?;
+        let invoked = guest
+            .stateforward_scxml_invoked_service_api()
+            .call_invoke(accessor, request, events)
+            .await?;
+        let Ok((returned, completion)) = invoked else {
+            return Ok(false);
+        };
+        accessor.with(|mut access| -> wasmtime::Result<()> {
+            returned.pipe(&mut access, Outbox(Arc::clone(&pump_io)))?;
+            completion.pipe(&mut access, Completion(Arc::clone(&pump_io)))
+        })?;
+        lock(&pump_io).started = true;
+        // Pump: refuel at every input, until the future resolves or a
+        // returned event breaks its bounds.
+        loop {
+            let refuel = std::future::poll_fn(|cx| {
+                let mut state = lock(&pump_io);
+                if state.done.is_some() || state.invalid {
+                    return Poll::Ready(false);
+                }
+                if std::mem::take(&mut state.refuel) {
+                    return Poll::Ready(true);
+                }
+                state.pump_waker = Some(cx.waker().clone());
+                Poll::Pending
+            })
+            .await;
+            if !refuel {
+                return Ok(true);
+            }
+            accessor.with(|mut access| {
+                use wasmtime::AsContextMut as _;
+                access.data_mut().limits.restart();
+                access.as_context_mut().set_fuel(call_fuel)
+            })?;
+        }
+    });
+    let waker = Arc::new(ThreadWaker {
+        thread: std::thread::current(),
+        woken: AtomicBool::new(false),
+    });
+    let task_waker = Waker::from(Arc::clone(&waker));
+    let mut cx = TaskContext::from_waker(&task_waker);
+    let mut future = std::pin::pin!(future);
+    loop {
+        waker.woken.store(false, Ordering::SeqCst);
+        let polled = future.as_mut().poll(&mut cx);
+        if polled.is_pending() && waker.woken.load(Ordering::SeqCst) {
+            // Woken while it ran: more is ready to run.
+            continue;
+        }
+        let mut state = lock(&io);
+        let events = std::mem::take(&mut state.returned);
+        state.returned_bytes = 0;
+        let requests = std::mem::take(&mut state.requests);
+        let next_deadline = state.next_deadline();
+        let report_state = match polled {
+            Poll::Ready(Ok(Ok(true))) => match (state.invalid, state.done.take()) {
+                (false, Some(Ok(data))) => ReportState::Done(data),
+                _ => ReportState::Failed,
+            },
+            Poll::Ready(Ok(Err(_)) | Err(_)) if state.started => ReportState::Failed,
+            Poll::Ready(Ok(Ok(false) | Err(_)) | Err(_)) => ReportState::Rejected,
+            Poll::Pending if state.invalid => ReportState::Failed,
+            Poll::Pending => ReportState::Running,
+        };
+        drop(state);
+        let finished = !matches!(report_state, ReportState::Running);
+        if reports
+            .send(Report {
+                events,
+                requests,
+                next_deadline,
+                state: report_state,
+            })
+            .is_err()
+            || finished
+        {
+            // The session is gone or the invocation ended: drop the
+            // future (cancelling every subtask) and the store.
+            return;
+        }
+        // Idle: wait for the next input. A closed channel is the session's
+        // cancel (SCXML 6.4).
+        let Ok(delivery) = deliveries.recv() else {
+            return;
+        };
+        let mut state = lock(&io);
+        state.now_ms = delivery.now_ms;
+        state.refuel = true;
+        match delivery.input {
+            Input::Event(event) => {
+                state.events.push_back(*event);
+                Io::wake(&mut state.events_waker);
+            }
+            Input::Timers => {
+                let now = state.now_ms;
+                for timer in state.timers.values_mut() {
+                    if !timer.fired && timer.deadline <= now {
+                        timer.fired = true;
+                        Io::wake(&mut timer.waker);
+                    }
+                }
+            }
+            Input::Response(id, outcome) => {
+                if let Some(pending) = state.pending.get_mut(&id) {
+                    pending.outcome = Some(outcome);
+                    Io::wake(&mut pending.waker);
+                }
+            }
+        }
+        Io::wake(&mut state.pump_waker);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The session's side of one invocation.
+// ---------------------------------------------------------------------------
+
+/// The cancellation of one request in flight: the host cancels it with its
+/// invocation (SCXML 6.4); the transport registers how to stop the request
+/// (close its connection) as soon as it holds one. Every registered action
+/// runs once, and one registered after the cancel runs at once.
+#[derive(Default)]
+pub(crate) struct CancelSignal {
+    state: Mutex<CancelState>,
+}
+
+#[derive(Default)]
+struct CancelState {
+    cancelled: bool,
+    actions: Vec<Box<dyn FnOnce() + Send>>,
+}
+
+impl CancelSignal {
+    /// Cancels the request: runs every registered action once.
+    pub(crate) fn cancel(&self) {
+        let actions = {
+            let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+            state.cancelled = true;
+            std::mem::take(&mut state.actions)
+        };
+        for action in actions {
+            action();
+        }
+    }
+
+    /// Whether the request was cancelled.
+    #[cfg(any(feature = "http", test))]
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .cancelled
+    }
+
+    /// Registers `action` to stop the request; it runs at once when the
+    /// request was already cancelled.
+    #[cfg(any(feature = "http", test))]
+    pub(crate) fn on_cancel(&self, action: impl FnOnce() + Send + 'static) {
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        if state.cancelled {
+            drop(state);
+            action();
+        } else {
+            state.actions.push(Box::new(action));
+        }
+    }
+}
+
+std::thread_local! {
+    /// The cancellation of the request the current transport thread
+    /// performs, which [`crate::ExtensionHttpClient`] wires to its
+    /// connection.
+    static REQUEST_CANCEL: std::cell::RefCell<Option<Arc<CancelSignal>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// The cancellation of the request this transport thread performs, if any.
+#[cfg(feature = "http")]
+pub(crate) fn request_cancel() -> Option<Arc<CancelSignal>> {
+    REQUEST_CANCEL.with_borrow(Option::clone)
+}
+
+/// One settled request of a live run, waiting for delivery on the session
+/// thread.
+pub(crate) struct Settled {
+    /// The run-unique id of the invocation that made it.
+    pub(crate) invocation: u64,
+    /// Its id within that invocation.
+    pub(crate) request: u64,
+    /// What the transport answered.
+    pub(crate) outcome: Result<ExtensionHttpResponse, ExtensionHttpFailure>,
+}
+
+/// The settled requests of one live run, shared by the session thread and
+/// every transport thread.
+pub(crate) struct HttpResponses {
+    settled: Mutex<VecDeque<Settled>>,
+    notify: Option<Arc<dyn Fn() + Send + Sync>>,
+}
+
+impl HttpResponses {
+    /// An empty queue that calls `notify` (from the settling thread) each
+    /// time a request settles.
+    pub(crate) fn new(notify: Option<Arc<dyn Fn() + Send + Sync>>) -> Arc<Self> {
+        Arc::new(Self {
+            settled: Mutex::new(VecDeque::new()),
+            notify,
+        })
+    }
+
+    /// Takes every settled request, in settling order.
+    pub(crate) fn take(&self) -> Vec<Settled> {
+        self.settled
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .drain(..)
+            .collect()
+    }
+
+    /// Whether a settled request waits for delivery.
+    pub(crate) fn has_settled(&self) -> bool {
+        !self
+            .settled
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_empty()
+    }
+
+    fn push(&self, settled: Settled) {
+        self.settled
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push_back(settled);
+        if let Some(notify) = &self.notify {
+            notify();
+        }
+    }
+}
+
+/// How a run carries out the requests its invocations make.
+#[derive(Clone)]
+pub(crate) enum RequestMode {
+    /// A batch run: each request is performed at once, on the session
+    /// thread, and its response delivered before anything else runs.
+    Immediate(Arc<dyn ExtensionHttp>),
+    /// A live session: each request is performed on a transport thread of
+    /// its own, and its response joins `responses` for delivery
+    /// (`LiveSession::deliver_http_responses`).
+    Threaded {
+        transport: Arc<dyn ExtensionHttp>,
+        responses: Arc<HttpResponses>,
+    },
+    /// A replaying live session: the responses come from the record.
+    Recorded,
+    /// No outbound HTTP: services' requests are refused before they leave
+    /// the invocation.
+    None,
+}
+
+/// What one input left of an invocation, for the run to apply in order: the
+/// events it returned, then how it stands.
+pub(crate) struct ServiceStep {
+    /// Validated, stamped events for the invoking session, in order.
+    pub(crate) events: Vec<WitEvent>,
+    /// How the input left the invocation.
+    pub(crate) state: ReportState,
+}
+
+/// One invocation, as the session holds it.
+pub(crate) struct ServiceHandle {
+    deliveries: Option<mpsc::Sender<Delivery>>,
+    reports: mpsc::Receiver<Report>,
+    /// The invocation's earliest timer, in logical ms.
+    next_deadline: Option<u64>,
+    /// Whether it ended (done, failed, or rejected).
+    ended: bool,
+    /// Its requests performed on transport threads, by id, with their
+    /// cancellation.
+    in_flight: BTreeMap<u64, Arc<CancelSignal>>,
+    /// Its requests waiting for a recorded response (replay), by id.
+    awaiting_record: std::collections::BTreeSet<u64>,
+    /// Its run-unique id, the key its settled requests carry.
+    invocation: u64,
+}
+
+impl Drop for ServiceHandle {
+    /// Dropping the handle cancels the invocation (SCXML 6.4): its thread
+    /// drops the `invoke` subtask and the store, and every request still in
+    /// flight is stopped.
+    fn drop(&mut self) {
+        self.deliveries = None;
+        for cancel in std::mem::take(&mut self.in_flight).into_values() {
+            cancel.cancel();
+        }
+    }
+}
+
+impl ServiceHandle {
+    /// Starts one invocation of the service `runtime` binds: its store, its
+    /// `invoke-request` with the references its `env` attributes bind, and
+    /// its thread, which instantiates the component and calls `invoke`.
+    /// Returns the handle and the start's report.
+    ///
+    /// # Errors
+    ///
+    /// `invalid-input` for an `env` attribute naming a slot the package
+    /// does not declare, a slot twice, or no variable; a host failure (a
+    /// granted directory that cannot be opened, a thread that cannot start)
+    /// as [`HostError`].
+    pub(crate) fn start(
+        runtime: &ServiceRuntime<'_>,
+        mut request: InvokeRequest,
+        now_ms: u64,
+        invocation: u64,
+        execution_context: &Context,
+    ) -> Result<Result<(Self, Report), ComponentError>, HostError> {
+        let (slots, references) = match bind_references(
+            &request.attributes,
+            &runtime.package.service_uri,
+            &runtime.package.env_slots,
+            runtime.values,
+        ) {
+            Ok(bound) => bound,
+            Err(rejected) => return Ok(Err(rejected)),
+        };
+        request.references = slots;
+        let wasi = runtime.wasi.context()?;
+        let store_config = &runtime.config.store;
+        let limits = wasmtime::StoreLimitsBuilder::new()
+            .memory_size(store_config.memory_bytes)
+            .table_elements(store_config.table_elements)
+            .instances(store_config.instances)
+            .tables(store_config.tables)
+            .memories(store_config.memories)
+            .trap_on_grow_failure(true)
+            .build();
+        let io: SharedIo = Arc::new(Mutex::new(Io {
+            now_ms,
+            type_uri: request.type_uri.clone(),
+            carrier: request.trace_context.clone(),
+            ..Io::default()
+        }));
+        let mut store = wasmtime::Store::new(
+            runtime.pre.engine(),
+            ServiceStoreData {
+                limits: crate::memory_growth::MeteredLimits::metered(
+                    limits,
+                    None,
+                    runtime.call_fuel,
+                ),
+                providers: runtime.providers.clone(),
+                execution_context: execution_context.clone(),
+                guest_spans: crate::guest_spans::GuestSpanTable::new(),
+                io: Arc::clone(&io),
+                // Validated when the package was bound.
+                allow: crate::HttpAllowlist::new(&runtime.package.http_origins)
+                    .map_err(|_| HostError::from(ArtifactError::NamespaceBinding))?,
+                references,
+                http_offered: runtime.http_offered,
+                wasi,
+                _store_lease: runtime.providers.acquire_store()?,
+            },
+        );
+        store.limiter(|state| &mut state.limits);
+        let invocation_state = Invocation {
+            store,
+            pre: runtime.pre.clone(),
+            request,
+            io,
+            call_fuel: runtime.call_fuel,
+        };
+        let (deliveries, delivered) = mpsc::channel();
+        let (reported, reports) = mpsc::channel();
+        let parent = Context::current();
+        std::thread::Builder::new()
+            .name("scxml-invoked-service".into())
+            .spawn(move || {
+                let _parent = parent.attach();
+                run_invocation(invocation_state, &delivered, &reported);
+            })
+            .map_err(|_| HostError::Component("invoked-service-thread-unavailable".into()))?;
+        let mut handle = Self {
+            deliveries: Some(deliveries),
+            reports,
+            next_deadline: None,
+            ended: false,
+            in_flight: BTreeMap::new(),
+            awaiting_record: std::collections::BTreeSet::new(),
+            invocation,
+        };
+        let report = handle.receive();
+        Ok(Ok((handle, report)))
+    }
+
+    /// The invocation's next report; a thread that ended without one failed.
+    fn receive(&mut self) -> Report {
+        let report = self.reports.recv().unwrap_or(Report {
+            events: Vec::new(),
+            requests: Vec::new(),
+            next_deadline: None,
+            state: ReportState::Failed,
+        });
+        self.next_deadline = report.next_deadline;
+        if !matches!(report.state, ReportState::Running) {
+            self.ended = true;
+            self.next_deadline = None;
+            self.deliveries = None;
+        }
+        report
+    }
+
+    /// Hands the invocation one input at `now_ms` and waits for its report;
+    /// an ended invocation takes nothing.
+    fn deliver(&mut self, now_ms: u64, input: Input) -> Option<Report> {
+        if self.ended {
+            return None;
+        }
+        let sender = self.deliveries.as_ref()?;
+        if sender.send(Delivery { now_ms, input }).is_err() {
+            self.ended = true;
+            return Some(Report {
+                events: Vec::new(),
+                requests: Vec::new(),
+                next_deadline: None,
+                state: ReportState::Failed,
+            });
+        }
+        Some(self.receive())
+    }
+
+    /// An event the invoking session sent to the service.
+    pub(crate) fn send(&mut self, event: WitEvent, now_ms: u64, mode: &RequestMode) -> ServiceStep {
+        let report = self.deliver(now_ms, Input::Event(Box::new(event)));
+        self.settle(report, now_ms, mode)
+    }
+
+    /// The service's due timers at `now_ms`.
+    pub(crate) fn timers(&mut self, now_ms: u64, mode: &RequestMode) -> ServiceStep {
+        let report = self.deliver(now_ms, Input::Timers);
+        self.settle(report, now_ms, mode)
+    }
+
+    /// The response of the request `request`, delivered at `now_ms`: from a
+    /// live run's transport or a replay's record. `None` when the
+    /// invocation ended or holds no such request (the response is dropped).
+    pub(crate) fn respond(
+        &mut self,
+        request: u64,
+        outcome: Result<ExtensionHttpResponse, ExtensionHttpFailure>,
+        now_ms: u64,
+        mode: &RequestMode,
+    ) -> Option<ServiceStep> {
+        let known =
+            self.in_flight.remove(&request).is_some() || self.awaiting_record.remove(&request);
+        if !known || self.ended {
+            return None;
+        }
+        let outcome = crate::extension::settle_response(outcome).map_err(|(error, _)| error);
+        let report = self.deliver(now_ms, Input::Response(request, outcome));
+        Some(self.settle(report, now_ms, mode))
+    }
+
+    /// Settles one report: the start's, or an input's. Its requests are
+    /// carried out as `mode` says (a batch run performs them now and
+    /// delivers each response before anything else runs).
+    pub(crate) fn settle(
+        &mut self,
+        report: Option<Report>,
+        now_ms: u64,
+        mode: &RequestMode,
+    ) -> ServiceStep {
+        let mut events = Vec::new();
+        let mut report = report;
+        loop {
+            let Some(current) = report.take() else {
+                return ServiceStep {
+                    events,
+                    state: ReportState::Running,
+                };
+            };
+            events.extend(current.events);
+            if !matches!(current.state, ReportState::Running) {
+                return ServiceStep {
+                    events,
+                    state: current.state,
+                };
+            }
+            if current.requests.is_empty() {
+                return ServiceStep {
+                    events,
+                    state: ReportState::Running,
+                };
+            }
+            match mode {
+                RequestMode::Immediate(transport) => {
+                    // One request at a time, its response delivered at once;
+                    // the requests still waiting go before the ones the
+                    // next report makes.
+                    let mut requests = current.requests.into_iter();
+                    let Some((id, request)) = requests.next() else {
+                        return ServiceStep {
+                            events,
+                            state: ReportState::Running,
+                        };
+                    };
+                    let span = scxml_telemetry::observe(
+                        Module::HostWasmtime,
+                        Operation::HostWasmtimeServiceHttpRequest,
+                    );
+                    let outcome = transport.fetch(&request);
+                    record_request(&span, &outcome);
+                    let outcome =
+                        crate::extension::settle_response(outcome).map_err(|(error, _)| error);
+                    report = self.deliver(now_ms, Input::Response(id, outcome));
+                    if let Some(next) = report.as_mut() {
+                        let later = std::mem::take(&mut next.requests);
+                        next.requests = requests.chain(later).collect();
+                    }
+                }
+                RequestMode::Threaded {
+                    transport,
+                    responses,
+                } => {
+                    for (id, request) in current.requests {
+                        let cancel = Arc::new(CancelSignal::default());
+                        self.in_flight.insert(id, Arc::clone(&cancel));
+                        spawn_request(
+                            Arc::clone(transport),
+                            responses,
+                            self.invocation,
+                            id,
+                            request,
+                            cancel,
+                        );
+                    }
+                    return ServiceStep {
+                        events,
+                        state: ReportState::Running,
+                    };
+                }
+                RequestMode::Recorded => {
+                    self.awaiting_record
+                        .extend(current.requests.into_iter().map(|(id, _)| id));
+                    return ServiceStep {
+                        events,
+                        state: ReportState::Running,
+                    };
+                }
+                RequestMode::None => {
+                    // Unreachable by construction (the invocation refuses
+                    // every request without a transport); fail closed.
+                    let mut failed = None;
+                    for (id, _) in current.requests {
+                        failed = self.deliver(
+                            now_ms,
+                            Input::Response(
+                                id,
+                                Err(component_error(
+                                    ErrorCode::Unavailable,
+                                    "the host offers this component no outbound HTTP",
+                                )),
+                            ),
+                        );
+                    }
+                    report = failed;
+                }
+            }
+        }
+    }
+
+    /// The invocation's earliest timer, in logical ms.
+    pub(crate) const fn next_deadline(&self) -> Option<u64> {
+        if self.ended { None } else { self.next_deadline }
+    }
+
+    /// Takes the timer deadline when it is due at `now`.
+    pub(crate) fn take_due(&mut self, now: u64) -> bool {
+        match self.next_deadline() {
+            Some(deadline) if deadline <= now => {
+                self.next_deadline = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether the invocation waits for a response of a request in flight
+    /// or a recorded one.
+    pub(crate) fn awaiting(&self) -> bool {
+        !self.ended && (!self.in_flight.is_empty() || !self.awaiting_record.is_empty())
+    }
+
+    /// The run-unique id its settled requests carry.
+    pub(crate) const fn invocation(&self) -> u64 {
+        self.invocation
+    }
+}
+
+/// Ends one transport request's span with its outcome.
+fn record_request(
+    span: &scxml_telemetry::FunctionSpan,
+    outcome: &Result<ExtensionHttpResponse, ExtensionHttpFailure>,
+) {
+    if outcome.is_ok() {
+        span.event(SignalEvent::TransformationCompleted);
+    } else {
+        span.event(SignalEvent::InputRejected);
+        span.fail(ErrorCategory::Platform);
+    }
+}
+
+/// Performs one admitted request on a transport thread of its own and
+/// queues its outcome for delivery; `cancel` closes its connection.
+fn spawn_request(
+    transport: Arc<dyn ExtensionHttp>,
+    responses: &Arc<HttpResponses>,
+    invocation: u64,
+    request_id: u64,
+    request: ExtensionHttpRequest,
+    cancel: Arc<CancelSignal>,
+) {
+    let parent = Context::current();
+    let queue = Arc::clone(responses);
+    let spawned = std::thread::Builder::new()
+        .name("scxml-invoked-service-http".into())
+        .spawn(move || {
+            let _parent = parent.attach();
+            let span = scxml_telemetry::observe(
+                Module::HostWasmtime,
+                Operation::HostWasmtimeServiceHttpRequest,
+            );
+            REQUEST_CANCEL.with_borrow_mut(|slot| *slot = Some(cancel));
+            let outcome = transport.fetch(&request);
+            REQUEST_CANCEL.with_borrow_mut(|slot| *slot = None);
+            record_request(&span, &outcome);
+            queue.push(Settled {
+                invocation,
+                request: request_id,
+                outcome,
+            });
+        });
+    if spawned.is_err() {
+        // A thread that could not start sent nothing: the request fails.
+        responses.push(Settled {
+            invocation,
+            request: request_id,
+            outcome: Err(ExtensionHttpFailure::Transport),
+        });
+    }
+}
+
+/// One invocation's slot references and the values they stand for.
+type BoundReferences = (Vec<SlotReference>, Vec<(u32, String)>);
+
+/// The slot references of one invocation: for each `env` attribute (sorted
+/// by slot) whose slot `env_slots` declares, a fresh reference when
+/// `values` holds the variable for `type_uri` (numbered from 1 per
+/// invocation, so none crosses invocations); a variable with no value, or
+/// one not granted to `type_uri`, leaves its slot absent.
+///
+/// # Errors
+///
+/// `invalid-input` for more than [`crate::MAX_DECLARED_ITEMS`] attributes,
+/// one outside the `env` namespace, a slot the package does not declare or
+/// bound twice, or a name that is not a variable name.
+fn bind_references(
+    attributes: &[ExtensionAttribute],
+    type_uri: &str,
+    env_slots: &[String],
+    values: &crate::ExtensionEnvironment,
+) -> Result<BoundReferences, ComponentError> {
+    let invalid = |detail| Err(component_error(ErrorCode::InvalidInput, detail));
+    if attributes.len() > crate::MAX_DECLARED_ITEMS {
+        return invalid("the invocation binds more env slots than a package declares");
+    }
+    let mut slots = Vec::new();
+    let mut references = Vec::new();
+    for (index, attribute) in attributes.iter().enumerate() {
+        if attribute.name.namespace_uri.as_deref() != Some(scxml_types::ENV_NAMESPACE_URI) {
+            return invalid("an invoke attribute is not in the env namespace");
+        }
+        let slot = &attribute.name.local_name;
+        if !env_slots.contains(slot) {
+            return invalid("an env slot is not declared by the service's package");
+        }
+        if attributes
+            .get(..index)
+            .is_some_and(|before| before.iter().any(|seen| seen.name.local_name == *slot))
+        {
+            return invalid("the invocation binds one env slot twice");
+        }
+        if !crate::extension::is_env_name(&attribute.value) {
+            return invalid("an env slot names no valid variable");
+        }
+        let Some(value) = values.held(type_uri, &attribute.value) else {
+            continue;
+        };
+        let reference = u32::try_from(references.len().saturating_add(1))
+            .map_err(|_| component_error(ErrorCode::InvalidInput, "too many env slots"))?;
+        references.push((reference, value.to_owned()));
+        slots.push(SlotReference {
+            slot: slot.clone(),
+            reference,
+        });
+    }
+    Ok((slots, references))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CancelSignal, HttpResponses, Settled, event_bytes};
+    use crate::{ExtensionHttpFailure, ExtensionHttpResponse};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
     #[test]
-    fn an_emitted_event_counts_its_retained_bytes() {
+    fn a_returned_event_counts_its_retained_bytes() {
         let mut event = scxml_types::Event::external(
             scxml_types::EventName::new("echo.reply".to_owned()).expect("a valid event name"),
         );
@@ -1382,12 +1742,55 @@ mod tests {
             event_bytes(&event),
             "echo.reply".len() + 100 + "urn:echo".len() + "raw".len()
         );
-        event.data = scxml_types::DataValue::Number(
-            scxml_types::FiniteNumber::new(1.0).expect("a finite number"),
-        );
-        assert_eq!(
-            event_bytes(&event),
-            "echo.reply".len() + 8 + "urn:echo".len() + "raw".len()
-        );
+    }
+
+    #[test]
+    fn settled_requests_queue_in_order_and_notify() {
+        let notified = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&notified);
+        let queue = HttpResponses::new(Some(Arc::new(move || {
+            counter.fetch_add(1, Ordering::AcqRel);
+        })));
+        queue.push(Settled {
+            invocation: 1,
+            request: 0,
+            outcome: Ok(ExtensionHttpResponse {
+                status: 200,
+                body: b"ok".to_vec(),
+            }),
+        });
+        queue.push(Settled {
+            invocation: 1,
+            request: 1,
+            outcome: Err(ExtensionHttpFailure::Transport),
+        });
+        assert!(queue.has_settled());
+        let settled = queue.take();
+        assert_eq!(settled.len(), 2);
+        assert_eq!((settled[0].invocation, settled[0].request), (1, 0));
+        assert_eq!(settled[1].outcome, Err(ExtensionHttpFailure::Transport));
+        assert!(!queue.has_settled());
+        assert_eq!(notified.load(Ordering::Acquire), 2);
+    }
+
+    #[test]
+    fn a_cancel_runs_each_action_once_and_a_late_action_at_once() {
+        let cancel = CancelSignal::default();
+        let ran = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&ran);
+        cancel.on_cancel(move || {
+            counter.fetch_add(1, Ordering::AcqRel);
+        });
+        assert!(!cancel.is_cancelled());
+        assert_eq!(ran.load(Ordering::Acquire), 0);
+        cancel.cancel();
+        cancel.cancel();
+        assert!(cancel.is_cancelled());
+        assert_eq!(ran.load(Ordering::Acquire), 1, "an action runs once");
+        let counter = Arc::clone(&ran);
+        cancel.on_cancel(move || {
+            counter.fetch_add(1, Ordering::AcqRel);
+        });
+        assert_eq!(ran.load(Ordering::Acquire), 2, "a late action runs at once");
     }
 }

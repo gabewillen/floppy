@@ -296,8 +296,8 @@ impl Sessions for Fake {
             },
             Delivery::FromInvocation {
                 invoke_id,
-                message: Invoked::Failed,
-            } => format!("failed.invoke.{invoke_id}"),
+                message: Invoked::CommunicationError,
+            } => format!("error.communication.{invoke_id}"),
         };
         self.command(invoked_sessions, session, &event)
     }
@@ -572,8 +572,8 @@ fn queues(invoked_sessions: &FakeInvocations) -> String {
                     } => format!("done.invoke.{invoke_id}"),
                     Delivery::FromInvocation {
                         invoke_id,
-                        message: Invoked::Failed,
-                    } => format!("failed.invoke.{invoke_id}"),
+                        message: Invoked::CommunicationError,
+                    } => format!("error.communication.{invoke_id}"),
                 })
                 .collect();
             let path = invoked_sessions.path(key).unwrap_or_default();

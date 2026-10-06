@@ -77,6 +77,15 @@ impl MeteredLimits {
         }
     }
 
+    /// Restarts the store's own budget with its full copy allowance (an
+    /// invoked service's store, at each input); a shared call budget is the
+    /// session host's and stays as it is.
+    pub(crate) fn restart(&self) {
+        if self.own {
+            self.budget.start();
+        }
+    }
+
     /// The budget whose copy allowance growth is taken from.
     pub(crate) const fn budget(&self) -> &Arc<CallBudget> {
         &self.budget

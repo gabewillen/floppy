@@ -3,14 +3,13 @@
 //! A service package binds one exact invoked-service type URI (SCXML 6.4
 //! `<invoke type>`) to the Wasm component that implements it. Like an
 //! extension package manifest it is declarative data: the validator and the
-//! compiler read only its URI (`SCXML094`, `COMP004`); hosts bind its
-//! component and grant its declared outbound HTTP origins and `env` slots,
-//! and link exactly the WASI interfaces it declares (`wasi-permissions`,
-//! [`scxml_types::wasi`]) that the run also grants.
+//! compiler read only its URI and `env` slots (`SCXML094`, `SCXML083`); hosts
+//! bind its component and grant its declared outbound HTTP origins and `env`
+//! slots. The WASI interfaces the component may use are its own imports,
+//! which the embedder reads from the component itself.
 
 use sha2::{Digest, Sha256};
 
-use crate::package_events::PackageEvents;
 use crate::schema::{
     MAX_EXTENSION_PACKAGE_FIELD_BYTES, MAX_EXTENSION_PACKAGE_LIST_ITEMS, is_env_slot,
     is_http_origin,
@@ -24,9 +23,8 @@ pub const SUPPORTED_SERVICE_WIT_WORLD: &str = "stateforward:scxml/invoked-servic
 /// Exact WIT package version supported for invoked-service components.
 pub const SUPPORTED_SERVICE_WIT_VERSION: &str = crate::schema::SUPPORTED_NAMESPACE_WIT_VERSION;
 /// Manifest fields in their canonical order (`format` first); every field is
-/// required except `wasi-permissions` and `events`, each omitted when the
-/// package declares none.
-pub const SERVICE_PACKAGE_FIELDS: [&str; 12] = [
+/// required.
+pub const SERVICE_PACKAGE_FIELDS: [&str; 10] = [
     "format",
     "service-uri",
     "package-version",
@@ -37,8 +35,6 @@ pub const SERVICE_PACKAGE_FIELDS: [&str; 12] = [
     "wit-version",
     "http-origins",
     "env-slots",
-    "wasi-permissions",
-    "events",
 ];
 
 /// Declarative package binding for one invoked-service type URI.
@@ -66,13 +62,6 @@ pub struct ServicePackageManifest {
     pub http_origins: Vec<String>,
     /// The `env` slots the service accepts.
     pub env_slots: Vec<String>,
-    /// The WASI interfaces its component may import: a canonical list
-    /// ([`scxml_types::check_wasi_permissions`]), empty when the manifest
-    /// omits the field. Hosts link only those the run also grants.
-    pub wasi_permissions: Vec<scxml_types::WasiPermission>,
-    /// The events the service emits and accepts, each with its data schema
-    /// ([`PackageEvents`]); empty when the manifest omits `events`.
-    pub events: PackageEvents,
 }
 
 impl ServicePackageManifest {
@@ -81,12 +70,9 @@ impl ServicePackageManifest {
     /// field is rejected), every value a string except `schema-artifact` and
     /// `schema-sha256` (each a string or `null`) and `http-origins` and
     /// `env-slots` (arrays of at most [`MAX_EXTENSION_PACKAGE_LIST_ITEMS`]
-    /// strings), the optional `wasi-permissions` a non-empty canonical list
-    /// of known permissions ([`scxml_types::wasi_permissions_from_json`];
-    /// an unknown interface, field, or value is rejected), the optional
-    /// `events` a declared event contract ([`PackageEvents::from_json`]), and
-    /// `format` equal to [`SERVICE_PACKAGE_FORMAT`]. The other entries are judged by
-    /// [`Self::verify`]. Deterministic and side-effect-free.
+    /// strings), and `format` equal to [`SERVICE_PACKAGE_FORMAT`]. The other
+    /// entries are judged by [`Self::verify`]. Deterministic and
+    /// side-effect-free.
     ///
     /// # Errors
     ///
@@ -155,18 +141,12 @@ impl ServicePackageManifest {
             wit_version: field("wit-version")?,
             http_origins: list("http-origins")?,
             env_slots: list("env-slots")?,
-            wasi_permissions: scxml_types::wasi_permissions_from_json(
-                object.get("wasi-permissions"),
-            )
-            .map_err(|error| format!("field `wasi-permissions`: {error}"))?,
-            events: PackageEvents::from_json(object.get("events"))?,
         })
     }
 
     /// The manifest as canonical JSON: the fields in
     /// [`SERVICE_PACKAGE_FIELDS`] order, compact, `null` for an absent
-    /// schema, `wasi-permissions` and `events` omitted when empty. Parsing it with
-    /// [`Self::from_json`] yields `self`.
+    /// schema. Parsing it with [`Self::from_json`] yields `self`.
     #[must_use]
     pub fn to_canonical_json(&self) -> String {
         let text = |value: &str| serde_json::Value::String(value.to_owned()).to_string();
@@ -181,7 +161,7 @@ impl ServicePackageManifest {
             .to_string()
         };
         format!(
-            "{{\"format\":{},\"service-uri\":{},\"package-version\":{},\"service-artifact\":{},\"schema-artifact\":{},\"schema-sha256\":{},\"wit-world\":{},\"wit-version\":{},\"http-origins\":{},\"env-slots\":{}{}{}}}",
+            "{{\"format\":{},\"service-uri\":{},\"package-version\":{},\"service-artifact\":{},\"schema-artifact\":{},\"schema-sha256\":{},\"wit-world\":{},\"wit-version\":{},\"http-origins\":{},\"env-slots\":{}}}",
             text(SERVICE_PACKAGE_FORMAT),
             text(&self.service_uri),
             text(&self.package_version),
@@ -192,8 +172,6 @@ impl ServicePackageManifest {
             text(&self.wit_version),
             list(&self.http_origins),
             list(&self.env_slots),
-            scxml_types::wasi_permissions_canonical_field(&self.wasi_permissions),
-            self.events.canonical_field(),
         )
     }
 
@@ -210,14 +188,8 @@ impl ServicePackageManifest {
     /// URI, `schema-artifact` and `schema-sha256` not both present or both
     /// absent, a schema whose bytes are missing or do not hash to
     /// `schema-sha256`, schema bytes for a manifest without a schema, an
-    /// unsupported WIT identity, an invalid or repeated list entry, a
-    /// non-canonical `wasi-permissions` list, or an invalid `events` entry
-    /// ([`PackageEvents::check`]; the event schemas themselves are verified
-    /// by [`PackageEvents::resolve`]).
+    /// unsupported WIT identity, or an invalid or repeated list entry.
     pub fn verify(&self, schema: Option<&[u8]>) -> Result<(), String> {
-        scxml_types::check_wasi_permissions(&self.wasi_permissions)
-            .map_err(|error| format!("service package field `wasi-permissions`: {error}"))?;
-        self.events.check("service package")?;
         let schema_fields: [(&str, Option<&str>); 2] = [
             ("schema-artifact", self.schema_artifact.as_deref()),
             ("schema-sha256", self.schema_sha256.as_deref()),
@@ -325,8 +297,6 @@ mod tests {
             wit_version: SUPPORTED_SERVICE_WIT_VERSION.into(),
             http_origins: Vec::new(),
             env_slots: vec!["endpoint".into()],
-            wasi_permissions: Vec::new(),
-            events: PackageEvents::default(),
         }
     }
 
@@ -342,12 +312,11 @@ mod tests {
             ServicePackageManifest::from_json(canonical.as_bytes()).expect("round trips"),
             manifest
         );
-        assert!(!canonical.contains("wasi-permissions"), "{canonical}");
         let fields: Vec<usize> = SERVICE_PACKAGE_FIELDS
             .iter()
             .filter_map(|field| canonical.find(&format!("\"{field}\"")))
             .collect();
-        assert_eq!(fields.len(), SERVICE_PACKAGE_FIELDS.len() - 2);
+        assert_eq!(fields.len(), SERVICE_PACKAGE_FIELDS.len());
         assert!(
             fields.windows(2).all(|pair| pair[0] < pair[1]),
             "{canonical}"
@@ -375,46 +344,6 @@ mod tests {
     }
 
     #[test]
-    fn declared_wasi_permissions_are_canonical_and_closed() {
-        let mut files = echo();
-        files.wasi_permissions = vec![
-            scxml_types::WasiPermission::Clocks,
-            scxml_types::WasiPermission::Filesystem {
-                mount: "workspace".into(),
-                access: scxml_types::FilesystemAccess::ReadWrite,
-            },
-        ];
-        assert_eq!(files.verify(None), Ok(()));
-        let canonical = files.to_canonical_json();
-        assert!(canonical.ends_with(
-            ",\"wasi-permissions\":[{\"interface\":\"wasi:clocks\"},{\"interface\":\"wasi:filesystem\",\"mount\":\"workspace\",\"access\":\"read-write\"}]}"
-        ));
-        assert_eq!(
-            ServicePackageManifest::from_json(canonical.as_bytes()).expect("round trips"),
-            files
-        );
-        for (from, to) in [
-            ("wasi:clocks", "wasi:http/outgoing-handler"),
-            ("\"read-write\"", "\"execute\""),
-            ("\"mount\"", "\"path\""),
-        ] {
-            let tampered = canonical.replace(from, to);
-            assert!(
-                ServicePackageManifest::from_json(tampered.as_bytes())
-                    .expect_err("an unknown permission fails closed")
-                    .starts_with("field `wasi-permissions`"),
-                "{tampered}"
-            );
-        }
-        let empty = echo()
-            .to_canonical_json()
-            .replacen('}', ",\"wasi-permissions\":[]}", 1);
-        assert!(ServicePackageManifest::from_json(empty.as_bytes()).is_err());
-        files.wasi_permissions.reverse();
-        assert!(files.verify(None).is_err());
-    }
-
-    #[test]
     fn verification_binds_identity_and_the_optional_schema_digest() {
         let mut scxml = echo();
         scxml.service_uri = "http://www.w3.org/TR/scxml/".into();
@@ -435,33 +364,5 @@ mod tests {
         let mut slots = echo();
         slots.env_slots = vec!["apikey".into(), "apikey".into()];
         assert!(slots.verify(None).is_err());
-    }
-
-    #[test]
-    fn declared_events_are_canonical_and_checked() {
-        let mut events = echo();
-        events.events = PackageEvents {
-            emits: vec![crate::PackageEvent {
-                name: "echo.reply".into(),
-                schema_artifact: "events.json#/$defs/Reply".into(),
-                schema_sha256: "a".repeat(64),
-            }],
-            accepts: Vec::new(),
-        };
-        assert_eq!(events.verify(None), Ok(()));
-        let canonical = events.to_canonical_json();
-        assert!(
-            canonical.ends_with(&format!(
-                ",\"events\":{{\"emits\":[{{\"name\":\"echo.reply\",\"schema-artifact\":\"events.json#/$defs/Reply\",\"schema-sha256\":\"{}\"}}],\"accepts\":[]}}}}",
-                "a".repeat(64)
-            )),
-            "{canonical}"
-        );
-        assert_eq!(
-            ServicePackageManifest::from_json(canonical.as_bytes()).expect("round trips"),
-            events
-        );
-        events.events.emits[0].name = "echo.*".into();
-        assert!(events.verify(None).is_err());
     }
 }

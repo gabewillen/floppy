@@ -25,10 +25,11 @@ use std::time::{Duration, Instant};
 use sha2::{Digest as _, Sha256};
 
 /// The release components the Wasmtime session host links, and the echo
-/// invoked-service example the service replay test binds.
+/// and files invoked-service examples the service tests bind.
 const COMPONENTS: &[&str] = &[
     "scxml_clock",
     "scxml_service_example",
+    "scxml_service_files",
     "scxml_data_model_ecmascript",
     "scxml_data_model_null",
     "scxml_data_model_xpath",
@@ -857,7 +858,7 @@ fn a_recorded_http_session_replays_byte_for_byte_without_the_network() {
 
 /// The echo service's `endpoint` slot bound to `endpoint`, by digest, on
 /// the logical clock.
-fn deferred_binding(endpoint: &str) -> Vec<String> {
+fn fetch_binding(endpoint: &str) -> Vec<String> {
     let (dir, _) = release();
     let component = Path::new(dir).join("scxml_service_example.virtualized.wasm");
     let digest = format!(
@@ -879,15 +880,16 @@ fn deferred_binding(endpoint: &str) -> Vec<String> {
     ]
 }
 
-/// `s0` invokes the echo service with its `endpoint` slot; `defer` makes it
-/// GET the slot's URL with `outbound-http.begin`, `ping` is echoed, `leave`
-/// exits `s0` (cancelling the service), and the 1 s timer `defer` arms
-/// fires on the logical clock only once no request is in flight.
-fn deferred_document(directory: &Path) -> PathBuf {
+/// `s0` invokes the echo service with its `endpoint` slot; `fetch` makes it
+/// GET the slot's URL with `outbound-http.fetch`, `ping` is echoed, `leave`
+/// exits `s0` (cancelling the invocation, SCXML 6.4), and the 1 s timer
+/// `fetch` arms fires on the logical clock only once no request is in
+/// flight.
+fn fetch_document(directory: &Path) -> PathBuf {
     document(
         directory,
         &format!(
-            r##"<state id="s0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"><invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/><transition event="defer"><send event="defer" target="#_echo"/><send event="timer" delay="1s"/></transition><transition event="ping"><send event="ping" target="#_echo"/></transition><transition event="echo.ping"><log label="ping" expr="_event.name"/></transition><transition event="echo.fetched"><log label="fetched" expr="_event.data"/></transition><transition event="timer" target="done"><log label="timer" expr="'fired'"/></transition><transition event="leave" target="away"/></state><state id="away"><transition event="timer"><log label="timer" expr="'fired'"/></transition></state><final id="done"/>"##
+            r##"<state id="s0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"><invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/><transition event="fetch"><send event="fetch" target="#_echo"/><send event="timer" delay="1s"/></transition><transition event="ping"><send event="ping" target="#_echo"/></transition><transition event="echo.ping"><log label="ping" expr="_event.name"/></transition><transition event="echo.fetched"><log label="fetched" expr="_event.data"/></transition><transition event="timer" target="done"><log label="timer" expr="'fired'"/></transition><transition event="leave" target="away"/></state><state id="away"><transition event="timer"><log label="timer" expr="'fired'"/></transition></state><final id="done"/>"##
         ),
     )
 }
@@ -917,29 +919,39 @@ fn log_lines(records: &[serde_json::Value]) -> Vec<String> {
         .collect()
 }
 
-/// `run` gives invoked services the deferred transport: a slow request never
-/// blocks the session (the `ping` sent while it is in flight is answered
-/// first), its outcome arrives as a `service-response` call, and the
-/// logical clock fires the 1 s timer only after it.
-#[test]
-fn a_service_makes_a_deferred_request_against_a_loopback_server() {
+/// Serves one request on a loopback port, answering `204` once `answer`
+/// receives (or at once when it is `None`).
+fn answer_once(
+    answer: Option<std::sync::mpsc::Receiver<()>>,
+) -> (u16, std::thread::JoinHandle<()>) {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
     let port = listener.local_addr().expect("an address").port();
-    let (pinged_tx, pinged) = std::sync::mpsc::channel::<()>();
     let server = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().expect("the service connects");
         read_head(&mut stream);
-        // Answer only after the session answered the ping.
-        pinged
-            .recv_timeout(Duration::from_secs(30))
-            .expect("the ping is answered while the request is in flight");
+        if let Some(answer) = answer {
+            answer
+                .recv_timeout(Duration::from_secs(30))
+                .expect("the ping is answered while the request is in flight");
+        }
         stream
             .write_all(b"HTTP/1.1 204 No Content\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
             .expect("the answer is written");
     });
-    let directory = scratch("deferred");
-    let doc = deferred_document(&directory);
-    let args = deferred_binding(&format!("http://127.0.0.1:{port}/slow"));
+    (port, server)
+}
+
+/// A service's `fetch` suspends only its own task: a slow request never
+/// blocks the session (the `ping` sent while it is in flight is answered
+/// first), its response arrives in an `http-response` call, and the
+/// logical clock fires the 1 s timer only after it.
+#[test]
+fn a_service_fetch_never_blocks_the_session() {
+    let (pinged_tx, pinged) = std::sync::mpsc::channel::<()>();
+    let (port, server) = answer_once(Some(pinged));
+    let directory = scratch("fetch");
+    let doc = fetch_document(&directory);
+    let args = fetch_binding(&format!("http://127.0.0.1:{port}/slow"));
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let mut child = command(&doc, &args)
         .stdin(Stdio::piped())
@@ -950,7 +962,7 @@ fn a_service_makes_a_deferred_request_against_a_loopback_server() {
     let mut stdin = child.stdin.take().expect("stdin is piped");
     let mut stdout = BufReader::new(child.stdout.take().expect("stdout is piped"));
     stdin
-        .write_all(b"{\"name\":\"defer\"}\n{\"name\":\"ping\"}\n")
+        .write_all(b"{\"name\":\"fetch\"}\n{\"name\":\"ping\"}\n")
         .expect("input is writable");
     let mut lines = Vec::new();
     loop {
@@ -984,16 +996,16 @@ fn a_service_makes_a_deferred_request_against_a_loopback_server() {
     assert!(
         records
             .iter()
-            .any(|record| record["type"] == "call" && record["cause"] == "service-response"),
+            .any(|record| record["type"] == "call" && record["cause"] == "http-response"),
         "{text}"
     );
 }
 
 /// Leaving the invoking state cancels the invocation (SCXML 6.4): `run`
-/// closes the deferred request's connection at once, while the process and
-/// its session keep running.
+/// closes its request's connection at once, while the process and its
+/// session keep running.
 #[test]
-fn leaving_the_invoking_state_closes_the_deferred_request_connection() {
+fn leaving_the_invoking_state_closes_the_request_connection() {
     use std::io::Read as _;
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
     let port = listener.local_addr().expect("an address").port();
@@ -1017,9 +1029,9 @@ fn leaving_the_invoking_state_closes_the_deferred_request_connection() {
         closed_tx.send(Instant::now()).expect("the test waits");
         streaming.join().expect("the streaming thread ends");
     });
-    let directory = scratch("deferred-cancel");
-    let doc = deferred_document(&directory);
-    let args = deferred_binding(&format!("http://127.0.0.1:{port}/stream"));
+    let directory = scratch("fetch-cancel");
+    let doc = fetch_document(&directory);
+    let args = fetch_binding(&format!("http://127.0.0.1:{port}/stream"));
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let mut child = command(&doc, &args)
         .stdin(Stdio::piped())
@@ -1029,7 +1041,7 @@ fn leaving_the_invoking_state_closes_the_deferred_request_connection() {
         .expect("scxml-cli must start");
     let mut stdin = child.stdin.take().expect("stdin is piped");
     stdin
-        .write_all(b"{\"name\":\"defer\"}\n")
+        .write_all(b"{\"name\":\"fetch\"}\n")
         .expect("input is writable");
     requested
         .recv_timeout(Duration::from_secs(30))
@@ -1042,7 +1054,7 @@ fn leaving_the_invoking_state_closes_the_deferred_request_connection() {
     let closed_at = closed
         .recv_timeout(Duration::from_secs(5))
         .expect("the server sees the connection close while the run goes on");
-    assert!(closed_at.duration_since(left) < Duration::from_secs(5));
+    assert!(closed_at.duration_since(left) < Duration::from_secs(2));
     assert!(
         child.try_wait().expect("the child is waitable").is_none(),
         "the run is still open: the cancel, not the exit, closed the connection"
@@ -1058,32 +1070,109 @@ fn leaving_the_invoking_state_closes_the_deferred_request_connection() {
     assert_eq!(log_lines(&records), ["timer: fired"]);
 }
 
-/// A recorded run must replay without the network, so `begin` is refused:
-/// nothing reaches the server, and the refused service fails its `send`.
+/// A service's HTTP responses are recorded inputs: `--record` performs the
+/// request and writes its response, and `--replay` reproduces the session
+/// byte for byte with nothing listening.
 #[test]
-fn a_recorded_run_starts_no_deferred_request() {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
-    let port = listener.local_addr().expect("an address").port();
-    listener
-        .set_nonblocking(true)
-        .expect("the listener is non-blocking");
-    let directory = scratch("deferred-record");
-    let doc = deferred_document(&directory);
+fn a_recorded_service_fetch_replays_without_the_network() {
+    let (port, server) = answer_once(None);
+    let directory = scratch("fetch-record");
+    let doc = fetch_document(&directory);
     let log = directory.join("session.ndjson");
-    let mut args = deferred_binding(&format!("http://127.0.0.1:{port}/slow"));
-    args.extend(["--record".into(), log.display().to_string()]);
-    let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    let output = run(&doc, &args, "{\"name\":\"defer\"}\n");
-    assert!(
-        listener.accept().is_err(),
-        "a recorded run sends no deferred request"
+    let log_arg = log.display().to_string();
+    let binding = fetch_binding(&format!("http://127.0.0.1:{port}/once"));
+    let recorded_args = [binding.clone(), vec!["--record".into(), log_arg.clone()]].concat();
+    let recorded_args: Vec<&str> = recorded_args.iter().map(String::as_str).collect();
+    let recorded = run(&doc, &recorded_args, "{\"name\":\"fetch\"}\n");
+    server.join().expect("the server ends");
+    assert_eq!(recorded.status.code(), Some(0), "{}", stderr(&recorded));
+    assert_eq!(
+        log_lines(&parse_records(&recorded)),
+        ["fetched: 204", "timer: fired"]
     );
-    let records = parse_records(&output);
     assert!(
-        !log_lines(&records)
-            .iter()
-            .any(|line| line.starts_with("fetched")),
+        fs::read_to_string(&log)
+            .expect("the log is readable")
+            .contains("\"http-response\""),
+        "the response is a recorded input"
+    );
+    // A replay takes its clock from the log; nothing listens on the port.
+    let mut replay_args = binding;
+    replay_args.drain(0..2);
+    replay_args.extend(["--replay".into(), log_arg]);
+    let replay_args: Vec<&str> = replay_args.iter().map(String::as_str).collect();
+    let replayed = run(&doc, &replay_args, "");
+    assert_eq!(replayed.status.code(), Some(0), "{}", stderr(&replayed));
+    assert_eq!(parse_records(&recorded)[1..], parse_records(&replayed)[1..]);
+}
+
+const FILES: &str = "https://stateforward.org/scxml/services/files";
+
+/// The files service imports `wasi:filesystem`: `run` binds it only with a
+/// `--dir` grant (wasmtime's `--dir HOST::GUEST`, scoped to its type URI),
+/// and then it writes into that directory.
+#[test]
+fn a_wasi_service_runs_only_with_its_dir_granted() {
+    let directory = scratch("files");
+    let workspace_dir = directory.join("workspace");
+    fs::create_dir_all(&workspace_dir).expect("the workspace is creatable");
+    let doc = document(
+        &directory,
+        &format!(
+            r#"<state id="s0"><invoke type="{FILES}" id="files"><param name="name" expr="'out.txt'"/><param name="text" expr="'hi'"/></invoke><transition event="done.invoke.files" target="done"><log label="done" expr="JSON.stringify(_event.data)"/></transition></state><final id="done"/>"#
+        ),
+    );
+    let (dir, _) = release();
+    let component = Path::new(dir).join("scxml_service_files.virtualized.wasm");
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(fs::read(&component).expect("the files component is readable"))
+    );
+    let manifest = workspace().join("components/scxml-service-files/package/files.service.json");
+    let binding = vec![
+        "--clock".to_owned(),
+        "logical".into(),
+        "--service-package".into(),
+        manifest.display().to_string(),
+        "--service-component".into(),
+        format!("{FILES}={}", component.display()),
+        "--service-component-sha256".into(),
+        format!("{FILES}={digest}"),
+    ];
+    let args: Vec<&str> = binding.iter().map(String::as_str).collect();
+    let ungranted = run(&doc, &args, "");
+    assert_ne!(ungranted.status.code(), Some(0), "{}", stderr(&ungranted));
+    assert!(
+        stderr(&ungranted).contains("whose resource the run does not grant"),
+        "{}",
+        stderr(&ungranted)
+    );
+    assert!(!workspace_dir.join("out.txt").exists());
+
+    let granted = [
+        binding,
+        vec![
+            "--dir".into(),
+            format!("{FILES}={}::/workspace", workspace_dir.display()),
+        ],
+    ]
+    .concat();
+    let args: Vec<&str> = granted.iter().map(String::as_str).collect();
+    let output = run(&doc, &args, "");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("= WASI imports: ")
+            && stderr(&output).contains("wasi:filesystem/preopens")
+            && stderr(&output).contains("= WASI resources: --dir "),
         "{}",
         stderr(&output)
+    );
+    assert_eq!(
+        log_lines(&parse_records(&output)),
+        [r#"done: {"seed":null,"wrote":2}"#]
+    );
+    assert_eq!(
+        fs::read_to_string(workspace_dir.join("out.txt")).expect("the file is written"),
+        "hi"
     );
 }

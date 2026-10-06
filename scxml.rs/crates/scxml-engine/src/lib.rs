@@ -1091,12 +1091,17 @@ impl Engine {
     /// session's `<send>`s on the internal event queue: a failure the
     /// platform learns of only after that `<send>` completed (a delayed send
     /// whose target no longer answers when it falls due, or a `BasicHTTP`
-    /// request that fails after it was accepted). SCXML 3.12.2: the
-    /// processor "MUST place these events in the internal event queue and
-    /// MUST process them like any other event"; 6.2.4: "If it is unable to
-    /// dispatch the message, the Processor MUST place the error
-    /// error.communication on the internal event queue." The event is a
-    /// platform event whose `sendid` is `send_id` (5.10.1).
+    /// request that fails after it was accepted), or of an invoked service
+    /// that failed after its start (WIT `invocation-message`
+    /// `communication-error`: its future resolved `err`, it trapped, or it
+    /// returned an invalid event). SCXML 3.12.2: the processor "MUST place
+    /// these events in the internal event queue and MUST process them like
+    /// any other event"; 6.2.4: "If it is unable to dispatch the message,
+    /// the Processor MUST place the error error.communication on the
+    /// internal event queue." The event is a platform event whose `sendid`
+    /// is `send_id` and whose `invokeid` is `invoke_id` (5.10.1). No
+    /// liveness check: the message of an invocation already cancelled is
+    /// still delivered, as its events are.
     ///
     /// Appendix D mapping: `mainEventLoop` blocks on the external queue only
     /// once the macrostep and its internal-queue drain have finished. An
@@ -1114,6 +1119,7 @@ impl Engine {
     pub fn queue_communication_error(
         &mut self,
         send_id: Option<scxml_types::SendId>,
+        invoke_id: Option<InvokeId>,
         trace_context: Option<TraceContext>,
     ) -> Result<(), EngineError> {
         let span = observe(Module::Engine, Operation::EngineQueuePlatformError);
@@ -1123,42 +1129,11 @@ impl Engine {
                 EngineStatus::Finished => return Err(EngineError::Finished),
                 EngineStatus::Running => {}
             }
-            self.push_platform_error(PlatformError::Communication, send_id, trace_context)
-        })();
-        complete(&span, &result);
-        result
-    }
-
-    /// Places the `error.communication` of a failed invoked service on the
-    /// internal event queue: the service the invocation `invoke_id` started
-    /// trapped, failed a call, or emitted an invalid event after its start,
-    /// and the host retired it (WIT `invocation-message.failed`). SCXML
-    /// 3.12.2: errors go "in the internal event queue"; the event is a
-    /// platform event whose `invokeid` is `invoke_id` (5.10.1), and its
-    /// processing follows the Appendix D mapping of
-    /// [`Self::queue_communication_error`]. No liveness check: the message
-    /// of an invocation already cancelled is still delivered, as its events
-    /// are.
-    ///
-    /// # Errors
-    ///
-    /// Rejects a machine that is not started, a finished machine, and queue
-    /// overflow.
-    pub fn queue_invocation_failure(
-        &mut self,
-        invoke_id: InvokeId,
-        trace_context: Option<TraceContext>,
-    ) -> Result<(), EngineError> {
-        let span = observe(Module::Engine, Operation::EngineQueuePlatformError);
-        let result = (|| {
-            match self.status {
-                EngineStatus::Ready => return Err(EngineError::NotStarted),
-                EngineStatus::Finished => return Err(EngineError::Finished),
-                EngineStatus::Running => {}
-            }
-            self.push_platform_error(PlatformError::Communication, None, trace_context)?;
-            if let Some(event) = self.internal.back_mut() {
-                event.invoke_id = Some(invoke_id);
+            self.push_platform_error(PlatformError::Communication, send_id, trace_context)?;
+            if invoke_id.is_some()
+                && let Some(event) = self.internal.back_mut()
+            {
+                event.invoke_id = invoke_id;
             }
             Ok(())
         })();
@@ -4546,7 +4521,6 @@ mod tests {
             data: Vec::new(),
             scripts: Vec::new(),
             extension_namespaces: Vec::new(),
-            invoke_types: Vec::new(),
         }
     }
 
@@ -4642,7 +4616,7 @@ mod tests {
                     event_schema: None,
                 }],
             }],
-            env: Vec::new(),
+            attributes: Vec::new(),
         }];
         machine.states[0].transitions = vec![0, 1];
         machine.transitions[0].events = vec!["child".into()];
@@ -5503,7 +5477,6 @@ mod tests {
             data: Vec::new(),
             scripts: Vec::new(),
             extension_namespaces: Vec::new(),
-            invoke_types: Vec::new(),
         }
     }
 
@@ -5771,7 +5744,6 @@ mod tests {
             data: Vec::new(),
             scripts: Vec::new(),
             extension_namespaces: Vec::new(),
-            invoke_types: Vec::new(),
         }
     }
 
@@ -5904,7 +5876,6 @@ mod tests {
             data: Vec::new(),
             scripts: Vec::new(),
             extension_namespaces: Vec::new(),
-            invoke_types: Vec::new(),
         }
     }
 
@@ -6596,7 +6567,6 @@ mod tests {
             data: Vec::new(),
             scripts: Vec::new(),
             extension_namespaces: Vec::new(),
-            invoke_types: Vec::new(),
         }
     }
 

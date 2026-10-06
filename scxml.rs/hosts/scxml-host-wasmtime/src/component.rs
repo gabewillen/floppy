@@ -11,8 +11,8 @@ use crate::bindings::exports::stateforward::scxml::machine_api::{
 };
 use crate::bindings::stateforward::scxml::ir_source;
 use crate::bindings::stateforward::scxml::machine_capability_types::{
-    self, DocumentKind, ExtensionExecution, InvokedSession, MachineCapabilities, MachineSnapshot,
-    Observation, SendDisposition,
+    self, DocumentKind, ExtensionExecution, MachineCapabilities, MachineSnapshot, Observation,
+    SendDisposition,
 };
 use crate::bindings::stateforward::scxml::telemetry;
 use crate::bindings::stateforward::scxml::types::{
@@ -949,10 +949,10 @@ impl machine_capability_types::HostMachineCapabilities for MachineStoreData {
     fn start_invocation(
         &mut self,
         _capabilities: Resource<MachineCapabilities>,
-        request: InvokedSession,
+        request: machine_capability_types::Invocation,
     ) -> Result<machine_capability_types::InvocationProgress, ComponentError> {
         match self.links_mut() {
-            Some(links) => links.start_invocation(request),
+            Some(links) => links.start(request),
             None => Err(unavailable()),
         }
     }
@@ -964,28 +964,6 @@ impl machine_capability_types::HostMachineCapabilities for MachineStoreData {
     ) -> Result<machine_capability_types::InvocationProgress, ComponentError> {
         match self.links_mut() {
             Some(links) => links.cancel_invocation(&invoke_id),
-            None => Err(unavailable()),
-        }
-    }
-
-    fn load_services(
-        &mut self,
-        _capabilities: Resource<MachineCapabilities>,
-        type_uris: Vec<String>,
-    ) -> Result<(), ComponentError> {
-        match self.session.as_deref() {
-            Some(links) => links.load_services(&type_uris),
-            None => Err(unavailable()),
-        }
-    }
-
-    fn start_service(
-        &mut self,
-        _capabilities: Resource<MachineCapabilities>,
-        request: crate::bindings::stateforward::scxml::types::ServiceInvocation,
-    ) -> Result<machine_capability_types::InvocationProgress, ComponentError> {
-        match self.links_mut() {
-            Some(links) => links.start_service(request),
             None => Err(unavailable()),
         }
     }
@@ -1774,7 +1752,6 @@ pub(crate) const fn operation_name(operation: telemetry::Operation) -> &'static 
         telemetry::Operation::Diff => "diff",
         telemetry::Operation::CommunicationError => "communication-error",
         telemetry::Operation::ScheduleBasichttp => "schedule-basichttp",
-        telemetry::Operation::Wake => "wake",
     }
 }
 
@@ -1970,7 +1947,6 @@ mod tests {
             data: Vec::new(),
             scripts: Vec::new(),
             extension_namespaces: Vec::new(),
-            invoke_types: Vec::new(),
         }
     }
 
