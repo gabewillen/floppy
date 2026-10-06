@@ -38,6 +38,11 @@
 //!   variable granted only to other packages leaves the slot absent, exactly
 //!   like one with no value. The values are masked in
 //!   the text the CLI writes ([`crate::mask`]).
+//! * `--extension-call-fuel N` (`snapshot run` and `run`) caps the
+//!   instruction fuel of one extension component call at `N` instead of the
+//!   host's `DEFAULT_EXTENSION_CALL_FUEL`
+//!   (`ExtensionComponents::with_call_fuel`): an element that links a large
+//!   component (a validator with its bundled schemas, say) may need more.
 //! * Every command that reads a document lists, per bound element, its
 //!   namespace, version, declared outbound origins, and the slots the
 //!   document binds (with the variables they name): what importing it
@@ -706,6 +711,9 @@ pub(crate) struct RunFlags {
     env: Vec<EnvFlag>,
     /// `--env-file` paths, in order.
     env_files: Vec<PathBuf>,
+    /// `--extension-call-fuel`: the instruction fuel cap of one extension
+    /// component call (the host's `DEFAULT_EXTENSION_CALL_FUEL` without it).
+    pub(crate) call_fuel: Option<u64>,
     /// Repository namespace flags.
     pub(crate) repository: RepositoryFlags,
 }
@@ -782,6 +790,17 @@ impl RunFlags {
                     return Err("--env-file requires PATH".into());
                 }
                 self.env_files.push(PathBuf::from(value));
+                Ok(())
+            }
+            "--extension-call-fuel" => {
+                let fuel = value
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|fuel| *fuel > 0)
+                    .ok_or("--extension-call-fuel requires a positive integer")?;
+                if self.call_fuel.replace(fuel).is_some() {
+                    return Err("--extension-call-fuel was given twice".into());
+                }
                 Ok(())
             }
             other => Err(format!("unknown option `{other}`")),
@@ -1180,5 +1199,27 @@ mod tests {
                 .contains("urn:")
         );
         assert!(refused_note("urn:a", "https://x.example").contains("`https://x.example`"));
+    }
+
+    #[test]
+    fn the_extension_call_fuel_is_one_positive_integer() {
+        let mut flags = RunFlags::default();
+        assert_eq!(flags.call_fuel, None, "the host's default without the flag");
+        for rejected in ["0", "-1", "lots", ""] {
+            assert!(
+                flags.accept("--extension-call-fuel", rejected).is_err(),
+                "{rejected}"
+            );
+        }
+        flags
+            .accept("--extension-call-fuel", "1000000000")
+            .expect("a positive integer");
+        assert_eq!(flags.call_fuel, Some(1_000_000_000));
+        assert!(
+            flags
+                .accept("--extension-call-fuel", "7")
+                .expect_err("given twice")
+                .contains("twice")
+        );
     }
 }
