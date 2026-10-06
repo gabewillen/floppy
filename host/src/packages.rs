@@ -11,7 +11,6 @@
 //! config names.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Write as _;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
@@ -414,9 +413,7 @@ impl Packages {
     /// run grants (names only). An embedder shows it before running.
     #[must_use]
     pub fn consent(&self, values: &Values) -> String {
-        // `writeln!` into a `String` cannot fail (`fmt::Write for String`
-        // always returns `Ok`), so its results below carry nothing to handle.
-        let mut text = String::new();
+        let mut lines: Vec<String> = Vec::new();
         let list = |items: &[String]| {
             if items.is_empty() {
                 "none".to_owned()
@@ -426,25 +423,23 @@ impl Packages {
         };
         for extension in &self.extensions {
             let manifest = &extension.manifest;
-            let _ = writeln!(
-                text,
-                "extension {} {}\n  http-origins: {}\n  env-slots: {}",
+            lines.push(format!(
+                "extension {} {}\n  http-origins: {}\n  env-slots: {}\n",
                 manifest.namespace_uri,
                 manifest.package_version,
                 list(&manifest.http_origins),
                 list(&manifest.env_slots)
-            );
+            ));
         }
         for service in &self.services {
             let manifest = &service.manifest;
-            let _ = writeln!(
-                text,
-                "service {} {}\n  http-origins: {}\n  env-slots: {}",
+            lines.push(format!(
+                "service {} {}\n  http-origins: {}\n  env-slots: {}\n",
                 manifest.service_uri,
                 manifest.package_version,
                 list(&manifest.http_origins),
                 list(&manifest.env_slots)
-            );
+            ));
             for permission in &manifest.wasi_permissions {
                 let granted: Vec<String> = self
                     .grants
@@ -454,17 +449,16 @@ impl Packages {
                     })
                     .map(|granted| describe_grant(&granted.grant))
                     .collect();
-                let _ = writeln!(
-                    text,
-                    "  wasi: {} granted {}",
+                lines.push(format!(
+                    "  wasi: {} granted {}\n",
                     permission.describe(),
                     list(&granted)
-                );
+                ));
             }
         }
         let names: Vec<String> = values.names().map(str::to_owned).collect();
-        let _ = writeln!(text, "env granted: {}", list(&names));
-        text
+        lines.push(format!("env granted: {}\n", list(&names)));
+        lines.concat()
     }
 
     /// The compiler's package inputs: every extension manifest and its schema.
