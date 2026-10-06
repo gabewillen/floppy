@@ -11,8 +11,8 @@ reopening one needs the maintainer. All are dated 2026-10-06.
 | Kind | squashed `git subtree` |
 | Source repository | local scxml.rs (`stateforward/scxml.rs`) |
 | Source branch | `feat/invoke-services` |
-| Source commit | `dd18cd11cc04e5f693c64e2f4b76e065e45fe6a6` ("Bind invoked service components in the run log identity so a replay with a different service is refused") |
-| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d"), then `070aa258` ("Squashed 'scxml.rs/' changes from fe7d555d..dd18cd11") |
+| Source commit | `2bf0dd5520fd912e5915ac96f64b1d6f103c984b` ("Print only variable names in ExtensionEnvironment's Debug and state the extension WASI refusal in AGENTS.md") |
+| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d"), then `070aa258` ("Squashed 'scxml.rs/' changes from fe7d555d..dd18cd11"), then `0a20ad2b` ("Squashed 'scxml.rs/' changes from dd18cd11..2bf0dd55") |
 | Update | `git subtree pull --prefix scxml.rs <scxml.rs> feat/invoke-services --squash`, after the change lands upstream |
 
 ## Decisions
