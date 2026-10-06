@@ -1,0 +1,18 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0",
+  "package-version": "0.1.0",
+  "extension-artifact": "nemobot_decision.virtualized.wasm",
+  "schema-artifact": "decision.xsd",
+  "schema-sha256": "738b36f34bd19d665f7d6516200cd3c4f05e71608199844d4dc8a0594dbda998",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0",
+  "http-origins": ["https://api.typesafe.ai"],
+  "env-slots": ["apikey", "baseurl"],
+  "events": {
+    "emits": [
+      {"name": "decision.abstain", "schema-artifact": "events.json#/$defs/Abstain", "schema-sha256": "99ff9582dbc6651346ebdc2f7a05ef9e06f9b4e469d102b8482b1dfd97345095"}
+    ],
+    "accepts": []
+  }
+}

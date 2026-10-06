@@ -86,7 +86,19 @@ expected_imports() {
                 'stateforward:scxml/data-model-host@0.2.0' \
                 'stateforward:scxml/outbound-http@0.2.0'
             ;;
-        nemobot_decision) ;;
+        # <decision:rank|classify|choose>: reads its parameters through the
+        # data model, the menu and default state through the session
+        # snapshot, posts one admitted request, and assigns the result or
+        # raises the chosen event (execution-host).
+        nemobot_decision)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'stateforward:scxml/data-model-host@0.2.0' \
+                'stateforward:scxml/execution-host@0.2.0' \
+                'stateforward:scxml/outbound-http@0.2.0' \
+                'stateforward:scxml/session-snapshot-host@0.2.0'
+            ;;
         *) echo "no import allowlist for component: $1" >&2; exit 1 ;;
     esac
 }
@@ -160,12 +172,13 @@ for component in $namespace_components; do
     repeat="$namespaces_dir/$component.determinism-check.wasm"
     test -f "$raw" || { echo "missing release component artifact: $raw" >&2; exit 1; }
     virt_input=$raw
-    if [ "$component" = nemobot_scxml ] || [ "$component" = nemobot_generate ]; then
+    if [ "$component" = nemobot_scxml ] || [ "$component" = nemobot_generate ] || [ "$component" = nemobot_decision ]; then
         # <sx:validate> links the scxml.rs validator, whose bundled XML
         # Schema backend seeds ahash from wasi:random/random and whose
         # `event` schema checks use std's RandomState (insecure-seed);
-        # <gen:generate> checks structured output with the same `event`
-        # schema code (boon, std's RandomState). wasi-virt denies randomness
+        # <gen:generate> checks structured output and <decision:choose>
+        # filled event data with the same `event` schema code (boon, std's
+        # RandomState). wasi-virt denies randomness
         # (the first schema check would trap), so compose the subtree's
         # pinned deterministic provider first, exactly as scxml.rs does for
         # its validator component (see the .wat header); the values only

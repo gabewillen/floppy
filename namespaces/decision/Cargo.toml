@@ -13,6 +13,18 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# Canonical JSON (deterministic request bodies), the digest check of the
+# snapshot's event schemas, and the JSON Schema checks of filled event data
+# (`resolve` for explicit candidates, `CompiledSchema` for every schema;
+# boon, nothing ever loaded).
+scxml-event-schema.workspace = true
+scxml-types.workspace = true
+serde_json.workspace = true
+wit-bindgen.workspace = true
+
+[dev-dependencies]
+# The package test reads the manifest with the parser every host uses.
+scxml-validator-core.workspace = true
 
 [lints]
 workspace = true
