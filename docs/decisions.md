@@ -11,8 +11,8 @@ reopening one needs the maintainer. All are dated 2026-10-06.
 | Kind | squashed `git subtree` |
 | Source repository | local scxml.rs (`stateforward/scxml.rs`) |
 | Source branch | `feat/invoke-services` |
-| Source commit | `e7d2fd7a8` ("Take --extension-call-fuel in scxml-cli snapshot run and run"), on top of `91b7c1b3` ("Read @FILE argument files in scxml-cli"), `14c4b8e97` ("Delete the openai namespace: model calls are invoked services"), `968095dd` ("Give invoked services deferred requests in scxml-cli run") and `50d622d7` ("Close a deferred service request's connection when its instance is cancelled") |
-| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d"), then `070aa258` ("Squashed 'scxml.rs/' changes from fe7d555d..dd18cd11"), then `0a20ad2b` ("Squashed 'scxml.rs/' changes from dd18cd11..2bf0dd55"), then `bf96cbf9` ("Squashed 'scxml.rs/' changes from 2bf0dd55..ebc051ae"), then `a2aaf0da` ("Squashed 'scxml.rs/' changes from ebc051ae1..5eb077c4b"), then `56069d18` ("Squashed 'scxml.rs/' changes from 5eb077c4b..14c4b8e97"), then `5dd298d9` ("Squashed 'scxml.rs/' changes from 14c4b8e97..e7d2fd7a8") |
+| Source commit | `aa12fa6d8` ("Document the WASI 0.3 invoked-service cutover"), on top of `f5bf2b674` ("Answer a service start-invocation unavailable in the browser host") and `67c811ab` ("Cut invoked services over to WASI 0.3 async invoke on wasmtime 49"), then `e7d2fd7a8` ("Take --extension-call-fuel in scxml-cli snapshot run and run") |
+| Squash commits here | `353ce1a` ("Squashed 'scxml.rs/' content from commit 9971c05"), then `5be41b24` ("Squashed 'scxml.rs/' changes from 9971c05a..fe7d555d"), then `070aa258` ("Squashed 'scxml.rs/' changes from fe7d555d..dd18cd11"), then `0a20ad2b` ("Squashed 'scxml.rs/' changes from dd18cd11..2bf0dd55"), then `bf96cbf9` ("Squashed 'scxml.rs/' changes from 2bf0dd55..ebc051ae"), then `a2aaf0da` ("Squashed 'scxml.rs/' changes from ebc051ae1..5eb077c4b"), then `56069d18` ("Squashed 'scxml.rs/' changes from 5eb077c4b..14c4b8e97"), then `5dd298d9` ("Squashed 'scxml.rs/' changes from 14c4b8e97..e7d2fd7a8"), then `91f3feed7` ("Squashed 'scxml.rs/' changes from e7d2fd7a8..f5bf2b674"), then `1c0991c20` ("Squashed 'scxml.rs/' changes from f5bf2b674..aa12fa6d8") |
 | Update | `git subtree pull --prefix scxml.rs <scxml.rs> feat/invoke-services --squash`, after the change lands upstream |
 
 ## Decisions
@@ -33,8 +33,26 @@ reopening one needs the maintainer. All are dated 2026-10-06.
 | D12 | 2026-10-06 | Git work is local commits only: no push, no pull requests, no remotes, no branches beyond the named ones. Each repository's AGENTS.md/CONTRIBUTING.md is followed; scxml.rs's rules are normative (fail closed, no unwrap/panic on reachable paths, wasm-only resource bounds, hard cutovers, canonical outputs, thin hosts, Wasm components behind versioned WIT). |
 | D14 | 2026-10-06 | nemobot has no runtime of its own. nemobot is bots (SCXML documents plus their schemas) and packages (`namespaces/*`, `services/*`), and they run on scxml.rs through `scxml-cli run`. The `host/` crate of D7 (nemobot's embedder: config file, env grants, package binding, WASI grants, consent listing, deferred transport, extension call fuel, session loop) is deleted as a hard cutover; what scxml-cli lacked went upstream (argument files, `--extension-call-fuel`). Each bot ships a scxml-cli argument file (`bots/<name>/<name>.args`) and, when it answers `#_parent`, a parent document; the tests drive `scxml-cli`. |
 | D13 | 2026-10-06 | Anything asynchronous, I/O-bound, or long-running is an invoked service (`<invoke>`). Extension elements are executable content: synchronous and quick, per the SCXML specification. So extension components get no WASI (services only; the host refusal stays, as the rule rather than a gap), and model calls never run inside executable content. `generate` becomes `services/generate`; `decision` splits into the synchronous `<decision:menu>` (namespace) and `services/decision`. |
+| D15 | 2026-10-06 | Invoked services cut over to WASI 0.3 and the Component Model async ABI on wasmtime 49.0.2 (scxml.rs `67c811ab`), a hard cutover. The `invoked-service` world imports `wasi:clocks/monotonic-clock@0.3.0` (the session's logical clock), `outbound-http` (whose `fetch` is an `async func`), and `telemetry`, and exports one `invoke: async func(request: invoke-request, events: stream<event>) -> result<tuple<stream<event>, future<result<option<data-value>, component-error>>>, component-error>`. This reverses D4's manifest `wasi-permissions` (a service may use exactly the WASI interfaces its component imports; the run grants runtime resources with wasmtime CLI names: `--dir URI=HOST::GUEST`, `--wasi URI=inherit-network`, `--wasi URI=allow-ip-name-lookup`; `--grant` is deleted) and the package event contracts of D5 (manifests have no `events`; the invoking document describes service events with `event:schema`, so `services/generate/package/events.json` is deleted and its schemas live in `bots/builder/builder.scxml` and `bots/builder/schemas`). The deferred transport (`outbound-http.begin`/`take`, `wake`) is deleted; a service's HTTP responses are recorded inputs, so record and replay work with services. `services/generate` and `services/decision` are each one async `invoke`. |
 
 ## Notes on applying the decisions
+
+- D15 (2026-10-06) supersedes the parts of the notes below that name
+  `wasi-permissions`, `--grant`, package event contracts,
+  `outbound-http.begin`/`take`, `wake`, `ThreadedServiceHttp`, or the
+  refusal of `--record`/`--replay` for WASI packages; they are kept as the
+  record of how D4, D5, D13, and D14 were first applied. Under D15 the
+  `generate` and `decision` services await `outbound-http.fetch` inside
+  `invoke` (it suspends only their own task), write their one event to the
+  returned stream, and resolve the result future; leaving the invoking
+  state drops the invocation and closes its connection (SCXML 6.4), and
+  `services/generate` still streams (`"stream": true`, server-sent events)
+  internally so the backend can stop generating. The failure code
+  `refused` is gone from both services: a request the host refuses before
+  sending fails as `transport`, as the host reports both the same way.
+  `decision.abstain` and `decision.failed` transitions in the builder gain
+  `decision_id !== null` in their `cond` so `<decision:menu>` never offers
+  them.
 
 - D4 and D13 (2026-10-06): slice 2 delivers WASI permissions for invoked
   services only, and the scxml.rs session host refuses an extension package
