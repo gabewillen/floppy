@@ -1110,7 +1110,7 @@ fn the_event_name_bound_applies_to_wasm_builds_only() {
         assert!(explicit.is_err());
     } else {
         assert_eq!(MAX_EVENT_NAME_BYTES, usize::MAX);
-        assert_eq!(offered, [long.clone()]);
+        assert_eq!(offered, std::slice::from_ref(&long));
         assert_eq!(explicit.map(|menu| menu.len()), Ok(1));
     }
     let at_bound = "e".repeat(256);
