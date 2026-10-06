@@ -64,7 +64,7 @@ esac
 mkdir -p "$artifacts_dir"
 
 # Expected imports of each namespace component after virtualization, one per
-# line. The skeletons import nothing yet; each namespace adds its exact
+# line. A skeleton imports nothing; each namespace adds its exact
 # stateforward:scxml interfaces here when it implements its component.
 expected_imports() {
     case "$1" in
@@ -76,7 +76,17 @@ expected_imports() {
                 'stateforward:scxml/telemetry@0.2.0' \
                 'stateforward:scxml/data-model-host@0.2.0'
             ;;
-        nemobot_generate|nemobot_decision) ;;
+        # <gen:generate>: reads its parameters through the data model,
+        # posts one admitted request, and assigns the reply there; no
+        # execution-host or snapshot.
+        nemobot_generate)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'stateforward:scxml/data-model-host@0.2.0' \
+                'stateforward:scxml/outbound-http@0.2.0'
+            ;;
+        nemobot_decision) ;;
         *) echo "no import allowlist for component: $1" >&2; exit 1 ;;
     esac
 }
@@ -150,13 +160,16 @@ for component in $namespace_components; do
     repeat="$namespaces_dir/$component.determinism-check.wasm"
     test -f "$raw" || { echo "missing release component artifact: $raw" >&2; exit 1; }
     virt_input=$raw
-    if [ "$component" = nemobot_scxml ]; then
+    if [ "$component" = nemobot_scxml ] || [ "$component" = nemobot_generate ]; then
         # <sx:validate> links the scxml.rs validator, whose bundled XML
         # Schema backend seeds ahash from wasi:random/random and whose
-        # `event` schema checks use std's RandomState (insecure-seed).
-        # wasi-virt denies randomness (the first validation would trap), so
-        # compose the subtree's pinned deterministic provider first, exactly
-        # as scxml.rs does for its validator component (see the .wat header).
+        # `event` schema checks use std's RandomState (insecure-seed);
+        # <gen:generate> checks structured output with the same `event`
+        # schema code (boon, std's RandomState). wasi-virt denies randomness
+        # (the first schema check would trap), so compose the subtree's
+        # pinned deterministic provider first, exactly as scxml.rs does for
+        # its validator component (see the .wat header); the values only
+        # key in-memory hash tables.
         random="$run_tmp/wasi-random-validator.wasm"
         seeded="$run_tmp/$component.seeded.wasm"
         wasm-tools parse "$workspace/scxml.rs/components/scxml-validator/wasi-random.wat" -o "$random"

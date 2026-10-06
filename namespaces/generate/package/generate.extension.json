@@ -1,0 +1,12 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://github.com/stateforward/nemobot/namespaces/generate@v0.1.0",
+  "package-version": "0.1.0",
+  "extension-artifact": "nemobot_generate.virtualized.wasm",
+  "schema-artifact": "generate.xsd",
+  "schema-sha256": "95254e26bce625fc06cdbe7bb2d97346ae9bee69c89c8dba94f34ba01e5c860f",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0",
+  "http-origins": ["https://api.openai.com"],
+  "env-slots": ["apikey", "baseurl"]
+}

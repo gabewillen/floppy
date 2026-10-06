@@ -1188,6 +1188,13 @@ version = "0.1.0"
 [[package]]
 name = "nemobot-generate"
 version = "0.1.0"
+dependencies = [
+ "scxml-event-schema",
+ "scxml-types",
+ "scxml-validator-core",
+ "serde_json",
+ "wit-bindgen 0.51.0",
+]
 
 [[package]]
 name = "nemobot-host"
