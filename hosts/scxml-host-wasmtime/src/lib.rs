@@ -176,8 +176,9 @@ pub use extension::{
 mod service;
 #[cfg(feature = "wasmtime")]
 pub use service::{
-    DEFAULT_SERVICE_CALL_FUEL, MAX_SERVICE_COMPONENTS, MAX_SERVICE_EVENTS, ServiceComponents,
-    ServiceEventSchema, ServiceEvents, ServicePackage,
+    DEFAULT_SERVICE_CALL_FUEL, MAX_SERVICE_COMPONENTS, MAX_SERVICE_EMITS_PER_CALL,
+    MAX_SERVICE_EMITTED_BYTES_PER_CALL, MAX_SERVICE_EVENTS, ServiceComponents, ServiceEventSchema,
+    ServiceEvents, ServicePackage,
 };
 #[cfg(feature = "wasmtime")]
 mod wasi;
