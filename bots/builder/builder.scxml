@@ -14,16 +14,34 @@
   files); the nemobot-host builder_bot test keeps them equal.
 
   intake -> design (gen:generate, topology plan) -> author (gen:generate,
-  draft SCXML + event schemas + test scripts) -> validate (sx:validate;
-  machine-applicable fixes through apply_fixes, at most 2 passes per draft)
-  -> simulate (each test script drives the draft as an invoked child through
-  #_candidate) -> package -> done. Every failure goes through retry_gate, which
-  counts it and gives up after max_attempts; triage then lets decision:choose
-  pick among its enabled event:schema transitions (repair, redesign,
+  draft SCXML + event schemas + test scripts) -> validate (the draft
+  contract, then sx:validate; machine-applicable fixes through apply_fixes,
+  at most 2 passes per draft) -> simulate (each test script drives the draft
+  as an invoked child with its own invoke id) -> package -> done. Every
+  failure goes through retry_gate, which counts it and gives up after
+  max_attempts; triage then lets decision:choose pick among its enabled
+  event:schema transitions (repair while there is a plan, redesign,
   abandon). When the decision is unavailable (no key granted, backend
   failure: error.execution) or abstains, fallback decides by cond: redesign
-  when there is no plan yet, else repair. Timeouts are delayed sends
-  cancelled on exit.
+  when there is no plan yet, else repair.
+
+  Bounds on time: gen:generate is a synchronous extension call inside
+  onentry, so no delayed send can preempt it; each generation is bounded by
+  the host's outbound HTTP timeouts (scxml.rs ExtensionHttpConfig: 10 s to
+  connect, 120 s per request) and fails as error.execution. The simulation
+  is bounded in the topology: each test runs at most sim_test_cap_ms, and
+  simulate-timeout (a delayed send cancelled on exit) fires only after
+  max_tests * sim_test_cap_ms plus a margin.
+
+  The draft contract: drafts are model-written and run as invoked children
+  of this session, which would inherit every namespace package and env
+  value the run binds. validate therefore refuses, before sx:validate's
+  verdict counts, a draft that declares a namespace other than SCXML and
+  event, or holds an invoke or script element (with any prefix), a src or
+  srcexpr attribute, a typeexpr attribute, or a type attribute other than
+  internal, external, deep, shallow, or the SCXML Event I/O Processor (so
+  no BasicHTTP send). The check is textual and fails closed: a forbidden
+  pattern inside a comment or CDATA section is refused too.
 
   Bindings: the scxml, generate, and decision namespace packages; the env
   slots OPENAI_API_KEY and OPENAI_BASE_URL (generate) and TYPESAFE_API_KEY and
@@ -45,7 +63,10 @@
     <data id="model" expr="'gpt-4o-mini'"/>
     <!-- The work. -->
     <data id="plan" expr="null"/>
+    <data id="previous_plan" expr="null"/>
     <data id="draft" expr="null"/>
+    <data id="previous_tests" expr="null"/>
+    <data id="contract_errors" expr="[]"/>
     <data id="scxml_text" expr="null"/>
     <data id="parsed_schemas" expr="[]"/>
     <data id="report" expr="null"/>
@@ -64,6 +85,9 @@
     <data id="attempt_log" expr="[]"/>
     <data id="failure_reason" expr="null"/>
     <!-- Simulation. -->
+    <data id="max_tests" expr="8"/>
+    <data id="sim_test_cap_ms" expr="120000"/>
+    <data id="candidate_id" expr="null"/>
     <data id="sim_index" expr="0"/>
     <data id="sim_results" expr="[]"/>
     <data id="observed" expr="[]"/>
@@ -94,54 +118,42 @@
   <!-- Plans the topology (structured output). -->
   <state id="design">
     <onentry>
-      <send id="design-timeout" event="builder.timeout" delay="180s"/>
+      <assign location="previous_plan" expr="plan"/>
       <assign location="plan" expr="null"/>
       <gen:generate location="plan" modelexpr="model" schemaname="topology_plan" strict="true"
                     system="You are the design stage of the nemobot builder bot. Plan the topology of one SCXML 1.0 state machine that implements the specification and honours every constraint. Use concise lowercase state ids (letters, digits, underscores). Name events with dotted lowercase names. Inputs are events the machine receives from its invoker; outputs are events it sends to its invoker. Model timing with delayed timer events, never with loops. When diagnostics or a previous plan are given, the previous attempt failed: plan again so that it cannot fail the same way. Answer with the plan only."
-                    expr="JSON.stringify({task: 'design', spec: spec, constraints: constraints, previous_plan: plan, diagnostics: diagnostics})"
+                    expr="JSON.stringify({task: 'design', spec: spec, constraints: constraints, previous_plan: previous_plan, diagnostics: diagnostics})"
                     env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
         <gen:schema>{"type":"object","properties":{"name":{"type":"string"},"summary":{"type":"string"},"states":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["atomic","compound","parallel","final"]},"parent":{"type":"string"},"purpose":{"type":"string"}},"required":["id","kind","parent","purpose"],"additionalProperties":false}},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"direction":{"type":"string","enum":["input","output","internal"]},"description":{"type":"string"}},"required":["name","direction","description"],"additionalProperties":false}},"transitions":{"type":"array","items":{"type":"object","properties":{"source":{"type":"string"},"event":{"type":"string"},"target":{"type":"string"},"description":{"type":"string"}},"required":["source","event","target","description"],"additionalProperties":false}}},"required":["name","summary","states","events","transitions"],"additionalProperties":false}</gen:schema>
       </gen:generate>
     </onentry>
-    <onexit>
-      <cancel sendid="design-timeout"/>
-    </onexit>
     <transition cond="plan !== null" target="author">
       <assign location="mode" expr="'author'"/>
     </transition>
     <transition event="error.execution" target="retry_gate">
       <assign location="diagnostics" expr="[{kind: 'generate', code: 'design-failed', message: 'the design generation failed or answered outside the plan schema'}]"/>
     </transition>
-    <transition event="builder.timeout" target="retry_gate">
-      <assign location="diagnostics" expr="[{kind: 'timeout', code: 'design-timeout', message: 'the design generation did not finish in time'}]"/>
-    </transition>
   </state>
 
   <!-- Writes the draft: SCXML, its input event schemas, and test scripts. -->
   <state id="author">
     <onentry>
-      <send id="author-timeout" event="builder.timeout" delay="300s"/>
       <assign location="attempt" expr="attempt + 1"/>
+      <assign location="previous_tests" expr="draft === null ? null : draft.tests"/>
       <assign location="draft" expr="null"/>
       <gen:generate location="draft" modelexpr="model" schemaname="scxml_draft" strict="true"
-                    system="You are the author stage of the nemobot builder bot. Write one complete SCXML 1.0 document that implements the plan and the specification. Rules: the root element is scxml in the namespace http://www.w3.org/2005/07/scxml with version 1.0 and datamodel ecmascript; use only core SCXML elements, plus the schema attribute of the namespace https://github.com/stateforward/scxml.rs/namespaces/event (bound to the prefix event) to give each input event an inline JSON Schema on the transitions that take it, written as single-quoted JSON; no other namespaces, no src attributes, no script elements, no invoke elements; every transition target names an existing state id; event descriptors are separated by spaces, never commas; send every output to the invoker with a send element whose target is #_parent, exactly once per occurrence (announce a state from its own onentry, not also from the transitions into it); the machine starts on its own in its initial state unless the specification names a start event; every state is reachable; implement timing with delayed sends (for example delay 3s) and cancel pending timers on exit. Also return schemas: one entry per input event, its schema as the JSON text of a JSON Schema object (for example {&quot;type&quot;:&quot;object&quot;}) equal to the inline one; and tests: one to eight test scripts, each with input events (name, data as JSON object text or the empty string, delay_ms from the start of the test), settle_ms (the total observation time from the start of the test, larger than every delay_ms), expect_events (the output event names the machine must send to #_parent, in order; other outputs may appear between them), and expect_done (whether the machine reaches a top-level final state within settle_ms; a machine that cycles forever never does). When the task is repair, previous_scxml and previous_tests failed with the given diagnostics: a simulate diagnostic means either the machine or the test expectation is wrong, so fix whichever disagrees with the specification, fix every other diagnostic, and keep what already works."
-                    expr="JSON.stringify({task: mode, spec: spec, constraints: constraints, plan: plan, previous_scxml: mode === 'repair' ? scxml_text : null, previous_tests: mode === 'repair' &amp;&amp; draft !== null ? draft.tests : null, diagnostics: diagnostics})"
+                    system="You are the author stage of the nemobot builder bot. Write one complete SCXML 1.0 document that implements the plan and the specification. Rules: the root element is scxml in the namespace http://www.w3.org/2005/07/scxml with version 1.0 and datamodel ecmascript; use only core SCXML elements, plus the schema attribute of the namespace https://github.com/stateforward/scxml.rs/namespaces/event (bound to the prefix event) to give each input event an inline JSON Schema on the transitions that take it, written as single-quoted JSON; no other namespaces, no src or srcexpr attributes, no script elements, no invoke elements, no type or typeexpr attribute on send (drafts that break these rules are refused before validation counts); every transition target names an existing state id; event descriptors are separated by spaces, never commas; send every output to the invoker with a send element whose target is #_parent, exactly once per occurrence (announce a state from its own onentry, not also from the transitions into it); the machine starts on its own in its initial state unless the specification names a start event; every state is reachable; implement timing with delayed sends (for example delay 3s) and cancel pending timers on exit. Also return schemas: one entry per input event, its schema as the JSON text of a JSON Schema object (for example {&quot;type&quot;:&quot;object&quot;}) equal to the inline one; and tests: one to eight test scripts, each with input events (name, data as JSON object text or the empty string, delay_ms from the start of the test), settle_ms (the total observation time from the start of the test, larger than every delay_ms), expect_events (the output event names the machine must send to #_parent, in order; other outputs may appear between them), and expect_done (whether the machine reaches a top-level final state within settle_ms; a machine that cycles forever never does). When the task is repair, previous_scxml and previous_tests failed with the given diagnostics: a simulate diagnostic means either the machine or the test expectation is wrong, so fix whichever disagrees with the specification, fix every other diagnostic, and keep what already works."
+                    expr="JSON.stringify({task: mode, spec: spec, constraints: constraints, plan: plan, previous_scxml: mode === 'repair' ? scxml_text : null, previous_tests: mode === 'repair' ? previous_tests : null, diagnostics: diagnostics})"
                     env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
         <gen:schema>{"type":"object","properties":{"scxml":{"type":"string"},"schemas":{"type":"array","items":{"type":"object","properties":{"event":{"type":"string"},"schema":{"type":"string"}},"required":["event","schema"],"additionalProperties":false}},"tests":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"data":{"type":"string"},"delay_ms":{"type":"integer"}},"required":["name","data","delay_ms"],"additionalProperties":false}},"settle_ms":{"type":"integer"},"expect_events":{"type":"array","items":{"type":"string"}},"expect_done":{"type":"boolean"}},"required":["name","events","settle_ms","expect_events","expect_done"],"additionalProperties":false}}},"required":["scxml","schemas","tests"],"additionalProperties":false}</gen:schema>
       </gen:generate>
     </onentry>
-    <onexit>
-      <cancel sendid="author-timeout"/>
-    </onexit>
     <transition cond="draft !== null" target="validate">
       <assign location="scxml_text" expr="draft.scxml"/>
       <assign location="fix_passes" expr="0"/>
     </transition>
     <transition event="error.execution" target="retry_gate">
       <assign location="diagnostics" expr="[{kind: 'generate', code: 'author-failed', message: 'the author generation failed or answered outside the draft schema'}]"/>
-    </transition>
-    <transition event="builder.timeout" target="retry_gate">
-      <assign location="diagnostics" expr="[{kind: 'timeout', code: 'author-timeout', message: 'the author generation did not finish in time'}]"/>
     </transition>
   </state>
 
@@ -152,14 +164,18 @@
       <assign location="report" expr="null"/>
       <assign location="fixed" expr="null"/>
       <assign location="schema_errors" expr="[]"/>
+      <assign location="contract_errors" expr="(function (text) { var errors = []; var add = function (message) { if (errors.length &lt; 20) { errors.push({kind: &#x27;draft&#x27;, code: &#x27;draft-contract&#x27;, message: message}); } }; var allowed = [&#x27;http://www.w3.org/2005/07/scxml&#x27;, &#x27;https://github.com/stateforward/scxml.rs/namespaces/event&#x27;]; var match = null; var declarations = /xmlns(?::[A-Za-z_][\w.\-]*)?\s*=\s*(?:&quot;([^&quot;]*)&quot;|&#x27;([^&#x27;]*)&#x27;)/g; while ((match = declarations.exec(text)) !== null) { var uri = match[1] !== undefined ? match[1] : match[2]; if (allowed.indexOf(uri) &lt; 0) { add(&#x27;the draft declares the namespace &#x27; + JSON.stringify(uri.slice(0, 200)) + &#x27;; only the SCXML namespace and the event namespace are allowed&#x27;); } } if (/&lt;\s*(?:[A-Za-z_][\w.\-]*:)?invoke[\s\/&gt;]/.test(text)) { add(&#x27;the draft holds an invoke element; drafts must not invoke anything&#x27;); } if (/&lt;\s*(?:[A-Za-z_][\w.\-]*:)?script[\s\/&gt;]/.test(text)) { add(&#x27;the draft holds a script element; drafts must not use script&#x27;); } if (/\s(?:[A-Za-z_][\w.\-]*:)?(?:src|srcexpr)\s*=/.test(text)) { add(&#x27;the draft has a src or srcexpr attribute; drafts must load nothing&#x27;); } if (/\s(?:[A-Za-z_][\w.\-]*:)?typeexpr\s*=/.test(text)) { add(&#x27;the draft has a typeexpr attribute; drafts must name no processor or invoke type by expression&#x27;); } var types = [&#x27;internal&#x27;, &#x27;external&#x27;, &#x27;deep&#x27;, &#x27;shallow&#x27;, &#x27;http://www.w3.org/TR/scxml/#SCXMLEventProcessor&#x27;]; var typed = /\s(?:[A-Za-z_][\w.\-]*:)?type\s*=\s*(?:&quot;([^&quot;]*)&quot;|&#x27;([^&#x27;]*)&#x27;)/g; while ((match = typed.exec(text)) !== null) { var value = match[1] !== undefined ? match[1] : match[2]; if (types.indexOf(value) &lt; 0) { add(&#x27;the draft has the type &#x27; + JSON.stringify(value.slice(0, 200)) + &#x27;; drafts send only through the SCXML Event I/O Processor&#x27;); } } return errors; })(scxml_text)"/>
       <assign location="parsed_schemas" expr="draft.schemas.map(function (s) { var value = null; try { value = JSON.parse(s.schema); } catch (e) { value = null; } if (value === null || (typeof value !== 'object' &amp;&amp; typeof value !== 'boolean') || Array.isArray(value)) { schema_errors.push({kind: 'draft', code: 'schema-not-json', message: 'the schemas entry of ' + JSON.stringify(s.event) + ' is not a JSON Schema object as JSON text: ' + JSON.stringify(String(s.schema).slice(0, 200))}); } return {event: s.event, schema: value}; })"/>
       <sx:validate location="report" expr="scxml_text" name="draft.scxml"
                    applyfixes="machine-applicable" fixedlocation="fixed"/>
     </onentry>
+    <transition cond="report !== null &amp;&amp; contract_errors.length &gt; 0" target="retry_gate">
+      <assign location="diagnostics" expr="contract_errors"/>
+    </transition>
     <transition cond="report !== null &amp;&amp; schema_errors.length &gt; 0" target="retry_gate">
       <assign location="diagnostics" expr="schema_errors.slice(0, 20)"/>
     </transition>
-    <transition cond="report !== null &amp;&amp; report.validator.counts.errors === 0 &amp;&amp; Array.isArray(draft.tests) &amp;&amp; draft.tests.length &gt;= 1 &amp;&amp; draft.tests.length &lt;= 8 &amp;&amp; draft.tests.every(function (t) { return t.events.length &lt;= 32; })"
+    <transition cond="report !== null &amp;&amp; report.validator.counts.errors === 0 &amp;&amp; Array.isArray(draft.tests) &amp;&amp; draft.tests.length &gt;= 1 &amp;&amp; draft.tests.length &lt;= max_tests &amp;&amp; draft.tests.every(function (t) { return t.events.length &lt;= 32; })"
                 target="simulate">
       <assign location="warnings" expr="report.validator.counts.warnings"/>
     </transition>
@@ -186,10 +202,12 @@
     <transition target="validate"/>
   </state>
 
-  <!-- Runs every test script against the draft as an invoked child. -->
+  <!-- Runs every test script against the draft as an invoked child. The
+       timeout covers the longest simulation validate admits (max_tests
+       tests of at most sim_test_cap_ms each) plus a margin. -->
   <state id="simulate" initial="sim_next">
     <onentry>
-      <send id="simulate-timeout" event="builder.timeout" delay="900s"/>
+      <send id="simulate-timeout" event="builder.timeout" delayexpr="(max_tests * sim_test_cap_ms + 60000) + 'ms'"/>
       <assign location="sim_index" expr="0"/>
       <assign location="sim_results" expr="[]"/>
     </onentry>
@@ -205,7 +223,9 @@
       <transition target="sim_run"/>
     </state>
 
-    <!-- One test: the draft runs as #_candidate for the script's settle time. -->
+    <!-- One test: the draft runs as a fresh invocation (its own generated
+         id in candidate_id, so nothing a cancelled earlier candidate left
+         on the queue counts) for the script's settle time. -->
     <state id="sim_run">
       <onentry>
         <assign location="observed" expr="[]"/>
@@ -221,28 +241,28 @@
         </foreach>
         <cancel sendid="sim-settle"/>
       </onexit>
-      <invoke id="candidate" type="scxml">
+      <invoke idlocation="candidate_id" type="scxml">
         <content expr="scxml_text"/>
       </invoke>
       <transition event="sim.drive">
         <foreach array="draft.tests[sim_index].events" item="step">
-          <send eventexpr="step.name" target="#_candidate" idlocation="sent_id"
+          <send eventexpr="step.name" targetexpr="'#_' + candidate_id" idlocation="sent_id"
                 delayexpr="Math.min(Math.max(step.delay_ms, 0), 60000) + 'ms'">
             <content expr="step.data === '' ? null : JSON.parse(step.data)"/>
           </send>
           <assign location="sim_sends" expr="sim_sends.concat([sent_id])"/>
         </foreach>
         <send id="sim-settle" event="sim.settle"
-              delayexpr="Math.min(120000, Math.max.apply(null, [1, draft.tests[sim_index].settle_ms].concat(draft.tests[sim_index].events.map(function (e) { return e.delay_ms + 1; })))) + 'ms'"/>
+              delayexpr="Math.min(sim_test_cap_ms, Math.max.apply(null, [1, draft.tests[sim_index].settle_ms].concat(draft.tests[sim_index].events.map(function (e) { return e.delay_ms + 1; })))) + 'ms'"/>
       </transition>
-      <transition event="done.invoke.candidate" target="sim_check">
+      <transition event="done.invoke" cond="_event.invokeid === candidate_id" target="sim_check">
         <assign location="child_done" expr="true"/>
       </transition>
       <transition event="sim.settle" target="sim_check"/>
-      <transition event="error.*" target="sim_check">
+      <transition event="error.*" cond="!_event.invokeid || _event.invokeid === candidate_id" target="sim_check">
         <assign location="sim_error" expr="_event.name"/>
       </transition>
-      <transition event="*" cond="_event.invokeid === 'candidate'">
+      <transition event="*" cond="_event.invokeid === candidate_id">
         <assign location="observed" expr="observed.concat([_event.name])"/>
       </transition>
     </state>
@@ -251,7 +271,7 @@
          order (other outputs may come between), and expect_done. -->
     <state id="sim_check">
       <onentry>
-        <assign location="sim_results" expr="sim_results.concat([(function (t) { var next = 0; observed.forEach(function (name) { if (next &lt; t.expect_events.length &amp;&amp; name === t.expect_events[next]) { next += 1; } }); return {name: t.name, passed: sim_error === null &amp;&amp; next === t.expect_events.length &amp;&amp; child_done === t.expect_done, observed: observed, expected: t.expect_events, done: child_done, expect_done: t.expect_done, error: sim_error}; })(draft.tests[sim_index])])"/>
+        <assign location="sim_results" expr="sim_results.concat([(function (t) { var next = 0; observed.forEach(function (name) { if (next &lt; t.expect_events.length &amp;&amp; name === t.expect_events[next]) { next += 1; } }); return {name: t.name, invokeid: candidate_id, passed: sim_error === null &amp;&amp; next === t.expect_events.length &amp;&amp; child_done === t.expect_done, observed: observed, expected: t.expect_events, done: child_done, expect_done: t.expect_done, error: sim_error}; })(draft.tests[sim_index])])"/>
         <assign location="sim_index" expr="sim_index + 1"/>
       </onentry>
       <transition target="sim_next"/>
@@ -284,8 +304,13 @@
                        instructions="An SCXML draft failed. Choose how the builder continues: repair the draft from its diagnostics when they are local mistakes, redesign the plan when the diagnostics show the topology is wrong or there is no plan, abandon only when the specification cannot be built as a state machine."
                        env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL"/>
     </onentry>
-    <transition event="triage.repair" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"triage.repair","description":"Repair the current draft: author it again from the same plan with the diagnostics of the failed attempt.","type":"object","additionalProperties":false}' target="author">
+    <transition event="triage.repair" cond="plan !== null" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"triage.repair","description":"Repair the current draft: author it again from the same plan with the diagnostics of the failed attempt.","type":"object","additionalProperties":false}' target="author">
       <assign location="mode" expr="'repair'"/>
+      <assign location="decisions" expr="decisions.concat(['triage.repair'])"/>
+    </transition>
+    <!-- Repair needs a plan (builder.done reports it); without one, a
+         triage.repair (never offered then) redesigns. -->
+    <transition event="triage.repair" target="design">
       <assign location="decisions" expr="decisions.concat(['triage.repair'])"/>
     </transition>
     <transition event="triage.redesign" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"triage.redesign","description":"Redesign: plan the topology again, then author a new draft, because the plan itself looks wrong.","type":"object","additionalProperties":false}' target="design">

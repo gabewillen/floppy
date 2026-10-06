@@ -307,18 +307,32 @@ fn green_comma() -> String {
     )
 }
 
-/// A draft: the document, the button's schema, and one test script.
-fn draft(scxml: &str) -> String {
-    json!({
-        "scxml": scxml,
-        "schemas": [{"event": "pedestrian.button", "schema": BUTTON_SCHEMA}],
-        "tests": [{
+/// The test scripts every draft carries.
+fn tests() -> Json {
+    json!([
+        {
             "name": "button ends green early",
             "events": [{"name": "pedestrian.button", "data": "{}", "delay_ms": 1000}],
             "settle_ms": 6000,
             "expect_events": ["light.green", "light.yellow", "light.red", "walk.on"],
             "expect_done": false,
-        }],
+        },
+        {
+            "name": "the light starts green",
+            "events": [],
+            "settle_ms": 2000,
+            "expect_events": ["light.green"],
+            "expect_done": false,
+        },
+    ])
+}
+
+/// A draft: the document, the button's schema, and two test scripts.
+fn draft(scxml: &str) -> String {
+    json!({
+        "scxml": scxml,
+        "schemas": [{"event": "pedestrian.button", "schema": BUTTON_SCHEMA}],
+        "tests": tests(),
     })
     .to_string()
 }
@@ -331,6 +345,15 @@ fn invalid_draft() -> String {
 /// A draft whose only error has a machine-applicable fix.
 fn fixable_draft() -> String {
     draft(&traffic_light(&green_comma(), "red"))
+}
+
+/// A draft that breaks the draft contract: red invokes a nested machine
+/// from a string, which `sx:validate` does not look inside.
+fn smuggling_draft() -> String {
+    draft(&traffic_light(&green_separate(), "red").replace(
+        "<transition event=\"light.timer\" target=\"green\"/>",
+        "<transition event=\"light.timer\" target=\"green\"/><invoke type=\"scxml\"><content expr=\"'&lt;scxml xmlns=&quot;http://www.w3.org/2005/07/scxml&quot; version=&quot;1.0&quot;/&gt;'\"/></invoke>",
+    ))
 }
 
 fn completion(content: &str) -> String {
@@ -415,7 +438,9 @@ impl Received {
 /// The deterministic fake backend on 127.0.0.1. `generate` routes:
 /// `/repair/v1` answers the plan, then the invalid draft, then the fixable
 /// one, then valid drafts; `/broken/v1` answers the plan, then only invalid
-/// drafts. `decision` route: `/typesafe` chooses `triage.repair`.
+/// drafts; `/smuggle/v1` answers the plan, then only drafts that break the
+/// draft contract; `/noplan/v1` fails every plan (404). `decision` routes:
+/// `/typesafe` chooses `triage.repair`, `/redesign` `triage.redesign`.
 struct Mock {
     origin: String,
     received: Arc<Mutex<Vec<Received>>>,
@@ -474,9 +499,14 @@ impl Mock {
                 };
                 let reply = match (path.as_str(), request.schema_name()) {
                     (
-                        "/repair/v1/chat/completions" | "/broken/v1/chat/completions",
+                        "/repair/v1/chat/completions"
+                        | "/broken/v1/chat/completions"
+                        | "/smuggle/v1/chat/completions",
                         Some("topology_plan"),
                     ) => Some(completion(PLAN)),
+                    ("/smuggle/v1/chat/completions", Some("scxml_draft")) => {
+                        Some(completion(&smuggling_draft()))
+                    }
                     ("/repair/v1/chat/completions", Some("scxml_draft")) => {
                         Some(completion(&match authors {
                             1 => invalid_draft(),
@@ -488,6 +518,7 @@ impl Mock {
                         Some(completion(&invalid_draft()))
                     }
                     ("/typesafe/v1/systemone", _) => system_one("triage.repair", &body),
+                    ("/redesign/v1/systemone", _) => system_one("triage.redesign", &body),
                     _ => None,
                 };
                 let (status, reply) = reply.map_or(("404 Not Found", "{}".to_owned()), |reply| {
@@ -509,14 +540,14 @@ impl Mock {
 }
 
 /// Writes an env file holding both fake keys and both base URLs.
-fn env_file(test: &str, mock: &Mock, generate_route: &str) -> PathBuf {
+fn env_file(test: &str, mock: &Mock, generate_route: &str, decision_route: &str) -> PathBuf {
     let dir = workspace().join("target/test-builder-bot/env");
     std::fs::create_dir_all(&dir).expect("the env directory is creatable");
     let path = dir.join(format!("{test}.env"));
     std::fs::write(
         &path,
         format!(
-            "OPENAI_API_KEY={FAKE_OPENAI_KEY}\nOPENAI_BASE_URL={origin}/{generate_route}/v1\nTYPESAFE_API_KEY={FAKE_TYPESAFE_KEY}\nTYPESAFE_BASE_URL={origin}/typesafe\n",
+            "OPENAI_API_KEY={FAKE_OPENAI_KEY}\nOPENAI_BASE_URL={origin}/{generate_route}/v1\nTYPESAFE_API_KEY={FAKE_TYPESAFE_KEY}\nTYPESAFE_BASE_URL={origin}/{decision_route}\n",
             origin = mock.origin
         ),
     )
@@ -532,7 +563,19 @@ const ALL: [&str; 4] = [
 ];
 
 fn run(mock: &Mock, test: &str, route: &str, env: &[&str], request: &Json) -> Vec<Egress> {
-    let config = config(&env_file(test, mock, route), env);
+    run_deciding(mock, test, route, "typesafe", env, request)
+}
+
+/// [`run`] with the decision backend on `decision_route`.
+fn run_deciding(
+    mock: &Mock,
+    test: &str,
+    route: &str,
+    decision_route: &str,
+    env: &[&str],
+    request: &Json,
+) -> Vec<Egress> {
+    let config = config(&env_file(test, mock, route, decision_route), env);
     let handle = open(&config, ClockMode::Logical);
     handle
         .send(build_event(request))
@@ -679,7 +722,7 @@ fn the_builder_repairs_an_invalid_draft_fixes_it_simulates_it_and_reports_done()
         done["schemas"],
         json!([{"event": "pedestrian.button", "schema": {"type": "object", "additionalProperties": false}}])
     );
-    assert_eq!(done["tests"][0]["name"], "button ends green early");
+    assert_eq!(done["tests"], tests());
 
     let report = &done["report"];
     assert_eq!(report["attempts"], 2, "{report}");
@@ -689,12 +732,26 @@ fn the_builder_repairs_an_invalid_draft_fixes_it_simulates_it_and_reports_done()
     assert_eq!(report["plan"]["name"], "traffic_light");
     assert_eq!(report["history"][0]["diagnostics"][0]["code"], "SCXML005");
     let simulation = report["simulation"].as_array().expect("simulation results");
-    assert_eq!(simulation.len(), 1, "{report}");
-    assert_eq!(simulation[0]["passed"], true, "{report}");
+    assert_eq!(simulation.len(), 2, "{report}");
+    assert!(
+        simulation.iter().all(|result| result["passed"] == true),
+        "{report}"
+    );
     assert_eq!(
         simulation[0]["observed"],
         json!(["light.green", "light.yellow", "light.red", "walk.on"]),
-        "the draft ran as an invoked child, driven through #_candidate: {report}"
+        "the draft ran as an invoked child, driven through #_<invokeid>: {report}"
+    );
+    assert_eq!(
+        simulation[1]["observed"],
+        json!(["light.green"]),
+        "{report}"
+    );
+    let first_id = simulation[0]["invokeid"].as_str().expect("an invoke id");
+    let second_id = simulation[1]["invokeid"].as_str().expect("an invoke id");
+    assert!(
+        !first_id.is_empty() && first_id != second_id,
+        "each test runs its own invocation, so nothing an earlier one queued counts: {report}"
     );
 
     // One plan, two drafts (the second with the first one's diagnostics),
@@ -705,6 +762,7 @@ fn the_builder_repairs_an_invalid_draft_fixes_it_simulates_it_and_reports_done()
     assert_eq!(designs.len(), 1);
     assert_eq!(authors.len(), 2);
     assert_eq!(designs[0].user_input()["spec"], SPEC);
+    assert_eq!(designs[0].user_input()["previous_plan"], Json::Null);
     let first = authors[0].user_input();
     assert_eq!(first["task"], "author");
     assert_eq!(first["plan"]["name"], "traffic_light");
@@ -717,6 +775,12 @@ fn the_builder_repairs_an_invalid_draft_fixes_it_simulates_it_and_reports_done()
             .is_some_and(|text| text.contains(r#"target="amber""#)),
         "the repair sees the failed draft"
     );
+    assert_eq!(
+        second["previous_tests"],
+        tests(),
+        "the repair sees the failed draft's tests"
+    );
+    assert_eq!(first["previous_tests"], Json::Null);
     for request in designs.iter().chain(&authors) {
         assert_eq!(
             request.authorization.as_deref(),
@@ -774,6 +838,104 @@ fn the_builder_gives_up_after_max_attempts_with_the_fallback_triage() {
             .iter()
             .all(|request| request.path != "/typesafe/v1/systemone"),
         "no decision request without a granted key"
+    );
+}
+
+/// A redesign sends the plan it replaces as `previous_plan`.
+#[test]
+fn a_redesign_sends_the_previous_plan() {
+    let mock = Mock::start();
+    let records = run_deciding(
+        &mock,
+        "redesign",
+        "broken",
+        "redesign",
+        &ALL,
+        &json!({"spec": SPEC, "max_attempts": 2}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "builder.failed", "{failed}");
+    let received = mock.received();
+    let designs = chat_requests(&received, "topology_plan");
+    assert_eq!(designs.len(), 2, "one design, then the redesign");
+    assert_eq!(designs[0].user_input()["previous_plan"], Json::Null);
+    let expected: Json = serde_json::from_str(PLAN).expect("the plan is JSON");
+    let second = designs[1].user_input();
+    assert_eq!(
+        second["previous_plan"], expected,
+        "the redesign sees the plan it replaces"
+    );
+    assert_eq!(second["diagnostics"][0]["code"], "SCXML005");
+}
+
+/// Without a plan, `decision:choose` is not offered `triage.repair` (its
+/// guard is false), so `builder.done` never reports a null plan.
+#[test]
+fn repair_is_not_offered_without_a_plan() {
+    let mock = Mock::start();
+    let records = run_deciding(
+        &mock,
+        "noplan",
+        "noplan",
+        "redesign",
+        &ALL,
+        &json!({"spec": SPEC, "max_attempts": 2}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "builder.failed", "{failed}");
+    assert_eq!(failed["reason"], "attempts-exhausted");
+    assert_eq!(failed["diagnostics"][0]["code"], "design-failed");
+    let received = mock.received();
+    assert_eq!(chat_requests(&received, "topology_plan").len(), 2);
+    assert!(chat_requests(&received, "scxml_draft").is_empty());
+    let decisions: Vec<&Received> = received
+        .iter()
+        .filter(|request| request.path == "/redesign/v1/systemone")
+        .collect();
+    assert_eq!(decisions.len(), 1);
+    let offered: Vec<&String> = decisions[0]
+        .body
+        .pointer("/questions/selection/criteria")
+        .and_then(Json::as_object)
+        .expect("the selection question")
+        .keys()
+        .collect();
+    assert!(
+        !offered.iter().any(|label| *label == "triage.repair"),
+        "{offered:?}"
+    );
+    assert!(
+        offered.iter().any(|label| *label == "triage.redesign"),
+        "{offered:?}"
+    );
+}
+
+/// A draft that invokes, scripts, loads, or declares another namespace is
+/// refused before validation counts, so it never runs as a child with the
+/// run's packages and env values.
+#[test]
+fn a_draft_that_breaks_the_draft_contract_never_runs() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "smuggle",
+        "smuggle",
+        &["OPENAI_API_KEY", "OPENAI_BASE_URL"],
+        &json!({"spec": SPEC, "max_attempts": 1}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "builder.failed", "{failed}");
+    assert_eq!(failed["reason"], "attempts-exhausted");
+    assert_eq!(failed["diagnostics"][0]["kind"], "draft");
+    assert_eq!(failed["diagnostics"][0]["code"], "draft-contract");
+    assert!(
+        failed["diagnostics"][0]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("invoke")),
+        "{failed}"
     );
 }
 

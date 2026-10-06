@@ -44,35 +44,61 @@ intake -> design -> author -> validate -> simulate -> package -> done
 ```
 
 * `design`: `gen:generate` with the `topology_plan` structured-output schema.
+  A redesign sends the plan it replaces (`previous_plan`) with the
+  diagnostics.
 * `author`: `gen:generate` with the `scxml_draft` schema: the document (plain
   SCXML with inline `event:schema` on its input transitions), the input event
   schemas as JSON text, and one to eight test scripts (input events with
   delays, a settle time, the outputs expected in order, and whether the
   machine finishes). A repair sees the failed draft, its tests, and the
   diagnostics.
-* `validate`: the draft's schemas must parse; `sx:validate` with
+* `validate`: the draft must keep the draft contract (below); its schemas
+  must parse; `sx:validate` with
   `applyfixes="machine-applicable"`; when the fixes change the text,
   `apply_fixes` takes them and validates again (at most 2 passes per draft);
   otherwise the error diagnostics feed back to `author`.
-* `simulate`: each test script runs the draft as an invoked child
-  (`<invoke id="candidate" type="scxml"><content expr="scxml_text"/></invoke>`),
-  sends the script's events through `#_candidate` with their delays, collects
-  every event the child sends to `#_parent` until the settle time (or
-  `done.invoke.candidate`), and compares: the expected outputs must appear in
-  order (others may come between) and the child must finish exactly when the
-  test says so.
+* `simulate`: each test script runs the draft as a fresh invoked child
+  (`<invoke idlocation="candidate_id" type="scxml"><content expr="scxml_text"/></invoke>`,
+  so each test has its own generated invoke id and nothing a cancelled
+  earlier child left on the queue counts), sends the script's events through
+  `#_<candidate_id>` with their delays, collects every event that child
+  sends to `#_parent` until the settle time (at most `sim_test_cap_ms`,
+  120 s) or its `done.invoke`, and compares: the expected outputs must
+  appear in order (others may come between) and the child must finish
+  exactly when the test says so.
 * `package`: sends `builder.done`.
 * `retry_gate`: every failure (generation, draft, validation, simulation,
   timeout) passes through it; it counts the failure and fails the build at
   `max_attempts`, so every loop is bounded.
 * `triage`: `decision:choose` picks among the state's enabled `event:schema`
-  transitions, `triage.repair`, `triage.redesign`, and `triage.abandon`.
+  transitions: `triage.repair` (guarded by `plan !== null`, so it is offered
+  only when there is a plan to repair from), `triage.redesign`, and
+  `triage.abandon`.
 * `fallback`: the cond-based triage when the decision is unavailable (no
   `TYPESAFE_API_KEY` granted or a backend failure: `error.execution`) or
   abstains (`decision.abstain`): redesign without a plan, else repair.
 
-Timeouts are delayed sends cancelled on exit (`design` 180 s, `author`
-300 s, `simulate` 900 s); a timeout is a failure like any other.
+Time is bounded in two ways. `gen:generate` is a synchronous extension
+call inside `onentry`, so no delayed send can preempt it: each generation
+is bounded by the host's outbound HTTP timeouts (10 s to connect, 120 s
+per request) and a timed-out request is `error.execution`, a failure like
+any other. The simulation is bounded in the topology: `simulate-timeout`
+is a delayed send cancelled on exit that fires after
+`max_tests * sim_test_cap_ms` plus 60 s, longer than the longest
+simulation `validate` admits (8 tests of at most 120 s each).
+
+## The draft contract
+
+Drafts are model output, and a draft runs as an invoked child of the
+builder's session, which would inherit every namespace package and `env`
+value the run binds. So `validate` refuses, before `sx:validate`'s verdict
+counts, a draft that declares a namespace other than SCXML and `event`, or
+holds an `invoke` or `script` element (with any prefix), a `src` or
+`srcexpr` attribute, a `typeexpr` attribute, or a `type` other than
+`internal`, `external`, `deep`, `shallow`, or the SCXML Event I/O Processor
+(so no BasicHTTP send). The diagnostics (`draft-contract`) feed back to
+`author`. The check is textual and fails closed: a forbidden pattern
+inside a comment or a CDATA section is refused too.
 
 ## Bindings
 
@@ -93,12 +119,15 @@ the spec "a traffic light with a pedestrian button" against a fake
 Chat Completions and `system_one` backend on 127.0.0.1: an invalid first
 draft (`SCXML005`) goes back to `author` through `triage.repair`, the second
 draft's only error is fixed by its machine-applicable fix, and the fixed
-draft simulates as an invoked child before `builder.done`. Other cases cover
-the fallback triage exhausting `max_attempts` and an invalid request. The
+draft runs its two test scripts as two invoked children (distinct invoke
+ids) before `builder.done`; the repair request carries the failed draft and
+its tests. Other cases cover a redesign that sends the plan it replaces,
+`triage.repair` not being offered without a plan, a draft that breaks the
+draft contract never running, the fallback triage exhausting
+`max_attempts`, and an invalid request. The
 ignored `live_builder_through_an_env_file` test runs the same spec with the
 real backends; [`examples/traffic_light`](examples/traffic_light) is one such
-live build (`gpt-4.1`; it passed on its first attempt, so no triage ran; an
-earlier live run repaired twice through TypeSafe's `triage.repair`), kept
+live build (its `report.json` records one attempt, so no triage ran), kept
 because it validates and passed its own simulation. It is model output, kept as built: for example
 its `onexit` handlers do not cancel the phase timers, which its tests do not
 detect.
