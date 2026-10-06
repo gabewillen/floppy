@@ -24,11 +24,11 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use scxml_host_wasmtime::{
-    ArtifactKind, AuthenticatedComponent, DocumentKind, EmbeddedDocument, ExtensionComponents,
-    ExtensionEnvironment, ExtensionHttpClient, ExtensionHttpConfig, ExtensionPackage,
-    MachineScripts, ScriptedEvent, SessionEmbedder, SessionHost, SessionHostComponents,
-    SessionOutcome, SessionRun, SnapshotRequest, TelemetryProviders, TrustedComponentDigest,
-    TrustedManifestDigest, WasmtimeHostConfig, authenticate_component,
+    ArtifactKind, AuthenticatedComponent, DocumentKind, EmbeddedDocument, EnvVariable,
+    ExtensionComponents, ExtensionEnvironment, ExtensionHttpClient, ExtensionHttpConfig,
+    ExtensionPackage, MachineScripts, ScriptedEvent, SessionEmbedder, SessionHost,
+    SessionHostComponents, SessionOutcome, SessionRun, SnapshotRequest, TelemetryProviders,
+    TrustedComponentDigest, TrustedManifestDigest, WasmtimeHostConfig, authenticate_component,
     authenticate_extension_component,
 };
 use sha2::{Digest as _, Sha256};
@@ -260,13 +260,23 @@ impl SessionEmbedder for NoResources {
 }
 
 /// A session host binding the openai namespace (its package declaring
-/// `declared`) with `variables` as the run's values and, when `outbound`,
-/// an outbound transport.
+/// `declared`) with `variables` as the run's values, granted to the openai
+/// namespace, and, when `outbound`, an outbound transport.
 fn host(variables: &[(&str, String)], outbound: bool, declared: &[&str]) -> SessionHost {
+    granted_host(variables, OPENAI_URI, outbound, declared)
+}
+
+/// [`host`] with `variables` granted to `granted_to` only.
+fn granted_host(
+    variables: &[(&str, String)],
+    granted_to: &str,
+    outbound: bool,
+    declared: &[&str],
+) -> SessionHost {
     let values = ExtensionEnvironment::new(
         variables
             .iter()
-            .map(|(name, value)| ((*name).to_owned(), value.clone())),
+            .map(|(name, value)| EnvVariable::new(*name, value.clone(), [granted_to.to_owned()])),
     )
     .expect("valid variables");
     let mut extensions = ExtensionComponents::new()
@@ -506,6 +516,19 @@ fn a_missing_api_key_raises_error_execution_and_sends_nothing() {
     );
     assert_eq!(run(&host).configuration, ["failed"]);
     assert!(mock.received().is_empty());
+}
+
+#[test]
+fn values_granted_to_another_package_are_absent_and_send_nothing() {
+    let mock = Mock::start();
+    let host = granted_host(
+        &key_and_base(format!("{}/ok/v1", mock.origin)),
+        "https://github.com/stateforward/scxml.rs/namespaces/other@v0.2.0",
+        true,
+        &[],
+    );
+    assert_eq!(run(&host).configuration, ["failed"]);
+    assert!(mock.received().is_empty(), "nothing reached the network");
 }
 
 #[test]

@@ -43,7 +43,9 @@
 //!   `env:<slot>expr`, [`scxml_types::ENV_NAMESPACE_URI`]), the host hands the
 //!   component an opaque reference for that slot, valid only during that
 //!   `execute` call, and substitutes the value only inside the call's
-//!   `outbound-http` requests. A name with no value leaves the slot absent
+//!   `outbound-http` requests. Each value is granted to exact package URIs
+//!   ([`EnvVariable`]); a name with no value, or whose value is not granted
+//!   to the element's namespace, leaves the slot absent
 //!   ([`ExtensionObserver::value_missing`]). An element's references are its
 //!   own: another element, of the same or another namespace, never receives
 //!   them. Extension components import no WASI interface at all: this host
@@ -228,31 +230,93 @@ const SCXML_NAMESPACE: &str = "http://www.w3.org/2005/07/scxml";
 /// The built-in XML namespace, which no extension component may claim.
 const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
 
-/// The values of the variables a run grants extension elements' `env` slots:
+/// One variable a run grants: its name, its value, and the exact package URIs
+/// (extension namespace URIs or invoked-service type URIs) whose elements or
+/// `<invoke>`s may reference it. A slot reference to the variable from any
+/// other package is absent, exactly like a variable with no value. Its `Debug`
+/// output never prints the value.
+#[derive(Clone, Eq, PartialEq)]
+pub struct EnvVariable {
+    name: String,
+    value: String,
+    packages: Vec<String>,
+}
+
+impl std::fmt::Debug for EnvVariable {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("EnvVariable")
+            .field("name", &self.name)
+            .field("packages", &self.packages)
+            .finish_non_exhaustive()
+    }
+}
+
+impl EnvVariable {
+    /// `name` holding `value`, granted to exactly `packages` (sorted and
+    /// checked by [`ExtensionEnvironment::new`]).
+    #[must_use]
+    pub fn new(
+        name: impl Into<String>,
+        value: impl Into<String>,
+        packages: impl IntoIterator<Item = String>,
+    ) -> Self {
+        let mut packages: Vec<String> = packages.into_iter().collect();
+        packages.sort();
+        Self {
+            name: name.into(),
+            value: value.into(),
+            packages,
+        }
+    }
+
+    /// The variable's name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The exact package URIs granted the variable, sorted.
+    #[must_use]
+    pub fn packages(&self) -> &[String] {
+        &self.packages
+    }
+
+    fn is_valid(&self) -> bool {
+        !self.name.is_empty()
+            && self.name.len() <= MAX_ENVIRONMENT_NAME_BYTES
+            && !self.name.contains(['=', '\0'])
+            && self.value.len() <= MAX_ENVIRONMENT_VALUE_BYTES
+            && !self.value.contains('\0')
+            && !self.packages.is_empty()
+            && self.packages.windows(2).all(|pair| pair[0] != pair[1])
+            && self.packages.iter().all(|uri| {
+                uri.len() <= MAX_NAMESPACE_URI_BYTES && scxml_types::NamespaceUri::new(uri).is_ok()
+            })
+    }
+}
+
+/// The values of the variables a run grants extension elements' and invoked
+/// services' `env` slots, each scoped to the package URIs it is granted to:
 /// exactly what the embedder passes, never the host process environment.
-/// Extension components never receive them, only references
-/// ([`ExtensionComponents::with_values`]). [`ExtensionEnvironment::none`] (the
-/// default) holds nothing, so every slot is absent. Its `Debug` output
-/// names the variables only, never a value, so formatting it (or a type
-/// that holds it, such as [`ExtensionComponents`] or
-/// [`crate::ServiceComponents`]) never prints a secret.
+/// Components never receive them, only references
+/// ([`ExtensionComponents::with_values`], [`crate::ServiceComponents::with_values`]),
+/// and only for a variable granted to the referencing element's or
+/// `<invoke>`'s package. [`ExtensionEnvironment::none`] (the default) holds
+/// nothing, so every slot is absent. Its `Debug` output names the variables
+/// and their packages only, never a value, so formatting it (or a type that
+/// holds it, such as [`ExtensionComponents`] or [`crate::ServiceComponents`])
+/// never prints a secret.
 #[derive(Clone, Default, Eq, PartialEq)]
 pub struct ExtensionEnvironment {
-    variables: Vec<(String, String)>,
+    variables: Vec<EnvVariable>,
 }
 
 impl std::fmt::Debug for ExtensionEnvironment {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("ExtensionEnvironment")
-            .field(
-                "names",
-                &self
-                    .variables
-                    .iter()
-                    .map(|(name, _)| name.as_str())
-                    .collect::<Vec<_>>(),
-            )
+            .field("variables", &self.variables)
             .finish_non_exhaustive()
     }
 }
@@ -270,19 +334,17 @@ impl ExtensionEnvironment {
     ///
     /// [`HostError::InvalidLimit`] ([`InvalidLimit::Environment`]) for a
     /// duplicate name, an empty name or one containing `=` or NUL, a name over
-    /// [`MAX_ENVIRONMENT_NAME_BYTES`], or a value over
-    /// [`MAX_ENVIRONMENT_VALUE_BYTES`] or containing NUL.
-    pub fn new(variables: impl IntoIterator<Item = (String, String)>) -> Result<Self, HostError> {
-        let mut variables: Vec<(String, String)> = variables.into_iter().collect();
-        variables.sort();
-        let invalid = variables.windows(2).any(|pair| pair[0].0 == pair[1].0)
-            || variables.iter().any(|(name, value)| {
-                name.is_empty()
-                    || name.len() > MAX_ENVIRONMENT_NAME_BYTES
-                    || name.contains(['=', '\0'])
-                    || value.len() > MAX_ENVIRONMENT_VALUE_BYTES
-                    || value.contains('\0')
-            });
+    /// [`MAX_ENVIRONMENT_NAME_BYTES`], a value over
+    /// [`MAX_ENVIRONMENT_VALUE_BYTES`] or containing NUL, or a variable
+    /// granted to no package, to one package twice, or to a package URI that
+    /// is not an absolute URI within [`MAX_NAMESPACE_URI_BYTES`].
+    pub fn new(variables: impl IntoIterator<Item = EnvVariable>) -> Result<Self, HostError> {
+        let mut variables: Vec<EnvVariable> = variables.into_iter().collect();
+        variables.sort_by(|left, right| left.name.cmp(&right.name));
+        let invalid = variables
+            .windows(2)
+            .any(|pair| pair[0].name == pair[1].name)
+            || !variables.iter().all(EnvVariable::is_valid);
         if invalid {
             return Err(HostError::InvalidLimit(InvalidLimit::Environment));
         }
@@ -291,8 +353,23 @@ impl ExtensionEnvironment {
 
     /// The variables, sorted by name.
     #[must_use]
-    pub fn variables(&self) -> &[(String, String)] {
+    pub fn variables(&self) -> &[EnvVariable] {
         &self.variables
+    }
+
+    /// The value held for `name` when it is granted to `package` (exact
+    /// URI); `None` when it is unheld or granted only to other packages.
+    pub(crate) fn held(&self, package: &str, name: &str) -> Option<&str> {
+        self.variables
+            .binary_search_by(|held| held.name.as_str().cmp(name))
+            .ok()
+            .and_then(|index| self.variables.get(index))
+            .filter(|held| {
+                held.packages
+                    .binary_search_by(|granted| granted.as_str().cmp(package))
+                    .is_ok()
+            })
+            .map(|held| held.value.as_str())
     }
 }
 
@@ -431,7 +508,7 @@ impl Default for ExtensionComponents {
 /// What [`ExtensionComponents`] hands the session host.
 pub(crate) struct ExtensionParts {
     pub(crate) bindings: Vec<Binding>,
-    pub(crate) values: Arc<[(String, String)]>,
+    pub(crate) values: Arc<ExtensionEnvironment>,
     pub(crate) http: Option<Arc<dyn ExtensionHttp>>,
     pub(crate) observer: Option<Arc<dyn ExtensionObserver>>,
     pub(crate) call_fuel: u64,
@@ -545,7 +622,7 @@ impl ExtensionComponents {
     pub(crate) fn into_parts(self) -> ExtensionParts {
         ExtensionParts {
             bindings: self.bindings,
-            values: Arc::from(self.values.variables().to_vec()),
+            values: Arc::new(self.values),
             http: self.http,
             observer: self.observer,
             call_fuel: self.call_fuel,
@@ -647,7 +724,7 @@ pub(crate) struct ExtensionRuntime<'a> {
     /// The package of the namespace being instantiated.
     pub(crate) package: &'a ExtensionPackage,
     /// The run's values `env` slots may reference.
-    pub(crate) values: &'a Arc<[(String, String)]>,
+    pub(crate) values: &'a Arc<ExtensionEnvironment>,
     pub(crate) http: Option<&'a Arc<dyn ExtensionHttp>>,
     pub(crate) observer: Option<&'a Arc<dyn ExtensionObserver>>,
     pub(crate) call_fuel: u64,
@@ -731,7 +808,7 @@ pub(crate) struct ExtensionStoreData {
     /// The origins and URL prefixes its package declares.
     allow: crate::HttpAllowlist,
     /// The run's values `env` slots may reference.
-    values: Arc<[(String, String)]>,
+    values: Arc<ExtensionEnvironment>,
     /// The outbound HTTP transport, if any.
     http: Option<Arc<dyn ExtensionHttp>>,
     observer: Option<Arc<dyn ExtensionObserver>>,
@@ -976,6 +1053,7 @@ impl ExtensionInstance {
             let data = self.store.data();
             bind_references(
                 element,
+                &self.namespace_uri,
                 &self.env_slots,
                 &data.values,
                 &mut lent,
@@ -996,9 +1074,12 @@ impl ExtensionInstance {
             }
         };
         if let Some(observer) = self.store.data().observer.as_deref() {
-            for missing in
-                element_names_without_value(element, &self.env_slots, &self.store.data().values)
-            {
+            for missing in element_names_without_value(
+                element,
+                &self.namespace_uri,
+                &self.env_slots,
+                &self.store.data().values,
+            ) {
                 observer.value_missing(&self.namespace_uri, &missing.0, &missing.1);
             }
         }
@@ -1548,7 +1629,7 @@ type BoundReferences = (Vec<SlotReference>, Vec<(u32, String)>);
 /// The slot references of one execution: for each `env` attribute of
 /// `element` naming one of `env_slots`, the variable it names (`env:<slot>`)
 /// or its expression evaluates to (`env:<slot>expr`), bound to a fresh
-/// reference when `values` holds it, in attribute order. References are
+/// reference when `values` holds it for `namespace_uri`, in attribute order. References are
 /// numbered from 1 for every call, so one never outlives it.
 ///
 /// # Errors
@@ -1558,8 +1639,9 @@ type BoundReferences = (Vec<SlotReference>, Vec<(u32, String)>);
 /// to a variable name.
 fn bind_references(
     element: &ExecutableContentExtension,
+    namespace_uri: &str,
     env_slots: &[String],
-    values: &[(String, String)],
+    values: &ExtensionEnvironment,
     lent: &mut Lent,
     event: Option<&scxml_types::Event>,
 ) -> Result<BoundReferences, ComponentError> {
@@ -1608,7 +1690,7 @@ fn bind_references(
                 "an env slot names no valid variable",
             ));
         }
-        let Some(value) = held(values, &name) else {
+        let Some(value) = values.held(namespace_uri, &name) else {
             continue;
         };
         let reference = u32::try_from(references.len().saturating_add(1))
@@ -1620,12 +1702,13 @@ fn bind_references(
 }
 
 /// `(slot, name)` of every literal `env:<slot>="NAME"` attribute of `element`
-/// whose variable has no value (expression names are reported nowhere: they
+/// whose variable has no value granted to `namespace_uri` (expression names are reported nowhere: they
 /// are evaluated per execution).
 fn element_names_without_value(
     element: &ExecutableContentExtension,
+    namespace_uri: &str,
     env_slots: &[String],
-    values: &[(String, String)],
+    values: &ExtensionEnvironment,
 ) -> Vec<(String, String)> {
     element
         .attributes
@@ -1635,19 +1718,10 @@ fn element_names_without_value(
         })
         .filter_map(|attribute| {
             let (slot, expr) = env_slot_of(&attribute.name.local_name, env_slots)?;
-            (!expr && held(values, &attribute.value).is_none())
+            (!expr && values.held(namespace_uri, &attribute.value).is_none())
                 .then(|| (slot, attribute.value.clone()))
         })
         .collect()
-}
-
-/// The value `values` (sorted by name) holds for `name`.
-pub(crate) fn held<'a>(values: &'a [(String, String)], name: &str) -> Option<&'a str> {
-    values
-        .binary_search_by(|(held, _)| held.as_str().cmp(name))
-        .ok()
-        .and_then(|index| values.get(index))
-        .map(|(_, value)| value.as_str())
 }
 
 /// The slot an `env` attribute's local name binds and whether it is the
@@ -1932,8 +2006,12 @@ mod tests {
     #[test]
     fn debug_output_names_variables_and_never_prints_a_value() {
         const VALUE: &str = "sk-debug-must-not-print";
-        let values = ExtensionEnvironment::new([("OPENAI_API_KEY".to_owned(), VALUE.to_owned())])
-            .expect("a valid variable");
+        let values = ExtensionEnvironment::new([EnvVariable::new(
+            "OPENAI_API_KEY",
+            VALUE,
+            ["urn:x".to_owned()],
+        )])
+        .expect("a valid variable");
         let environment = format!("{values:?}");
         assert!(environment.contains("OPENAI_API_KEY"), "{environment}");
         for text in [
@@ -2176,29 +2254,44 @@ mod tests {
         }
     }
 
+    fn variable(name: &str, value: &str, packages: &[&str]) -> EnvVariable {
+        EnvVariable::new(name, value, packages.iter().map(|uri| (*uri).to_owned()))
+    }
+
     #[test]
     fn environments_are_sorted_and_bounded() {
         let environment = ExtensionEnvironment::new([
-            ("B".to_owned(), "2".to_owned()),
-            ("A".to_owned(), "1".to_owned()),
+            variable("B", "2", &["urn:y", "urn:x"]),
+            variable("A", "1", &["urn:x"]),
         ])
         .expect("valid variables");
+        let names: Vec<&str> = environment
+            .variables()
+            .iter()
+            .map(EnvVariable::name)
+            .collect();
+        assert_eq!(names, ["A", "B"]);
         assert_eq!(
-            environment.variables(),
-            [
-                ("A".to_owned(), "1".to_owned()),
-                ("B".to_owned(), "2".to_owned())
-            ]
+            environment.variables()[1].packages(),
+            ["urn:x".to_owned(), "urn:y".to_owned()],
+            "packages are sorted"
         );
         for variables in [
-            vec![(String::new(), "v".to_owned())],
-            vec![("A=B".to_owned(), "v".to_owned())],
-            vec![("A".to_owned(), "v\0".to_owned())],
+            vec![variable("", "v", &["urn:x"])],
+            vec![variable("A=B", "v", &["urn:x"])],
+            vec![variable("A", "v\0", &["urn:x"])],
             vec![
-                ("A".to_owned(), "1".to_owned()),
-                ("A".to_owned(), "2".to_owned()),
+                variable("A", "1", &["urn:x"]),
+                variable("A", "2", &["urn:y"]),
             ],
-            vec![("A".to_owned(), "x".repeat(MAX_ENVIRONMENT_VALUE_BYTES + 1))],
+            vec![variable(
+                "A",
+                &"x".repeat(MAX_ENVIRONMENT_VALUE_BYTES + 1),
+                &["urn:x"],
+            )],
+            vec![variable("A", "v", &[])],
+            vec![variable("A", "v", &["urn:x", "urn:x"])],
+            vec![variable("A", "v", &["not a uri"])],
         ] {
             assert!(matches!(
                 ExtensionEnvironment::new(variables),
@@ -2208,12 +2301,27 @@ mod tests {
         assert!(ExtensionEnvironment::none().variables().is_empty());
     }
 
+    #[test]
+    fn a_value_is_held_only_for_the_packages_it_is_granted_to() {
+        let environment = ExtensionEnvironment::new([
+            variable("KEY", "k", &["urn:a", "urn:c"]),
+            variable("OTHER", "o", &["urn:b"]),
+        ])
+        .expect("valid variables");
+        assert_eq!(environment.held("urn:a", "KEY"), Some("k"));
+        assert_eq!(environment.held("urn:c", "KEY"), Some("k"));
+        assert_eq!(environment.held("urn:b", "KEY"), None, "out of scope");
+        assert_eq!(environment.held("urn:a", "OTHER"), None, "out of scope");
+        assert_eq!(environment.held("urn:a", "MISSING"), None, "unheld");
+        assert_eq!(environment.held("urn:A", "KEY"), None, "exact URI only");
+    }
+
     /// The host sets no bound on how many variables an environment passes
     /// (a native resource bound would refuse an inherited environment).
     #[test]
     fn an_environment_passes_any_number_of_variables() {
         let environment = ExtensionEnvironment::new(
-            (0..1_000).map(|index| (format!("V{index:04}"), String::new())),
+            (0..1_000).map(|index| variable(&format!("V{index:04}"), "", &["urn:x"])),
         )
         .expect("an environment of any size is valid");
         assert_eq!(environment.variables().len(), 1_000);

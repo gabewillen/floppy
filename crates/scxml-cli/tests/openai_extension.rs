@@ -298,13 +298,25 @@ fn the_example_validates_against_the_package_schema_and_unsupported_attributes_d
     );
 }
 
+/// The openai element's variables, granted to its namespace (values from
+/// the calling shell).
+fn grants() -> Vec<&'static str> {
+    static GRANTS: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(|| {
+        ["OPENAI_API_KEY", "OPENAI_BASE_URL"]
+            .iter()
+            .flat_map(|name| ["--env".to_owned(), format!("{name}@{OPENAI_URI}")])
+            .collect()
+    });
+    GRANTS.iter().map(String::as_str).collect()
+}
+
 #[test]
 fn snapshot_run_stores_the_generated_reply_and_transitions_on_it() {
     let mock = Mock::start();
     let base = format!("{}/v1", mock.origin);
     let (run, shown) = run_example(
         "success",
-        &["--env", "OPENAI_API_KEY", "--env", "OPENAI_BASE_URL"],
+        &grants(),
         &[("OPENAI_API_KEY", "sk-test"), ("OPENAI_BASE_URL", &base)],
     );
     assert!(run.status.success(), "{}", text(&run.stderr));
@@ -326,7 +338,7 @@ fn snapshot_run_sends_the_event_the_model_called() {
     let (run, shown) = run_named_example(
         "decide",
         "decide",
-        &["--env", "OPENAI_API_KEY", "--env", "OPENAI_BASE_URL"],
+        &grants(),
         &[("OPENAI_API_KEY", "sk-test"), ("OPENAI_BASE_URL", &base)],
     );
     assert!(run.status.success(), "{}", text(&run.stderr));
@@ -368,7 +380,7 @@ fn snapshot_run_raises_error_execution_for_every_failure() {
         ("no-key", ok_base.as_str(), false, 0),
     ] {
         let before = mock.requests().len();
-        let extra = ["--env", "OPENAI_API_KEY", "--env", "OPENAI_BASE_URL"];
+        let extra = grants();
         let mut env = vec![("OPENAI_BASE_URL", base)];
         if key {
             env.push(("OPENAI_API_KEY", "sk-test"));
@@ -392,9 +404,9 @@ fn the_run_lists_what_the_element_consents_to_and_masks_the_values() {
         "summary",
         &[
             "--env",
-            "OPENAI_API_KEY=sk-masked-key-123",
+            &format!("OPENAI_API_KEY@{OPENAI_URI}=sk-masked-key-123"),
             "--env",
-            "OPENAI_BASE_URL",
+            &format!("OPENAI_BASE_URL@{OPENAI_URI}"),
         ],
         &[("OPENAI_BASE_URL", &base)],
     );
@@ -431,7 +443,9 @@ fn a_missing_value_names_the_env_flag_and_removed_flags_are_refused() {
     assert!(run.status.success(), "{}", text(&run.stderr));
     assert!(shown.contains("configuration: atomic [failed]"), "{shown}");
     assert!(
-        text(&run.stderr).contains("apikey <- OPENAI_API_KEY (no value: add --env OPENAI_API_KEY)"),
+        text(&run.stderr).contains(&format!(
+            "apikey <- OPENAI_API_KEY (no value granted: add --env OPENAI_API_KEY@{OPENAI_URI})"
+        )),
         "{}",
         text(&run.stderr)
     );
@@ -439,6 +453,8 @@ fn a_missing_value_names_the_env_flag_and_removed_flags_are_refused() {
         vec!["--extension-http-allow", "https://api.openai.com"],
         vec!["--inherit-env"],
         vec!["--env", &format!("{OPENAI_URI}=OPENAI_API_KEY")],
+        vec!["--env", "OPENAI_API_KEY"],
+        vec!["--env", "OPENAI_API_KEY=sk-unscoped"],
     ] {
         let (refused, _) = run_example("removed", &removed, &[]);
         assert_eq!(refused.status.code(), Some(2), "{removed:?}");

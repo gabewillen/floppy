@@ -119,6 +119,16 @@ hard cutover.
   the CLI passes `--env`/`--env-file` values and, outside `--record` and
   `--replay`, the outbound transport to services. The echo example declares
   an `endpoint` slot and GETs it on `fetch`.
+- Env values scoped per package: `ExtensionEnvironment::new` takes
+  `EnvVariable`s, each granted to exact package URIs (extension namespace or
+  invoked-service type URIs); a slot naming a variable not granted to its
+  element's namespace or its `<invoke>`'s type URI is absent, exactly like
+  an unheld one. The CLI's `--env` is now `--env NAME@URI[=VALUE]`
+  (repeatable per package; the unscoped `--env NAME[=VALUE]` is removed), a
+  granted variable's value is its flag's, else its last `--env-file` entry,
+  else the calling shell's, and `--env-file` entries no flag grants are
+  dropped. The pre-run listing says `(no value granted: add --env
+  NAME@URI)`.
 - Per-call emit bounds for invoked services: one export call emits at most
   1024 events (`MAX_SERVICE_EMITS_PER_CALL`) of at most 4 MiB of
   cumulative event bytes (`MAX_SERVICE_EMITTED_BYTES_PER_CALL`) on every

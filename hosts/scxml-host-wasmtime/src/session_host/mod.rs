@@ -473,7 +473,7 @@ pub(crate) struct HostCore {
     /// document fails its session start).
     extension_resolver: Option<Arc<dyn crate::extension::ExtensionResolver>>,
     /// The run's values elements' `env` slots may reference.
-    extension_values: Arc<[(String, String)]>,
+    extension_values: Arc<crate::ExtensionEnvironment>,
     /// The transport admitted extension requests go through (none: refused).
     extension_http: Option<Arc<dyn crate::extension::ExtensionHttp>>,
     /// The embedder's observer of refused requests and missing values.
@@ -934,7 +934,7 @@ impl SessionHost {
             namespaces: RefCell::new(Vec::new()),
             namespace_linker: OnceCell::new(),
             extension_resolver: None,
-            extension_values: Arc::from(Vec::new()),
+            extension_values: Arc::new(crate::ExtensionEnvironment::none()),
             extension_http: None,
             extension_observer: None,
             namespace_call_fuel: crate::extension::DEFAULT_EXTENSION_CALL_FUEL,

@@ -204,7 +204,7 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
             "--extension-package" | "--service-package" => "MANIFEST.json",
             "--extension-component-sha256" | "--service-component-sha256" => "URI=HEX",
             "--grant" => "URI=PERMISSION[=VALUE]",
-            "--env" => "NAME or NAME=VALUE",
+            "--env" => "NAME@URI or NAME@URI=VALUE",
             "--env-file" => "PATH",
             "--fuel" | "--max-commands" => "N",
             "--session-id" => "NAME",
@@ -1938,9 +1938,8 @@ mod live {
             return Err("[record-wasi] --record and --replay cannot run a package that declares WASI permissions: its effects and inputs are outside the replay log".into());
         }
         let values = args.namespaces.values()?;
-        crate::mask::install(&values);
-        let granted: Vec<String> = values.iter().map(|(name, _)| name.clone()).collect();
-        crate::extensions::write_notes(&packages.summary(Some(&granted)));
+        crate::mask::install(&crate::extensions::HeldValue::pairs(&values));
+        crate::extensions::write_notes(&packages.summary(Some(&values)));
         crate::extensions::write_notes(&crate::services::summary(
             &services.packages,
             Some(&args.services),
@@ -1997,11 +1996,9 @@ mod live {
         // recorded or replayed session gets no outbound transport: every
         // extension request is refused, the same way in both.
         let outbound = args.record.is_none() && args.replay.is_none();
-        let service_components = args
-            .services
-            .components(&services, values.clone(), outbound)?;
+        let service_components = args.services.components(&services, &values, outbound)?;
         let (extensions, _notes) =
-            crate::snapshot::host::extensions(&args.namespaces, &packages, values, outbound)?;
+            crate::snapshot::host::extensions(&args.namespaces, &packages, &values, outbound)?;
         let host = host
             .with_extension_components(extensions)?
             .with_service_components(service_components)?;

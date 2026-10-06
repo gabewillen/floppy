@@ -817,15 +817,19 @@ fn open_endpoint(host: &SessionHost, invoke: &str) -> LiveSession {
     .expect("the session opens")
 }
 
-fn endpoint_host(http: &std::sync::Arc<RecordingHttp>, values: &[(&str, &str)]) -> SessionHost {
+/// `values` are `(name, value, granted package URI)`.
+fn endpoint_host(
+    http: &std::sync::Arc<RecordingHttp>,
+    values: &[(&str, &str, &str)],
+) -> SessionHost {
     host_with(
         ServiceComponents::new()
             .with_values(
-                scxml_host_wasmtime::ExtensionEnvironment::new(
-                    values
-                        .iter()
-                        .map(|(name, value)| ((*name).to_owned(), (*value).to_owned())),
-                )
+                scxml_host_wasmtime::ExtensionEnvironment::new(values.iter().map(
+                    |(name, value, uri)| {
+                        scxml_host_wasmtime::EnvVariable::new(*name, *value, [(*uri).to_owned()])
+                    },
+                ))
                 .expect("valid values"),
             )
             .with_outbound_http(std::sync::Arc::clone(http) as _)
@@ -837,7 +841,7 @@ fn endpoint_host(http: &std::sync::Arc<RecordingHttp>, values: &[(&str, &str)]) 
 #[test]
 fn an_env_slot_reference_lives_for_the_whole_invocation() {
     let http = std::sync::Arc::new(RecordingHttp::default());
-    let host = endpoint_host(&http, &[("ENDPOINT", "http://127.0.0.1:9/status")]);
+    let host = endpoint_host(&http, &[("ENDPOINT", "http://127.0.0.1:9/status", ECHO)]);
     for invoke in [
         format!(r#"<invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/>"#),
         format!(r#"<invoke type="{ECHO}" id="echo" env:endpointexpr="'END' + 'POINT'"/>"#),
@@ -860,7 +864,7 @@ fn an_env_slot_reference_lives_for_the_whole_invocation() {
 }
 
 #[test]
-fn an_unbound_or_undeclared_env_slot_never_reaches_the_network() {
+fn an_unbound_out_of_scope_or_undeclared_env_slot_never_reaches_the_network() {
     let http = std::sync::Arc::new(RecordingHttp::default());
     // No value: the slot is absent, the service's fetch fails, and the host
     // retires it (error.communication).
@@ -874,9 +878,21 @@ fn an_unbound_or_undeclared_env_slot_never_reaches_the_network() {
         .expect("fetch is processed");
     assert_eq!(session.configuration().expect("configuration"), ["failed"]);
     session.close().expect("the session closes");
+    // A value granted only to another package is absent exactly like no
+    // value: the echo service's fetch fails the same way.
+    let host = endpoint_host(&http, &[("ENDPOINT", "http://127.0.0.1:9/status", FILES)]);
+    let mut session = open_endpoint(
+        &host,
+        &format!(r#"<invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/>"#),
+    );
+    session
+        .send(&ScriptedEvent::named("fetch"))
+        .expect("fetch is processed");
+    assert_eq!(session.configuration().expect("configuration"), ["failed"]);
+    session.close().expect("the session closes");
     // A slot the package does not declare rejects the start: the `<invoke>`
     // raises error.execution and the service never runs.
-    let host = endpoint_host(&http, &[("ENDPOINT", "http://127.0.0.1:9/status")]);
+    let host = endpoint_host(&http, &[("ENDPOINT", "http://127.0.0.1:9/status", ECHO)]);
     let mut session = open_endpoint(
         &host,
         &format!(r#"<invoke type="{ECHO}" id="echo" env:other="ENDPOINT"/>"#),

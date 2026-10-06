@@ -240,12 +240,16 @@ instantiate). Instead:
   a name that is not a variable name) and rejects the namespace anywhere
   else (`SCXML084`; on an SCXML element it is `SCXML068`).
 - **The run holds the values.** The embedder supplies them
-  (`ExtensionComponents::with_values`). The CLI holds a value for each
-  `--env NAME` (the calling shell's value), `--env NAME=VALUE`, and each entry
-  of `--env-file PATH` (Docker's format: `NAME=VALUE` with the value taken
-  literally, a bare `NAME` from the shell, `#` comments, blank lines ignored;
-  files in order, then `--env`, which wins). Nothing by default; there is no
-  whole-environment form. Values are masked (`[masked]`) in the text the CLI
+  (`ExtensionComponents::with_values`), each variable granted to exact package
+  URIs (`EnvVariable`); a slot naming a variable not granted to the element's
+  namespace is absent, exactly as if no value were held. The CLI grants a
+  variable to a namespace with `--env NAME@URI` or `--env NAME@URI=VALUE`
+  (repeat it for several namespaces; there is no unscoped form) and holds its
+  flag's value, else its last `--env-file PATH` entry (Docker's format:
+  `NAME=VALUE` with the value taken literally, a bare `NAME` from the shell,
+  `#` comments, blank lines ignored), else the calling shell's; an
+  `--env-file` entry no flag grants is dropped. Nothing by default; there is
+  no whole-environment form. Values are masked (`[masked]`) in the text the CLI
   writes; canonical snapshot documents are written exactly (their `sha256`
   covers their bytes).
 - **The component holds references.** For each `execute` call the host binds
@@ -319,7 +323,7 @@ event and error category.
 ```console
 OPENAI_API_KEY=... scxml-cli snapshot run namespaces/openai/examples/hello.scxml \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
-  --env OPENAI_API_KEY
+  --env OPENAI_API_KEY@https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0
 ```
 
 The WIT import is project-specific rather than `wasi:http`, as the
@@ -561,7 +565,7 @@ document needs no flag to bind it:
 # first release that publishes it).
 OPENAI_API_KEY=... scxml-cli snapshot run namespaces/openai/examples/hello.scxml \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
-  --env OPENAI_API_KEY
+  --env OPENAI_API_KEY@https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0
 
 # Later runs: the same command with --offline uses the cache only.
 ```
