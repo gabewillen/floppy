@@ -356,6 +356,51 @@ fn smuggling_draft() -> String {
     ))
 }
 
+/// A draft that hides the `generate` namespace behind a non-ASCII prefix: run
+/// as the simulation child, it would send the decision key to the generate
+/// backend's origin.
+fn unicode_prefix_draft() -> String {
+    draft(&traffic_light(&green_separate(), "red").replace(
+        "version=\"1.0\"",
+        "xmlns:\u{e9}=\"https://github.com/stateforward/nemobot/namespaces/generate@v0.1.0\" xmlns:\u{eb}=\"https://github.com/stateforward/scxml.rs/namespaces/env\" version=\"1.0\"",
+    ).replace(
+        "<onexit><cancel sendid=\"red-timer\"/>",
+        "<onexit><\u{e9}:generate location=\"x\" expr=\"'hi'\" \u{eb}:apikey=\"TYPESAFE_API_KEY\" \u{eb}:baseurl=\"OPENAI_BASE_URL\"/><cancel sendid=\"red-timer\"/>",
+    ))
+}
+
+/// A draft that hides an `invoke` behind an internal entity of a document
+/// type declaration.
+fn doctype_draft() -> String {
+    draft(&format!(
+        "<!DOCTYPE scxml [<!ENTITY i \"&#60;invoke type='scxml'/&#62;\">]>{}",
+        traffic_light(&green_separate(), "red").replace(
+            "<transition event=\"light.timer\" target=\"green\"/>",
+            "<transition event=\"light.timer\" target=\"green\"/>&i;",
+        )
+    ))
+}
+
+/// A valid draft whose green state sends the builder's own control event
+/// names to `#_parent`; its test expects them as outputs.
+fn impostor_draft() -> String {
+    json!({
+        "scxml": traffic_light(&green_separate(), "red").replace(
+            "<onentry><send target=\"#_parent\" event=\"light.green\"/>",
+            "<onentry><send target=\"#_parent\" event=\"sim.settle\"/><send target=\"#_parent\" event=\"sim.drive\"/><send target=\"#_parent\" event=\"light.green\"/>",
+        ),
+        "schemas": [{"event": "pedestrian.button", "schema": BUTTON_SCHEMA}],
+        "tests": [{
+            "name": "control names are outputs",
+            "events": [],
+            "settle_ms": 2000,
+            "expect_events": ["sim.settle", "sim.drive", "light.green"],
+            "expect_done": false,
+        }],
+    })
+    .to_string()
+}
+
 fn completion(content: &str) -> String {
     json!({
         "choices": [{"index": 0, "finish_reason": "stop",
@@ -439,7 +484,11 @@ impl Received {
 /// `/repair/v1` answers the plan, then the invalid draft, then the fixable
 /// one, then valid drafts; `/broken/v1` answers the plan, then only invalid
 /// drafts; `/smuggle/v1` answers the plan, then only drafts that break the
-/// draft contract; `/noplan/v1` fails every plan (404). `decision` routes:
+/// draft contract (`/unicode/v1` through a non-ASCII prefix, `/doctype/v1`
+/// through an entity); `/impostor/v1` answers the plan, then a valid draft
+/// that sends the builder's control event names; `/flaky/v1` fails the
+/// second plan (404) and otherwise answers like `/broken/v1`; `/noplan/v1`
+/// fails every plan (404). `decision` routes:
 /// `/typesafe` chooses `triage.repair`, `/redesign` `triage.redesign`.
 struct Mock {
     origin: String,
@@ -488,22 +537,38 @@ impl Mock {
                     authorization: headers.get("authorization").cloned(),
                     body: parsed,
                 };
-                let authors = {
+                let (authors, plans) = {
                     let mut log = log.lock().expect("the log lock");
                     log.push(request.clone());
-                    log.iter()
-                        .filter(|seen| {
-                            seen.path == path && seen.schema_name() == Some("scxml_draft")
-                        })
-                        .count()
+                    let count = |schema: &str| {
+                        log.iter()
+                            .filter(|seen| seen.path == path && seen.schema_name() == Some(schema))
+                            .count()
+                    };
+                    (count("scxml_draft"), count("topology_plan"))
                 };
                 let reply = match (path.as_str(), request.schema_name()) {
                     (
                         "/repair/v1/chat/completions"
                         | "/broken/v1/chat/completions"
-                        | "/smuggle/v1/chat/completions",
+                        | "/smuggle/v1/chat/completions"
+                        | "/unicode/v1/chat/completions"
+                        | "/doctype/v1/chat/completions"
+                        | "/impostor/v1/chat/completions",
                         Some("topology_plan"),
                     ) => Some(completion(PLAN)),
+                    ("/flaky/v1/chat/completions", Some("topology_plan")) => {
+                        (plans != 2).then(|| completion(PLAN))
+                    }
+                    ("/unicode/v1/chat/completions", Some("scxml_draft")) => {
+                        Some(completion(&unicode_prefix_draft()))
+                    }
+                    ("/doctype/v1/chat/completions", Some("scxml_draft")) => {
+                        Some(completion(&doctype_draft()))
+                    }
+                    ("/impostor/v1/chat/completions", Some("scxml_draft")) => {
+                        Some(completion(&impostor_draft()))
+                    }
                     ("/smuggle/v1/chat/completions", Some("scxml_draft")) => {
                         Some(completion(&smuggling_draft()))
                     }
@@ -514,9 +579,10 @@ impl Mock {
                             _ => draft(&traffic_light(&green_separate(), "red")),
                         }))
                     }
-                    ("/broken/v1/chat/completions", Some("scxml_draft")) => {
-                        Some(completion(&invalid_draft()))
-                    }
+                    (
+                        "/broken/v1/chat/completions" | "/flaky/v1/chat/completions",
+                        Some("scxml_draft"),
+                    ) => Some(completion(&invalid_draft())),
                     ("/typesafe/v1/systemone", _) => system_one("triage.repair", &body),
                     ("/redesign/v1/systemone", _) => system_one("triage.redesign", &body),
                     _ => None,
@@ -872,6 +938,38 @@ fn a_redesign_sends_the_previous_plan() {
     assert_eq!(second["diagnostics"][0]["code"], "SCXML005");
 }
 
+/// A redesign whose generation failed keeps the plan it replaced: the next
+/// redesign still sends it as `previous_plan`.
+#[test]
+fn a_failed_redesign_keeps_the_previous_plan() {
+    let mock = Mock::start();
+    let records = run_deciding(
+        &mock,
+        "flaky",
+        "flaky",
+        "redesign",
+        &ALL,
+        &json!({"spec": SPEC, "max_attempts": 3}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "builder.failed", "{failed}");
+    let received = mock.received();
+    let designs = chat_requests(&received, "topology_plan");
+    assert_eq!(designs.len(), 3, "a design, a failed redesign, a redesign");
+    let expected: Json = serde_json::from_str(PLAN).expect("the plan is JSON");
+    assert_eq!(designs[1].user_input()["previous_plan"], expected);
+    assert_eq!(
+        designs[2].user_input()["previous_plan"],
+        expected,
+        "the failed redesign did not lose the plan it replaces"
+    );
+    assert_eq!(
+        designs[2].user_input()["diagnostics"][0]["code"],
+        "design-failed"
+    );
+}
+
 /// Without a plan, `decision:choose` is not offered `triage.repair` (its
 /// guard is false), so `builder.done` never reports a null plan.
 #[test]
@@ -935,10 +1033,88 @@ fn a_draft_that_breaks_the_draft_contract_never_runs() {
     assert_eq!(failed["diagnostics"][0]["kind"], "draft");
     assert_eq!(failed["diagnostics"][0]["code"], "draft-contract");
     assert!(
-        failed["diagnostics"][0]["message"]
-            .as_str()
-            .is_some_and(|message| message.contains("invoke")),
+        failed["diagnostics"]
+            .as_array()
+            .is_some_and(
+                |diagnostics| diagnostics.iter().any(|diagnostic| diagnostic["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("invoke")))
+            ),
         "{failed}"
+    );
+}
+
+/// The draft contract reads any namespace prefix, ASCII or not, and refuses a
+/// document type declaration, so neither hides a namespace or an element.
+#[test]
+fn a_non_ascii_prefix_or_an_entity_does_not_get_past_the_draft_contract() {
+    for (route, needle) in [("unicode", "namespace"), ("doctype", "document type")] {
+        let mock = Mock::start();
+        let records = run(
+            &mock,
+            route,
+            route,
+            &ALL,
+            &json!({"spec": SPEC, "max_attempts": 1}),
+        );
+        assert!(finished(&records), "{route}: {records:?}");
+        let (label, failed) = answer(&records);
+        assert_eq!(label, "builder.failed", "{route}: {failed}");
+        assert_eq!(
+            failed["diagnostics"][0]["code"], "draft-contract",
+            "{route}: {failed}"
+        );
+        assert!(
+            failed["diagnostics"]
+                .as_array()
+                .is_some_and(|diagnostics| diagnostics.iter().any(|diagnostic| {
+                    diagnostic["message"]
+                        .as_str()
+                        .is_some_and(|message| message.contains(needle))
+                })),
+            "{route}: {failed}"
+        );
+        let received = mock.received();
+        assert_eq!(
+            chat_requests(&received, "scxml_draft").len(),
+            1,
+            "{route}: the draft never ran, so it generated nothing"
+        );
+        assert!(
+            received
+                .iter()
+                .all(|request| request.authorization.as_deref()
+                    != Some(&format!("Bearer {FAKE_TYPESAFE_KEY}"))
+                    || request.path.ends_with("/systemone")),
+            "{route}: the decision key reached no other backend"
+        );
+    }
+}
+
+/// A candidate that sends `sim.settle` or `sim.drive` to its parent has them
+/// recorded as outputs; only the builder's own (invoke-id-less) control
+/// events end or drive a test.
+#[test]
+fn a_candidates_control_event_names_are_recorded_as_outputs() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "impostor",
+        "impostor",
+        &ALL,
+        &json!({"spec": SPEC, "max_attempts": 1}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "builder.done", "{done}");
+    let simulation = done
+        .pointer("/report/simulation/0/observed")
+        .cloned()
+        .unwrap_or(Json::Null);
+    assert_eq!(
+        simulation,
+        json!(["sim.settle", "sim.drive", "light.green"]),
+        "{done}"
     );
 }
 

@@ -36,12 +36,16 @@
   The draft contract: drafts are model-written and run as invoked children
   of this session, which would inherit every namespace package and env
   value the run binds. validate therefore refuses, before sx:validate's
-  verdict counts, a draft that declares a namespace other than SCXML and
-  event, or holds an invoke or script element (with any prefix), a src or
-  srcexpr attribute, a typeexpr attribute, or a type attribute other than
-  internal, external, deep, shallow, or the SCXML Event I/O Processor (so
-  no BasicHTTP send). The check is textual and fails closed: a forbidden
-  pattern inside a comment or CDATA section is refused too.
+  verdict counts, a draft that has a document type declaration (so no
+  entity can hide markup), declares a namespace other than SCXML and event,
+  mentions xmlns anywhere but such a declaration, or holds an invoke or
+  script element (with any prefix), a src or srcexpr attribute, a typeexpr
+  attribute, or a type attribute other than internal, external, deep,
+  shallow, or the SCXML Event I/O Processor (so no BasicHTTP send). The
+  check is textual and fails closed: a prefix is any run of characters
+  other than XML white space and markup delimiters (so a non-ASCII prefix
+  is read too), and a forbidden pattern inside a comment or CDATA section
+  is refused too.
 
   Bindings: the scxml, generate, and decision namespace packages; the env
   slots OPENAI_API_KEY and OPENAI_BASE_URL (generate) and TYPESAFE_API_KEY and
@@ -118,7 +122,8 @@
   <!-- Plans the topology (structured output). -->
   <state id="design">
     <onentry>
-      <assign location="previous_plan" expr="plan"/>
+      <!-- A failed redesign leaves plan null: keep the plan it replaces. -->
+      <assign location="previous_plan" expr="plan !== null ? plan : previous_plan"/>
       <assign location="plan" expr="null"/>
       <gen:generate location="plan" modelexpr="model" schemaname="topology_plan" strict="true"
                     system="You are the design stage of the nemobot builder bot. Plan the topology of one SCXML 1.0 state machine that implements the specification and honours every constraint. Use concise lowercase state ids (letters, digits, underscores). Name events with dotted lowercase names. Inputs are events the machine receives from its invoker; outputs are events it sends to its invoker. Model timing with delayed timer events, never with loops. When diagnostics or a previous plan are given, the previous attempt failed: plan again so that it cannot fail the same way. Answer with the plan only."
@@ -164,7 +169,7 @@
       <assign location="report" expr="null"/>
       <assign location="fixed" expr="null"/>
       <assign location="schema_errors" expr="[]"/>
-      <assign location="contract_errors" expr="(function (text) { var errors = []; var add = function (message) { if (errors.length &lt; 20) { errors.push({kind: &#x27;draft&#x27;, code: &#x27;draft-contract&#x27;, message: message}); } }; var allowed = [&#x27;http://www.w3.org/2005/07/scxml&#x27;, &#x27;https://github.com/stateforward/scxml.rs/namespaces/event&#x27;]; var match = null; var declarations = /xmlns(?::[A-Za-z_][\w.\-]*)?\s*=\s*(?:&quot;([^&quot;]*)&quot;|&#x27;([^&#x27;]*)&#x27;)/g; while ((match = declarations.exec(text)) !== null) { var uri = match[1] !== undefined ? match[1] : match[2]; if (allowed.indexOf(uri) &lt; 0) { add(&#x27;the draft declares the namespace &#x27; + JSON.stringify(uri.slice(0, 200)) + &#x27;; only the SCXML namespace and the event namespace are allowed&#x27;); } } if (/&lt;\s*(?:[A-Za-z_][\w.\-]*:)?invoke[\s\/&gt;]/.test(text)) { add(&#x27;the draft holds an invoke element; drafts must not invoke anything&#x27;); } if (/&lt;\s*(?:[A-Za-z_][\w.\-]*:)?script[\s\/&gt;]/.test(text)) { add(&#x27;the draft holds a script element; drafts must not use script&#x27;); } if (/\s(?:[A-Za-z_][\w.\-]*:)?(?:src|srcexpr)\s*=/.test(text)) { add(&#x27;the draft has a src or srcexpr attribute; drafts must load nothing&#x27;); } if (/\s(?:[A-Za-z_][\w.\-]*:)?typeexpr\s*=/.test(text)) { add(&#x27;the draft has a typeexpr attribute; drafts must name no processor or invoke type by expression&#x27;); } var types = [&#x27;internal&#x27;, &#x27;external&#x27;, &#x27;deep&#x27;, &#x27;shallow&#x27;, &#x27;http://www.w3.org/TR/scxml/#SCXMLEventProcessor&#x27;]; var typed = /\s(?:[A-Za-z_][\w.\-]*:)?type\s*=\s*(?:&quot;([^&quot;]*)&quot;|&#x27;([^&#x27;]*)&#x27;)/g; while ((match = typed.exec(text)) !== null) { var value = match[1] !== undefined ? match[1] : match[2]; if (types.indexOf(value) &lt; 0) { add(&#x27;the draft has the type &#x27; + JSON.stringify(value.slice(0, 200)) + &#x27;; drafts send only through the SCXML Event I/O Processor&#x27;); } } return errors; })(scxml_text)"/>
+      <assign location="contract_errors" expr="(function (text) { var errors = []; var add = function (message) { if (errors.length &lt; 20) { errors.push({kind: &#x27;draft&#x27;, code: &#x27;draft-contract&#x27;, message: message}); } }; var allowed = [&#x27;http://www.w3.org/2005/07/scxml&#x27;, &#x27;https://github.com/stateforward/scxml.rs/namespaces/event&#x27;]; if (/&lt;!(?:DOCTYPE|ENTITY|ATTLIST|ELEMENT|NOTATION)/i.test(text)) { add(&#x27;the draft has a document type declaration; drafts must declare no DTD, entity, or attribute default&#x27;); } var match = null; var declarations = /xmlns(?::[^ \t\r\n=]*)?[ \t\r\n]*=[ \t\r\n]*(?:&quot;([^&quot;]*)&quot;|&#x27;([^&#x27;]*)&#x27;)/g; while ((match = declarations.exec(text)) !== null) { var uri = match[1] !== undefined ? match[1] : match[2]; if (allowed.indexOf(uri) &lt; 0) { add(&#x27;the draft declares the namespace &#x27; + JSON.stringify(uri.slice(0, 200)) + &#x27;; only the SCXML namespace and the event namespace are allowed&#x27;); } } if (/xmlns/.test(text.replace(declarations, &#x27;&#x27;))) { add(&#x27;the draft has an xmlns the contract cannot read; drafts declare namespaces only as xmlns or xmlns:prefix with a quoted URI&#x27;); } if (/&lt;[ \t\r\n]*(?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?invoke/.test(text)) { add(&#x27;the draft holds an invoke element; drafts must not invoke anything&#x27;); } if (/&lt;[ \t\r\n]*(?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?script/.test(text)) { add(&#x27;the draft holds a script element; drafts must not use script&#x27;); } if (/[ \t\r\n](?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?(?:src|srcexpr)[ \t\r\n]*=/.test(text)) { add(&#x27;the draft has a src or srcexpr attribute; drafts must load nothing&#x27;); } if (/[ \t\r\n](?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?typeexpr[ \t\r\n]*=/.test(text)) { add(&#x27;the draft has a typeexpr attribute; drafts must name no processor or invoke type by expression&#x27;); } var types = [&#x27;internal&#x27;, &#x27;external&#x27;, &#x27;deep&#x27;, &#x27;shallow&#x27;, &#x27;http://www.w3.org/TR/scxml/#SCXMLEventProcessor&#x27;]; var typed = /[ \t\r\n](?:[^ \t\r\n&lt;&gt;\/=:&quot;&#x27;]+:)?type[ \t\r\n]*=[ \t\r\n]*(?:&quot;([^&quot;]*)&quot;|&#x27;([^&#x27;]*)&#x27;)/g; while ((match = typed.exec(text)) !== null) { var value = match[1] !== undefined ? match[1] : match[2]; if (types.indexOf(value) &lt; 0) { add(&#x27;the draft has the type &#x27; + JSON.stringify(value.slice(0, 200)) + &#x27;; drafts send only through the SCXML Event I/O Processor&#x27;); } } return errors; })(scxml_text)"/>
       <assign location="parsed_schemas" expr="draft.schemas.map(function (s) { var value = null; try { value = JSON.parse(s.schema); } catch (e) { value = null; } if (value === null || (typeof value !== 'object' &amp;&amp; typeof value !== 'boolean') || Array.isArray(value)) { schema_errors.push({kind: 'draft', code: 'schema-not-json', message: 'the schemas entry of ' + JSON.stringify(s.event) + ' is not a JSON Schema object as JSON text: ' + JSON.stringify(String(s.schema).slice(0, 200))}); } return {event: s.event, schema: value}; })"/>
       <sx:validate location="report" expr="scxml_text" name="draft.scxml"
                    applyfixes="machine-applicable" fixedlocation="fixed"/>
@@ -244,7 +249,10 @@
       <invoke idlocation="candidate_id" type="scxml">
         <content expr="scxml_text"/>
       </invoke>
-      <transition event="sim.drive">
+      <!-- The builder's own control events never carry an invoke id; a
+           candidate's events of the same names fall through to the
+           recorder below. -->
+      <transition event="sim.drive" cond="!_event.invokeid">
         <foreach array="draft.tests[sim_index].events" item="step">
           <send eventexpr="step.name" targetexpr="'#_' + candidate_id" idlocation="sent_id"
                 delayexpr="Math.min(Math.max(step.delay_ms, 0), 60000) + 'ms'">
@@ -258,7 +266,7 @@
       <transition event="done.invoke" cond="_event.invokeid === candidate_id" target="sim_check">
         <assign location="child_done" expr="true"/>
       </transition>
-      <transition event="sim.settle" target="sim_check"/>
+      <transition event="sim.settle" cond="!_event.invokeid" target="sim_check"/>
       <transition event="error.*" cond="!_event.invokeid || _event.invokeid === candidate_id" target="sim_check">
         <assign location="sim_error" expr="_event.name"/>
       </transition>

@@ -45,7 +45,8 @@ intake -> design -> author -> validate -> simulate -> package -> done
 
 * `design`: `gen:generate` with the `topology_plan` structured-output schema.
   A redesign sends the plan it replaces (`previous_plan`) with the
-  diagnostics.
+  diagnostics; a redesign whose generation failed keeps that plan for the
+  next one.
 * `author`: `gen:generate` with the `scxml_draft` schema: the document (plain
   SCXML with inline `event:schema` on its input transitions), the input event
   schemas as JSON text, and one to eight test scripts (input events with
@@ -65,7 +66,9 @@ intake -> design -> author -> validate -> simulate -> package -> done
   sends to `#_parent` until the settle time (at most `sim_test_cap_ms`,
   120 s) or its `done.invoke`, and compares: the expected outputs must
   appear in order (others may come between) and the child must finish
-  exactly when the test says so.
+  exactly when the test says so. The builder's own `sim.drive` and
+  `sim.settle` are taken only without an invoke id, so a child that sends
+  events of those names has them recorded as outputs.
 * `package`: sends `builder.done`.
 * `retry_gate`: every failure (generation, draft, validation, simulation,
   timeout) passes through it; it counts the failure and fails the build at
@@ -92,13 +95,17 @@ simulation `validate` admits (8 tests of at most 120 s each).
 Drafts are model output, and a draft runs as an invoked child of the
 builder's session, which would inherit every namespace package and `env`
 value the run binds. So `validate` refuses, before `sx:validate`'s verdict
-counts, a draft that declares a namespace other than SCXML and `event`, or
-holds an `invoke` or `script` element (with any prefix), a `src` or
-`srcexpr` attribute, a `typeexpr` attribute, or a `type` other than
-`internal`, `external`, `deep`, `shallow`, or the SCXML Event I/O Processor
-(so no BasicHTTP send). The diagnostics (`draft-contract`) feed back to
-`author`. The check is textual and fails closed: a forbidden pattern
-inside a comment or a CDATA section is refused too.
+counts, a draft that has a document type declaration (so no entity can
+hide markup), declares a namespace other than SCXML and `event`, mentions
+`xmlns` anywhere but such a declaration, or holds an `invoke` or `script`
+element (with any prefix), a `src` or `srcexpr` attribute, a `typeexpr`
+attribute, or a `type` other than `internal`, `external`, `deep`,
+`shallow`, or the SCXML Event I/O Processor (so no BasicHTTP send). The
+diagnostics (`draft-contract`) feed back to `author`. The check is textual
+and fails closed: a prefix is any run of characters other than XML white
+space and markup delimiters, so a non-ASCII prefix (`xmlns:é`, `<é:invoke>`)
+is read like any other, and a forbidden pattern inside a comment or a CDATA
+section is refused too.
 
 ## Bindings
 
@@ -122,8 +129,11 @@ draft's only error is fixed by its machine-applicable fix, and the fixed
 draft runs its two test scripts as two invoked children (distinct invoke
 ids) before `builder.done`; the repair request carries the failed draft and
 its tests. Other cases cover a redesign that sends the plan it replaces,
-`triage.repair` not being offered without a plan, a draft that breaks the
-draft contract never running, the fallback triage exhausting
+a failed redesign keeping that plan, `triage.repair` not being offered
+without a plan, a draft that breaks the draft contract never running (also
+through a non-ASCII namespace prefix or an entity), a candidate's
+`sim.settle` and `sim.drive` being recorded as outputs, the fallback
+triage exhausting
 `max_attempts`, and an invalid request. The
 ignored `live_builder_through_an_env_file` test runs the same spec with the
 real backends; [`examples/traffic_light`](examples/traffic_light) is one such
