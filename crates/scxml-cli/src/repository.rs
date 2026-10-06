@@ -1279,6 +1279,23 @@ impl Repository {
         Ok(entry)
     }
 
+    /// The SHA-256 of the repository service's component, as the cache
+    /// pinned it or the release's `SHA256SUMS` lists it (then pinned).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::resolve_service_package`], and a release without the
+    /// asset in `SHA256SUMS`.
+    #[cfg(feature = "wasmtime")]
+    pub(crate) fn service_component_sha256(&self, service_uri: &str) -> Result<String, String> {
+        let (package, entry) = self.resolve_service_inner(service_uri)?;
+        let uri = RepositoryUri::parse_service(service_uri)
+            .ok_or_else(|| format!("`{service_uri}` is not a repository service URI"))?;
+        self.pin_component(&uri, service_uri, &package.manifest.service_artifact, entry)?
+            .component_sha256
+            .ok_or_else(|| "the cache pinned no component digest".to_owned())
+    }
+
     /// The repository service's package and component bytes, authenticated
     /// by the SHA-256 its release's `SHA256SUMS` lists (pinned on first
     /// use): from the cache, or downloaded from the release and verified.

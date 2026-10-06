@@ -1125,6 +1125,8 @@ mod live {
         fuel: u64,
         clock: &'static str,
         namespaces: Vec<(String, String)>,
+        /// Each bound invoked service's URI and component SHA-256, sorted.
+        services: Vec<(String, String)>,
         /// The advertised `BasicHTTP` base (`--http-listen`); every
         /// session's location, so replay advertises the same one.
         http_public_url: Option<String>,
@@ -1142,6 +1144,16 @@ mod live {
                         .finish()
                 })
                 .collect();
+            let services: Vec<String> = self
+                .services
+                .iter()
+                .map(|(uri, sha256)| {
+                    Object::new()
+                        .string("uri", uri)
+                        .string("service_component_sha256", sha256)
+                        .finish()
+                })
+                .collect();
             let header = Object::record("header")
                 .string("format", LOG_FORMAT)
                 .string("ir_sha256", &self.ir_sha256)
@@ -1153,12 +1165,36 @@ mod live {
                 .number("max_commands", self.max_commands)
                 .number("fuel", self.fuel)
                 .string("clock", self.clock)
-                .raw("namespaces", &format!("[{}]", namespaces.join(",")));
+                .raw("namespaces", &format!("[{}]", namespaces.join(",")))
+                .raw("services", &format!("[{}]", services.join(",")));
             match &self.http_public_url {
                 Some(url) => header.string("http_public_url", url),
                 None => header.null("http_public_url"),
             }
             .finish()
+        }
+
+        /// What of the component bindings a log `header` records differs
+        /// from this identity's: its namespace extension components or its
+        /// invoked service components.
+        fn binding_mismatch(&self, header: &serde_json::Value) -> Option<&'static str> {
+            let listed = |bindings: &[(String, String)], digest: &str| {
+                serde_json::Value::Array(
+                    bindings
+                        .iter()
+                        .map(|(uri, sha256)| serde_json::json!({"uri": uri, digest: sha256}))
+                        .collect(),
+                )
+            };
+            if header.get("namespaces")
+                != Some(&listed(&self.namespaces, "extension_component_sha256"))
+            {
+                return Some("set of namespace extension components");
+            }
+            if header.get("services") != Some(&listed(&self.services, "service_component_sha256")) {
+                return Some("set of invoked service components");
+            }
+            None
         }
     }
 
@@ -1222,7 +1258,7 @@ mod live {
         };
         let mismatch = |what: &str| {
             format!(
-                "[replay-identity-mismatch] the replay log `{}` was recorded with a different {what}; replay needs the same document, components, and namespace bindings",
+                "[replay-identity-mismatch] the replay log `{}` was recorded with a different {what}; replay needs the same document, components, namespace bindings, and service bindings",
                 path.display()
             )
         };
@@ -1233,13 +1269,8 @@ mod live {
         {
             return Err(mismatch("component release").into());
         }
-        let expected_namespaces: Vec<serde_json::Value> = identity
-            .namespaces
-            .iter()
-            .map(|(uri, sha256)| serde_json::json!({"uri": uri, "extension_component_sha256": sha256}))
-            .collect();
-        if header.get("namespaces") != Some(&serde_json::Value::Array(expected_namespaces)) {
-            return Err(mismatch("set of namespace extension components").into());
+        if let Some(what) = identity.binding_mismatch(&header) {
+            return Err(mismatch(what).into());
         }
         let mut records = Vec::new();
         for (number, line) in lines {
@@ -1943,6 +1974,7 @@ mod live {
             fuel: args.fuel,
             clock: args.clock.as_str(),
             namespaces,
+            services: args.services.identity(&services)?,
             http_public_url: None,
         };
         let replay = args

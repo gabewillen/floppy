@@ -133,8 +133,7 @@ disagree are in [spec-errata.md](spec-errata.md).
   pinning, offline use, and authentication up to the host's `type-uri`
   check); a session snapshot of a run
   holding a live invoked service is refused (`unavailable`;
-  `scxml.session-snapshot/v2` cannot represent one); a live session's
-  `--record`/`--replay` log does not bind the service components; child
+  `scxml.session-snapshot/v2` cannot represent one); child
   documents compiled at run time by the compiler component are not checked
   for unbound service types (`COMP004`), which then fail their session start
   instead; the validator and compiler components' WIT requests carry no

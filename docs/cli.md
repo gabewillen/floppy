@@ -369,8 +369,9 @@ service, or the command fails before anything runs; the host links nothing
 else, and a component importing an undeclared WASI interface fails its
 session start. `run` refuses `--record` and `--replay` when a bound package
 declares any WASI permission (`[record-wasi]`). A run holding a live
-service cannot be snapshotted (the snapshot is refused), and a `--record`
-log does not bind service components.
+service cannot be snapshotted (the snapshot is refused). A `--record` log
+binds each service's URI and component SHA-256, and `--replay` refuses a
+run whose services differ (`[replay-identity-mismatch]`).
 ## `run`
 
 `run` keeps one live session of a document open through the same components
