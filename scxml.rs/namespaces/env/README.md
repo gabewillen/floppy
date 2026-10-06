@@ -78,9 +78,9 @@ with an example.
   never receives it. The host substitutes the value only into that call's
   `outbound-http` requests, admitted only to an origin the package declares
   or one a reference's value supplies entirely. An invoked service's
-  references are bound once, at its `start`, and stay valid for the whole
-  invocation (every later `send`, `wake`, or `cancel` of that instance), only
-  inside that instance's admitted `outbound-http` requests.
+  references are bound once, when its invocation starts
+  (`invoke-request.references`), and stay valid for the whole invocation,
+  only inside that invocation's admitted `outbound-http` requests.
 - **A missing value leaves the slot absent.** The component decides what
   that means (`<example:fetch>` sends no `authorization` without a token). Before a
   run, the CLI lists each element's bound slots and names the `--env` flag

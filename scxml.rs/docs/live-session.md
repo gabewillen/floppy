@@ -63,10 +63,10 @@ ends with every session in a stable configuration.
   next deadline. If nothing is due, `advance` only moves the clock.
 - `advance_to(ms)` and `run_until_idle()` are for logical sessions only.
   `run_until_idle` fires every pending deadline in order, which is the batch
-  run's drain, except that it never moves the clock past a deferred request
-  of an invoked service still in flight (`awaiting_service_responses`): it
-  returns, and the embedder waits for the outcome (see "Deferred service
-  requests" below) before it calls it again.
+  run's drain, except that it never moves the clock past an invoked
+  service's request still in flight (`awaiting_http_responses`): it
+  returns, and the embedder waits for the response (see "Invoked services'
+  HTTP responses" below) before it calls it again.
 - `snapshot(options)` returns the canonical `scxml.session-snapshot/v2`
   document of the session in its stable configuration ([session-snapshot.md](session-snapshot.md)).
   For the same state it is the same document a batch run produces:
@@ -164,24 +164,22 @@ decides where they go:
   waits behind queued external events. A delayed send whose target no
   longer answers when it falls due takes the same path in batch and live
   runs alike.
-- Deferred service requests: an invoked service makes a slow request with
-  `outbound-http.begin` instead of the blocking `fetch`
-  ([invoked-services.md](invoked-services.md#slow-requests-without-blocking-the-session)),
-  through the transport `ServiceComponents::with_deferred_http` grants (a
-  `ServiceHttp`; `ThreadedServiceHttp`, feature `http`, runs each request
-  through an `ExtensionHttpClient` on a thread of its own and closes the
-  request's connection when its instance abandons it). The session keeps taking events and
-  firing timers meanwhile. The transport settles each request's
-  `ServiceHttpOutcome` from any thread; `LiveHttp::on_service_response`
-  wakes the embedder, which calls `deliver_service_responses`: at the
-  session's current time (due deadlines fire first), each outcome whose
-  instance is still live and waiting reaches it, the instance's `wake`
-  runs (it reads the outcome with `take`), and every session runs to a
-  stable configuration. An outcome whose instance was cancelled (its state
-  exited), completed, or retired meanwhile is dropped; `ThreadedServiceHttp`
-  has already closed that request's connection, so its thread ended
-  instead of waiting for the response. A recording or
-  replaying session delivers no outcome, so there `begin` is refused.
+- Invoked services' HTTP responses: an invoked service's
+  `outbound-http.fetch` is an `async func` that suspends only the calling
+  task ([invoked-services.md](invoked-services.md#outbound-http)). A live
+  session performs each admitted request through the transport
+  `ServiceComponents::with_outbound_http` grants, on a transport thread of
+  its own, and keeps taking events and firing timers meanwhile.
+  `LiveHttp::on_http_response` is called from any thread when a response
+  arrives, so the embedder calls `deliver_http_responses`: at the session's
+  current time (due deadlines fire first), each response reaches the
+  invocation that waits for it, whose event loop runs until it waits again,
+  and every session runs to a stable configuration. A response of an
+  invocation that was cancelled (its state exited) or ended meanwhile is
+  dropped, and cancelling it closed that request's connection, so its
+  thread ended instead of waiting. A recording session records each
+  delivered response (`HttpResponse`); a replaying session performs no
+  request and delivers each response from the record.
 - `receive_http(request)` delivers one inbound message. Its target, in
   origin form or absolute, must end in `/sessions/{_sessionid}/basichttp`
   (so a proxy may mount the listener under a prefix). The message is queued
@@ -236,6 +234,11 @@ the session time it was applied:
   in request order (a refusal raises `error.communication` inside the
   `<send>`, so the decision is an input); the requests themselves are
   outputs and are not recorded
+- `HttpResponse { at_ms, path, request, response }`: the response (or the
+  transport's failure) to an invoked service's `outbound-http.fetch`;
+  `path` is the invocation's lineage of invoke ids and `request` the
+  request's number within the invocation, from 0. Replay delivers it from
+  the record, only to the invocation of that lineage; any other diverges
 
 `take_recorded` drains the log. The engine is deterministic given its calls
 and their times. So opening a `LiveClock::Logical` session over the same
@@ -254,8 +257,9 @@ an inbound message, a denied send, and a late failure, and
 over real sockets.
 
 Replay does not capture what a document reads from outside its inputs:
-documents loaded through `<invoke src>` or `<data src>`, and the environment
-passed to namespace extension components. Replay must supply the same ones.
+documents loaded through `<invoke src>` or `<data src>`, the environment
+passed to namespace extension components, and what an invoked service reads
+through its WASI resources. Replay must supply the same ones.
 
 ## The `run` command
 
@@ -345,7 +349,7 @@ non-fatal `error` record carrying its line number, and the session goes on.
 | --- | --- |
 | `opened` | `session`, `clock`, `ioprocessors` (`{uri: {"location": …}}`) |
 | `log` | `session`, `parent` (children only), `label` (when present), `text` |
-| `call` | `cause` (`start`, `event`, `timer`, `idle`, `http`, `communication-error`, `service-response`), `at_ms`, `status`, `configuration`, `next_deadline_ms`, `commands` |
+| `call` | `cause` (`start`, `event`, `timer`, `idle`, `http`, `communication-error`, `http-response`), `at_ms`, `status`, `configuration`, `next_deadline_ms`, `commands` |
 | `snapshot` | `document`: the canonical snapshot document, embedded byte for byte |
 | `done` | the root reached a top-level final state; when that final state has `<donedata>`, its evaluated value as `data` (JSON kinds) or `xml` (SCXML 5.5: the processor "SHOULD return the data to the environment in an implementation-dependent manner") |
 | `error` | `code`, `message`, `fatal`, `line` (input errors) |
@@ -384,12 +388,14 @@ first), `event` (`at_ms`, `name`,
 decoded `event`: `name`, optional
 `sendid`, `origin`, `origintype`, `data`/`xml`, `raw`, and
 `trace_context`), `communication-error` (`at_ms`, `senders`: each
-`session`, invoke-id `path`, and the failed send's `sendid`), or `outbound`
-(`accepted`). A final
+`session`, invoke-id `path`, and the failed send's `sendid`), `outbound`
+(`accepted`), or `http-response` (`at_ms`, the invocation's invoke-id
+`path`, `request`, and either `status` with `body` (UTF-8) or `body_hex`,
+or `failure`: `not-allowed`, `transport`, or `response-too-large`). A final
 `{"type":"close","reason":…}` line marks the end. The log holds every
 input's payload, including each inbound message's data, raw text, and W3C
-carrier as received, so it needs the same access and retention protection
-as those messages.
+carrier as received, and each service response's body, so it needs the
+same access and retention protection as those messages.
 
 `--replay FILE` checks the header against the document's Machine IR, the
 component release, the namespace bindings, and the service bindings (a
@@ -415,7 +421,7 @@ under the session's single `session-run` span:
 | `scxml.host-wasmtime.session-advance` | an advance that fires something, or a drain to idle |
 | `scxml.host-wasmtime.session-receive-http` | one inbound BasicHTTP message that reached a session's queue |
 | `scxml.host-wasmtime.session-communication-error` | one delivery of owed `error.communication` events |
-| `scxml.host-wasmtime.session-service-response` | one delivery of settled deferred service requests |
+| `scxml.host-wasmtime.session-http-response` | one delivery of an invoked service's HTTP response |
 | `scxml.host-wasmtime.session-close` | the graceful close |
 | `scxml.host-wasmtime.extension-http-fetch` | one `outbound-http` request an extension component made, on the session thread, inside its `execute` call (blocking the call; bounded by the granted transport's timeouts) |
 | `scxml.host-wasmtime.basichttp-network-post` | one outbound request (`http` feature), on its own thread, a child of the send that issued it |

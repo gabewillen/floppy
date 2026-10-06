@@ -15,7 +15,7 @@
 //! * **Resources** — only runtime resources need a grant, named after
 //!   wasmtime CLI's options ([`WasiOptions`]): `wasi:filesystem` needs at
 //!   least one preopened directory (`--dir HOST::GUEST`), `wasi:sockets/tcp`
-//!   the addresses its connections may reach (`-S tcp`), and
+//!   network access (`-S inherit-network`: any address), and
 //!   `wasi:sockets/ip-name-lookup` `-S allow-ip-name-lookup`. A component
 //!   importing one without its grant is refused
 //!   ([`ArtifactError::WasiResourceUngranted`]), and so is a grant whose
@@ -28,10 +28,8 @@
 //!   `wasi:http`, and UDP are never linked.
 //! * **Context** — [`WasiPlan::context`] builds one invocation's context:
 //!   each granted directory preopened at its guest path, read-write (as
-//!   wasmtime's `--dir`), TCP connections admitted only to the granted
-//!   addresses (and the implicit wildcard bind a connect performs;
-//!   listening, accepting, and UDP are refused), name lookup only when
-//!   granted. Clocks and randomness are the host's.
+//!   wasmtime's `--dir`), TCP connections to any address only under
+//!   `inherit-network` (UDP is refused), name lookup only when granted. Clocks and randomness are the host's.
 //!
 //! Telemetry: no span of its own. Planning failures surface through the
 //! binding's error, and WASI calls run inside the invocation's spans.

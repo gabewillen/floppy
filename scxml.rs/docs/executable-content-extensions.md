@@ -14,9 +14,9 @@ is a *package* of two independently deployed artifacts:
 A **manifest** binds them: the exact namespace URI, the package version, the
 extension artifact, the schema artifact and its SHA-256, the WIT world and
 version, the outbound HTTP origins its extension component may reach
-(`http-origins`), the `env` slots its elements accept (`env-slots`), and,
-optionally, the WASI permissions its component may import
-(`wasi-permissions`; "WASI permissions" below). A package is bound explicitly (`--extension-package`), or, when its namespace
+(`http-origins`), and the `env` slots its elements accept (`env-slots`).
+It declares no WASI and no events ("WASI" below). A package is bound
+explicitly (`--extension-package`), or, when its namespace
 URI is a repository path, loaded from that repository's release ("Loading an
 element from a repository" below). The example namespace
 ([`components/scxml-extension-example`](../components/scxml-extension-example))
@@ -58,7 +58,7 @@ in-process. Here the same roles are a component's exports and imports:
 | `itp.Snapshot(ctx, SnapshotConfig{ExcludeData})` | `session-snapshot-host.snapshot(exclude)`: the canonical `scxml.session-snapshot/v2` document of the executing session (read-only; see below) |
 | `net/http` clients | `outbound-http.fetch` for a quick request (deny by default; admitted to the origins the package declares or the run supplies; see below); a slow request belongs in an invoked service |
 | `os.LookupEnv` for keys and endpoints | an `env` slot: the element names the variable (`env:token="API_TOKEN"`), and the component receives an opaque reference, never the value (see below) |
-| other ambient OS access | nothing ambient: an extension component reaches the outside world only through its world's imports (and, in a later release, the WASI interfaces its package declares and the run grants; see "WASI permissions") |
+| other ambient OS access | nothing ambient: an extension component reaches the outside world only through its world's imports; it gets no WASI interface (see "WASI") |
 
 Differences that matter when porting:
 
@@ -138,90 +138,28 @@ interfaces it uses. Keep the decision logic in plain Rust behind a small trait
 so native tests exercise it without a host (the example component's
 `ExampleNamespace::execute` is the model).
 
-## WASI permissions
+## WASI
 
-Nothing WASI is ambient. A component may import a WASI 0.2 interface only
-when its package declares it and the run grants it: no WASI interface beyond
-what the manifest declares and the run grants. A manifest declares the
-interfaces in an optional `wasi-permissions` field (omitted when empty; the
-same field and vocabulary as a service package's):
+Extension components get no WASI interface, by rule. An extension element
+is executable content: it runs synchronously inside a microstep and must
+stay quick. Anything asynchronous, I/O-bound, or long-running belongs in an
+invoked service ([invoked-services.md](invoked-services.md)), which runs
+beside the session and whose `<invoke>` is cancelled when its state exits.
+The Wasmtime host links no WASI interface into an extension component, so
+one that imports any fails to instantiate. An extension package manifest
+has no WASI field: an invoked service's WASI interfaces are its
+component's own imports, and the run grants their resources with
+wasmtime's option names
+([invoked-services.md](invoked-services.md#wasi-imports-and-resources)).
+[`components/scxml-service-files`](../components/scxml-service-files) is
+the example of a service component that imports `wasi:filesystem`.
 
-```json
-"wasi-permissions": [
-  { "interface": "wasi:clocks" },
-  { "interface": "wasi:filesystem", "mount": "workspace", "access": "read-write" }
-]
-```
-
-| `interface` | Fields | What the run grants |
-|---|---|---|
-| `wasi:clocks` | none | the host's wall and monotonic clocks |
-| `wasi:filesystem` | `mount` (`[a-z][a-z0-9-]*`), `access` (`read-only` or `read-write`) | one host directory, seen by the component at `/<mount>` |
-| `wasi:random` | none | the host's random sources |
-| `wasi:sockets/ip-name-lookup` | none | the host's resolver |
-| `wasi:sockets/tcp` | none | outbound connections to the `IP:PORT` addresses granted (no listening, no UDP) |
-
-The list is sorted by interface, then mount, with no entry twice, and holds
-at most 16 entries; an unknown interface, field, or value, an empty list, or
-an unsorted list is rejected when the manifest is read. `wasi:cli`,
-`wasi:http` (outbound HTTP is the `outbound-http` capability below), and UDP
-are not grantable.
-
-The embedder grants each declared permission for the run
-(`WasiGrants`; the CLI's `--grant URI=PERMISSION[=VALUE]`, for example
-`--grant URI=wasi:filesystem=workspace=./data` or
-`--grant URI=wasi:sockets/tcp=127.0.0.1:5432`). The host then links exactly the
-declared and granted interfaces (with the `wasi:io` interfaces they use) into
-that one component, and fails closed before the first macrostep when a
-declared permission is not granted, a grant names nothing the package
-declares, or the component imports a WASI interface its package does not
-declare. The CLI lists each package's declared permissions, and what the run
-grants each, before it runs, and refuses `--record` and `--replay` for such a
-run: the effects and inputs of a WASI interface are outside the replay log.
-
-**WASI is linked only into invoked-service components, by rule.** An
-extension element is executable content: it runs synchronously inside a
-microstep and must stay quick. Anything asynchronous, I/O-bound, or
-long-running belongs in an invoked service
-([invoked-services.md](invoked-services.md)), whose events and `wake`s keep
-the session responsive and whose `<invoke>` is cancelled when its state
-exits. So the Wasmtime host refuses an extension package that declares any
-WASI permission when it is bound or resolved (`WasiExtensionUnsupported`);
-its manifest still reads, validates, and lists. An extension component's
-`outbound-http.fetch` blocks the session for the request's duration and is
-meant for quick requests; a slow one (a model call, for example) belongs in
-a service, which can make it without blocking (`outbound-http.begin`). [`components/scxml-service-files`](../components/scxml-service-files)
-is the example of a component that declares `wasi:filesystem`.
-
-## Event contracts
-
-A package may declare the events its component emits and accepts, each with
-a JSON Schema for the event's data, in an optional `events` field (omitted
-when it declares none; the same field as a service package's):
-
-```json
-"events": {
-  "emits": [
-    { "name": "echo.reply", "schema-artifact": "events.json#/$defs/Reply", "schema-sha256": "<64 hex>" }
-  ],
-  "accepts": []
-}
-```
-
-`name` is an exact event name (no `*`, no empty token), and each list is
-sorted by name with no name twice (at most 64 each). `schema-artifact` names
-a JSON file relative to the manifest, optionally with a JSON Pointer
-fragment, and `schema-sha256` is the SHA-256 of the file's bytes; every
-command that reads the manifest reads the file, checks the digest, and
-resolves the schema exactly like an `event:schema` reference (the same
-dialects, reference and bundling rules, and canonical JSON; see
-[namespaces/event](../namespaces/event/README.md)). A repository package's
-files are fetched at its pinned commit and checked against the digests its
-pinned manifest declares. The CLI lists the declared events
-(`= events: emits ...; accepts ...`). For an invoked service the session host
-enforces the contract and the validator cross-checks documents against it
-([invoked-services.md](invoked-services.md#event-contracts)); an extension
-package's contract is declared and verified only in this release.
+An extension component's `outbound-http.fetch` is the same WIT `async
+func`, but `execute` is synchronous: the host drives the call to
+completion, so `fetch` blocks `execute`, and the session, for the
+request's duration, and is meant for quick requests. A slow one (a model
+call, for example) belongs in a service, whose `fetch` suspends only its
+own task.
 
 ## Values are references: `env` slots
 
@@ -321,8 +259,8 @@ text (or bytes) and references. The capability is deny by default:
   `execute`; fuel meters instructions, not wall time, so the transport's
   timeouts are what bound the wait. That is why `fetch` is for quick
   requests only: a slow one (a model call, for example) belongs in an
-  invoked service, whose `outbound-http.begin` never blocks the session
-  ([invoked-services.md](invoked-services.md#slow-requests-without-blocking-the-session)).
+  invoked service, whose `fetch` suspends only its own task, never the
+  session ([invoked-services.md](invoked-services.md#outbound-http)).
 - **Failures are the extension component's to map.** A refused request, a
   transport failure, or an oversized response is a `component-error`;
   `<example:fetch>` maps every one, and every non-2xx status, to
@@ -345,12 +283,11 @@ API_TOKEN=... scxml-cli snapshot run DOC.scxml \
 
 The WIT import is project-specific rather than `wasi:http`, as the
 `BasicHTTP` processor's `http-transport` is: extension components import no
-WASI interface (and `wasi:http` is not a grantable permission), the reference
+WASI interface (and no host links `wasi:http`), the reference
 substitution needs the host to see every part, and a
 bounded request-and-response record lets the host reuse its audited
 allowlist, canonicalization, and TLS policy without adding the
-`wasi:io` stream and resource machinery, an async runtime, or a second HTTP
-client.
+`wasi:io` stream and resource machinery or a second HTTP client.
 
 ## Reading the session snapshot
 
@@ -567,8 +504,7 @@ document needs no flag to bind it:
   still reach it only as references, substituted into requests to those
   origins or to an origin a value supplies. Every command that reads a
   document (`validate` in its human format) lists each element's namespace, release tag and pinned commit,
-  declared origins, the slots the document binds, and declared WASI
-  permissions, before anything runs.
+  declared origins, and the slots the document binds, before anything runs.
 - **Telemetry.** `scxml.cli.resolve-extension-package`,
   `scxml.cli.resolve-extension-component`, and the host's
   `scxml.host-wasmtime.extension-load` spans carry only their closed outcome;
@@ -605,8 +541,8 @@ scxml-cli snapshot run weather.scxml \
   sessions) and no transition previews.
 - `outbound-http` is not streamed: a component receives the whole response
   body once.
-- WASI permissions are linked into invoked-service components only, by rule
+- WASI is linked into invoked-service components only, by rule
   (extension elements are synchronous executable content; I/O-bound work
-  belongs in services): the Wasmtime host refuses an extension package that
-  declares any (`WasiExtensionUnsupported`). The browser host links no WASI
-  interface at all.
+  belongs in services): an extension component that imports any WASI
+  interface fails to instantiate. The browser host links no WASI interface
+  at all.

@@ -113,80 +113,71 @@ disagree are in [spec-errata.md](spec-errata.md).
   `stateforward:scxml/invoked-service` Wasm components the Wasmtime session
   host binds to exact type URIs (`SessionHost::with_service_components`;
   the CLI's `--service-package`, `--service-component`, and
-  `--service-component-sha256`): one instance per invocation, a leaf with no
-  machine, under the per-call fuel and call budget. The engine evaluates the
-  request (`src`/`srcexpr` text is data, never loaded), the host runs `start`,
-  delivers `#_<invokeid>` and autoforwarded events to `send`, runs `wake` on
-  the shared logical clock, and calls `cancel` when the invoking state exits;
-  `emit`, `complete` (`done.invoke` with data), and retirement (`failed`, an
-  `error.communication` with the invoke id) reuse the invocation routing of
-  invoked sessions. Proven by
+  `--service-component-sha256`): one instance per invocation, in its own
+  store on its own thread, under the per-input fuel and call budget. The
+  engine evaluates the request (`src`/`srcexpr` text is data, never loaded),
+  and the host calls the WASI 0.3 async export `invoked-service-api.invoke`
+  with an `events` stream fed by `#_<invokeid>` sends and autoforwarded
+  events; the events the service writes to its returned stream, and its
+  future (`ok`: `done.invoke` with data; `err` or a trap: the
+  `communication-error` message, `error.communication` with the invoke id),
+  reuse the invocation routing of invoked sessions. Its
+  `wasi:clocks/monotonic-clock` runs on the session's logical clock, and
+  leaving the invoking state cancels the invocation and drops its store
+  (SCXML 6.4). Proven by
   `hosts/scxml-host-wasmtime/tests/service_invoke.rs` with the echo and timer
   example (`components/scxml-service-example`) and by the engine tests in
-  `crates/scxml-engine/tests/interpret.rs`. Gaps of this first slice: types are bound only by exact
-  URI (an `<invoke>` of a type no host binds, literal or `typeexpr`, raises
-  `error.execution` when it starts, as SCXML 6.4 makes invocation a runtime
-  action; the session start is unaffected), and a repository service URI (`.../services/<name>@<tag>`) is
-  resolved only for a literal `<invoke type>` (a `typeexpr` naming one is not
-  resolved, and no shipped component answers a repository service URI, so
+  `crates/scxml-engine/tests/interpret.rs`. Gaps: types are bound only by
+  exact URI (an `<invoke>` of a type no host binds, literal or `typeexpr`,
+  raises `error.execution` when it runs, as SCXML 6.4 makes invocation a
+  runtime action; the session start is unaffected), and a repository service
+  URI (`.../services/<name>@<tag>`) is resolved only for a literal
+  `<invoke type>` (a `typeexpr` naming one is not resolved, and no shipped
+  component answers a repository service URI, so
   `crates/scxml-cli/tests/repository_services.rs` proves resolution,
-  pinning, offline use, and authentication up to the host's `type-uri`
-  check); a session snapshot of a run
-  holding a live invoked service is refused (`unavailable`;
-  `scxml.session-snapshot/v2` cannot represent one); child
-  documents compiled at run time by the compiler component are not checked
-  for unbound service types (`COMP004`), whose `<invoke>` then raises
-  `error.execution` when it starts; the validator and compiler components' WIT requests carry no
-  service packages, so the validator component reports every literal
-  service type as unbound (`SCXML094`, a warning); and the browser host binds no service (`load-services` and
-  `start-service` answer `unavailable`).
-- Deferred service requests (`outbound-http.begin`/`take`, outcomes
-  delivered through `wake`) run only in live sessions that neither record
-  nor replay, through the embedder's `ServiceHttp` transport
-  (`ServiceComponents::with_deferred_http`). Proven by the `service_invoke`
-  deferred tests (a held request does not block events, a logical session's
-  clock waits for it, a cancelled service abandons it, a recording session
-  refuses it; `cancelling_the_invoking_state_closes_the_streaming_connection_and_ends_its_thread`
-  proves that `ThreadedServiceHttp` closes an abandoned request's connection
-  and ends its thread; the CLI's `live_run` deferred tests prove `run`
-  wires it, against loopback servers). Gaps: batch runs (and `snapshot
-  run`) refuse `begin`, an abandoned
-  request still resolving or connecting ends only within the connect timeout
-  (nothing is sent), an embedder's own `ServiceHttp` transport is not told
-  that a request was abandoned (its own timeouts bound it), and the browser
-  host offers neither.
-- Package event contracts: a service or extension package may declare the
-  events its component emits and accepts with JSON Schemas (`events`). The
-  Wasmtime host enforces a service's contract on every `emit` (a mismatch
-  retires the service: `error.communication`) and every `<send>` to it (a
-  mismatch raises `error.execution`; a delayed send is checked when sent and
-  when due), and the validator checks a document's `event:schema` against it
-  (`SCXML095`, `SCXML096`). Proven by the `service_invoke` contract tests and
-  the validator's and CLI's service event tests. Gaps: autoforwarded events
-  are not checked; an extension package's contract is declared, verified,
-  and listed but not enforced (nothing checks the events an extension
-  element raises or sends); schema compatibility is exact identity of
-  canonical schemas, not subsumption; the validator does not check
-  `<send>` data to a service against `accepts`; and the browser host binds
-  no service.
-- WASI permissions: a service or extension package may declare the WASI 0.2
-  interfaces its component imports (`wasi-permissions`: `wasi:clocks`,
-  `wasi:filesystem` with a named mount and access, `wasi:random`,
-  `wasi:sockets/ip-name-lookup`, `wasi:sockets/tcp`; unknown entries fail
-  closed). The Wasmtime host links into a service component exactly the
-  declared permissions the embedder grants (`ServiceComponents::with_wasi_grants`;
-  the CLI's `--grant URI=PERMISSION[=VALUE]`) and fails the binding or the
-  session start closed otherwise. Proven by the `service_invoke` tests with
-  `components/scxml-service-files` (a granted read-write mount is read and
-  written, a read-only mount refuses the write, an ungranted or undeclared
-  permission and an undeclared WASI import fail closed). By rule, not as a gap,
-  extension components get no WASI interface (the host refuses an extension
-  package that declares one: extension elements are synchronous executable
-  content, and I/O-bound work belongs in invoked services). Gaps: `wasi:cli`, `wasi:http`, and UDP are not grantable; individual
-  WASI calls get no span of their own (the service's export-call spans cover
-  them); a run binding a package that declares any permission cannot be
-  recorded or replayed; and the browser host links no WASI interface.
-  The SCXML and `BasicHTTP` Event I/O processors are supported; no other
+  pinning, offline use, and authentication up to binding); a session
+  snapshot of a run holding a live invoked service is refused
+  (`unavailable`; `scxml.session-snapshot/v2` cannot represent one); the
+  validator and compiler components' WIT requests carry no service packages,
+  so the validator component reports every literal service type as unbound
+  (`SCXML094`, a warning); and the browser host binds no service
+  (`start-invocation` of a service answers `unavailable`).
+- Invoked services' outbound HTTP: `outbound-http.fetch` is an `async func`
+  that suspends only the calling task. A batch run performs the request
+  through the embedder's transport (`ServiceComponents::with_outbound_http`);
+  a live session performs it on a transport thread of its own and delivers
+  the response as a recorded external input (`http-response`), which a
+  replay delivers from its log. Proven by the `service_invoke` tests
+  (`a_fetch_suspends_only_its_task_and_its_response_arrives_as_an_external_input`,
+  `leaving_the_invoking_state_drops_a_request_in_flight`,
+  `a_recorded_http_response_replays_without_the_network`, and
+  `cancelling_the_invoking_state_closes_the_streaming_connection_and_ends_its_thread`,
+  which proves the connection closes and its thread ends within 2 s) and
+  the CLI's `live_run` service fetch tests, against loopback servers. Gaps:
+  responses are delivered whole (no streaming); a cancelled request still
+  resolving or connecting ends only within the connect timeout (nothing is
+  sent); and the browser host offers none.
+- WASI for invoked services: the WASI interfaces a service may use are its
+  component's own `wasi:*` imports; no manifest declares them. Only runtime
+  resources need a grant, named after wasmtime CLI's options and scoped to
+  the service's exact type URI (`ServiceComponents::with_wasi`; the CLI's
+  `--dir URI=HOST::GUEST`, `--wasi URI=inherit-network`, and
+  `--wasi URI=allow-ip-name-lookup`); an import without its grant, a grant
+  without its import, or a `wasi:*` import the host never links fails the
+  binding closed. Proven by the `service_invoke` tests with
+  `components/scxml-service-files`
+  (`a_preopened_directory_is_what_the_filesystem_import_reads_and_writes`,
+  `an_ungranted_or_unused_wasi_resource_fails_the_binding_closed`) and the
+  CLI's `a_wasi_service_runs_only_with_its_dir_granted`. By rule, not as a
+  gap, extension components get no WASI interface (extension elements are
+  synchronous executable content, and I/O-bound work belongs in invoked
+  services). Gaps: `wasi:cli`, `wasi:http`, and UDP are never linked; TCP is
+  all or nothing (`inherit-network`); individual WASI calls get no span of
+  their own (the invocation's spans cover them); a replay log does not
+  capture what a service reads through its WASI resources (files, sockets),
+  so a replay needs the same ones; and the browser host links no WASI
+  interface.
+- The SCXML and `BasicHTTP` Event I/O processors are supported; no other
   Event I/O processor exists, so a `<send>` of any other type raises
   `error.execution` (SCXML 6.2, IRP case 199). `BasicHTTP`
   sends run through the shipped `scxml-ioprocessor-basichttp` component,
@@ -354,8 +345,8 @@ In detail:
   responses are delivered whole (no streaming), are not recorded in `run`
   replay logs (so a recorded or replayed `run` offers extension components no
   outbound HTTP: every request is refused the same way in both), and carry no
-  W3C trace headers. A slow request belongs in an invoked service
-  (`outbound-http.begin`, which never blocks the session).
+  W3C trace headers. A slow request belongs in an invoked service, whose
+  `fetch` suspends only its own task, never the session.
 - The BasicHTTP network of live sessions (`LiveHttp`, `scxml-cli run
   --http-allow`/`--http-listen`): outbound requests carry no W3C trace headers (so `_event.raw` at a
   receiver never depends on telemetry) and their response bodies are never

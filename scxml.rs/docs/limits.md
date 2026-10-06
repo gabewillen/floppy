@@ -53,7 +53,8 @@ with the known open defects under its "Known limitations (pending)".
   records that name a session also name its parent: trace entries and
   `log` outputs (`parent`), snapshots (each session's `parent` index and
   `invoked_by`), and the replay log's `http` and `communication-error`
-  records (the invoke-id `path` from the root).
+  records (the invoke-id `path` from the root); an `http-response` record
+  names an invoked service's invocation by the same `path`.
 - **ECMAScript XML values.** SCXML 1.0 B.2.1: "the Processor MUST create the
   corresponding DOM structure and assign it as the value of the variable."
   The DOM is a frozen, read-only DOM Core subset (node, element, attribute,

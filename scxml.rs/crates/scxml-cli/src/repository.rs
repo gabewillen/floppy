@@ -116,8 +116,7 @@ const ENTRY_FIELDS: [&str; 6] = [
     "component-sha256",
 ];
 /// The cache index entry format of a repository service. Its manifest's
-/// digest pins its optional schema and event schemas, whose digests the
-/// manifest declares.
+/// digest pins its optional schema, whose digest the manifest declares.
 const SERVICE_ENTRY_FORMAT: &str = "stateforward.scxml.service-cache/v1";
 /// Service cache index entry fields in their canonical order.
 const SERVICE_ENTRY_FIELDS: [&str; 5] = [
@@ -1151,7 +1150,7 @@ impl Repository {
     }
 
     /// The package of the repository service `service_uri` (manifest,
-    /// optional schema, and event schemas, verified), from the cache or its
+    /// and optional schema, verified), from the cache or its
     /// repository; pins the URI on first use.
     ///
     /// # Errors
