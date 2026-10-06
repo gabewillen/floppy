@@ -17,8 +17,8 @@
 #                (function calling)
 #
 # OPENAI_API_KEY must be set in the invoking environment (any non-empty
-# value for servers that ignore it); `--env OPENAI_API_KEY` makes the run hold
-# it, and the element's env:apikey slot names it. The extension component
+# value for servers that ignore it); `--env OPENAI_API_KEY@<openai URI>` grants
+# it to the openai namespace, and the element's env:apikey slot names it. The extension component
 # receives only an opaque reference, never the key. Requires
 # `cargo build -p scxml-cli --features wasmtime`.
 set -eu
@@ -53,6 +53,6 @@ OPENAI_BASE_URL=$base "$cli" snapshot run "$work/$example.scxml" \
     --extension-package "$workspace/namespaces/openai/package/openai.extension.json" \
     --extension-component "$uri=$release/scxml_extension_openai.virtualized.wasm" \
     --extension-component-sha256 "$uri=$openai_sha" \
-    --env OPENAI_API_KEY --env OPENAI_BASE_URL \
+    --env "OPENAI_API_KEY@$uri" --env "OPENAI_BASE_URL@$uri" \
     --output "$work/final.snapshot.json"
 "$cli" snapshot show "$work/final.snapshot.json" --color never

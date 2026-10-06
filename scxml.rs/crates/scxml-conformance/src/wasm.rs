@@ -447,7 +447,8 @@ impl WasmExecutor {
 
     /// Binds `releases` (each namespace at most once): every component is
     /// authenticated by its trusted SHA-256 and every package verified
-    /// against its schema; the run then holds the harness's fake values and
+    /// against its schema; the run then holds the harness's fake values
+    /// (granted to every bound namespace) and
     /// reaches only the in-process stand-in
     /// ([`crate::openai_service`]). Replaces any earlier binding.
     ///
@@ -462,8 +463,21 @@ impl WasmExecutor {
         releases: Vec<ExtensionRelease>,
     ) -> Result<Self, WasmExecutorError> {
         let service = std::sync::Arc::new(crate::openai_service::OpenAiService::new());
-        let values = ExtensionEnvironment::new(crate::openai_service::values())
-            .map_err(WasmExecutorError::Host)?;
+        // The fake values are granted to every namespace this run binds.
+        let uris: Vec<String> = releases
+            .iter()
+            .map(|release| release.manifest.namespace_uri.clone())
+            .collect();
+        let values = if uris.is_empty() {
+            ExtensionEnvironment::none()
+        } else {
+            ExtensionEnvironment::new(crate::openai_service::values().into_iter().map(
+                |(name, value)| {
+                    scxml_host_wasmtime::EnvVariable::new(name, value, uris.iter().cloned())
+                },
+            ))
+            .map_err(WasmExecutorError::Host)?
+        };
         let mut components = ExtensionComponents::new()
             .with_values(values)
             .with_outbound_http(service.clone());

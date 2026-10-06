@@ -340,9 +340,9 @@ fn repository(server: &Server, cache: &Path) -> Vec<String> {
 fn openai_grants(server: &Server) -> Vec<String> {
     vec![
         "--env".into(),
-        "OPENAI_API_KEY=sk-test".into(),
+        format!("OPENAI_API_KEY@{OPENAI_URI}=sk-test"),
         "--env".into(),
-        format!("OPENAI_BASE_URL={}/v1", server.origin),
+        format!("OPENAI_BASE_URL@{OPENAI_URI}={}/v1", server.origin),
     ]
 }
 
@@ -832,13 +832,17 @@ fn values_reach_only_their_element_and_only_admitted_origins() {
         text(&refused.stderr)
     );
 
-    // B names A's key for its own token slot, toward an undeclared origin:
-    // refused before anything is sent, so the key never leaves.
     let toward_undeclared = two_elements(
         &directory,
         &format!(r#"url="{echo}" env:token="OPENAI_API_KEY""#),
     );
-    let (refused, shown) = run(&toward_undeclared, &[], &[]);
+    let also_b = format!("OPENAI_API_KEY@{EXAMPLE_URI}");
+    let also_b: &[&str] = &["--env", &also_b];
+
+    // B names A's key (granted to B as well) for its own token slot, toward
+    // an undeclared origin: refused before anything is sent, so the key
+    // never leaves.
+    let (refused, shown) = run(&toward_undeclared, &[], also_b);
     assert!(refused.status.success(), "{}", text(&refused.stderr));
     assert!(
         shown.contains(r#"outcome = "status=refused slots=token""#),
@@ -850,7 +854,7 @@ fn values_reach_only_their_element_and_only_admitted_origins() {
     // The same element whose package declares the origin: admitted, the
     // reference substituted by the host, the component still holding only
     // the slot's name.
-    let (admitted, shown) = run(&toward_undeclared, &[&server.origin], &[]);
+    let (admitted, shown) = run(&toward_undeclared, &[&server.origin], also_b);
     assert!(admitted.status.success(), "{}", text(&admitted.stderr));
     assert!(shown.contains("configuration: atomic [fetched]"), "{shown}");
     assert!(
@@ -869,7 +873,10 @@ fn values_reach_only_their_element_and_only_admitted_origins() {
     let (supplied, shown) = run(
         &two_elements(&directory, r#"path="/echo" env:url="ECHO_BASE""#),
         &[],
-        &["--env", &format!("ECHO_BASE={}", server.origin)],
+        &[
+            "--env",
+            &format!("ECHO_BASE@{EXAMPLE_URI}={}", server.origin),
+        ],
     );
     assert!(supplied.status.success(), "{}", text(&supplied.stderr));
     assert!(
@@ -887,7 +894,10 @@ fn values_reach_only_their_element_and_only_admitted_origins() {
             &format!(r#"path=":{port}/echo" env:url="HOST_ONLY""#),
         ),
         &[],
-        &["--env", "HOST_ONLY=http://127.0.0.1"],
+        &[
+            "--env",
+            &format!("HOST_ONLY@{EXAMPLE_URI}=http://127.0.0.1"),
+        ],
     );
     assert!(split.status.success(), "{}", text(&split.stderr));
     assert!(
@@ -895,6 +905,41 @@ fn values_reach_only_their_element_and_only_admitted_origins() {
         "{shown}"
     );
     assert_eq!(server.echoes(), 2, "nothing more was sent");
+}
+
+/// A value granted only to A's namespace never reaches B: B's slot naming it
+/// is absent, exactly like an unheld value, even toward an origin B's
+/// package declares, and the listing names the flag that would grant it.
+#[test]
+fn a_value_granted_to_another_namespace_is_absent() {
+    let server = github();
+    let directory = scratch("scoped");
+    let output = directory.join("final.snapshot.json");
+    let mut flags = repository(&server, &directory.join("cache"));
+    flags.extend(openai_grants(&server));
+    flags.extend(example_package(&directory, &[&server.origin]));
+    let document = two_elements(
+        &directory,
+        &format!(r#"url="{}/echo" env:token="OPENAI_API_KEY""#, server.origin),
+    );
+    let (out_of_scope, shown) = snapshot_run(&document, &output, &flags);
+    assert!(
+        out_of_scope.status.success(),
+        "{}",
+        text(&out_of_scope.stderr)
+    );
+    assert!(
+        shown.contains(r#"outcome = "status=200 slots=""#),
+        "{shown}"
+    );
+    assert_eq!(server.echoes(), 1, "B's request carried no reference");
+    assert!(
+        text(&out_of_scope.stderr).contains(&format!(
+            "token <- OPENAI_API_KEY (no value granted: add --env OPENAI_API_KEY@{EXAMPLE_URI})"
+        )),
+        "{}",
+        text(&out_of_scope.stderr)
+    );
 }
 
 /// A misspelled slot is the validator's `SCXML083`, with the fix.
@@ -964,6 +1009,10 @@ fn env_files_supply_values_that_are_masked_in_cli_output() {
         "close",
         "--env-file",
         &env_file.display().to_string(),
+        "--env",
+        &format!("OPENAI_API_KEY@{OPENAI_URI}"),
+        "--env",
+        &format!("OPENAI_BASE_URL@{OPENAI_URI}"),
     ]);
     args.extend(repository(&server, &directory.join("cache")));
     let live = cli(&args);
@@ -988,14 +1037,15 @@ fn env_files_supply_values_that_are_masked_in_cli_output() {
     let mut flags = repository(&server, &directory.join("cache"));
     flags.extend(strings(&[
         "--env",
-        &format!("OPENAI_BASE_URL={}/v1", server.origin),
+        &format!("OPENAI_BASE_URL@{OPENAI_URI}={}/v1", server.origin),
     ]));
     let (missing, shown) = snapshot_run(&hello(), &output, &flags);
     assert!(missing.status.success(), "{}", text(&missing.stderr));
     assert!(shown.contains("configuration: atomic [failed]"), "{shown}");
     assert!(
-        text(&missing.stderr)
-            .contains("apikey <- OPENAI_API_KEY (no value: add --env OPENAI_API_KEY)"),
+        text(&missing.stderr).contains(&format!(
+            "apikey <- OPENAI_API_KEY (no value granted: add --env OPENAI_API_KEY@{OPENAI_URI})"
+        )),
         "{}",
         text(&missing.stderr)
     );

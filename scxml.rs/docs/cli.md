@@ -306,13 +306,20 @@ relative to the manifest, or `--extension-component URI=PATH`, authenticated by
 the required `--extension-component-sha256 URI=HEX` (the manifest is not a trust
 anchor for the extension component). A namespace whose URI is a repository
 element needs no flag ("Loading an element from a repository" below).
-`--env NAME` (the calling shell's value, when set), `--env NAME=VALUE`, and
-`--env-file PATH` (repeatable, Docker's `--env-file` format: one `NAME=VALUE` or
-bare `NAME` per line, the value taken literally, `#` comments; files in order,
-then `--env`, which wins) say which variables the run holds values for; nothing
+`--env NAME@URI` and `--env NAME@URI=VALUE` (repeatable) grant the variable
+`NAME` to exactly the package whose namespace or service type URI is `URI`
+(everything after the first `@` up to the first `=`; repeat the flag to grant
+one variable to several packages, and at most one of a variable's flags may
+give `=VALUE`); there is no unscoped form. `--env-file PATH` (repeatable,
+Docker's `--env-file` format: one `NAME=VALUE` or bare `NAME` per line, the
+value taken literally, `#` comments) supplies values. A granted variable holds
+its flag's `VALUE`, else the last `--env-file` entry for it, else the calling
+shell's value; an `--env-file` entry no flag grants is dropped. Nothing is held
 by default. An element (or an invoked service's `<invoke>`) names the variable
-for one of its slots (`env:<slot>="NAME"`); its extension or service component
-receives an opaque reference, never the value (a service's reference lives for
+for one of its slots (`env:<slot>="NAME"`); when the variable is granted to the
+element's namespace (or the service's type URI) its extension or service
+component receives an opaque reference, never the value, and otherwise the slot
+is absent exactly as if no value were held (a service's reference lives for
 its whole invocation; see [invoked-services.md](invoked-services.md#values-are-references-env-slots)), and every value is masked (`[masked]`) in the text the CLI
 writes (notes, diagnostics, live-session records); canonical snapshot
 documents are written exactly (their `sha256` covers their bytes) and get
@@ -322,7 +329,7 @@ keeps JSON and SARIF stderr clean) lists, on standard error, each bound
 element's namespace, version (release tag and pinned commit, or package
 version and manifest), declared outbound origins, the slots the document
 binds with the variables they name, noting each one the run holds no value
-for with the `--env` flag that adds it, and its declared WASI permissions
+granted to that namespace for with the `--env NAME@URI` flag that adds it, and its declared WASI permissions
 (`= WASI:`; the Wasmtime host refuses an extension package that declares any
 in this release), and, when its manifest declares an event contract, the
 events it emits and accepts (`= events:`).
@@ -475,9 +482,9 @@ The first command prints, before it runs:
 element `https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0`
   = version: release v0.2.0 (commit <the tag's commit>), package 0.2.0
   = outbound HTTP: https://api.openai.com
-  = env slots: apikey <- OPENAI_API_KEY, baseurl <- OPENAI_BASE_URL (no value: add --env OPENAI_BASE_URL)
+  = env slots: apikey <- OPENAI_API_KEY, baseurl <- OPENAI_BASE_URL (no value granted: add --env OPENAI_BASE_URL@https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0)
 ```
 
 Without `OPENAI_BASE_URL` the element uses `https://api.openai.com/v1`; with
-`--env OPENAI_BASE_URL=http://127.0.0.1:11434/v1` it reaches a local
+`--env OPENAI_BASE_URL@https://github.com/stateforward/scxml.rs/namespaces/openai@v0.2.0=http://127.0.0.1:11434/v1` it reaches a local
 OpenAI-compatible service instead, an origin the run supplied.

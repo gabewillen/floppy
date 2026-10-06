@@ -383,7 +383,7 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
             "--extension-package" | "--service-package" => "MANIFEST.json",
             "--extension-component-sha256" | "--service-component-sha256" => "URI=HEX",
             "--grant" => "URI=PERMISSION[=VALUE]",
-            "--env" => "NAME or NAME=VALUE",
+            "--env" => "NAME@URI or NAME@URI=VALUE",
             "--env-file" => "PATH",
             flag if crate::repository::RepositoryFlags::expects(flag).is_some() => {
                 crate::repository::RepositoryFlags::expects(flag).unwrap_or("a value")
@@ -766,9 +766,8 @@ fn run(args: &RunArgs) -> Result<(), Box<dyn std::error::Error>> {
     )?;
     args.services.check(&services.packages)?;
     let values = args.namespaces.values()?;
-    crate::mask::install(&values);
-    let granted: Vec<String> = values.into_iter().map(|(name, _)| name).collect();
-    crate::extensions::write_notes(&packages.summary(Some(&granted)));
+    crate::mask::install(&crate::extensions::HeldValue::pairs(&values));
+    crate::extensions::write_notes(&packages.summary(Some(&values)));
     crate::extensions::write_notes(&crate::services::summary(
         &services.packages,
         Some(&args.services),
@@ -988,8 +987,8 @@ pub(crate) mod host {
             scxml_host_wasmtime::DEFAULT_FUEL,
         )?;
         let values = args.namespaces.values()?;
-        let services = args.services.components(services, values.clone(), true)?;
-        let (extensions, _notes) = extensions(&args.namespaces, packages, values, true)?;
+        let services = args.services.components(services, &values, true)?;
+        let (extensions, _notes) = extensions(&args.namespaces, packages, &values, true)?;
         let host = host
             .with_extension_components(extensions)?
             .with_service_components(services)?;
@@ -1124,17 +1123,16 @@ pub(crate) mod host {
     pub(crate) fn extensions(
         flags: &crate::extensions::RunFlags,
         packages: &crate::extensions::Packages,
-        values: Vec<(String, String)>,
+        values: &[crate::extensions::HeldValue],
         outbound: bool,
     ) -> Result<(scxml_host_wasmtime::ExtensionComponents, Notes), Box<dyn std::error::Error>> {
         use scxml_host_wasmtime::{
-            ExtensionComponents, ExtensionEnvironment, TrustedComponentDigest,
-            authenticate_extension_component,
+            ExtensionComponents, TrustedComponentDigest, authenticate_extension_component,
         };
 
         let observer = std::sync::Arc::new(Observer::default());
         let mut extensions = ExtensionComponents::new()
-            .with_values(ExtensionEnvironment::new(values)?)
+            .with_values(crate::extensions::HeldValue::environment(values)?)
             .with_observer(std::sync::Arc::clone(&observer) as _);
         if outbound {
             extensions = extensions.with_outbound_http(std::sync::Arc::new(

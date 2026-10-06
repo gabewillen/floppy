@@ -44,8 +44,9 @@
 //!   never receives one: for each `env` slot its `<invoke>` binds
 //!   (`service-invocation.env`, `env:<slot>="NAME"` or `env:<slot>expr`)
 //!   that its package declares, the host hands `start` an opaque reference
-//!   when it holds a value for the variable (a name with no value leaves the
-//!   slot absent). Unlike an extension element's per-call references, a
+//!   when it holds a value for the variable granted to the service's type
+//!   URI ([`crate::EnvVariable`]; a name with no value, or one granted only
+//!   to other packages, leaves the slot absent). Unlike an extension element's per-call references, a
 //!   service's references live for the whole invocation: every later export
 //!   call of that instance may use them, and only inside its own admitted
 //!   `outbound-http` requests; no other instance ever receives them. A slot
@@ -669,7 +670,7 @@ impl ServiceHandle {
     ) -> Result<ServiceStep, ComponentError> {
         let bound = {
             let data = self.store.data();
-            bind_references(&request.env, &data.env_slots, data.values.variables())
+            bind_references(&request.env, &data.type_uri, &data.env_slots, &data.values)
         };
         let (slots, references) = match bound {
             Ok(bound) => bound,
@@ -844,8 +845,9 @@ type BoundReferences = (Vec<SlotReference>, Vec<(u32, String)>);
 
 /// The slot references of one invocation: for each `env` binding (sorted by
 /// slot) whose slot `env_slots` declares, a fresh reference when `values`
-/// holds the variable (numbered from 1 per invocation, so none crosses
-/// instances); a variable with no value leaves its slot absent.
+/// holds the variable for `type_uri` (numbered from 1 per invocation, so none
+/// crosses instances); a variable with no value, or one not granted to
+/// `type_uri`, leaves its slot absent.
 ///
 /// # Errors
 ///
@@ -854,8 +856,9 @@ type BoundReferences = (Vec<SlotReference>, Vec<(u32, String)>);
 /// variable name.
 fn bind_references(
     env: &[EnvBinding],
+    type_uri: &str,
     env_slots: &[String],
-    values: &[(String, String)],
+    values: &crate::ExtensionEnvironment,
 ) -> Result<BoundReferences, ComponentError> {
     let invalid = |detail| Err(component_error(ErrorCode::InvalidInput, detail));
     if env.len() > crate::MAX_DECLARED_ITEMS {
@@ -876,7 +879,7 @@ fn bind_references(
         if !crate::extension::is_env_name(&binding.name) {
             return invalid("an env slot names no valid variable");
         }
-        let Some(value) = crate::extension::held(values, &binding.name) else {
+        let Some(value) = values.held(type_uri, &binding.name) else {
             continue;
         };
         let reference = u32::try_from(references.len().saturating_add(1))

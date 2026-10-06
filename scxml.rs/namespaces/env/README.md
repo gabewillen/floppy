@@ -60,12 +60,16 @@ with an example.
 ## Values, references, and masking
 
 - **The run holds the values.** An embedder supplies them
-  (`ExtensionComponents::with_values`). The CLI holds a value for each
-  `--env NAME` (the calling shell's value), `--env NAME=VALUE`, and each entry
-  of `--env-file PATH` (Docker's format: `NAME=VALUE` taken literally, a bare
-  `NAME` from the shell, `#` comments and blank lines ignored; files in
-  order, then `--env`, which wins). Nothing is held by default, and there is
-  no whole-environment form.
+  (`ExtensionComponents::with_values`), each variable granted to exact package
+  URIs; a slot naming a variable not granted to its element's namespace (or
+  its `<invoke>`'s service type URI) is absent, exactly as if no value were
+  held. The CLI grants a variable with `--env NAME@URI` or
+  `--env NAME@URI=VALUE` (repeat it for several packages; there is no
+  unscoped form) and holds its flag's value, else its last `--env-file PATH`
+  entry (Docker's format: `NAME=VALUE` taken literally, a bare `NAME` from
+  the shell, `#` comments and blank lines ignored), else the calling shell's;
+  an `--env-file` entry no flag grants is dropped. Nothing is held by
+  default, and there is no whole-environment form.
 - **The component holds references.** For each `execute` call the host binds
   every slot the element names, whose variable the run holds, to a fresh
   opaque `value-reference`. A reference is valid only during that call and

@@ -755,12 +755,12 @@ impl ServiceFlags {
     pub(crate) fn components(
         &self,
         resolved: &Services,
-        values: Vec<(String, String)>,
+        values: &[crate::extensions::HeldValue],
         outbound: bool,
     ) -> Result<scxml_host_wasmtime::ServiceComponents, Box<dyn std::error::Error>> {
         let packages = &resolved.packages;
         let mut services = scxml_host_wasmtime::ServiceComponents::new()
-            .with_values(scxml_host_wasmtime::ExtensionEnvironment::new(values)?);
+            .with_values(crate::extensions::HeldValue::environment(values)?);
         if outbound {
             services = services.with_outbound_http(std::sync::Arc::new(
                 scxml_host_wasmtime::ExtensionHttpClient::new(

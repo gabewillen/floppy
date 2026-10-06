@@ -24,12 +24,19 @@
 //!   (`extension-artifact`) or by `--extension-component URI=PATH`, and
 //!   authenticated by the SHA-256 in `--extension-component-sha256 URI=HEX`
 //!   (required for every such package; the manifest is not a trust anchor).
-//! * `--env NAME`, `--env NAME=VALUE`, and `--env-file PATH` (repeatable;
-//!   Docker's format, [`crate::env_file`]) say which variables the run holds
-//!   values for. An element names a variable for one of its slots with
-//!   `env:<slot>="NAME"`; its extension component receives an opaque
-//!   reference, never the value, and the host substitutes the value only
-//!   into the element's admitted outbound requests. The values are masked in
+//! * `--env NAME@URI` and `--env NAME@URI=VALUE` (repeatable) grant the
+//!   variable `NAME` to the package whose exact namespace or service type URI
+//!   is `URI` (repeat the flag to grant one variable to several packages);
+//!   `--env-file PATH` (repeatable; Docker's format, [`crate::env_file`])
+//!   supplies values. A granted variable's value is the flag's `VALUE`, else
+//!   the last `--env-file` entry for it, else the calling shell's; an
+//!   `--env-file` entry no flag grants is dropped. An element (or an
+//!   `<invoke>`) names a variable for one of its slots with
+//!   `env:<slot>="NAME"`; when the variable is granted to its package, its
+//!   component receives an opaque reference, never the value, and the host
+//!   substitutes the value only into its admitted outbound requests; a
+//!   variable granted only to other packages leaves the slot absent, exactly
+//!   like one with no value. The values are masked in
 //!   the text the CLI writes ([`crate::mask`]).
 //! * Every command that reads a document lists, per bound element, its
 //!   namespace, version, declared outbound origins, and the slots the
@@ -274,9 +281,10 @@ impl Packages {
     /// What importing each element consents to: its namespace, version,
     /// declared outbound origins, the slots the document binds (with the
     /// variables they name and, when `granted` is given, whether the run
-    /// holds a value for each), and its declared WASI permissions (which this
-    /// release's host refuses for extension components). Never a value.
-    pub(crate) fn summary(&self, granted: Option<&[String]>) -> Vec<String> {
+    /// holds a value for each granted to that namespace), and its declared
+    /// WASI permissions (which this release's host refuses for extension
+    /// components). Never a value.
+    pub(crate) fn summary(&self, granted: Option<&[HeldValue]>) -> Vec<String> {
         let mut lines = Vec::new();
         for package in self.explicit.iter().chain(&self.repository) {
             let manifest = &package.manifest;
@@ -302,12 +310,15 @@ impl Packages {
                 .iter()
                 .filter(|binding| &binding.namespace_uri == uri)
                 .map(|binding| match (&binding.name, granted) {
-                    (SlotName::Variable(name), Some(granted)) if granted.contains(name) => {
+                    (SlotName::Variable(name), Some(granted))
+                        if granted.iter().any(|held| held.grants(name, uri)) =>
+                    {
                         format!("{} <- {name}", binding.slot)
                     }
-                    (SlotName::Variable(name), Some(_)) => {
-                        format!("{} <- {name} (no value: add --env {name})", binding.slot)
-                    }
+                    (SlotName::Variable(name), Some(_)) => format!(
+                        "{} <- {name} (no value granted: add --env {name}@{uri})",
+                        binding.slot
+                    ),
                     (SlotName::Variable(name), None) => format!("{} <- {name}", binding.slot),
                     (SlotName::Expression, _) => format!("{} <- (expression)", binding.slot),
                 })
@@ -625,18 +636,62 @@ impl<R: SchemaResolver> SchemaResolver for PackageSchemaResolver<R> {
 
 /// One `--env` flag.
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum EnvFlag {
-    /// `--env NAME`: the calling shell's current value, when set.
-    PassThrough(String),
-    /// `--env NAME=VALUE`.
-    Set(String, String),
+struct EnvFlag {
+    /// The variable.
+    name: String,
+    /// The exact package URI it is granted to.
+    uri: String,
+    /// `=VALUE`, when given.
+    value: Option<String>,
 }
 
-impl EnvFlag {
-    fn name(&self) -> &str {
-        match self {
-            Self::PassThrough(name) | Self::Set(name, _) => name,
-        }
+/// One variable the run holds a value for, and the exact package URIs
+/// (namespace or service type URIs) it is granted to. `Debug` names the
+/// variable and its packages only.
+#[derive(Clone, Eq, PartialEq)]
+pub(crate) struct HeldValue {
+    pub(crate) name: String,
+    pub(crate) value: String,
+    /// Sorted, distinct, non-empty.
+    pub(crate) packages: Vec<String>,
+}
+
+impl std::fmt::Debug for HeldValue {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("HeldValue")
+            .field("name", &self.name)
+            .field("packages", &self.packages)
+            .finish_non_exhaustive()
+    }
+}
+
+impl HeldValue {
+    /// Whether this is `name`, granted to `uri`.
+    pub(crate) fn grants(&self, name: &str, uri: &str) -> bool {
+        self.name == name && self.packages.iter().any(|granted| granted == uri)
+    }
+
+    /// The run's values as the session host takes them.
+    #[cfg(feature = "wasmtime")]
+    pub(crate) fn environment(
+        values: &[Self],
+    ) -> Result<scxml_host_wasmtime::ExtensionEnvironment, scxml_host_wasmtime::HostError> {
+        scxml_host_wasmtime::ExtensionEnvironment::new(values.iter().map(|held| {
+            scxml_host_wasmtime::EnvVariable::new(
+                held.name.clone(),
+                held.value.clone(),
+                held.packages.iter().cloned(),
+            )
+        }))
+    }
+
+    /// `(name, value)` of every value, for masking.
+    pub(crate) fn pairs(values: &[Self]) -> Vec<(String, String)> {
+        values
+            .iter()
+            .map(|held| (held.name.clone(), held.value.clone()))
+            .collect()
     }
 }
 
@@ -691,20 +746,35 @@ impl RunFlags {
                 Ok(())
             }
             "--env" => {
-                let flag = match value.split_once('=') {
-                    Some((name, value)) => EnvFlag::Set(name.to_owned(), value.to_owned()),
-                    None => EnvFlag::PassThrough(value.to_owned()),
+                const USAGE: &str = "--env requires NAME@URI or NAME@URI=VALUE, NAME being [A-Za-z_][A-Za-z0-9_]* and URI the exact namespace or service type URI granted the variable";
+                let (name, rest) = value.split_once('@').ok_or(USAGE)?;
+                let (uri, value) = match rest.split_once('=') {
+                    Some((uri, value)) => (uri, Some(value.to_owned())),
+                    None => (rest, None),
                 };
-                if !crate::env_file::is_name(flag.name()) {
-                    return Err(
-                        "--env requires NAME or NAME=VALUE, NAME being [A-Za-z_][A-Za-z0-9_]*"
-                            .into(),
-                    );
+                if !crate::env_file::is_name(name) || scxml_types::NamespaceUri::new(uri).is_err() {
+                    return Err(USAGE.into());
                 }
-                if self.env.iter().any(|seen| seen.name() == flag.name()) {
-                    return Err("--env was given twice for one NAME".into());
+                if self
+                    .env
+                    .iter()
+                    .any(|seen| seen.name == name && seen.uri == uri)
+                {
+                    return Err("--env was given twice for one NAME@URI".into());
                 }
-                self.env.push(flag);
+                if value.is_some()
+                    && self
+                        .env
+                        .iter()
+                        .any(|seen| seen.name == name && seen.value.is_some())
+                {
+                    return Err("--env gave two values for one NAME".into());
+                }
+                self.env.push(EnvFlag {
+                    name: name.to_owned(),
+                    uri: uri.to_owned(),
+                    value,
+                });
                 Ok(())
             }
             "--env-file" => {
@@ -775,37 +845,49 @@ impl RunFlags {
             .map(String::as_str)
     }
 
-    /// The run's values: every `--env-file` in order (read once, now), then
-    /// every `--env` (which wins, as `docker run -e` overrides
-    /// `--env-file`); a pass-through name the calling shell does not set holds
-    /// no value. Sorted by name.
+    /// The run's values: exactly the variables an `--env` flag grants, each
+    /// scoped to every URI its flags name. A variable's value is its flag's
+    /// `=VALUE`, else the last `--env-file` entry for it (every file read
+    /// once, now, in order), else the calling shell's; a variable none of
+    /// them sets holds no value. `--env-file` entries no flag grants are
+    /// dropped. Sorted by name.
     ///
     /// # Errors
     ///
     /// An unreadable, oversized, or malformed `--env-file` (the message names
     /// the file and line, never a value).
-    pub(crate) fn values(&self) -> Result<Vec<(String, String)>, String> {
-        let mut values = BTreeMap::new();
+    pub(crate) fn values(&self) -> Result<Vec<HeldValue>, String> {
+        let mut files = BTreeMap::new();
         for path in &self.env_files {
             for (name, value) in crate::env_file::read(path)? {
-                values.insert(name, value);
+                files.insert(name, value);
             }
         }
+        let mut granted: BTreeMap<&str, (Option<&str>, BTreeSet<&str>)> = BTreeMap::new();
         for flag in &self.env {
-            match flag {
-                EnvFlag::Set(name, value) => {
-                    values.insert(name.clone(), value.clone());
-                }
-                EnvFlag::PassThrough(name) => {
-                    if let Ok(value) = std::env::var(name) {
-                        values.insert(name.clone(), value);
-                    } else {
-                        values.remove(name);
-                    }
-                }
+            let entry = granted.entry(flag.name.as_str()).or_default();
+            if let Some(value) = &flag.value {
+                entry.0 = Some(value);
             }
+            entry.1.insert(flag.uri.as_str());
         }
-        Ok(values.into_iter().collect())
+        Ok(granted
+            .into_iter()
+            .filter_map(|(name, (flag_value, packages))| {
+                let value = match flag_value {
+                    Some(value) => Some(value.to_owned()),
+                    None => files
+                        .get(name)
+                        .cloned()
+                        .or_else(|| std::env::var(name).ok()),
+                }?;
+                Some(HeldValue {
+                    name: name.to_owned(),
+                    value,
+                    packages: packages.into_iter().map(str::to_owned).collect(),
+                })
+            })
+            .collect())
     }
 }
 
@@ -974,31 +1056,57 @@ mod tests {
     }
 
     #[test]
-    fn env_flags_are_session_wide_and_files_come_first() {
+    fn env_flags_grant_each_variable_to_named_packages() {
         let dir = std::env::temp_dir().join(format!("scxml-cli-env-flags-{}", std::process::id()));
         fs::create_dir_all(&dir).expect("temporary directory");
         let file = dir.join(".env");
-        fs::write(&file, "KEY=from-file\nOTHER=kept\n").expect("env file");
+        fs::write(&file, "KEY=from-file\nFILED=kept\nUNGRANTED=dropped\n").expect("env file");
         let mut flags = RunFlags::default();
         flags
             .accept("--env-file", &file.display().to_string())
             .expect("PATH");
-        flags.accept("--env", "KEY=from-flag").expect("NAME=VALUE");
-        assert!(flags.accept("--env", "KEY").is_err(), "one NAME once");
-        assert!(flags.accept("--env", "1A").is_err());
-        assert!(flags.accept("--env", "=v").is_err());
+        flags
+            .accept("--env", "KEY@urn:a=from-flag")
+            .expect("NAME@URI=VALUE");
+        flags
+            .accept("--env", "KEY@urn:b")
+            .expect("a second package");
+        flags
+            .accept("--env", "FILED@https://example.com/ns@v1")
+            .expect("a URI holding `@`");
         assert!(
-            flags.accept("--env", "urn:x=KEY").is_err(),
-            "no per-namespace form"
+            flags.accept("--env", "KEY@urn:b").is_err(),
+            "one NAME@URI once"
         );
+        assert!(
+            flags.accept("--env", "KEY@urn:c=other").is_err(),
+            "one value per NAME"
+        );
+        assert!(flags.accept("--env", "KEY").is_err(), "no unscoped form");
+        assert!(flags.accept("--env", "KEY=v").is_err(), "no unscoped form");
+        assert!(flags.accept("--env", "1A@urn:a").is_err());
+        assert!(flags.accept("--env", "A@not a uri").is_err());
+        assert!(flags.accept("--env", "A@").is_err());
+        let values = flags.values().expect("values");
         assert_eq!(
-            flags.values().expect("values"),
+            values,
             [
-                ("KEY".to_owned(), "from-flag".to_owned()),
-                ("OTHER".to_owned(), "kept".to_owned())
+                HeldValue {
+                    name: "FILED".into(),
+                    value: "kept".into(),
+                    packages: vec!["https://example.com/ns@v1".into()],
+                },
+                HeldValue {
+                    name: "KEY".into(),
+                    value: "from-flag".into(),
+                    packages: vec!["urn:a".into(), "urn:b".into()],
+                },
             ],
-            "--env overrides --env-file"
+            "a flag's value wins over the file; ungranted entries are dropped"
         );
+        assert!(values[1].grants("KEY", "urn:b"));
+        assert!(!values[1].grants("KEY", "urn:c"), "out of scope");
+        assert!(!format!("{values:?}").contains("from-flag"), "Debug masks");
         assert!(
             flags.accept("--extension-http-allow", "x").is_err(),
             "removed"
@@ -1029,10 +1137,23 @@ mod tests {
         assert!(summary.contains("element `urn:x`"), "{summary}");
         assert!(summary.contains(&format!("release v1 (commit {})", "c".repeat(40))));
         assert!(summary.contains("outbound HTTP: https://api.example"));
-        assert!(summary.contains("apikey <- API_KEY (no value: add --env API_KEY)"));
+        assert!(
+            summary.contains("apikey <- API_KEY (no value granted: add --env API_KEY@urn:x)"),
+            "{summary}"
+        );
         assert!(summary.contains("baseurl <- (expression)"));
-        let granted = packages.summary(Some(&["API_KEY".to_owned()])).join("\n");
+        let held = |uri: &str| HeldValue {
+            name: "API_KEY".into(),
+            value: "v".into(),
+            packages: vec![uri.into()],
+        };
+        let granted = packages.summary(Some(&[held("urn:x")])).join("\n");
         assert!(!granted.contains("no value"), "{granted}");
+        let elsewhere = packages.summary(Some(&[held("urn:y")])).join("\n");
+        assert!(
+            elsewhere.contains("(no value granted: add --env API_KEY@urn:x)"),
+            "a value granted to another package is not this element's: {elsewhere}"
+        );
     }
 
     #[test]

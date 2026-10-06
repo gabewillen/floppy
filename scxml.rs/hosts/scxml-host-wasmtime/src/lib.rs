@@ -162,10 +162,10 @@ pub use artifact::{
 mod extension;
 #[cfg(feature = "wasmtime")]
 pub use extension::{
-    DEFAULT_EXTENSION_CALL_FUEL, ExtensionComponents, ExtensionEnvironment, ExtensionHttp,
-    ExtensionHttpFailure, ExtensionHttpMethod, ExtensionHttpRequest, ExtensionHttpResponse,
-    ExtensionObserver, ExtensionPackage, ExtensionResolveError, ExtensionResolver,
-    MAX_DECLARED_ITEMS, MAX_ENVIRONMENT_NAME_BYTES, MAX_ENVIRONMENT_VALUE_BYTES,
+    DEFAULT_EXTENSION_CALL_FUEL, EnvVariable, ExtensionComponents, ExtensionEnvironment,
+    ExtensionHttp, ExtensionHttpFailure, ExtensionHttpMethod, ExtensionHttpRequest,
+    ExtensionHttpResponse, ExtensionObserver, ExtensionPackage, ExtensionResolveError,
+    ExtensionResolver, MAX_DECLARED_ITEMS, MAX_ENVIRONMENT_NAME_BYTES, MAX_ENVIRONMENT_VALUE_BYTES,
     MAX_EXTENSION_COMPONENTS, MAX_EXTENSION_HTTP_HEADER_NAME_BYTES,
     MAX_EXTENSION_HTTP_HEADER_VALUE_BYTES, MAX_EXTENSION_HTTP_HEADERS, MAX_EXTENSION_HTTP_PARTS,
     MAX_EXTENSION_HTTP_REQUEST_BODY_BYTES, MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES,
@@ -530,7 +530,8 @@ pub enum InvalidLimit {
     /// Script byte bound of a `ScriptPolicy` (with the `wasmtime` feature).
     ScriptBytes,
     /// Variables of a `ExtensionEnvironment` (with the `wasmtime` feature):
-    /// count, name, or value bounds, or a duplicate or illegal name.
+    /// name or value bounds, a duplicate or illegal name, or a variable granted
+    /// to no package, to one package twice, or to an invalid package URI.
     Environment,
 }
 

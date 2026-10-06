@@ -111,6 +111,9 @@ the variable whose value the host binds, in the host's `env` vocabulary
   package declares or one a reference's value supplies entirely. No other
   instance, invocation, or element ever receives them, and they end when the
   instance is dropped.
+- Every value is granted to exact package URIs (`EnvVariable`; the CLI's
+  `--env NAME@URI`): a variable granted only to other packages is treated
+  exactly like one the run holds no value for.
 - A variable the run holds no value for leaves its slot absent; the service
   decides what that means. A slot the package does not declare, one slot
   bound twice, or a name that is not a variable name rejects the start: the
