@@ -13,6 +13,16 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# The validator itself, linked in (no I/O): parsing, the bundled W3C XSD set,
+# semantic rules, and the `event:schema` checks.
+scxml-event-schema.workspace = true
+scxml-reporting.workspace = true
+scxml-syntax.workspace = true
+scxml-types.workspace = true
+scxml-validator-core.workspace = true
+scxml-validator-xsd.workspace = true
+serde_json.workspace = true
+wit-bindgen.workspace = true
 
 [lints]
 workspace = true

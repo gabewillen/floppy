@@ -1,0 +1,12 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://github.com/stateforward/nemobot/namespaces/scxml@v0.1.0",
+  "package-version": "0.1.0",
+  "extension-artifact": "nemobot_scxml.virtualized.wasm",
+  "schema-artifact": "scxml.xsd",
+  "schema-sha256": "011931a730e886cdf83c856befe30b9baa38ba9e79f62ad46475f8e14a6d91d7",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0",
+  "http-origins": [],
+  "env-slots": []
+}

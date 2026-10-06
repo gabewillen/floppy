@@ -30,10 +30,14 @@ opentelemetry = { version = "0.33.0", default-features = false, features = ["tra
 serde = { version = "1.0.228", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.145", default-features = false, features = ["std"] }
 sha2 = { version = "0.10.9", default-features = false }
+# wit-bindgen generated ABI glue of the namespace components (the same pin as
+# scxml.rs's components).
+wit-bindgen = { version = "0.51.0", default-features = false, features = ["macros", "realloc"] }
 
 scxml-compiler-core = { path = "scxml.rs/crates/scxml-compiler-core" }
 scxml-event-schema = { path = "scxml.rs/crates/scxml-event-schema" }
 scxml-host-wasmtime = { path = "scxml.rs/hosts/scxml-host-wasmtime" }
+scxml-reporting = { path = "scxml.rs/crates/scxml-reporting" }
 scxml-syntax = { path = "scxml.rs/crates/scxml-syntax" }
 scxml-types = { path = "scxml.rs/crates/scxml-types" }
 scxml-validator-core = { path = "scxml.rs/crates/scxml-validator-core" }

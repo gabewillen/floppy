@@ -68,7 +68,15 @@ mkdir -p "$artifacts_dir"
 # stateforward:scxml interfaces here when it implements its component.
 expected_imports() {
     case "$1" in
-        nemobot_scxml|nemobot_generate|nemobot_decision) ;;
+        # <sx:validate>: reads its source through the data model and assigns
+        # the report there; no execution-host, outbound-http, or snapshot.
+        nemobot_scxml)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'stateforward:scxml/data-model-host@0.2.0'
+            ;;
+        nemobot_generate|nemobot_decision) ;;
         *) echo "no import allowlist for component: $1" >&2; exit 1 ;;
     esac
 }
@@ -141,9 +149,23 @@ for component in $namespace_components; do
     virtualized="$namespaces_dir/$component.virtualized.wasm"
     repeat="$namespaces_dir/$component.determinism-check.wasm"
     test -f "$raw" || { echo "missing release component artifact: $raw" >&2; exit 1; }
-    if wasm-tools component wit "$raw" | sed -n 's/^  import \(.*\);$/\1/p' | grep -q '^wasi:'; then
-        wasi-virt "$raw" -o "$virtualized"
-        wasi-virt "$raw" -o "$repeat"
+    virt_input=$raw
+    if [ "$component" = nemobot_scxml ]; then
+        # <sx:validate> links the scxml.rs validator, whose bundled XML
+        # Schema backend seeds ahash from wasi:random/random and whose
+        # `event` schema checks use std's RandomState (insecure-seed).
+        # wasi-virt denies randomness (the first validation would trap), so
+        # compose the subtree's pinned deterministic provider first, exactly
+        # as scxml.rs does for its validator component (see the .wat header).
+        random="$run_tmp/wasi-random-validator.wasm"
+        seeded="$run_tmp/$component.seeded.wasm"
+        wasm-tools parse "$workspace/scxml.rs/components/scxml-validator/wasi-random.wat" -o "$random"
+        wasm-tools compose "$raw" -d "$random" -o "$seeded" 2>/dev/null
+        virt_input=$seeded
+    fi
+    if wasm-tools component wit "$virt_input" | sed -n 's/^  import \(.*\);$/\1/p' | grep -q '^wasi:'; then
+        wasi-virt "$virt_input" -o "$virtualized"
+        wasi-virt "$virt_input" -o "$repeat"
     else
         # wasi-virt refuses a component with no WASI import to plug (the
         # empty skeletons): there is nothing to virtualize, so the release
