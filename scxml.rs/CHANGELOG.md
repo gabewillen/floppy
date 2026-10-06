@@ -54,6 +54,15 @@ hard cutover.
 
 ### Added
 
+- `scxml-cli` argument files: an argument `@FILE` before `--` is replaced by
+  the lines of `FILE`, one argument per line taken literally, exactly as
+  rustc reads `@path` (no quoting, comments, or nesting; regular file, UTF-8,
+  at most 1 MiB), so a run's packages, digests, grants, and `--env` scopes
+  can live in one file.
+- `scxml-cli snapshot run` and `run` take `--extension-call-fuel N`, the
+  instruction fuel cap of one extension component call
+  (`ExtensionComponents::with_call_fuel`; `DEFAULT_EXTENSION_CALL_FUEL`
+  without it), for elements that link large components.
 - Invoked services (SCXML 6.4): an `<invoke>` whose type is neither absent
   nor the SCXML type runs in a `stateforward:scxml/invoked-service` Wasm
   component the Wasmtime session host binds to that exact type URI

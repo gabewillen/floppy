@@ -188,6 +188,7 @@ pub const RUN_OPTIONS: &[&str] = &[
     "--grant",
     "--env",
     "--env-file",
+    "--extension-call-fuel",
     "--offline",
     "--cache-dir",
     "--github-api-base",
@@ -385,6 +386,7 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
             "--grant" => "URI=PERMISSION[=VALUE]",
             "--env" => "NAME@URI or NAME@URI=VALUE",
             "--env-file" => "PATH",
+            "--extension-call-fuel" => "N",
             flag if crate::repository::RepositoryFlags::expects(flag).is_some() => {
                 crate::repository::RepositoryFlags::expects(flag).unwrap_or("a value")
             }
@@ -1134,6 +1136,11 @@ pub(crate) mod host {
         let mut extensions = ExtensionComponents::new()
             .with_values(crate::extensions::HeldValue::environment(values)?)
             .with_observer(std::sync::Arc::clone(&observer) as _);
+        if let Some(fuel) = flags.call_fuel {
+            extensions = extensions
+                .with_call_fuel(fuel)
+                .map_err(|error| format!("--extension-call-fuel: {error}"))?;
+        }
         if outbound {
             extensions = extensions.with_outbound_http(std::sync::Arc::new(
                 scxml_host_wasmtime::ExtensionHttpClient::new(

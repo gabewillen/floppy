@@ -274,7 +274,7 @@ diagnostics only, in rustc style (`error[code]: …`, `warning[code]: stdin
 line N: …`).
 
 It takes the same component, `--resource`, `--extension-package`,
-`--extension-component`, `--extension-component-sha256`, `--env`,
+`--extension-component`, `--extension-component-sha256`, `--extension-call-fuel`, `--env`,
 `--env-file`, and repository namespace (`--offline`, `--cache-dir`,
 `--github-*`) flags as `snapshot run`, plus these (with `--record` or
 `--replay` extension components get no outbound HTTP: a replay log does not

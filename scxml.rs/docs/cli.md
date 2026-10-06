@@ -276,6 +276,15 @@ $SCXML_RUN target/ping.scxml --components "$RELEASE" --components-manifest-sha25
 
 ## Flags and exit status
 
+An argument `@FILE` (before `--`) is replaced by the lines of `FILE`, one
+argument per line, exactly as rustc reads `@path`: each line is taken
+literally (no quoting, escapes, comments, or variable expansion), a line
+starting with `@` is not read as another file, CRLF reads like LF, and a
+relative path inside is relative to the current directory. The file must be
+a regular UTF-8 file of at most 1 MiB. A run's whole binding (components,
+packages, digests, grants, `--env` scopes) can live in one such file:
+`scxml-cli run @bot.args bot.scxml`.
+
 `compile` writes the artifact to `--output` and its recipe to
 `<output>.recipe.json`, and with `--canonical` also writes the canonical
 compiler report. The default `--artifact lowered-ir` writes portable Machine IR
@@ -292,7 +301,9 @@ for `validate`, `compile`, `snapshot run`, and `run`. `snapshot run` and `run`
 also execute each bound namespace's extension component: `extension-artifact`
 relative to the manifest, or `--extension-component URI=PATH`, authenticated by
 the required `--extension-component-sha256 URI=HEX` (the manifest is not a trust
-anchor for the extension component). A namespace whose URI is a repository
+anchor for the extension component). `--extension-call-fuel N` caps the
+instruction fuel of each extension component call at `N` (default: the host's
+`DEFAULT_EXTENSION_CALL_FUEL`, 100 million). A namespace whose URI is a repository
 element needs no flag ("Loading an element from a repository" below).
 `--env NAME@URI` and `--env NAME@URI=VALUE` (repeatable) grant the variable
 `NAME` to exactly the package whose namespace or service type URI is `URI`
