@@ -7,6 +7,44 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-07, no `scx` time limit on service requests and the no-progress exit (decision D26), model `sparks/qwen3.8-flash-next`
+
+The runs used floppy commit `6f48bcc4` (subtree scxml.rs `1a1defa7`, which
+removed `scx`'s 120 s total and 10 s connect timeouts on invoked-service
+requests), with the dev cache rebuilt by `sh scripts/build-components.sh`
+and `scx` rebuilt with its session components into `target/scx-live`, as
+the entries below describe. `CPA_API_KEY` came from floppy's `.env` and
+`TYPESAFE_API_KEY` from `mosfet/mosfet.py/.env`, no base URL was set, and
+the request set no `max_attempts`, so only the no-progress rule could end
+the loop. From a clean shell (`env -i HOME="$HOME" PATH="/usr/bin:/bin"`),
+in the floppy root:
+
+```console
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"model":"sparks/qwen3.8-flash-next"}}' |
+  target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
+    --env-file .env --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env bots/builder/builder.scx
+```
+
+Durations are from the arrival of each stage's `log` record on standard
+output to the next one.
+
+| Run | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| builder, run 1 | `sparks/qwen3.8-flash-next` | pass | 1 of 3 | exit 0 in 319 s, final state `done` on attempt 3 after `generate author-failed` (`status`) and `simulate test-failed`, triage `triage.repair` twice through the decision service; generations 9.3 s (design), 125.5 s (author, `status`), 46.1 s, 25.2 s (author); simulations 54.4 s and 54.9 s (2 tests each) |
+| builder, run 2 | `sparks/qwen3.8-flash-next` | fail | 2 of 3 | exit 0 in 267 s, final state `failed` (`no-progress`): design 14.0 s, then both author generations ended `status` after 125.6 s and 125.3 s, the same failure twice in a row |
+| builder, run 3 | `sparks/qwen3.8-flash-next` | pass | 3 of 3 | exit 0 in 220 s, final state `done` on attempt 2 after `validate SCXML008` (with `XSD-cvc-complex-type.3.2.2`, `<cancel event>`), triage `triage.repair`; generations 12.7 s (design), 45.2 s, 20.2 s (author); simulation 139.4 s (4 tests) |
+
+No request ended at 120 s any more: the three long author generations ran
+about 125 s and ended as `status`, an HTTP error answer from the gateway,
+consistent with Cloudflare's `524` at about 125 s measured in the entry
+below (the done data does not carry the status code). Run 2's `no-progress`
+is that gateway limit hit twice in a row. The builder's `builder.timeout`
+values are long enough: `generate_timeout_ms` (300 s) is more than twice the
+longest generation, which the gateway itself ends at about 125 s, and the
+longest simulation (139.4 s) is far below `simulate-timeout` (8 tests of
+120 s plus 60 s), so none was raised. The built documents were not kept.
+Nothing in the tests was changed to make them pass.
+
 ## 2026-10-07, `reasoning_effort` (decision D25), model `sparks/qwen3.8-flash-next`
 
 The runs used floppy commit `834a9c08` (the subtree unchanged from the
