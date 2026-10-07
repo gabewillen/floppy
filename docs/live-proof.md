@@ -6,6 +6,46 @@ env file named by `NEMOBOT_LIVE_ENV_FILE`
 Each variable was granted only to its own package: `OPENAI_*` to `generate`,
 and `TYPESAFE_*` to `decision`.
 
+## 2026-10-06, tagless URIs, the draft profile, and the base URL default (decisions D18, D19, D20), model `gpt-6-luna`
+
+The runs used nemobot commit `05157554` (subtree scxml.rs `73f340b7`):
+`sh scripts/build-components.sh` publishing the decision namespace and both
+services into the dev cache `target/components/package-cache` (pinned under
+their tagless URIs to release tag `v0.1.0` at that commit; `scx`'s release
+cache untouched), and `scx` built from the subtree with those session
+components embedded (`SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml"
+CARGO_TARGET_DIR=target/scx-live cargo build --release --locked -p
+scxml-cli`). The mosfet env file sets no `TYPESAFE_BASE_URL`; the decision
+service used its package's declared origin `https://api.typesafe.ai`
+(decision D18), so the builder's triage went to the decision service, not
+the fallback. Drafts were checked with `<scx:validate profile="draft">`
+(decision D20). The builder command, from a clean shell
+(`env -i HOME="$HOME" PATH="/usr/bin:/bin"`), in the nemobot root:
+
+```console
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"max_attempts":4,"model":"gpt-6-luna"}}' |
+  target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
+    --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env bots/builder/builder.scx
+```
+
+The consent listing named each package with `release v0.1.0 (commit
+05157554...)`, the generate service's origin `https://api.openai.com/v1`, and
+the decision service's `https://api.typesafe.ai`.
+
+| Run | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| builder, run 1 | `gpt-6-luna` | pass | 1 | exit 0 in 151 s; attempt 1 of 4, 0 failures, no triage, so the decision service did not run |
+| builder, run 2 | `gpt-6-luna` | pass | 1 | exit 0 in 100 s; attempt 1 of 4, no triage |
+| builder, run 3 | `gpt-6-luna` (generate), TypeSafe `system_one` (decision) | pass | 1 | exit 0 in 133 s; attempt 2 of 4 after 1 failure (`validate` / `SCXML070`), triage decided by the decision service: `decisions` = `["triage.repair"]` (no `fallback:*`); plan `pedestrian_traffic_light`; all five of its tests passed in simulation; progress `log`s `design`, `author`, `validate`, `retry_gate`, `triage`, `author`, `validate`, `simulate`, `done`; the built document compiled again with `scx compile` (no packages) |
+| `generate_service live_generate_through_an_env_file` | `gpt-6-luna` | pass | 1 | the env file's `OPENAI_BASE_URL`; no shell default |
+| `decision_service live_decision_through_an_env_file` | TypeSafe `system_one` | pass (`shipped`) | 1 | no `TYPESAFE_BASE_URL` anywhere: the package's declared origin |
+
+Runs 1 and 2 are listed because they were run: a draft that passes on its
+first attempt never reaches triage, so run 3 was the first to exercise the
+decision service inside the builder. The builder's output was written to
+`target/builder-live-cli/` and is not committed. Nothing in the tests was
+changed to make them pass.
+
 ## 2026-10-06, `scx run` straight from the document (decisions D16, D17), model `gpt-6-luna`
 
 The runs used nemobot commit `7b0b0b8b` (subtree scxml.rs `50283481`):
