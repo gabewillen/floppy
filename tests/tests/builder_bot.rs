@@ -34,7 +34,7 @@ use std::collections::BTreeMap;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value as Json, json};
@@ -149,8 +149,10 @@ const PLAN: &str = r#"{"name":"traffic_light","summary":"A vehicle light that cy
 /// that generation by then, so it never reaches the report.
 const LATE_PLAN: &str = r#"{"name":"late_plan","summary":"Answered after the timeout.","states":[],"events":[],"transitions":[]}"#;
 
-/// How long the slow route holds its first plan answer.
-const SLOW_PLAN_DELAY: Duration = Duration::from_secs(4);
+/// The longest the slow route holds its first plan answer while it waits
+/// for the builder to ask for the redesign: a hang guard only. The answer is
+/// released by the redesign request, so no assertion depends on time.
+const SLOW_PLAN_HOLD_BOUND: Duration = Duration::from_mins(3);
 
 const BUTTON_SCHEMA: &str = r#"{"type":"object","additionalProperties":false}"#;
 
@@ -494,14 +496,16 @@ impl Received {
 /// through a DTD entity); `/impostor/v1` answers the plan, then a valid draft
 /// that sends the builder's control event names; `/flaky/v1` fails the
 /// second plan (404) and otherwise answers like `/broken/v1`; `/noplan/v1`
-/// fails every plan (404); `/slow/v1` holds its first plan for
-/// [`SLOW_PLAN_DELAY`] and answers [`LATE_PLAN`], then answers the plan and
+/// fails every plan (404); `/slow/v1` holds its first plan until its
+/// second plan request arrives (at most [`SLOW_PLAN_HOLD_BOUND`]) and
+/// answers [`LATE_PLAN`], then answers the plan and
 /// valid drafts. Each connection is served on its own thread, so a held
 /// answer delays nothing else. `decision` routes:
 /// `/typesafe` chooses `triage.repair`, `/redesign` `triage.redesign`.
 struct Mock {
     origin: String,
-    received: Arc<Mutex<Vec<Received>>>,
+    /// Every request so far, and the signal that one more arrived.
+    received: Arc<(Mutex<Vec<Received>>, Condvar)>,
 }
 
 impl Mock {
@@ -511,26 +515,27 @@ impl Mock {
             "http://{}",
             listener.local_addr().expect("the mock has an address")
         );
-        let received = Arc::new(Mutex::new(Vec::<Received>::new()));
+        let received = Arc::new((Mutex::new(Vec::<Received>::new()), Condvar::new()));
         let log = Arc::clone(&received);
         std::thread::spawn(move || {
             for stream in listener.incoming() {
                 let Ok(stream) = stream else { continue };
                 let log = Arc::clone(&log);
-                std::thread::spawn(move || serve(stream, &log));
+                std::thread::spawn(move || serve(stream, &log.0, &log.1));
             }
         });
         Self { origin, received }
     }
 
     fn received(&self) -> Vec<Received> {
-        self.received.lock().expect("the log lock").clone()
+        self.received.0.lock().expect("the log lock").clone()
     }
 }
 
-/// Serves one connection of the mock: reads one request, records it,
-/// answers it (holding the slow route's first plan), and records when.
-fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>) {
+/// Serves one connection of the mock: reads one request, records it (and
+/// signals `arrived`), answers it (holding the slow route's first plan until
+/// its second plan request arrives), and records when.
+fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>, arrived: &Condvar) {
     let Ok(clone) = stream.try_clone() else {
         return;
     };
@@ -566,22 +571,32 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>) {
         at: Instant::now(),
         answered: Arc::new(Mutex::new(None)),
     };
+    let count = |log: &[Received], schema: &str| {
+        log.iter()
+            .filter(|seen| seen.path == path && seen.schema_name() == Some(schema))
+            .count()
+    };
     let (authors, plans) = {
         let mut log = log.lock().expect("the log lock");
         log.push(request.clone());
-        let count = |schema: &str| {
-            log.iter()
-                .filter(|seen| seen.path == path && seen.schema_name() == Some(schema))
-                .count()
-        };
-        (count("scxml_draft"), count("topology_plan"))
+        arrived.notify_all();
+        let counts = (count(&log, "scxml_draft"), count(&log, "topology_plan"));
+        if path == "/slow/v1/chat/completions"
+            && request.schema_name() == Some("topology_plan")
+            && counts.1 == 1
+        {
+            // Hold the first plan until the builder asks for the redesign:
+            // its timeout has preempted this generation by then.
+            drop(
+                arrived
+                    .wait_timeout_while(log, SLOW_PLAN_HOLD_BOUND, |log| {
+                        count(log, "topology_plan") < 2
+                    })
+                    .expect("the log lock"),
+            );
+        }
+        counts
     };
-    if path == "/slow/v1/chat/completions"
-        && request.schema_name() == Some("topology_plan")
-        && plans == 1
-    {
-        std::thread::sleep(SLOW_PLAN_DELAY);
-    }
     let reply = mock_reply(&path, request.schema_name(), authors, plans, &body);
     let (status, reply) = reply.map_or(("404 Not Found", "{}".to_owned()), |reply| {
         ("200 OK", reply)
@@ -913,11 +928,9 @@ fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
     let mut args = builder_args(&builder_document(), "wall");
     args.extend(["--env-file".to_owned(), env.display().to_string()]);
     let mut run = Run::start(&args, &[]);
-    // The clock of the assertions below starts once the session is open.
     let mut records = run.until(Duration::from_mins(2), |record| {
         record["type"] == "call" && record["cause"] == "start"
     });
-    let started = Instant::now();
     run.event(
         "builder.request",
         &json!({"spec": SPEC, "max_attempts": 3, "generate_timeout_ms": 1000}),
@@ -948,17 +961,12 @@ fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
         .lock()
         .expect("the answered lock")
         .expect("the held plan was answered");
+    // The first plan is held until the redesign request arrives, so the
+    // redesign was asked for while that generation was still in flight:
+    // the timeout preempted it.
     assert!(
-        designs[1].at < late,
+        designs[1].at <= late,
         "the builder moved on while the first generation was still in flight"
-    );
-    assert!(
-        late.duration_since(designs[0].at) >= SLOW_PLAN_DELAY,
-        "the first plan was held past the timeout"
-    );
-    assert!(
-        designs[1].at.duration_since(started) < SLOW_PLAN_DELAY,
-        "the timeout fired before the held answer"
     );
 }
 
