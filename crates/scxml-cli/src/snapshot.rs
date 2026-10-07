@@ -122,8 +122,6 @@ pub struct RunArgs {
     pub options: Options,
     /// Destination.
     pub output: Output,
-    /// `URI=PATH` resources for invoked documents and external scripts.
-    pub resources: Vec<(String, PathBuf)>,
     /// Extension packages, their extension components, and the environment
     /// the extension components see.
     pub(crate) namespaces: crate::extensions::RunFlags,
@@ -178,7 +176,6 @@ pub const RUN_OPTIONS: &[&str] = &[
     "--trace-context",
     "--output",
     "--output-dir",
-    "--resource",
     "--extension-package",
     "--extension-component",
     "--extension-component-sha256",
@@ -407,7 +404,6 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
     let mut options = Options::default();
     let mut out = None;
     let mut out_dir = None;
-    let mut resources = Vec::new();
     let mut namespaces = crate::extensions::RunFlags::default();
     let mut services = crate::services::ServiceFlags::default();
     for (flag, value) in parsed.options {
@@ -440,7 +436,6 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
             }
             "--output" => out = Some(PathBuf::from(value)),
             "--output-dir" => out_dir = Some(PathBuf::from(value)),
-            "--resource" => resources.push(parse_resource(value)?),
             namespace => namespaces.accept(namespace, value)?,
         }
     }
@@ -475,19 +470,9 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
         points,
         options,
         output,
-        resources,
         namespaces,
         services,
     })
-}
-
-pub(crate) fn parse_resource(value: &str) -> Result<(String, PathBuf), String> {
-    match value.split_once('=') {
-        Some((uri, path)) if !uri.is_empty() && !path.is_empty() => {
-            Ok((uri.to_owned(), PathBuf::from(path)))
-        }
-        _ => Err("--resource requires non-empty URI=PATH".into()),
-    }
 }
 
 /// Runs one parsed subcommand.
@@ -753,8 +738,16 @@ fn run(args: &RunArgs) -> Result<(), Box<dyn std::error::Error>> {
     host::available()?;
     // Extension packages and flags are checked before anything executes.
     let source = crate::read_source(&args.document)?;
+    // Every literal URI of the document tree loads once, before anything
+    // runs; the `<invoke src>` documents' packages bind with the root's.
+    let loaded = crate::documents::Documents::prefetch(
+        args.namespaces.repository.open()?,
+        &args.document,
+        &source,
+    )?;
     let packages = crate::extensions::Packages::resolve(
         &source,
+        loaded.children(),
         &args.namespaces.packages,
         &[],
         &args.namespaces.repository,
@@ -762,6 +755,7 @@ fn run(args: &RunArgs) -> Result<(), Box<dyn std::error::Error>> {
     args.namespaces.check(&packages)?;
     let services = crate::services::resolve(
         &source,
+        loaded.children(),
         &args.services.packages,
         &args.namespaces.repository,
     )?;
@@ -781,7 +775,9 @@ fn run(args: &RunArgs) -> Result<(), Box<dyn std::error::Error>> {
         Some(&args.services),
         None,
     ));
-    let documents = host::run(args, &packages, &services)?;
+    crate::extensions::write_notes(&loaded.summary());
+    let scripts = loaded.script_packages(&source)?;
+    let documents = host::run(args, &packages, &services, loaded, scripts)?;
     write_documents(&args.output, &documents)
 }
 
@@ -854,92 +850,6 @@ pub(crate) mod host {
     use super::Points;
     use super::{CheckpointDocument, RunArgs};
 
-    /// Documents for `<invoke src>`, `<data src>`, and runtime scripts:
-    /// exact `--resource URI=PATH` matches, read as bounded regular files;
-    /// otherwise an `<invoke src>` at or below the running document's
-    /// directory, under exactly the rules of an `event:schema` file reference
-    /// (`crate::event_schemas`: relative, no scheme, query, fragment, `.` or
-    /// `..` segment, percent-decoded, a regular file that does not resolve
-    /// outside the directory through a symbolic link).
-    #[cfg(feature = "wasmtime")]
-    pub(crate) struct ResourceDocuments {
-        pub(crate) resources: Vec<(String, std::path::PathBuf)>,
-        /// The running document's directory, canonicalized; `None` when it
-        /// cannot be, so only `--resource` documents load.
-        pub(crate) directory: Option<std::path::PathBuf>,
-    }
-
-    #[cfg(feature = "wasmtime")]
-    impl ResourceDocuments {
-        /// `resources`, and the directory of `document` for sibling
-        /// `<invoke src>` documents.
-        pub(crate) fn new(
-            resources: Vec<(String, std::path::PathBuf)>,
-            document: &std::path::Path,
-        ) -> Self {
-            Self {
-                resources,
-                directory: crate::event_schemas::document_directory(document),
-            }
-        }
-    }
-
-    #[cfg(feature = "wasmtime")]
-    impl scxml_host_wasmtime::SessionEmbedder for ResourceDocuments {
-        fn document(
-            &self,
-            kind: scxml_host_wasmtime::DocumentKind,
-            uri: &str,
-        ) -> Option<scxml_host_wasmtime::EmbeddedDocument> {
-            if let Some(path) = self
-                .resources
-                .iter()
-                .find(|(name, _)| name == uri)
-                .map(|(_, path)| path)
-            {
-                let bytes = crate::read_source(path).ok()?;
-                let text = String::from_utf8(bytes).ok()?;
-                return Some(scxml_host_wasmtime::EmbeddedDocument {
-                    text,
-                    media_type: media_type_of(path).map(str::to_owned),
-                });
-            }
-            if kind != scxml_host_wasmtime::DocumentKind::Invocation {
-                return None;
-            }
-            let directory = self.directory.as_deref()?;
-            let bytes = crate::event_schemas::read_reference(directory, uri)?;
-            let text = String::from_utf8(bytes).ok()?;
-            Some(scxml_host_wasmtime::EmbeddedDocument {
-                text,
-                media_type: None,
-            })
-        }
-
-        fn scripts(&self) -> scxml_host_wasmtime::MachineScripts {
-            scxml_host_wasmtime::MachineScripts::none()
-        }
-    }
-
-    /// The media type a resource file's extension registers (SCXML B.2.1
-    /// reads a JSON or XML indication for `<data src>`): `.json` is
-    /// `application/json` (RFC 8259 §11, "File extension(s): .json") and
-    /// `.xml` is `application/xml` (RFC 7303 §9.1, "File extension(s):
-    /// .xml"). Other extensions indicate nothing; `.txt` in particular stays
-    /// unlabeled, because the official W3C cases ship JSON and XML in `.txt`
-    /// files and expect them read by content.
-    #[cfg(feature = "wasmtime")]
-    fn media_type_of(path: &std::path::Path) -> Option<&'static str> {
-        let extension = path.extension()?.to_str()?;
-        if extension.eq_ignore_ascii_case("json") {
-            Some("application/json")
-        } else if extension.eq_ignore_ascii_case("xml") {
-            Some("application/xml")
-        } else {
-            None
-        }
-    }
-
     /// Compiles the document canonically (the same validator and
     /// expression stack as `scx compile`) and returns the lowered
     /// Machine IR bytes and the linked data model's name.
@@ -948,6 +858,7 @@ pub(crate) mod host {
         document: &std::path::Path,
         packages: &[crate::extensions::Package],
         services: &[crate::services::ServicePackage],
+        scripts: Vec<scxml_compiler_core::ScriptPackage>,
     ) -> Result<(Vec<u8>, Option<String>), Box<dyn std::error::Error>> {
         use scxml_compiler_core::{CompileInput, Compiler, MachineIr, ScriptResolution};
         use scxml_validator_core::{FileSchemaResolver, Validator};
@@ -986,7 +897,7 @@ pub(crate) mod host {
             source,
             packages: manifests,
             package_schemas,
-            scripts: Vec::new(),
+            scripts,
             script_resolution: ScriptResolution::Compile,
             event_schemas,
         };
@@ -1012,16 +923,19 @@ pub(crate) mod host {
     /// Wasmtime session host (the scripted events, then drain) and
     /// returns the requested checkpoint documents.
     #[cfg(feature = "wasmtime")]
-    pub fn run(
+    pub(crate) fn run(
         args: &RunArgs,
         packages: &crate::extensions::Packages,
         services: &crate::services::Services,
+        documents: crate::documents::Documents,
+        scripts: Vec<scxml_compiler_core::ScriptPackage>,
     ) -> Result<Vec<CheckpointDocument>, Box<dyn std::error::Error>> {
         use std::rc::Rc;
 
         use scxml_host_wasmtime::{ScriptedEvent, SessionRun, SnapshotPoints, SnapshotRequest};
 
-        let (ir_bytes, data_model) = compile(&args.document, &packages.all(), &services.packages)?;
+        let (ir_bytes, data_model) =
+            compile(&args.document, &packages.all(), &services.packages, scripts)?;
         let host = args
             .components
             .session_host(scxml_host_wasmtime::DEFAULT_FUEL)?;
@@ -1044,10 +958,7 @@ pub(crate) mod host {
             session_id: "session",
             events: &events,
             external_client: None,
-            embedder: Rc::new(ResourceDocuments::new(
-                args.resources.clone(),
-                &args.document,
-            )),
+            embedder: Rc::new(documents),
             // No host-imposed command budget: resource limits apply to the
             // Wasm components only, whose own per-call command bound stops
             // every machine call.
@@ -1057,7 +968,7 @@ pub(crate) mod host {
                 options: args.options.clone(),
             },
         });
-        let outcome = outcome.map_err(|error| repository_failure(packages, error.into()))?;
+        let outcome = outcome?;
         // A failed snapshot fails this command, never the run: `Final`
         // needs only the last checkpoint, every other mode every one it
         // names.
@@ -1136,28 +1047,14 @@ pub(crate) mod host {
         }
     }
 
-    /// A run failure, preceded by the repository namespace failure that caused
-    /// it when the session start could not load one.
-    #[cfg(feature = "wasmtime")]
-    pub(crate) fn repository_failure(
-        packages: &crate::extensions::Packages,
-        error: Box<dyn std::error::Error>,
-    ) -> Box<dyn std::error::Error> {
-        match packages
-            .store
-            .as_ref()
-            .and_then(|store| store.take_failure())
-        {
-            Some(failure) => format!("{failure}\n  = note: {error}").into(),
-            None => error,
-        }
-    }
-
     /// The run's extension components: the values elements' `env` slots may
     /// reference, the outbound transport (none with `outbound` false: every
     /// request is refused), the CLI's observer, every `--extension-package`
     /// extension component authenticated by its pinned SHA-256 and bound, and
-    /// the repository resolver that loads the repository namespaces a session's
+    /// every repository namespace the run's documents use (the root's and
+    /// every literal `<invoke src>` child's), resolved once, authenticated by
+    /// its pinned SHA-256, and bound before the session starts, so the root
+    /// and every invoked session share one compiled component
     /// document uses when the session starts.
     #[cfg(feature = "wasmtime")]
     pub(crate) fn extensions(
@@ -1220,9 +1117,20 @@ pub(crate) mod host {
             extensions = extensions.bind(package.host_package(), &component)?;
         }
         if let Some(store) = &packages.store {
-            extensions = extensions.with_resolver(std::sync::Arc::new(
-                crate::repository::RepositoryResolver(std::sync::Arc::clone(store)),
-            ));
+            for package in &packages.repository {
+                let uri = &package.manifest.namespace_uri;
+                let resolved = store.resolve_component(uri)?;
+                let component = authenticate_extension_component(
+                    &resolved.bytes,
+                    TrustedComponentDigest::from_hex(&resolved.sha256)?,
+                )
+                .map_err(|error| {
+                    format!(
+                        "repository namespace `{uri}`: its extension component is rejected: {error}"
+                    )
+                })?;
+                extensions = extensions.bind(resolved.package.host_package(), &component)?;
+            }
         }
         Ok((extensions, Notes(observer)))
     }
@@ -1252,10 +1160,12 @@ pub(crate) mod host {
     /// Runs the document (never reached without Wasmtime: [`available`]
     /// fails first).
     #[cfg(not(feature = "wasmtime"))]
-    pub fn run(
+    pub(crate) fn run(
         _args: &RunArgs,
         _packages: &crate::extensions::Packages,
         _services: &crate::services::Services,
+        _documents: crate::documents::Documents,
+        _scripts: Vec<scxml_compiler_core::ScriptPackage>,
     ) -> Result<Vec<CheckpointDocument>, Box<dyn std::error::Error>> {
         available().map(|()| Vec::new())
     }
@@ -1311,8 +1221,6 @@ mod tests {
             "preserve",
             "--output-dir",
             "out",
-            "--resource",
-            "child.scxml=c.scxml",
         ])
         .expect("parses");
         assert_eq!(run.events, ["go"]);
@@ -1320,10 +1228,6 @@ mod tests {
         assert_eq!(run.options.exclude, [Section::DataModel, Section::Queues]);
         assert_eq!(run.options.trace_context, TraceContextPolicy::Preserve);
         assert_eq!(run.output, Output::Dir("out".into()));
-        assert_eq!(
-            run.resources,
-            [("child.scxml".into(), PathBuf::from("c.scxml"))]
-        );
         assert_eq!(
             run_args(&["--every", "--output-dir", "d"]).map(|run| run.points),
             Ok(Points::Every)
@@ -1355,7 +1259,6 @@ mod tests {
             (&["--exclude", "pending-sends"][..], "--exclude requires"),
             (&["--at", "x"][..], "--at requires"),
             (&["--trace-context", "keep"][..], "strip or preserve"),
-            (&["--resource", "=p"][..], "URI=PATH"),
             (&["--evnt", "go"][..], "did you mean `--event`"),
         ] {
             let error = run_args(extra).expect_err("rejected");

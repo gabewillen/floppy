@@ -181,6 +181,26 @@ const NOT_SELF_CHECKING: &[(&str, &str)] = &[
         "SCXML094",
         "the example needs the validator's bound service types; the validator's invoke type tests cover it",
     ),
+    (
+        "SCXML097",
+        "the example needs the draft profile; the validator's draft profile tests cover it",
+    ),
+    (
+        "SCXML098",
+        "the example needs the draft profile; the validator's draft profile tests cover it",
+    ),
+    (
+        "SCXML099",
+        "the example needs the draft profile; the validator's draft profile tests cover it",
+    ),
+    (
+        "SCXML100",
+        "the example needs the draft profile; the validator's draft profile tests cover it",
+    ),
+    (
+        "SCXML101",
+        "the example needs the draft profile; the validator's draft profile tests cover it",
+    ),
     ("XSD002", "the example is a schema, not an SCXML document"),
     ("XSD003", "the example is a schema, not an SCXML document"),
     ("XSD004", "the example is a schema, not an SCXML document"),

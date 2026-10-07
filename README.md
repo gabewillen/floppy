@@ -377,7 +377,10 @@ The full list, with evidence, is in
   synchronous executable content), as each component's own `wasi:*` imports
   with the runtime resources the run grants (`--dir`, `--wasi`); `wasi:cli`,
   `wasi:http`, and UDP are never linked.
-- Repository namespaces are GitHub repositories only.
+- Repository namespaces and services are GitHub repositories only; a
+  release serves its package only under the exact URI its manifest names
+  (pinned or tagless), and a child loaded by `<invoke srcexpr>` or
+  `<content expr>` compiles against what the run already bound.
 - An `event:schema` references only files relative to the document; child
   documents compiled when invoked and the browser host get no schema files.
 

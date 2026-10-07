@@ -349,8 +349,15 @@ These apply on every build, because they are not resource bounds:
   `event:schema` a JSON Pointer selects (a result at most 8 times its file
   plus 4096 bytes, checked as the copies grow, and nested no deeper than
   the 128 levels the Machine IR decoder reads back; past either
-  `SCXML092`), and the 32 MiB rendered and SARIF report bounds. Each guards against output that grows
-  faster than its input.
+  `SCXML092`), the 32 MiB rendered and SARIF report bounds, and the 64
+  documents `snapshot run` and `run` load through `<invoke src>` before the
+  first macrostep. Each guards against output that grows faster than its
+  input.
+- **Network-ingress protections of the CLI**: a document it fetches by URI
+  (`<invoke src>`, `<script src>`, `<data src>`, `srcexpr`) is at most
+  16 MiB over HTTPS, follows at most 5 redirects (each to `https:`), and
+  shares the repository resolver's connect (10 s) and total (60 s)
+  timeouts, with no retry.
 - **Format and interchange contracts**: the WIT value bounds of events and
   data (for example 64 KiB per event payload or data value, raised as
   `error.execution`, and 1024-byte names: a literal event name, send id,

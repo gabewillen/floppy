@@ -425,7 +425,9 @@ executing call's shared fuel budget, and a trap retires the instance for the
 session. Invoked child documents compile against the host's bound packages.
 A namespace a session's document uses that no binding names is loaded when the
 session starts (`machine-capabilities.load-extensions`) through the embedder's
-`ExtensionResolver`, or the start fails closed. Extension components import no
+`ExtensionResolver`, or the start fails closed. The CLI binds every repository
+namespace of the document and of each literal `<invoke src>` document it
+loads before the session starts, so its runs never need the resolver. Extension components import no
 WASI interface (the host links none into them; WASI is linked into
 invoked-service components only, as each component's own `wasi:*` imports
 with the runtime resources the run grants, through `wasmtime-wasi` inside

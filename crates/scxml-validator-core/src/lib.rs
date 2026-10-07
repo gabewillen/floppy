@@ -57,6 +57,7 @@
 
 mod datamodel_check;
 mod diagnostic;
+mod draft_profile;
 mod env_attributes;
 mod event_attributes;
 mod graph;
@@ -138,12 +139,25 @@ pub enum SchemaMode {
     Strict,
 }
 
+/// A restriction profile one validation applies on top of SCXML 1.0
+/// (`Validator::with_profile`); without one, no profile rule runs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Profile {
+    /// A document a machine writes and runs as an invoked child (a builder
+    /// bot's draft): only the SCXML and `event` namespaces, no `<invoke>`
+    /// or `<script>`, no `src`/`srcexpr`, no `typeexpr`, no `<send type>`
+    /// but the SCXML Event I/O Processor's, and no DTD (`SCXML097` to
+    /// `SCXML101`; docs/validator-rules.md, "Draft profile").
+    Draft,
+}
+
 /// First-class validation pipeline with independently testable phases.
 #[derive(Debug)]
 pub struct Validator<R, B> {
     resolver: R,
     backend: B,
     schema_mode: SchemaMode,
+    profile: Option<Profile>,
     xml_limits: XmlLimits,
     /// Linked parse-only checkers, at most one per data model.
     expression_checkers: Vec<std::sync::Arc<dyn ExpressionSyntaxChecker>>,
@@ -167,6 +181,7 @@ impl<R, B> Validator<R, B> {
             resolver,
             backend,
             schema_mode: SchemaMode::Strict,
+            profile: None,
             xml_limits: XmlLimits::DEFAULT,
             expression_checkers: Vec::new(),
             extension_slots: None,
@@ -235,6 +250,15 @@ impl<R, B> Validator<R, B> {
         self.expression_checkers
             .retain(|linked| linked.data_model() != checker.data_model());
         self.expression_checkers.push(checker);
+        self
+    }
+
+    /// Applies `profile`'s rules on top of SCXML 1.0. A namespace the
+    /// profile does not admit is reported by the profile, not also as a
+    /// missing schema.
+    #[must_use]
+    pub const fn with_profile(mut self, profile: Profile) -> Self {
+        self.profile = Some(profile);
         self
     }
 
@@ -372,6 +396,13 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
                 {
                     continue;
                 }
+                // The draft profile reports a namespace it does not admit
+                // (`SCXML097`); a missing-schema error would restate it.
+                if self.profile == Some(Profile::Draft)
+                    && !draft_profile::admits_namespace(&namespace_uri)
+                {
+                    continue;
+                }
                 // SCXML001 owns a near-miss namespace on the root (with the
                 // exact-URI fix); a missing-schema error would restate it.
                 if semantic::is_near_scxml_namespace(&namespace_uri)
@@ -423,6 +454,11 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
         }
         for diagnostic in invoke_types::invoke_type_diagnostics(document, self.services.as_ref()) {
             report.push(diagnostic);
+        }
+        if self.profile == Some(Profile::Draft) {
+            for diagnostic in draft_profile::draft_profile_diagnostics(document) {
+                report.push(diagnostic);
+            }
         }
         refine::refine_report(Some(document), &mut report);
         report.sort();

@@ -38,9 +38,11 @@ hard cutover.
 - Extension components execute extension-namespace elements end to end
   under the Wasmtime host, with host-admitted outbound HTTP and read-only
   session snapshots. A document loads an element straight from a repository
-  by naming its release
-  (`https://github.com/<owner>/<repo>/namespaces/<name>@<tag>`): verified against the release's `SHA256SUMS`, cached, pinned,
-  and loaded when a session starts. Elements receive the run's values only
+  by naming it
+  (`https://github.com/<owner>/<repo>/namespaces/<name>[@<tag>]`: a release
+  tag, or the latest release): verified against the release's `SHA256SUMS`,
+  cached, pinned, resolved once per run, and bound before the session
+  starts. Elements receive the run's values only
   as references (`env:<slot>="NAME"`), and importing an element consents to
   the origins its manifest declares.
 - Both official W3C IRP corpora still pass every applicable case through
@@ -54,6 +56,24 @@ hard cutover.
 
 ### Added
 
+- `snapshot run` and `run` load `<invoke src>`, `<script src>`, and
+  `<data src>` by SCXML's defaults (`https:`, `file:`, and relative URIs
+  against the naming document's base URI): every literal URI of the document
+  tree once before the first macrostep, listed before running, through the
+  repository resolver's bounded, credential-free HTTPS fetcher
+  (`scxml.cli.read-document`); a `<script src>` that cannot be fetched
+  rejects the document (SCXML 5.8), and an `<invoke srcexpr>` URI is fetched
+  when the invoke runs (`error.execution` on failure). This replaces
+  `--resource URI=PATH` and the at-or-below-the-document-directory rule for
+  `<invoke src>`, both removed.
+- The validator's draft profile (`scxml_validator_core::Profile::Draft`,
+  `Validator::with_profile`; `<scx:validate profile="draft">`): for a
+  document a machine writes and runs as its own invoked child, `SCXML097`
+  (a namespace other than SCXML's, `event`, and `xml`), `SCXML098`
+  (`<invoke>`, `<script>`), `SCXML099` (`src`, `srcexpr`), `SCXML100`
+  (`typeexpr`, a `<send type>` other than the SCXML Event I/O Processor),
+  and `SCXML101` (a DTD), documented in `docs/validator-rules.md` and
+  `scx --explain`.
 - The `scx` extension namespace (`namespaces/scx`,
   `https://github.com/stateforward/scxml.rs/namespaces/scx`, tagless and
   versioned with the toolchain): `<scx:validate>` runs the validator on a
@@ -179,7 +199,7 @@ hard cutover.
   1024 events of at most 4 MiB in all, on every build (an amplification
   guard); past either bound the invocation fails (`error.communication`).
 - Repository services: a literal `<invoke type>` of exactly
-  `https://github.com/<owner>/<repo>/services/<name>@<tag>` that no
+  `https://github.com/<owner>/<repo>/services/<name>[@<tag>]` that no
   `--service-package` binds is resolved by the CLI exactly like a repository
   namespace: the tag to a commit, the manifest
   (`services/<name>/package/<name>.service.json`, naming its own URI) and
@@ -269,16 +289,22 @@ hard cutover.
   `unavailable`, and the browser host answers only through the page's
   `executeExtension` callback. New span `scxml.host-wasmtime.extension-load`.
 - Repository namespaces: a namespace URI of exactly
-  `https://github.com/<owner>/<repo>/namespaces/<name>@<tag>` names a package at
-  `namespaces/<name>/package/<name>.extension.json` in that repository. The CLI
-  (`crates/scxml-cli/src/repository.rs`) resolves every one a document uses
-  that no flag binds: the tag to a commit through the GitHub API, the manifest
-  and schema from that commit (exact URI, schema SHA-256, `targetNamespace`),
-  and, when a session starts, the release asset the manifest names, verified
-  against the release's `SHA256SUMS`. Verified bytes are cached
-  content-addressed (`${XDG_CACHE_HOME:-$HOME/.cache}/scxml/extensions`,
-  `--cache-dir`), the URI is pinned to its first resolution's commit and
-  digests, later runs use no network, and `--offline` forbids any fetch.
+  `https://github.com/<owner>/<repo>/namespaces/<name>[@<tag>]` names a package at
+  `namespaces/<name>/package/<name>.extension.json` in that repository:
+  `@<tag>` pins a release, and a tagless URI names the repository's latest
+  release (`releases/latest`), asked once per run; the `env`, `event`, and
+  `scx` vocabularies `scx` provides are matched first and never fetched. The
+  CLI (`crates/scxml-cli/src/repository.rs`) resolves every one the document,
+  or a literal `<invoke src>` document it loads, uses that no flag binds: the
+  tag to a commit through the GitHub API, the manifest and schema from that
+  commit (exact URI, schema SHA-256, `targetNamespace`), and, before the
+  session starts, the release asset the manifest names, verified against the
+  release's `SHA256SUMS`, bound once and shared by every invoked session.
+  Verified bytes are cached content-addressed
+  (`${XDG_CACHE_HOME:-$HOME/.cache}/scxml/extensions`, `--cache-dir`), the URI
+  is pinned to its resolution's commit and digests (a tagless URI with its
+  `tag`), a pinned URI's later runs use no network, and `--offline` forbids
+  any fetch; the consent listing shows each release tag and commit.
   HTTPS only, redirects only to GitHub or configured origins (at most 5),
   explicit timeouts, no retry, bounded bodies, a token only from
   `--github-token-env NAME` and only to the API; `--github-api-base`,
@@ -360,8 +386,8 @@ hard cutover.
   gone), and the CLI `done` record's `data`/`xml`.
 - `<data src>` and BasicHTTP bodies honour a JSON or XML media type: WIT
   `load-document` returns a `loaded-document` `{text, media-type}`;
-  `EmbeddedDocument` carries the media type (the CLI maps `--resource`
-  `.json` and `.xml`), and the browser `resolve`/`loadDocument` may answer
+  `EmbeddedDocument` carries the media type (the CLI passes a fetched
+  document's `Content-Type`, else maps `.json` and `.xml` URLs), and the browser `resolve`/`loadDocument` may answer
   `{text, mediaType}`.
 - WIT `data-model-api.check-effects`, which the validator's
   `expression-syntax` import forwards (a third-party data model implements

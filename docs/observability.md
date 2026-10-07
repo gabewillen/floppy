@@ -152,7 +152,7 @@ or expression: `scxml.syntax.parse-xml` (module `syntax`) per parse;
 and `render-sarif`; the validator and reporter components' WIT entry spans;
 and the CLI's `main`, command (`validate`, `compile`, `explain`,
 `conformance`, `conformance-prepare`), file-read (`read-source`,
-`read-template`, `read-script`, `read-event-schema`), and `emit` spans. Failures carry only a
+`read-template`, `read-script`, `read-event-schema`, `read-document`), and `emit` spans. Failures carry only a
 closed `ErrorCategory` value (for example `validation`, `input-read`, or
 `command-budget`); no diagnostic code, count, path, or namespace URI is an
 attribute. `cargo run --release --locked -p scxml-bench --bin validator`

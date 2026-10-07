@@ -178,11 +178,13 @@ so a document needs no flag to bind it:
 <invoke type="https://github.com/stateforward/nemobot/services/memory@v0.1.0" id="memory"/>
 ```
 
-- **The URI form.** Exactly `https://github.com/<owner>/<repo>/services/<name>@<tag>`:
+- **The URI form.** Exactly `https://github.com/<owner>/<repo>/services/<name>[@<tag>]`:
   the literal `services` folder, one name segment (`[A-Za-z0-9._-]`), no
-  trailing slash, and the release tag after the last `@`. The manifest's
-  `service-uri` must equal it byte for byte, tag included; a new version is a
-  new URI. A `services/` URI is never a repository namespace, and a
+  trailing slash, and, optionally, the release tag after the last `@`:
+  `@<tag>` pins that release, and a tagless URI names the repository's latest
+  release, resolved once per root session and listed with the tag and commit
+  it resolved to. The manifest's `service-uri` must equal the URI byte for
+  byte (with its tag, or tagless for a tagless URI). A `services/` URI is never a repository namespace, and a
   `namespaces/` URI never a repository service; any other path is an
   ordinary service type URI.
 - **The layout.** The manifest is `services/<name>/package/<name>.service.json`;
@@ -190,10 +192,13 @@ so a document needs no flag to bind it:
   component is the release asset the manifest's `service-artifact` names (a
   plain asset name), listed in the release's `SHA256SUMS`.
 - **When it loads.** Only a literal `<invoke type>` that no
-  `--service-package` binds is resolved (a `typeexpr` is never resolved: it
-  runs only against what the run binds). `validate` and `compile` (and the
-  compile step of `snapshot run` and `run`) resolve the package: the tag to a
-  commit through the GitHub API, then the manifest and its schema at that
+  `--service-package` binds is resolved, in the document or in an
+  `<invoke src>` document the run loads (a `typeexpr` is never resolved: it
+  runs only against what the run binds). Each URI is resolved once per root
+  session and its component bound once, shared by every session that invokes
+  it. `validate` and `compile` (and the
+  compile step of `snapshot run` and `run`) resolve the package: the tag (or
+  the latest release's tag) to a commit through the GitHub API, then the manifest and its schema at that
   commit, each checked against the digest the manifest declares. `snapshot
   run` and `run` then resolve the component from the release, authenticated
   by its `SHA256SUMS` entry, and bind it before the session starts. Any
@@ -202,7 +207,7 @@ so a document needs no flag to bind it:
 - **The cache, offline, network bounds, and telemetry** are the repository
   namespaces' exactly: the same content-addressed cache and `--cache-dir`,
   the URI pinned on first use (`stateforward.scxml.service-cache/v1`: the
-  URI, commit, manifest digest, and, once read, the component digest; the
+  URI, a tagless URI's `tag`, the commit, manifest digest, and, once read, the component digest; the
   pinned manifest pins its schema digest), `--offline`, HTTPS only with
   loopback HTTP for explicit mirror bases, bounded redirects, timeouts, and
   bodies, no retry, no ambient credentials, and the CLI spans

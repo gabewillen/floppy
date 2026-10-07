@@ -32,6 +32,15 @@ toolchain, its URI carries no release tag, like the
 
 ## The element
 
+`profile="draft"` adds the validator's draft profile
+([validator rules](../../docs/validator-rules.md#draft-profile), `SCXML097`
+to `SCXML101`) for a document the machine then runs as its own invoked
+child: only the SCXML and `event` namespaces, no `<invoke>` or `<script>`,
+no `src`/`srcexpr`, no `typeexpr`, no `<send type>` but the SCXML Event I/O
+Processor's, and no DTD. The findings are ordinary diagnostics of the
+report, so the machine branches on `report.validator.counts.errors` as
+always.
+
 ```xml
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:scx="https://github.com/stateforward/scxml.rs/namespaces/scx"
@@ -51,7 +60,7 @@ toolchain, its URI carries no release tag, like the
 ```
 
 `src/lib.rs` documents every attribute and child (`location`, `expr` or one
-`scx:content`, `name`, `applyfixes` with `fixedlocation`, and
+`scx:content`, `name`, `applyfixes` with `fixedlocation`, `profile`, and
 `scx:eventschema` resources), the failures (`error.execution` with a static
 detail; the document, its schemas, and the report are never echoed), the
 wasm-only bounds, and the telemetry. Executable content is synchronous: one

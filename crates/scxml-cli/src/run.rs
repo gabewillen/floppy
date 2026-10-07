@@ -31,7 +31,6 @@ use crate::components::ComponentArgs;
 pub const RUN_OPTIONS: &[&str] = &[
     "--components",
     "--components-manifest-sha256",
-    "--resource",
     "--extension-package",
     "--extension-component",
     "--extension-component-sha256",
@@ -106,8 +105,6 @@ pub struct RunArgs {
     pub document: PathBuf,
     /// Release components and their manifest digest.
     pub components: ComponentArgs,
-    /// `URI=PATH` resources for invoked documents.
-    pub resources: Vec<(String, PathBuf)>,
     /// Extension packages, extension components, and their environment.
     pub(crate) namespaces: crate::extensions::RunFlags,
     /// Invoked-service packages and their components.
@@ -228,7 +225,6 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
     let document = crate::snapshot::one_operand(&parsed.operands, "run", "DOC.scx")?;
     let mut components_dir = None;
     let mut manifest = None;
-    let mut resources = Vec::new();
     let mut namespaces = crate::extensions::RunFlags::default();
     let mut services = crate::services::ServiceFlags::default();
     let mut fuel = None;
@@ -247,7 +243,6 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
         match flag {
             "--components" => components_dir = Some(PathBuf::from(value)),
             "--components-manifest-sha256" => manifest = Some(value.to_owned()),
-            "--resource" => resources.push(crate::snapshot::parse_resource(value)?),
             "--fuel" => fuel = Some(positive(value, "--fuel")?),
             "--max-commands" => max_commands = Some(positive(value, "--max-commands")?),
             "--session-id" => {
@@ -346,7 +341,6 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
     Ok(RunArgs {
         document,
         components,
-        resources,
         namespaces,
         services,
         fuel: fuel.unwrap_or(DEFAULT_FUEL),
@@ -2049,8 +2043,17 @@ mod live {
     )]
     pub fn execute(args: &RunArgs) -> Result<(), Box<dyn std::error::Error>> {
         let source = crate::read_source(&args.document)?;
+        // Every literal URI of the document tree loads once, before the
+        // first macrostep; the `<invoke src>` documents' packages bind with
+        // the root's.
+        let loaded = crate::documents::Documents::prefetch(
+            args.namespaces.repository.open()?,
+            &args.document,
+            &source,
+        )?;
         let packages = crate::extensions::Packages::resolve(
             &source,
+            loaded.children(),
             &args.namespaces.packages,
             &[],
             &args.namespaces.repository,
@@ -2058,6 +2061,7 @@ mod live {
         args.namespaces.check(&packages)?;
         let services = crate::services::resolve(
             &source,
+            loaded.children(),
             &args.services.packages,
             &args.namespaces.repository,
         )?;
@@ -2072,8 +2076,13 @@ mod live {
             &packages.slot_uses,
             &values,
         ));
-        let (ir, data_model) =
-            crate::snapshot::host::compile(&args.document, &packages.all(), &services.packages)?;
+        crate::extensions::write_notes(&loaded.summary());
+        let (ir, data_model) = crate::snapshot::host::compile(
+            &args.document,
+            &packages.all(),
+            &services.packages,
+            loaded.script_packages(&source)?,
+        )?;
         let mut namespaces = Vec::new();
         for package in &packages.explicit {
             let sha256 = args
@@ -2191,10 +2200,7 @@ mod live {
             machine_ir: &ir,
             data_model: data_model.as_deref(),
             session_id: &identity.session_id,
-            embedder: Rc::new(crate::snapshot::host::ResourceDocuments::new(
-                args.resources.clone(),
-                &args.document,
-            )),
+            embedder: Rc::new(loaded),
             max_commands: identity.max_commands,
             clock,
             record: args.record.is_some(),
@@ -2204,16 +2210,7 @@ mod live {
         let mut session = match opened {
             Ok(session) => session,
             Err(error) => {
-                // A repository namespace that could not load fails the
-                // session start; its own failure says why.
-                let message = match packages
-                    .store
-                    .as_ref()
-                    .and_then(|store| store.take_failure())
-                {
-                    Some(failure) => format!("{failure}\n  = note: {error}"),
-                    None => error.to_string(),
-                };
+                let message = error.to_string();
                 sink.error(
                     &failure_code(&error.failure),
                     &message,
@@ -2421,8 +2418,6 @@ mod tests {
             "agent",
             "--record",
             "log.ndjson",
-            "--resource",
-            "child.scxml=child.scxml",
         ])
         .expect("every option parses");
         assert_eq!(parsed.clock, ClockMode::Logical);

@@ -52,7 +52,7 @@ pub(crate) fn load(document: &Path, source: &[u8]) -> Resources {
 
 /// The canonical directory of the document at `document`, which its file
 /// references resolve against; `None` when it cannot be canonicalized.
-pub(crate) fn document_directory(document: &Path) -> Option<PathBuf> {
+fn document_directory(document: &Path) -> Option<PathBuf> {
     let directory = document
         .parent()
         .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
@@ -62,32 +62,6 @@ pub(crate) fn document_directory(document: &Path) -> Option<PathBuf> {
         &directory
     })
     .ok()
-}
-
-/// The bytes of the file `reference` names at or below `root` (a
-/// [`document_directory`]) when it is a path the `event:schema` vocabulary
-/// accepts ([`resource_problem`]) with no fragment; `None` otherwise, or
-/// when it does not resolve to a regular file at or below `root`. Used for
-/// `<invoke src>` documents next to the running document.
-#[cfg_attr(
-    not(feature = "wasmtime"),
-    allow(dead_code, reason = "only a running session loads invoked documents")
-)]
-pub(crate) fn read_reference(root: &Path, reference: &str) -> Option<Vec<u8>> {
-    if reference.contains('#') || resource_problem(reference).is_some() {
-        return None;
-    }
-    // Reading an invoked SCXML document is a source read, like the run's own
-    // document (`crate::read_source`).
-    let span = observe(Module::Cli, Operation::CliReadSource);
-    let bytes = read_below(root, reference);
-    if bytes.is_some() {
-        span.event(SignalEvent::ExternalReadCompleted);
-    } else {
-        span.event(SignalEvent::InputRejected);
-        span.fail(ErrorCategory::InputRead);
-    }
-    bytes
 }
 
 /// The distinct resource parts of the document's `event:schema` references

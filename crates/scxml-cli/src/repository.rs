@@ -1,28 +1,43 @@
 //! Repository namespaces and repository services: an extension namespace,
 //! or an invoked-service type, whose URI is the path of its package in a
-//! GitHub repository at a release tag.
+//! GitHub repository, at a release tag or at the repository's latest
+//! release.
 //!
 //! # The URI
 //!
-//! `https://github.com/<owner>/<repo>/namespaces/<name>@<tag>` (a repository
-//! namespace) or `https://github.com/<owner>/<repo>/services/<name>@<tag>`
-//! (a repository service), exactly: the literal `namespaces` or `services`
-//! folder, one name segment, no trailing slash, and the release tag after the
-//! last `@`. Every repository namespace lives in its own `namespaces/<name>/`
-//! folder and every repository service in its own `services/<name>/` folder;
-//! any other path is an ordinary namespace or service type URI, and a
-//! `services/` URI is never a repository namespace (nor a `namespaces/` URI a
-//! repository service).
+//! `https://github.com/<owner>/<repo>/namespaces/<name>[@<tag>]` (a
+//! repository namespace) or
+//! `https://github.com/<owner>/<repo>/services/<name>[@<tag>]` (a repository
+//! service), exactly: the literal `namespaces` or `services` folder, one name
+//! segment, no trailing slash, and, optionally, the release tag after the
+//! last `@`. With `@<tag>` the URI pins that release; without one (a
+//! tagless URI) it names the repository's latest GitHub release, resolved
+//! once per root session through the same bounded, verified path. The
+//! built-in tagless vocabularies `scx` embeds (`env`, `event`, `scx`, under
+//! `https://github.com/stateforward/scxml.rs/namespaces/`) are matched first
+//! and are never repository namespaces, so they are never fetched. Every
+//! repository namespace lives in its own `namespaces/<name>/` folder and
+//! every repository service in its own `services/<name>/` folder; any other
+//! path is an ordinary namespace or service type URI, and a `services/` URI
+//! is never a repository namespace (nor a `namespaces/` URI a repository
+//! service).
 //! A document binds that exact string (SCXML 1.0 section 4.10 namespace
 //! binding, and SCXML 6.4 `<invoke type>`, are byte-exact); the package
 //! manifest's `namespace-uri` (and the schema's `targetNamespace`), or
-//! `service-uri`, must equal it byte for byte. A new version is a new URI.
-//! Nothing about this is visible to SCXML: to a document it is an ordinary
-//! namespace or type URI. A repository service is resolved only for a
-//! literal `<invoke type>` no `--service-package` binds.
+//! `service-uri`, must equal it byte for byte, so a release serves its
+//! package under the URI its manifest names: a tagless URI needs a release
+//! whose manifest names the tagless URI, a pinned URI one whose manifest
+//! names that pinned URI. A pinned URI and a tagless one are distinct URIs
+//! and may both be bound in one session. Nothing about this is visible to
+//! SCXML: to a document it is an ordinary namespace or type URI. A
+//! repository service is resolved only for a literal `<invoke type>` no
+//! `--service-package` binds.
 //!
 //! # Where the bytes come from
 //!
+//! * A tagless URI's release is the repository's latest release
+//!   (`/repos/<owner>/<repo>/releases/latest`, its `tag_name`), asked once
+//!   per repository per root session.
 //! * The tag resolves to a commit through the GitHub REST API
 //!   (`/repos/<owner>/<repo>/git/ref/tags/<tag>`, dereferencing annotated
 //!   tags).
@@ -32,23 +47,29 @@
 //!   come from `raw.githubusercontent.com` at that commit, never at the tag;
 //!   the schema must match the digest the manifest declares.
 //! * The component is the release asset the manifest's `extension-artifact`
-//!   or `service-artifact` names, from the release of `<tag>`,
-//!   authenticated by the SHA-256 that release's `SHA256SUMS` asset lists for
-//!   it. A namespace's component is resolved when a session starts; a
-//!   service's when `snapshot run` or `run` binds it, before the session
-//!   starts.
+//!   or `service-artifact` names, from that release, authenticated by the
+//!   SHA-256 that release's `SHA256SUMS` asset lists for it, resolved when
+//!   `snapshot run` or `run` binds it, before the session starts.
 //!
 //! # Trust and the cache
 //!
 //! Every acquired byte is verified before it is stored, and stored exactly,
 //! content-addressed, under `<cache>/sha256/<hex>`. The first resolution of
 //! a URI pins it: `<cache>/index/<sha256 of the URI>.json` records the
-//! commit and the manifest, schema, and component digests, and every later
-//! use re-verifies the cached bytes against them and never asks the network
-//! again (a missing object is re-fetched at the pinned commit and must match
-//! the pinned digest). Cached bytes that do not match their digest fail
-//! closed. `--offline` never touches the network: a URI not in the cache
-//! fails closed.
+//! commit (and, for a tagless URI, the release tag) and the manifest,
+//! schema, and component digests, and every later use re-verifies the cached
+//! bytes against them. A pinned URI never asks the network again (a missing
+//! object is re-fetched at the pinned commit and must match the pinned
+//! digest); a tagless URI asks for the latest release once per root session
+//! and re-pins only when that release names another commit. Cached bytes that
+//! do not match their digest fail closed. `--offline` never touches the
+//! network: a URI not in the cache fails closed, and a tagless URI uses the
+//! release the cache pinned.
+//!
+//! One CLI process runs one root session, so every resolution of the
+//! process shares one [`Repository`] ([`RepositoryFlags::open`]): each URI is
+//! resolved once, and the root and every invoked child share its verified
+//! bytes.
 //!
 //! # Network bounds
 //!
@@ -71,14 +92,15 @@
 //! each with its closed outcome only: no URI, URL, tag, commit, digest, or
 //! path is ever recorded.
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(feature = "wasmtime")]
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 #[cfg(feature = "wasmtime")]
 use std::time::Duration;
 
@@ -106,10 +128,12 @@ const RELEASE_ASSET_ORIGINS: [&str; 2] = [
 const SUMS_ASSET: &str = "SHA256SUMS";
 /// The cache index entry format of a repository namespace.
 const ENTRY_FORMAT: &str = "stateforward.scxml.extension-cache/v1";
-/// Namespace cache index entry fields in their canonical order.
-const ENTRY_FIELDS: [&str; 6] = [
+/// Namespace cache index entry fields in their canonical order (`tag` only
+/// for a tagless URI: the release it was pinned to).
+const ENTRY_FIELDS: [&str; 7] = [
     "format",
     "namespace-uri",
+    "tag",
     "commit",
     "manifest-sha256",
     "schema-sha256",
@@ -119,9 +143,10 @@ const ENTRY_FIELDS: [&str; 6] = [
 /// digest pins its optional schema, whose digest the manifest declares.
 const SERVICE_ENTRY_FORMAT: &str = "stateforward.scxml.service-cache/v1";
 /// Service cache index entry fields in their canonical order.
-const SERVICE_ENTRY_FIELDS: [&str; 5] = [
+const SERVICE_ENTRY_FIELDS: [&str; 6] = [
     "format",
     "service-uri",
+    "tag",
     "commit",
     "manifest-sha256",
     "component-sha256",
@@ -129,6 +154,13 @@ const SERVICE_ENTRY_FIELDS: [&str; 5] = [
 
 /// Maximum bytes of a repository namespace URI.
 pub(crate) const MAX_URI_BYTES: usize = 512;
+/// The tagless vocabularies `scx` itself provides, matched before any
+/// repository namespace and never fetched.
+const BUILT_IN_NAMESPACES: [&str; 3] = [
+    scxml_types::ENV_NAMESPACE_URI,
+    scxml_types::EVENT_NAMESPACE_URI,
+    crate::extensions::SCX_NAMESPACE_URI,
+];
 /// The one repository folder every repository namespace lives in.
 const NAMESPACES_FOLDER: &str = "namespaces";
 /// The one repository folder every repository service lives in.
@@ -152,6 +184,10 @@ pub(crate) const MAX_SUMS_BYTES: u64 = 64 * 1024;
 pub(crate) const MAX_COMPONENT_BYTES: u64 = (2 << 30) - 1;
 /// Maximum bytes of a cache index entry.
 const MAX_ENTRY_BYTES: u64 = 16 * 1024;
+/// Maximum bytes of one document fetched over the network (`<invoke src>`,
+/// `<script src>`, `<data src>`, `srcexpr`): a network-ingress bound, on
+/// every build.
+pub(crate) const MAX_DOCUMENT_BYTES: u64 = 16 * 1024 * 1024;
 /// Maximum redirects one download follows.
 pub(crate) const MAX_REDIRECTS: usize = 5;
 /// Maximum annotated-tag dereferences while resolving a tag.
@@ -206,7 +242,9 @@ pub(crate) struct RepositoryUri {
     repo: String,
     /// The package's folder name under `namespaces/` or `services/`.
     name: String,
-    tag: String,
+    /// The pinned release tag; `None` for a tagless URI (the latest
+    /// release).
+    tag: Option<String>,
 }
 
 impl RepositoryUri {
@@ -226,9 +264,15 @@ impl RepositoryUri {
         if uri.len() > MAX_URI_BYTES {
             return None;
         }
+        if kind == Kind::Namespace && BUILT_IN_NAMESPACES.contains(&uri) {
+            return None;
+        }
         let rest = uri.strip_prefix(GITHUB_PREFIX)?;
-        let (path, tag) = rest.rsplit_once('@')?;
-        if !valid_tag(tag) {
+        let (path, tag) = match rest.rsplit_once('@') {
+            Some((path, tag)) => (path, Some(tag)),
+            None => (rest, None),
+        };
+        if tag.is_some_and(|tag| !valid_tag(tag)) {
             return None;
         }
         let mut segments = path.split('/');
@@ -246,7 +290,7 @@ impl RepositoryUri {
             owner: owner.to_owned(),
             repo: repo.to_owned(),
             name: name.to_owned(),
-            tag: tag.to_owned(),
+            tag: tag.map(str::to_owned),
         })
     }
 
@@ -370,14 +414,31 @@ impl RepositoryFlags {
         Ok(true)
     }
 
-    /// Opens the cache and checks the bases. Nothing touches the network.
+    /// The repository of this process's root session: opened (the cache and
+    /// the bases checked, nothing touching the network) on first use and
+    /// shared by every later call with the same flags, so each URI is
+    /// resolved once per root session and every resolution shares its
+    /// verified bytes.
     ///
     /// # Errors
     ///
     /// A message for a base that is not an admissible URL, an unset token
     /// variable, or no cache directory (neither `--cache-dir`,
     /// `XDG_CACHE_HOME`, nor `HOME`).
-    pub(crate) fn open(&self) -> Result<Repository, String> {
+    pub(crate) fn open(&self) -> Result<Arc<Repository>, String> {
+        static OPENED: Mutex<Vec<(RepositoryFlags, Arc<Repository>)>> = Mutex::new(Vec::new());
+        let mut opened = OPENED
+            .lock()
+            .map_err(|_| "the repository of this session is unavailable".to_owned())?;
+        if let Some((_, repository)) = opened.iter().find(|(flags, _)| flags == self) {
+            return Ok(Arc::clone(repository));
+        }
+        let repository = Arc::new(self.open_new()?);
+        opened.push((self.clone(), Arc::clone(&repository)));
+        Ok(repository)
+    }
+
+    fn open_new(&self) -> Result<Repository, String> {
         let cache_dir = match &self.cache_dir {
             Some(dir) => dir.clone(),
             None => default_cache_dir().ok_or(
@@ -422,7 +483,9 @@ impl RepositoryFlags {
             token,
             #[cfg(feature = "wasmtime")]
             client: OnceLock::new(),
-            failure: Mutex::new(None),
+            releases: Mutex::new(BTreeMap::new()),
+            entries: Mutex::new(BTreeMap::new()),
+            documents: Mutex::new(BTreeMap::new()),
         })
     }
 }
@@ -500,6 +563,9 @@ impl Bases {
 struct Entry {
     /// The repository namespace or service URI.
     uri: String,
+    /// The release a tagless URI was pinned to; `None` for a pinned URI,
+    /// whose tag is part of it.
+    tag: Option<String>,
     commit: String,
     manifest_sha256: String,
     /// A namespace's schema digest; `None` for a service, whose manifest
@@ -515,9 +581,14 @@ impl Entry {
     /// a service's in `stateforward.scxml.service-cache/v1`.
     fn encode(&self) -> Vec<u8> {
         let string = |value: &str| serde_json::Value::String(value.to_owned()).to_string();
+        let tag = self
+            .tag
+            .as_deref()
+            .map(|tag| format!("\n  \"tag\": {},", string(tag)))
+            .unwrap_or_default();
         let mut text = match &self.schema_sha256 {
             Some(schema) => format!(
-                "{{\n  \"format\": {},\n  \"namespace-uri\": {},\n  \"commit\": {},\n  \"manifest-sha256\": {},\n  \"schema-sha256\": {}",
+                "{{\n  \"format\": {},\n  \"namespace-uri\": {},{tag}\n  \"commit\": {},\n  \"manifest-sha256\": {},\n  \"schema-sha256\": {}",
                 string(ENTRY_FORMAT),
                 string(&self.uri),
                 string(&self.commit),
@@ -525,7 +596,7 @@ impl Entry {
                 string(schema),
             ),
             None => format!(
-                "{{\n  \"format\": {},\n  \"service-uri\": {},\n  \"commit\": {},\n  \"manifest-sha256\": {}",
+                "{{\n  \"format\": {},\n  \"service-uri\": {},{tag}\n  \"commit\": {},\n  \"manifest-sha256\": {}",
                 string(SERVICE_ENTRY_FORMAT),
                 string(&self.uri),
                 string(&self.commit),
@@ -566,6 +637,7 @@ impl Entry {
         }
         let entry = Self {
             uri: required(uri_field)?,
+            tag: field("tag")?,
             commit: required("commit")?,
             manifest_sha256: required("manifest-sha256")?,
             schema_sha256: if format == ENTRY_FORMAT {
@@ -575,6 +647,9 @@ impl Entry {
             },
             component_sha256: field("component-sha256")?,
         };
+        if entry.tag.as_deref().is_some_and(|tag| !valid_tag(tag)) {
+            return Err("field `tag` is not a release tag".into());
+        }
         if !is_commit(&entry.commit)
             || !is_sha256_hex(&entry.manifest_sha256)
             || entry
@@ -656,6 +731,15 @@ impl Cache {
                 path.display()
             ));
         }
+        let tagless = RepositoryUri::parse(namespace_uri)
+            .or_else(|| RepositoryUri::parse_service(namespace_uri))
+            .is_some_and(|uri| uri.tag.is_none());
+        if entry.tag.is_some() != tagless {
+            return Err(format!(
+                "the cache index `{}` records a release tag exactly when its URI has none, and this one does not",
+                path.display()
+            ));
+        }
         Ok(Some(entry))
     }
 
@@ -721,9 +805,9 @@ impl Client {
     }
 }
 
-/// Resolves repository namespaces through the cache and, unless offline,
-/// their repository. Shared by the compile step and the session host's
-/// resolver; its own failures are kept for the CLI's report.
+/// Resolves repository namespaces and services through the cache and,
+/// unless offline, their repository, and fetches the documents a run loads.
+/// One per root session ([`RepositoryFlags::open`]).
 pub(crate) struct Repository {
     cache: Cache,
     offline: bool,
@@ -731,7 +815,21 @@ pub(crate) struct Repository {
     token: Option<String>,
     #[cfg(feature = "wasmtime")]
     client: OnceLock<Client>,
-    failure: Mutex<Option<String>>,
+    /// The latest release (tag, commit) of each repository a tagless URI
+    /// named, asked once per root session.
+    releases: Mutex<BTreeMap<(String, String), (String, String)>>,
+    /// The entry each URI resolved to in this root session.
+    entries: Mutex<BTreeMap<String, Entry>>,
+    /// Every document URL fetched in this root session, and the outcome.
+    documents: Mutex<BTreeMap<String, Result<Fetched, String>>>,
+}
+
+/// One fetched document: its exact bytes and the media type its source
+/// indicated (an HTTP `Content-Type` without parameters), if any.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct Fetched {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) media_type: Option<String>,
 }
 
 impl std::fmt::Debug for Repository {
@@ -751,19 +849,6 @@ pub(crate) struct ResolvedComponent {
 }
 
 impl Repository {
-    /// The failure of the last resolution the session host asked for, once.
-    pub(crate) fn take_failure(&self) -> Option<String> {
-        self.failure
-            .lock()
-            .map_or(None, |mut failure| failure.take())
-    }
-
-    fn record(&self, message: &str) {
-        if let Ok(mut failure) = self.failure.lock() {
-            *failure = Some(message.to_owned());
-        }
-    }
-
     #[cfg(feature = "wasmtime")]
     fn client(&self) -> &Client {
         self.client.get_or_init(Client::new)
@@ -867,25 +952,205 @@ impl Repository {
         ))
     }
 
+    /// The document at `url`, fetched once per root session (its outcome,
+    /// failure included, is kept): a `file:` URL is read as a regular file,
+    /// an `https:` URL fetched within [`MAX_DOCUMENT_BYTES`], following at
+    /// most [`MAX_REDIRECTS`] redirects, each to another `https:` URL, with
+    /// the client's timeouts, no retry, and no credentials, cookies, or
+    /// proxies. `--offline` forbids every network fetch; any other scheme is
+    /// refused.
+    ///
+    /// # Errors
+    ///
+    /// A message naming why the document cannot be loaded.
+    pub(crate) fn fetch_document(&self, url: &url::Url) -> Result<Fetched, String> {
+        let key = url.as_str().to_owned();
+        if let Some(outcome) = self
+            .documents
+            .lock()
+            .map_err(|_| "the document memo is unavailable".to_owned())?
+            .get(&key)
+        {
+            return outcome.clone();
+        }
+        let span = observe(Module::Cli, Operation::CliReadDocument);
+        let outcome = match url.scheme() {
+            "file" => url
+                .to_file_path()
+                .map_err(|()| format!("`{url}` is not a local file path"))
+                .and_then(|path| {
+                    crate::read_source(&path)
+                        .map(|bytes| Fetched {
+                            bytes,
+                            media_type: None,
+                        })
+                        .map_err(|error| error.to_string())
+                }),
+            "https"
+                if url.host().is_some()
+                    && url.username().is_empty()
+                    && url.password().is_none() =>
+            {
+                if self.offline {
+                    Err(format!(
+                        "`{url}` is not a local file, and --offline forbids fetching it"
+                    ))
+                } else {
+                    self.get_document(url.clone())
+                }
+            }
+            _ => Err(format!(
+                "`{url}` is neither an https: URL (without userinfo) nor a file: URL"
+            )),
+        };
+        record_outcome(&span, outcome.is_ok());
+        self.documents
+            .lock()
+            .map_err(|_| "the document memo is unavailable".to_owned())?
+            .insert(key, outcome.clone());
+        outcome
+    }
+
+    /// Without Wasmtime this build links no network client.
+    #[cfg(not(feature = "wasmtime"))]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "the same signature as the networked build's"
+    )]
+    #[expect(
+        clippy::unused_self,
+        reason = "the same signature as the networked build's"
+    )]
+    fn get_document(&self, url: url::Url) -> Result<Fetched, String> {
+        Err(format!(
+            "cannot fetch `{url}`: this scx was built without `--features wasmtime`, which links its network client"
+        ))
+    }
+
+    /// GETs one `https:` document within [`MAX_DOCUMENT_BYTES`], following
+    /// at most [`MAX_REDIRECTS`] redirects to `https:` URLs.
+    #[cfg(feature = "wasmtime")]
+    fn get_document(&self, url: url::Url) -> Result<Fetched, String> {
+        let shown = url.to_string();
+        let mut current = url;
+        for _ in 0..=MAX_REDIRECTS {
+            if current.scheme() != "https"
+                || current.host().is_none()
+                || !current.username().is_empty()
+                || current.password().is_some()
+            {
+                return Err(format!(
+                    "`{shown}` leads to `{current}`, which is not an https: URL without userinfo"
+                ));
+            }
+            let mut response = self
+                .client()
+                .agent
+                .get(current.as_str())
+                .call()
+                .map_err(|error| format!("cannot fetch `{shown}`: {error}"))?;
+            let status = response.status().as_u16();
+            if matches!(status, 301 | 302 | 303 | 307 | 308) {
+                let location = response
+                    .headers()
+                    .get("location")
+                    .and_then(|value| value.to_str().ok())
+                    .ok_or_else(|| format!("`{shown}` redirects without a location"))?;
+                current = current
+                    .join(location)
+                    .map_err(|_| format!("`{shown}` redirects to an invalid location"))?;
+                continue;
+            }
+            if !(200..300).contains(&status) {
+                return Err(format!("`{shown}` answered HTTP {status}"));
+            }
+            let media_type = response
+                .headers()
+                .get("content-type")
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.split(';').next())
+                .map(|value| value.trim().to_ascii_lowercase())
+                .filter(|value| !value.is_empty());
+            let too_large =
+                || format!("`{shown}` is larger than its {MAX_DOCUMENT_BYTES}-byte bound");
+            if response
+                .headers()
+                .get("content-length")
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.trim().parse::<u64>().ok())
+                .is_some_and(|length| length > MAX_DOCUMENT_BYTES)
+            {
+                return Err(too_large());
+            }
+            let bytes = response
+                .body_mut()
+                .with_config()
+                .limit(MAX_DOCUMENT_BYTES.saturating_add(1))
+                .read_to_vec()
+                .map_err(|error| match error {
+                    ureq::Error::BodyExceedsLimit(_) => too_large(),
+                    error => format!("cannot read `{shown}`: {error}"),
+                })?;
+            if u64::try_from(bytes.len()).map_or(true, |length| length > MAX_DOCUMENT_BYTES) {
+                return Err(too_large());
+            }
+            return Ok(Fetched { bytes, media_type });
+        }
+        Err(format!(
+            "`{shown}` redirects more than {MAX_REDIRECTS} times"
+        ))
+    }
+
     fn api_json(&self, path: &str) -> Result<serde_json::Value, String> {
         let url = Bases::join(&self.bases.api, path)?;
         let bytes = self.get(url, MAX_API_BYTES, "application/vnd.github+json")?;
         serde_json::from_slice(&bytes).map_err(|_| "the GitHub API answered malformed JSON".into())
     }
 
+    /// The latest release of the repository a tagless `uri` names: its tag
+    /// and the commit the tag names, asked once per repository per root
+    /// session.
+    fn latest_release(&self, uri: &RepositoryUri) -> Result<(String, String), String> {
+        let key = (uri.owner.clone(), uri.repo.clone());
+        if let Some(release) = self
+            .releases
+            .lock()
+            .map_err(|_| "the release memo is unavailable".to_owned())?
+            .get(&key)
+        {
+            return Ok(release.clone());
+        }
+        let value = self.api_json(&format!("repos/{}/{}/releases/latest", uri.owner, uri.repo))?;
+        let tag = value
+            .get("tag_name")
+            .and_then(serde_json::Value::as_str)
+            .filter(|tag| valid_tag(tag))
+            .ok_or_else(|| {
+                format!(
+                    "the GitHub API answered no valid `tag_name` for the latest release of `{}/{}`",
+                    uri.owner, uri.repo
+                )
+            })?
+            .to_owned();
+        let commit = self.resolve_tag(uri, &tag)?;
+        let release = (tag, commit);
+        self.releases
+            .lock()
+            .map_err(|_| "the release memo is unavailable".to_owned())?
+            .insert(key, release.clone());
+        Ok(release)
+    }
+
     /// The commit `tag` names (annotated tags dereferenced).
-    fn resolve_tag(&self, uri: &RepositoryUri) -> Result<String, String> {
+    fn resolve_tag(&self, uri: &RepositoryUri, tag: &str) -> Result<String, String> {
         let value = self.api_json(&format!(
-            "repos/{}/{}/git/ref/tags/{}",
-            uri.owner, uri.repo, uri.tag
+            "repos/{}/{}/git/ref/tags/{tag}",
+            uri.owner, uri.repo
         ))?;
         if value.get("ref").and_then(serde_json::Value::as_str)
-            != Some(format!("refs/tags/{}", uri.tag).as_str())
+            != Some(format!("refs/tags/{tag}").as_str())
         {
-            return Err(format!(
-                "the GitHub API does not name tag `{}` exactly",
-                uri.tag
-            ));
+            return Err(format!("the GitHub API does not name tag `{tag}` exactly"));
         }
         let mut object = value.get("object").cloned();
         for _ in 0..MAX_TAG_DEREFERENCES {
@@ -912,9 +1177,60 @@ impl Repository {
             }
         }
         Err(format!(
-            "tag `{}` is nested deeper than {MAX_TAG_DEREFERENCES} annotated tags",
-            uri.tag
+            "tag `{tag}` is nested deeper than {MAX_TAG_DEREFERENCES} annotated tags"
         ))
+    }
+
+    /// The entry `text` (the URI `uri` parses from) resolves to in this root
+    /// session: the cache's pin of a pinned URI (or, on first use, `pin` at
+    /// the commit its tag names); for a tagless URI, the latest release,
+    /// re-pinned with `pin` when the cache pinned another one (offline: the
+    /// cache's pin).
+    fn session_entry(
+        &self,
+        text: &str,
+        uri: &RepositoryUri,
+        service: bool,
+        pin: impl FnOnce(Option<String>, String) -> Result<Entry, String>,
+    ) -> Result<Entry, String> {
+        let memo = |entries: &Mutex<BTreeMap<String, Entry>>| {
+            entries
+                .lock()
+                .map(|entries| entries.get(text).cloned())
+                .map_err(|_| "the resolution memo is unavailable".to_owned())
+        };
+        if let Some(entry) = memo(&self.entries)? {
+            return Ok(entry);
+        }
+        let cached = self.cache.entry(text, service)?;
+        let entry = match (&uri.tag, cached) {
+            (Some(_), Some(entry)) => entry,
+            (Some(tag), None) => {
+                self.require_online(text, "package")?;
+                pin(None, self.resolve_tag(uri, tag)?)?
+            }
+            (None, Some(entry)) if self.offline => entry,
+            (None, cached) => {
+                self.require_online(text, "package")?;
+                let (tag, commit) = self.latest_release(uri)?;
+                match cached {
+                    Some(entry) if entry.commit == commit && entry.tag.as_ref() == Some(&tag) => {
+                        entry
+                    }
+                    _ => pin(Some(tag), commit)?,
+                }
+            }
+        };
+        self.remember(&entry)?;
+        Ok(entry)
+    }
+
+    fn remember(&self, entry: &Entry) -> Result<(), String> {
+        self.entries
+            .lock()
+            .map_err(|_| "the resolution memo is unavailable".to_owned())?
+            .insert(entry.uri.clone(), entry.clone());
+        Ok(())
     }
 
     fn raw_url(&self, uri: &RepositoryUri, commit: &str, file: &str) -> Result<url::Url, String> {
@@ -930,13 +1246,15 @@ impl Repository {
         )
     }
 
-    fn download_url(&self, uri: &RepositoryUri, asset: &str) -> Result<url::Url, String> {
+    fn download_url(
+        &self,
+        uri: &RepositoryUri,
+        tag: &str,
+        asset: &str,
+    ) -> Result<url::Url, String> {
         Bases::join(
             &self.bases.download,
-            &format!(
-                "{}/{}/releases/download/{}/{asset}",
-                uri.owner, uri.repo, uri.tag
-            ),
+            &format!("{}/{}/releases/download/{tag}/{asset}", uri.owner, uri.repo),
         )
     }
 
@@ -984,10 +1302,9 @@ impl Repository {
             .ok_or_else(|| format!("`{namespace_uri}` is not a repository namespace URI"))?;
         let schema_limit = u64::try_from(MAX_COMPONENT_SCHEMA_BYTES)
             .map_err(|_| "the schema bound does not fit")?;
-        let entry = match self.cache.entry(namespace_uri, false)? {
-            Some(entry) => entry,
-            None => self.pin_package(namespace_uri, &uri, schema_limit)?,
-        };
+        let entry = self.session_entry(namespace_uri, &uri, false, |tag, commit| {
+            self.pin_package(namespace_uri, &uri, tag, commit, schema_limit)
+        })?;
         let schema_sha256 = entry
             .schema_sha256
             .clone()
@@ -1017,16 +1334,17 @@ impl Repository {
         Ok((package, entry))
     }
 
-    /// First use of `namespace_uri`: resolves its tag, fetches and verifies
-    /// its package at that commit, stores it, and pins the URI.
+    /// First use of `namespace_uri` (or of its tagless URI's new release):
+    /// fetches and verifies its package at `commit`, stores it, and pins the
+    /// URI (with `tag` for a tagless URI).
     fn pin_package(
         &self,
         namespace_uri: &str,
         uri: &RepositoryUri,
+        tag: Option<String>,
+        commit: String,
         schema_limit: u64,
     ) -> Result<Entry, String> {
-        self.require_online(namespace_uri, "package")?;
-        let commit = self.resolve_tag(uri)?;
         let manifest = self.get(
             self.raw_url(uri, &commit, &uri.manifest_name())?,
             MAX_MANIFEST_BYTES,
@@ -1047,6 +1365,7 @@ impl Repository {
         )?;
         let entry = Entry {
             uri: namespace_uri.to_owned(),
+            tag,
             commit,
             manifest_sha256: sha256_hex(&manifest),
             schema_sha256: Some(sha256_hex(&schema)),
@@ -1091,6 +1410,7 @@ impl Repository {
         if entry.component_sha256.is_some() {
             return Ok(entry);
         }
+        let tag = release_tag(uri, &entry)?;
         self.require_online(
             namespace_uri,
             match uri.kind {
@@ -1098,16 +1418,20 @@ impl Repository {
                 Kind::Service => "service component digest",
             },
         )?;
-        let sums = self.get(self.download_url(uri, SUMS_ASSET)?, MAX_SUMS_BYTES, "*/*")?;
+        let sums = self.get(
+            self.download_url(uri, &tag, SUMS_ASSET)?,
+            MAX_SUMS_BYTES,
+            "*/*",
+        )?;
         let digest = sums_entry(&sums, asset).ok_or_else(|| {
             format!(
-                "{} `{namespace_uri}`: release `{}` lists no single SHA-256 for `{asset}` in its {SUMS_ASSET}",
+                "{} `{namespace_uri}`: release `{tag}` lists no single SHA-256 for `{asset}` in its {SUMS_ASSET}",
                 uri.kind.label(),
-                uri.tag
             )
         })?;
         entry.component_sha256 = Some(digest);
         self.cache.write_entry(&entry)?;
+        self.remember(&entry)?;
         Ok(entry)
     }
 
@@ -1129,6 +1453,7 @@ impl Repository {
                 .ok_or_else(|| format!("`{namespace_uri}` is not a repository namespace URI"))?;
             let asset = package.manifest.extension_artifact.clone();
             let entry = self.pin_component(&uri, namespace_uri, &asset, entry)?;
+            let tag = release_tag(&uri, &entry)?;
             let sha256 = entry
                 .component_sha256
                 .ok_or("the cache pinned no component digest")?;
@@ -1137,7 +1462,7 @@ impl Repository {
                 "extension component",
                 &sha256,
                 MAX_COMPONENT_BYTES,
-                || self.download_url(&uri, &asset),
+                || self.download_url(&uri, &tag, &asset),
             )?;
             Ok(ResolvedComponent {
                 package,
@@ -1169,10 +1494,9 @@ impl Repository {
     fn resolve_service_inner(&self, service_uri: &str) -> Result<(ServicePackage, Entry), String> {
         let uri = RepositoryUri::parse_service(service_uri)
             .ok_or_else(|| format!("`{service_uri}` is not a repository service URI"))?;
-        let entry = match self.cache.entry(service_uri, true)? {
-            Some(entry) => entry,
-            None => self.pin_service(service_uri, &uri)?,
-        };
+        let entry = self.session_entry(service_uri, &uri, true, |tag, commit| {
+            self.pin_service(service_uri, &uri, tag, commit)
+        })?;
         let manifest = self.pinned(
             service_uri,
             "manifest",
@@ -1209,11 +1533,16 @@ impl Repository {
         Ok(schema)
     }
 
-    /// First use of `service_uri`: resolves its tag, fetches and verifies
-    /// its package at that commit, stores it, and pins the URI.
-    fn pin_service(&self, service_uri: &str, uri: &RepositoryUri) -> Result<Entry, String> {
-        self.require_online(service_uri, "package")?;
-        let commit = self.resolve_tag(uri)?;
+    /// First use of `service_uri` (or of its tagless URI's new release):
+    /// fetches and verifies its package at `commit`, stores it, and pins the
+    /// URI (with `tag` for a tagless URI).
+    fn pin_service(
+        &self,
+        service_uri: &str,
+        uri: &RepositoryUri,
+        tag: Option<String>,
+        commit: String,
+    ) -> Result<Entry, String> {
         let manifest = self.get(
             self.raw_url(uri, &commit, &uri.manifest_name())?,
             MAX_MANIFEST_BYTES,
@@ -1223,6 +1552,7 @@ impl Repository {
         let schema = self.service_schema(service_uri, uri, &commit, &parsed)?;
         let entry = Entry {
             uri: service_uri.to_owned(),
+            tag,
             commit,
             manifest_sha256: sha256_hex(&manifest),
             schema_sha256: None,
@@ -1271,6 +1601,7 @@ impl Repository {
                 .ok_or_else(|| format!("`{service_uri}` is not a repository service URI"))?;
             let asset = package.manifest.service_artifact.clone();
             let entry = self.pin_component(&uri, service_uri, &asset, entry)?;
+            let tag = release_tag(&uri, &entry)?;
             let sha256 = entry
                 .component_sha256
                 .ok_or("the cache pinned no component digest")?;
@@ -1279,7 +1610,7 @@ impl Repository {
                 "service component",
                 &sha256,
                 MAX_COMPONENT_BYTES,
-                || self.download_url(&uri, &asset),
+                || self.download_url(&uri, &tag, &asset),
             )?;
             Ok(ResolvedService {
                 package,
@@ -1332,7 +1663,7 @@ fn check_service_manifest(
 ) -> Result<(), String> {
     if manifest.service_uri != service_uri {
         return Err(format!(
-            "repository service `{service_uri}`: its manifest binds `{}`, not this URI\n  = help: a repository service's manifest names its own URI byte for byte, tag included",
+            "repository service `{service_uri}`: its manifest binds `{}`, not this URI\n  = help: a repository service's manifest names its own URI byte for byte (with its tag, or tagless for a tagless URI)",
             manifest.service_uri
         ));
     }
@@ -1372,7 +1703,8 @@ fn verify_service(
         format!("repository service `{service_uri}`: its package does not verify: {error}")
     })?;
     let tag = RepositoryUri::parse_service(service_uri)
-        .map(|uri| uri.tag)
+        .and_then(|uri| uri.tag)
+        .or_else(|| entry.tag.clone())
         .unwrap_or_default();
     Ok(ServicePackage {
         origin: ServiceOrigin::Repository {
@@ -1412,6 +1744,15 @@ pub(crate) fn used_services(source: &[u8], bound: &[String]) -> Vec<String> {
     uris.into_iter().collect()
 }
 
+/// The release tag of `uri`: its own, or, for a tagless URI, the one its
+/// entry was pinned to.
+fn release_tag(uri: &RepositoryUri, entry: &Entry) -> Result<String, String> {
+    uri.tag
+        .clone()
+        .or_else(|| entry.tag.clone())
+        .ok_or_else(|| "a tagless URI's cache index pins no release tag".to_owned())
+}
+
 /// How messages name `uri`: a repository service or namespace.
 fn label(uri: &str) -> &'static str {
     if RepositoryUri::parse_service(uri).is_some() {
@@ -1440,7 +1781,7 @@ fn check_manifest(
 ) -> Result<(), String> {
     if manifest.namespace_uri != namespace_uri {
         return Err(format!(
-            "repository namespace `{namespace_uri}`: its manifest binds `{}`, not this URI\n  = help: a repository namespace's manifest names its own URI byte for byte, tag included",
+            "repository namespace `{namespace_uri}`: its manifest binds `{}`, not this URI\n  = help: a repository namespace's manifest names its own URI byte for byte (with its tag, or tagless for a tagless URI)",
             manifest.namespace_uri
         ));
     }
@@ -1485,7 +1826,8 @@ fn verify_package(
         ));
     }
     let tag = RepositoryUri::parse(namespace_uri)
-        .map(|uri| uri.tag)
+        .and_then(|uri| uri.tag)
+        .or_else(|| entry.tag.clone())
         .unwrap_or_default();
     Ok(Package {
         origin: PackageOrigin::Repository {
@@ -1537,23 +1879,23 @@ fn sums_entry(bytes: &[u8], asset: &str) -> Option<String> {
     found
 }
 
-/// The namespaces a document uses that a repository namespace serves and no
-/// other flag binds, resolved to their packages.
+/// The `used` namespaces that a repository namespace serves and no other
+/// flag binds, resolved to their packages.
 ///
 /// # Errors
 ///
 /// The first resolution failure.
 pub(crate) fn resolve_document_packages(
     repository: &Repository,
-    source: &[u8],
+    used: &[String],
     bound: &[String],
 ) -> Result<Vec<Package>, String> {
     let mut packages = Vec::new();
-    for namespace_uri in used_namespaces(source) {
-        if bound.contains(&namespace_uri) || RepositoryUri::parse(&namespace_uri).is_none() {
+    for namespace_uri in used {
+        if bound.contains(namespace_uri) || RepositoryUri::parse(namespace_uri).is_none() {
             continue;
         }
-        packages.push(repository.resolve_package(&namespace_uri)?);
+        packages.push(repository.resolve_package(namespace_uri)?);
     }
     Ok(packages)
 }
@@ -1573,47 +1915,6 @@ pub(crate) fn used_namespaces(source: &[u8]) -> Vec<String> {
     .unwrap_or_default()
 }
 
-/// Repository namespaces as a session host resolver: the extension component
-/// of a repository URI, authenticated by its pinned SHA-256.
-#[cfg(feature = "wasmtime")]
-#[derive(Debug)]
-pub(crate) struct RepositoryResolver(pub(crate) Arc<Repository>);
-
-#[cfg(feature = "wasmtime")]
-impl scxml_host_wasmtime::ExtensionResolver for RepositoryResolver {
-    fn resolve(
-        &self,
-        namespace_uri: &str,
-    ) -> Result<
-        Option<scxml_host_wasmtime::ResolvedExtension>,
-        scxml_host_wasmtime::ExtensionResolveError,
-    > {
-        if RepositoryUri::parse(namespace_uri).is_none() {
-            return Ok(None);
-        }
-        let resolved = (|| {
-            let resolved = self.0.resolve_component(namespace_uri)?;
-            let digest = scxml_host_wasmtime::TrustedComponentDigest::from_hex(&resolved.sha256)
-                .map_err(|error| error.to_string())?;
-            let component =
-                scxml_host_wasmtime::authenticate_extension_component(&resolved.bytes, digest)
-                    .map_err(|error| {
-                        format!(
-                            "repository namespace `{namespace_uri}`: its extension component is rejected: {error}"
-                        )
-                    })?;
-            Ok::<_, String>(scxml_host_wasmtime::ResolvedExtension {
-                package: resolved.package.host_package(),
-                component,
-            })
-        })();
-        resolved.map(Some).map_err(|message| {
-            self.0.record(&message);
-            scxml_host_wasmtime::ExtensionResolveError { message }
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1627,10 +1928,22 @@ mod tests {
         assert_eq!(uri.owner, "stateforward");
         assert_eq!(uri.repo, "scxml.rs");
         assert_eq!(uri.name, "example");
-        assert_eq!(uri.tag, "v0.2.0");
+        assert_eq!(uri.tag.as_deref(), Some("v0.2.0"));
         assert_eq!(uri.manifest_name(), "example.extension.json");
+        let tagless =
+            RepositoryUri::parse("https://github.com/stateforward/nemobot/namespaces/decision")
+                .expect("a tagless repository namespace URI");
+        assert_eq!(tagless.tag, None);
+        assert_eq!(tagless.name, "decision");
+        // The vocabularies scx provides are matched first: never fetched.
+        for built_in in [
+            "https://github.com/stateforward/scxml.rs/namespaces/env",
+            "https://github.com/stateforward/scxml.rs/namespaces/event",
+            "https://github.com/stateforward/scxml.rs/namespaces/scx",
+        ] {
+            assert!(RepositoryUri::parse(built_in).is_none(), "{built_in}");
+        }
         for other in [
-            "https://github.com/stateforward/scxml.rs/namespaces/example",
             "https://github.com/stateforward/scxml.rs@v0.2.0",
             "https://github.com/stateforward/scxml.rs/namespaces/example/@v0.2.0",
             "https://github.com/stateforward/scxml.rs/tree/main/namespaces@v1",
@@ -1675,6 +1988,7 @@ mod tests {
     fn cache_entries_are_canonical_and_closed() {
         let entry = Entry {
             uri: "https://github.com/o/r/e@v1".into(),
+            tag: None,
             commit: "a".repeat(40),
             manifest_sha256: "b".repeat(64),
             schema_sha256: Some("c".repeat(64)),
@@ -1695,9 +2009,28 @@ mod tests {
     }
 
     #[test]
+    fn tagless_entries_record_their_release_tag() {
+        let entry = Entry {
+            uri: "https://github.com/o/r/services/s".into(),
+            tag: Some("v2".into()),
+            commit: "a".repeat(40),
+            manifest_sha256: "b".repeat(64),
+            schema_sha256: None,
+            component_sha256: None,
+        };
+        let bytes = entry.encode();
+        let text = String::from_utf8(bytes.clone()).expect("UTF-8");
+        assert!(text.contains("\"service-uri\": \"https://github.com/o/r/services/s\",\n  \"tag\": \"v2\",\n  \"commit\""));
+        assert_eq!(Entry::decode(&bytes), Ok(entry));
+        let bad = text.replace("\"v2\"", "\"-v2\"");
+        assert!(Entry::decode(bad.as_bytes()).is_err());
+    }
+
+    #[test]
     fn service_cache_entries_are_canonical_and_closed() {
         let entry = Entry {
             uri: "https://github.com/o/r/services/s@v1".into(),
+            tag: None,
             commit: "a".repeat(40),
             manifest_sha256: "b".repeat(64),
             schema_sha256: None,
@@ -1728,7 +2061,7 @@ mod tests {
         .expect("a repository service URI");
         assert_eq!(uri.kind, Kind::Service);
         assert_eq!(uri.name, "memory");
-        assert_eq!(uri.tag, "v0.1.0");
+        assert_eq!(uri.tag.as_deref(), Some("v0.1.0"));
         assert_eq!(uri.manifest_name(), "memory.service.json");
         assert!(
             RepositoryUri::parse("https://github.com/stateforward/nemobot/services/memory@v0.1.0")
@@ -1742,8 +2075,13 @@ mod tests {
             .is_none(),
             "a namespaces/ URI is never a repository service"
         );
+        assert_eq!(
+            RepositoryUri::parse_service("https://github.com/o/r/services/memory")
+                .map(|uri| uri.tag),
+            Some(None),
+            "a tagless repository service names the latest release"
+        );
         for other in [
-            "https://github.com/o/r/services/memory",
             "https://github.com/o/r/services/memory/@v1",
             "https://github.com/o/r/services@v1",
             "https://github.com/o/r/Services/memory@v1",

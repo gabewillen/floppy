@@ -271,48 +271,39 @@ fn a_failing_step_fails_the_session_with_exit_one() {
     assert!(stderr(&output).contains("error["), "{}", stderr(&output));
 }
 
-/// An `<invoke src>` at or below the document's directory loads with no
-/// `--resource` (the rules of an `event:schema` file reference); one that
-/// leaves the directory (`..`), or names an absolute path, does not load, so
-/// its `<invoke>` raises `error.execution` (SCXML 6.4).
+/// `<invoke src>` follows SCXML's defaults: a relative URI resolves against
+/// the invoking document's base URI (wherever it leads, `..` included), and
+/// an absolute `file:` or `https:` URI loads as written. Every literal URI is
+/// loaded before the first macrostep and listed; one that cannot be loaded
+/// raises `error.execution` when its `<invoke>` runs (SCXML 6.4).
 #[test]
-fn an_invoke_src_beside_the_document_loads_without_a_resource() {
+fn invoke_src_loads_relative_file_and_absolute_uris_and_lists_them() {
     let directory = scratch("invoke-src");
     fs::create_dir_all(directory.join("children")).expect("a child directory");
-    fs::write(
-        directory.join("children/child.scx"),
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><final id="f"/></scxml>"#,
-    )
-    .expect("the child is writable");
+    let child = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><final id="f"/></scxml>"#;
+    fs::write(directory.join("children/child.scx"), child).expect("the child is writable");
     let outside = directory.parent().expect("a parent").join("outside.scx");
-    fs::write(
-        &outside,
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><final id="f"/></scxml>"#,
-    )
-    .expect("the outside document is writable");
+    fs::write(&outside, child).expect("the outside document is writable");
     let body = |src: &str| {
         format!(
             r#"<state id="s0"><invoke type="scxml" src="{src}"/><transition event="done.invoke" target="done"/><transition event="error.execution" target="failed"/></state><final id="done"><donedata><content expr="'done'"/></donedata></final><final id="failed"><donedata><content expr="'failed'"/></donedata></final>"#
         )
     };
-    let loaded = run(
-        &document(&directory, &body("children/child.scx")),
-        &["--clock", "logical", "--on-eof", "close"],
-        "",
+    let file_url = format!(
+        "file://{}",
+        fs::canonicalize(&outside).expect("canonical").display()
     );
-    let records = parse_records(&loaded);
-    let done = records
-        .iter()
-        .find(|record| record["type"] == "done")
-        .unwrap_or_else(|| panic!("{records:?}\n{}", stderr(&loaded)));
-    assert_eq!(done["data"], "done", "{records:?}");
-    for refused in [
-        "../outside.scx",
-        "./children/child.scx",
-        "children/child.scx#x",
+    for (src, expected) in [
+        ("children/child.scx", "done"),
+        ("./children/child.scx", "done"),
+        ("../outside.scx", "done"),
+        (file_url.as_str(), "done"),
+        ("children/missing.scx", "failed"),
+        ("https://127.0.0.1:1/child.scx", "failed"),
+        ("ftp://example.com/child.scx", "failed"),
     ] {
         let output = run(
-            &document(&directory, &body(refused)),
+            &document(&directory, &body(src)),
             &["--clock", "logical", "--on-eof", "close"],
             "",
         );
@@ -320,21 +311,91 @@ fn an_invoke_src_beside_the_document_loads_without_a_resource() {
         let done = records
             .iter()
             .find(|record| record["type"] == "done")
-            .unwrap_or_else(|| panic!("{refused}: {records:?}\n{}", stderr(&output)));
-        assert_eq!(done["data"], "failed", "{refused}: {records:?}");
+            .unwrap_or_else(|| panic!("{src}: {records:?}\n{}", stderr(&output)));
+        assert_eq!(done["data"], expected, "{src}: {records:?}");
+        assert!(
+            stderr(&output).contains(&format!("= for: <invoke src=\"{src}\">")),
+            "{src}: the consent lists the URI: {}",
+            stderr(&output)
+        );
     }
-    let absolute = run(
-        &document(&directory, &body(&outside.display().to_string())),
+}
+
+/// A `srcexpr` URI is loaded when its `<invoke>` runs, through the same
+/// loader (relative to the root document); a URI that cannot be loaded
+/// raises `error.execution` (SCXML 6.4).
+#[test]
+fn a_srcexpr_uri_loads_when_the_invoke_runs_and_a_failure_is_error_execution() {
+    let directory = scratch("invoke-srcexpr");
+    fs::create_dir_all(directory.join("children")).expect("a child directory");
+    fs::write(
+        directory.join("children/child.scx"),
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><final id="f"/></scxml>"#,
+    )
+    .expect("the child is writable");
+    let body = |expr: &str| {
+        format!(
+            r#"<state id="s0"><invoke type="scxml" srcexpr="{expr}"/><transition event="done.invoke" target="done"/><transition event="error.execution" target="failed"/></state><final id="done"><donedata><content expr="'done'"/></donedata></final><final id="failed"><donedata><content expr="'failed'"/></donedata></final>"#
+        )
+    };
+    for (expr, expected) in [
+        ("'children/child.scx'", "done"),
+        ("'https://127.0.0.1:1/child.scx'", "failed"),
+        ("'children/missing.scx'", "failed"),
+    ] {
+        let output = run(
+            &document(&directory, &body(expr)),
+            &["--clock", "logical", "--on-eof", "close"],
+            "",
+        );
+        let records = parse_records(&output);
+        let done = records
+            .iter()
+            .find(|record| record["type"] == "done")
+            .unwrap_or_else(|| panic!("{expr}: {records:?}\n{}", stderr(&output)));
+        assert_eq!(done["data"], expected, "{expr}: {records:?}");
+    }
+}
+
+/// A `<script src>` that cannot be fetched rejects the document before
+/// anything runs (SCXML 5.8); one that loads is pinned and runs.
+#[test]
+fn a_script_src_that_cannot_be_fetched_rejects_the_document() {
+    let directory = scratch("script-src");
+    fs::write(directory.join("lib.js"), "var loaded = 'yes';").expect("the script is writable");
+    let body = |src: &str| {
+        format!(
+            r#"<script src="{src}"/><state id="s0"><transition target="done"/></state><final id="done"><donedata><content expr="loaded"/></donedata></final>"#
+        )
+    };
+    let loaded = run(
+        &document(&directory, &body("lib.js")),
         &["--clock", "logical", "--on-eof", "close"],
         "",
     );
-    let records = parse_records(&absolute);
+    let records = parse_records(&loaded);
     assert!(
         records
             .iter()
-            .any(|record| record["type"] == "done" && record["data"] == "failed"),
-        "{records:?}"
+            .any(|record| record["type"] == "done" && record["data"] == "yes"),
+        "{records:?}\n{}",
+        stderr(&loaded)
     );
+    for src in ["missing.js", "https://127.0.0.1:1/lib.js"] {
+        let output = run(
+            &document(&directory, &body(src)),
+            &["--clock", "logical", "--on-eof", "close"],
+            "",
+        );
+        assert!(!output.status.success(), "{src}");
+        assert!(output.stdout.is_empty(), "{src}: nothing ran");
+        assert!(
+            stderr(&output)
+                .contains("cannot be fetched, so the document is rejected (SCXML 1.0 §5.8)"),
+            "{src}: {}",
+            stderr(&output)
+        );
+    }
 }
 
 #[test]

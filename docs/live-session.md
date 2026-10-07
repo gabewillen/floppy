@@ -276,7 +276,7 @@ one JSON record per line on standard output. Standard error carries
 diagnostics only, in rustc style (`error[code]: …`, `warning[code]: stdin
 line N: …`).
 
-It takes the same component, `--resource`, `--extension-package`,
+It takes the same component, `--extension-package`,
 `--extension-component`, `--extension-component-sha256`, `--env`,
 `--env-file`, and repository namespace (`--offline`, `--cache-dir`,
 `--github-*`) flags as `snapshot run`, plus these (with `--record` or
