@@ -6,6 +6,43 @@ env file named by `NEMOBOT_LIVE_ENV_FILE`
 Each variable was granted only to its own package: `OPENAI_*` to `generate`,
 and `TYPESAFE_*` to `decision`.
 
+## 2026-10-07, repository packages resolved by the embedded GitHub resolver component (decision D22), model `gpt-6-luna`
+
+The run used nemobot commit `a1367dbe` (subtree scxml.rs `f6b8a1c6`) with
+the change to `scripts/build-components.sh` this entry is committed with
+(it builds the resolver component `scx` now embeds): `sh
+scripts/build-components.sh` publishing the decision namespace and both
+services into the dev cache `target/components/package-cache` (pinned to
+release tag `v0.1.0` at commit `a1367dbe`), and `scx` built from the subtree
+with those session components and the resolver embedded
+(`SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml"
+CARGO_TARGET_DIR="$PWD/target/scx-live" cargo build --release --locked -p
+scxml-cli --manifest-path scxml.rs/Cargo.toml`). The builder command, from a
+clean shell (`env -i HOME="$HOME" PATH="/usr/bin:/bin"`), in the nemobot
+root:
+
+```console
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"max_attempts":4,"model":"gpt-6-luna"}}' |
+  target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
+    --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env bots/builder/builder.scx
+```
+
+`--offline` resolves every repository package from the dev cache, so the
+resolver component is never asked; the run proves the cutover leaves
+offline resolution and the consent listing as they were: the decision
+namespace and both services by their tagless URIs with `release v0.1.0
+(commit a1367dbe...)`, the generate service's origin
+`https://api.openai.com/v1`, and the decision service's
+`https://api.typesafe.ai`; `TYPESAFE_BASE_URL` had no value (decision D18's
+declared origin applies).
+
+| Run | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| builder | `gpt-6-luna` | pass | 1 | exit 0 in 89 s; attempt 2 of 4, 1 failure (`validate` / `SCXML070`: a `<send>` to `#_internal` cannot use `delay`), 0 fixes, triage `triage.repair` from the decision service; plan `pedestrian_traffic_light`; both of its tests (`normal_cycle`, `button_ends_green_early`) passed in simulation; progress `log`s `design`, `author`, `validate`, `retry_gate`, `triage`, `author`, `validate`, `simulate`, `done`; the built document compiled again with `scx compile` (no packages) |
+
+The builder's output was written to `target/builder-live-cli/` and is not
+committed. Nothing in the tests was changed to make them pass.
+
 ## 2026-10-07, `@<tag>` split at parsing, the tagless URI as identity (decision D21), model `gpt-6-luna`
 
 The run used nemobot commit `c5295cd2` (subtree scxml.rs `50f6e592`):

@@ -5,9 +5,9 @@
 # Usage: sh scripts/build-components.sh [--artifacts-dir DIR] [--session-only]
 #
 # 1. The scxml.rs session components a `scx run` session links (machine,
-#    compiler, the three data models, both I/O processors, clock) and the
-#    `scx` namespace's component (`<scx:validate>`), which `scx` embeds too,
-#    built and
+#    compiler, the three data models, both I/O processors, clock), the
+#    `scx` namespace's component (`<scx:validate>`), and the GitHub resolver
+#    component (repository packages), which `scx` embeds too, built and
 #    verified by the subtree's own scxml.rs/scripts/verify-wasm-capabilities.sh
 #    into DIR/scxml: the release `scx` embeds when it is built with
 #    SCXML_WASM_ARTIFACTS_DIR=DIR/scxml (README.md, "Running a bot"). Its
@@ -47,7 +47,7 @@ expected_wasm_tools='wasm-tools 1.244.0'
 expected_wasi_virt='wasi-virt 0.2.0'
 expected_wasi_virt_source='https://github.com/bytecodealliance/WASI-Virt'
 expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
-session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scx'
+session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
 namespace_components='nemobot_decision'
 service_components='nemobot_service_generate nemobot_service_decision'
 
