@@ -222,8 +222,13 @@ fn validate_bounded(
     // and knows no DTD. A document whose internal DTD subset changes its
     // infoset (included entities, supplied defaults, normalized values,
     // XML 1.0 §5.1) is validated as the serialization of the infoset the
-    // parser built; any other document as its source bytes.
-    let infoset = has_internal_subset(document).then(|| infoset_text(document));
+    // parser built, and so is one whose namespace or `<invoke type>` URIs
+    // pinned a release (`@<tag>`, split off when the document was parsed,
+    // `scxml_types::strip_tag`): its elements are in the tagless namespace
+    // a package's schema targets. Any other document is validated as its
+    // source bytes.
+    let infoset =
+        (has_internal_subset(document) || has_tag(document)).then(|| infoset_text(document));
     let instance = infoset.as_deref().unwrap_or_else(|| document.source.text());
     let findings = RefCell::new(project::Findings::new(MAX_VALIDATION_MESSAGES));
     {
@@ -254,6 +259,24 @@ fn validate_bounded(
         report.push(diagnostic);
     }
     Ok(report)
+}
+
+/// Whether the parser split a release tag off any namespace declaration or
+/// attribute of the document.
+fn has_tag(document: &Document) -> bool {
+    let mut found = false;
+    document.root.visit(&mut |element| {
+        found = found
+            || element
+                .namespaces
+                .iter()
+                .any(|declaration| declaration.tag.is_some())
+            || element
+                .attributes
+                .iter()
+                .any(|attribute| attribute.tag.is_some());
+    });
+    found
 }
 
 /// Whether the prolog holds a document type declaration with an internal
@@ -1021,6 +1044,48 @@ mod tests {
         // serialized infoset; any other as its source bytes.
         assert!(!has_internal_subset(&document("<root xmlns='urn:test'/>")));
         assert!(has_internal_subset(&document(&format!("{subset}<root/>"))));
+    }
+
+    /// A pinned repository namespace (`@<tag>`) is in the tagless namespace
+    /// once parsed, which its package's schema targets; findings keep the
+    /// source spans of what the author wrote.
+    #[test]
+    fn a_pinned_namespace_validates_against_its_tagless_schema() {
+        let schema = XSD.replace("urn:test", "https://github.com/o/r/namespaces/t");
+        let schemas = [SchemaSource::new("memory:t.xsd", schema.into_bytes())];
+        let pinned =
+            r#"<root xmlns="https://github.com/o/r/namespaces/t@v1.0.0"><item>42</item></root>"#;
+        let valid = XsdSchemaBackend
+            .validate(&document(pinned), &schemas)
+            .expect("the pinned document validates");
+        assert!(!valid.has_errors(), "{:?}", valid.diagnostics());
+        let tagless = XsdSchemaBackend
+            .validate(
+                &document(
+                    r#"<root xmlns="https://github.com/o/r/namespaces/t"><item>42</item></root>"#,
+                ),
+                &schemas,
+            )
+            .expect("the tagless document validates");
+        assert!(!tagless.has_errors(), "{:?}", tagless.diagnostics());
+
+        let invalid_xml =
+            r#"<root xmlns="https://github.com/o/r/namespaces/t@v1.0.0"><item>nope</item></root>"#;
+        let invalid = XsdSchemaBackend
+            .validate(&document(invalid_xml), &schemas)
+            .expect("the pinned document validates");
+        let finding = invalid
+            .diagnostics()
+            .iter()
+            .find(|item| item.code.starts_with("XSD-cvc-"))
+            .expect("the item is not an int");
+        let start = invalid_xml.find("<item>").expect("the source item");
+        assert!(
+            finding.primary.span.start >= start,
+            "the finding lands on the source element: {finding:?}"
+        );
+        assert!(has_tag(&document(pinned)));
+        assert!(!has_tag(&document("<root xmlns='urn:test'/>")));
     }
 
     #[test]

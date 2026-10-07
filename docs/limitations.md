@@ -322,18 +322,17 @@ In detail:
   standalone proof host answers `unavailable`. Extension component instance
   state is not part of session snapshots, and the CLI's `conformance run`
   binds no extension packages.
-- Repository namespaces are GitHub repositories only. A release serves its
-  package only under the URI its manifest names, so a pinned
-  `.../<name>@<tag>` URI resolves only against a release whose manifest
-  names that pinned URI, and a tagless one only against a latest release
-  whose manifest names the tagless URI (XML namespaces and invoke types are
-  byte-exact, and a schema's `targetNamespace` cannot be rewritten). The
+- Repository namespaces are GitHub repositories only. A release's manifest
+  names its package's tagless URI; a pin (`@<tag>`) is split off when the
+  document is parsed and is resolution input only. The
   repository namespaces and services of every literal `<invoke src>`
   document are resolved with the root's before the session starts; a child
   document an `<invoke srcexpr>` loads, or a `<content expr>` child, compiles
   against what is already bound, so a repository namespace or service only
   such a child uses is not resolved for it (its invocation fails with
-  `error.execution`). A relative `srcexpr` URI resolves against the root
+  `error.execution`), and an `<invoke srcexpr>` document that pins a release
+  (`@<tag>`) does not load (`error.execution`), since its pin was never
+  resolved. A relative `srcexpr` URI resolves against the root
   document's base URI (the host's `load-document` call does not identify the
   invoking document), and a literal relative URI that documents of
   different bases resolve to different URLs does not load (its element

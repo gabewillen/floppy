@@ -185,20 +185,40 @@ pub enum DocumentKind {
 /// host boundary; one of any length passes it, and the machine component
 /// (a wasm build) reads one of at most 256 bytes, a longer one indicating
 /// nothing.
-#[derive(Clone, Debug, Eq, PartialEq)]
+///
+/// An `<invoke src>` document may carry bindings of its own: the extension
+/// and service components its sessions (and every inline `<content>`
+/// session below them) use for the namespaces and type URIs those bindings
+/// name, in place of the host's ([`SessionHost::with_extension_components`],
+/// [`SessionHost::with_service_components`]); every other namespace and
+/// type URI stays the host's. An embedder binds this way a release a child
+/// document pinned that differs from the root's. Only their bindings (and,
+/// for services, their WASI grants) are read: values, transports,
+/// observers, call fuel, and the resolver stay the host's. A binding that
+/// does not verify fails the run as a host failure.
+#[derive(Clone, Debug)]
 pub struct EmbeddedDocument {
     /// The document text exactly as the resource holds it.
     pub text: String,
     /// The indicated media type, if any.
     pub media_type: Option<String>,
+    /// For an `<invoke src>` document, the extension components its
+    /// sessions bind in place of the host's; `None` for the host's.
+    pub extensions: Option<crate::ExtensionComponents>,
+    /// For an `<invoke src>` document, the service components its sessions
+    /// bind in place of the host's; `None` for the host's.
+    pub services: Option<crate::ServiceComponents>,
 }
 
 impl From<String> for EmbeddedDocument {
-    /// A document whose source indicated no media type.
+    /// A document whose source indicated no media type and that binds
+    /// nothing of its own.
     fn from(text: String) -> Self {
         Self {
             text,
             media_type: None,
+            extensions: None,
+            services: None,
         }
     }
 }
@@ -526,7 +546,81 @@ pub(crate) struct ServiceEntry {
     pre: OnceCell<crate::service::ServicePre>,
 }
 
+/// The bindings an `<invoke src>` document carries ([`EmbeddedDocument`]):
+/// the sessions it runs, and every inline `<content>` session below them,
+/// use these in place of the host's bindings of the same namespace or type
+/// URI.
+pub(crate) struct DocumentBindings {
+    namespaces: Vec<(crate::ExtensionPackage, Rc<LazyComponent>)>,
+    services: Vec<ServiceEntry>,
+}
+
+impl DocumentBindings {
+    fn namespace(
+        &self,
+        namespace_uri: &str,
+    ) -> Option<&(crate::ExtensionPackage, Rc<LazyComponent>)> {
+        self.namespaces
+            .iter()
+            .find(|(package, _)| package.namespace_uri == namespace_uri)
+    }
+
+    fn service(&self, type_uri: &str) -> Option<&ServiceEntry> {
+        self.services
+            .iter()
+            .find(|entry| entry.package.service_uri == type_uri)
+    }
+}
+
 impl HostCore {
+    /// The bindings one `<invoke src>` document carries, verified like the
+    /// host's own; empty (the host's) when it carries none.
+    ///
+    /// # Errors
+    ///
+    /// A component over the host's byte bound or of the wrong kind, or a
+    /// service's WASI imports and grants that do not match.
+    pub(crate) fn document_bindings(
+        &self,
+        extensions: Option<crate::ExtensionComponents>,
+        services: Option<crate::ServiceComponents>,
+    ) -> Result<Rc<DocumentBindings>, HostError> {
+        let mut namespaces = Vec::new();
+        if let Some(extensions) = extensions {
+            for binding in extensions.into_parts().bindings {
+                crate::capability_graph::validate_component(
+                    &binding.component,
+                    binding.component.kind(),
+                    &self.config,
+                )?;
+                namespaces.push((
+                    binding.package,
+                    Rc::new(LazyComponent::new(&binding.component)),
+                ));
+            }
+        }
+        let mut entries = Vec::new();
+        if let Some(services) = services {
+            for (package, component, wasi) in services.into_parts()?.bindings {
+                crate::capability_graph::validate_component(
+                    &component,
+                    component.kind(),
+                    &self.config,
+                )?;
+                entries.push(ServiceEntry {
+                    component: LazyComponent::new(&component),
+                    package,
+                    wasi,
+                    pre: OnceCell::new(),
+                });
+            }
+        }
+        Ok(Rc::new(DocumentBindings {
+            namespaces,
+            services: entries,
+        }))
+    }
+
     pub(crate) fn machine(&self) -> &wasmtime::component::Component {
         self.machine.component()
     }
@@ -549,29 +643,44 @@ impl HostCore {
         self.basichttp.get(&self.shared)
     }
 
-    /// Every bound extension component with its exact URI, compiled on first
-    /// use; empty when none is bound.
+    /// Every extension component a session of `scope` binds (the
+    /// document's bindings, then the host's of every other namespace), with
+    /// its exact URI, compiled on first use; empty when none is bound.
     pub(crate) fn extension_components(
         &self,
+        scope: Option<&DocumentBindings>,
     ) -> Result<Vec<(crate::ExtensionPackage, wasmtime::component::Component)>, HostError> {
-        let bound: Vec<(crate::ExtensionPackage, Rc<LazyComponent>)> = self
-            .namespaces
-            .borrow()
-            .iter()
-            .map(|(package, component)| (package.clone(), Rc::clone(component)))
-            .collect();
-        bound
+        self.scoped_namespaces(scope)
             .into_iter()
             .map(|(package, component)| Ok((package, component.get(&self.shared)?.clone())))
             .collect()
     }
 
-    /// The package of every bound namespace, for child compilation.
-    pub(crate) fn extension_packages(&self) -> Vec<crate::ExtensionPackage> {
-        self.namespaces
-            .borrow()
-            .iter()
-            .map(|(package, _)| package.clone())
+    /// The bindings a session of `scope` uses: the document's, then the
+    /// host's of every namespace the document does not bind.
+    fn scoped_namespaces(
+        &self,
+        scope: Option<&DocumentBindings>,
+    ) -> Vec<(crate::ExtensionPackage, Rc<LazyComponent>)> {
+        let own = scope.map_or(&[][..], |scope| scope.namespaces.as_slice());
+        own.iter()
+            .chain(self.namespaces.borrow().iter().filter(|(package, _)| {
+                !own.iter()
+                    .any(|(scoped, _)| scoped.namespace_uri == package.namespace_uri)
+            }))
+            .map(|(package, component)| (package.clone(), Rc::clone(component)))
+            .collect()
+    }
+
+    /// The package of every namespace a session of `scope` binds, for child
+    /// compilation.
+    pub(crate) fn extension_packages(
+        &self,
+        scope: Option<&DocumentBindings>,
+    ) -> Vec<crate::ExtensionPackage> {
+        self.scoped_namespaces(scope)
+            .into_iter()
+            .map(|(package, _)| package)
             .collect()
     }
 
@@ -611,8 +720,9 @@ impl HostCore {
     pub(crate) fn session_namespaces(
         &self,
         execution_context: &opentelemetry::Context,
+        scope: Option<&DocumentBindings>,
     ) -> Result<Option<crate::extension::SessionNamespaces>, HostError> {
-        let bound = self.extension_components()?;
+        let bound = self.extension_components(scope)?;
         if bound.is_empty() {
             return Ok(None);
         }
@@ -646,6 +756,7 @@ impl HostCore {
         namespaces: &mut Option<crate::extension::SessionNamespaces>,
         namespace_uris: &[String],
         execution_context: &opentelemetry::Context,
+        scope: Option<&DocumentBindings>,
     ) -> Result<(), LoadFailure> {
         for namespace_uri in namespace_uris {
             if namespaces
@@ -654,7 +765,13 @@ impl HostCore {
             {
                 continue;
             }
-            let (package, component) = self.bound_or_resolved(namespace_uri)?;
+            let (package, component) = match scope.and_then(|scope| scope.namespace(namespace_uri))
+            {
+                Some((package, component)) => {
+                    (package.clone(), component.get(&self.shared)?.clone())
+                }
+                None => self.bound_or_resolved(namespace_uri)?,
+            };
             let linker = self.namespace_linker()?;
             namespaces
                 .get_or_insert_with(crate::extension::SessionNamespaces::empty)
@@ -715,11 +832,23 @@ impl HostCore {
         Ok((resolved.package, component.get(&self.shared)?.clone()))
     }
 
-    /// Whether a service component is bound to exactly `type_uri`.
-    pub(crate) fn binds_service(&self, type_uri: &str) -> bool {
-        self.services
-            .iter()
-            .any(|entry| entry.package.service_uri == type_uri)
+    /// Whether a session of `scope` binds a service component to exactly
+    /// `type_uri` (the document's binding, else the host's).
+    pub(crate) fn binds_service(&self, type_uri: &str, scope: Option<&DocumentBindings>) -> bool {
+        self.service_entry(type_uri, scope).is_some()
+    }
+
+    /// The service a session of `scope` binds to exactly `type_uri`.
+    fn service_entry<'a>(
+        &'a self,
+        type_uri: &str,
+        scope: Option<&'a DocumentBindings>,
+    ) -> Option<&'a ServiceEntry> {
+        scope.and_then(|scope| scope.service(type_uri)).or_else(|| {
+            self.services
+                .iter()
+                .find(|entry| entry.package.service_uri == type_uri)
+        })
     }
 
     /// Starts one invocation of the service bound to exactly
@@ -740,12 +869,9 @@ impl HostCore {
         invocation: u64,
         http_offered: bool,
         execution_context: &opentelemetry::Context,
+        scope: Option<&DocumentBindings>,
     ) -> Result<Option<ServiceStart>, HostError> {
-        let Some(entry) = self
-            .services
-            .iter()
-            .find(|entry| entry.package.service_uri == request.type_uri)
-        else {
+        let Some(entry) = self.service_entry(&request.type_uri, scope) else {
             return Ok(None);
         };
         let rejected = || {
@@ -1009,8 +1135,8 @@ impl SessionHost {
     /// that no binding names is loaded through the resolver
     /// [`crate::ExtensionComponents::with_resolver`] supplies when that session
     /// starts; without one, or when it cannot load it, the session start fails
-    /// closed. Extension components import no WASI interface (a package that
-    /// declares one is refused, [`crate::ArtifactError::WasiExtensionUnsupported`])
+    /// closed. Extension components import no WASI interface (their linker
+    /// links none, so a component that imports one does not instantiate)
     /// and never receive the embedder's values ([`crate::ExtensionComponents::with_values`]),
     /// only per-execution references to the ones their element's `env` slots
     /// name; their requests go through the embedder's transport (none by

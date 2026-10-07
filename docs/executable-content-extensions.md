@@ -448,21 +448,29 @@ document needs no flag to bind it:
        version="1.0" datamodel="ecmascript" initial="ask">
 ```
 
-- **The URI form.** Exactly `https://github.com/<owner>/<repo>/namespaces/<name>[@<tag>]`:
+- **The URI form.** Exactly `https://github.com/<owner>/<repo>/namespaces/<name>`:
   the literal `namespaces` folder and one name segment (`[A-Za-z0-9._-]`;
   any other path, such as a bare or nested package path, is an ordinary
-  namespace URI), no trailing slash, and, optionally, the release tag after
-  the last `@`. `@<tag>` pins that release; a tagless URI names the
-  repository's latest GitHub release, resolved once per root session. The
-  `env`, `event`, and `scx` vocabularies `scx` provides are tagless too, and
-  are matched first and never fetched. Binding stays byte-exact. The
-  package's manifest `namespace-uri` and its schema's `targetNamespace` must
-  equal the URI byte for byte (with its tag, or tagless for a tagless URI),
-  so a release serves its package under exactly the URI its manifest names (`scripts/set-namespace-version.sh vX.Y.Z`
-  moves this repository's namespaces to a new tag before it is tagged, and the
-  release job checks it with `scripts/check-namespace-versions.sh`). To SCXML it
-  is an ordinary namespace URI: nothing in a document names a version, ref,
-  or digest.
+  namespace URI), no trailing slash. That tagless URI is the package's
+  identity and names the repository's latest GitHub release, resolved once
+  per root session. A document may pin a release by writing one `@<tag>`
+  after it (`[A-Za-z0-9._+-]`, starting with a letter or digit, without
+  `..`).
+- **The tag is not part of the namespace.** The `@<tag>` is split off once,
+  when the document is parsed (`scxml_types::strip_tag`, for namespace
+  declarations and literal `<invoke type>`s only), and goes to the CLI's
+  resolver alone: the validator, the compiler, the Machine IR, the engine,
+  the data models, and the host see only the tagless URI, exactly, so a
+  pinned and a tagless use of one release validate against the same schema
+  and bind the same element. The package's manifest `namespace-uri` and its
+  schema's `targetNamespace` name the tagless URI byte for byte (a manifest
+  naming a pinned URI is refused; the release job checks this repository's
+  packages with `scripts/check-namespace-versions.sh`). A malformed pin (an
+  `@` not followed by exactly one tag, such as `...@` or `...@v1/x`), one
+  document pinning a package to two releases, and a pin of the `env`,
+  `event`, or `scx` vocabularies (`scx` provides them: tagless, matched
+  first, never fetched) fail closed. Any other URI keeps its `@`
+  (`https://example.org/a@b/ns`, a `urn:` with `@`) byte for byte.
 - **The layout.** The manifest is `namespaces/<name>/package/<name>.extension.json`
   and its schema the manifest's relative `schema-artifact`; several
   namespaces live in one repository, one folder each under `namespaces/`. The extension component is the
@@ -476,11 +484,18 @@ document needs no flag to bind it:
   `--schema` binds; they never need the component. `snapshot run` and `run`
   also resolve the namespaces of every literal `<invoke src>` document the
   run loads, and bind every component, authenticated, before the session
-  starts. Each URI is resolved once per root session; the root and every
-  invoked session (inline `<content>` or `<invoke src>`) share its compiled
-  component, one instance per session, and a child that pins a release gets
-  that release beside a tagless one. Any failure fails closed: validation or
-  compilation stops, or the run fails before the first macrostep.
+  starts. Each resolution (the tagless URI, or it with a pin) happens once
+  per root session. The run binds each package to the root document's
+  resolution (its pin, else the latest release), or, for a package only
+  `<invoke src>` documents use, the first such document's; every tagless use
+  in the tree shares it, and the root and every invoked session (inline
+  `<content>` or `<invoke src>`) share its compiled component, one instance
+  per session. An `<invoke src>` document that pins another release gets
+  that release for its own sessions and their inline `<content>` sessions,
+  alongside the run's (the CLI hands it to the host with the document,
+  `EmbeddedDocument::extensions`), and the consent listing names that
+  document. Any failure fails closed: validation or compilation stops, or the
+  run fails before the first macrostep.
 - **The trust model.** A tagless URI's tag is its repository's latest
   release (`/repos/<owner>/<repo>/releases/latest`, its `tag_name`), and the
   consent listing shows the tag and commit it resolved to. The tag resolves

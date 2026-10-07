@@ -178,15 +178,19 @@ so a document needs no flag to bind it:
 <invoke type="https://github.com/stateforward/nemobot/services/memory@v0.1.0" id="memory"/>
 ```
 
-- **The URI form.** Exactly `https://github.com/<owner>/<repo>/services/<name>[@<tag>]`:
+- **The URI form.** Exactly `https://github.com/<owner>/<repo>/services/<name>`:
   the literal `services` folder, one name segment (`[A-Za-z0-9._-]`), no
-  trailing slash, and, optionally, the release tag after the last `@`:
-  `@<tag>` pins that release, and a tagless URI names the repository's latest
-  release, resolved once per root session and listed with the tag and commit
-  it resolved to. The manifest's `service-uri` must equal the URI byte for
-  byte (with its tag, or tagless for a tagless URI). A `services/` URI is never a repository namespace, and a
-  `namespaces/` URI never a repository service; any other path is an
-  ordinary service type URI.
+  trailing slash. That tagless URI is the service's identity and names the
+  repository's latest release, resolved once per root session and listed
+  with the tag and commit it resolved to; a literal `<invoke type>` may pin a
+  release with one trailing `@<tag>`, which is split off when the document
+  is parsed and read only by the CLI's resolver, exactly as for repository
+  namespaces ([executable-content-extensions.md](executable-content-extensions.md#loading-an-element-from-a-repository)):
+  the Machine IR, the engine, and the host see the tagless type URI. The
+  manifest's `service-uri` names the tagless URI byte for byte (a manifest
+  naming a pinned URI is refused). A `services/` URI is never a repository
+  namespace, and a `namespaces/` URI never a repository service; any other
+  path is an ordinary service type URI.
 - **The layout.** The manifest is `services/<name>/package/<name>.service.json`;
   its optional `schema-artifact` is a plain relative path beside it; the
   component is the release asset the manifest's `service-artifact` names (a
@@ -194,9 +198,12 @@ so a document needs no flag to bind it:
 - **When it loads.** Only a literal `<invoke type>` that no
   `--service-package` binds is resolved, in the document or in an
   `<invoke src>` document the run loads (a `typeexpr` is never resolved: it
-  runs only against what the run binds). Each URI is resolved once per root
-  session and its component bound once, shared by every session that invokes
-  it. `validate` and `compile` (and the
+  runs only against what the run binds). Each resolution is made once per
+  root session and its component bound once, shared by every session that
+  invokes it, with the repository namespaces' rule for which release a
+  document binds: the root's, shared by every tagless use, and an
+  `<invoke src>` document's own pin for its own sessions
+  (`EmbeddedDocument::services`). `validate` and `compile` (and the
   compile step of `snapshot run` and `run`) resolve the package: the tag (or
   the latest release's tag) to a commit through the GitHub API, then the manifest and its schema at that
   commit, each checked against the digest the manifest declares. `snapshot

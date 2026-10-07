@@ -2046,7 +2046,7 @@ mod live {
         // Every literal URI of the document tree loads once, before the
         // first macrostep; the `<invoke src>` documents' packages bind with
         // the root's.
-        let loaded = crate::documents::Documents::prefetch(
+        let mut loaded = crate::documents::Documents::prefetch(
             args.namespaces.repository.open()?,
             &args.document,
             &source,
@@ -2096,9 +2096,14 @@ mod live {
         // SHA256SUMS on first use); the component itself loads when the
         // session starts.
         if let Some(store) = &packages.store {
-            for package in &packages.repository {
-                let uri = &package.manifest.namespace_uri;
-                namespaces.push((uri.clone(), store.component_sha256(uri)?));
+            for package in packages
+                .repository
+                .iter()
+                .chain(packages.documents.iter().flat_map(|(_, packages)| packages))
+            {
+                if let Some(uri) = package.resolved_uri() {
+                    namespaces.push((uri.to_owned(), store.component_sha256(uri)?));
+                }
             }
         }
         namespaces.sort();
@@ -2136,6 +2141,7 @@ mod live {
             Some(&args.services),
             Some(&service_imports),
         ));
+        crate::snapshot::host::bind_documents(&mut loaded, &packages, &args.services, &services)?;
         let host = args.components.session_host(identity.fuel)?;
         // A replay log does not record extension components' responses, so a
         // recorded or replayed session gets no extension transport: every

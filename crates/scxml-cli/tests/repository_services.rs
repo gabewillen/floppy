@@ -30,6 +30,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use sha2::{Digest as _, Sha256};
 
 const SERVICE_URI: &str = "https://github.com/stateforward/nemobot/services/echo@v0.1.0";
+/// The tagless URI of the echo service: its identity, which every release's
+/// manifest names, and, in a document, the repository's latest release.
+const TAGLESS_URI: &str = "https://github.com/stateforward/nemobot/services/echo";
 const ASSET: &str = "scxml_service_example.virtualized.wasm";
 /// The commit the mock tag names (a lightweight tag).
 const COMMIT: &str = "89abcdef0123456789abcdef0123456789abcdef";
@@ -296,7 +299,7 @@ fn snapshot_run(document: &str, output: &Path, extra: &[String]) -> Output {
 
 #[test]
 fn validate_resolves_the_package_at_its_commit_and_then_runs_offline() {
-    let server = github(&manifest(SERVICE_URI));
+    let server = github(&manifest(TAGLESS_URI));
     let directory = scratch("validate");
     let cache = directory.join("cache");
     let source = document(&directory);
@@ -308,7 +311,7 @@ fn validate_resolves_the_package_at_its_commit_and_then_runs_offline() {
     assert!(!stderr.contains("SCXML094"), "{stderr}");
     assert!(
         stderr.contains(&format!(
-            "service `{SERVICE_URI}`\n  = version: release v0.1.0 (commit {COMMIT}), package 0.1.0"
+            "service `{TAGLESS_URI}`\n  = version: release v0.1.0 (commit {COMMIT}), package 0.1.0"
         )),
         "{stderr}"
     );
@@ -344,7 +347,7 @@ fn validate_resolves_the_package_at_its_commit_and_then_runs_offline() {
 
 #[test]
 fn a_run_binds_the_release_component_authenticated_by_its_sha256sums() {
-    let server = github(&manifest(SERVICE_URI));
+    let server = github(&manifest(TAGLESS_URI));
     let directory = scratch("run");
     let cache = directory.join("cache");
     let source = document(&directory);
@@ -396,23 +399,38 @@ fn a_run_binds_the_release_component_authenticated_by_its_sha256sums() {
 
 #[test]
 fn a_package_that_does_not_name_itself_exactly_or_an_unlisted_component_fails_closed() {
-    // The manifest names another URI.
-    let server = github(&manifest(
-        "https://github.com/stateforward/nemobot/services/echo@v0.2.0",
-    ));
-    let directory = scratch("uri");
-    let source = document(&directory);
-    let invalid = validate(&source, &repository(&server, &directory.join("cache")));
-    assert!(!invalid.status.success());
-    assert!(
-        text(&invalid.stderr).contains("its manifest binds"),
-        "{}",
-        text(&invalid.stderr)
-    );
-    assert!(!directory.join("cache/index").exists(), "nothing is pinned");
+    // The manifest names another package, or a pinned URI (the tag is never
+    // part of the identity a release's manifest names).
+    for (name, named, expected) in [
+        (
+            "uri",
+            "https://github.com/stateforward/nemobot/services/other",
+            "is `https://github.com/stateforward/nemobot/services/other`, not `https://github.com/stateforward/nemobot/services/echo`",
+        ),
+        (
+            "pinned-uri",
+            "https://github.com/stateforward/nemobot/services/echo@v0.1.0",
+            "names the pinned URI",
+        ),
+    ] {
+        let server = github(&manifest(named));
+        let directory = scratch(name);
+        let source = document(&directory);
+        let invalid = validate(&source, &repository(&server, &directory.join("cache")));
+        assert!(!invalid.status.success(), "{name}");
+        assert!(
+            text(&invalid.stderr).contains(expected),
+            "{name}: {}",
+            text(&invalid.stderr)
+        );
+        assert!(
+            !directory.join("cache/index").exists(),
+            "{name}: nothing is pinned"
+        );
+    }
 
     // The release does not list the component.
-    let server = github(&manifest(SERVICE_URI));
+    let server = github(&manifest(TAGLESS_URI));
     server.body(
         &download_path("SHA256SUMS"),
         format!("{}  other.wasm\n", "0".repeat(64)),
@@ -434,7 +452,7 @@ fn a_package_that_does_not_name_itself_exactly_or_an_unlisted_component_fails_cl
 
 #[test]
 fn offline_without_the_cache_fails_closed_and_a_bound_uri_is_never_fetched() {
-    let server = github(&manifest(SERVICE_URI));
+    let server = github(&manifest(TAGLESS_URI));
     let directory = scratch("offline");
     let source = document(&directory);
     let mut flags = repository(&server, &directory.join("cache"));
@@ -452,7 +470,7 @@ fn offline_without_the_cache_fails_closed_and_a_bound_uri_is_never_fetched() {
     // A `--service-package` that binds the URI wins: nothing is fetched.
     let package = directory.join("package");
     fs::create_dir_all(&package).expect("package directory");
-    fs::write(package.join("echo.service.json"), manifest(SERVICE_URI)).expect("manifest");
+    fs::write(package.join("echo.service.json"), manifest(TAGLESS_URI)).expect("manifest");
     let mut bound = repository(&server, &directory.join("cache"));
     bound.push("--service-package".into());
     bound.push(package.join("echo.service.json").display().to_string());
@@ -465,8 +483,6 @@ fn offline_without_the_cache_fails_closed_and_a_bound_uri_is_never_fetched() {
     assert!(server.requests().is_empty());
 }
 
-/// The tagless URI of the echo service: the repository's latest release.
-const TAGLESS_URI: &str = "https://github.com/stateforward/nemobot/services/echo";
 /// The commit the latest release's tag (`v0.2.0`) names.
 const LATEST_COMMIT: &str = "fedcba9876543210fedcba9876543210fedcba98";
 
@@ -482,7 +498,7 @@ fn latest_download_path(asset: &str) -> String {
 /// [`LATEST_COMMIT`]) whose manifest names the tagless URI.
 fn github_with_latest() -> Server {
     let release = release();
-    let server = github(&manifest(SERVICE_URI));
+    let server = github(&manifest(TAGLESS_URI));
     server.body(
         &format!("/api/repos/{REPO}/releases/latest"),
         r#"{"tag_name":"v0.2.0","name":"v0.2.0"}"#,
@@ -642,9 +658,13 @@ fn a_pinned_child_coexists_with_a_tagless_root_and_is_resolved_for_the_child() {
         stderr.contains(&format!(
             "service `{TAGLESS_URI}`\n  = version: release v0.2.0 (commit {LATEST_COMMIT})"
         )) && stderr.contains(&format!(
-            "service `{SERVICE_URI}`\n  = version: release v0.1.0 (commit {COMMIT})"
+            "service `{TAGLESS_URI}`\n  = version: release v0.1.0 (commit {COMMIT})"
         )),
         "both versions are bound: {stderr}"
+    );
+    assert!(
+        stderr.contains("= for: the sessions of <invoke src> document"),
+        "the child's own release is listed with its document: {stderr}"
     );
     let requests = server.requests();
     for sums in [

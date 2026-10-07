@@ -220,11 +220,18 @@ impl fmt::Display for ExpandedName {
 pub struct NamespaceDeclaration {
     /// Prefix, or `None` for the default namespace declaration.
     pub prefix: Option<String>,
-    /// Exact declared URI. The empty string undeclares a namespace.
+    /// Declared URI, exact except that a repository package URI's trailing
+    /// `@<tag>` is split off into [`Self::tag`]
+    /// ([`scxml_types::strip_tag`]). The empty string undeclares a
+    /// namespace.
     pub uri: String,
+    /// The release tag a repository package URI pinned (`@<tag>`), which
+    /// only the CLI's resolver reads; `None` for every other declaration.
+    pub tag: Option<String>,
     /// Span of the complete declaration.
     pub span: Span,
-    /// Span of the URI value when recoverable.
+    /// Span of the URI value as written (the tag included) when
+    /// recoverable.
     pub value_span: Span,
 }
 
@@ -235,11 +242,17 @@ pub struct Attribute {
     pub lexical_name: String,
     /// Namespace-resolved name.
     pub name: ExpandedName,
-    /// Decoded XML value.
+    /// Decoded XML value; for the `type` of an SCXML `<invoke>`, a
+    /// repository package URI's trailing `@<tag>` is split off into
+    /// [`Self::tag`] ([`scxml_types::strip_tag`]).
     pub value: String,
+    /// The release tag an SCXML `<invoke type>` repository package URI
+    /// pinned (`@<tag>`), which only the CLI's resolver reads; `None` for
+    /// every other attribute.
+    pub tag: Option<String>,
     /// Span of the complete attribute.
     pub span: Span,
-    /// Span of the value inside quotes.
+    /// Span of the value inside quotes, as written (the tag included).
     pub value_span: Span,
 }
 
