@@ -1278,6 +1278,10 @@ export interface ExtensionPackage {
   witVersion: string;
   /** The schema bytes (at most MAX_NAMESPACE_SCHEMA_BYTES). */
   schema: Uint8Array;
+  /** The package validator artifact, present exactly with `validatorSha256`. */
+  validatorArtifact?: string;
+  /** Lowercase SHA-256 of the package validator component. */
+  validatorSha256?: string;
 }
 
 /** The bytes of one schema file an `event:schema` references (`uri` as authored, before `#`). */
@@ -1357,6 +1361,47 @@ export const MAX_NAMESPACE_SCHEMA_BYTES: number;
 /** Maximum `session-snapshot-host.snapshot` calls of one `execute` call. */
 export const MAX_EXTENSION_SNAPSHOTS: number;
 
+/** A package validator component authenticatePackageValidatorComponent accepted. */
+export interface AuthenticatedPackageValidator {
+  readonly kind: 'package-validator-component';
+  /** The trusted SHA-256 of its bytes (its release artifact digest). */
+  readonly sha256: string;
+  /** The `dist/` component built from it. */
+  readonly component: string;
+}
+
+/**
+ * Authenticates one package validator component: `bytes` must hash to
+ * `sha256` (the trust anchor), and that digest must be the release artifact
+ * of a package validator this package ships transpiled. Throws
+ * ScxmlHostError 'invalid-argument', 'artifact-digest-mismatch', or
+ * 'artifact-kind-mismatch'.
+ */
+export function authenticatePackageValidatorComponent(
+  bytes: Uint8Array,
+  sha256: string,
+): Promise<AuthenticatedPackageValidator>;
+
+/**
+ * Package validator components keyed by exact package URI (the Wasmtime
+ * host's `PackageValidators`; createValidator `packageValidators`). The
+ * validator calls the one bound to a package once per document with the
+ * package's elements; a trap (fuel exhaustion included) or an error is
+ * reported as `PKG002`.
+ */
+export class PackageValidators {
+  constructor();
+  /**
+   * Binds `component` to the exact package URI `uri` (an extension
+   * namespace URI or a service type URI). Throws ScxmlHostError
+   * 'artifact-kind-mismatch', or 'namespace-binding' for a URI that is
+   * empty or already bound.
+   */
+  bind(uri: string, component: AuthenticatedPackageValidator): this;
+  /** The fuel of one package validator call (a positive safe integer; default DEFAULT_FUEL). */
+  withCallFuel(fuel: number): this;
+}
+
 /** Request options shared by `compile` and `validate`. */
 export interface CompileRequestOptions {
   sourceName?: string;
@@ -1381,6 +1426,8 @@ export function createValidator(options?: {
   loadCoreModule?: CoreModuleLoader;
   /** Per-validation fuel budget; a positive safe integer (default DEFAULT_COMPILE_FUEL). */
   fuel?: number;
+  /** The package validator components the validator calls. */
+  packageValidators?: PackageValidators;
 }): Promise<{
   /**
    * Validates one SCXML document: `report` is the canonical

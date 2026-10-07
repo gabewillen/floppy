@@ -189,7 +189,12 @@ fixed `scxml.module` value `data-model-component` plus the guest's closed WIT
 operation/outcome/event enums. The validator adapter (`ComponentValidator`)
 adds the closed `scxml.host-wasmtime.validator-new` (one compile and link)
 and `validator-validate` (one request) operations; the data model's
-`check-syntax` calls run inside `validator-validate`. Every `scxml.module`
+`check-syntax` calls run inside `validator-validate`. Each package validator
+component call (`PackageValidators`, one package's elements in one document,
+whether the native validator or the validator component asks for it) is one
+closed `scxml.host-wasmtime.package-validator-validate` operation with only
+its closed outcome; the package URI, the document, and the diagnostics never
+become attributes. Every `scxml.module`
 value is a static component label, so the set stays closed. Operation spans a guest opens through
 `telemetry.start` go through one bounded span table per Wasmtime store (at
 most 1024 open spans; a refused span answers handle `0` and the guest

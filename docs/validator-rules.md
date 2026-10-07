@@ -104,6 +104,8 @@ reports no `COMP001`.
 | `SCXML092` | error | An `event:schema` has a `$ref`, `$dynamicRef`, or `$recursiveRef` that names another resource (nothing is fetched), a fragment that names no value, or, when a pointer selects part of a file, a part that relies on `$id`, `$anchor`, `$dynamicAnchor`, `$recursiveAnchor`, plain-name fragments, or dynamic references and so cannot be bundled, or a bundle over its bounds: more than 256 referenced values (wasm builds only), more than 8 times its file plus 4096 bytes, or nested deeper than the 128 levels the Machine IR decoder reads back. A schema over the 1 MiB Machine IR string bound (wasm builds only) is `SCXML069`. |
 | `SCXML093` | warning | A literal `<invoke type>` is a platform-specific value, not a URI: neither an SCXML invoke type (absent, `scxml`, or `http://www.w3.org/TR/scxml/`) nor an absolute service type URI of at most 4096 bytes. SCXML 1.0 §6.4.1 allows platform-specific types, but a service package binds an invoked service by an exact absolute URI, so on a host built from this repository the `<invoke>` raises `error.execution` when it runs; the document still compiles and runs. |
 | `SCXML094` | warning | A literal `<invoke type>` names an invoked service no given service package binds (`--service-package`). Invocation is a runtime action (SCXML 6.4): the document compiles and runs, and without a bound package the `<invoke>` raises `error.execution` when it runs. |
+| `SCXML102` | error | In an ECMAScript document (`datamodel="ecmascript"`, or none), the literal JSON `<content>` of a `<send>` or `<donedata>` (no `expr`, text only, parsed after the data model's white-space normalization) does not satisfy the element's own literal `event:schema` (inline, or a file whose bytes were supplied). The primary label is the `<content>`, the secondary the schema. `event:schemaexpr` and schemas that do not resolve are skipped silently. |
+| `SCXML103` | warning | In an ECMAScript document, a `<send event="x">` delivered to its own session (no `target`, or `#_internal`, through the SCXML Event I/O Processor) or the `<donedata>` of a final child of a compound state (its `done.state.<id>`) creates data a transition of the same document handling that event (SCXML 3.12.1 descriptor matching, nested `<content>` documents excluded) does not accept: its literal JSON `<content>`, or a witness of its own literal schema, fails the transition's literal schema. Equal schemas are compatible; otherwise only a witness is reported, an instance the producer's schema admits and the transition's rejects, drawn from the producer's schema (`const`, `enum`, `examples`, `default`, then a minimal instance of each `type`, its required properties filled in), so the check never reports an incompatibility it cannot exhibit. `event:schemaexpr` is skipped silently. The schemas are metadata, so the transition is still taken; this is a warning. |
 | `SCXML068` | error | An attribute in another namespace on an SCXML element that lowering visits (`xml:lang`, `xml:space`, `xml:base`, `xsi:schemaLocation`, or a custom attribute, but not an `event` attribute, which `SCXML085` owns; one finding per element, machine-applicable removal when every such attribute is `xml:*` or `xsi:*`, which carry no SCXML behavior), or an element in another namespace anywhere but executable content (where it is a custom action), including inside `<log>`, `<cancel>`, `<param>`, and `<script>`, which the schema's `##other` wildcards admit but lowering does not. A content model without a wildcard (`<donedata>`, `<raise>`, `<elseif>`) is left to the schema's `XSD-cvc-complex-type.2.4`, attributed to the W3C SCXML schema. The compiler lowers neither rather than drop it silently. This is a limit of this toolchain, not an SCXML rule: SCXML 1.0 and the bundled W3C schema allow both (`##other` wildcards), so the finding has category `internal` (like `COMP001`), cites no SCXML section, and says the construct cannot be lowered by this compiler. The `xsi` namespace, like `xml`, needs no registered schema (no `XSD001`). |
 | `SCXML069` | error | The document exceeds a Machine IR bound: 65 nested states (a child of `<scxml>` and 64 levels below it), 64 levels of `<if>`/`<foreach>` nesting, 32 levels of inline XML in `<data>`, `<content>`, or `<assign>` (31 below a custom action, fewer inside deep executable content), 10,000 child nodes of an element, attributes of an inline element, tokens in a `target`, `initial`, `event`, or `namelist`, actions in an `<if>` branch, `<elseif>` branches, or `<data>` per scope, 100,000 targets across a machine's multi-target sets, 10,000 extension namespaces, or 1 MiB per attribute value, text run, script body, name, or namespace URI. At most 16 findings per machine; target-list findings are left to `SCXML028` when the machine is over the graph's target-reference bound. |
 
@@ -135,6 +137,47 @@ them through the element.
 | `SCXML099` | error | A `src` or `srcexpr` attribute on an SCXML element (`<data>`, `<script>`, `<invoke>`): a draft loads nothing. |
 | `SCXML100` | error | A `typeexpr` attribute, or a `<send type>` other than the SCXML Event I/O Processor's `http://www.w3.org/TR/scxml/#SCXMLEventProcessor` (SCXML 6.2, C.1). `<transition type>` and `<history type>` are not judged. |
 | `SCXML101` | error | A document type declaration (XML 1.0 §2.8): a draft declares no entity or attribute default. |
+
+### Package validators
+
+An extension or service package may ship a package validator component
+(`stateforward:scxml-validator/package-validator`, named by the manifest's
+`validator-artifact` and `validator-sha256`, resolved, pinned, and
+digest-verified like the package's own component) that checks what its XSD
+cannot. After the XSD and built-in checks, the validator builds the
+document's read-only context once (`document.context`: every element in
+document order with its attributes, spans, children, and parent, the
+`<data>` and state ids, every `<transition>` with its source state, `event`,
+and resolved literal `event:schema`, and the root's `datamodel`) and calls
+each package's validator once with its targets: the elements in its
+namespace (an extension package), or the `<invoke>` elements whose literal
+`type` is its service URI (a service package). The world imports nothing:
+no WASI, no I/O; each call runs on a fresh fuel-bounded store, so its answer
+depends only on its input. Its diagnostics are reported with the code
+`<prefix>::<code>` and category `package`: the prefix is the document's
+prefix of the namespace (an extension package; a namespace declared as the
+default namespace uses its last path segment), or the service URI's last
+path segment, which is a repository service's `<name>` (a service package:
+`https://github.com/stateforward/floppy/services/generate` reports
+`generate::schema_mismatch`). Labels keep their exact spans.
+
+| Code | Severity | What it proves |
+| --- | --- | --- |
+| `PKG002` | error | A package validator failed closed: it trapped (fuel exhaustion included), returned an error, returned more than 256 diagnostics, a code that is not `[a-z][a-z0-9_]*` of at most 64 bytes, a span outside the source or off a character boundary, overlapping edits within one fix, or an edit outside every element of the package. All of that package's diagnostics are discarded for this one error, which names the package and labels its first element. |
+
+`scx validate`, `compile`, `snapshot run`, and `run` link the package
+validators of the packages they bind through the Wasmtime host
+(`PackageValidators`); the validator component reaches them through its
+`package-validator-api` import, which the Wasmtime host's
+`ComponentValidator::with_package_validators` and the browser host's
+`createValidator({packageValidators})` answer with the same routing (by the
+first target's exact namespace URI, or the literal `type` of an `<invoke>`),
+so the reports agree. `crates/scxml-validator-core/src/package_validator/tests.rs`
+covers the rendering and every fail-closed case;
+`hosts/scxml-host-wasmtime/tests/package_validators.rs`,
+`crates/scxml-cli/tests/extension_packages.rs`, and the browser host's
+`test/validator.test.mjs` run the example package validator
+(`components/scxml-package-validator-example`).
 
 ### Semantic machine graph rules
 
@@ -642,6 +685,7 @@ states more precisely are superseded by that rule (table above).
 | `COMP002` | error | package | a used extension namespace has no verified extension package | [SCXML 1.0 §4.10 Extensibility of Executable Content](https://www.w3.org/TR/scxml/#extensibility) |
 | `COMP003` | error | package | a `<script src>` cannot be resolved or authenticated at compile time | [SCXML 1.0 §5.8 <script>](https://www.w3.org/TR/scxml/#script) |
 | `PKG001` | error | package | an extension package manifest does not match its schema binding | [SCXML 1.0 §4.10 Extensibility of Executable Content](https://www.w3.org/TR/scxml/#extensibility) |
+| `PKG002` | error | package | a package validator failed or returned diagnostics outside its contract | [SCXML 1.0 §4.10 Extensibility of Executable Content](https://www.w3.org/TR/scxml/#extensibility) |
 | `SCXML001` | error | semantic | the root element is not `<scxml>` in the SCXML namespace | [SCXML 1.0 §3.2 <scxml>](https://www.w3.org/TR/scxml/#scxml) |
 | `SCXML002` | error | semantic | an identifier is declared more than once | [SCXML 1.0 §3.14 IDs](https://www.w3.org/TR/scxml/#IDs) |
 | `SCXML003` | error | semantic | an identifier is not an XML NCName | [SCXML 1.0 §3.14 IDs](https://www.w3.org/TR/scxml/#IDs) |
@@ -734,6 +778,8 @@ states more precisely are superseded by that rule (table above).
 | `SCXML099` | error | semantic | a draft has a `src` or `srcexpr` attribute | [SCXML 1.0 §5.3 <data>](https://www.w3.org/TR/scxml/#data) |
 | `SCXML100` | error | semantic | a draft names a type by expression or sends through another Event I/O Processor | [SCXML 1.0 §6.2 <send>](https://www.w3.org/TR/scxml/#send) |
 | `SCXML101` | error | semantic | a draft has a document type declaration | [XML 1.0 (Fifth Edition) §2.8 Prolog and Document Type Declaration](https://www.w3.org/TR/xml/#sec-prolog-dtd) |
+| `SCXML102` | error | semantic | the literal data of a `<send>` or `<donedata>` does not satisfy its own `event:schema` | [JSON Schema 2020-12 Validation](https://json-schema.org/draft/2020-12/json-schema-validation) |
+| `SCXML103` | warning | semantic | a `<send>` or `<donedata>` creates event data a transition handling it does not accept | [SCXML 1.0 §3.12.1 Event Descriptors](https://www.w3.org/TR/scxml/#EventDescriptors) |
 | `XML001` | error | syntax | the document is not well-formed XML | [XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents](https://www.w3.org/TR/xml/#sec-well-formed) |
 | `XML002` | error | syntax | the document exceeds a configured XML resource limit | — |
 | `XML003` | error | syntax | an entity reference names no predefined or declared entity | [XML 1.0 (Fifth Edition) §4.6 Predefined Entities](https://www.w3.org/TR/xml/#sec-predefined-ent) |

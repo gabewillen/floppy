@@ -25,6 +25,7 @@ import { ImportFailure, ScxmlCompileError, ScxmlHostError, exportPayload } from 
 import { compileRequestParts, isCompileRequestOptions } from './compiler.js';
 import { DEFAULT_COMPILE_FUEL, FuelBudget, FuelMeter, isFuel } from './fuel.js';
 import { fetchCoreModules } from './loader.js';
+import { isPackageValidators, packageValidatorImport } from './package-validator.js';
 import { GUEST_MODULES, Telemetry, compilerTelemetryImport, isTelemetryOption } from './telemetry.js';
 
 /** Validator profiles (`Profile` of `scxml-validator-core`). */
@@ -72,32 +73,44 @@ function expressionSyntax(dataModel) {
  * @param {Function} [options.loadCoreModule] `(component, file) => Module`
  * @param {number} [options.fuel] per-validation fuel budget (default
  *   DEFAULT_COMPILE_FUEL)
+ * @param {object} [options.packageValidators] a PackageValidators: the
+ *   package validator components that answer the validator's
+ *   `package-validator-api` import; absent, every package answers none
  * @throws {ScxmlHostError} `invalid-argument` for a malformed option,
  *   `fuel-exhausted` or `instance-lost` when instantiation traps
  */
 export async function createValidator(options) {
-  const { dataModel, telemetry: telemetryOption, loadCoreModule, fuel = DEFAULT_COMPILE_FUEL } = options ?? {};
+  const {
+    dataModel,
+    telemetry: telemetryOption,
+    loadCoreModule,
+    fuel = DEFAULT_COMPILE_FUEL,
+    packageValidators,
+  } = options ?? {};
   const telemetry = new Telemetry(telemetryOption);
   if (
     !isFuel(fuel) ||
     !isTelemetryOption(telemetryOption) ||
     (dataModel !== undefined &&
       (dataModel === null || typeof dataModel.checkSyntax !== 'function' || typeof dataModel.checkEffects !== 'function')) ||
-    (loadCoreModule !== undefined && typeof loadCoreModule !== 'function')
+    (loadCoreModule !== undefined && typeof loadCoreModule !== 'function') ||
+    !isPackageValidators(packageValidators)
   ) {
     telemetry.observe('validate', 'rejected');
     throw new ScxmlHostError('invalid-argument');
   }
+  const loader = loadCoreModule ?? (defaultLoader ??= fetchCoreModules());
   const imports = {};
   for (const [name, value] of [
     ['types', {}],
+    ['document', {}],
     ['telemetry', compilerTelemetryImport(telemetry, GUEST_MODULES.validator)],
     ['expression-syntax', expressionSyntax(dataModel)],
+    ['package-validator-api', await packageValidatorImport(packageValidators, loader, telemetry)],
   ]) {
     imports[`stateforward:scxml-validator/${name}`] = value;
     imports[`stateforward:scxml-validator/${name}@0.2.0`] = value;
   }
-  const loader = loadCoreModule ?? (defaultLoader ??= fetchCoreModules());
   const meter = new FuelMeter(fuel);
   const budget = new FuelBudget(fuel);
   let api;
@@ -129,12 +142,24 @@ export async function createValidator(options) {
         typeof source !== 'string' ||
         typeof sourceName !== 'string' ||
         !isCompileRequestOptions(validateOptions, schemaPolicy) ||
+        !(validateOptions?.packages ?? []).every((pkg) =>
+          ['validatorArtifact', 'validatorSha256'].every(
+            (field) => pkg[field] === undefined || typeof pkg[field] === 'string',
+          ),
+        ) ||
         (profile !== undefined && !PROFILES.includes(profile))
       ) {
         telemetry.observe('validate', 'rejected');
         throw new ScxmlHostError('invalid-argument');
       }
-      const { schemas, packages, eventSchemas } = compileRequestParts(validateOptions);
+      const { schemas, packages: records, eventSchemas } = compileRequestParts(validateOptions);
+      // The validator's package record also carries the optional package
+      // validator fields.
+      const packages = records.map((pkg, index) => ({
+        ...pkg,
+        validatorArtifact: validateOptions.packages[index].validatorArtifact,
+        validatorSha256: validateOptions.packages[index].validatorSha256,
+      }));
       const span = telemetry.start('validate');
       let report;
       try {

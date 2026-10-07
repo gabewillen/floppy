@@ -31,6 +31,7 @@ const COMPONENTS: &[&str] = &[
     "scxml_ioprocessor_scxml",
     "scxml_ioprocessor_basichttp",
     "scxml_extension_example",
+    "scxml_package_validator_example",
     "scxml_compiler",
     "scxml_machine",
 ];
@@ -325,4 +326,132 @@ fn snapshot_run_rejects_an_unbound_namespace_before_executing() {
     assert_eq!(rejected.status.code(), Some(2));
     assert!(text(&rejected.stderr).contains("error[COMP002]"));
     assert!(rejected.stdout.is_empty(), "no document is written");
+}
+
+/// A copy of the example package whose manifest names the example package
+/// validator (with `sha256`, the validator's digest unless given).
+fn validated_package(name: &str, sha256: Option<&str>) -> String {
+    let workspace = workspace();
+    let directory = scratch(name);
+    let source = workspace.join("components/scxml-extension-example/package");
+    fs::copy(source.join("example.xsd"), directory.join("example.xsd")).expect("schema copies");
+    let validator =
+        Path::new(&release().dir).join("scxml_package_validator_example.virtualized.wasm");
+    let bytes = fs::read(&validator).expect("the example validator was built");
+    fs::write(directory.join("validator.wasm"), &bytes).expect("validator copies");
+    let digest = sha256.map_or_else(|| format!("{:x}", Sha256::digest(&bytes)), str::to_owned);
+    let manifest = fs::read_to_string(source.join("example.extension.json")).expect("manifest");
+    let manifest = manifest.replacen(
+        "\"wit-version\": \"0.2.0\"",
+        &format!("\"wit-version\": \"0.2.0\",\n  \"validator-artifact\": \"validator.wasm\",\n  \"validator-sha256\": \"{digest}\""),
+        1,
+    );
+    let path = directory.join("example.extension.json");
+    fs::write(&path, manifest).expect("manifest writes");
+    path.display().to_string()
+}
+
+fn raise_document(name: &str, raise: &str) -> String {
+    let path = scratch(name).join("raise.scx");
+    fs::write(
+        &path,
+        format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ex="{EXAMPLE_URI}" version="1.0" datamodel="ecmascript" initial="busy">
+  <final id="busy"><onentry>{raise}</onentry></final>
+</scxml>"#
+        ),
+    )
+    .expect("document writes");
+    path.display().to_string()
+}
+
+#[test]
+fn a_package_validator_reports_with_the_document_prefix() {
+    let package = validated_package("prefix", None);
+    let document = raise_document("prefix-doc", r#"<ex:raise event="e" in="bsy"/>"#);
+    let human = cli(
+        &["validate", &document, "--extension-package", &package],
+        &[],
+    );
+    assert!(!human.status.success());
+    let stderr = text(&human.stderr);
+    assert!(stderr.contains("ex::unknown_state"), "{stderr}");
+    let json = cli(
+        &[
+            "validate",
+            &document,
+            "--extension-package",
+            &package,
+            "--format",
+            "json",
+        ],
+        &[],
+    );
+    let stdout = text(&json.stdout);
+    assert!(
+        stdout.contains("\"code\":\"ex::unknown_state\""),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\"applicability\":\"machine-applicable\""),
+        "{stdout}"
+    );
+    let clean = raise_document("prefix-clean", r#"<ex:raise event="e" in="busy"/>"#);
+    let output = cli(&["validate", &clean, "--extension-package", &package], &[]);
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    // compile runs the same validator.
+    let out = scratch("prefix-compile").join("out.json");
+    let compiled = cli(
+        &[
+            "compile",
+            &document,
+            "--extension-package",
+            &package,
+            "--output",
+            &out.display().to_string(),
+        ],
+        &[],
+    );
+    assert!(!compiled.status.success());
+    let reported = format!("{}{}", text(&compiled.stdout), text(&compiled.stderr));
+    assert!(reported.contains("ex::unknown_state"), "{reported}");
+}
+
+#[test]
+fn a_failing_package_validator_fails_closed() {
+    let package = validated_package("trap", None);
+    for event in ["example.validator.trap", "example.validator.spin"] {
+        let document = raise_document("trap-doc", &format!(r#"<ex:raise event="{event}"/>"#));
+        let output = cli(
+            &[
+                "validate",
+                &document,
+                "--extension-package",
+                &package,
+                "--format",
+                "json",
+            ],
+            &[],
+        );
+        assert!(!output.status.success());
+        let stdout = text(&output.stdout);
+        assert!(stdout.contains("\"code\":\"PKG002\""), "{event}: {stdout}");
+        assert!(stdout.contains(EXAMPLE_URI), "{stdout}");
+    }
+}
+
+#[test]
+fn a_package_validator_must_match_its_manifest_digest() {
+    let package = validated_package("digest", Some(&"0".repeat(64)));
+    let document = raise_document("digest-doc", r#"<ex:raise event="e"/>"#);
+    let output = cli(
+        &["validate", &document, "--extension-package", &package],
+        &[],
+    );
+    assert!(!output.status.success());
+    let stderr = text(&output.stderr);
+    assert!(
+        stderr.contains("does not match `validator-sha256`"),
+        "{stderr}"
+    );
 }

@@ -201,6 +201,10 @@ const NOT_SELF_CHECKING: &[(&str, &str)] = &[
         "SCXML101",
         "the example needs the draft profile; the validator's draft profile tests cover it",
     ),
+    (
+        "PKG002",
+        "the example needs a failing package validator component; the package validator tests cover it",
+    ),
     ("XSD002", "the example is a schema, not an SCXML document"),
     ("XSD003", "the example is a schema, not an SCXML document"),
     ("XSD004", "the example is a schema, not an SCXML document"),

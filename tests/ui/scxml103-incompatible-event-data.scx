@@ -1,0 +1,22 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" initial="order">
+  <datamodel>
+    <data id="quantity" expr="1"/>
+  </datamodel>
+  <state id="order">
+    <onentry>
+      <send event="order.placed"
+            event:schema='{"type":"object","properties":{"quantity":{"type":"integer"}},"required":["quantity"]}'>
+        <param name="quantity" expr="quantity"/>
+      </send>
+      <send event="order.note"><content>{"note": 7}</content></send>
+    </onentry>
+    <transition event="order.placed"
+                event:schema='{"type":"object","properties":{"quantity":{"type":"string"}},"required":["quantity"]}'
+                target="done"/>
+    <transition event="order.note"
+                event:schema='{"type":"object","properties":{"note":{"type":"string"}}}'/>
+  </state>
+  <final id="done"/>
+</scxml>

@@ -113,7 +113,7 @@ case "$proof_dir" in
 esac
 manifest="$proof_dir/manifest.tsv"
 manifest_tmp="$proof_dir/manifest.tsv.tmp"
-all_components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_service_example scxml_service_files scxml_extension_example scxml_script_example scxml_validator scxml_reporter_rustc scxml_reporter_sarif scxml_compiler scxml_machine scxml_snapshot_codec scxml_resolver_github scx'
+all_components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_service_example scxml_service_files scxml_extension_example scxml_package_validator_example scxml_script_example scxml_validator scxml_reporter_rustc scxml_reporter_sarif scxml_compiler scxml_machine scxml_snapshot_codec scxml_resolver_github scx'
 if [ "$#" -eq 0 ]; then
     components=$all_components
 else
@@ -176,11 +176,15 @@ expected_imports() {
         # no I/O: no outbound-http, no WASI).
         scxml_extension_example) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' 'stateforward:scxml/execution-host@0.2.0' 'stateforward:scxml/session-snapshot-host@0.2.0' ;;
         scxml_script_example) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' ;;
+        # A package validator's world imports nothing: its export's record
+        # types arrive through the types-only types and document interfaces
+        # (checked by types_only_imports below), so it can call nothing.
+        scxml_package_validator_example) printf '%s\n' 'stateforward:scxml-validator/types@0.2.0' 'stateforward:scxml-validator/document@0.2.0' ;;
         # <scx:validate> reads its source through the data model and assigns
         # the report there; no execution-host or snapshot.
         scx) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' ;;
         scxml_reporter_rustc|scxml_reporter_sarif) printf '%s\n' 'stateforward:scxml-reporter/telemetry@0.2.0' 'stateforward:scxml-reporter/types@0.2.0' ;;
-        scxml_validator) printf '%s\n' 'stateforward:scxml-validator/telemetry@0.2.0' 'stateforward:scxml-validator/expression-syntax@0.2.0' 'stateforward:scxml-validator/types@0.2.0' ;;
+        scxml_validator) printf '%s\n' 'stateforward:scxml-validator/telemetry@0.2.0' 'stateforward:scxml-validator/expression-syntax@0.2.0' 'stateforward:scxml-validator/types@0.2.0' 'stateforward:scxml-validator/document@0.2.0' 'stateforward:scxml-validator/package-validator-api@0.2.0' ;;
         scxml_compiler) printf '%s\n' 'stateforward:scxml-compiler/telemetry@0.2.0' 'stateforward:scxml-compiler/types@0.2.0' ;;
         scxml_machine) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/ir-source@0.2.0' 'stateforward:scxml/machine-capability-types@0.2.0' ;;
         # The session snapshot codec is capability-free: it reads only its
@@ -199,13 +203,14 @@ expected_imports() {
     esac
 }
 
-# Interfaces (space-separated, from the `stateforward:scxml@0.2.0` package)
-# a component imports for their types alone: the imported
-# interface must declare no function and no resource, so the component can
-# call nothing through it.
+# A WIT package, then the interfaces (space-separated) of that package a
+# component imports for their types alone: the imported interface must
+# declare no function and no resource, so the component can call nothing
+# through it.
 types_only_imports() {
     case "$1" in
-        scxml_snapshot_codec) printf '%s\n' 'machine-capability-types machine-api data-model-api io-processor-api' ;;
+        scxml_snapshot_codec) printf '%s\n' 'stateforward:scxml@0.2.0 machine-capability-types machine-api data-model-api io-processor-api' ;;
+        scxml_package_validator_example) printf '%s\n' 'stateforward:scxml-validator@0.2.0 types document' ;;
         *) ;;
     esac
 }
@@ -213,18 +218,19 @@ types_only_imports() {
 # Usage: check_types_only_imports COMPONENT WORLD_TEXT
 #
 # Reads the `wasm-tools component wit` rendering of COMPONENT and fails when
-# an interface named by types_only_imports is missing from the
-# `stateforward:scxml@0.2.0` package or declares a function (`name: func`,
-# `async func`, `static`, or `constructor`) or a resource.
+# an interface named by types_only_imports is missing from its package or
+# declares a function (`name: func`, `async func`, `static`, or
+# `constructor`) or a resource.
 check_types_only_imports() {
     interfaces=$(types_only_imports "$1")
     test -n "$interfaces" || return 0
     violations=$(printf '%s\n' "$2" | awk -v wanted="$interfaces" '
         BEGIN {
             count = split(wanted, names, " ")
-            for (i = 1; i <= count; i++) if (names[i] != "") want[names[i]] = 1
+            package_line = "package " names[1] " {"
+            for (i = 2; i <= count; i++) if (names[i] != "") want[names[i]] = 1
         }
-        /^package stateforward:scxml@0\.2\.0 \{$/ { in_package = 1; next }
+        $0 == package_line { in_package = 1; next }
         /^package / { in_package = 0; next }
         in_package && /^  interface [a-z0-9-]+ \{$/ {
             name = $2

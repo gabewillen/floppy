@@ -23,8 +23,9 @@ pub const SUPPORTED_SERVICE_WIT_WORLD: &str = "stateforward:scxml/invoked-servic
 /// Exact WIT package version supported for invoked-service components.
 pub const SUPPORTED_SERVICE_WIT_VERSION: &str = crate::schema::SUPPORTED_NAMESPACE_WIT_VERSION;
 /// Manifest fields in their canonical order (`format` first); every field is
-/// required.
-pub const SERVICE_PACKAGE_FIELDS: [&str; 10] = [
+/// required except the last two ([`crate::VALIDATOR_FIELDS`]), which are
+/// optional.
+pub const SERVICE_PACKAGE_FIELDS: [&str; 12] = [
     "format",
     "service-uri",
     "package-version",
@@ -35,6 +36,8 @@ pub const SERVICE_PACKAGE_FIELDS: [&str; 10] = [
     "wit-version",
     "http-origins",
     "env-slots",
+    "validator-artifact",
+    "validator-sha256",
 ];
 
 /// Declarative package binding for one invoked-service type URI.
@@ -62,6 +65,12 @@ pub struct ServicePackageManifest {
     pub http_origins: Vec<String>,
     /// The `env` slots the service accepts.
     pub env_slots: Vec<String>,
+    /// Optional package validator component artifact identifier (relative
+    /// to the manifest); present exactly when `validator_sha256` is.
+    pub validator_artifact: Option<String>,
+    /// Lowercase SHA-256 of the package validator component; present
+    /// exactly when `validator_artifact` is.
+    pub validator_sha256: Option<String>,
 }
 
 impl ServicePackageManifest {
@@ -141,6 +150,8 @@ impl ServicePackageManifest {
             wit_version: field("wit-version")?,
             http_origins: list("http-origins")?,
             env_slots: list("env-slots")?,
+            validator_artifact: crate::schema::optional_field(&object, "validator-artifact")?,
+            validator_sha256: crate::schema::optional_field(&object, "validator-sha256")?,
         })
     }
 
@@ -161,7 +172,7 @@ impl ServicePackageManifest {
             .to_string()
         };
         format!(
-            "{{\"format\":{},\"service-uri\":{},\"package-version\":{},\"service-artifact\":{},\"schema-artifact\":{},\"schema-sha256\":{},\"wit-world\":{},\"wit-version\":{},\"http-origins\":{},\"env-slots\":{}}}",
+            "{{\"format\":{},\"service-uri\":{},\"package-version\":{},\"service-artifact\":{},\"schema-artifact\":{},\"schema-sha256\":{},\"wit-world\":{},\"wit-version\":{},\"http-origins\":{},\"env-slots\":{}",
             text(SERVICE_PACKAGE_FORMAT),
             text(&self.service_uri),
             text(&self.package_version),
@@ -172,7 +183,14 @@ impl ServicePackageManifest {
             text(&self.wit_version),
             list(&self.http_origins),
             list(&self.env_slots),
-        )
+        ) + &match (&self.validator_artifact, &self.validator_sha256) {
+            (Some(artifact), Some(sha256)) => format!(
+                ",\"validator-artifact\":{},\"validator-sha256\":{}}}",
+                text(artifact),
+                text(sha256)
+            ),
+            _ => "}".to_owned(),
+        }
     }
 
     /// Verifies bounded identity, the supported WIT identity, the declared
@@ -214,6 +232,11 @@ impl ServicePackageManifest {
                 ));
             }
         }
+        crate::schema::verify_validator_fields(
+            "service",
+            self.validator_artifact.as_deref(),
+            self.validator_sha256.as_deref(),
+        )?;
         if !scxml_types::is_service_type_uri(&self.service_uri) {
             return Err(
                 "service package field `service-uri` must be an absolute service type URI that is not the SCXML type"
@@ -297,6 +320,8 @@ mod tests {
             wit_version: SUPPORTED_SERVICE_WIT_VERSION.into(),
             http_origins: Vec::new(),
             env_slots: vec!["endpoint".into(), "token".into()],
+            validator_artifact: None,
+            validator_sha256: None,
         }
     }
 
@@ -311,6 +336,15 @@ mod tests {
         assert_eq!(
             ServicePackageManifest::from_json(canonical.as_bytes()).expect("round trips"),
             manifest
+        );
+        let mut validated = manifest.clone();
+        validated.validator_artifact = Some("echo_validator.wasm".into());
+        validated.validator_sha256 = Some("ab".repeat(32));
+        assert_eq!(validated.verify(None), Ok(()));
+        let canonical = validated.to_canonical_json();
+        assert_eq!(
+            ServicePackageManifest::from_json(canonical.as_bytes()).expect("round trips"),
+            validated
         );
         let fields: Vec<usize> = SERVICE_PACKAGE_FIELDS
             .iter()
@@ -364,5 +398,15 @@ mod tests {
         let mut slots = echo();
         slots.env_slots = vec!["apikey".into(), "apikey".into()];
         assert!(slots.verify(None).is_err());
+        let mut validator = echo();
+        validator.validator_artifact = Some("v.wasm".into());
+        assert!(validator.verify(None).is_err(), "the validator fields pair");
+        validator.validator_sha256 = Some("AB".repeat(32));
+        assert!(
+            validator.verify(None).is_err(),
+            "the digest is lowercase hex"
+        );
+        validator.validator_sha256 = Some("ab".repeat(32));
+        assert_eq!(validator.verify(None), Ok(()));
     }
 }

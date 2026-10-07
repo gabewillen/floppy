@@ -18,6 +18,7 @@ export { ASYNC_MECHANISMS, ASYNC_MODES, AsyncMachineSession, asyncMechanism } fr
 export { createEcmaScriptDataModel, createNullDataModel, createXPathDataModel } from './datamodel.js';
 export { COMPILE_STATUSES, MAX_REPORT_BYTES, SCHEMA_POLICIES, createCompiler } from './compiler.js';
 export { createValidator } from './validator.js';
+export { PackageValidators, authenticatePackageValidatorComponent } from './package-validator.js';
 export {
   DEFAULT_EXTENSION_CALL_FUEL,
   ExtensionComponents,

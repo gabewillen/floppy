@@ -868,19 +868,21 @@ pub(crate) mod host {
         let event_schemas = crate::event_schemas::load(document, &bytes);
         let source = crate::utf8_source(document, bytes)?;
         let (manifests, package_schemas) = crate::extensions::compile_inputs(packages);
-        let compiler = Compiler::new(
-            Validator::new(
-                crate::extensions::PackageSchemaResolver::new(
-                    BundledSchemaResolver::new(FileSchemaResolver::new()),
-                    packages,
-                ),
-                XsdSchemaBackend,
-            )
-            .with_schema_mode(scxml_validator_core::SchemaMode::default())
-            .with_services(crate::services::bound_services(services))
-            .with_expression_checker(std::sync::Arc::new(crate::expression::EcmaScriptSyntax))
-            .with_expression_checker(std::sync::Arc::new(crate::expression::XPathSyntax)),
-        );
+        let mut validator = Validator::new(
+            crate::extensions::PackageSchemaResolver::new(
+                BundledSchemaResolver::new(FileSchemaResolver::new()),
+                packages,
+            ),
+            XsdSchemaBackend,
+        )
+        .with_schema_mode(scxml_validator_core::SchemaMode::default())
+        .with_services(crate::services::bound_services(services))
+        .with_expression_checker(std::sync::Arc::new(crate::expression::EcmaScriptSyntax))
+        .with_expression_checker(std::sync::Arc::new(crate::expression::XPathSyntax));
+        if let Some(linked) = crate::package_validators::linked(packages, services)? {
+            validator = validator.with_package_validator(linked);
+        }
+        let compiler = Compiler::new(validator);
         let input = CompileInput {
             source_name: document.display().to_string(),
             source,

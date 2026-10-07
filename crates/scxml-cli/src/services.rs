@@ -74,6 +74,9 @@ pub(crate) struct ServicePackage {
     pub(crate) origin: ServiceOrigin,
     /// The verified manifest.
     pub(crate) manifest: ServicePackageManifest,
+    /// The package validator component bytes the manifest's
+    /// `validator-sha256` names, when it names one.
+    pub(crate) validator: Option<Vec<u8>>,
 }
 
 impl ServicePackage {
@@ -174,9 +177,16 @@ fn load_one(path: &Path) -> Result<ServicePackage, Box<dyn std::error::Error>> {
     manifest
         .verify(schema.as_deref())
         .map_err(|error| format!("service package `{shown}` does not verify: {error}"))?;
+    let validator = crate::extensions::read_validator(
+        path,
+        manifest.validator_artifact.as_deref(),
+        manifest.validator_sha256.as_deref(),
+    )
+    .map_err(|error| format!("service package `{shown}`: {error}"))?;
     Ok(ServicePackage {
         origin: ServiceOrigin::Manifest(path.to_path_buf()),
         manifest,
+        validator,
     })
 }
 

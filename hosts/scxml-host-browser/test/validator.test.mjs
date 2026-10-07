@@ -16,8 +16,12 @@ import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { createHash } from 'node:crypto';
+
 import {
+  PackageValidators,
   ScxmlHostError,
+  authenticatePackageValidatorComponent,
   cachedCoreModules,
   createEcmaScriptDataModel,
   createValidator,
@@ -109,4 +113,31 @@ test('a validation that runs out of fuel loses the instance', async () => {
   const starved = await createValidator({ loadCoreModule, fuel: 1_000_000 });
   await assert.rejects(starved.validate('<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"/>'), (error) => error.code === 'fuel-exhausted');
   await assert.rejects(starved.validate('<scxml/>'), (error) => error.code === 'instance-lost');
+});
+
+test('package validators report with the document prefix and fail closed (Wasmtime parity)', async () => {
+  const artifacts = process.env.SCXML_BROWSER_ARTIFACTS ?? join(workspace, 'target/wasm-artifacts/browser-host');
+  const bytes = new Uint8Array(await readFile(join(artifacts, 'scxml_package_validator_example.virtualized.wasm')));
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  await assert.rejects(authenticatePackageValidatorComponent(bytes, '0'.repeat(64)), (error) => error.code === 'artifact-digest-mismatch');
+  const component = await authenticatePackageValidatorComponent(bytes, digest);
+  const pkg = await readPackage('components/scxml-extension-example/package/example.extension.json');
+  const packageValidators = new PackageValidators().bind(pkg.namespaceUri, component);
+  assert.throws(() => packageValidators.bind(pkg.namespaceUri, component), (error) => error.code === 'namespace-binding');
+  const validator = await createValidator({ loadCoreModule, packageValidators });
+  const document = (raise) =>
+    `<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ex="${pkg.namespaceUri}" version="1.0" initial="busy"><final id="busy"><onentry>${raise}</onentry></final></scxml>`;
+  const typo = JSON.parse(decode((await validator.validate(document('<ex:raise event="e" in="bsy"/>'), { packages: [pkg] })).report));
+  const finding = typo.validator.diagnostics.find((diagnostic) => diagnostic.code === 'ex::unknown_state');
+  assert.ok(finding, JSON.stringify(typo));
+  assert.equal(finding.fixes[0].applicability, 'machine-applicable');
+  assert.equal(finding.fixes[0].edits[0].replacement, 'in="busy"');
+  assert.deepEqual(codes((await validator.validate(document('<ex:raise event="e" in="busy"/>'), { packages: [pkg] })).report), []);
+  for (const event of ['example.validator.trap', 'example.validator.spin']) {
+    const report = (await validator.validate(document(`<ex:raise event="${event}"/>`), { packages: [pkg] })).report;
+    assert.deepEqual(codes(report), ['PKG002'], event);
+  }
+  // Unbound: no package validator answers.
+  const unlinked = await createValidator({ loadCoreModule });
+  assert.deepEqual(codes((await unlinked.validate(document('<ex:raise event="e" in="bsy"/>'), { packages: [pkg] })).report), []);
 });

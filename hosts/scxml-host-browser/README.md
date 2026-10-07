@@ -284,6 +284,26 @@ the same two options. The compiler component bundles no W3C schema, so a
 page validates first and compiles with `schemaPolicy: 'off'`, as the
 Wasmtime host compiles child documents.
 
+A package may ship a package validator component (manifest
+`validator-artifact` and `validator-sha256`) that checks what its schema
+cannot. `createValidator({packageValidators})` links them, as the Wasmtime
+host's `ComponentValidator::with_package_validators` does:
+
+```js
+const component = await authenticatePackageValidatorComponent(bytes, sha256);
+const packageValidators = new PackageValidators().bind(pkg.namespaceUri, component); // .withCallFuel(n)
+const validator = await createValidator({ dataModel, packageValidators });
+```
+
+The validator calls a bound package validator once per document with the
+package's elements (an extension namespace's elements, or the `<invoke>`s
+whose literal `type` is a service URI) and reports its diagnostics as
+`<prefix>::<code>`; a trap (fuel exhaustion included) or an error is
+`PKG002`. Each call instantiates the component afresh on its own fuel
+budget (`withCallFuel`, default `DEFAULT_FUEL`). Only package validators
+this package ships transpiled authenticate: the example package validator
+(`scxml_package_validator_example`).
+
 ### Extension components
 
 An extension namespace (SCXML 1.0 section 4.10) runs its elements in its
@@ -983,7 +1003,7 @@ sources.
 | Signal | Name | Attribute or field | Values | Cardinality |
 | --- | --- | --- | --- | --- |
 | host spans | tracer `scxml-host-browser`; span name = `scxml.operation` | `scxml.module` | `host-browser` | 1 |
-| host spans and counter | | `scxml.operation` | `create-session`, `ir-source`, `command`, `capability`, `data-model`, `compile`, `load-core-module`, `delayed-send`, `invocation`, `snapshot`, `snapshot-diff`, `validate`, `extension-load`, `extension-instantiate`, `extension-execute`, `extension-shutdown` | 16 |
+| host spans and counter | | `scxml.operation` | `create-session`, `ir-source`, `command`, `capability`, `data-model`, `compile`, `load-core-module`, `delayed-send`, `invocation`, `snapshot`, `snapshot-diff`, `validate`, `extension-load`, `extension-instantiate`, `extension-execute`, `extension-shutdown`, `package-validator-validate` | 17 |
 | host spans and counter | | `scxml.outcome` | `ok`, `rejected`, `failed` | 3 |
 | host counter | `scxml.host.operations` (`{operation}`) | the three attributes above | 1 × 11 × 3 | ≤ 33 series |
 | guest spans and point signals | tracer `scxml-component-guest`; span name = `scxml.operation` | `scxml.module` | `machine-component`, `data-model-component`, `compiler-component`, `snapshot-codec-component`, `validator-component`, `executable-content-extension` | 6 |

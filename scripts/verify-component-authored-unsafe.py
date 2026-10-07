@@ -19,6 +19,7 @@ COMPONENT_CRATES = (
     "scxml-ioprocessor-basichttp",
     "scxml-ioprocessor-scxml",
     "scxml-machine",
+    "scxml-package-validator-example",
     "scxml-reporter-rustc",
     "scxml-reporter-sarif",
     "scxml-resolver-github",

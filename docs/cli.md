@@ -340,7 +340,12 @@ for `validate`, `compile`, `snapshot run`, and `run`: a
 `schema-artifact` and `schema-sha256` (both a string or both `null`; a named
 schema is read relative to the manifest and verified against its digest),
 `wit-world` (`stateforward:scxml/invoked-service`), `wit-version`,
-`http-origins`, and `env-slots`; unknown fields and values are rejected
+`http-origins`, and `env-slots`, and optionally `validator-artifact` and
+`validator-sha256` (both or neither: a package validator component, read
+relative to the manifest and verified against its digest, which
+`validate`, `compile`, `snapshot run`, and `run` call on the document's
+`<invoke>`s of the service; [validator-rules.md](validator-rules.md#package-validators));
+unknown fields and values are rejected
 (a manifest declares no WASI and no events). `validate` warns on a literal
 `<invoke type>` no package binds (`SCXML094`), and on a literal type that is
 a platform-specific value rather than a URI (`SCXML093`); `compile` rejects

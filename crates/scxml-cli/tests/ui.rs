@@ -70,6 +70,10 @@ const NOT_REACHABLE_FROM_VALIDATE: &[(&str, &str)] = &[
     ("SCXML069", WASM_ONLY_BOUND),
     ("COMP002", "produced only by `compile` package binding"),
     (
+        "PKG002",
+        "needs a failing package validator component; covered by validator-core package_validator tests and the CLI extension_packages test",
+    ),
+    (
         "COMP003",
         "produced only by `compile` script-package pinning; covered by compiler-core script_packages tests",
     ),

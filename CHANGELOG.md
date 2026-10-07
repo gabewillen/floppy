@@ -59,6 +59,24 @@ hard cutover.
 
 ### Added
 
+- Package validators: an extension or service package manifest may name a
+  package validator component (`validator-artifact`, `validator-sha256`;
+  the WIT world `stateforward:scxml-validator/package-validator`, which
+  imports nothing, over the read-only `document` interface and the
+  canonical-report `diagnostic` records in `types`). `scx validate`,
+  `compile`, `snapshot run`, and `run`, the Wasmtime host's
+  `PackageValidators` and `ComponentValidator::with_package_validators`, and
+  the browser host's `PackageValidators` (`createValidator({packageValidators})`)
+  call it once per document with the package's elements and report its
+  diagnostics as `<prefix>::<code>`; a failure or out-of-contract answer is
+  `PKG002`. Repository packages resolve, pin, and verify it like their
+  component. The example package validator
+  (`components/scxml-package-validator-example`) checks the example
+  namespace's `<example:raise in>`.
+- Literal event data checks: `SCXML102` (literal JSON `<content>` of a
+  `<send>` or `<donedata>` against its own literal `event:schema`) and
+  `SCXML103` (provable incompatibility, with a witness, between what a
+  `<send>` or `<donedata>` creates and a transition handling its event).
 - Browser host parity, slice 1: `createValidator` runs the bundled validator
   component (the `scx validate` report, byte for byte, plus the draft
   profile: the validator WIT request gains `profile`); the validator and

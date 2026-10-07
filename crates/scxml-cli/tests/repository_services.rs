@@ -46,6 +46,7 @@ const COMPONENTS: &[&str] = &[
     "scxml_ioprocessor_scxml",
     "scxml_ioprocessor_basichttp",
     "scxml_service_example",
+    "scxml_package_validator_example",
     "scxml_compiler",
     "scxml_machine",
 ];
@@ -61,6 +62,7 @@ struct Release {
     dir: String,
     manifest_sha256: String,
     echo: Vec<u8>,
+    validator: Vec<u8>,
 }
 
 fn release() -> &'static Release {
@@ -83,6 +85,8 @@ fn release() -> &'static Release {
             dir: dir.display().to_string(),
             manifest_sha256: format!("{:x}", Sha256::digest(manifest.as_bytes())),
             echo: fs::read(dir.join(ASSET)).expect("the echo component"),
+            validator: fs::read(dir.join("scxml_package_validator_example.virtualized.wasm"))
+                .expect("the example package validator"),
         }
     })
 }
@@ -679,5 +683,72 @@ fn a_pinned_child_coexists_with_a_tagless_root_and_is_resolved_for_the_child() {
         count(&requests, &download_path(ASSET)) + count(&requests, &latest_download_path(ASSET)),
         1,
         "{requests:?}"
+    );
+}
+
+/// The package validator asset a validated echo release ships.
+const VALIDATOR_ASSET: &str = "echo_validator.wasm";
+
+/// The echo manifest naming [`VALIDATOR_ASSET`] with `digest`.
+fn validated_manifest(digest: &str) -> String {
+    // The manifest is one flat object: its only `}` closes it.
+    manifest(TAGLESS_URI).replacen(
+        '}',
+        &format!(r#","validator-artifact":"{VALIDATOR_ASSET}","validator-sha256":"{digest}"}}"#),
+        1,
+    )
+}
+
+#[test]
+fn a_package_validator_resolves_from_the_release_by_its_sha256sums_and_then_offline() {
+    let release = release();
+    let digest = sha256(&release.validator);
+    let text_manifest = validated_manifest(&digest);
+    assert!(
+        text_manifest.ends_with(&format!(r#""validator-sha256":"{digest}"}}"#)),
+        "{text_manifest}"
+    );
+    let server = github(&text_manifest);
+    server.body(
+        &download_path("SHA256SUMS"),
+        format!(
+            "{}  {ASSET}\n{digest}  {VALIDATOR_ASSET}\n",
+            sha256(&release.echo)
+        ),
+    );
+    server.body(&download_path(VALIDATOR_ASSET), release.validator.clone());
+    let directory = scratch("package-validator");
+    let cache = directory.join("cache");
+    let source = document(&directory);
+    let flags = repository(&server, &cache);
+    let first = validate(&source, &flags);
+    assert!(first.status.success(), "{}", text(&first.stderr));
+    let requests = server.requests();
+    assert!(
+        requests.contains(&format!("GET {} HTTP/1.1", download_path(VALIDATOR_ASSET))),
+        "{requests:?}"
+    );
+    let before = requests.len();
+    let mut offline = flags.clone();
+    offline.push("--offline".into());
+    let again = validate(&source, &offline);
+    assert!(again.status.success(), "{}", text(&again.stderr));
+    assert_eq!(server.requests().len(), before, "offline uses no network");
+}
+
+#[test]
+fn a_package_validator_the_release_does_not_list_fails_closed() {
+    let release = release();
+    let server = github(&validated_manifest(&sha256(&release.validator)));
+    // SHA256SUMS lists only the service component.
+    server.body(&download_path(VALIDATOR_ASSET), release.validator.clone());
+    let directory = scratch("package-validator-unlisted");
+    let source = document(&directory);
+    let output = validate(&source, &repository(&server, &directory.join("cache")));
+    assert!(!output.status.success());
+    let stderr = text(&output.stderr);
+    assert!(
+        stderr.contains("does not list the manifest's `validator-sha256`"),
+        "{stderr}"
     );
 }

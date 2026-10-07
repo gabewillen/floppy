@@ -484,6 +484,9 @@ pub enum Operation {
     /// Compiles and links the validator component with its expression-syntax
     /// data-model component.
     HostWasmtimeValidatorNew,
+    /// Runs one package validator component call (one package's targets in
+    /// one document).
+    HostWasmtimePackageValidatorValidate,
     /// Runs one conformance case through the shipped components under
     /// Wasmtime.
     ConformanceRunnerRunCaseWasm,
@@ -547,6 +550,9 @@ impl Operation {
             Self::HostWasmtimeLoopbackPost => "scxml.host-wasmtime.loopback-post",
             Self::HostWasmtimeValidatorValidate => "scxml.host-wasmtime.validator-validate",
             Self::HostWasmtimeValidatorNew => "scxml.host-wasmtime.validator-new",
+            Self::HostWasmtimePackageValidatorValidate => {
+                "scxml.host-wasmtime.package-validator-validate"
+            }
             Self::PrepareTransformerIdentity => "scxml.conformance.prepare.transformer-identity",
             Self::PrepareTransformerTransform => "scxml.conformance.prepare.transformer-transform",
             Self::PrepareCorpus => "scxml.conformance.prepare.corpus",

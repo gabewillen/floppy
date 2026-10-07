@@ -37,6 +37,8 @@ struct PackageBinding<'a> {
     schema_sha256: &'a str,
     wit_world: &'a str,
     wit_version: &'a str,
+    validator_artifact: Option<&'a str>,
+    validator_sha256: Option<&'a str>,
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
@@ -99,8 +101,8 @@ fn verify_package_binding(
         schema_sha256: package.schema_sha256.to_owned(),
         wit_world: package.wit_world.to_owned(),
         wit_version: package.wit_version.to_owned(),
-        // The WIT package record carries no WASI permissions: validation
-        // only checks the schema binding and never links the component.
+        validator_artifact: package.validator_artifact.map(str::to_owned),
+        validator_sha256: package.validator_sha256.map(str::to_owned),
     };
     manifest.verify_schema(&SchemaSource::new(schema.system_id, schema.bytes))
 }
@@ -141,8 +143,9 @@ mod guest {
     use scxml_validator_core::{
         ComponentRequestBoundary, EffectCause, EffectCheck, EffectFinding, EffectFragment,
         EffectKind, EffectRole, EffectSpan, ExpressionCheck, ExpressionKind,
-        ExpressionSyntaxChecker, ExternalScripts, MemorySchemaResolver, SchemaMode, SchemaSource,
-        SyntaxIssue, Validator,
+        ExpressionSyntaxChecker, ExternalScripts, MemorySchemaResolver, PackageValidator,
+        PackageValidatorFailure, SchemaMode, SchemaSource, SyntaxIssue, Validator,
+        package_validator::{document, types as package_types},
     };
     use scxml_validator_xsd::{BundledSchemaResolver, XsdSchemaBackend};
 
@@ -152,10 +155,13 @@ mod guest {
     });
 
     use exports::stateforward::scxml_validator::validator_api::Guest;
+    use stateforward::scxml_validator::document as wit_document;
     use stateforward::scxml_validator::expression_syntax as wit_syntax;
+    use stateforward::scxml_validator::package_validator_api as wit_package;
     use stateforward::scxml_validator::telemetry as wit_telemetry;
     use stateforward::scxml_validator::types::{
-        ComponentError, ErrorCode, ErrorVersion, Profile, SchemaPolicy, ValidationRequest,
+        self as wit_types, ComponentError, ErrorCode, ErrorVersion, Profile, SchemaPolicy,
+        ValidationRequest,
     };
 
     /// The source id of the one document a validation reads: every span
@@ -298,6 +304,113 @@ mod guest {
         }
     }
 
+    /// Validator-side adapter over the imported `package-validator-api`:
+    /// the host routes each call to the package bound to the targets.
+    #[derive(Debug)]
+    struct ImportedPackageValidator;
+
+    impl PackageValidator for ImportedPackageValidator {
+        fn validate(
+            &self,
+            _package: &str,
+            document: &document::Context,
+            targets: &[u32],
+        ) -> Result<Vec<package_types::Diagnostic>, PackageValidatorFailure> {
+            let span = |span: package_types::Span| wit_types::Span {
+                start: span.start,
+                end: span.end,
+            };
+            let name = |name: &document::QualifiedName| wit_document::QualifiedName {
+                namespace_uri: name.namespace_uri.clone(),
+                local_name: name.local_name.clone(),
+            };
+            let context = wit_document::Context {
+                elements: document
+                    .elements
+                    .iter()
+                    .map(|element| wit_document::Element {
+                        name: name(&element.name),
+                        span: span(element.span),
+                        attributes: element
+                            .attributes
+                            .iter()
+                            .map(|attribute| wit_document::Attribute {
+                                name: name(&attribute.name),
+                                value: attribute.value.clone(),
+                                span: span(attribute.span),
+                            })
+                            .collect(),
+                        children: element.children.clone(),
+                        parent: element.parent,
+                    })
+                    .collect(),
+                data_ids: document.data_ids.clone(),
+                state_ids: document.state_ids.clone(),
+                transitions: document
+                    .transitions
+                    .iter()
+                    .map(|transition| wit_document::TransitionInfo {
+                        state: transition.state.clone(),
+                        event: transition.event.clone(),
+                        event_schema: transition.event_schema.clone(),
+                    })
+                    .collect(),
+                datamodel: document.datamodel.clone(),
+            };
+            let returned =
+                wit_package::validate(&context, targets).map_err(|_| PackageValidatorFailure)?;
+            let span = |span: wit_types::Span| package_types::Span {
+                start: span.start,
+                end: span.end,
+            };
+            let label = |label: wit_types::Label| package_types::Label {
+                span: span(label.span),
+                message: label.message,
+            };
+            Ok(returned
+                .into_iter()
+                .map(|diagnostic| package_types::Diagnostic {
+                    code: diagnostic.code,
+                    severity: match diagnostic.severity {
+                        wit_types::Severity::Note => package_types::Severity::Note,
+                        wit_types::Severity::Warning => package_types::Severity::Warning,
+                        wit_types::Severity::Error => package_types::Severity::Error,
+                    },
+                    message: diagnostic.message,
+                    primary: label(diagnostic.primary),
+                    secondary: diagnostic.secondary.into_iter().map(label).collect(),
+                    help: diagnostic.help,
+                    fixes: diagnostic
+                        .fixes
+                        .into_iter()
+                        .map(|fix| package_types::Fix {
+                            message: fix.message,
+                            applicability: match fix.applicability {
+                                wit_types::Applicability::MachineApplicable => {
+                                    package_types::Applicability::MachineApplicable
+                                }
+                                wit_types::Applicability::MaybeIncorrect => {
+                                    package_types::Applicability::MaybeIncorrect
+                                }
+                                wit_types::Applicability::HasPlaceholders => {
+                                    package_types::Applicability::HasPlaceholders
+                                }
+                            },
+                            edits: fix
+                                .edits
+                                .into_iter()
+                                .map(|edit| package_types::Edit {
+                                    span: span(edit.span),
+                                    replacement: edit.replacement,
+                                })
+                                .collect(),
+                        })
+                        .collect(),
+                })
+                .collect())
+        }
+    }
+
     static TRACE_HOST: TraceHost = TraceHost;
 
     impl WasmTraceHost for TraceHost {
@@ -416,7 +529,8 @@ mod guest {
                     // invoked-service type is bound: a literal one is
                     // `SCXML094`, exactly as `scx validate` reports
                     // it without `--service-package`.
-                    .with_services(std::collections::BTreeMap::new());
+                    .with_services(std::collections::BTreeMap::new())
+                    .with_package_validator(std::sync::Arc::new(ImportedPackageValidator));
                 if let Some(Profile::Draft) = request.profile {
                     validator = validator.with_profile(scxml_validator_core::Profile::Draft);
                 }
@@ -455,6 +569,8 @@ mod guest {
                         schema_sha256: &package.schema_sha256,
                         wit_world: &package.wit_world,
                         wit_version: &package.wit_version,
+                        validator_artifact: package.validator_artifact.as_deref(),
+                        validator_sha256: package.validator_sha256.as_deref(),
                     })
                     .collect::<Vec<_>>();
                 let used_namespaces = outcome
@@ -558,9 +674,21 @@ mod guest {
                 ("package.schema-sha256", package.schema_sha256.as_str()),
                 ("package.wit-world", package.wit_world.as_str()),
                 ("package.wit-version", package.wit_version.as_str()),
-            ] {
+            ]
+            .into_iter()
+            .map(|(field, value)| (field, Some(value)))
+            .chain([
+                (
+                    "package.validator-artifact",
+                    package.validator_artifact.as_deref(),
+                ),
+                (
+                    "package.validator-sha256",
+                    package.validator_sha256.as_deref(),
+                ),
+            ]) {
                 boundary
-                    .add_optional_metadata(field, Some(value))
+                    .add_optional_metadata(field, value)
                     .map_err(|_| ComponentError {
                         version: ErrorVersion::V1,
                         code: ErrorCode::InvalidRequest,
@@ -656,6 +784,8 @@ mod tests {
             schema_sha256,
             wit_world: SUPPORTED_NAMESPACE_WIT_WORLD,
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION,
+            validator_artifact: None,
+            validator_sha256: None,
         }
     }
 

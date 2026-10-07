@@ -10,7 +10,7 @@ use crate::{ArtifactError, HostError, component_size_admitted};
 const MAX_MANIFEST_BYTES: usize = 64 * 1024;
 const MAX_MANIFEST_PATH_BYTES: usize = 4 * 1024;
 const MANIFEST_HEADER_LINES: usize = 6;
-const MAX_ARTIFACTS: usize = 17;
+const MAX_ARTIFACTS: usize = 18;
 
 /// Closed component identities accepted from the deterministic artifact manifest.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -31,6 +31,10 @@ pub enum ArtifactKind {
     ServiceExample,
     /// Example extension component.
     ExtensionExample,
+    /// Example package validator component
+    /// (`stateforward:scxml-validator/package-validator`) of the example
+    /// extension namespace.
+    PackageValidatorExample,
     /// Example Wasm script component (`stateforward:scxml/script`).
     ScriptExample,
     /// Validator component.
@@ -69,6 +73,11 @@ pub enum ArtifactKind {
     /// SHA-256 through [`authenticate_service_component`]. Never listed in a
     /// release manifest.
     ServiceComponent,
+    /// A package's validator component
+    /// (`stateforward:scxml-validator/package-validator`), authenticated by
+    /// its exact SHA-256 through [`authenticate_package_validator_component`].
+    /// Never listed in a release manifest.
+    PackageValidatorComponent,
 }
 
 impl ArtifactKind {
@@ -85,6 +94,7 @@ impl ArtifactKind {
             Self::IoProcessorBasicHttp => "BasicHTTP Event I/O Processor",
             Self::ServiceExample => "invoked-service example",
             Self::ExtensionExample => "extension-namespace example",
+            Self::PackageValidatorExample => "package validator example",
             Self::ScriptExample => "script example",
             Self::Validator => "validator",
             Self::ReporterRustc => "rustc-style reporter",
@@ -96,6 +106,7 @@ impl ArtifactKind {
             Self::Scx => "scx namespace",
             Self::ExtensionComponent => "extension component",
             Self::ServiceComponent => "invoked-service component",
+            Self::PackageValidatorComponent => "package validator component",
         }
     }
 
@@ -115,6 +126,7 @@ impl ArtifactKind {
             Self::IoProcessorBasicHttp => "scxml_ioprocessor_basichttp",
             Self::ServiceExample => "scxml_service_example",
             Self::ExtensionExample => "scxml_extension_example",
+            Self::PackageValidatorExample => "scxml_package_validator_example",
             Self::ScriptExample => "scxml_script_example",
             Self::Validator => "scxml_validator",
             Self::ReporterRustc => "scxml_reporter_rustc",
@@ -129,6 +141,7 @@ impl ArtifactKind {
             Self::ExtensionComponent => "scxml_extension",
             // Never parsed from a manifest either.
             Self::ServiceComponent => "scxml_service",
+            Self::PackageValidatorComponent => "scxml_package_validator",
         }
     }
 
@@ -142,6 +155,7 @@ impl ArtifactKind {
             "scxml_ioprocessor_basichttp" => Some(Self::IoProcessorBasicHttp),
             "scxml_service_example" => Some(Self::ServiceExample),
             "scxml_extension_example" => Some(Self::ExtensionExample),
+            "scxml_package_validator_example" => Some(Self::PackageValidatorExample),
             "scxml_script_example" => Some(Self::ScriptExample),
             "scxml_validator" => Some(Self::Validator),
             "scxml_reporter_rustc" => Some(Self::ReporterRustc),
@@ -276,6 +290,29 @@ pub fn authenticate_service_component(
         component_bytes,
         trusted_digest,
         ArtifactKind::ServiceComponent,
+    )
+}
+
+/// Authenticates one package's validator component
+/// (`stateforward:scxml-validator/package-validator`, named by the package
+/// manifest's `validator-artifact` and `validator-sha256`) without invoking
+/// Wasmtime, exactly as [`authenticate_extension_component`]. The result has
+/// kind [`ArtifactKind::PackageValidatorComponent`];
+/// [`crate::PackageValidators::bind`] additionally checks that it imports
+/// nothing.
+///
+/// # Errors
+///
+/// Fails closed with [`HostError::Artifact`] for oversized, empty, or
+/// digest-mismatched bytes.
+pub fn authenticate_package_validator_component(
+    component_bytes: &[u8],
+    trusted_digest: TrustedComponentDigest,
+) -> Result<AuthenticatedComponent, HostError> {
+    authenticate_by_digest(
+        component_bytes,
+        trusted_digest,
+        ArtifactKind::PackageValidatorComponent,
     )
 }
 
@@ -662,6 +699,7 @@ mod tests {
         ArtifactKind::IoProcessorBasicHttp,
         ArtifactKind::ServiceExample,
         ArtifactKind::ExtensionExample,
+        ArtifactKind::PackageValidatorExample,
         ArtifactKind::ScriptExample,
         ArtifactKind::Validator,
         ArtifactKind::ReporterRustc,
