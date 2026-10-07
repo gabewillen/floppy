@@ -77,7 +77,7 @@ fn a_prompt_with_a_system_message_builds_the_canonical_request() {
     );
     assert_eq!(
         String::from_utf8(request.body).expect("UTF-8"),
-        r#"{"messages":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"model":"mock-model","stream":true}"#
+        r#"{"messages":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"model":"mock-model","reasoning_effort":"low","stream":true}"#
     );
     assert_eq!(
         request.headers[2],
@@ -119,6 +119,20 @@ fn a_schema_asks_for_structured_output_with_its_name_and_strictness() {
         DEFAULT_SCHEMA_NAME
     );
     assert_eq!(text_body["response_format"]["json_schema"]["strict"], false);
+}
+
+#[test]
+fn reasoning_effort_is_sent_as_given() {
+    let generation = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("reasoning_effort", text("high")),
+    ])
+    .expect("valid parameters");
+    let body: Json =
+        serde_json::from_slice(&build_request(Part::Reference(2), 1, &generation).body)
+            .expect("JSON");
+    assert_eq!(body["reasoning_effort"], "high");
 }
 
 #[test]
@@ -200,6 +214,22 @@ fn malformed_parameters_reject_the_start() {
         (
             vec![model.clone(), prompt.clone(), ("strict", text("true"))],
             "strict as text",
+        ),
+        (
+            vec![
+                model.clone(),
+                prompt.clone(),
+                ("reasoning_effort", text("max")),
+            ],
+            "an unknown reasoning effort",
+        ),
+        (
+            vec![
+                model.clone(),
+                prompt.clone(),
+                ("reasoning_effort", Data::Bool(true)),
+            ],
+            "a non-text reasoning effort",
         ),
         (
             vec![("model", Data::Bool(true)), prompt],

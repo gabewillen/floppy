@@ -37,6 +37,9 @@
 //!   schema **before** anything is returned. `schemaname` (a string matching
 //!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it) and `strict`
 //!   (a boolean, `false` without it) are sent with it and require it.
+//! * `reasoning_effort` (optional, one of `none`, `minimal`, `low`,
+//!   `medium`, `high`, `xhigh`): sent as `reasoning_effort`, and
+//!   [`DEFAULT_REASONING_EFFORT`] without it.
 //!
 //! Any other parameter, a parameter given twice, or a malformed value
 //! rejects the start: the `<invoke>` raises `error.execution` and nothing is
@@ -79,6 +82,7 @@
 //! ```json
 //! {"messages":[{"content":"…","role":"system"},{"content":"…","role":"user"}],
 //!  "model":"…",
+//!  "reasoning_effort":"low",
 //!  "response_format":{"json_schema":{"name":"result","schema":{…},"strict":false},"type":"json_schema"},
 //!  "stream":true}
 //! ```
@@ -108,6 +112,14 @@
 //! answer as `delta.content`: a small limit can go entirely to reasoning
 //! and leave no answer (a 20-token limit did). The time bound is the
 //! invoking state's `<send delay>`, not a token count.
+//!
+//! The request always sends `reasoning_effort`. The default gateway holds a
+//! reasoning model's reasoning back until its answer starts, so nothing
+//! reaches the connection while it reasons; without `reasoning_effort` the
+//! model reasoned past Cloudflare's 100-second limit (a `524`) on the
+//! builder's prompts, and with it the reasoning ends sooner. `low` (the
+//! default) was the fastest of `low`, `medium`, and `high` on the builder's
+//! prompts with drafts of the same quality (`docs/live-proof.md`).
 //!
 //! # The reply
 //!
@@ -169,6 +181,10 @@ pub const BASE_URL_SLOT: &str = "baseurl";
 pub const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
 /// `json_schema.name` when the invocation names none.
 pub const DEFAULT_SCHEMA_NAME: &str = "result";
+/// `reasoning_effort` when the invocation names none.
+pub const DEFAULT_REASONING_EFFORT: &str = "low";
+/// The `reasoning_effort` values the Chat Completions API defines.
+pub const REASONING_EFFORTS: [&str; 6] = ["none", "minimal", "low", "medium", "high", "xhigh"];
 /// Upper bound on the bytes of a schema name (the `OpenAI` limit).
 pub const MAX_SCHEMA_NAME_BYTES: usize = 64;
 
@@ -290,6 +306,8 @@ pub struct Generation {
     pub messages: Vec<Message>,
     /// The structured-output request, when the invocation gave a schema.
     pub schema: Option<ResponseSchema>,
+    /// `reasoning_effort`, one of [`REASONING_EFFORTS`].
+    pub reasoning_effort: &'static str,
 }
 
 /// The closed failure codes of [`FAILED_EVENT`].
@@ -426,6 +444,19 @@ pub fn response_schema(
     })
 }
 
+/// The `reasoning_effort` an invocation asks: one of [`REASONING_EFFORTS`],
+/// or [`DEFAULT_REASONING_EFFORT`] without the parameter.
+fn reasoning_effort_parameter(value: Option<&Data>) -> Result<&'static str, &'static str> {
+    match value {
+        None => Ok(DEFAULT_REASONING_EFFORT),
+        Some(Data::String(effort)) => REASONING_EFFORTS
+            .into_iter()
+            .find(|known| known == effort)
+            .ok_or("generate reasoning_effort must be none, minimal, low, medium, high, or xhigh"),
+        Some(_) => Err("generate reasoning_effort must be a string"),
+    }
+}
+
 /// The validated generation request of an invocation's parameters (see the
 /// crate documentation, "Parameters").
 ///
@@ -443,6 +474,7 @@ pub fn parse_parameters<'a>(
     let mut schema = None;
     let mut schema_name = None;
     let mut strict = None;
+    let mut reasoning_effort = None;
     for (name, value) in parameters {
         let slot = match name {
             "model" => &mut model,
@@ -452,6 +484,7 @@ pub fn parse_parameters<'a>(
             "schema" => &mut schema,
             "schemaname" => &mut schema_name,
             "strict" => &mut strict,
+            "reasoning_effort" => &mut reasoning_effort,
             _ => return Err("generate takes no parameter of that name"),
         };
         if slot.replace(value).is_some() {
@@ -509,6 +542,7 @@ pub fn parse_parameters<'a>(
         Some(Data::Bool(strict)) => Some(*strict),
         Some(_) => return Err("generate strict must be a boolean"),
     };
+    let reasoning_effort = reasoning_effort_parameter(reasoning_effort)?;
     let schema = match schema {
         None => {
             if schema_name.is_some() || strict.is_some() {
@@ -525,14 +559,15 @@ pub fn parse_parameters<'a>(
         model,
         messages: conversation,
         schema,
+        reasoning_effort,
     })
 }
 
 /// The Chat Completions request: `POST {base}/chat/completions` (`base` is
 /// the `baseurl` slot's reference, or the package's declared origin when no
 /// value is held) with the `apikey` slot's reference as a bearer key and a
-/// canonical JSON body: `messages`, `model`, `stream` (`true`), and, with a
-/// schema, `response_format`.
+/// canonical JSON body: `messages`, `model`, `reasoning_effort`, `stream`
+/// (`true`), and, with a schema, `response_format`.
 #[must_use]
 pub fn build_request(base: Part, api_key: u32, generation: &Generation) -> Request {
     let mut body = Map::new();
@@ -547,6 +582,10 @@ pub fn build_request(base: Part, api_key: u32, generation: &Generation) -> Reque
             .collect(),
     );
     body.insert("model".into(), generation.model.clone().into());
+    body.insert(
+        "reasoning_effort".into(),
+        generation.reasoning_effort.into(),
+    );
     body.insert("stream".into(), Json::Bool(true));
     if let Some(schema) = &generation.schema {
         body.insert(

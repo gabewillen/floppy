@@ -265,7 +265,7 @@ fn a_text_generation_posts_the_canonical_request_and_returns_the_reply() {
     );
     assert_eq!(
         String::from_utf8(received[0].body.clone()).expect("UTF-8"),
-        r#"{"messages":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"model":"mock-model","stream":true}"#,
+        r#"{"messages":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"model":"mock-model","reasoning_effort":"low","stream":true}"#,
         "the request body is canonical JSON"
     );
 }
