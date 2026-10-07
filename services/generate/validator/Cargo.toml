@@ -1,0 +1,31 @@
+[package]
+name = "floppy-service-generate-validator"
+description = "The package validator of the `generate` service: checks each `<invoke>` of it (its parameters, and the `event:schema` of the transitions that take its events) before the document runs, as a Wasm component that imports nothing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The `schema_mismatch` check: each transition's resolved schema compiled
+# (`CompiledSchema`; boon, nothing ever loaded) and checked against what the
+# service returns.
+scxml-event-schema.workspace = true
+scxml-types.workspace = true
+serde_json.workspace = true
+wit-bindgen.workspace = true
+
+[dev-dependencies]
+# The parameter names, values, and failure codes are the service's own.
+floppy-service-generate = { path = ".." }
+# The tests parse documents as scxml.rs does.
+scxml-syntax.workspace = true
+
+[lints]
+workspace = true

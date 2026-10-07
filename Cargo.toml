@@ -3,6 +3,7 @@ members = [
     "tests",
     "namespaces/decision",
     "services/generate",
+    "services/generate/validator",
     "services/decision",
 ]
 # scxml.rs is a squashed subtree with its own workspace, lockfile, and proof
@@ -38,6 +39,9 @@ scxml-compiler-core = { path = "scxml.rs/crates/scxml-compiler-core" }
 scxml-event-schema = { path = "scxml.rs/crates/scxml-event-schema" }
 scxml-host-wasmtime = { path = "scxml.rs/hosts/scxml-host-wasmtime" }
 scxml-reporting = { path = "scxml.rs/crates/scxml-reporting" }
+# The `scx` namespace's fix pass (`apply_machine_applicable`), which the
+# package validator test applies.
+scx = { path = "scxml.rs/namespaces/scx" }
 scxml-syntax = { path = "scxml.rs/crates/scxml-syntax" }
 scxml-types = { path = "scxml.rs/crates/scxml-types" }
 scxml-validator-core = { path = "scxml.rs/crates/scxml-validator-core" }

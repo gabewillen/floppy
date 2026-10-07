@@ -10,6 +10,10 @@ authors.workspace = true
 publish.workspace = true
 
 [dev-dependencies]
+# The generate package validator's fixes are applied with the `scx`
+# namespace's fix pass to the canonical report `scx validate` writes.
+scx.workspace = true
+scxml-reporting.workspace = true
 # The builder's inline `event:schema` attributes are compared with its
 # schema files through the scxml.rs XML parser.
 scxml-event-schema.workspace = true

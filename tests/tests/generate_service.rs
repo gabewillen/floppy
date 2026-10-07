@@ -327,15 +327,40 @@ fn a_failing_backend_returns_generate_failed() {
 }
 
 #[test]
+fn parameters_the_package_validator_sees_refuse_the_run_and_send_nothing() {
+    let mock = Mock::start();
+    let env = env_file("malformed", &format!("{}/text/v1", mock.origin));
+    // No model, and a parameter the service does not define: the generate
+    // package validator reports both before the session starts.
+    let finished = support::run_document(
+        "generate.scx",
+        &document(
+            r#"<param name="prompt" expr="'Say hello.'"/><param name="temperature" expr="1"/>"#,
+            "_event.data.text",
+        ),
+        &args(&env),
+        &[],
+        Duration::from_secs(60),
+    );
+    assert!(!finished.status.success());
+    assert!(finished.records.is_empty(), "{:?}", finished.records);
+    for code in ["generate::missing_param", "generate::unknown_param"] {
+        assert!(finished.stderr.contains(code), "{}", finished.stderr);
+    }
+    assert!(mock.received().is_empty(), "nothing is sent");
+}
+
+#[test]
 fn malformed_parameters_reject_the_start_and_send_nothing() {
     let mock = Mock::start();
     let env = env_file("malformed", &format!("{}/text/v1", mock.origin));
     let args = args(&env);
-    // No model, and a parameter the service does not define.
+    // A value only the run knows (the package validator checks literal
+    // values only) that the service rejects when the invocation starts.
     let finished = open(
         &args,
         &document(
-            r#"<param name="prompt" expr="'Say hello.'"/><param name="temperature" expr="1"/>"#,
+            r#"<param name="model" expr="'mock-model'"/><param name="prompt" expr="'Say hello.'"/><param name="reasoning_effort" expr="'max'.toUpperCase()"/>"#,
             "_event.data.text",
         ),
     );

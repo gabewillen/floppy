@@ -13,8 +13,9 @@
 #    SCXML_WASM_ARTIFACTS_DIR=DIR/scxml (README.md, "Running a bot"). Its
 #    CARGO_TARGET_DIR is target/scxml.rs (never the subtree's own target
 #    directory).
-# 2. Unless --session-only: every floppy namespace component and invoked
-#    service component, built one cargo invocation per component (so
+# 2. Unless --session-only: every floppy namespace component, invoked
+#    service component, and package validator component (DIR/services),
+#    built one cargo invocation per component (so
 #    features never unify across them) with the reproducible release flags
 #    (scripts/reproducible-wasm-env.sh), WASI virtualized by the pinned
 #    wasi-virt (twice: the bytes must be identical; a component that imports
@@ -50,6 +51,9 @@ expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
 namespace_components='floppy_decision'
 service_components='floppy_service_generate floppy_service_decision'
+# Package validator components (stateforward:scxml-validator/package-validator),
+# each named by its package's manifest (`validator-artifact`).
+validator_components='floppy_service_generate_validator'
 
 usage() {
     echo "usage: build-components.sh [--artifacts-dir DIR] [--session-only]" >&2
@@ -107,6 +111,13 @@ expected_imports() {
                 'stateforward:scxml/outbound-http@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0'
             ;;
+        # A package validator's world imports nothing: its export's record
+        # types arrive through the types-only types and document interfaces.
+        floppy_service_generate_validator)
+            printf '%s\n' \
+                'stateforward:scxml-validator/types@0.2.0' \
+                'stateforward:scxml-validator/document@0.2.0'
+            ;;
         *) echo "no import allowlist for component: $1" >&2; exit 1 ;;
     esac
 }
@@ -157,7 +168,7 @@ TMPDIR=$run_tmp
 export TMPDIR
 trap 'rm -rf "$run_tmp"; rm -f "$artifacts_dir"/namespaces/*.tmp "$artifacts_dir"/services/*.tmp "$artifacts_dir"/namespaces/*.determinism-check.wasm "$artifacts_dir"/services/*.determinism-check.wasm' EXIT HUP INT TERM
 
-for component in $namespace_components $service_components; do
+for component in $namespace_components $service_components $validator_components; do
     package=$(printf '%s' "$component" | tr '_' '-')
     (cd "$workspace" && cargo build --locked --release --target wasm32-wasip2 -p "$package")
 done
@@ -193,7 +204,7 @@ build_component() {
     test -f "$raw" || { echo "missing release component artifact: $raw" >&2; exit 1; }
     virt_input=$raw
     case "$component" in
-        floppy_decision|floppy_service_generate|floppy_service_decision)
+        floppy_decision|floppy_service_generate|floppy_service_decision|floppy_service_generate_validator)
         # <decision:menu> compiles each offered schema, the generate service
         # checks structured output, and the decision service checks the
         # menu's schemas and the filled event data with the same `event`
@@ -239,7 +250,7 @@ build_component() {
 }
 
 build_kind namespaces $namespace_components
-build_kind services $service_components
+build_kind services $service_components $validator_components
 
 # 3. Publish every package into the dev repository-package cache (scxml.rs
 # crates/scxml-cli/src/repository.rs, "Trust and the cache": objects under
@@ -304,6 +315,21 @@ for component in $service_components; do
     schema_artifact=$(manifest_field "$manifest" schema-artifact)
     if [ -n "$schema_artifact" ]; then
         publish_object "$workspace/services/$name/package/$schema_artifact" > /dev/null
+    fi
+    # A package validator (`validator-artifact`, the component built above)
+    # is published by its digest. Its
+    # bytes depend on the build host (Cargo's symbol-mangling hash reads the
+    # host's target triple), so the manifest the dev cache pins names this
+    # build's digest: the checked-in one when they agree, else a copy with
+    # `validator-sha256` set to it.
+    validator_artifact=$(manifest_field "$manifest" validator-artifact)
+    if [ -n "$validator_artifact" ]; then
+        validator_sha256=$(publish_object "$artifacts_dir/services/$validator_artifact")
+        if [ "$validator_sha256" != "$(manifest_field "$manifest" validator-sha256)" ]; then
+            sed "s/\"validator-sha256\": *\"[0-9a-f]*\"/\"validator-sha256\": \"$validator_sha256\"/" "$manifest" > "$run_tmp/$name.service.json"
+            manifest="$run_tmp/$name.service.json"
+            printf 'note: %s pins this build'"'"'s package validator %s\n' "$uri" "$validator_sha256"
+        fi
     fi
     manifest_sha256=$(publish_object "$manifest")
     component_sha256=$(publish_object "$artifacts_dir/services/$component.virtualized.wasm")
