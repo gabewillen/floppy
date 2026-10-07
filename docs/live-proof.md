@@ -7,6 +7,64 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-07, `reasoning_effort` (decision D25), model `sparks/qwen3.8-flash-next`
+
+The runs used floppy commit `834a9c08` (the subtree unchanged from the
+entry below), built and run exactly as that entry describes: the dev cache
+pinned to commit `834a9c08`, `scx` rebuilt with its session components,
+`CPA_API_KEY` from floppy's `.env` and `TYPESAFE_API_KEY` from
+`mosfet/mosfet.py/.env`, no base URL set, and the same builder command.
+
+### Choosing the default
+
+Each request below went straight to `https://cpa.willen.dev/v1` with the
+body `generate` sends (strict `json_schema`, `stream: true`, the builder's
+system message and prompt), one at a time. "First event" is the first
+`data:` line, "total" the last.
+
+| Prompt | `reasoning_effort` | First event | Total | Validator errors in the draft |
+| --- | --- | --- | --- | --- |
+| design | (none) | none | `524` at 125.2 s | |
+| design | `low` | 13.7 s | 20.0 s | |
+| design | `medium` | 32.9 s | 44.6 s | |
+| design | `high` | 13.9 s, 14.2 s | 22.3 s, 20.9 s | |
+| author | `low` | 55.3 s, 32.8 s | 60.4 s, 37.8 s | 6, 10 |
+| author | `medium` | 88.5 s, 50.5 s | 94.5 s, 55.2 s | 0, 6 |
+| author | `high` | 22.3 s, 73.8 s, none | 27.6 s, 79.0 s, `524` at 125.2 s | 9, 6 |
+| generate live test | `low` | 2.5 s | 2.6 s | |
+
+Every draft parsed as XML and ran into the same errors (mostly `<cancel
+event>`, which SCXML does not have), which the builder's repair loop is
+for, so quality did not separate the values; `low` had the best worst case,
+so it is the default. Two things did not match the expectation the change
+was made on:
+
+- The gateway does not stream the reasoning live with `reasoning_effort`
+  either. In every request the first reasoning chunk arrived within 0.2 s
+  of the first content chunk (on a short prompt with `high` and no schema:
+  reasoning at 8.4 s, content at 8.5 s, 205 chunks in the first second), so
+  the gateway holds the reasoning back until the answer starts, and no byte
+  flows while the model reasons.
+- The value hardly bounds the reasoning: the author prompt with `none`
+  still reasoned (1,273 reasoning chunks, first event at 59.1 s) and with
+  `minimal` got a `524` at 125.3 s.
+
+| Run | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| `live_generate_through_an_env_file` | `sparks/qwen3.8-flash-next` | pass | 1 | 14 s; first event 2.5 s when measured directly |
+| builder, run 1 | `sparks/qwen3.8-flash-next` | fail | 1 of 3 | exit 0 in 510 s, `attempts-exhausted`: designs took 120.3 s (`transport`), 120.0 s (`transport`), and 27.0 s, then both author generations 120.0 s (`transport`) |
+| builder, run 2 | `sparks/qwen3.8-flash-next` | pass | 2 of 3 | exit 0 in 276 s, final state `done` on attempt 3 after `validate SCXML011` and `simulate test-failed` (triage `triage.repair` twice); generations 19.9 s (design), 49.1 s, 11.6 s, 23.9 s (author); all 3 simulation tests passed |
+| builder, run 3 | `sparks/qwen3.8-flash-next` | fail | 3 of 3 | exit 0 in 301 s, `attempts-exhausted`: design 18.2 s, author 120.3 s (`transport`), then repairs in 56.0 s, 23.5 s, 24.3 s that failed `XSD-cvc-pattern-valid`, `schema-not-json`, and `simulate test-failed` |
+
+Every `transport` failure ended at 120 s, `scx`'s fixed limit for a whole
+service request (`DEFAULT_EXTENSION_TOTAL_TIMEOUT`, before Cloudflare's
+`524` at about 125 s). No bytes were flowing then: the gateway sends
+nothing until the answer starts, and every answer measured ended within 14 s
+of its first byte. So an idle limit in `scx` instead of the total one would
+not have saved these generations; what would is a gateway that streams the
+reasoning as it is produced. The built document of run 2 was not kept.
+Nothing in the tests was changed to make them pass.
+
 ## 2026-10-07, floppy (decision D23) on the DGX Sparks (decision D24), model `sparks/qwen3.8-flash-next`
 
 The runs used floppy commit `790785a2` (subtree scxml.rs `76654ac1`):

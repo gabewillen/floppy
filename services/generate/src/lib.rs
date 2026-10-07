@@ -113,13 +113,13 @@
 //! and leave no answer (a 20-token limit did). The time bound is the
 //! invoking state's `<send delay>`, not a token count.
 //!
-//! The request always sends `reasoning_effort`. The default gateway holds a
-//! reasoning model's reasoning back until its answer starts, so nothing
-//! reaches the connection while it reasons; without `reasoning_effort` the
-//! model reasoned past Cloudflare's 100-second limit (a `524`) on the
-//! builder's prompts, and with it the reasoning ends sooner. `low` (the
-//! default) was the fastest of `low`, `medium`, and `high` on the builder's
-//! prompts with drafts of the same quality (`docs/live-proof.md`).
+//! The request always sends `reasoning_effort`, `low` by default. The
+//! default gateway holds a reasoning model's reasoning back until its answer
+//! starts, so nothing reaches the connection while it reasons; without
+//! `reasoning_effort` the builder's design prompt reasoned past Cloudflare's
+//! limit (a `524`), and `low` had the best worst case of `low`, `medium`,
+//! and `high` on the builder's prompts, with drafts of the same quality
+//! (`docs/live-proof.md`, decision D25).
 //!
 //! # The reply
 //!
