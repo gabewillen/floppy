@@ -27,22 +27,28 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 
 ```console
 # The session components and every namespace and service component, verified,
-# with every package published into scx's repository-package cache
-# (${XDG_CACHE_HOME:-$HOME/.cache}/scxml/extensions), so the bots' repository
-# URIs resolve locally with no flag.
+# with every package published into a dev repository-package cache under
+# target/ (never scx's release cache), pinned under the bots' tagless
+# repository URIs.
 sh scripts/build-components.sh
 # scx, from the subtree, embedding the session components just built.
 SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml" \
   cargo install --locked --path scxml.rs/crates/scxml-cli
-# A bot.
+# A bot, with the locally built packages.
+scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx
+# A bot, with the packages of nemobot's latest GitHub release (once phase 7
+# publishes one).
 scx run --env-file .env bots/builder/builder.scx
 ```
 
 A bot's document is all a run needs: its namespaces and `<invoke type>`s are
-repository URIs (`https://github.com/stateforward/nemobot/...@v0.1.0`) that
-`scx` resolves from the cache `scripts/build-components.sh` fills, its `env`
+tagless repository URIs (`https://github.com/stateforward/nemobot/namespaces/<name>`,
+`.../services/<name>`), which name the repository's latest release, so the
+same document runs against the dev cache `scripts/build-components.sh`
+fills (`--offline --cache-dir`) and against a release, unedited; its `env`
 attributes decide which `<invoke>` receives which variable of the env file,
-and an `<invoke src>` beside it loads with no flag. Each bot's README gives
+and an `<invoke src>` loads by URI (relative to its document, `file:`, or
+`https:`) with no flag. Each bot's README gives
 its input events ([bots/builder/README.md](bots/builder/README.md#running)).
 
 Contributor rules are in [AGENTS.md](AGENTS.md).

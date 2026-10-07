@@ -1,10 +1,10 @@
 {
   "format": "stateforward.scxml.extension-package/v2",
-  "namespace-uri": "https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0",
+  "namespace-uri": "https://github.com/stateforward/nemobot/namespaces/decision",
   "package-version": "0.1.0",
   "extension-artifact": "nemobot_decision.virtualized.wasm",
   "schema-artifact": "decision.xsd",
-  "schema-sha256": "24e1a79a991158a372612f0a365fe3c56da64c040ccdf042ba0ba999b0642131",
+  "schema-sha256": "ec7320b4aa45fa36443f1e21173b42d9d60693e55926e32c686d91fa7087ba29",
   "wit-world": "stateforward:scxml/executable-content-extension",
   "wit-version": "0.2.0",
   "http-origins": [],

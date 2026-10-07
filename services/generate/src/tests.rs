@@ -420,8 +420,10 @@ fn the_package_manifest_binds_the_exact_uri_and_artifacts() {
     .expect("the manifest parses");
     manifest.verify(None).expect("the manifest verifies");
     assert_eq!(manifest.service_uri, SERVICE_URI);
-    assert_eq!(SERVICE_URI, format!("{SERVICE_URI_BASE}@{SERVICE_TAG}"));
-    assert!(SERVICE_URI_BASE.ends_with(SERVICE_NAME));
+    assert_eq!(
+        SERVICE_URI,
+        format!("https://github.com/stateforward/nemobot/services/{SERVICE_NAME}")
+    );
     assert_eq!(
         manifest.service_artifact,
         "nemobot_service_generate.virtualized.wasm"

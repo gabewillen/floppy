@@ -11,7 +11,7 @@
                  synchronous and quick.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0"
+           targetNamespace="https://github.com/stateforward/nemobot/namespaces/decision"
            elementFormDefault="qualified">
   <xs:element name="menu">
     <xs:complexType>

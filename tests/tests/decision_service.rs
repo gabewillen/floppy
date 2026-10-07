@@ -35,7 +35,7 @@ use std::time::Duration;
 use serde_json::{Map, Value as Json, json};
 use support::{Finished, labelled, logs, run_document, scratch, service_uri};
 
-const NAMESPACE_URI: &str = "https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0";
+const NAMESPACE_URI: &str = "https://github.com/stateforward/nemobot/namespaces/decision";
 /// The fake key (not a secret): the mock checks it arrives as the bearer.
 const FAKE_KEY: &str = "ts-nemobot-fake";
 

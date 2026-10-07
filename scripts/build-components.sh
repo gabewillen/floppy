@@ -2,7 +2,7 @@
 # Builds and verifies nemobot's Wasm components for wasm32-wasip2, the way
 # scxml.rs builds its own (scxml.rs/scripts/verify-wasm-capabilities.sh).
 #
-# Usage: sh scripts/build-components.sh [--artifacts-dir DIR] [--cache-dir DIR] [--session-only]
+# Usage: sh scripts/build-components.sh [--artifacts-dir DIR] [--session-only]
 #
 # 1. The scxml.rs session components a `scx run` session links (machine,
 #    compiler, the three data models, both I/O processors, clock) and the
@@ -23,18 +23,21 @@
 #    WASI interface is retained). DIR/namespaces and DIR/services receive
 #    each `<component>.virtualized.wasm` and a `components.tsv` with their
 #    sizes and SHA-256 digests.
-# 3. Unless --session-only: publishes every package above into scxml.rs's
-#    repository-package cache (`scx --cache-dir`, default
-#    ${XDG_CACHE_HOME:-$HOME/.cache}/scxml/extensions), exactly as `scx`'s
+# 3. Unless --session-only: publishes every package above into a dev
+#    repository-package cache, DIR/package-cache, exactly as `scx`'s
 #    resolver stores a release it fetched: the manifest, schema, and
 #    verified component bytes content-addressed under sha256/<hex>, and the
-#    URI pinned in index/<sha256 of the URI>.json to this checkout's commit
-#    and those digests. A document's repository URIs
-#    (https://github.com/stateforward/nemobot/namespaces/<name>@<tag> and
-#    .../services/<name>@<tag>) then resolve from the cache with no flag and
-#    no network, and every run re-verifies the bytes against the pins; the
-#    documents never change. This is a local mirror: it replaces whatever the
-#    cache pinned for those URIs.
+#    URI pinned in index/<sha256 of the URI>.json to this checkout's commit,
+#    the release tag v<package-version> (a tagless URI's entry records the
+#    release it was pinned to), and those digests. The documents' tagless
+#    repository URIs (https://github.com/stateforward/nemobot/namespaces/<name>
+#    and .../services/<name>) then resolve from it with
+#    `scx --offline --cache-dir DIR/package-cache`, with no network, and
+#    every run re-verifies the bytes against the pins; the same documents
+#    resolve the latest GitHub release without those flags. The dev cache
+#    is never the release cache (`${XDG_CACHE_HOME:-$HOME/.cache}/scxml/
+#    extensions`, which only `scx`'s resolver writes), so a dev build never
+#    overwrites a release's entries.
 #
 # DIR defaults to target/components. Tool identities are checked by the
 # scxml.rs script; this script checks them again before building namespaces.
@@ -49,12 +52,11 @@ namespace_components='nemobot_decision'
 service_components='nemobot_service_generate nemobot_service_decision'
 
 usage() {
-    echo "usage: build-components.sh [--artifacts-dir DIR] [--cache-dir DIR] [--session-only]" >&2
+    echo "usage: build-components.sh [--artifacts-dir DIR] [--session-only]" >&2
     exit 2
 }
 
 artifacts_dir=''
-cache_dir=''
 session_only=false
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -62,12 +64,6 @@ while [ "$#" -gt 0 ]; do
             [ "$#" -ge 2 ] && [ -n "$2" ] || usage
             [ -z "$artifacts_dir" ] || usage
             artifacts_dir=$2
-            shift 2
-            ;;
-        --cache-dir)
-            [ "$#" -ge 2 ] && [ -n "$2" ] || usage
-            [ -z "$cache_dir" ] || usage
-            cache_dir=$2
             shift 2
             ;;
         --session-only)
@@ -245,21 +241,11 @@ build_component() {
 build_kind namespaces $namespace_components
 build_kind services $service_components
 
-# 3. Publish every package into the repository-package cache (scxml.rs
+# 3. Publish every package into the dev repository-package cache (scxml.rs
 # crates/scxml-cli/src/repository.rs, "Trust and the cache": objects under
 # sha256/<hex>, the pinned entry under index/<sha256 of the URI>.json in its
 # canonical form). The commit is this checkout's.
-if [ -z "$cache_dir" ]; then
-    if [ -n "${XDG_CACHE_HOME:-}" ]; then
-        cache_dir="$XDG_CACHE_HOME/scxml/extensions"
-    else
-        cache_dir="$HOME/.cache/scxml/extensions"
-    fi
-fi
-case "$cache_dir" in
-    /*) ;;
-    *) cache_dir="$(pwd -P)/$cache_dir" ;;
-esac
+cache_dir="$artifacts_dir/package-cache"
 commit=$(git -C "$workspace" rev-parse HEAD)
 case "$commit" in
     *[!0-9a-f]*|'') echo "not a git commit: $commit" >&2; exit 1 ;;
@@ -305,8 +291,9 @@ for component in $namespace_components; do
         exit 1
     }
     component_sha256=$(publish_object "$artifacts_dir/namespaces/$component.virtualized.wasm")
-    printf '{\n  "format": "stateforward.scxml.extension-cache/v1",\n  "namespace-uri": "%s",\n  "commit": "%s",\n  "manifest-sha256": "%s",\n  "schema-sha256": "%s",\n  "component-sha256": "%s"\n}\n' \
-        "$uri" "$commit" "$manifest_sha256" "$schema_sha256" "$component_sha256" | publish_entry "$uri"
+    tag="v$(manifest_field "$manifest" package-version)"
+    printf '{\n  "format": "stateforward.scxml.extension-cache/v1",\n  "namespace-uri": "%s",\n  "tag": "%s",\n  "commit": "%s",\n  "manifest-sha256": "%s",\n  "schema-sha256": "%s",\n  "component-sha256": "%s"\n}\n' \
+        "$uri" "$tag" "$commit" "$manifest_sha256" "$schema_sha256" "$component_sha256" | publish_entry "$uri"
     printf 'published %s component-sha256=%s\n' "$uri" "$component_sha256"
 done
 for component in $service_components; do
@@ -320,8 +307,9 @@ for component in $service_components; do
     fi
     manifest_sha256=$(publish_object "$manifest")
     component_sha256=$(publish_object "$artifacts_dir/services/$component.virtualized.wasm")
-    printf '{\n  "format": "stateforward.scxml.service-cache/v1",\n  "service-uri": "%s",\n  "commit": "%s",\n  "manifest-sha256": "%s",\n  "component-sha256": "%s"\n}\n' \
-        "$uri" "$commit" "$manifest_sha256" "$component_sha256" | publish_entry "$uri"
+    tag="v$(manifest_field "$manifest" package-version)"
+    printf '{\n  "format": "stateforward.scxml.service-cache/v1",\n  "service-uri": "%s",\n  "tag": "%s",\n  "commit": "%s",\n  "manifest-sha256": "%s",\n  "component-sha256": "%s"\n}\n' \
+        "$uri" "$tag" "$commit" "$manifest_sha256" "$component_sha256" | publish_entry "$uri"
     printf 'published %s component-sha256=%s\n' "$uri" "$component_sha256"
 done
 printf 'package-cache path=%s commit=%s\n' "$cache_dir" "$commit"

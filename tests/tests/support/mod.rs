@@ -4,9 +4,11 @@
 //!
 //! * [`components`] runs `scripts/build-components.sh` once per test binary
 //!   into `target/test-components`: the session components, every namespace
-//!   and service component, and the packages published into the test's own
-//!   repository-package cache (`target/test-components/package-cache`).
-//!   Test binaries run one after another, so they share the directory.
+//!   and service component, and the packages published into the build's dev
+//!   repository-package cache (`target/test-components/package-cache`). The
+//!   build runs with `XDG_CACHE_HOME` pointing at an empty directory, so a
+//!   test can check it never wrote the release cache. Test binaries run one
+//!   after another, so they share the directory.
 //! * [`cli`] builds `scx` once per test binary from the `scxml.rs/` subtree
 //!   into `target/scx`, embedding the session components just built
 //!   (`SCXML_WASM_ARTIFACTS_DIR`).
@@ -61,8 +63,12 @@ pub struct Components {
     pub dir: PathBuf,
     /// The session components' directory (the release `scx` embeds).
     pub session: PathBuf,
-    /// The repository-package cache the build published every package into.
+    /// The dev repository-package cache the build published every package
+    /// into.
     pub cache: PathBuf,
+    /// The `XDG_CACHE_HOME` the build ran with: the release cache would be
+    /// `scxml/extensions` below it.
+    pub release_home: PathBuf,
 }
 
 impl Components {
@@ -84,7 +90,7 @@ impl Components {
 
 /// The exact type URI of the nemobot service `name`.
 pub fn service_uri(name: &str) -> String {
-    format!("https://github.com/stateforward/nemobot/services/{name}@v0.1.0")
+    format!("https://github.com/stateforward/nemobot/services/{name}")
 }
 
 /// The components `scripts/build-components.sh` builds and verifies.
@@ -92,20 +98,22 @@ pub fn components() -> &'static Components {
     static COMPONENTS: OnceLock<Components> = OnceLock::new();
     COMPONENTS.get_or_init(|| {
         let dir = workspace().join("target/test-components");
-        let cache = dir.join("package-cache");
+        let release_home = dir.join("release-home");
+        let _ = std::fs::remove_dir_all(&release_home);
+        std::fs::create_dir_all(&release_home).expect("the release home is creatable");
         let status = Command::new("sh")
             .arg(workspace().join("scripts/build-components.sh"))
             .arg("--artifacts-dir")
             .arg(&dir)
-            .arg("--cache-dir")
-            .arg(&cache)
+            .env("XDG_CACHE_HOME", &release_home)
             .current_dir(workspace())
             .status()
             .expect("the build script runs");
         assert!(status.success(), "the component proof must pass");
         Components {
             session: dir.join("scxml"),
-            cache,
+            cache: dir.join("package-cache"),
+            release_home,
             dir,
         }
     })

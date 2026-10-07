@@ -93,9 +93,11 @@ fn choose() -> Prepared {
 }
 
 #[test]
-fn the_service_uri_is_the_repository_path_of_its_name_at_its_tag() {
-    assert_eq!(SERVICE_URI, format!("{SERVICE_URI_BASE}@{SERVICE_TAG}"));
-    assert!(SERVICE_URI_BASE.ends_with(&format!("/services/{SERVICE_NAME}")));
+fn the_service_uri_is_the_tagless_repository_path_of_its_name() {
+    assert_eq!(
+        SERVICE_URI,
+        format!("https://github.com/stateforward/nemobot/services/{SERVICE_NAME}")
+    );
 }
 
 #[test]

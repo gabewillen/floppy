@@ -104,9 +104,13 @@ phase 7; until then every backend is selected by its `env:baseurl` slot.
 - `scx run` lists, before running, each package's origins, slots, and
   WASI imports (with what the run grants), and each variable the document
   names with the elements and `<invoke>`s it goes to.
-- nemobot publishes no GitHub release yet, so its repository URIs resolve
-  only from the local cache `scripts/build-components.sh` publishes into
-  (phase 7 publishes releases).
+- nemobot publishes no GitHub release yet, so its tagless repository URIs
+  resolve only from the dev cache `scripts/build-components.sh` publishes
+  into (`scx run --offline --cache-dir target/components/package-cache`);
+  phase 7 publishes releases, and the same documents then resolve the
+  latest one unedited. A release's manifests name the tagless URIs, so a
+  document that pins `@<tag>` resolves only a release whose manifests name
+  that pinned URI (scxml.rs matches namespace and type URIs byte for byte).
 - Sessions that bind a package declaring a WASI permission cannot be
   recorded or replayed (scxml.rs refuses it); the builder binds none and is
   not recorded either.
@@ -116,5 +120,5 @@ phase 7; until then every backend is selected by its `env:baseurl` slot.
   unheld value. The scope is by package URI, so a child session an
   `<invoke type="scxml">` compiles at run time (which inherits the parent's
   packages) reaches a variable through those packages' elements too; the
-  builder's draft contract still
+  builder's draft profile (decision D20) still
   refuses drafts that use foreign namespaces.

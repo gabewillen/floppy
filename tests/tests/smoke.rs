@@ -85,3 +85,36 @@ fn a_wall_clock_session_fires_its_delayed_send() {
         Some("finished")
     );
 }
+
+/// `scripts/build-components.sh` publishes the locally built packages into
+/// its own dev cache under the artifacts directory, pinned under their
+/// tagless repository URIs, and never into the release cache
+/// (`${XDG_CACHE_HOME}/scxml/extensions`), so a dev build cannot overwrite a
+/// release's entries.
+#[test]
+fn the_dev_build_publishes_under_target_and_leaves_the_release_cache_untouched() {
+    use sha2::{Digest as _, Sha256};
+
+    let components = support::components();
+    assert!(
+        !components.release_home.join("scxml").exists(),
+        "the build wrote below XDG_CACHE_HOME"
+    );
+    assert!(components.cache.starts_with(&components.dir));
+    for uri in [
+        "https://github.com/stateforward/nemobot/namespaces/decision",
+        "https://github.com/stateforward/nemobot/services/generate",
+        "https://github.com/stateforward/nemobot/services/decision",
+    ] {
+        let entry = components
+            .cache
+            .join("index")
+            .join(format!("{:x}.json", Sha256::digest(uri.as_bytes())));
+        let text = std::fs::read_to_string(&entry)
+            .unwrap_or_else(|error| panic!("{uri} is pinned in the dev cache: {error}"));
+        assert!(
+            text.contains(&format!("\"{uri}\",\n  \"tag\": \"v0.1.0\",")),
+            "{text}"
+        );
+    }
+}

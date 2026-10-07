@@ -130,12 +130,11 @@ fn execution(result: Result<Executed, Failure<&'static str>>) -> &'static str {
 }
 
 #[test]
-fn the_namespace_uri_is_the_repository_path_of_its_name_at_its_tag() {
+fn the_namespace_uri_is_the_tagless_repository_path_of_its_name() {
     assert_eq!(
         NAMESPACE_URI,
-        format!("{NAMESPACE_URI_BASE}@{NAMESPACE_TAG}")
+        format!("https://github.com/stateforward/nemobot/namespaces/{NAMESPACE_NAME}")
     );
-    assert_eq!(NAMESPACE_URI_BASE.rsplit('/').next(), Some(NAMESPACE_NAME));
 }
 
 #[test]

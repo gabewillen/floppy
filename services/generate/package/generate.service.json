@@ -1,6 +1,6 @@
 {
   "format": "stateforward.scxml.service-package/v1",
-  "service-uri": "https://github.com/stateforward/nemobot/services/generate@v0.1.0",
+  "service-uri": "https://github.com/stateforward/nemobot/services/generate",
   "package-version": "0.1.0",
   "service-artifact": "nemobot_service_generate.virtualized.wasm",
   "schema-artifact": null,

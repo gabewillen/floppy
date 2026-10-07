@@ -12,7 +12,7 @@
 //! [`SERVICE_URI`]:
 //!
 //! ```xml
-//! <invoke idlocation="gen" type="https://github.com/stateforward/nemobot/services/generate@v0.1.0"
+//! <invoke idlocation="gen" type="https://github.com/stateforward/nemobot/services/generate"
 //!         env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
 //!   <param name="model" expr="'gpt-6-luna'"/>
 //!   <param name="prompt" expr="'Say hello.'"/>
@@ -144,16 +144,9 @@ use serde_json::{Map, Value as Json};
 /// before the tag.
 pub const SERVICE_NAME: &str = "generate";
 
-/// The service's repository URI without its `@<tag>` suffix.
-pub const SERVICE_URI_BASE: &str = "https://github.com/stateforward/nemobot/services/generate";
-
-/// The release tag the service URI names. nemobot has no release yet: this
-/// is the placeholder of its first release (the workspace version), and the
-/// manifest's `service-uri` moves with it before a tag is cut.
-pub const SERVICE_TAG: &str = "v0.1.0";
-
-/// The exact service type URI documents name: `{SERVICE_URI_BASE}@{SERVICE_TAG}`.
-pub const SERVICE_URI: &str = "https://github.com/stateforward/nemobot/services/generate@v0.1.0";
+/// The exact service type URI documents name: tagless, so it names the
+/// repository's latest release (decision D19); the manifest names it too.
+pub const SERVICE_URI: &str = "https://github.com/stateforward/nemobot/services/generate";
 
 /// The `env` slot of the API key (`env:apikey`).
 pub const API_KEY_SLOT: &str = "apikey";

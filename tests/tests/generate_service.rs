@@ -1,7 +1,7 @@
 //! Integration test of the `generate` service through `scx run`: a
 //! session binds the real `nemobot_service_generate` component (resolved
 //! from its repository URI) and invokes
-//! it (`<invoke type="https://github.com/stateforward/nemobot/services/generate@v0.1.0">`)
+//! it (`<invoke type="https://github.com/stateforward/nemobot/services/generate">`)
 //! against a deterministic fake Chat Completions backend on 127.0.0.1
 //! (nothing reaches the network). The request runs off the session thread
 //! (the service awaits `outbound-http.fetch`, an `async func`, which

@@ -10,7 +10,7 @@
 //!
 //! ```xml
 //! <onentry><decision:menu location="menu"/></onentry>
-//! <invoke type="https://github.com/stateforward/nemobot/services/decision@v0.1.0" ...>
+//! <invoke type="https://github.com/stateforward/nemobot/services/decision" ...>
 //!   <param name="menu" expr="menu"/>
 //!   <param name="state" expr="..."/>
 //! </invoke>
@@ -94,16 +94,10 @@ use serde_json::{Map, Value as Json};
 /// URI before the tag.
 pub const NAMESPACE_NAME: &str = "decision";
 
-/// The namespace's repository namespace URI without its `@<tag>` suffix.
-pub const NAMESPACE_URI_BASE: &str = "https://github.com/stateforward/nemobot/namespaces/decision";
-
-/// The release tag the namespace URI names (the placeholder of nemobot's
-/// first release, as for every nemobot namespace).
-pub const NAMESPACE_TAG: &str = "v0.1.0";
-
-/// The exact namespace URI documents bind: `{NAMESPACE_URI_BASE}@{NAMESPACE_TAG}`.
-pub const NAMESPACE_URI: &str =
-    "https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0";
+/// The exact namespace URI documents bind: tagless, so it names the
+/// repository's latest release (decision D19); the manifest and schema name
+/// it too.
+pub const NAMESPACE_URI: &str = "https://github.com/stateforward/nemobot/namespaces/decision";
 
 /// Upper bound on a menu event name's bytes (wasm builds only).
 pub const MAX_EVENT_NAME_BYTES: usize = wasm_bound(256);
