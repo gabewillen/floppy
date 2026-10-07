@@ -6,6 +6,39 @@ env file named by `NEMOBOT_LIVE_ENV_FILE`
 Each variable was granted only to its own package: `OPENAI_*` to `generate`,
 and `TYPESAFE_*` to `decision`.
 
+## 2026-10-07, `@<tag>` split at parsing, the tagless URI as identity (decision D21), model `gpt-6-luna`
+
+The run used nemobot commit `c5295cd2` (subtree scxml.rs `50f6e592`):
+`sh scripts/build-components.sh` publishing the decision namespace and both
+services into the dev cache `target/components/package-cache` (their
+manifests and the namespace's schema name the tagless URIs, pinned in the
+cache to release tag `v0.1.0` at commit `84fe9ca0`), and `scx` built from the
+subtree with those session components embedded
+(`SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml"
+CARGO_TARGET_DIR="$PWD/target/scx-live" cargo build --release --locked -p
+scxml-cli --manifest-path scxml.rs/Cargo.toml`). The builder command, from a
+clean shell (`env -i HOME="$HOME" PATH="/usr/bin:/bin"`), in the nemobot
+root:
+
+```console
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"max_attempts":4,"model":"gpt-6-luna"}}' |
+  target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
+    --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env bots/builder/builder.scx
+```
+
+The consent listing named the decision namespace and both services by their
+tagless URIs with `release v0.1.0 (commit 84fe9ca0...)`, the generate
+service's origin `https://api.openai.com/v1`, and the decision service's
+`https://api.typesafe.ai`; `TYPESAFE_BASE_URL` had no value (decision D18's
+declared origin applies).
+
+| Run | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| builder | `gpt-6-luna` | pass | 1 | exit 0 in 98 s; attempt 1 of 4, 0 failures, 0 fixes, no triage (the decision service did not run); plan `traffic_light_pedestrian`; both of its tests passed in simulation; progress `log`s `design`, `author`, `validate`, `simulate`, `done`; the built document compiled again with `scx compile` (no packages) |
+
+The builder's output was written to `target/builder-live-cli/` and is not
+committed. Nothing in the tests was changed to make them pass.
+
 ## 2026-10-06, tagless URIs, the draft profile, and the base URL default (decisions D18, D19, D20), model `gpt-6-luna`
 
 The runs used nemobot commit `05157554` (subtree scxml.rs `73f340b7`):
