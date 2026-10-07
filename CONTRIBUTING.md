@@ -184,10 +184,12 @@ byte for byte), and reproduces all of them through the CLI:
 ```console
 export CARGO_TARGET_DIR="$PWD/target/irp-components"
 RELEASE="$CARGO_TARGET_DIR/wasm-artifacts/irp-components"
+# The release scx embeds (crates/scxml-cli/build.rs).
+export SCXML_WASM_ARTIFACTS_DIR="$RELEASE"
 sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
   scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
   scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine \
-  scxml_extension_example
+  scxml_extension_example scx
 MANIFEST_SHA256=$(sha256sum "$RELEASE/manifest.tsv" | cut -d ' ' -f 1)
 EXTENSION_SHA256=$(sha256sum "$RELEASE/scxml_extension_example.virtualized.wasm" | cut -d ' ' -f 1)
 # The uploaded release-components artifact carries the license texts.
@@ -199,7 +201,6 @@ cargo build --release --locked -p scxml-cli --features wasmtime
 for model in ecmascript xpath; do
   "$CARGO_TARGET_DIR/release/scx" conformance run \
     --corpus "tests/conformance/w3c-irp/prepared/$model" \
-    --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
     --canonical-baseline "tests/conformance/w3c-irp/baselines/$model.scxml-report.json"
 done
 # Each repository namespace's own suite (docs/conformance.md, "Namespace
@@ -224,7 +225,6 @@ done
 for model in ecmascript xpath; do
   "$CARGO_TARGET_DIR/release/scx" conformance run \
     --corpus "tests/conformance/w3c-irp/prepared/$model" \
-    --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
     --snapshot-every-checkpoint \
     --canonical-baseline "tests/conformance/w3c-irp/baselines/$model.scxml-report.json"
 done

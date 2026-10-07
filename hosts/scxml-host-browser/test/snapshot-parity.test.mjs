@@ -100,7 +100,7 @@ async function loadFixtures() {
     names.map(async (name) => ({
       name,
       ops: JSON.parse(await readFile(join(fixtures, `${name}.ops.json`), 'utf8')),
-      source: await readFile(join(fixtures, `${name}.scxml`), 'utf8'),
+      source: await readFile(join(fixtures, `${name}.scx`), 'utf8'),
     })),
   );
 }
@@ -113,7 +113,7 @@ async function loadFixtures() {
 async function embedder(compiler) {
   const lowered = new Map();
   for (const name of await readdir(fixtures)) {
-    if (name.endsWith('.scxml')) {
+    if (name.endsWith('.scx')) {
       const source = await readFile(join(fixtures, name), 'utf8');
       const compiled = await compiler.compile(source, { sourceName: name });
       lowered.set(source, compiled.status === 'emitted' ? compiled.ir : undefined);
@@ -329,7 +329,7 @@ for (const basichttp of [true, false]) {
           requested.map(({ checkpoint }) => `${padded(checkpoint)}.snapshot.json`),
           `${fixture.name}: golden/ holds exactly the requested checkpoints`,
         );
-        const compiled = await compiler.compile(fixture.source, { sourceName: `${fixture.name}.scxml` });
+        const compiled = await compiler.compile(fixture.source, { sourceName: `${fixture.name}.scx` });
         assert.equal(compiled.status, 'emitted', `${fixture.name}: the fixture compiles`);
         const { data_model: dataModelName } = JSON.parse(new TextDecoder().decode(compiled.ir));
         const factory = DATA_MODELS[dataModelName ?? ''];

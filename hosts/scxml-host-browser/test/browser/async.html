@@ -56,7 +56,7 @@
       `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="outer">
          <datamodel><data id="base" expr="'${base}'"/><data id="name" expr="'child'"/></datamodel>
          <state id="outer">
-           <invoke id="kid" srcexpr="base + 'async-' + name + '.scxml'"/>
+           <invoke id="kid" srcexpr="base + 'async-' + name + '.scx'"/>
            <transition event="done.invoke.kid" cond="_event.data.answer === 42" target="pass"/>
            <transition event="error.execution" target="failed"/>
          </state>

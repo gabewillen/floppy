@@ -56,7 +56,7 @@ const TYPES = {
   '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json',
   '.wasm': 'application/wasm',
-  '.scxml': 'application/xml',
+  '.scx': 'application/xml',
 };
 
 // The pinned `@opentelemetry/api` ESM build uses extensionless relative
