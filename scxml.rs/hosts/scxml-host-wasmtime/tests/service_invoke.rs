@@ -1136,10 +1136,7 @@ impl SlowStream {
 #[test]
 fn cancelling_the_invoking_state_closes_the_streaming_connection_and_ends_its_thread() {
     let server = SlowStream::start();
-    let client = scxml_host_wasmtime::ExtensionHttpClient::new(
-        scxml_host_wasmtime::ExtensionHttpConfig::new(),
-    )
-    .expect("the default client configuration is valid");
+    let client = scxml_host_wasmtime::ExtensionHttpClient::new();
     let host = host_with(
         ServiceComponents::new()
             .with_values(
@@ -1207,5 +1204,81 @@ fn cancelling_the_invoking_state_closes_the_streaming_connection_and_ends_its_th
     assert!(logs(&mut session).is_empty());
     assert_eq!(session.configuration().expect("configuration"), ["away"]);
     server.server.join().expect("the server ends");
+    session.close().expect("the session closes");
+}
+
+/// A service request has no time limit of its own (the invocation bounds
+/// it, SCXML 6.4): a loopback server that says nothing for a while and then
+/// streams its answer slowly is read to its end.
+#[cfg(feature = "http")]
+#[test]
+fn a_slow_streaming_response_is_read_to_its_end() {
+    use std::io::{Read as _, Write as _};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
+    let port = listener
+        .local_addr()
+        .expect("the listener has an address")
+        .port();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("the client connects");
+        let mut head = Vec::new();
+        let mut byte = [0_u8; 1];
+        while !head.ends_with(b"\r\n\r\n") {
+            assert_eq!(stream.read(&mut byte).expect("the head is read"), 1);
+            head.push(byte[0]);
+        }
+        // Nothing at all, then the head and one chunk every 100 ms.
+        std::thread::sleep(Duration::from_millis(1_500));
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\n\r\n",
+            )
+            .expect("the response head is written");
+        let chunk = b"data: {\"choices\":[{\"delta\":{\"content\":\"token\"}}]}\n\n";
+        let framed = [format!("{:x}\r\n", chunk.len()).as_bytes(), chunk, b"\r\n"].concat();
+        for _ in 0..15 {
+            stream.write_all(&framed).expect("a chunk is written");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        stream.write_all(b"0\r\n\r\n").expect("the stream ends");
+    });
+    let host = host_with(
+        ServiceComponents::new()
+            .with_values(
+                ExtensionEnvironment::new([EnvVariable::new(
+                    "ENDPOINT",
+                    format!("http://127.0.0.1:{port}/slow"),
+                    [ECHO.to_owned()],
+                )])
+                .expect("valid values"),
+            )
+            .with_outbound_http(Arc::new(scxml_host_wasmtime::ExtensionHttpClient::new()))
+            .bind(package(ECHO), component(ArtifactKind::ServiceExample))
+            .expect("the example service binds"),
+    );
+    let notified = Arc::new(AtomicUsize::new(0));
+    let mut session = open_with(
+        &host,
+        &endpoint_document(BOUND),
+        false,
+        None,
+        counted(&notified),
+    )
+    .expect("the session opens");
+    let started = Instant::now();
+    session
+        .send(&ScriptedEvent::named("fetch"))
+        .expect("fetch is processed");
+    arrived(&notified, 1);
+    assert!(
+        started.elapsed() >= Duration::from_millis(3_000),
+        "the whole stream was read"
+    );
+    session
+        .deliver_http_responses()
+        .expect("the response is delivered")
+        .expect("one response arrived");
+    assert_eq!(logs(&mut session), ["fetched: 200"]);
+    server.join().expect("the server ends");
     session.close().expect("the session closes");
 }

@@ -683,10 +683,7 @@ impl ServiceFlags {
             .with_values(crate::extensions::HeldValue::environment(values)?);
         if outbound {
             services = services.with_outbound_http(std::sync::Arc::new(
-                scxml_host_wasmtime::ExtensionHttpClient::new(
-                    scxml_host_wasmtime::ExtensionHttpConfig::new(),
-                )
-                .map_err(|error| format!("[extension-http-invalid] {error}"))?,
+                scxml_host_wasmtime::ExtensionHttpClient::new(),
             ));
         }
         for (uri, flags) in &self.wasi {

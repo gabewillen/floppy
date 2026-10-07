@@ -258,34 +258,13 @@ impl OutboundHttp for NetworkClient {
     }
 }
 
-/// Default time for one whole invoked-service request, from resolution to
-/// the end of the response body (model calls are slow).
-pub const DEFAULT_EXTENSION_TOTAL_TIMEOUT: Duration = Duration::from_secs(120);
-
-/// Configuration of one [`ExtensionHttpClient`].
+/// Configuration of the resolver's agent ([`crate::ResolverComponent`]).
 #[derive(Clone, Copy, Debug)]
 pub struct ExtensionHttpConfig {
     /// Time to establish one connection.
     pub connect_timeout: Duration,
     /// Time for one whole request, including the response body.
     pub total_timeout: Duration,
-}
-
-impl Default for ExtensionHttpConfig {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ExtensionHttpConfig {
-    /// [`DEFAULT_CONNECT_TIMEOUT`] and [`DEFAULT_EXTENSION_TOTAL_TIMEOUT`].
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            connect_timeout: DEFAULT_CONNECT_TIMEOUT,
-            total_timeout: DEFAULT_EXTENSION_TOTAL_TIMEOUT,
-        }
-    }
 }
 
 /// The outbound HTTP transport of invoked services
@@ -299,9 +278,12 @@ impl ExtensionHttpConfig {
 /// refused). No redirect is followed (a 3xx is the response), and no cookie,
 /// credential, or environment proxy is used. TLS
 /// is rustls verified against the operating system's trust store. Each
-/// request runs on the calling (session) thread, bounded by the connect
-/// and total timeouts; the response head by [`MAX_RESPONSE_HEAD_BYTES`]
-/// and the body by [`crate::MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES`]. The
+/// request runs on its invocation's transport thread with no time limit of
+/// its own: the invocation bounds it, since leaving the invoking state
+/// cancels the invocation and closes the connection (SCXML 6.4), and an
+/// unreachable host fails when the operating system gives up connecting.
+/// The response head is bounded by [`MAX_RESPONSE_HEAD_BYTES`] and the body
+/// by [`crate::MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES`]. The
 /// caller's `service-http-request` span covers the request; nothing about
 /// it is recorded here.
 pub struct ExtensionHttpClient {
@@ -316,16 +298,16 @@ impl std::fmt::Debug for ExtensionHttpClient {
     }
 }
 
+impl Default for ExtensionHttpClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExtensionHttpClient {
-    /// A client with `config`.
-    ///
-    /// # Errors
-    ///
-    /// [`HttpClientError::TimeoutInvalid`] for a zero timeout.
-    pub fn new(config: ExtensionHttpConfig) -> Result<Self, HttpClientError> {
-        if config.connect_timeout.is_zero() || config.total_timeout.is_zero() {
-            return Err(HttpClientError::TimeoutInvalid);
-        }
+    /// A client with no connect or total timeout.
+    #[must_use]
+    pub fn new() -> Self {
         let tls = ureq::tls::TlsConfig::builder()
             .provider(ureq::tls::TlsProvider::Rustls)
             .root_certs(ureq::tls::RootCerts::PlatformVerifier)
@@ -335,14 +317,12 @@ impl ExtensionHttpClient {
             .http_status_as_error(false)
             .max_redirects(0)
             .proxy(None)
-            .timeout_connect(Some(config.connect_timeout))
-            .timeout_global(Some(config.total_timeout))
             .max_response_header_size(MAX_RESPONSE_HEAD_BYTES)
             .user_agent("scxml-extension")
             .tls_config(tls)
             .build()
             .new_agent();
-        Ok(Self { agent })
+        Self { agent }
     }
 }
 
@@ -352,8 +332,9 @@ impl ExtensionHttpClient {
     /// open is never used, and an open one is shut down, so the call stops
     /// waiting for the response at once and answers
     /// [`crate::ExtensionHttpFailure::Transport`]. (Resolving the host and
-    /// opening the TCP connection are not interrupted; they end within the
-    /// connect timeout, and nothing is sent after a cancel.)
+    /// opening the TCP connection are not interrupted; they end when the
+    /// operating system answers or gives up, and nothing is sent after a
+    /// cancel.)
     pub(crate) fn fetch_cancellable(
         &self,
         request: &crate::ExtensionHttpRequest,
@@ -691,6 +672,25 @@ mod tests {
         );
         assert_eq!(canonical_http_url("https://u@api.example/"), None);
         assert_eq!(canonical_http_url("mailto:x@y"), None);
+    }
+
+    #[test]
+    fn a_service_request_has_no_time_limit() {
+        let timeouts = ExtensionHttpClient::new().agent.config().timeouts();
+        assert_eq!(
+            (
+                timeouts.global,
+                timeouts.per_call,
+                timeouts.resolve,
+                timeouts.connect,
+                timeouts.send_request,
+                timeouts.send_body,
+                timeouts.recv_response,
+                timeouts.recv_body,
+            ),
+            (None, None, None, None, None, None, None, None),
+            "the invocation's lifetime is the only bound"
+        );
     }
 
     #[test]

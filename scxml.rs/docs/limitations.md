@@ -156,8 +156,10 @@ disagree are in [spec-errata.md](spec-errata.md).
   which proves the connection closes and its thread ends within 2 s) and
   the CLI's `live_run` service fetch tests, against loopback servers. Gaps:
   responses are delivered whole (no streaming); a cancelled request still
-  resolving or connecting ends only within the connect timeout (nothing is
-  sent); and the browser host offers none.
+  resolving or connecting ends only when the operating system answers or
+  gives up (nothing is sent); and the browser host offers none. A request
+  has no time limit of its own: the invocation's lifetime bounds it
+  (`a_slow_streaming_response_is_read_to_its_end`).
 - WASI for invoked services: the WASI interfaces a service may use are its
   component's own `wasi:*` imports; no manifest declares them. Only runtime
   resources need a grant, named after wasmtime CLI's options and scoped to
