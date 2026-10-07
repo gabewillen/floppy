@@ -7,6 +7,87 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-07, the builder against vLLM directly (no gateway), model `Qwen/Qwen3.8-Flash-Next`
+
+The runs used floppy commit `4909f064` (the failure-cause logging below;
+the generate service, the dev cache, the subtree scxml.rs `1a1defa7`, and
+the `target/scx-live` `scx` are unchanged from the entries below), with the
+builder's model calls going straight to vLLM on the DGX Spark
+(`http://192.168.2.89:8000/v1`, model `Qwen/Qwen3.8-Flash-Next`) instead of
+through the CPA gateway. The vLLM key reached the builder's
+`env:apikey="CPA_API_KEY"` slot from the calling shell only: a subshell
+exported `CPA_API_KEY` from `VLLM_API_KEY` in floppy's `.env` and `scx` got
+a bare `--env CPA_API_KEY`; floppy's `.env` was not given as an env file
+(its own `CPA_API_KEY` would have won), and no value was written to disk.
+`TYPESAFE_API_KEY` came from `mosfet/mosfet.py/.env`. The base URL came
+from a scratch env file holding only `CPA_BASE_URL`, naming a local
+streaming tap (`http://127.0.0.1:<port>/v1`, a Python script outside the
+repository) that forwarded each request byte for byte to
+`192.168.2.89:8000` and its streamed answer chunk by chunk, and recorded,
+per request, when the first and last `reasoning` and `content` deltas
+arrived and whether the stream completed or the client closed it (it never
+recorded a header). In the floppy root:
+
+```console
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"model":"Qwen/Qwen3.8-Flash-Next"}}' |
+  target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
+    --env CPA_API_KEY --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env \
+    --env-file <file with only CPA_BASE_URL> bots/builder/builder.scx
+```
+
+Durations are from the arrival of each stage's `log` record on standard
+output to the next one; "reasoning from" is the tap's time of the first
+`reasoning` delta of each generation, from the request.
+
+| Run | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| builder, run 1 | `Qwen/Qwen3.8-Flash-Next` | pass | 1 of 3 | exit 0 in 527 s, final state `done` on attempt 5 after `validate XML001` (an unclosed `event:schema` value), `validate SCXML008` (`<cancel>` without `sendid`), `validate XSD-cvc-complex-type.3.2.2` (`sendid` on `<send>`), and `simulate test-failed`, triage `triage.repair` four times (0.2 s each); generations 15.5 s (design), 74.2 s, 39.6 s, 18.9 s, 45.8 s, 42.5 s (author); simulations 143.3 s and 144.0 s (4 tests each); plan `traffic_light_pedestrian` |
+| builder, run 2 | `Qwen/Qwen3.8-Flash-Next` | pass | 2 of 3 | exit 0 in 437 s, final state `done` on attempt 3 after `validate SCXML008` (with `XSD-cvc-complex-type.3.2.2`) and `simulate test-failed` (4 tests), triage `triage.repair` twice; generations 13.6 s (design), 80.0 s, 10.8 s, 40.9 s (author); simulations 144.4 s and 144.9 s (4 tests each); plan `traffic_light_pedestrian` |
+| builder, run 3 | `Qwen/Qwen3.8-Flash-Next` | pass | 3 of 3 | exit 0 in 235 s, final state `done` on attempt 5 after `validate XSD-cvc-complex-type.3.2.2`, `simulate test-failed` twice (different observations, so progress), and `validate XML001`, triage `triage.repair` four times; generations 15.9 s (design), 41.9 s, 19.4 s, 34.8 s, 12.6 s, 21.1 s (author); simulations 28.3 s, 28.9 s, 28.9 s (3 tests each); plan `traffic_light` |
+
+No generation came near the builder's `generate_timeout_ms` (300 s): the
+longest took 80.0 s, so no generation was cancelled and the question of
+whether a cancelled one was still reasoning did not arise. Every one of the
+16 generations streamed its reasoning from the start: the first `reasoning`
+delta arrived 0.15 s to 0.66 s after the request, the reasoning went on
+until 5.1 s to 74.0 s after it (124 to 1,717 deltas), the answer followed
+it and took 3.6 s to 7.0 s, and every stream completed (`finish_reason` `stop`, all
+`200`). No `design-failed`, `status`, or timeout occurred.
+
+Compared with the gateway runs (the two entries below: two passes in three
+each), direct vLLM passed three in three. Its author generations took
+10.8 s to 80.0 s, where through the gateway six of the 18 author
+generations ended at a limit (three `status` at about 125 s through
+Cloudflare, three `author-timeout` at 300 s on the LAN) and the answered
+ones took up to 119.9 s; the design generations took
+13.6 s to 15.9 s against 9.3 s to 35.3 s. The gateway held the reasoning
+back about 19 s before its first byte; vLLM sends it at once, so with vLLM
+a generation in flight is visibly progressing. The longest stages are now
+the simulations (up to 144.9 s for 4 tests), which run the model's tests
+on the wall clock for their own `settle_ms`. The runs needed more repair
+attempts (3 to 5) than the gateway's passes (2 to 4) with the same mix of
+validator and simulation failures. The built documents were not kept.
+Nothing in the tests was changed to make them pass.
+
+### The missing cause of a `design-failed`
+
+The LAN gateway's run 1 below logged `design-failed` after 0.2 s with no
+cause. The builder had it: the design stage's diagnostic message named the
+generate service's failure code (`the design generation failed (<code>)`),
+but the `retry_gate` log carried only the diagnostic's kind and code, and
+the `failed` done data carried only the diagnostics of the last failure,
+which the later `author-timeout`s had replaced. Commit `4909f064` makes
+the `retry_gate` and `failed` logs carry the first diagnostic's message
+too, adds the failure history (as in `done`'s report) to the `failed` done
+data, names the error event in the `error.execution` and
+`error.communication` diagnostics, and says "it ended without an event"
+instead of `null`. The fake-backend test
+`a_fast_design_failure_keeps_its_cause_in_the_log_and_the_failed_done_data`
+(a plan request answered `404` at once, then a draft that fails twice) was
+red before the change (`failure 1: generate design-failed`, no history) and
+is green after it. The gateway run's code itself is not recoverable from
+that run's output.
+
 ## 2026-10-07, the builder through the gateway's LAN address (no Cloudflare), model `sparks/qwen3.8-flash-next`
 
 The runs used floppy commit `4bd63aa0` (code and subtree scxml.rs
