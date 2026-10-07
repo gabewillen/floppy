@@ -27,6 +27,7 @@ export const COMPONENTS = Object.freeze([
   'snapshot-codec',
   'validator',
   'extension-example',
+  'package-validator-example',
   'scx',
 ]);
 

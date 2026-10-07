@@ -10,6 +10,7 @@ mod event_schemas;
 mod expression;
 mod extensions;
 mod mask;
+mod package_validators;
 #[cfg_attr(
     not(feature = "wasmtime"),
     allow(
@@ -936,12 +937,15 @@ fn validate(
             extensions::write_notes(&services::summary(&services, None, None));
         }
         let packages = resolved.all();
-        let validator = Validator::new(schemas.resolver(&packages), XsdSchemaBackend)
+        let mut validator = Validator::new(schemas.resolver(&packages), XsdSchemaBackend)
             .with_services(services::bound_services(&services))
             .with_event_schema_resources(event_schemas::load(path, &source))
             .with_schema_mode(mode)
             .with_expression_checker(std::sync::Arc::new(expression::EcmaScriptSyntax))
             .with_expression_checker(std::sync::Arc::new(expression::XPathSyntax));
+        if let Some(linked) = package_validators::linked(&packages, &services)? {
+            validator = validator.with_package_validator(linked);
+        }
         let name = path.display().to_string();
         // Expression parsing is recursive; run the bounded validation on a
         // thread with an explicit stack reservation instead of the ambient one.
@@ -1008,13 +1012,15 @@ fn compile(
             .collect::<Vec<_>>();
         // Compile validates with the same expression checker as `validate`,
         // so a document `validate` rejects is never compiled.
-        let compiler = Compiler::new(
-            Validator::new(schemas.resolver(&extension_packages), XsdSchemaBackend)
-                .with_schema_mode(mode)
-                .with_services(services::bound_services(&services))
-                .with_expression_checker(std::sync::Arc::new(expression::EcmaScriptSyntax))
-                .with_expression_checker(std::sync::Arc::new(expression::XPathSyntax)),
-        );
+        let mut validator = Validator::new(schemas.resolver(&extension_packages), XsdSchemaBackend)
+            .with_schema_mode(mode)
+            .with_services(services::bound_services(&services))
+            .with_expression_checker(std::sync::Arc::new(expression::EcmaScriptSyntax))
+            .with_expression_checker(std::sync::Arc::new(expression::XPathSyntax));
+        if let Some(linked) = package_validators::linked(&extension_packages, &services)? {
+            validator = validator.with_package_validator(linked);
+        }
+        let compiler = Compiler::new(validator);
         let input = CompileInput {
             source_name: path.display().to_string(),
             source,

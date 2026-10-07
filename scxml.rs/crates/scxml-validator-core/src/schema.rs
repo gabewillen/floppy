@@ -30,8 +30,9 @@ pub const MAX_HTTP_ORIGIN_BYTES: usize = 2_048;
 /// The only extension package manifest format (its `format` field) this
 /// release reads.
 pub const EXTENSION_PACKAGE_FORMAT: &str = "stateforward.scxml.extension-package/v2";
-/// Manifest fields in their canonical order (`format` first).
-const EXTENSION_PACKAGE_FIELDS: [&str; 8] = [
+/// Manifest fields in their canonical order (`format` first); the last two
+/// ([`VALIDATOR_FIELDS`]) are optional.
+const EXTENSION_PACKAGE_FIELDS: [&str; 10] = [
     "format",
     "namespace-uri",
     "package-version",
@@ -40,7 +41,59 @@ const EXTENSION_PACKAGE_FIELDS: [&str; 8] = [
     "schema-sha256",
     "wit-world",
     "wit-version",
+    "validator-artifact",
+    "validator-sha256",
 ];
+
+/// The optional package validator fields of both manifest formats: the
+/// validator component artifact (relative to the manifest) and its
+/// lowercase hex SHA-256, present together or not at all.
+pub const VALIDATOR_FIELDS: [&str; 2] = ["validator-artifact", "validator-sha256"];
+
+/// Reads one optional string field of a manifest object.
+pub(crate) fn optional_field(
+    object: &serde_json::Map<String, serde_json::Value>,
+    name: &str,
+) -> Result<Option<String>, String> {
+    match object.get(name) {
+        Some(serde_json::Value::String(value)) => Ok(Some(value.clone())),
+        Some(_) => Err(format!("field `{name}` must be a string")),
+        None => Ok(None),
+    }
+}
+
+/// Verifies a manifest's optional validator fields: both present or both
+/// absent, the artifact non-empty and bounded, the digest lowercase hex
+/// SHA-256. `kind` names the manifest in messages.
+pub(crate) fn verify_validator_fields(
+    kind: &str,
+    artifact: Option<&str>,
+    sha256: Option<&str>,
+) -> Result<(), String> {
+    match (artifact, sha256) {
+        (None, None) => Ok(()),
+        (Some(artifact), Some(sha256)) => {
+            if artifact.is_empty() || artifact.len() > MAX_EXTENSION_PACKAGE_FIELD_BYTES {
+                return Err(format!(
+                    "{kind} package field `validator-artifact` must be non-empty and at most {MAX_EXTENSION_PACKAGE_FIELD_BYTES} bytes"
+                ));
+            }
+            if sha256.len() != 64
+                || !sha256
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            {
+                return Err(format!(
+                    "{kind} package field `validator-sha256` must be a lowercase hex SHA-256"
+                ));
+            }
+            Ok(())
+        }
+        _ => Err(format!(
+            "{kind} package fields `validator-artifact` and `validator-sha256` must be present together"
+        )),
+    }
+}
 
 /// Whether `slot` is an `env-slots` entry: `[a-z][a-z0-9-]*`, at most
 /// [`MAX_ENV_SLOT_BYTES`] bytes, never ending in `expr` (the suffix of the
@@ -112,6 +165,12 @@ pub struct ExtensionPackageManifest {
     pub wit_world: String,
     /// WIT package/world version.
     pub wit_version: String,
+    /// Optional package validator component artifact identifier (relative
+    /// to the manifest); present exactly when `validator_sha256` is.
+    pub validator_artifact: Option<String>,
+    /// Lowercase SHA-256 of the package validator component; present
+    /// exactly when `validator_artifact` is.
+    pub validator_sha256: Option<String>,
 }
 
 impl ExtensionPackageManifest {
@@ -162,6 +221,8 @@ impl ExtensionPackageManifest {
             schema_sha256: field("schema-sha256")?,
             wit_world: field("wit-world")?,
             wit_version: field("wit-version")?,
+            validator_artifact: optional_field(&object, "validator-artifact")?,
+            validator_sha256: optional_field(&object, "validator-sha256")?,
         })
     }
 
@@ -197,6 +258,11 @@ impl ExtensionPackageManifest {
                 ));
             }
         }
+        verify_validator_fields(
+            "extension",
+            self.validator_artifact.as_deref(),
+            self.validator_sha256.as_deref(),
+        )?;
         if self.wit_world != SUPPORTED_NAMESPACE_WIT_WORLD {
             return Err(format!(
                 "extension package WIT world must equal `{SUPPORTED_NAMESPACE_WIT_WORLD}`"
@@ -836,6 +902,8 @@ mod tests {
             schema_sha256: hex::encode(Sha256::digest(&source.bytes)),
             wit_world: "stateforward:scxml/executable-content-extension".into(),
             wit_version: "0.2.0".into(),
+            validator_artifact: None,
+            validator_sha256: None,
         };
         assert_eq!(manifest.verify_schema(&source), Ok(()));
         let mut invalid = manifest.clone();
@@ -855,6 +923,8 @@ mod tests {
             schema_sha256: hex::encode(Sha256::digest(&source.bytes)),
             wit_world: "stateforward:scxml/other".into(),
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION.into(),
+            validator_artifact: None,
+            validator_sha256: None,
         };
         assert_eq!(
             manifest.verify_schema(&source),
@@ -899,6 +969,8 @@ mod tests {
             schema_sha256: "00".repeat(32),
             wit_world: SUPPORTED_NAMESPACE_WIT_WORLD.into(),
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION.into(),
+            validator_artifact: None,
+            validator_sha256: None,
         };
         let oversized_system_id = SchemaSource::new(
             "x".repeat(MAX_COMPONENT_METADATA_BYTES + 1),
@@ -936,6 +1008,8 @@ mod tests {
             schema_sha256: hex::encode(Sha256::digest(&source.bytes)),
             wit_world: SUPPORTED_NAMESPACE_WIT_WORLD.into(),
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION.into(),
+            validator_artifact: None,
+            validator_sha256: None,
         };
         assert_eq!(
             manifest.verify_schema(&source),

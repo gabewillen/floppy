@@ -95,6 +95,9 @@ pub(crate) struct Package {
     pub(crate) manifest: ExtensionPackageManifest,
     /// The schema bytes the manifest's digest names.
     pub(crate) schema: SchemaSource,
+    /// The package validator component bytes the manifest's
+    /// `validator-sha256` names, when it names one.
+    pub(crate) validator: Option<Vec<u8>>,
 }
 
 /// The exact URI of the `scx` namespace (`namespaces/scx`), which `scx`
@@ -129,6 +132,7 @@ impl Package {
             origin: PackageOrigin::Embedded,
             manifest,
             schema,
+            validator: None,
         })
     }
 
@@ -511,11 +515,58 @@ fn load_one(path: &Path) -> Result<Package, Box<dyn std::error::Error>> {
     manifest
         .verify_schema(&schema)
         .map_err(|error| format!("extension package `{shown}` does not verify: {error}"))?;
+    let validator = read_validator(
+        path,
+        manifest.validator_artifact.as_deref(),
+        manifest.validator_sha256.as_deref(),
+    )
+    .map_err(|error| format!("extension package `{shown}`: {error}"))?;
     Ok(Package {
         origin: PackageOrigin::Manifest(path.to_path_buf()),
         manifest,
         schema,
+        validator,
     })
+}
+
+/// The package validator component a verified manifest names
+/// (`validator-artifact` relative to the manifest's directory), read within
+/// the component bound and checked against `validator-sha256`; `None` when
+/// the manifest names none.
+pub(crate) fn read_validator(
+    manifest: &Path,
+    artifact: Option<&str>,
+    sha256: Option<&str>,
+) -> Result<Option<Vec<u8>>, String> {
+    let (Some(artifact), Some(sha256)) = (artifact, sha256) else {
+        return Ok(None);
+    };
+    let path = relative_to_manifest(manifest, artifact, "validator-artifact")?;
+    let bytes = read_bounded(&path, crate::repository::MAX_COMPONENT_BYTES).map_err(|error| {
+        format!(
+            "cannot read its package validator `{}`: {error}",
+            path.display()
+        )
+    })?;
+    if hex_sha256(&bytes) != sha256 {
+        return Err(format!(
+            "its package validator `{}` does not match `validator-sha256`",
+            path.display()
+        ));
+    }
+    Ok(Some(bytes))
+}
+
+/// The lowercase hex SHA-256 of `bytes`.
+fn hex_sha256(bytes: &[u8]) -> String {
+    use sha2::Digest as _;
+    sha2::Sha256::digest(bytes)
+        .iter()
+        .fold(String::with_capacity(64), |mut text, byte| {
+            use std::fmt::Write as _;
+            let _ = write!(text, "{byte:02x}");
+            text
+        })
 }
 
 /// `artifact` inside the manifest's directory: a relative path of plain
@@ -1127,6 +1178,7 @@ mod tests {
                 },
                 manifest,
                 schema: SchemaSource::new("x.xsd", Vec::new()),
+                validator: None,
             }],
             slot_uses: slot_uses(source),
             ..Packages::default()

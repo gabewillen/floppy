@@ -2900,6 +2900,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "scxml-package-validator-example"
+version = "0.2.0"
+dependencies = [
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
 name = "scxml-packager"
 version = "0.2.0"
 dependencies = [

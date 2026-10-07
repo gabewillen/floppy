@@ -51,15 +51,15 @@ use crate::guest_spans::GuestSpanTable;
 use crate::memory_growth::MeteredLimits;
 use crate::{
     ArtifactError, ArtifactKind, AuthenticatedComponent, ComponentDataModel, HostError,
-    LifecycleLease, MachineDataModel as _, TelemetryProviders, WasmtimeHostConfig,
-    component_engine, record_store_limits,
+    LifecycleLease, MachineDataModel as _, PackageValidators, TelemetryProviders,
+    WasmtimeHostConfig, component_engine, record_store_limits,
 };
 
 #[allow(
     missing_docs,
     reason = "generated WIT bindings re-exported as `validator_types`; the canonical documentation is validator.wit"
 )]
-mod validator_bindings {
+pub(crate) mod validator_bindings {
     wasmtime::component::bindgen!({
         path: "../../crates/scxml-wit/wit/validator",
         world: "validator",
@@ -76,9 +76,12 @@ use validator_bindings::stateforward::scxml_validator::types::ErrorCode as Valid
 /// The validator component's request types (`stateforward:scxml-validator`
 /// `types`), as the generated bindings define them.
 pub mod validator_types {
+    pub use super::validator_bindings::stateforward::scxml_validator::document::{
+        Attribute, Context, Element, QualifiedName, TransitionInfo,
+    };
     pub use super::validator_bindings::stateforward::scxml_validator::types::{
-        EventSchemaResource, ExtensionPackage, Profile, SchemaPolicy, SchemaResource, TraceContext,
-        ValidationRequest,
+        Applicability, Diagnostic, Edit, EventSchemaResource, ExtensionPackage, Fix, Label,
+        Profile, SchemaPolicy, SchemaResource, Severity, Span, TraceContext, ValidationRequest,
     };
 }
 
@@ -90,6 +93,8 @@ struct ValidatorStoreData {
     guest_spans: GuestSpanTable,
     /// The linked data model and its name, answering `expression-syntax`.
     syntax: Option<(ComponentDataModel, String)>,
+    /// The bound package validators, answering `package-validator-api`.
+    packages: Option<std::sync::Arc<PackageValidators>>,
     _store_lease: LifecycleLease,
 }
 
@@ -104,6 +109,7 @@ pub struct ComponentValidator {
     data_model: Option<(wasmtime::component::Component, Linker<DataModelStoreData>)>,
     config: WasmtimeHostConfig,
     providers: TelemetryProviders,
+    packages: Option<std::sync::Arc<PackageValidators>>,
 }
 
 impl std::fmt::Debug for ComponentValidator {
@@ -192,7 +198,19 @@ impl ComponentValidator {
             data_model,
             config: config.clone(),
             providers: providers.clone(),
+            packages: None,
         })
+    }
+
+    /// Answers the validator's `package-validator-api` import with
+    /// `packages`: each call goes to the validator bound to its targets'
+    /// package ([`PackageValidators::route`]), and a package with none
+    /// answers an empty list. Without this call every package answers an
+    /// empty list.
+    #[must_use]
+    pub fn with_package_validators(mut self, packages: std::sync::Arc<PackageValidators>) -> Self {
+        self.packages = Some(packages);
+        self
     }
 
     /// Validates one request in fresh stores and returns the component's
@@ -264,6 +282,7 @@ impl ComponentValidator {
                 execution_context: Context::current(),
                 guest_spans: GuestSpanTable::new(),
                 syntax,
+                packages: self.packages.clone(),
                 _store_lease: self.providers.acquire_store()?,
             },
         );
@@ -423,6 +442,37 @@ const fn effect_span(span: DataModelEffectSpan) -> EffectSpan {
 }
 
 impl validator_bindings::stateforward::scxml_validator::types::Host for ValidatorStoreData {}
+
+impl validator_bindings::stateforward::scxml_validator::document::Host for ValidatorStoreData {}
+
+impl validator_bindings::stateforward::scxml_validator::package_validator_api::Host
+    for ValidatorStoreData
+{
+    fn validate(
+        &mut self,
+        document: validator_types::Context,
+        targets: Vec<u32>,
+    ) -> Result<
+        Vec<validator_types::Diagnostic>,
+        validator_bindings::stateforward::scxml_validator::types::ComponentError,
+    > {
+        let (Some(packages), Some(package)) = (
+            self.packages.as_ref(),
+            PackageValidators::route(&document, &targets),
+        ) else {
+            return Ok(Vec::new());
+        };
+        packages
+            .validate(package, &document, &targets)
+            .map_err(
+                |_| validator_bindings::stateforward::scxml_validator::types::ComponentError {
+                    version:
+                        validator_bindings::stateforward::scxml_validator::types::ErrorVersion::V1,
+                    code: ValidatorErrorCode::InvalidRequest,
+                },
+            )
+    }
+}
 
 impl validator_telemetry::Host for ValidatorStoreData {
     fn start(

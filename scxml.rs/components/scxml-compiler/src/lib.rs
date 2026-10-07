@@ -182,6 +182,8 @@ mod guest {
                     wit_version: package.wit_version,
                     // The WIT package record carries no WASI permissions:
                     // compilation never links the extension component.
+                    validator_artifact: None,
+                    validator_sha256: None,
                 })
                 .collect(),
             schema_mode: match request.options.schema_policy {
@@ -695,6 +697,8 @@ mod tests {
             schema_sha256: "0".repeat(64),
             wit_world: "stateforward:other/world".into(),
             wit_version: scxml_validator_core::SUPPORTED_NAMESPACE_WIT_VERSION.into(),
+            validator_artifact: None,
+            validator_sha256: None,
         }];
         assert_eq!(
             compile(foreign_world),

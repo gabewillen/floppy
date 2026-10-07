@@ -60,9 +60,11 @@ mod diagnostic;
 mod draft_profile;
 mod env_attributes;
 mod event_attributes;
+mod event_payloads;
 mod graph;
 mod invoke_types;
 mod lowering;
+pub mod package_validator;
 mod refine;
 mod request;
 mod schema;
@@ -97,6 +99,7 @@ pub use graph::{
     graph_work_budget,
 };
 pub use lowering::bounds as lowering_bounds;
+pub use package_validator::{PackageValidator, PackageValidatorFailure};
 pub use request::{
     ComponentRequestBoundary, MAX_COMPONENT_METADATA_BYTES, MAX_COMPONENT_PACKAGE_COUNT,
     MAX_COMPONENT_REQUEST_BYTES, MAX_COMPONENT_SCHEMA_BYTES, MAX_COMPONENT_SCHEMA_COUNT,
@@ -108,7 +111,8 @@ pub use schema::{
     MAX_ENV_SLOT_BYTES, MAX_EXTENSION_PACKAGE_FIELD_BYTES, MAX_EXTENSION_PACKAGE_LIST_ITEMS,
     MAX_HTTP_ORIGIN_BYTES, MemorySchemaResolver, MissingSchemaPolicy,
     SUPPORTED_NAMESPACE_WIT_VERSION, SUPPORTED_NAMESPACE_WIT_WORLD, SchemaBackendError,
-    SchemaResolveError, SchemaResolver, SchemaSource, SchemaValidator, is_env_slot, is_http_origin,
+    SchemaResolveError, SchemaResolver, SchemaSource, SchemaValidator, VALIDATOR_FIELDS,
+    is_env_slot, is_http_origin,
 };
 pub use schema_values::{COLLAPSED_ATTRIBUTES, collapses_whitespace};
 pub use scxml_event_schema::Resources as EventSchemaResources;
@@ -168,6 +172,8 @@ pub struct Validator<R, B> {
     /// The bytes of each schema file an `event:schema` references, keyed by
     /// the reference's resource part as authored.
     event_schema_resources: EventSchemaResources,
+    /// The linked package validators; `None` runs none.
+    packages: Option<std::sync::Arc<dyn PackageValidator>>,
 }
 
 impl<R, B> Validator<R, B> {
@@ -183,7 +189,22 @@ impl<R, B> Validator<R, B> {
             expression_checkers: Vec::new(),
             services: None,
             event_schema_resources: std::collections::BTreeMap::new(),
+            packages: None,
         }
+    }
+
+    /// Links the package validators: after the XSD and built-in checks,
+    /// each package with targets in a document (an extension namespace's
+    /// elements, or the `<invoke>`s whose literal `type` is a service type
+    /// URI) is checked once by `validator` (`package_validator`; `PKG002`
+    /// when one fails).
+    #[must_use]
+    pub fn with_package_validator(
+        mut self,
+        validator: std::sync::Arc<dyn PackageValidator>,
+    ) -> Self {
+        self.packages = Some(validator);
+        self
     }
 
     /// The bytes of each schema file the document's `event:schema`
@@ -431,11 +452,23 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
         for diagnostic in event_attribute_diagnostics(document, event_schemas) {
             report.push(diagnostic);
         }
+        for diagnostic in event_payloads::event_payload_diagnostics(document, event_schemas) {
+            report.push(diagnostic);
+        }
         for diagnostic in invoke_types::invoke_type_diagnostics(document, self.services.as_ref()) {
             report.push(diagnostic);
         }
         if self.profile == Some(Profile::Draft) {
             for diagnostic in draft_profile::draft_profile_diagnostics(document) {
+                report.push(diagnostic);
+            }
+        }
+        if let Some(validator) = &self.packages {
+            for diagnostic in package_validator::package_validator_diagnostics(
+                document,
+                event_schemas,
+                validator.as_ref(),
+            ) {
                 report.push(diagnostic);
             }
         }

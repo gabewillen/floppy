@@ -1,0 +1,14 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" initial="order">
+  <state id="order">
+    <onentry>
+      <send event="order.placed" target="#_parent"
+            event:schema='{"type":"object","properties":{"quantity":{"type":"integer","minimum":1}},"required":["quantity"]}'>
+        <content>{"quantity": 0}</content>
+      </send>
+    </onentry>
+    <transition target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

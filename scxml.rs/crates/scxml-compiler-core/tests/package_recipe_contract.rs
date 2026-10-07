@@ -59,6 +59,8 @@ fn package(
             schema_sha256: hex::encode(Sha256::digest(&schema_bytes)),
             wit_world: SUPPORTED_NAMESPACE_WIT_WORLD.into(),
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION.into(),
+            validator_artifact: None,
+            validator_sha256: None,
         },
         NamespaceSchemaBinding {
             namespace_uri: namespace_uri.into(),

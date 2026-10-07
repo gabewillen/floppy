@@ -1298,8 +1298,58 @@ impl Repository {
                 )
             },
         )?;
-        let package = verify_package(namespace_uri, &manifest, &schema, &entry)?;
+        let mut package = verify_package(namespace_uri, &manifest, &schema, &entry)?;
+        package.validator = self.validator(
+            namespace_uri,
+            &uri,
+            release,
+            package.manifest.validator_artifact.as_deref(),
+            package.manifest.validator_sha256.as_deref(),
+        )?;
         Ok((package, entry))
+    }
+
+    /// The package validator component a verified repository manifest
+    /// names (`validator-artifact`, a release asset), authenticated like a
+    /// package's own component: the release's `SHA256SUMS` must list
+    /// exactly the manifest's `validator-sha256` for it, and the bytes must
+    /// hash to it; cached by that digest, which the pinned manifest pins.
+    /// `None` when the manifest names none.
+    fn validator(
+        &self,
+        package_uri: &str,
+        uri: &RepositoryUri,
+        release: (&str, &str),
+        artifact: Option<&str>,
+        sha256: Option<&str>,
+    ) -> Result<Option<Vec<u8>>, String> {
+        let (Some(asset), Some(sha256)) = (artifact, sha256) else {
+            return Ok(None);
+        };
+        if !valid_segment(asset) {
+            return Err(format!(
+                "{} `{package_uri}`: its `validator-artifact` is not a plain release asset name",
+                uri.kind.label()
+            ));
+        }
+        self.pinned(
+            package_uri,
+            "package validator",
+            sha256,
+            MAX_COMPONENT_BYTES,
+            || {
+                let sums = self.fetch(uri, release, Artifact::Sha256Sums, MAX_SUMS_BYTES)?;
+                if sums_entry(&sums, asset).as_deref() != Some(sha256) {
+                    return Err(format!(
+                        "{} `{package_uri}`: release `{}` does not list the manifest's `validator-sha256` for `{asset}` in its {SUMS_ASSET}",
+                        uri.kind.label(),
+                        release.0
+                    ));
+                }
+                self.fetch(uri, release, Artifact::Component(asset), MAX_COMPONENT_BYTES)
+            },
+        )
+        .map(Some)
     }
 
     /// First use of `namespace_uri` (or of its tagless URI's new release):
@@ -1483,7 +1533,14 @@ impl Repository {
         )?;
         let parsed = parse_service_manifest(service_uri, &manifest)?;
         let schema = self.service_schema(service_uri, &uri, release, &parsed)?;
-        let package = verify_service(service_uri, &manifest, schema.as_deref(), &entry)?;
+        let mut package = verify_service(service_uri, &manifest, schema.as_deref(), &entry)?;
+        package.validator = self.validator(
+            service_uri,
+            &uri,
+            release,
+            package.manifest.validator_artifact.as_deref(),
+            package.manifest.validator_sha256.as_deref(),
+        )?;
         Ok((package, entry))
     }
 
@@ -1703,6 +1760,7 @@ fn verify_service(
             commit: entry.commit.clone(),
         },
         manifest,
+        validator: None,
     })
 }
 
@@ -1821,6 +1879,7 @@ fn verify_package(
         },
         manifest,
         schema,
+        validator: None,
     })
 }
 

@@ -9,7 +9,7 @@
 //   tracer `scxml-host-browser`   one span per host operation, named after
 //                                 the operation, attributes
 //                                 scxml.module = host-browser,
-//                                 scxml.operation = HOST_OPERATIONS (16),
+//                                 scxml.operation = HOST_OPERATIONS (17),
 //                                 scxml.outcome = OUTCOMES (3)
 //   tracer `scxml-component-guest` guest spans and point signals opened
 //                                 through the WIT telemetry imports, named
@@ -94,6 +94,7 @@ export const HOST_OPERATIONS = Object.freeze([
   'extension-instantiate',
   'extension-execute',
   'extension-shutdown',
+  'package-validator-validate',
 ]);
 /** Closed `scxml.outcome` values (the WIT telemetry `outcome` enum). */
 export const OUTCOMES = Object.freeze(['ok', 'rejected', 'failed']);

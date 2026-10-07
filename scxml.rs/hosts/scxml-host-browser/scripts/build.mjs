@@ -25,8 +25,9 @@
 //   (the manifest digest the build authenticated), which the session
 //   snapshot lists in `snapshot.components` (docs/session-snapshot.md,
 //   "`snapshot`");
-// * the validator (`scxml_validator`) and the extension components the
-//   package ships (`scxml_extension_example`, `scx`) are built like every
+// * the validator (`scxml_validator`), the extension components the
+//   package ships (`scxml_extension_example`, `scx`), and the package
+//   validator it ships (`scxml_package_validator_example`) are built like every
 //   other component; `identity.js` also lists each component's imported
 //   interfaces;
 // * the optional session snapshot codec (`scxml_snapshot_codec`) is built
@@ -85,6 +86,11 @@ const COMPONENTS = [
     name: 'extension-example',
     artifact: 'scxml_extension_example',
     file: 'scxml_extension_example.virtualized.wasm',
+  },
+  {
+    name: 'package-validator-example',
+    artifact: 'scxml_package_validator_example',
+    file: 'scxml_package_validator_example.virtualized.wasm',
   },
   { name: 'scx', artifact: 'scx', file: 'scx.virtualized.wasm' },
 ];

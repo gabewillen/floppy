@@ -165,6 +165,7 @@ binds a namespace ([executable-content-extensions.md](executable-content-extensi
 | `wit-world`, `wit-version` | `stateforward:scxml/invoked-service`, `0.2.0` |
 | `http-origins` | the origins or URL prefixes its `outbound-http` requests may reach (binding consents to them) |
 | `env-slots` | the `env` slots an `<invoke>` of it may bind |
+| `validator-artifact`, `validator-sha256` | optional: a package validator component and its SHA-256 (both present or both absent; [validator-rules.md](validator-rules.md#package-validators)) |
 
 Unknown fields and values fail closed when the manifest is read. The CLI
 binds a package with `--service-package MANIFEST.json` and authenticates its

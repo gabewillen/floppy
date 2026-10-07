@@ -144,6 +144,10 @@ mod validator;
 #[cfg(feature = "wasmtime")]
 pub use validator::{ComponentValidator, validator_types};
 #[cfg(feature = "wasmtime")]
+mod package_validator;
+#[cfg(feature = "wasmtime")]
+pub use package_validator::PackageValidators;
+#[cfg(feature = "wasmtime")]
 mod script;
 #[cfg(feature = "wasmtime")]
 pub use script::{
@@ -156,7 +160,8 @@ mod artifact;
 pub use artifact::{
     ArtifactKind, AuthenticatedComponent, ComponentSource, TrustedComponentDigest,
     TrustedManifestDigest, authenticate_component, authenticate_extension_component,
-    authenticate_packaged_machine, authenticate_service_component,
+    authenticate_package_validator_component, authenticate_packaged_machine,
+    authenticate_service_component,
 };
 #[cfg(feature = "wasmtime")]
 mod extension;

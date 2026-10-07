@@ -225,6 +225,15 @@ The CLI resolves `schema-artifact` and `extension-artifact` relative to the
 manifest's directory (plain relative paths only). Every field is required,
 unknown fields are rejected, and `wit-world` and `wit-version` must be exactly
 the supported identity. The string fields are bounded to 4096 bytes.
+Optionally, a package ships a package validator component that checks what
+its XSD cannot: `validator-artifact` (relative to the manifest; a release
+asset for a repository namespace) and `validator-sha256` (its lowercase
+SHA-256), both or neither. `validate`, `compile`, `snapshot run`, and `run`
+call it once per document with the namespace's elements and report its
+diagnostics as `<prefix>::<code>`
+([validator-rules.md](validator-rules.md#package-validators)); a repository
+namespace's validator is verified against the release's `SHA256SUMS` and the
+manifest's digest, and cached like its component.
 `http-origins` and `env-slots` are unknown fields here (only a service
 package declares them). Version 1 manifests are rejected.
 

@@ -48,7 +48,9 @@ interface types {
   /// its bundled, unmodified official W3C SCXML 1.0 schema set.
   record schema-resource { namespace-uri: string, system-id: string, bytes: list<u8> }
   /// extension package manifest (exact URI, extension artifact,
-  /// schema artifact and lowercase hex SHA-256, WIT world and version).
+  /// schema artifact and lowercase hex SHA-256, WIT world and version, and
+  /// the optional package validator artifact and its lowercase hex SHA-256,
+  /// present together or not at all).
   record extension-package {
     namespace-uri: string,
     package-version: string,
@@ -57,6 +59,8 @@ interface types {
     schema-sha256: string,
     wit-world: string,
     wit-version: string,
+    validator-artifact: option<string>,
+    validator-sha256: option<string>,
   }
   /// Exact bytes of one JSON Schema file an `event:schema` attribute
   /// references (the `event` attribute vocabulary,
@@ -81,7 +85,7 @@ interface types {
   /// bytes; at most 64 `schemas` and 64 `packages`; each schema's `bytes` at
   /// most 4194304 bytes and all schemas at most 16777216 bytes together; every
   /// metadata string (`source-name`, schema `namespace-uri` and `system-id`,
-  /// every package field, and present trace-context fields) non-empty and at
+  /// every present package field, and present trace-context fields) non-empty and at
   /// most 4096 bytes, and at most 1048576 metadata bytes together; the whole
   /// request at most 33554432 bytes. Schema namespace URIs and package
   /// namespace URIs must each be unique (exact byte comparison). `event-schemas` holds at most 64 resources and 16777216 bytes together
@@ -100,6 +104,93 @@ interface types {
     profile: option<profile>,
     trace-context: option<trace-context>,
   }
+  /// Diagnostic severity (the canonical report's `severity`).
+  enum severity { note, warning, error }
+  /// Confidence in applying a fix's edits (the canonical report's
+  /// `applicability`).
+  enum applicability { machine-applicable, maybe-incorrect, has-placeholders }
+  /// A half-open UTF-8 byte range of the document source (`start <= end`,
+  /// both on character boundaries).
+  record span { start: u32, end: u32 }
+  /// One labeled source range.
+  record label { span: span, message: option<string> }
+  /// One replacement of a source range.
+  record edit { span: span, replacement: string }
+  /// One suggested repair: non-overlapping edits.
+  record fix { message: string, applicability: applicability, edits: list<edit> }
+  /// One diagnostic of a package validator, in the canonical report's
+  /// terms. `code` is the package's own code (`[a-z][a-z0-9_]*`, at most 64
+  /// bytes); the validator reports it as `<prefix>::<code>`.
+  record diagnostic {
+    code: string,
+    severity: severity,
+    message: string,
+    primary: label,
+    secondary: list<label>,
+    help: option<string>,
+    fixes: list<fix>,
+  }
+}
+
+/// The parsed document a package validator reads: read-only data the
+/// validator builds once per document. Every index is into `elements`.
+interface document {
+  use types.{span};
+  /// An expanded XML name: the exact, tagless namespace URI (none for no
+  /// namespace) and the local name.
+  record qualified-name { namespace-uri: option<string>, local-name: string }
+  /// One attribute as parsed: its value after XML attribute-value
+  /// normalization, and the span of the whole attribute.
+  record attribute { name: qualified-name, value: string, span: span }
+  /// One element: the span of the whole element (start tag to end tag), its
+  /// attributes in source order, and its child elements' and parent's
+  /// indices.
+  record element {
+    name: qualified-name,
+    span: span,
+    attributes: list<attribute>,
+    children: list<u32>,
+    parent: option<u32>,
+  }
+  /// One SCXML `<transition>`, in document order (the n-th is the n-th
+  /// `<transition>` element): its source state's `id` (empty when the state
+  /// has none), its `event` attribute, and the literal text of its
+  /// `event:schema` (none without one, and none for `event:schemaexpr`).
+  record transition-info { state: string, event: option<string>, event-schema: option<string> }
+  /// The whole document: every element in document order (the root is
+  /// index 0), the `<data>` and state ids in document order, the
+  /// transitions, and the root's `datamodel` attribute.
+  record context {
+    elements: list<element>,
+    data-ids: list<string>,
+    state-ids: list<string>,
+    transitions: list<transition-info>,
+    datamodel: option<string>,
+  }
+}
+
+/// A package validator: an optional component an extension or service
+/// package ships (manifest `validator-artifact` and `validator-sha256`) that
+/// checks what the package's XSD cannot. The validator calls it once per
+/// document, after the XSD and built-in checks, with the package's targets:
+/// the elements in its namespace (an extension package) or the `<invoke>`
+/// elements whose `type` is its service URI (a service package). Its
+/// diagnostics are reported as `<prefix>::<code>`, where the prefix is the
+/// document's prefix of the namespace (an extension package; the URI's last
+/// path segment when it is the default namespace) or the service URI's last
+/// path segment (a service package: a repository service's `<name>`). It
+/// runs with no
+/// imports, on a bounded fuel budget, and must be deterministic. The
+/// validator fails closed with one `PKG002` error naming the package on a
+/// trap (fuel exhaustion included), an `err`, a span outside the source or
+/// off a character boundary, overlapping edits within one fix, or an edit
+/// outside every target element.
+interface package-validator-api {
+  use types.{component-error, diagnostic};
+  use document.{context};
+  /// Checks `targets` (indices into `document.elements`, in document
+  /// order, never empty) and returns at most 256 diagnostics.
+  validate: func(document: context, targets: list<u32>) -> result<list<diagnostic>, component-error>;
 }
 
 /// Explicit parse-only expression syntax capability.
@@ -187,5 +278,16 @@ interface validator-api {
 world validator {
   import telemetry;
   import expression-syntax;
+  /// The bound package validators, one call per package with targets: the
+  /// host routes each call to the package bound to the targets' exact
+  /// namespace URI (extension elements) or literal `<invoke type>`
+  /// (`<invoke>` elements), and answers an empty list when that package
+  /// ships no validator.
+  import package-validator-api;
   export validator-api;
+}
+
+/// A package validator component: no imports.
+world package-validator {
+  export package-validator-api;
 }

@@ -145,6 +145,7 @@ mod tests {
             ("scxml/deps/clock", "scxml-clock", "clock"),
             ("basichttp", "scxml-basichttp", "basichttp"),
             ("validator", "scxml-validator", "validator"),
+            ("validator", "scxml-validator", "package-validator"),
             ("compiler", "scxml-compiler", "compiler"),
             ("reporter", "scxml-reporter", "reporter"),
         ] {

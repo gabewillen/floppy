@@ -109,7 +109,8 @@ run_node_tests() {
 sh "$workspace/scripts/verify-wasm-capabilities.sh" --artifacts-dir "$artifacts" \
     scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
     scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine \
-    scxml_snapshot_codec scxml_validator scxml_extension_example scx
+    scxml_snapshot_codec scxml_validator scxml_extension_example \
+    scxml_package_validator_example scx
 test -f "$ir" || { echo "missing CLI-compiled lowered IR: $ir" >&2; exit 1; }
 cargo build --release --locked --manifest-path "$workspace/Cargo.toml" -p scxml-wasm-meter
 meter="$target_root/release/scxml-wasm-meter"
