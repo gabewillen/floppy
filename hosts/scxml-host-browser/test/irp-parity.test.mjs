@@ -33,6 +33,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { cachedCoreModules, createCompiler } from '../src/index.js';
+import { readPackage } from './packages.js';
 import { runIrpCase } from './irp-harness.js';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -122,4 +123,92 @@ for (const variant of ['ecmascript', 'xpath']) {
     assert.deepEqual(tallies, EXPECTED_TALLIES[variant]);
     assert.ok(snapshots > tally.compared, 'a snapshot at every checkpoint of every case');
   });
+}
+
+// Every repository namespace's own suite (namespaces/<name>/irp) against its
+// canonical baseline, through the same pipeline as `scx conformance run`:
+// the compiler (schema policy off) with the extension packages the suite
+// binds (the `env` suite binds the example namespace; the `event` suite
+// none) and each case's dependencies below its document's directory as its
+// `event:schema` files, keyed relative to that directory. A
+// document-rejection case passes when the compiler rejects it with exactly
+// the listed error codes (the oracle compares the set of codes); every
+// other case runs like an official one. Every case must reach the
+// disposition (and, for a run, the final configuration) the baseline
+// records.
+const NAMESPACE_SUITES = {
+  env: ['components/scxml-extension-example/package/example.extension.json'],
+  event: [],
+};
+const NAMESPACE_TALLIES = {
+  env: { rejections: 8, runs: 0 },
+  event: { rejections: 17, runs: 12 },
+};
+
+for (const [name, manifests] of Object.entries(NAMESPACE_SUITES)) {
+  for (const variant of ['ecmascript', 'xpath']) {
+    test(`browser and Wasmtime agree on the ${name} namespace suite (${variant})`, async () => {
+      const suite = join(workspace, 'namespaces', name, 'irp');
+      const dir = join(suite, 'prepared', variant);
+      const readText = (path) => readFile(join(dir, path), 'utf8');
+      const corpus = JSON.parse(await readText('corpus.json'));
+      const baseline = JSON.parse(await readFile(join(suite, 'baselines', `${variant}.scxml-report.json`), 'utf8'));
+      const expected = new Map(baseline.conformance.cases.map((entry) => [entry.id, entry]));
+      const packages = await Promise.all(manifests.map(readPackage));
+      const tally = { rejections: 0, runs: 0 };
+      const mismatches = [];
+      for (const testCase of corpus.cases) {
+        const recorded = expected.get(testCase.id);
+        assert.ok(recorded, `baseline records case ${testCase.id}`);
+        const directory = testCase.start_uri.includes('/') ? testCase.start_uri.slice(0, testCase.start_uri.lastIndexOf('/') + 1) : '';
+        const eventSchemas = await Promise.all(
+          Object.entries(testCase.dependency_source_artifacts ?? {})
+            .filter(([uri]) => uri.startsWith(directory))
+            .map(async ([uri, path]) => ({
+              uri: uri.slice(directory.length),
+              bytes: new Uint8Array(await readFile(join(dir, path))),
+            })),
+        );
+        if (testCase.expected.kind === 'document-rejection') {
+          tally.rejections += 1;
+          const source = await readText(testCase.source);
+          const compiled = await compiler.compile(source, {
+            sourceName: testCase.source.slice(testCase.source.lastIndexOf('/') + 1),
+            packages,
+            eventSchemas,
+          });
+          const codes = new Set(
+            JSON.parse(new TextDecoder().decode(compiled.report))
+              .compiler.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')
+              .map((diagnostic) => diagnostic.code),
+          );
+          const disposition =
+            compiled.status === 'rejected' &&
+            codes.size === new Set(testCase.expected.codes).size &&
+            testCase.expected.codes.every((code) => codes.has(code))
+              ? 'passed'
+              : 'failed';
+          if (disposition !== recorded.disposition) mismatches.push({ id: testCase.id, codes: [...codes], recorded: recorded.disposition });
+          continue;
+        }
+        tally.runs += 1;
+        const result = await runIrpCase({
+          testCase,
+          commandBudget: corpus.default_command_budget,
+          readText,
+          compiler,
+          loadCoreModule,
+          eventSchemas,
+        });
+        if (
+          result.disposition !== recorded.disposition ||
+          JSON.stringify(result.configuration) !== JSON.stringify(recorded.configuration)
+        ) {
+          mismatches.push({ id: testCase.id, expected: [recorded.disposition, recorded.configuration], result });
+        }
+      }
+      assert.deepEqual(mismatches, []);
+      assert.deepEqual(tally, NAMESPACE_TALLIES[name]);
+    });
+  }
 }

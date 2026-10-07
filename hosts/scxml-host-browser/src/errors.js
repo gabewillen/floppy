@@ -49,6 +49,20 @@ export const HOST_ERROR_CODES = Object.freeze([
   // progress (a capability provider or data model calling back into the
   // session); nothing was entered and the session stays usable.
   'reentrant-call',
+  // An extension component's bytes do not hash to the trusted SHA-256
+  // (authenticateExtensionComponent).
+  'artifact-digest-mismatch',
+  // A component is not an extension component this package ships built
+  // (authenticateExtensionComponent, ExtensionComponents.bind).
+  'artifact-kind-mismatch',
+  // An extension package binding was refused (ExtensionComponents.bind).
+  'namespace-binding',
+  // A bound extension component does not implement its namespace URI; the
+  // session start fails.
+  'extension-component-uri-mismatch',
+  // A bound extension component's `initialize` failed; the session start
+  // fails.
+  'extension-component-initialize-failed',
 ]);
 
 const ERROR_CODE_SET = new Set(ERROR_CODES);

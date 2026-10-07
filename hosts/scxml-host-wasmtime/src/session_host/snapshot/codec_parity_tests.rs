@@ -165,6 +165,10 @@ impl Codec {
                     TraceContextPolicy::Preserve => codec::exports::stateforward::scxml::session_snapshot_api::TraceContextPolicy::Preserve,
                     TraceContextPolicy::Strip => codec::exports::stateforward::scxml::session_snapshot_api::TraceContextPolicy::Strip,
                 },
+                point: match options.point {
+                    scxml_snapshot::SnapshotPoint::Checkpoint => codec::exports::stateforward::scxml::session_snapshot_api::SnapshotPoint::Checkpoint,
+                    scxml_snapshot::SnapshotPoint::ExecutableContent => codec::exports::stateforward::scxml::session_snapshot_api::SnapshotPoint::ExecutableContent,
+                },
             };
         let api = self.instance.stateforward_scxml_session_snapshot_api();
         api.call_encode(&mut self.store, capture, &codec_options)

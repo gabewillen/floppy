@@ -2069,9 +2069,9 @@ mod live {
         let values = args.namespaces.values(&packages.slot_uses)?;
         crate::mask::install(
             &crate::extensions::HeldValue::pairs(&values),
-            &crate::extensions::declared_origins(&packages, &services.packages),
+            &crate::extensions::declared_origins(&services.packages),
         );
-        crate::extensions::write_notes(&packages.summary(Some(&values)));
+        crate::extensions::write_notes(&packages.summary());
         crate::extensions::write_notes(&crate::extensions::env_summary(
             &packages.slot_uses,
             &values,
@@ -2143,12 +2143,7 @@ mod live {
         ));
         crate::snapshot::host::bind_documents(&mut loaded, &packages, &args.services, &services)?;
         let host = args.components.session_host(identity.fuel)?;
-        // A replay log does not record extension components' responses, so a
-        // recorded or replayed session gets no extension transport: every
-        // extension request is refused, the same way in both.
-        let outbound = args.record.is_none() && args.replay.is_none();
-        let (extensions, _notes) =
-            crate::snapshot::host::extensions(&args.namespaces, &packages, &values, outbound)?;
+        let extensions = crate::snapshot::host::extensions(&args.namespaces, &packages)?;
         let host = host
             .with_extension_components(extensions)?
             .with_service_components(service_components)?;

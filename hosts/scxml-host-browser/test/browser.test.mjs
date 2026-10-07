@@ -25,11 +25,18 @@
 // `none` fallback, where the prefetched document still loads and the
 // runtime URL is the typed `dynamic-url-unavailable` error.
 //
+// The parity page (test/browser/parity.html) runs the cross-host parity
+// corpus (tests/fixtures/host-parity) through the page's own validator,
+// compiler, and extension components, and every case must equal its
+// Wasmtime golden, as test/host-parity.test.mjs requires in Node.
+//
 // Inputs: SCXML_BROWSER_IR (CLI-compiled lowered IR of the representative
-// fixture). Serves only this package's src/, dist/, test/, the pinned
-// `@opentelemetry/api` ESM build, the trace fixture, and that IR, plus the
-// recording BasicHTTP endpoints under /basichttp/, on 127.0.0.1 with an
-// ephemeral port.
+// fixture) and SCXML_BROWSER_ARTIFACTS (the release directory dist/ was
+// built from). Serves only this package's src/, dist/, test/, the pinned
+// `@opentelemetry/api` ESM build, the trace fixture, and that IR, the
+// parity corpus's workspace files under /workspace/ and its extension
+// components under /artifacts/, plus the recording BasicHTTP endpoints
+// under /basichttp/, on 127.0.0.1 with an ephemeral port.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -47,7 +54,17 @@ assert.ok(
   'SCXML_BROWSER_IR must name the CLI-compiled lowered IR of tests/fixtures/representative-machine.scx; ' +
     'run `sh scripts/verify-browser-host.sh` from the repository root (README.md, "Tests")',
 );
+const artifactsDir = process.env.SCXML_BROWSER_ARTIFACTS ?? join(workspace, 'target/wasm-artifacts/browser-host');
 const tracePath = join(workspace, 'tests/fixtures/representative-machine.trace.json');
+/** The workspace directories the parity page reads (under /workspace/). */
+const PARITY_DIRECTORIES = [
+  'tests/fixtures/host-parity',
+  'components/scxml-extension-example/package',
+  'namespaces/scx/package',
+  'namespaces/event/examples',
+];
+/** The release artifacts the parity page authenticates (under /artifacts/). */
+const PARITY_ARTIFACTS = ['scxml_extension_example.virtualized.wasm', 'scx.virtualized.wasm'];
 const fixture = JSON.parse(await readFile(tracePath, 'utf8'));
 
 const TYPES = {
@@ -66,6 +83,14 @@ const OTEL_API_ESM = 'node_modules/@opentelemetry/api/build/esm';
 function resolveRequest(pathname) {
   if (pathname === '/fixture/trace.json') return tracePath;
   if (pathname === '/fixture/ir.json') return irPath;
+  if (pathname.startsWith('/artifacts/')) {
+    const file = pathname.slice('/artifacts/'.length);
+    return PARITY_ARTIFACTS.includes(file) ? join(artifactsDir, file) : undefined;
+  }
+  if (pathname.startsWith('/workspace/')) {
+    const path = normalize(join(workspace, decodeURIComponent(pathname.slice('/workspace/'.length))));
+    return PARITY_DIRECTORIES.some((dir) => path.startsWith(join(workspace, dir) + sep)) ? path : undefined;
+  }
   const path = normalize(join(packageRoot, decodeURIComponent(pathname)));
   const inside = (dir) => path.startsWith(join(packageRoot, dir) + sep);
   if (inside(OTEL_API_ESM)) return extname(path) === '' ? `${path}.js` : path;
@@ -197,6 +222,22 @@ test('headless Chromium reproduces the shared Wasmtime trace', async () => {
     console.log(`browser: nested-loop fuel exhaustion after ${Math.round(nestedLoop.elapsed)} ms`);
     console.log(`browser: heavy-command fuel exhaustion after ${Math.round(sharedBudget.elapsed)} ms`);
     console.log(`browser: ${userAgent}`);
+  } finally {
+    await browser.close();
+    await new Promise((done) => server.close(done));
+  }
+});
+
+test('headless Chromium matches the Wasmtime goldens of the parity corpus', async () => {
+  const server = await serve();
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const { cases } = await runPage(browser, server.address().port, 'parity.html');
+    assert.ok(cases.length >= 3, `ran ${cases.length} cases`);
+    for (const { name, result, golden } of cases) {
+      assert.equal(result.validation, undefined, `${name}: ${JSON.stringify(result.validation)}`);
+      assert.deepEqual(result.outcome, golden, name);
+    }
   } finally {
     await browser.close();
     await new Promise((done) => server.close(done));

@@ -1,25 +1,23 @@
 //! The `env` attribute vocabulary ([`scxml_types::ENV_NAMESPACE_URI`]).
 //!
-//! An executable-content extension element, or the `<invoke>` of an invoked
-//! service, may carry `env:<slot>="NAME"` or `env:<slot>expr="EXPR"`
-//! attributes naming the variable whose value the host binds to one of the
-//! element's slots, as an opaque reference. The slots an element accepts are
-//! the ones its package manifest declares (`env-slots`): the extension
-//! package of its namespace, or the service package of its `<invoke type>`.
-//! XSD cannot check them (schemas admit the namespace with a lax wildcard),
-//! so these rules do:
+//! The `<invoke>` of an invoked service may carry `env:<slot>="NAME"` or
+//! `env:<slot>expr="EXPR"` attributes naming the variable whose value the
+//! host binds to one of the service's slots, as an opaque reference. The
+//! slots an `<invoke>` accepts are the ones its service package declares
+//! (`env-slots`). These rules check them:
 //!
-//! * `SCXML083`: an `env` attribute names a slot its element's package does
+//! * `SCXML083`: an `env` attribute names a slot the service's package does
 //!   not declare, names both `<slot>` and `<slot>expr`, or names a variable
-//!   that is not a valid name. Checked only for elements whose package the
-//!   validator was given ([`crate::Validator::with_extension_slots`],
-//!   [`crate::Validator::with_services`]); an `<invoke typeexpr>` names its
-//!   service only at run time, so the host judges its slots.
-//! * `SCXML084`: an element in the `env` namespace (it has none), an `env`
-//!   attribute on an element in no namespace, or one on an `<invoke>` of an
-//!   SCXML session (an absent `type` or an SCXML invoke type): only
-//!   executable-content extension elements and invoked services have slots.
-//!   An `env` attribute on any other SCXML element is `SCXML068`'s (an
+//!   that is not a valid name. Checked against the package for a literal
+//!   service type the validator was given ([`crate::Validator::with_services`]);
+//!   otherwise (an unbound type, or an `<invoke typeexpr>`, which names its
+//!   service only at run time) only what Machine IR requires of any binding.
+//! * `SCXML084`: an element in the `env` namespace (it has none), or an `env`
+//!   attribute on any element other than an SCXML `<invoke>` of a service:
+//!   an element in no namespace, an executable-content extension element
+//!   (executable content does no I/O, so it has no slots), or an `<invoke>`
+//!   of an SCXML session (an absent `type` or an SCXML invoke type). An
+//!   `env` attribute on any other SCXML element is `SCXML068`'s (an
 //!   attribute in another namespace on an SCXML element).
 
 use std::collections::BTreeMap;
@@ -63,13 +61,11 @@ pub fn env_slot<'a>(local_name: &'a str, declared: &[String]) -> Option<(&'a str
         .map(|slot| (slot, true))
 }
 
-/// Every `SCXML083` and `SCXML084` finding of `document`; `slots` maps an
-/// extension namespace URI to the slots its package declares, and
-/// `services` an invoked-service type URI to its package's `env` slots.
+/// Every `SCXML083` and `SCXML084` finding of `document`; `services` maps an
+/// invoked-service type URI to its package's `env` slots.
 #[must_use]
 pub fn env_attribute_diagnostics(
     document: &Document,
-    slots: Option<&BTreeMap<String, Vec<String>>>,
     services: Option<&BTreeMap<String, Vec<String>>>,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
@@ -88,26 +84,15 @@ pub fn env_attribute_diagnostics(
             return;
         }
         match namespace {
-            None => {
-                for attribute in env_attributes {
-                    diagnostics.push(unplaced(attribute));
-                }
-            }
             Some(crate::SCXML_NAMESPACE) if element.name.local_name == "invoke" => {
                 invoke_slots(element, &env_attributes, services, &mut diagnostics);
             }
             // `SCXML068` reports every other attribute in another namespace
             // on an SCXML element.
             Some(crate::SCXML_NAMESPACE) => {}
-            Some(namespace) => {
-                if let Some(declared) = slots.and_then(|slots| slots.get(namespace)) {
-                    check_slots(
-                        element,
-                        namespace,
-                        &env_attributes,
-                        declared,
-                        &mut diagnostics,
-                    );
+            None | Some(_) => {
+                for attribute in env_attributes {
+                    diagnostics.push(unplaced(element, attribute));
                 }
             }
         }
@@ -282,25 +267,30 @@ fn env_element(element: &Element) -> Diagnostic {
         element.start_tag_span,
     )
     .with_category(DiagnosticCategory::Semantic)
-    .with_primary_message("not an executable-content extension")
+    .with_primary_message("not an element of any vocabulary")
     .with_note(format!(
-        "`{ENV_NAMESPACE_URI}` is an attribute vocabulary only: an extension element's `env:<slot>=\"NAME\"` attribute names the variable whose value the host binds to that slot"
+        "`{ENV_NAMESPACE_URI}` is an attribute vocabulary only: an invoked service's `<invoke env:<slot>=\"NAME\">` names the variable whose value the host binds to that slot"
     ))
-    .with_help("remove the element, and put an `env:<slot>` attribute on the extension element that needs the value")
+    .with_help("remove the element, and put an `env:<slot>` attribute on the `<invoke>` of the service that needs the value")
 }
 
-fn unplaced(attribute: &Attribute) -> Diagnostic {
-    Diagnostic::error(
-        "SCXML084",
+fn unplaced(element: &Element, attribute: &Attribute) -> Diagnostic {
+    let message = if element.name.namespace_uri.is_none() {
         format!(
             "`{}` is on an element in no namespace, which has no slots",
             attribute.lexical_name
-        ),
-        attribute.span,
-    )
-    .with_category(DiagnosticCategory::Semantic)
-    .with_primary_message("only an executable-content extension element has slots")
-    .with_help("move the attribute to the extension element that needs the value")
+        )
+    } else {
+        format!(
+            "`{}` is on the executable-content extension `<{}>`, which has no slots",
+            attribute.lexical_name, element.lexical_name
+        )
+    };
+    Diagnostic::error("SCXML084", message, attribute.span)
+        .with_category(DiagnosticCategory::Semantic)
+        .with_primary_message("only an invoked service's `<invoke>` has slots")
+        .with_note("executable content runs synchronously inside a microstep and does no I/O, so it never holds a value; work that needs one (a token for a network request, for example) belongs in an invoked service (SCXML 6.4)")
+        .with_help("remove the attribute, and bind the slot on the `<invoke>` of the service that needs the value")
 }
 
 fn undeclared(
@@ -365,7 +355,7 @@ fn undeclared(
                 format!("{slot}{suffix}"),
             ));
     } else {
-        diagnostic = diagnostic.with_help("bind only a slot the element's package declares");
+        diagnostic = diagnostic.with_help("bind only a slot the service's package declares");
     }
     diagnostic
 }
@@ -383,17 +373,6 @@ mod tests {
         .expect("the fixture parses")
     }
 
-    fn codes(text: &str, slots: &[&str]) -> Vec<(String, String)> {
-        let slots = BTreeMap::from([(
-            "urn:x".to_owned(),
-            slots.iter().map(|slot| (*slot).to_owned()).collect(),
-        )]);
-        env_attribute_diagnostics(&document(text), Some(&slots), None)
-            .into_iter()
-            .map(|diagnostic| (diagnostic.code, diagnostic.message))
-            .collect()
-    }
-
     fn machine(body: &str) -> String {
         format!(
             r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:x="urn:x" xmlns:env="{ENV_NAMESPACE_URI}" version="1.0"><state id="s"><onentry>{body}</onentry></state></scxml>"#
@@ -401,81 +380,27 @@ mod tests {
     }
 
     #[test]
-    fn declared_slots_bind_names_and_expressions() {
-        assert!(
-            codes(
-                &machine(r#"<x:a env:key="API_KEY" env:baseexpr="b"/>"#),
-                &["key", "base"]
-            )
-            .is_empty()
-        );
-        assert!(codes(&machine(r#"<x:a env:key="_k1"/>"#), &["key"]).is_empty());
-    }
-
-    #[test]
-    fn undeclared_repeated_and_invalid_slots_are_scxml083() {
-        let typo = env_attribute_diagnostics(
-            &document(&machine(r#"<x:a env:kye="K"/>"#)),
-            Some(&BTreeMap::from([(
-                "urn:x".to_owned(),
-                vec!["key".to_owned()],
-            )])),
-            None,
-        );
-        let [typo] = typo.as_slice() else {
-            panic!("one finding: {typo:?}");
-        };
-        assert_eq!(typo.code, "SCXML083");
-        assert!(
-            typo.help
-                .as_deref()
-                .is_some_and(|help| help.contains("did you mean `key`?"))
-        );
-        assert_eq!(typo.fixes[0].edits[0].replacement, "key");
-        for body in [
-            r#"<x:a env:key="K" env:keyexpr="'K'"/>"#,
-            r#"<x:a env:key="1K"/>"#,
-            r#"<x:a env:key="A-B"/>"#,
-            r#"<x:a env:other="K"/>"#,
-        ] {
-            assert_eq!(
-                codes(&machine(body), &["key"])
-                    .iter()
-                    .map(|(code, _)| code.as_str())
-                    .collect::<Vec<_>>(),
-                ["SCXML083"],
-                "{body}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_env_namespace_has_no_elements_and_unqualified_elements_no_slots() {
+    fn only_a_service_invoke_has_slots() {
         for body in [
             r#"<env:get name="K"/>"#,
+            r#"<x:a env:key="K"/>"#,
+            r#"<x:a env:keyexpr="'K'"/>"#,
             r#"<x:a><b xmlns="" env:key="K"/></x:a>"#,
         ] {
             assert_eq!(
-                codes(&machine(body), &["key"])
+                env_attribute_diagnostics(&document(&machine(body)), None)
                     .iter()
-                    .map(|(code, _)| code.as_str())
+                    .map(|diagnostic| diagnostic.code.as_str())
                     .collect::<Vec<_>>(),
                 ["SCXML084"],
                 "{body}"
             );
         }
         // SCXML068 owns attributes in other namespaces on SCXML elements.
-        assert!(codes(&machine(r#"<log env:key="K"/>"#), &["key"]).is_empty());
-    }
-
-    #[test]
-    fn without_a_package_slots_are_not_judged() {
-        let found = env_attribute_diagnostics(
-            &document(&machine(r#"<x:a env:anything="K"/>"#)),
-            None,
-            None,
+        assert!(
+            env_attribute_diagnostics(&document(&machine(r#"<log env:key="K"/>"#)), None)
+                .is_empty()
         );
-        assert!(found.is_empty());
     }
 
     #[test]
@@ -485,7 +410,7 @@ mod tests {
             let text = format!(
                 r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="{ENV_NAMESPACE_URI}" version="1.0"><state id="s">{invoke}</state></scxml>"#
             );
-            env_attribute_diagnostics(&document(&text), None, Some(&services))
+            env_attribute_diagnostics(&document(&text), Some(&services))
                 .into_iter()
                 .map(|diagnostic| diagnostic.code)
                 .collect()

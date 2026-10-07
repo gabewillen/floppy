@@ -37,8 +37,6 @@ struct PackageBinding<'a> {
     schema_sha256: &'a str,
     wit_world: &'a str,
     wit_version: &'a str,
-    env_slots: &'a [String],
-    http_origins: &'a [String],
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
@@ -101,8 +99,6 @@ fn verify_package_binding(
         schema_sha256: package.schema_sha256.to_owned(),
         wit_world: package.wit_world.to_owned(),
         wit_version: package.wit_version.to_owned(),
-        env_slots: package.env_slots.to_vec(),
-        http_origins: package.http_origins.to_vec(),
         // The WIT package record carries no WASI permissions: validation
         // only checks the schema binding and never links the component.
     };
@@ -159,7 +155,7 @@ mod guest {
     use stateforward::scxml_validator::expression_syntax as wit_syntax;
     use stateforward::scxml_validator::telemetry as wit_telemetry;
     use stateforward::scxml_validator::types::{
-        ComponentError, ErrorCode, ErrorVersion, SchemaPolicy, ValidationRequest,
+        ComponentError, ErrorCode, ErrorVersion, Profile, SchemaPolicy, ValidationRequest,
     };
 
     /// The source id of the one document a validation reads: every span
@@ -415,21 +411,15 @@ mod guest {
                         SchemaPolicy::Lax => SchemaMode::Lax,
                         SchemaPolicy::Off => SchemaMode::Off,
                     })
-                    .with_extension_slots(
-                        request
-                            .packages
-                            .iter()
-                            .map(|package| {
-                                (package.namespace_uri.clone(), package.env_slots.clone())
-                            })
-                            .collect(),
-                    )
                     .with_event_schema_resources(event_schemas)
                     // The request carries no service packages, so no
                     // invoked-service type is bound: a literal one is
                     // `SCXML094`, exactly as `scx validate` reports
                     // it without `--service-package`.
                     .with_services(std::collections::BTreeMap::new());
+                if let Some(Profile::Draft) = request.profile {
+                    validator = validator.with_profile(scxml_validator_core::Profile::Draft);
+                }
                 // The linked expression-syntax capability is explicit; a
                 // provider that reports no data model disables checking.
                 if let Some(data_model) = wit_syntax::supported_data_model()
@@ -465,8 +455,6 @@ mod guest {
                         schema_sha256: &package.schema_sha256,
                         wit_world: &package.wit_world,
                         wit_version: &package.wit_version,
-                        env_slots: &package.env_slots,
-                        http_origins: &package.http_origins,
                     })
                     .collect::<Vec<_>>();
                 let used_namespaces = outcome
@@ -668,8 +656,6 @@ mod tests {
             schema_sha256,
             wit_world: SUPPORTED_NAMESPACE_WIT_WORLD,
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION,
-            env_slots: &[],
-            http_origins: &[],
         }
     }
 

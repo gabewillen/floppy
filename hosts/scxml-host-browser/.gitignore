@@ -2,6 +2,7 @@
 /node_modules/
 # Generated once by `npm run build` (jco transpile of the release guests).
 /dist/
-# Copied from the repository root by `npm pack` (scripts/copy-licenses.mjs).
+# Copied from the repository by `npm pack` (scripts/copy-licenses.mjs).
 /LICENSE-APACHE
 /LICENSE-MIT
+/NOTICE.md

@@ -652,11 +652,12 @@ test('assign placements match the canonical WIT variant and fail closed on other
   assert.deepEqual(model.evaluateValue('item', undefined), { tag: 'number', val: 5 });
 });
 
-test('dist embeds none of the vendored W3C schema bytes, so the license needs no W3C terms', async () => {
-  // The compiler component resolves schemas through a MemorySchemaResolver;
-  // only BundledSchemaResolver includes the vendored XSD, and the linker
-  // drops it. Should a build ever embed it, the package license and files
-  // must carry the W3C notice.
+test('only the validator and scx embed the vendored W3C schema, and the package carries its notice', async () => {
+  // The compiler component resolves schemas through a MemorySchemaResolver,
+  // so the linker drops the vendored XSD; the validator component and the
+  // `scx` extension component validate with the bundled W3C SCXML 1.0
+  // schema set (BundledSchemaResolver), so they embed it, and the package
+  // carries the W3C notice that permits its redistribution.
   const schemaDir = join(workspace, 'crates/scxml-validator-xsd/schemas/w3c-scxml-1.0');
   const schemaFiles = (await readdir(schemaDir)).sort();
   assert.deepEqual(schemaFiles, [
@@ -680,8 +681,12 @@ test('dist embeds none of the vendored W3C schema bytes, so the license needs no
     const text = await readFile(join(schemaDir, file), 'utf8');
     for (const line of text.split('\n').map((l) => l.trim()).filter((l) => l.length >= 40)) {
       probes += 1;
-      const embedded = distFiles.filter((_, index) => dist[index].includes(line));
-      assert.deepEqual(embedded, [], `${file} line ${JSON.stringify(line.slice(0, 40))} is not in dist`);
+      const embedded = distFiles
+        .filter((_, index) => dist[index].includes(line))
+        .map((path) => path.slice(join(packageRoot, 'dist').length + 1).split(/[\\/]/)[0]);
+      for (const component of embedded) {
+        assert.ok(['validator', 'scx'].includes(component), `${file} line ${JSON.stringify(line.slice(0, 40))} is in ${component}`);
+      }
     }
   }
   assert.ok(probes > 400, `probed ${probes} schema lines`);
@@ -694,6 +699,11 @@ test('dist embeds none of the vendored W3C schema bytes, so the license needs no
     assert.ok(packageJson.files.includes(file), `files lists ${file}`);
     await readFile(join(workspace, file));
   }
+  // The W3C notice of the embedded schema set travels with the package.
+  assert.ok(packageJson.files.includes('NOTICE.md'), 'files lists NOTICE.md');
+  const notice = await readFile(join(schemaDir, 'NOTICE.md'), 'utf8');
+  assert.ok(notice.includes('World Wide Web Consortium'));
+  assert.ok((await readFile(join(packageRoot, 'scripts/copy-licenses.mjs'), 'utf8')).includes('NOTICE.md'));
   assert.equal(packageJson.repository.directory, 'hosts/scxml-host-browser');
 });
 
@@ -775,6 +785,8 @@ test('telemetry names and labels match the Wasmtime host and the Rust facade', a
   assert.ok(capabilityGraph.includes(`"${hostTelemetry.CAPABILITY_MODULE}"`));
   assert.ok(component.includes(`"${hostTelemetry.GUEST_MODULES.machine}"`));
   assert.ok(dataModel.includes(`"${hostTelemetry.GUEST_MODULES.dataModel}"`));
+  assert.ok((await read('hosts/scxml-host-wasmtime/src/validator.rs')).includes(`"${hostTelemetry.GUEST_MODULES.validator}"`));
+  assert.ok((await read('hosts/scxml-host-wasmtime/src/extension.rs')).includes(`"${hostTelemetry.GUEST_MODULES.extension}"`));
   // The compiler label is the Rust facade's `Module::CompilerComponent`.
   const modules = [...facade.matchAll(/Self::(\w+) => "([a-z-]+)",/g)];
   const moduleValue = (variant) => modules.find((m) => m[1] === variant)?.[2];

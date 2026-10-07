@@ -381,19 +381,16 @@ interface types {
     start-element(start-element),
     end-element(qualified-name),
   }
-  /// An opaque reference to one value the host holds for the executing
-  /// executable-content extension (`executable-content-extension-api.execute`)
-  /// or invoked service (`invoke-request.references`): the component passes
-  /// it back inside an `outbound-http` request, where the host substitutes
-  /// the value. An extension element's reference is valid only during the
-  /// `execute` call that received it, an invoked service's for its whole
-  /// invocation; the value itself never enters the component.
+  /// An opaque reference to one value the host holds for an invoked service
+  /// (`invoke-request.references`): the component passes it back inside an
+  /// `outbound-http` request, where the host substitutes the value. A
+  /// reference is valid for its whole invocation; the value itself never
+  /// enters the component.
   type value-reference = u32;
-  /// One `env` slot of the executing element (or of an invoked service's
-  /// `<invoke>`) and the reference the host bound to it: the
-  /// `env:<slot>="NAME"` (or `env:<slot>expr`) attribute named a variable the
-  /// embedder holds a value for. A slot that is not named, or whose variable
-  /// has no value, is absent.
+  /// One `env` slot of an invoked service's `<invoke>` and the reference the
+  /// host bound to it: the `env:<slot>="NAME"` (or `env:<slot>expr`)
+  /// attribute named a variable the embedder holds a value for. A slot that
+  /// is not named, or whose variable has no value, is absent.
   record slot-reference { slot: string, reference: value-reference }
   /// One element of additional executable content, lowered by the compiler
   /// (SCXML 1.0 section 4.10: "any extensions to executable content MUST NOT
@@ -1674,51 +1671,48 @@ interface invoked-service-api {
 /// `shutdown` when it ends for any reason, so extension component state never
 /// outlives or crosses a session. An extension component's imported
 /// `data-model-host` and `execution-host` act on the executing session.
+///
+/// An extension element is executable content: it runs synchronously inside
+/// a microstep, so its component does no I/O (no network, no WASI) and
+/// receives no `env` slot values or references. Work that waits on the
+/// outside world belongs in an invoked service (SCXML 6.4).
 interface executable-content-extension-api {
-  use types.{executable-content-extension, extension-outcome, component-error, trace-context, slot-reference};
+  use types.{executable-content-extension, extension-outcome, component-error, trace-context};
   /// Returns the exact namespace URI this extension component implements.
   namespace-uri: func() -> string;
   /// Prepares extension component state.
   initialize: func() -> result<_, component-error>;
   /// Executes one lowered executable-content extension whose namespace is
   /// `namespace-uri`. `not-handled` declines it (the machine raises SCXML
-  /// `error.execution`). `references` holds one reference per `env` slot the
-  /// element names and the host holds a value for, in the element's
-  /// attribute order; the references are valid only during this call, and
-  /// only inside this call's `outbound-http` requests.
+  /// `error.execution`).
   /// Errors: `invalid-input` for malformed elements or carriers, `execution`
   /// for a behavior failure (both raised as SCXML `error.execution`); any
   /// other code fails the session. A trap (including fuel exhaustion) is an
   /// `execution` failure and retires the instance: later `execute` calls in the
   /// session fail with `execution`.
-  execute: func(element: executable-content-extension, context: option<trace-context>, references: list<slot-reference>) -> result<extension-outcome, component-error>;
+  execute: func(element: executable-content-extension, context: option<trace-context>) -> result<extension-outcome, component-error>;
   /// Releases extension component state; idempotent.
   shutdown: func() -> result<_, component-error>;
 }
 
-/// Outbound HTTP a host may grant to extension components (for SCXML 1.0
-/// section 4.10 behavior that calls a network service) and to invoked
-/// services (SCXML 6.4).
+/// Outbound HTTP a host may grant to invoked services (SCXML 6.4).
 ///
 /// Deny by default: a host that grants nothing refuses every request with
 /// `unavailable`. A granting host sends only to the targets its embedder
 /// allowlists, follows no redirect (a redirect status is returned as the
 /// response), and adds no ambient credentials, cookies, or proxy. `fetch`
-/// is asynchronous: an invoked service's call suspends only the calling
-/// task (the invoking session and the service's other tasks go on), while an
-/// extension component, whose `execute` is synchronous executable content,
-/// lowers it synchronously and so blocks `execute` until the response or the
-/// failure. The granting host bounds its connect and total time, and closes
-/// the connection of an invoked service's request when the invocation is
-/// cancelled. The URL, headers, and bodies are component payload: hosts never
-/// put them into telemetry. The capability works only during an extension
-/// component's `execute`, or while an invoked service's invocation runs
-/// (admitted to the origins its service package declares); elsewhere every
-/// call fails with `unavailable`.
+/// is asynchronous: a call suspends only the calling task (the invoking
+/// session and the service's other tasks go on). The granting host bounds
+/// its connect and total time, and closes the connection of a request when
+/// the invocation is cancelled. The URL, headers, and bodies are component
+/// payload: hosts never put them into telemetry. The capability works only
+/// while an invoked service's invocation runs (admitted to the origins its
+/// service package declares); elsewhere every call fails with
+/// `unavailable`.
 interface outbound-http {
   use types.{component-error, value-reference};
   /// One part of a URL or header value: literal text, or a reference the
-  /// host substitutes with the value it holds (`execute`'s `references`).
+  /// host substitutes with the value it holds (`invoke-request.references`).
   variant text-part {
     literal(string),
     reference(value-reference),
@@ -1744,7 +1738,7 @@ interface outbound-http {
   /// header value, and in `body`.
   ///
   /// The host substitutes every reference, then canonicalizes the URL and
-  /// admits the request only to an origin or URL prefix the element's package
+  /// admits the request only to an origin or URL prefix the service's package
   /// declares, or to the origin a reference's value supplies entirely (the
   /// first part is a reference whose value is an absolute `http` or `https`
   /// URL without userinfo, and the next part, if any, starts the path,
@@ -1766,7 +1760,7 @@ interface outbound-http {
   /// Errors: `invalid-input` for a request outside the bounds above or an
   /// unknown reference; `unavailable` when the host offers no outbound HTTP,
   /// the URL is not admitted, the transport failed (connect, TLS, timeout),
-  /// or the call is made outside `execute` or an invocation;
+  /// or the call is made outside an invocation;
   /// `payload-too-large` when the response body exceeds its bound.
   fetch: async func(request: http-request) -> result<http-response, component-error>;
 }
@@ -2245,12 +2239,25 @@ interface session-snapshot-api {
     /// Carriers are omitted.
     strip,
   }
+  /// Where in a run a document was taken (`options.point`).
+  enum snapshot-point {
+    /// At a stable checkpoint: the internal queue is empty.
+    checkpoint,
+    /// While one executable-content extension executes, for the extension
+    /// component that asked (`session-snapshot-host.snapshot`): one session,
+    /// mid-macrostep; `invocations` and `previews` are always excluded.
+    executable-content,
+  }
   /// How a document is produced.
   record snapshot-options {
     /// Excluded sections.
     exclude: list<section>,
     /// Trace-carrier policy.
     trace-context: trace-context-policy,
+    /// Where the document is taken: a host that runs extension components
+    /// encodes an `executable-content` document for
+    /// `session-snapshot-host.snapshot`.
+    point: snapshot-point,
   }
   /// Role of one component in the provenance list.
   enum component-role {
@@ -2343,15 +2350,14 @@ world invoked-service {
   import telemetry;
   export invoked-service-api;
 }
-/// An extension component. It imports
-/// only what it uses; `outbound-http` reaches the network only where the host
-/// grants it, and importing `session-snapshot-host` makes the machine compute
-/// its executable-content image for each of the extension component's elements.
+/// An extension component. It imports only what it uses, and no I/O (see
+/// `executable-content-extension-api`); importing `session-snapshot-host`
+/// makes the machine compute its executable-content image for each of the
+/// extension component's elements.
 world executable-content-extension {
   import telemetry;
   import data-model-host;
   import execution-host;
-  import outbound-http;
   import session-snapshot-host;
   export executable-content-extension-api;
 }

@@ -113,6 +113,9 @@ function preparedResources(sources) {
  * @param {Function} [options.checkpoint] awaited as `checkpoint(session)`
  *   at every checkpoint
  * @param {boolean} [options.trace] record the trace, command count, and clock
+ * @param {Array<{uri: string, bytes: Uint8Array}>} [options.eventSchemas] the
+ *   schema files the document's `event:schema` attributes reference (a
+ *   namespace suite's dependencies, keyed relative to its document)
  * @returns {Promise<{disposition: string, logs: string[], configuration?: string[], status?: string,
  *   error?: string, commands?: number, now?: number, trace?: object, dynamicLoads: number}>}
  *   (`dynamicLoads`: calls of the synchronous `loadDocument` fallback in the
@@ -127,11 +130,12 @@ export async function runIrpCase({
   loadCoreModule,
   checkpoint,
   trace = false,
+  eventSchemas = [],
 }) {
   const source = await readText(testCase.source);
   const sources = new Map();
   for (const dependency of testCase.dependencies) sources.set(dependency, await readText(dependency));
-  const compiled = await compiler.compile(source, { sourceName: fileName(testCase.source) });
+  const compiled = await compiler.compile(source, { sourceName: fileName(testCase.source), eventSchemas });
   if (compiled.status !== 'emitted') return { disposition: 'invalid', logs: [] };
   // Like the conformance embedder, link the data model the document itself
   // names (the IR's `data_model`), not the corpus variant: some XPath-corpus

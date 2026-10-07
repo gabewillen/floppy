@@ -1,0 +1,45 @@
+{
+  "configuration": [
+    "done"
+  ],
+  "done": null,
+  "logs": [
+    [
+      "event",
+      "raised.one internal"
+    ],
+    [
+      "event",
+      "raised.guarded internal"
+    ],
+    [
+      "event",
+      "sent.internal internal i1"
+    ],
+    [
+      "event",
+      "sent.external external"
+    ],
+    [
+      "error",
+      "error.execution platform"
+    ],
+    [
+      "error",
+      "error.execution platform"
+    ],
+    [
+      "count",
+      "0"
+    ],
+    [
+      "snapshot",
+      "{\"exclude\":[\"system\",\"pending_sends\",\"previews\",\"invocations\"],\"trace_context\":\"strip\",\"point\":\"executable-content\"}{\"session_id\":\"session\",\"datamodel_name\":\"ecmascript\",\"ir\":{\"version\":5,\"sha256\":\"467c30af0ccaa0b5a1033687f3e54c4f7e13081dca8ec8c36501fe47e255a10c\"},\"status\":\"running\",\"configuration\":{\"atomic\":[\"snapshotting\"],\"full\":[\"snapshotting\"]},\"history\":[],\"bound_states\":[],\"counters\":{\"send\":0,\"invoke\":0},\"data_model\":[{\"name\":\"snap\",\"value\":{\"type\":\"text\",\"value\":\"\"}},{\"name\":\"atInit\",\"value\":{\"type\":\"text\",\"value\":\"\"}},{\"name\":\"count\",\"value\":{\"type\":\"number\",\"value\":\"0\"}}],\"queues\":{\"internal\":[{\"name\":\"queued.before\",\"type\":\"internal\",\"data\":{\"type\":\"absent\"}},{\"name\":\"queued.by.extension\",\"type\":\"internal\",\"data\":{\"type\":\"absent\"}}],\"external\":[]},\"transitions\":[{\"source\":\"snapshotting\",\"index\":0,\"events\":[\"queued.before\"],\"targets\":[],\"type\":\"external\",\"has_cond\":false},{\"source\":\"snapshotting\",\"index\":1,\"events\":[\"queued.by.extension\"],\"targets\":[\"done\"],\"type\":\"external\",\"has_cond\":false}]}"
+    ],
+    [
+      "at-initialize",
+      "unavailable"
+    ]
+  ],
+  "status": "finished"
+}

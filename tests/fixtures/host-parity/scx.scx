@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Host parity: the `scx` namespace (`<scx:validate>`, the validator as
+  executable content) through both hosts, on a valid draft, an invalid one,
+  and the same invalid one under the draft profile.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:scx="https://github.com/stateforward/scxml.rs/namespaces/scx"
+       version="1.0" datamodel="ecmascript" initial="check">
+  <datamodel>
+    <data id="valid" expr="'&lt;scxml xmlns=&quot;http://www.w3.org/2005/07/scxml&quot; version=&quot;1.0&quot; initial=&quot;a&quot;&gt;&lt;state id=&quot;a&quot;&gt;&lt;transition event=&quot;go&quot; target=&quot;b&quot;/&gt;&lt;/state&gt;&lt;final id=&quot;b&quot;/&gt;&lt;/scxml&gt;'"/>
+    <data id="invalid" expr="'&lt;scxml xmlns=&quot;http://www.w3.org/2005/07/scxml&quot; version=&quot;1.0&quot; initial=&quot;missing&quot;&gt;&lt;state id=&quot;a&quot;&gt;&lt;invoke type=&quot;scxml&quot; src=&quot;child.scx&quot;/&gt;&lt;transition event=&quot;go&quot; target=&quot;nowhere&quot;/&gt;&lt;/state&gt;&lt;/scxml&gt;'"/>
+    <data id="report"/>
+  </datamodel>
+  <state id="check">
+    <onentry>
+      <scx:validate location="report" expr="valid" name="valid.scx"/>
+      <log label="valid" expr="report.validator.counts.errors + ' ' + report.validator.diagnostics.map(function (d) { return d.code; }).join(',')"/>
+      <scx:validate location="report" expr="invalid" name="invalid.scx"/>
+      <log label="invalid" expr="report.validator.counts.errors + ' ' + report.validator.diagnostics.map(function (d) { return d.code; }).join(',')"/>
+      <scx:validate location="report" expr="invalid" name="invalid.scx" profile="draft"/>
+      <log label="draft" expr="report.validator.counts.errors + ' ' + report.validator.diagnostics.map(function (d) { return d.code; }).join(',')"/>
+    </onentry>
+    <transition target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

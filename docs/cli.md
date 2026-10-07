@@ -298,34 +298,33 @@ under the host's `DEFAULT_EXTENSION_CALL_FUEL` instruction cap (one billion,
 enough for an element that compiles the whole W3C SCXML XSD set in one call;
 its documentation records the measurement). A namespace whose URI is a repository
 element needs no flag ("Loading an element from a repository" below).
-The document scopes every variable: an element (or an invoked service's
-`<invoke>`) names the variable for one of its slots (`env:<slot>="NAME"`), and
-the variable goes only to the packages (the element's namespace URI, or the
-`<invoke>`'s literal `type`) of the elements and `<invoke>`s that name it. An
-`env:<slot>expr` slot names its variable only when it executes, so its
-element's package may receive any variable the run holds, the reference
-minted for that element at that execution. `--env-file PATH` (repeatable,
+An extension element is executable content and does no I/O: its manifest
+declares no outbound origins and no `env` slots, and it receives no value.
+The document scopes every variable: an invoked service's `<invoke>` names
+the variable for one of its slots (`env:<slot>="NAME"`), and the variable
+goes only to the services (the `<invoke>`'s literal `type`) whose
+`<invoke>`s name it. An `env:<slot>expr` slot names its variable only when
+its `<invoke>` runs, so its service may receive any variable the run
+holds. `--env-file PATH` (repeatable,
 Docker's `--env-file` format: one `NAME=VALUE` or bare `NAME` per line, the
 value taken literally, `#` comments) and `--env NAME` or `--env NAME=VALUE`
 (repeatable, once per `NAME`) supply values. A variable holds its flag's
 `VALUE`, else the last `--env-file` entry for it, else, only when `--env NAME`
 names it, the calling shell's value; a variable no slot can name is dropped.
-Nothing is held by default. The extension or service component receives an
-opaque reference, never the value, and a slot whose variable holds no value
-is absent (a service's reference lives for its whole invocation; see
+Nothing is held by default. The service component receives an opaque
+reference for its whole invocation, never the value, and a slot whose
+variable holds no value is absent (see
 [invoked-services.md](invoked-services.md#values-are-references-env-slots)), and every value is masked (`[masked]`) in the text the CLI
 writes (notes, diagnostics, live-session records); canonical snapshot
 documents are written exactly (their `sha256` covers their bytes) and get
 the protections of the canonical artifacts they are.
 Every command that reads a document (`validate` in its human format, which
 keeps JSON and SARIF stderr clean) lists, on standard error, each bound
-element's namespace, version (release tag and pinned commit, or package
-version and manifest), declared outbound origins, the slots the document
-binds with the variables they name, noting each one the run holds no value
-for. `snapshot run` and `run` then list each variable the document names and
-the elements and `<invoke>`s it goes to (`env `NAME``, `= to: <invoke
-type="URI"> env:SLOT, <ELEMENT> of `URI` env:SLOT`), and each
-`env:<slot>expr` slot; names and URIs only, never a value.
+element's namespace and version (release tag and pinned commit, or package
+version and manifest). `snapshot run` and `run` then list each variable the
+document names and the `<invoke>`s it goes to (`env `NAME``, `= to: <invoke
+type="URI"> env:SLOT`, noting a variable the run holds no value for), and
+each `env:<slot>expr` slot; names and URIs only, never a value.
 A literal `<invoke type>` of exactly
 `https://github.com/OWNER/REPO/services/NAME[@TAG]` that no `--service-package`
 binds is a repository service: it is resolved, verified, cached, and pinned
@@ -458,10 +457,9 @@ CLI loads it: no flag binds it.
 ```xml
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:weather="https://github.com/example-org/scxml-weather/namespaces/weather@v1.0.0"
-       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript" initial="ask">
   …
-  <weather:lookup env:token="WEATHER_TOKEN" location="forecast"/>
+  <weather:summarize location="forecast"/>
 ```
 
 The URI is exactly `https://github.com/<owner>/<repo>/namespaces/<name>`, the
@@ -491,10 +489,9 @@ GitHub resolver component `scx` embeds (WASI 0.3 `wasi:http`, admitted only
 to the bases' origins and GitHub's asset hosts; the `--github-*-base` flags
 are its configuration), which needs a CLI built with `--features wasmtime`;
 a build without it resolves only what the cache holds. The CLI verifies
-everything the component returns. Importing an element consents to what its manifest
-declares (the origins in `http-origins`); the run's values reach it only as
-references, substituted into requests to those origins or to an origin a value
-supplies (a local base URL). Any failure fails closed: validation stops, or the
+everything the component returns. An element does no I/O, so importing it
+consents to no network access; a repository service consents to the origins
+its manifest declares (`http-origins`). Any failure fails closed: validation stops, or the
 run fails before the first macrostep.
 [executable-content-extensions.md](executable-content-extensions.md#loading-an-element-from-a-repository)
 specifies the URI, layout, trust model, cache, and bounds.

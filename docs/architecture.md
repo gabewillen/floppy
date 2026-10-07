@@ -388,10 +388,9 @@ are rejected before backend compilation.
 
 An extension package manifest binds exact URI, package version, extension
 component artifact, schema artifact and SHA-256 digest, WIT world, and WIT
-version, and declares the outbound HTTP origins or URL prefixes its extension
-component may reach (`http-origins`) and the `env` slots its elements accept
-(`env-slots`), at most 32 of each. Every string field is bounded to 4096 UTF-8
-bytes. The authoritative
+version, and nothing else: an extension element does no I/O, so it declares
+no outbound origins and no `env` slots (only an invoked-service package
+does). Every string field is bounded to 4096 UTF-8 bytes. The authoritative
 supported extension component identity is exactly
 `stateforward:scxml/executable-content-extension` at WIT version `0.2.0`;
 missing, oversized, or mismatched identity metadata is rejected before schema
@@ -427,18 +426,15 @@ A namespace a session's document uses that no binding names is loaded when the
 session starts (`machine-capabilities.load-extensions`) through the embedder's
 `ExtensionResolver`, or the start fails closed. The CLI binds every repository
 namespace of the document and of each literal `<invoke src>` document it
-loads before the session starts, so its runs never need the resolver. Extension components import no
-WASI interface (the host links none into them; WASI is linked into
-invoked-service components only, as each component's own `wasi:*` imports
-with the runtime resources the run grants, through `wasmtime-wasi` inside
-the host adapter; see [invoked-services.md](invoked-services.md)) and never
-receive a secret: an element names the variable for
-one of its slots with an attribute in the host's `env` vocabulary
-(`https://github.com/stateforward/scxml.rs/namespaces/env`: `env:<slot>="NAME"` or `env:<slot>expr`), the
-host hands the component an opaque reference valid for that `execute` call,
-and substitutes the embedder's value (`ExtensionComponents::with_values`) only
-into that call's `outbound-http` requests, each admitted only to an origin the
-element's package declares or one a reference's value supplies entirely.
+loads before the session starts, so its runs never need the resolver. Extension components do no
+I/O: they import no WASI interface and no `outbound-http` (the host links
+neither into them; WASI and `outbound-http` are linked into invoked-service
+components only, WASI as each component's own `wasi:*` imports with the
+runtime resources the run grants, through `wasmtime-wasi` inside the host
+adapter; see [invoked-services.md](invoked-services.md)), and they receive
+no `env` value or reference: only an invoked service's `<invoke>` binds
+slots in the host's `env` vocabulary
+(`https://github.com/stateforward/scxml.rs/namespaces/env`).
 [executable-content-extensions.md](executable-content-extensions.md)
 maps agentml-go's Go `Namespace` interface onto the WIT and walks through writing
 one.

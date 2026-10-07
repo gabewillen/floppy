@@ -60,8 +60,6 @@ fn the_package_binds_the_exact_uri_schema_digest_and_world() {
         .expect("the manifest is a valid extension package manifest");
     assert_eq!(manifest.namespace_uri, NAMESPACE_URI);
     assert_eq!(manifest.extension_artifact, "scx.virtualized.wasm");
-    assert!(manifest.http_origins.is_empty(), "no network");
-    assert!(manifest.env_slots.is_empty(), "no env slots");
     manifest
         .verify_schema(&scxml_validator_core::SchemaSource::new(
             "scx.xsd",

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "extension",
+      "document": "tests/fixtures/host-parity/extension.scx",
+      "extensions": ["https://stateforward.org/scxml/example"],
+      "events": ["go"]
+    },
+    {
+      "name": "scx",
+      "document": "tests/fixtures/host-parity/scx.scx",
+      "extensions": ["https://github.com/stateforward/scxml.rs/namespaces/scx"],
+      "events": []
+    },
+    {
+      "name": "event-schema-file",
+      "document": "namespaces/event/examples/order.scx",
+      "extensions": [],
+      "eventSchemas": ["schemas/order.json"],
+      "events": [{ "name": "order.placed", "data": { "id": "o-1", "items": [{ "sku": "a", "quantity": 2 }] } }]
+    }
+  ]
+}

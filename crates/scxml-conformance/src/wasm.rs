@@ -29,10 +29,7 @@
 //!   with `unavailable` is `Unsupported`; everything else is `Harness`.
 //! * Extension namespaces ([`WasmExecutor::with_extensions`]): each bound
 //!   namespace's component, authenticated by its trusted SHA-256, runs its
-//!   elements; the run holds exactly the harness's fake values
-//!   ([`crate::example_server::values`]) and its only outbound transport is
-//!   the deterministic in-process stand-in
-//!   ([`crate::example_server::ExampleServer`]), reset before every case.
+//!   elements (extension components do no I/O).
 //! * Telemetry: one `run-case-wasm` boundary span per case with closed
 //!   labels only.
 
@@ -42,12 +39,12 @@ use std::rc::Rc;
 
 use scxml_compiler_core::MachineIr;
 use scxml_host_wasmtime::{
-    ArtifactKind, DocumentKind, EmbeddedDocument, ExtensionComponents, ExtensionEnvironment,
-    ExtensionPackage, HostError, MachineScripts, ResolvedScript, RunFailure, ScriptPolicy,
-    ScriptResolveError, ScriptResolver, ScriptedEvent, SessionEmbedder, SessionHost,
-    SessionHostComponents, SessionHostError, SessionOutcome, SessionRun, TelemetryProviders,
-    Terminal, TraceObservation as HostObservation, TrustedComponentDigest, TrustedManifestDigest,
-    WasmtimeHostConfig, authenticate_component, basichttp_types,
+    ArtifactKind, DocumentKind, EmbeddedDocument, ExtensionComponents, ExtensionPackage, HostError,
+    MachineScripts, ResolvedScript, RunFailure, ScriptPolicy, ScriptResolveError, ScriptResolver,
+    ScriptedEvent, SessionEmbedder, SessionHost, SessionHostComponents, SessionHostError,
+    SessionOutcome, SessionRun, TelemetryProviders, Terminal, TraceObservation as HostObservation,
+    TrustedComponentDigest, TrustedManifestDigest, WasmtimeHostConfig, authenticate_component,
+    basichttp_types,
 };
 use scxml_telemetry::{ErrorCategory, Module, Operation, SignalEvent, observe};
 use sha2::{Digest as _, Sha256};
@@ -292,8 +289,6 @@ pub struct WasmExecutor {
     snapshot_collection: SnapshotCollection,
     /// The bound extension namespaces (namespace-URI order).
     extensions: Vec<BoundExtension>,
-    /// The outbound transport of the bound extension components, when any.
-    service: Option<std::sync::Arc<crate::example_server::ExampleServer>>,
 }
 
 impl std::fmt::Debug for WasmExecutor {
@@ -487,7 +482,6 @@ impl WasmExecutor {
                     include_bytes!("external_client.rs"),
                     include_bytes!("filter.rs"),
                     include_bytes!("manual_oracle.rs"),
-                    include_bytes!("example_server.rs"),
                     include_bytes!("oracle.rs"),
                     include_bytes!("report.rs"),
                     include_bytes!("runner.rs"),
@@ -512,16 +506,12 @@ impl WasmExecutor {
             identities,
             snapshot_collection,
             extensions: Vec::new(),
-            service: None,
         })
     }
 
     /// Binds `releases` (each namespace at most once): every component is
     /// authenticated by its trusted SHA-256 and every package verified
-    /// against its schema; the run then holds the harness's fake values
-    /// (granted to every bound namespace) and
-    /// reaches only the in-process stand-in
-    /// ([`crate::example_server`]). Replaces any earlier binding.
+    /// against its schema. Replaces any earlier binding.
     ///
     /// # Errors
     ///
@@ -533,25 +523,7 @@ impl WasmExecutor {
         mut self,
         releases: Vec<ExtensionRelease>,
     ) -> Result<Self, WasmExecutorError> {
-        let service = std::sync::Arc::new(crate::example_server::ExampleServer::new());
-        // The fake values are granted to every namespace this run binds.
-        let uris: Vec<String> = releases
-            .iter()
-            .map(|release| release.manifest.namespace_uri.clone())
-            .collect();
-        let values = if uris.is_empty() {
-            ExtensionEnvironment::none()
-        } else {
-            ExtensionEnvironment::new(crate::example_server::values().into_iter().map(
-                |(name, value)| {
-                    scxml_host_wasmtime::EnvVariable::new(name, value, uris.iter().cloned())
-                },
-            ))
-            .map_err(WasmExecutorError::Host)?
-        };
-        let mut components = ExtensionComponents::new()
-            .with_values(values)
-            .with_outbound_http(service.clone());
+        let mut components = ExtensionComponents::new();
         let mut bound = Vec::with_capacity(releases.len());
         for release in releases {
             let manifest = release.manifest;
@@ -573,8 +545,6 @@ impl WasmExecutor {
                         schema_sha256: manifest.schema_sha256.clone(),
                         wit_world: manifest.wit_world.clone(),
                         wit_version: manifest.wit_version.clone(),
-                        env_slots: manifest.env_slots.clone(),
-                        http_origins: manifest.http_origins.clone(),
                         schema: release.schema.bytes.clone(),
                     },
                     &component,
@@ -602,7 +572,6 @@ impl WasmExecutor {
             .with_extension_components(components)
             .map_err(WasmExecutorError::Host)?;
         self.extensions = bound;
-        self.service = Some(service);
         Ok(self)
     }
 
@@ -619,9 +588,6 @@ impl WasmExecutor {
             Module::ConformanceRunner,
             Operation::ConformanceRunnerRunCaseWasm,
         );
-        if let Some(service) = &self.service {
-            service.reset();
-        }
         let embedder: Rc<dyn SessionEmbedder> = Rc::new(PreparedSources {
             sources: sources.clone(),
         });

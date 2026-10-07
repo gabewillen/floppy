@@ -240,9 +240,10 @@ that execution is unchanged under each. Both data models pass 29 of 29
 - A reference to a repository-namespace resource or any absolute URI: only
   files relative to the document.
 - Schema files for documents compiled without the CLI's file access: a child
-  document the Wasmtime host compiles when it is invoked, and every document
-  the browser host compiles, get no schema files, so they may use inline
-  schemas and `event:schemaexpr` only (a reference rejects the document).
+  document a host compiles when it is invoked gets no schema files, so it
+  may use inline schemas and `event:schemaexpr` only (a reference rejects
+  the document). A browser page supplies a document's schema files to the
+  validator and compiler (`eventSchemas`).
 - Evaluating `event:schemaexpr`: a session snapshot evaluates no expression
   (docs/session-snapshot.md), so readers get the expression.
 

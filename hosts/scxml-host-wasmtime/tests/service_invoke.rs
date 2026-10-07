@@ -630,13 +630,15 @@ fn an_ungranted_or_unused_wasi_resource_fails_the_binding_closed() {
     );
 }
 
-/// A transport that answers 204, records each admitted request's URL, and,
+/// A transport that answers 204, records each admitted request's URL and
+/// `authorization` header, and,
 /// when `hold` is set, holds every request until the test releases it: what
 /// a slow model call looks like to the session.
 #[derive(Debug, Default)]
 struct TestHttp {
     hold: bool,
     urls: Mutex<Vec<String>>,
+    authorizations: Mutex<Vec<String>>,
     released: Mutex<usize>,
     wake: Condvar,
 }
@@ -676,6 +678,16 @@ impl ExtensionHttp for TestHttp {
             urls.push(request.url.clone());
             urls.len()
         };
+        self.authorizations
+            .lock()
+            .expect("the header log is not poisoned")
+            .extend(
+                request
+                    .headers
+                    .iter()
+                    .filter(|(name, _)| name.eq_ignore_ascii_case("authorization"))
+                    .map(|(_, value)| value.clone()),
+            );
         if self.hold {
             let mut released = self
                 .released
@@ -835,6 +847,83 @@ fn an_unbound_out_of_scope_or_undeclared_env_slot_never_reaches_the_network() {
     assert_eq!(session.configuration().expect("configuration"), ["refused"]);
     session.close().expect("the session closes");
     assert!(http.urls().is_empty());
+}
+
+/// `s` invokes the echo service as `invoke` says; `fetch` makes the service
+/// GET its `endpoint` slot's URL followed by `path`.
+fn path_document(invoke: &str, path: &str) -> String {
+    format!(
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="{env}" version="1.0" datamodel="ecmascript" initial="s">
+  <state id="s">
+    {invoke}
+    <transition event="fetch"><send event="fetch" target="#_echo"><content expr="'{path}'"/></send></transition>
+    <transition event="echo.fetched"><log label="fetched" expr="_event.data"/></transition>
+    <transition event="error.communication" target="failed"/>
+  </state>
+  <state id="failed"/>
+</scxml>"##,
+        env = scxml_types::ENV_NAMESPACE_URI
+    )
+}
+
+/// The `token` slot's reference becomes a header value and the request
+/// path follows the `endpoint` slot's reference, substituted by the host
+/// only into a request whose whole origin a value supplied (the package
+/// declares none): a value that is no origin, or a path that extends the
+/// authority a value starts, is refused before the transport sees it, and
+/// the invocation fails (`error.communication`).
+#[test]
+fn a_token_and_a_path_reach_only_a_request_whose_origin_a_value_supplies() {
+    let invoke =
+        format!(r#"<invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT" env:token="TOKEN"/>"#);
+    for (endpoint, path, admitted) in [
+        (
+            "http://127.0.0.1:9/v1",
+            "/status?q=1",
+            Some("http://127.0.0.1:9/v1/status?q=1"),
+        ),
+        ("http://127.0.0.1", ":9/status", None),
+        ("127.0.0.1:9", "/status", None),
+    ] {
+        let http = Arc::new(TestHttp::default());
+        let host = endpoint_host(
+            &http,
+            &[("ENDPOINT", endpoint, ECHO), ("TOKEN", "key-test", ECHO)],
+        );
+        let notified = Arc::new(AtomicUsize::new(0));
+        let mut session = open_with(
+            &host,
+            &path_document(&invoke, path),
+            false,
+            None,
+            counted(&notified),
+        )
+        .expect("the session opens");
+        session
+            .send(&ScriptedEvent::named("fetch"))
+            .expect("fetch is processed");
+        if let Some(url) = admitted {
+            arrived(&notified, 1);
+            session
+                .deliver_http_responses()
+                .expect("the response is delivered")
+                .expect("one response arrived");
+            assert_eq!(logs(&mut session), ["fetched: 204"]);
+            assert_eq!(http.urls(), [url]);
+            assert_eq!(
+                *http.authorizations.lock().expect("the header log"),
+                ["Bearer key-test"]
+            );
+        } else {
+            assert_eq!(
+                session.configuration().expect("configuration"),
+                ["failed"],
+                "{endpoint} {path}"
+            );
+            assert!(http.urls().is_empty(), "nothing is sent");
+        }
+        session.close().expect("the session closes");
+    }
 }
 
 #[test]

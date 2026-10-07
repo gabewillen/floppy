@@ -52,8 +52,8 @@ the canonical release of docs/conformance.md, empty filter identity) measure:
 
 | Data model | Passed / Applicable | Rejections | Not Passing | Corpus digest | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | --- | --- | --- |
-| ECMAScript | 29 / 29 | 17 | 0 | `466755eac36c408a41076a995cbe3e1d1257e8f7c057f939743becb740c7fe61` | `8ef026427d3abe563cd3b2b19d78d595cb8b2f1a43a27e67e8c55bed1389d7ac` | `9ff1105c36a369d6d729f844490dec558939054a1d07b05fb89b65427f3e33ba` |
-| XPath | 29 / 29 | 17 | 0 | `6714a32d12b248d1a809d7a6b26b2c8f5df1b00dc77aa07bfad9945bd389b3db` | `43449a6a13105dbba65eabb767656deda4240fb44bcc3381ae24f96d4647da4c` | `1173d0e4a1fcc815ff2682061d7c0ba4a0627aa43feecf28697ed08e8885150b` |
+| ECMAScript | 29 / 29 | 17 | 0 | `466755eac36c408a41076a995cbe3e1d1257e8f7c057f939743becb740c7fe61` | `f4de481e39a0add2bdfa1549a045162021842cef04f8280ca9029d5cd19843af` | `ef2def32c343f64fab6d802a3c07888256de496d364b05405849ac7c8a9bb896` |
+| XPath | 29 / 29 | 17 | 0 | `6714a32d12b248d1a809d7a6b26b2c8f5df1b00dc77aa07bfad9945bd389b3db` | `4edf64dc34dcdbea4ca2f04f601d830738d004b00cb4ce063b24449ee9a91a11` | `1ebec2ecabad17827bb08b4b5b3f305058e5f58d1169ccb748056a27a40e50c9` |
 
 The report identity lists no extension component. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
 the suite and its baselines statically, and `irp_components.rs` reproduces

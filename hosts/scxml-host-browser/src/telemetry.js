@@ -9,12 +9,12 @@
 //   tracer `scxml-host-browser`   one span per host operation, named after
 //                                 the operation, attributes
 //                                 scxml.module = host-browser,
-//                                 scxml.operation = HOST_OPERATIONS (11),
+//                                 scxml.operation = HOST_OPERATIONS (16),
 //                                 scxml.outcome = OUTCOMES (3)
 //   tracer `scxml-component-guest` guest spans and point signals opened
 //                                 through the WIT telemetry imports, named
 //                                 after the WIT operation, attributes
-//                                 scxml.module = GUEST_MODULES (4),
+//                                 scxml.module = GUEST_MODULES (6),
 //                                 scxml.operation = WIT operation enum,
 //                                 scxml.outcome = WIT outcome enum (3),
 //                                 error.type = compiler WIT error-category;
@@ -67,6 +67,8 @@ export const GUEST_MODULES = Object.freeze({
   dataModel: 'data-model-component',
   compiler: 'compiler-component',
   snapshotCodec: 'snapshot-codec-component',
+  validator: 'validator-component',
+  extension: 'executable-content-extension',
 });
 /**
  * Instrumentation scope and `scxml.module` of the capability guests (the
@@ -87,6 +89,11 @@ export const HOST_OPERATIONS = Object.freeze([
   'invocation',
   'snapshot',
   'snapshot-diff',
+  'validate',
+  'extension-load',
+  'extension-instantiate',
+  'extension-execute',
+  'extension-shutdown',
 ]);
 /** Closed `scxml.outcome` values (the WIT telemetry `outcome` enum). */
 export const OUTCOMES = Object.freeze(['ok', 'rejected', 'failed']);
@@ -427,14 +434,17 @@ export function clockTelemetryImport(telemetry) {
 }
 
 /**
- * `stateforward:scxml-compiler/telemetry@0.2.0` for the compiler component.
+ * `stateforward:scxml-compiler/telemetry@0.2.0` for the compiler component,
+ * and `stateforward:scxml-validator/telemetry@0.2.0` (the same shape) for the
+ * validator component (`module` GUEST_MODULES.validator).
  * @param {Telemetry} telemetry
+ * @param {string} [module] one of GUEST_MODULES (default the compiler's)
  */
-export function compilerTelemetryImport(telemetry) {
+export function compilerTelemetryImport(telemetry, module = GUEST_MODULES.compiler) {
   const spans = new SpanTable();
   return {
     start(_module, operation, parent) {
-      const started = telemetry.startGuest(GUEST_MODULES.compiler, operation, parent);
+      const started = telemetry.startGuest(module, operation, parent);
       if (started === undefined) return [0n, undefined];
       const handle = spans.open(started.span);
       if (handle === 0n) {

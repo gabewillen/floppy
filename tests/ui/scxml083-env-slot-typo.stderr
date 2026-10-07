@@ -1,20 +1,21 @@
-element `https://stateforward.org/scxml/example`
-  = version: package 0.2.0 from --extension-package components/scxml-extension-example/package/example.extension.json
+service `https://stateforward.org/scxml/services/echo`
+  = version: package 0.2.0 from --service-package components/scxml-service-example/package/echo.service.json
   = outbound HTTP: none
-  = env slots: tokn <- API_TOKEN
-error[SCXML083]: `<example:fetch>` has no `env` slot `tokn`
-  --> tests/ui/scxml083-env-slot-typo.scx:11:76
-   |
-11 |       <example:fetch url="https://api.example/v1/items" location="outcome" env:tokn="API_TOKEN"/>
-   |                                                                            ^^^^^^^^^^^^^^^^^^^^ not a slot its package declares
-   |
-   = note: the package of `https://stateforward.org/scxml/example` declares the slots `url`, `token`
-   = help: did you mean `token`?
-   = spec: SCXML 1.0 §4.10 Extensibility of Executable Content
+  = env slots: endpoint, token
+  = WASI resources: none
+error[SCXML083]: `<invoke>` has no `env` slot `tokn`
+ --> tests/ui/scxml083-env-slot-typo.scx:6:75
+  |
+6 |     <invoke type="https://stateforward.org/scxml/services/echo" id="echo" env:tokn="API_TOKEN"/>
+  |                                                                           ^^^^^^^^^^^^^^^^^^^^ not a slot its package declares
+  |
+  = note: the package of `https://stateforward.org/scxml/services/echo` declares the slots `endpoint`, `token`
+  = help: did you mean `token`?
+  = spec: SCXML 1.0 §6.4 <invoke>
 help: bind the declared slot `token`
-   |
-11 |       <example:fetch url="https://api.example/v1/items" location="outcome" env:token="API_TOKEN"/>
-   |                                                                                ~~~~~
+  |
+6 |     <invoke type="https://stateforward.org/scxml/services/echo" id="echo" env:token="API_TOKEN"/>
+  |                                                                               ~~~~~
 
 diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
 For more information about this error, try `scx --explain SCXML083`.

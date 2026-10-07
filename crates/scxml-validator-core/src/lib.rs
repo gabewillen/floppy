@@ -161,9 +161,6 @@ pub struct Validator<R, B> {
     xml_limits: XmlLimits,
     /// Linked parse-only checkers, at most one per data model.
     expression_checkers: Vec<std::sync::Arc<dyn ExpressionSyntaxChecker>>,
-    /// The `env` slots each bound extension namespace's package declares
-    /// (`SCXML083`); `None` judges no slot.
-    extension_slots: Option<std::collections::BTreeMap<String, Vec<String>>>,
     /// The `env` slots of each invoked service the caller's service packages
     /// bind, by exact type URI (`SCXML094`, `SCXML083` on `<invoke>`);
     /// `None` judges no binding.
@@ -184,7 +181,6 @@ impl<R, B> Validator<R, B> {
             profile: None,
             xml_limits: XmlLimits::DEFAULT,
             expression_checkers: Vec::new(),
-            extension_slots: None,
             services: None,
             event_schema_resources: std::collections::BTreeMap::new(),
         }
@@ -206,19 +202,6 @@ impl<R, B> Validator<R, B> {
     #[must_use]
     pub const fn event_schema_resources(&self) -> &EventSchemaResources {
         &self.event_schema_resources
-    }
-
-    /// The `env` slots each bound extension namespace's package declares
-    /// (exact namespace URI to `env-slots`): an `env` attribute on an element
-    /// of one of these namespaces must name a declared slot (`SCXML083`).
-    /// Elements of other namespaces are not judged.
-    #[must_use]
-    pub fn with_extension_slots(
-        mut self,
-        slots: std::collections::BTreeMap<String, Vec<String>>,
-    ) -> Self {
-        self.extension_slots = Some(slots);
-        self
     }
 
     /// The `env` slots of each invoked service the caller's service packages
@@ -442,11 +425,7 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
             report
         };
         report.extend(rules(document));
-        for diagnostic in env_attribute_diagnostics(
-            document,
-            self.extension_slots.as_ref(),
-            self.services.as_ref(),
-        ) {
+        for diagnostic in env_attribute_diagnostics(document, self.services.as_ref()) {
             report.push(diagnostic);
         }
         for diagnostic in event_attribute_diagnostics(document, event_schemas) {

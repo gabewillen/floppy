@@ -6,7 +6,5 @@
   "schema-artifact": "scx.xsd",
   "schema-sha256": "bd171e07162e911f24d7e3a4a95017d7c143bcbc785765d7ba05c3d9e4229a74",
   "wit-world": "stateforward:scxml/executable-content-extension",
-  "wit-version": "0.2.0",
-  "http-origins": [],
-  "env-slots": []
+  "wit-version": "0.2.0"
 }

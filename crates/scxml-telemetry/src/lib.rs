@@ -408,9 +408,6 @@ pub enum Operation {
     HostWasmtimeExtensionExecute,
     /// Shuts down one session's extension component.
     HostWasmtimeExtensionShutdown,
-    /// Performs one outbound HTTP request an extension component made
-    /// through the host-granted `outbound-http` capability.
-    HostWasmtimeExtensionHttpFetch,
     /// Starts one invocation of an invoked service: instantiates its
     /// component and calls its `invoked-service-api.invoke`
     /// (`machine-capabilities.start-invocation`).
@@ -649,7 +646,6 @@ impl Operation {
             Self::HostWasmtimeExtensionLoad => "scxml.host-wasmtime.extension-load",
             Self::HostWasmtimeExtensionExecute => "scxml.host-wasmtime.extension-execute",
             Self::HostWasmtimeExtensionShutdown => "scxml.host-wasmtime.extension-shutdown",
-            Self::HostWasmtimeExtensionHttpFetch => "scxml.host-wasmtime.extension-http-fetch",
             Self::HostWasmtimeServiceStart => "scxml.host-wasmtime.service-start",
             Self::HostWasmtimeServiceSend => "scxml.host-wasmtime.service-send",
             Self::HostWasmtimeServiceWaitUntil => "scxml.host-wasmtime.service-wait-until",

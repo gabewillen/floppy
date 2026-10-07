@@ -314,7 +314,7 @@ fn repository(server: &Server, cache: &Path) -> Vec<String> {
     ]
 }
 
-/// A document whose one element is the repository namespace's `fetch`,
+/// A document whose one element is the repository namespace's `raise`,
 /// with `attributes` (written once under `target/`).
 fn document_with(attributes: &str) -> String {
     let directory = workspace().join("target/cli-repository-namespaces");
@@ -330,8 +330,8 @@ fn document_with(attributes: &str) -> String {
             r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:repo="{REPOSITORY_URI}" xmlns:env="{ENV_NAMESPACE}" version="1.0" datamodel="ecmascript" initial="s0">
   <datamodel><data id="outcome" expr="''"/></datamodel>
   <state id="s0">
-    <onentry><repo:fetch {attributes} location="outcome"/></onentry>
-    <transition event="example.fetched" target="fetched"/>
+    <onentry><repo:raise {attributes}/></onentry>
+    <transition event="example.raised" target="fetched"/>
     <transition event="error.execution" target="refused"/>
   </state>
   <final id="fetched"/>
@@ -344,7 +344,7 @@ fn document_with(attributes: &str) -> String {
 }
 
 fn hello() -> String {
-    document_with(r#"url="http://127.0.0.1:9" path="/ok" env:token="REPO_TOKEN""#)
+    document_with(r#"event="example.raised""#)
 }
 
 /// `snapshot run` of `document` with `extra` flags.
@@ -449,7 +449,7 @@ fn validate_resolves_the_schema_and_never_the_component() {
     let valid = validate(&hello(), &flags);
     assert!(valid.status.success(), "{}", text(&valid.stderr));
     let invalid = validate(
-        &document_with(r#"url="http://127.0.0.1:9" stream="true""#),
+        &document_with(r#"event="example.raised" stream="true""#),
         &flags,
     );
     assert_eq!(
@@ -709,14 +709,14 @@ fn a_tampered_cache_fails_closed() {
     assert!(!output.exists());
 }
 
-/// A misspelled slot is the validator's `SCXML083`, with the fix, against
-/// the repository package's declared slots.
+/// An `env` attribute on a repository element is the validator's
+/// `SCXML084`: executable content has no slots.
 #[test]
-fn a_misspelled_slot_is_caught_by_the_validator() {
+fn an_env_attribute_on_a_repository_element_is_rejected() {
     let server = github();
-    let directory = scratch("typo");
+    let directory = scratch("env");
     let rejected = validate(
-        &document_with(r#"url="http://127.0.0.1:9" env:tokn="REPO_TOKEN""#),
+        &document_with(r#"event="example.raised" env:token="REPO_TOKEN""#),
         &repository(&server, &directory.join("cache")),
     );
     assert_eq!(
@@ -726,8 +726,7 @@ fn a_misspelled_slot_is_caught_by_the_validator() {
         text(&rejected.stderr)
     );
     let stderr = text(&rejected.stderr);
-    assert!(stderr.contains("error[SCXML083]"), "{stderr}");
-    assert!(stderr.contains("did you mean `token`?"), "{stderr}");
+    assert!(stderr.contains("error[SCXML084]"), "{stderr}");
 }
 
 /// An invoked child session that uses the repository namespace: the parent's

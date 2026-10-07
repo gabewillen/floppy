@@ -36,8 +36,8 @@ hard cutover.
 - BasicHTTP runs over the network in live sessions, and delayed BasicHTTP
   sends are held on the session clock.
 - Extension components execute extension-namespace elements end to end
-  under the Wasmtime host, with host-admitted outbound HTTP and read-only
-  session snapshots. A document loads an element straight from a repository
+  under the Wasmtime host, with read-only session snapshots and no I/O
+  (network calls and secrets belong in invoked services). A document loads an element straight from a repository
   by naming it
   (`https://github.com/<owner>/<repo>/namespaces/<name>`, the latest
   release, or `...@<tag>` to pin one): verified against the release's
@@ -45,9 +45,9 @@ hard cutover.
   session starts. The tag is never part of the namespace: it is split off
   when the document is parsed (`scxml_types::strip_tag`), so release
   manifests and schemas name the tagless URI and everything after the
-  parser sees it exactly. Elements receive the run's values only
-  as references (`env:<slot>="NAME"`), and importing an element consents to
-  the origins its manifest declares.
+  parser sees it exactly. Invoked services receive the run's values only
+  as references (`env:<slot>="NAME"` on their `<invoke>`), and binding a
+  service consents to the origins its manifest declares.
 - Both official W3C IRP corpora still pass every applicable case through
   the shipped components (ECMAScript 201 / 201, XPath 178 / 178); cases the
   W3C evidence shows never exercise a corpus's data model are now
@@ -59,6 +59,19 @@ hard cutover.
 
 ### Added
 
+- Browser host parity, slice 1: `createValidator` runs the bundled validator
+  component (the `scx validate` report, byte for byte, plus the draft
+  profile: the validator WIT request gains `profile`); the validator and
+  compiler take the page's extension packages and `event:schema` files
+  (`packages`, `eventSchemas`); and extension components run in the page
+  with the Wasmtime host's names and semantics (`ExtensionComponents`,
+  `authenticateExtensionComponent`, createSession `extensionComponents`):
+  per-session instances, session capabilities during `execute`, per-call
+  fuel, retirement after a trap, and the executable-content snapshot (the
+  codec WIT's `snapshot-options` gains `point`). The page's
+  `executeExtension` callback is gone. A shared corpus
+  (`tests/fixtures/host-parity`, the `env` and `event` namespace suites)
+  holds both hosts to the same outcomes in Node and headless Chromium.
 - `snapshot run` and `run` load `<invoke src>`, `<script src>`, and
   `<data src>` by SCXML's defaults (`https:`, `file:`, and relative URIs
   against the naming document's base URI): every literal URI of the document
@@ -182,20 +195,20 @@ hard cutover.
   slot rejects the start (`error.execution`). The validator checks them
   (`SCXML083` against the bound package, `SCXML084` on an SCXML session's
   `<invoke>`); the CLI passes `--env`/`--env-file` values and the outbound
-  transport to services. The echo example declares an `endpoint` slot and
-  GETs it on `fetch`.
+  transport to services. The echo example declares the `endpoint` and
+  `token` slots and GETs the endpoint (followed by the event's path) on
+  `fetch`.
 - Env values scoped per package: `ExtensionEnvironment::new` takes
-  `EnvVariable`s, each granted to exact package URIs (extension namespace or
-  invoked-service type URIs); a slot naming a variable not granted to its
-  element's namespace or its `<invoke>`'s type URI is absent, exactly like
-  an unheld one. The CLI derives the grants from the document: a variable
-  goes only to the packages of the elements and `<invoke>`s whose `env`
-  attributes name it (and to the package of every `env:<slot>expr` slot,
-  whose name is known only when it executes). `--env NAME[=VALUE]` and
+  `EnvVariable`s, each granted to exact invoked-service type URIs; a slot
+  naming a variable not granted to its `<invoke>`'s type URI is absent,
+  exactly like an unheld one. The CLI derives the grants from the document:
+  a variable goes only to the services whose `<invoke>`s' `env` attributes
+  name it (and to the service of every `env:<slot>expr` slot, whose name is
+  known only when it runs). `--env NAME[=VALUE]` and
   `--env-file` supply values: a variable's value is its flag's, else its
   last `--env-file` entry, else, only for a bare `--env NAME`, the calling
   shell's; a variable no slot can name is dropped. The pre-run listing shows
-  each variable and the elements and `<invoke>`s it goes to (names only).
+  each variable and the `<invoke>`s it goes to (names only).
 - Per-input bounds for invoked services: between two inputs (its start,
   an event, its due timers, an HTTP response) an invocation runs at most the
   configured fuel (`ServiceComponents::with_call_fuel`) and returns at most
@@ -327,20 +340,15 @@ hard cutover.
   `scxml.cli.resolve-extension-package` and
   `scxml.cli.resolve-extension-component`.
 - `env` slots: the host's attribute vocabulary `https://github.com/stateforward/scxml.rs/namespaces/env`
-  (`env:<slot>="NAME"`, `env:<slot>expr="EXPR"`) names, on an extension
-  element, the variable whose value the host binds to one of the slots its
-  package declares (`env-slots`). The component receives an opaque
-  `value-reference` per slot with `execute` (valid for that call and that
-  element only) and never the value; `outbound-http` URLs, header values, and
-  bodies are lists of literal and reference parts the host substitutes, then
-  admits only to an origin the package declares (`http-origins`) or one a
-  reference's value supplies entirely. Validator codes `SCXML083` (a slot the
-  package does not declare, with a fix; a slot bound twice; a name that is no
-  variable name) and `SCXML084` (the `env` namespace outside an extension
-  element's attributes). The CLI lists each element's namespace, version,
-  declared origins, and bound slots before running, names the `--env` flag
-  for a missing value, notes refused origins, and masks the run's values in
-  the text it writes.
+  (`env:<slot>="NAME"`, `env:<slot>expr="EXPR"`) names, on an invoked
+  service's `<invoke>`, the variable whose value the host binds to one of the
+  slots its service package declares (`env-slots`); see the invoked-services
+  entry above. Validator codes `SCXML083` (a slot the package does not
+  declare, with a fix; a slot bound twice; a name that is no variable name;
+  an attribute that names no valid slot) and `SCXML084` (the `env` namespace
+  anywhere but an invoked service's `<invoke>`, executable-content extension
+  elements included). The CLI lists each variable and the `<invoke>`s it goes
+  to before running and masks the run's values in the text it writes.
 - A `v*` tag publishes a GitHub release with every release component,
   `manifest.tsv`, and `SHA256SUMS` (CI job `release`, after every other job);
   `scripts/check-namespace-versions.sh` checks that every namespace package
@@ -439,17 +447,6 @@ hard cutover.
   0 of a `manual`-timer session's clock (2015-09-01T00:00:00Z, the
   Wasmtime host's batch epoch); ECMAScript `Date` reads it plus the
   session's logical time.
-- `stateforward:scxml/outbound-http`, a host-admitted, deny-by-default
-  outbound HTTP import of the `executable-content-extension` world (`fetch` of
-  one bounded `GET` or `POST`; no redirect followed; no ambient credentials).
-  The Wasmtime host refuses every request unless the embedder supplies an
-  `ExtensionHttp` transport (`ExtensionComponents::with_outbound_http`), and
-  admits each one only to an origin the element's package declares or a
-  reference's value supplies; the `http` feature's `ExtensionHttpClient`
-  bounds each request by a 10 s connect and 120 s total timeout and a 16 MiB
-  response body. `scx snapshot run` and `run` supply it (not with
-  `--record` or `--replay`). New host span
-  `scxml.host-wasmtime.extension-http-fetch`.
 - `namespaces/`, the top-level directory for repository namespaces, one
   folder each.
 - `stateforward:scxml/session-snapshot-host`, a read-only import of the
@@ -927,6 +924,22 @@ hard cutover.
   (`--extension-http-allow`) are gone: a package declares its origins, and a
   run supplies values only by name. Extension components import no WASI
   interface (`wasi:cli/environment` is no longer linked).
+- Extension I/O, by the rule that executable content is synchronous and
+  quick and anything doing I/O is an invoked service: the
+  `executable-content-extension` world no longer imports `outbound-http`,
+  and `executable-content-extension-api.execute` takes no `references`; an
+  extension package manifest declares no `http-origins` and no `env-slots`
+  (both unknown fields now), and the validator's and compiler's
+  `extension-package` WIT records lose both fields; `env` attributes on an
+  extension element are `SCXML084`; `ExtensionComponents::with_values`,
+  `with_outbound_http`, and `with_observer`, `ExtensionObserver`,
+  `ExtensionPackage::env_slots` and `http_origins`,
+  `Validator::with_extension_slots`, the span
+  `scxml.host-wasmtime.extension-http-fetch`, the example extension's
+  `<example:fetch>`, and the conformance harness's in-process stand-in
+  server (`scxml_conformance::example_server`) are gone. The echo service
+  gains a `token` slot and a request path in its `fetch` event, and the
+  `env` namespace suite keeps its document-rejection statements (8 tests).
 - Validator codes `SCXML035` (its findings are `SCXML004` errors),
   `SCXML043` (a value expression under the null data model, now the
   `SCXML079` warning), and `SCXML054` (an ECMAScript `=` in a condition,

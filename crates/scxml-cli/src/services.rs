@@ -819,13 +819,13 @@ mod tests {
             bound_services(&packages),
             BTreeMap::from([(
                 "https://stateforward.org/scxml/services/echo".to_owned(),
-                vec!["endpoint".to_owned()]
+                vec!["endpoint".to_owned(), "token".to_owned()]
             )])
         );
         let summary = summary(&packages, None, None).join("\n");
         assert!(summary.contains("service `https://stateforward.org/scxml/services/echo`"));
         assert!(summary.contains("= outbound HTTP: none"));
-        assert!(summary.contains("= env slots: endpoint"));
+        assert!(summary.contains("= env slots: endpoint, token"));
         assert!(summary.contains("= WASI resources: none"));
         assert!(
             packages[0]

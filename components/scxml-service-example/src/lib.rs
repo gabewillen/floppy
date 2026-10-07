@@ -16,11 +16,15 @@
 //!     `{"echoed":N,"ticks":M}` (the invoking session receives it on
 //!     `done.invoke.<id>`);
 //!   * `fetch`, which GETs the URL the invocation's `endpoint` slot
-//!     references (`env:endpoint="NAME"` on the `<invoke>`) through
-//!     `outbound-http.fetch`, suspending only that task (the service keeps
-//!     reading events meanwhile), and returns `echo.fetched` carrying the
-//!     response status; without a bound `endpoint`, or when the request
-//!     fails, the future resolves with an error (`error.communication`).
+//!     references (`env:endpoint="NAME"` on the `<invoke>`) followed by the
+//!     event's data when it is a string (a path, query, or fragment),
+//!     through `outbound-http.fetch`, with `authorization: Bearer <token>`
+//!     when the invocation binds the `token` slot, suspending only that task
+//!     (the service keeps reading events meanwhile), and returns
+//!     `echo.fetched` carrying the response status; without a bound
+//!     `endpoint`, or when the request fails, the future resolves with an
+//!     error (`error.communication`). The component holds only the slots'
+//!     references, never their values.
 //!
 //! When the invoking state exits first, the host cancels the invocation
 //! (SCXML 6.4) and drops its instance: there is nothing to release.
@@ -57,6 +61,8 @@ pub const FETCH_EVENT: &str = "fetch";
 pub const FETCHED_EVENT: &str = "echo.fetched";
 /// The `env` slot whose value is the URL `fetch` requests.
 pub const ENDPOINT_SLOT: &str = "endpoint";
+/// The `env` slot whose value `fetch` sends as a bearer token.
+pub const TOKEN_SLOT: &str = "token";
 
 /// What the guest does for one input, in order.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -70,9 +76,13 @@ pub enum EchoAction {
     },
     /// Resolve the service's future with this data (`done.invoke`).
     Done(DataValue),
-    /// GET the `endpoint` slot's URL, then [`Echo::fetched`] with the
-    /// status.
-    Fetch,
+    /// GET the `endpoint` slot's URL followed by `path`, then
+    /// [`Echo::fetched`] with the status.
+    Fetch {
+        /// What follows the endpoint (the `fetch` event's string data, else
+        /// empty).
+        path: String,
+    },
 }
 
 /// Why the service rejected an input.
@@ -149,7 +159,11 @@ impl Echo {
         }
         if name == FETCH_EVENT {
             return if self.endpoint {
-                Ok(EchoAction::Fetch)
+                let path = match data {
+                    DataValue::String(path) => path,
+                    _ => String::new(),
+                };
+                Ok(EchoAction::Fetch { path })
             } else {
                 Err(EchoError::NoEndpoint)
             };
@@ -248,7 +262,7 @@ mod guest {
     use std::task::{Poll, Waker};
 
     use exports::stateforward::scxml::invoked_service_api::Guest;
-    use stateforward::scxml::outbound_http::{self, HttpRequest, TextPart};
+    use stateforward::scxml::outbound_http::{self, HttpHeader, HttpRequest, TextPart};
     use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
     use stateforward::scxml::types::{
         ComponentError, DataValue, ErrorCode, ErrorVersion, Event, EventType, InvokeRequest,
@@ -325,7 +339,7 @@ mod guest {
                 None,
                 None,
             );
-            let (echo, delay, endpoint) = started?;
+            let (echo, delay, slots) = started?;
             let echo = Rc::new(RefCell::new(echo));
             let outputs: Outputs = Rc::default();
             let (mut returned, returned_reader) = wit_stream::new::<Event>();
@@ -360,7 +374,7 @@ mod guest {
                 wit_bindgen::spawn(async move {
                     monotonic_clock::wait_for(delay.saturating_mul(1_000_000)).await;
                     let action = timer_echo.borrow_mut().tick();
-                    carry_out(action, &timer_echo, &timer_outputs, endpoint);
+                    carry_out(action, &timer_echo, &timer_outputs, slots);
                 });
             }
             // The events the invoking session sends.
@@ -374,7 +388,7 @@ mod guest {
                             return;
                         }
                     };
-                    if carry_out(action, &echo, &outputs, endpoint) {
+                    if carry_out(action, &echo, &outputs, slots) {
                         return;
                     }
                     // A task spawned from a running task (a fetch) is polled
@@ -386,9 +400,17 @@ mod guest {
         }
     }
 
-    /// Parses the request: the service state, its timer, and its
-    /// `endpoint` reference.
-    fn start(request: &InvokeRequest) -> Result<(Echo, Option<u64>, Option<u32>), ComponentError> {
+    /// The references the invocation bound to the `endpoint` and `token`
+    /// slots.
+    #[derive(Clone, Copy)]
+    struct Slots {
+        endpoint: Option<u32>,
+        token: Option<u32>,
+    }
+
+    /// Parses the request: the service state, its timer, and its slot
+    /// references.
+    fn start(request: &InvokeRequest) -> Result<(Echo, Option<u64>, Slots), ComponentError> {
         if request.type_uri != super::ECHO_SERVICE_URI {
             return Err(error(ErrorCode::InvalidInput, "service type URI differs"));
         }
@@ -399,15 +421,21 @@ mod guest {
             .collect::<Result<Vec<_>, ComponentError>>()?;
         let (mut echo, delay) = Echo::start(parameters.iter().map(|(name, value)| (*name, value)))
             .map_err(echo_error)?;
-        let endpoint = request
-            .references
-            .iter()
-            .find(|binding| binding.slot == super::ENDPOINT_SLOT)
-            .map(|binding| binding.reference);
-        if endpoint.is_some() {
+        let slot = |name: &str| {
+            request
+                .references
+                .iter()
+                .find(|binding| binding.slot == name)
+                .map(|binding| binding.reference)
+        };
+        let slots = Slots {
+            endpoint: slot(super::ENDPOINT_SLOT),
+            token: slot(super::TOKEN_SLOT),
+        };
+        if slots.endpoint.is_some() {
             echo.bind_endpoint();
         }
-        Ok((echo, delay, endpoint))
+        Ok((echo, delay, slots))
     }
 
     /// Carries out one action; `true` when the service is done.
@@ -415,7 +443,7 @@ mod guest {
         action: Result<EchoAction, EchoError>,
         echo: &Rc<RefCell<Echo>>,
         outputs: &Outputs,
-        endpoint: Option<u32>,
+        slots: Slots,
     ) -> bool {
         match action {
             Err(EchoError::NotRunning) => true,
@@ -434,8 +462,8 @@ mod guest {
                 push(outputs, Output::Done(Ok(Some(wit_value(data)))));
                 true
             }
-            Ok(EchoAction::Fetch) => {
-                let Some(reference) = endpoint else {
+            Ok(EchoAction::Fetch { path }) => {
+                let Some(reference) = slots.endpoint else {
                     push(
                         outputs,
                         Output::Done(Err(echo_error(EchoError::NoEndpoint))),
@@ -446,17 +474,32 @@ mod guest {
                 let echo = Rc::clone(echo);
                 let outputs = Rc::clone(outputs);
                 wit_bindgen::spawn(async move {
+                    let mut url = vec![TextPart::Reference(reference)];
+                    if !path.is_empty() {
+                        url.push(TextPart::Literal(path));
+                    }
+                    let headers = slots
+                        .token
+                        .map(|token| HttpHeader {
+                            name: "authorization".to_owned(),
+                            value: vec![
+                                TextPart::Literal("Bearer ".to_owned()),
+                                TextPart::Reference(token),
+                            ],
+                        })
+                        .into_iter()
+                        .collect();
                     let response = outbound_http::fetch(HttpRequest {
                         method: "GET".to_owned(),
-                        url: vec![TextPart::Reference(reference)],
-                        headers: Vec::new(),
+                        url,
+                        headers,
                         body: Vec::new(),
                     })
                     .await;
                     match response {
                         Ok(response) => {
                             let action = echo.borrow_mut().fetched(response.status);
-                            carry_out(action, &echo, &outputs, Some(reference));
+                            carry_out(action, &echo, &outputs, slots);
                         }
                         Err(failure) => push(&outputs, Output::Done(Err(failure))),
                     }
@@ -620,7 +663,15 @@ mod tests {
         echo.bind_endpoint();
         assert_eq!(
             echo.send(super::FETCH_EVENT, DataValue::Absent),
-            Ok(EchoAction::Fetch)
+            Ok(EchoAction::Fetch {
+                path: String::new()
+            })
+        );
+        assert_eq!(
+            echo.send(super::FETCH_EVENT, DataValue::String("/ok?q".into())),
+            Ok(EchoAction::Fetch {
+                path: "/ok?q".into()
+            })
         );
         let action = echo.fetched(204).expect("running");
         assert!(matches!(

@@ -98,6 +98,7 @@ import {
   resolvedDocument,
 } from './resources.js';
 import { sha256Hex } from './sha256.js';
+import { SessionNamespaces, isExtensionComponents, prepareExtensions } from './extension.js';
 import { canonicalHttpUrl } from './url.js';
 import {
   MAX_SNAPSHOT_INVOKE_DEPTH,
@@ -148,7 +149,6 @@ export const UNSUPPORTED = Object.freeze({
 const CAPABILITY_KEYS = new Set([
   'log',
   'raise',
-  'executeExtension',
   'loadScript',
   'runScript',
   'loadDocument',
@@ -240,8 +240,14 @@ function enqueueRouted(run, route, event, sender) {
  * into the session from a capability provider with `reentrant-call`).
  */
 class Run {
-  constructor({ telemetry, capabilities, resources, maxCommands, trace, modules, invocations, fuel, budget, basichttp, bridge, invokeLimits, startEpochMs }) {
+  constructor({ telemetry, capabilities, resources, maxCommands, trace, modules, invocations, fuel, budget, basichttp, bridge, invokeLimits, startEpochMs, extensions }) {
     this.telemetry = telemetry;
+    /**
+     * The bound extension components, prepared for every session
+     * (src/extension.js `prepareExtensions`, plus the snapshot `codec` when
+     * one reads the session snapshot); undefined when none is bound.
+     */
+    this.extensions = extensions;
     /**
      * Unix epoch ms of logical time 0 of every session clock of the run:
      * what ECMAScript `Date` reads is this plus the logical time.
@@ -464,6 +470,43 @@ class SessionLinks {
     this.dataModelInitialized = false;
     /** This session's scripts loaded from the prefetched resources. */
     this.scripts = run.resources === undefined ? undefined : new ScriptLoads(run.resources);
+    /** This session's extension component instances (src/extension.js), once loaded. */
+    this.namespaces = undefined;
+    /**
+     * The active configuration (`update-active-configuration`), kept only
+     * when extension components are bound (their `in-state`).
+     */
+    this.configuration = new Set();
+    /** This session's `machine-capabilities` (set by machineImports), for its extension components. */
+    this.capabilities = undefined;
+  }
+
+  // The session as its extension components act on it (src/extension.js):
+  // the same capabilities `<send>` and `<cancel>` use.
+  classifyTarget(target) {
+    return this.capabilities.classifyTarget(target);
+  }
+  send(request) {
+    return this.capabilities.send(request);
+  }
+  cancel(sendId) {
+    this.capabilities.cancel(sendId, undefined);
+  }
+  /** The session clock's time: the run's start epoch plus the logical time. */
+  nowMs() {
+    return this.run.startEpochMs + this.io.now();
+  }
+  /** Logical time from the clock's read-only snapshot. */
+  snapshotNow() {
+    return this.io.snapshotNow();
+  }
+  /** Pending delayed sends (read-only). */
+  pendingSends() {
+    return this.io.snapshot();
+  }
+  /** This session's external event queue, as the events it will process. */
+  externalQueue() {
+    return this.run.invokedSessions.external(this.key).map(queuedEvent);
   }
 
   /**
@@ -594,6 +637,9 @@ class Instance {
   }
 
   dispose() {
+    // The session ended (finished, failed, or cancelled): its extension
+    // component instances are shut down exactly once.
+    this.links.namespaces?.shutdown();
     this.session[Symbol.dispose]?.();
   }
 }
@@ -766,6 +812,10 @@ function capabilityResource(links) {
 
   return class MachineCapabilities {
     updateActiveConfiguration(exited, entered) {
+      if (links.namespaces !== undefined) {
+        for (const state of exited) links.configuration.delete(state);
+        for (const state of entered) links.configuration.add(state);
+      }
       // A data model without In() support needs no configuration.
       if (typeof links.dataModel?.updateActiveConfiguration !== 'function') return;
       dataModel('updateActiveConfiguration', [[...exited], [...entered]]);
@@ -1067,37 +1117,55 @@ function capabilityResource(links) {
       }
       forward(run.capabilities, 'runScript', [reference, event]);
     }
-    // The page's callback answers `handled` or `not-handled` and queues no
-    // events; the WIT `extension-execution` record carries that answer with
-    // empty event lists (extension components are a Wasmtime host feature).
-    // No page callback reads the session snapshot, so the machine never
-    // computes an executable-content image here and `_snapshot` is always
-    // absent.
-    executeExtension(element, _event, _context, _snapshot) {
-      const answer = forward(
-        run.capabilities,
-        'executeExtension',
-        [element],
-        (v) => v !== null && typeof v === 'object' && (v.tag === 'handled' || v.tag === 'not-handled'),
-      );
-      return { outcome: { tag: 'ok', val: answer }, internal: [], external: [] };
-    }
-
-    extensionSnapshotRequest(_namespaceUri) {
-      return false;
-    }
-
-    // This host loads no extension component (repository namespaces are a
-    // Wasmtime host feature): the page's `executeExtension` callback answers
-    // every extension namespace the document uses. Without one, no namespace
-    // can be loaded and the session start fails closed before data binding.
-    loadExtensions(_namespaceUris) {
-      if (typeof run.capabilities?.executeExtension !== 'function') {
-        telemetry.observe('capability', 'rejected');
+    // An executable-content extension, routed by its exact namespace URI
+    // to this session's instance of the bound extension component
+    // (src/extension.js); an unbound one fails the session closed.
+    // `snapshot` is the machine's executable-content image, present exactly
+    // when the component reads the session snapshot.
+    executeExtension(element, event, context, snapshot) {
+      const instance = links.namespaces?.get(element.name.namespaceUri);
+      if (instance === undefined) {
+        telemetry.observe('extension-execute', 'rejected');
         throw unavailable();
       }
+      const span = telemetry.start('extension-execute');
+      const executed = telemetry.within(span, () => instance.execute(element, event, context, snapshot));
+      const handled = executed.outcome.tag === 'ok' && executed.outcome.val.tag === 'handled';
+      telemetry.end(span, handled ? 'ok' : executed.outcome.tag === 'ok' ? 'rejected' : 'failed');
+      if (run.fault !== undefined) throw hostFailure();
+      return executed;
     }
 
+    // Only a bound extension component that imports `session-snapshot-host`
+    // reads the machine's executable-content image.
+    extensionSnapshotRequest(namespaceUri) {
+      return links.namespaces?.get(namespaceUri)?.readsSnapshot === true;
+    }
+
+    // Every namespace the document uses gets this session's instance of its
+    // bound extension component; a namespace no binding names fails the
+    // session start closed before data binding.
+    loadExtensions(namespaceUris) {
+      const span = telemetry.start('extension-load');
+      try {
+        for (const uri of namespaceUris) {
+          if (links.namespaces?.has(uri)) continue;
+          const prepared = run.extensions?.prepared.get(uri);
+          if (prepared === undefined) throw unavailable();
+          links.namespaces ??= new SessionNamespaces();
+          try {
+            links.namespaces.add(prepared, links);
+          } catch (fault) {
+            run.latch(fault);
+            throw hostFailure();
+          }
+        }
+        telemetry.end(span, 'ok');
+      } catch (thrown) {
+        telemetry.end(span, thrown instanceof ImportFailure && thrown.payload.code === 'unavailable' ? 'rejected' : 'failed');
+        throw thrown;
+      }
+    }
   };
 }
 
@@ -1111,6 +1179,7 @@ function machineImports(links, machineIr) {
     },
   };
   const MachineCapabilities = capabilityResource(links);
+  links.capabilities = new MachineCapabilities();
   const imports = {};
   for (const [name, value] of [
     ['types', {}],
@@ -2488,15 +2557,18 @@ async function preloadChildModules(loader, telemetry) {
  * @param {object} [options.capabilities] `log` (`{label, text}`),
  *   `loadDocument` (`(kind, uri) => text`), `compileInvocation`
  *   (`(sourceName, source) => Uint8Array`, pre-lowered child IR; overrides
- *   the automatic child compiler), `raise`, `executeExtension`, `loadScript`,
+ *   the automatic child compiler), `raise`, `loadScript`,
  *   `runScript` providers; any other function key is invalid
+ * @param {object} [options.extensionComponents] an ExtensionComponents
+ *   (src/extension.js): the extension components of the namespaces the
+ *   document and every document it invokes use
  * @param {{compile?: 'auto' | 'provided', fuel?: number}} [options.invoke]
  *   `<invoke>` child compilation: `auto` (default) compiles children with a
  *   dedicated bundled compiler (src/invoke.js), pre-warmed before `start`;
  *   `provided` uses only `capabilities.compileInvocation`. `fuel` is the
  *   per-compile budget (default DEFAULT_COMPILE_FUEL)
  *   (`(sourceName, source) => Uint8Array`, pre-lowered child IR; enables
- *   `<invoke>`), `raise`, `executeExtension`, `loadScript`, `runScript`
+ *   `<invoke>`), `raise`, `loadScript`, `runScript`
  *   providers; any other function key is invalid
  * @param {object} [options.resources] `{allow, resolve}`: the page's URL
  *   policy and resolver (src/resources.js). Every statically known
@@ -2570,6 +2642,7 @@ export async function createSession(options) {
     http,
     invoke,
     invokeLimits,
+    extensionComponents,
   } = options ?? {};
   const telemetry = new Telemetry(telemetryOption);
   const isProvider = dataModel === undefined || (dataModel !== null && typeof dataModel === 'object');
@@ -2594,6 +2667,7 @@ export async function createSession(options) {
     !SNAPSHOT_MODES.includes(snapshot) ||
     !isHttpOption(http) ||
     !isInvokeOption(invoke) ||
+    !isExtensionComponents(extensionComponents) ||
     limits === undefined ||
     (loadCoreModule !== undefined && typeof loadCoreModule !== 'function') ||
     !isTelemetryOption(telemetryOption)
@@ -2624,6 +2698,19 @@ export async function createSession(options) {
   let loader = pageLoader;
   let modules;
   let invocations;
+  // Extension components: every binding's core modules are compiled now, so
+  // each session instantiates its own instance synchronously; one that reads
+  // the session snapshot needs the codec loaded too.
+  let extensions;
+  try {
+    extensions = await prepareExtensions(extensionComponents, pageLoader);
+    if (extensions !== undefined && [...extensions.prepared.values()].some((prepared) => prepared.readsSnapshot)) {
+      extensions.codec = await loadCodec(pageLoader);
+    }
+  } catch (cause) {
+    telemetry.end(span, 'failed');
+    throw cause instanceof ScxmlHostError ? cause : new ScxmlHostError('instance-lost', { cause });
+  }
   // <invoke>: the page's compileInvocation wins; otherwise, in
   // `auto` mode, a document that declares <invoke> gets the automatic
   // compiler, pre-warmed with its statically known children.
@@ -2641,6 +2728,7 @@ export async function createSession(options) {
           hostTelemetry: telemetry,
           fuel: invoke?.fuel,
           budget,
+          packages: extensions?.packages,
         };
         invocations = await InvocationCompiler.open(options);
         await invocations.prewarm(found.documents);
@@ -2672,6 +2760,7 @@ export async function createSession(options) {
     basichttp,
     bridge: options[BRIDGE],
     invokeLimits: limits,
+    extensions,
     // `event-loop` timers follow the page's clock: logical time 0 is the
     // wall-clock time the session was created; `manual` timers are logical
     // only and start at the fixed batch epoch, as the Wasmtime host's batch

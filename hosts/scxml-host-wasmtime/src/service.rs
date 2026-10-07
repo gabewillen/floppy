@@ -87,7 +87,7 @@ use crate::bindings::stateforward::scxml::types::{
     TraceContext as WitTraceContext,
 };
 use crate::component::{GuestSignal, component_error, record_guest_signal};
-use crate::extension::{ExtensionHttp, outbound_http};
+use crate::outbound_http::ExtensionHttp;
 use crate::session::{native_event, native_value};
 use crate::{
     ArtifactError, ArtifactKind, AuthenticatedComponent, ExtensionHttpFailure,
@@ -95,20 +95,20 @@ use crate::{
     TelemetryProviders, WasmtimeHostConfig,
 };
 
-mod service_bindings {
+pub(crate) mod service_bindings {
     wasmtime::component::bindgen!({
         path: "../../crates/scxml-wit/wit/scxml",
         world: "invoked-service",
         with: {
             "stateforward:scxml/types": crate::bindings::stateforward::scxml::types,
             "stateforward:scxml/telemetry": crate::bindings::stateforward::scxml::telemetry,
-            "stateforward:scxml/outbound-http": crate::extension::outbound_http,
             "wasi:clocks": wasmtime_wasi::p3::bindings::clocks,
         },
         require_store_data_send: true,
     });
 }
 
+pub use service_bindings::stateforward::scxml::outbound_http;
 use wasmtime_wasi::p3::bindings::clocks::{monotonic_clock, types as clock_types};
 
 /// Maximum service type URIs one session host binds.
@@ -274,7 +274,7 @@ impl ServiceComponents {
             || !package
                 .env_slots
                 .iter()
-                .all(|slot| crate::extension::is_env_slot(slot))
+                .all(|slot| crate::outbound_http::is_env_slot(slot))
         {
             return Err(ArtifactError::NamespaceBinding.into());
         }
@@ -742,7 +742,7 @@ impl<U> outbound_http::HostWithStore<U> for HasSelf<ServiceStoreData> {
             );
             let admitted = accessor.with(|mut access| {
                 let data = access.get();
-                crate::extension::admit_request(
+                crate::outbound_http::admit_request(
                     request,
                     &data.references,
                     &data.allow,
@@ -1471,7 +1471,7 @@ impl ServiceHandle {
         if !known || self.ended {
             return None;
         }
-        let outcome = crate::extension::settle_response(outcome).map_err(|(error, _)| error);
+        let outcome = crate::outbound_http::settle_response(outcome).map_err(|(error, _)| error);
         let report = self.deliver(now_ms, Input::Response(request, outcome));
         Some(self.settle(report, now_ms, mode))
     }
@@ -1526,7 +1526,7 @@ impl ServiceHandle {
                     let outcome = transport.fetch(&request);
                     record_request(&span, &outcome);
                     let outcome =
-                        crate::extension::settle_response(outcome).map_err(|(error, _)| error);
+                        crate::outbound_http::settle_response(outcome).map_err(|(error, _)| error);
                     report = self.deliver(now_ms, Input::Response(id, outcome));
                     if let Some(next) = report.as_mut() {
                         let later = std::mem::take(&mut next.requests);
@@ -1705,7 +1705,7 @@ fn bind_references(
         {
             return invalid("the invocation binds one env slot twice");
         }
-        if !crate::extension::is_env_name(&attribute.value) {
+        if !crate::outbound_http::is_env_name(&attribute.value) {
             return invalid("an env slot names no valid variable");
         }
         let Some(value) = values.held(type_uri, &attribute.value) else {

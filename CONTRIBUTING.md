@@ -387,14 +387,14 @@ WASI clock, filesystem, sockets, HTTP, random, environment, CLI, or stream
 import is a failure.
 
 Extension-component import inspection must show only the versioned project
-types, telemetry, and the `data-model-host`/`execution-host`/`outbound-http`
-interfaces the extension component calls. No extension component keeps a
-WASI interface: any WASI import (including `wasi:cli/environment`, `wasi:http`,
-and `wasi:sockets`), in any component, is a failure. The example reaches
-the network only through `outbound-http`, which the host admits only to
-the origins its package declares or a run-supplied value names, and it
-receives the run's values only as references (see
+types, telemetry, and the `data-model-host`/`execution-host`/
+`session-snapshot-host` interfaces the extension component calls. An
+extension component does no I/O: any WASI import (including
+`wasi:cli/environment`, `wasi:http`, and `wasi:sockets`) or `outbound-http`
+import is a failure (see
 [docs/executable-content-extensions.md](docs/executable-content-extensions.md)).
+Only an invoked service imports `outbound-http`, which the host admits only to
+the origins its package declares or a run-supplied value names.
 
 Reporter import inspection must show only
 `stateforward:scxml-reporter/telemetry@0.2.0` and
@@ -595,7 +595,7 @@ Boundaries per crate, which new code follows:
 | `scx snapshot` | `snapshot-run`, `snapshot-show`, `snapshot-check`, `snapshot-diff` (one span per subcommand) |
 | `scx run` | `run` (one span per command); the host's live-session spans cover each call |
 | `scxml-host-wasmtime` live sessions | `session-open`, `session-send`, `session-advance` (only when a deadline fires or a logical drain runs; never per wait), `session-receive-http` (only when an inbound message reaches a session's queue), `session-communication-error` (only when owed events are delivered), `session-close`, and the existing `session-snapshot`; no attribute beyond the closed operation and outcome labels |
-| `scxml-host-wasmtime` extension components | `extension-http-fetch` (one per `outbound-http` request an extension component makes, on the session thread, a child of the `execute` call); only the closed outcome event and error category (`invalid-input` for a malformed or refused request, `unsupported` when no transport is granted, `platform` for a transport failure or an oversized response); never a URL, host, header, body, status, prompt, or model; each `session-snapshot-host.snapshot` an extension component calls is one `session-snapshot` span (the checkpoint snapshot's operation) with only its closed signal event and error category, plus the `snapshot-bytes` measurement, never the document |
+| `scxml-host-wasmtime` extension components | Each `session-snapshot-host.snapshot` an extension component calls is one `session-snapshot` span (the checkpoint snapshot's operation) with only its closed signal event and error category, plus the `snapshot-bytes` measurement, never the document |
 | `scxml-host-wasmtime` invoked services | `service-start` (one per invocation started), `service-send` (one per event delivered to an invocation's `events` stream), `service-wait-until` (one per firing of an invocation's due timers), `service-cancel` (one per cancelled invocation), `service-http-fetch` (one per `outbound-http.fetch` a service makes, from admission to its response), `service-http-request` (one per admitted request the embedder's transport performs), and `session-http-response` (one per delivery of a service's HTTP response to a live session); only the closed outcome event and error category; never a type URI, invoke id, event, payload, or URL |
 | `scxml-host-wasmtime` `http` feature | `basichttp-network-post` (one per outbound request, on its worker thread, parented to the issuing send) `basichttp-listener-request` (one per inbound connection), `basichttp-listener-accept` (one per failed `accept`), and `basichttp-listener-connection` (one per accepted connection dropped or not kept); only the closed outcome event and error category; never a URL, host, port, path, header, status, or body |
 

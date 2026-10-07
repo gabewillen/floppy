@@ -57,10 +57,6 @@ interface types {
     schema-sha256: string,
     wit-world: string,
     wit-version: string,
-    /// The `env` slots its elements accept (`env:<slot>` attributes).
-    env-slots: list<string>,
-    /// The origins or URL prefixes its extension component's requests reach.
-    http-origins: list<string>,
   }
   /// Exact bytes of one JSON Schema file an `event:schema` attribute
   /// references (the `event` attribute vocabulary,
@@ -72,6 +68,13 @@ interface types {
     uri: string,
     /// The file's exact bytes.
     bytes: list<u8>,
+  }
+  /// A validator rule profile (`scxml-validator-core`'s `Profile`).
+  enum profile {
+    /// What a document a machine writes and then runs as its own invoked
+    /// child may use (`SCXML097` to `SCXML101`; `<scx:validate
+    /// profile="draft">` applies the same profile).
+    draft,
   }
   /// Request bounds (checked before any parsing; violations fail with
   /// `invalid-request` and produce no report): `source` at most 16777216
@@ -93,6 +96,8 @@ interface types {
     schemas: list<schema-resource>,
     packages: list<extension-package>,
     event-schemas: list<event-schema-resource>,
+    /// An optional rule profile; absent, no profile rule runs.
+    profile: option<profile>,
     trace-context: option<trace-context>,
   }
 }

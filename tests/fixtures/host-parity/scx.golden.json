@@ -1,0 +1,21 @@
+{
+  "configuration": [
+    "done"
+  ],
+  "done": null,
+  "logs": [
+    [
+      "valid",
+      "0 "
+    ],
+    [
+      "invalid",
+      "2 SCXML006,SCXML005"
+    ],
+    [
+      "draft",
+      "4 SCXML006,SCXML098,SCXML099,SCXML005"
+    ]
+  ],
+  "status": "finished"
+}

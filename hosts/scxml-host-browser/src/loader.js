@@ -10,7 +10,10 @@ import { Telemetry, isTelemetryOption } from './telemetry.js';
 
 /**
  * Components shipped in `dist/`. `snapshot-codec` is optional: it is loaded
- * only by the first session snapshot or snapshot diff.
+ * only by the first session snapshot or snapshot diff; `validator` only by
+ * createValidator; and the extension components (`extension-example`, the
+ * example namespace, and `scx`, the `scx` namespace) only when a page binds
+ * one.
  */
 export const COMPONENTS = Object.freeze([
   'machine',
@@ -22,6 +25,9 @@ export const COMPONENTS = Object.freeze([
   'clock',
   'compiler',
   'snapshot-codec',
+  'validator',
+  'extension-example',
+  'scx',
 ]);
 
 const CORE_FILE = /^[a-z-]+\.core[0-9]*\.wasm$/;

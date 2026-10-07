@@ -180,8 +180,6 @@ mod guest {
                     schema_sha256: package.schema_sha256,
                     wit_world: package.wit_world,
                     wit_version: package.wit_version,
-                    env_slots: package.env_slots,
-                    http_origins: package.http_origins,
                     // The WIT package record carries no WASI permissions:
                     // compilation never links the extension component.
                 })
@@ -364,15 +362,7 @@ pub fn compile(mut request: CompileRequest) -> Result<CompileOutput, CompileErro
             })
             .collect();
         let compiler = Compiler::new(
-            Validator::new(resolver, XsdSchemaBackend)
-                .with_schema_mode(request.schema_mode)
-                .with_extension_slots(
-                    request
-                        .packages
-                        .iter()
-                        .map(|package| (package.namespace_uri.clone(), package.env_slots.clone()))
-                        .collect(),
-                ),
+            Validator::new(resolver, XsdSchemaBackend).with_schema_mode(request.schema_mode),
         );
         let wasm_scripts = request
             .scripts
@@ -705,8 +695,6 @@ mod tests {
             schema_sha256: "0".repeat(64),
             wit_world: "stateforward:other/world".into(),
             wit_version: scxml_validator_core::SUPPORTED_NAMESPACE_WIT_VERSION.into(),
-            env_slots: Vec::new(),
-            http_origins: Vec::new(),
         }];
         assert_eq!(
             compile(foreign_world),

@@ -4,10 +4,10 @@
 //!   `snapshot run`, and `run`) binds one extension package: a
 //!   `stateforward.scxml.extension-package/v2` manifest naming the exact
 //!   namespace URI, package version, extension artifact, schema artifact and
-//!   its SHA-256, WIT world and version, the outbound HTTP origins or URL
-//!   prefixes its extension component may reach (`http-origins`: binding the
-//!   package consents to them), and the `env` slots its elements accept
-//!   (`env-slots`). The schema artifact is resolved relative to the
+//!   its SHA-256, and WIT world and version. An extension element is
+//!   executable content and does no I/O, so the manifest declares no
+//!   outbound origins and no `env` slots. The schema artifact is resolved
+//!   relative to the
 //!   manifest's directory, read within its byte bound, and checked against
 //!   the manifest before use; it then governs the namespace's XML structure
 //!   (so `--schema` may not name the same URI). `compile` also hands the
@@ -25,13 +25,12 @@
 //!   (`extension-artifact`) or by `--extension-component URI=PATH`, and
 //!   authenticated by the SHA-256 in `--extension-component-sha256 URI=HEX`
 //!   (required for every such package; the manifest is not a trust anchor).
-//! * The document scopes every variable: an element (or an `<invoke>`)
+//! * The document scopes every variable: an invoked service's `<invoke>`
 //!   names a variable for one of its slots with `env:<slot>="NAME"`, and the
-//!   variable goes only to the packages (the element's exact namespace URI,
-//!   or the `<invoke>`'s literal `type`) whose elements or `<invoke>`s name
-//!   it. An `env:<slot>expr` slot names its variable only when it executes,
-//!   so its element's package may receive any variable the run holds, each
-//!   reference minted for that element at that execution.
+//!   variable goes only to the packages (the `<invoke>`'s literal `type`)
+//!   whose `<invoke>`s name it. An `env:<slot>expr` slot names its variable
+//!   only when its `<invoke>` runs, so its package may receive any variable
+//!   the run holds.
 //!   `--env-file PATH` (repeatable; Docker's format, [`crate::env_file`])
 //!   and `--env NAME` / `--env NAME=VALUE` (repeatable) supply values: a
 //!   variable's value is its flag's `VALUE`, else the last `--env-file`
@@ -42,9 +41,7 @@
 //!   holds no value is absent. The values are masked in the text the CLI
 //!   writes ([`crate::mask`]).
 //! * Every command that reads a document lists, per bound element, its
-//!   namespace, version, declared outbound origins, and the slots the
-//!   document binds (with the variables they name): what importing it
-//!   consents to. Values never appear.
+//!   namespace and version: what importing it consents to.
 //!
 //! Files are read with a regular-file check and a byte bound.
 
@@ -193,8 +190,6 @@ impl Package {
             schema_sha256: manifest.schema_sha256.clone(),
             wit_world: manifest.wit_world.clone(),
             wit_version: manifest.wit_version.clone(),
-            env_slots: manifest.env_slots.clone(),
-            http_origins: manifest.http_origins.clone(),
             schema: self.schema.bytes.clone(),
         }
     }
@@ -268,7 +263,7 @@ pub(crate) struct Packages {
         )
     )]
     pub(crate) store: Option<Arc<Repository>>,
-    /// Every `env` slot binding the document's elements make.
+    /// Every `env` slot binding the document's `<invoke>`s make.
     pub(crate) slot_uses: Vec<SlotUse>,
 }
 
@@ -383,26 +378,8 @@ impl Packages {
             .collect()
     }
 
-    /// The `env-slots` of every package, by exact namespace URI (for the
-    /// validator's `SCXML083`).
-    pub(crate) fn slots(&self) -> BTreeMap<String, Vec<String>> {
-        self.explicit
-            .iter()
-            .chain(&self.repository)
-            .map(|package| {
-                (
-                    package.manifest.namespace_uri.clone(),
-                    package.manifest.env_slots.clone(),
-                )
-            })
-            .collect()
-    }
-
-    /// What importing each element consents to: its namespace, version,
-    /// declared outbound origins, and the slots the document binds (with the
-    /// variables they name and, when `granted` is given, whether the run
-    /// holds a value for each granted to that namespace). Never a value.
-    pub(crate) fn summary(&self, granted: Option<&[HeldValue]>) -> Vec<String> {
+    /// What importing each element consents to: its namespace and version.
+    pub(crate) fn summary(&self) -> Vec<String> {
         let documents = self
             .documents
             .iter()
@@ -431,41 +408,10 @@ impl Packages {
                     format!("package {} built into scx", manifest.package_version)
                 }
             };
-            let origins = if manifest.http_origins.is_empty() {
-                "none".to_owned()
-            } else {
-                manifest.http_origins.join(", ")
-            };
-            let mut slots: Vec<String> = self
-                .slot_uses
-                .iter()
-                .filter(|binding| &binding.namespace_uri == uri)
-                .map(|binding| match (&binding.name, granted) {
-                    (SlotName::Variable(name), Some(granted))
-                        if granted.iter().any(|held| held.grants(name, uri)) =>
-                    {
-                        format!("{} <- {name}", binding.slot)
-                    }
-                    (SlotName::Variable(name), Some(_)) => {
-                        format!("{} <- {name} (no value)", binding.slot)
-                    }
-                    (SlotName::Variable(name), None) => format!("{} <- {name}", binding.slot),
-                    (SlotName::Expression, _) => format!("{} <- (expression)", binding.slot),
-                })
-                .collect();
-            slots.sort();
-            slots.dedup();
             let scope = document.map_or_else(String::new, |url| {
                 format!("\n  = for: the sessions of <invoke src> document `{url}`")
             });
-            lines.push(format!(
-                "element `{uri}`\n  = version: {version}\n  = outbound HTTP: {origins}\n  = env slots: {}{scope}",
-                if slots.is_empty() {
-                    "none".to_owned()
-                } else {
-                    slots.join(", ")
-                }
-            ));
+            lines.push(format!("element `{uri}`\n  = version: {version}{scope}"));
         }
         lines
     }
@@ -480,14 +426,11 @@ pub(crate) enum SlotName {
     Expression,
 }
 
-/// One `env` attribute of an extension element, or of an `<invoke>` with a
-/// literal `type`, in the document.
+/// One `env` attribute of an `<invoke>` with a literal `type`, in the
+/// document.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct SlotUse {
-    /// The element's local name (`invoke` for an `<invoke>`).
-    pub(crate) element: String,
-    /// The package the slot belongs to: the element's exact namespace URI,
-    /// or the `<invoke>`'s literal `type`.
+    /// The package the slot belongs to: the `<invoke>`'s literal `type`.
     pub(crate) namespace_uri: String,
     /// The slot (the attribute's local name, `expr` stripped).
     pub(crate) slot: String,
@@ -495,9 +438,9 @@ pub(crate) struct SlotUse {
     pub(crate) name: SlotName,
 }
 
-/// Every `env` attribute on an element in another extension namespace or on
-/// an `<invoke>` with a literal `type`, in document order; a document that
-/// does not parse binds none here.
+/// Every `env` attribute on an `<invoke>` with a literal `type`, in document
+/// order; a document that does not parse binds none here (the validator's
+/// `SCXML084` rejects one anywhere else).
 pub(crate) fn slot_uses(source: &[u8]) -> Vec<SlotUse> {
     let Ok(text) = std::str::from_utf8(source) else {
         return Vec::new();
@@ -511,27 +454,21 @@ pub(crate) fn slot_uses(source: &[u8]) -> Vec<SlotUse> {
     };
     let mut uses = Vec::new();
     document.root.visit(&mut |element| {
-        let Some(element_namespace) = element.name.namespace_uri.as_deref() else {
+        if element.name.namespace_uri.as_deref() != Some(scxml_validator_core::SCXML_NAMESPACE)
+            || element.name.local_name != "invoke"
+        {
             return;
-        };
-        let namespace_uri = if element_namespace == scxml_validator_core::SCXML_NAMESPACE {
-            // An invoked service's `<invoke>` names its variables the same
-            // way; its package is its literal `type`.
-            let literal_type = element
-                .attributes
-                .iter()
-                .find(|attribute| {
-                    attribute.name.namespace_uri.is_none() && attribute.name.local_name == "type"
-                })
-                .map(|attribute| attribute.value.as_str());
-            match (element.name.local_name.as_str(), literal_type) {
-                ("invoke", Some(literal_type)) => literal_type,
-                _ => return,
-            }
-        } else if element_namespace == scxml_types::ENV_NAMESPACE_URI {
+        }
+        // An invoked service's package is its `<invoke>`'s literal `type`.
+        let Some(namespace_uri) = element
+            .attributes
+            .iter()
+            .find(|attribute| {
+                attribute.name.namespace_uri.is_none() && attribute.name.local_name == "type"
+            })
+            .map(|attribute| attribute.value.as_str())
+        else {
             return;
-        } else {
-            element_namespace
         };
         for attribute in &element.attributes {
             if attribute.name.namespace_uri.as_deref() != Some(scxml_types::ENV_NAMESPACE_URI) {
@@ -546,7 +483,6 @@ pub(crate) fn slot_uses(source: &[u8]) -> Vec<SlotUse> {
                 ),
             };
             uses.push(SlotUse {
-                element: element.name.local_name.clone(),
                 namespace_uri: namespace_uri.to_owned(),
                 slot,
                 name,
@@ -699,8 +635,7 @@ struct EnvFlag {
 }
 
 /// One variable the run holds a value for, and the exact package URIs
-/// (namespace or service type URIs) whose elements or `<invoke>`s the
-/// document lets name it. `Debug` names the variable and its packages only.
+/// (service type URIs) whose `<invoke>`s the document lets name it. `Debug` names the variable and its packages only.
 #[derive(Clone, Eq, PartialEq)]
 pub(crate) struct HeldValue {
     pub(crate) name: String,
@@ -720,11 +655,6 @@ impl std::fmt::Debug for HeldValue {
 }
 
 impl HeldValue {
-    /// Whether this is `name`, granted to `uri`.
-    pub(crate) fn grants(&self, name: &str, uri: &str) -> bool {
-        self.name == name && self.packages.iter().any(|granted| granted == uri)
-    }
-
     /// The run's values as the session host takes them.
     #[cfg(feature = "wasmtime")]
     pub(crate) fn environment(
@@ -889,7 +819,7 @@ impl RunFlags {
 
     /// The run's values, scoped by the document's `env` attributes
     /// (`uses`): each variable a static slot names goes to the packages of
-    /// the elements and `<invoke>`s naming it, and every variable the run
+    /// the `<invoke>`s naming it, and every variable the run
     /// supplies also goes to the package of each `env:<slot>expr` slot. A
     /// variable's value is its flag's `=VALUE`, else the last `--env-file`
     /// entry for it (every file read once, now, in order), else, only for a
@@ -945,23 +875,16 @@ impl RunFlags {
 }
 
 /// The consent listing of the run's variables: each variable the document
-/// names, the elements and `<invoke>`s it goes to (names and URIs only), and
+/// names, the `<invoke>`s it goes to (names and URIs only), and
 /// whether the run holds a value for it; then each `env:<slot>expr` slot,
 /// which may name any variable the run holds when it executes. Never a
 /// value.
 pub(crate) fn env_summary(uses: &[SlotUse], held: &[HeldValue]) -> Vec<String> {
     let target = |binding: &SlotUse| {
-        if binding.element == "invoke" {
-            format!(
-                "<invoke type=\"{}\"> env:{}",
-                binding.namespace_uri, binding.slot
-            )
-        } else {
-            format!(
-                "<{}> of `{}` env:{}",
-                binding.element, binding.namespace_uri, binding.slot
-            )
-        }
+        format!(
+            "<invoke type=\"{}\"> env:{}",
+            binding.namespace_uri, binding.slot
+        )
     };
     let mut names: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
     let mut expressions = BTreeSet::new();
@@ -1000,22 +923,12 @@ pub(crate) fn env_summary(uses: &[SlotUse], held: &[HeldValue]) -> Vec<String> {
     lines
 }
 
-/// Every `http-origins` entry the bound extension and service packages
-/// declare: public strings (their manifests declare them).
-pub(crate) fn declared_origins(
-    packages: &Packages,
-    services: &[crate::services::ServicePackage],
-) -> Vec<String> {
-    packages
-        .explicit
+/// Every `http-origins` entry the bound service packages declare: public
+/// strings (their manifests declare them).
+pub(crate) fn declared_origins(services: &[crate::services::ServicePackage]) -> Vec<String> {
+    services
         .iter()
-        .chain(&packages.repository)
-        .flat_map(|package| package.manifest.http_origins.iter().cloned())
-        .chain(
-            services
-                .iter()
-                .flat_map(|service| service.manifest.http_origins.iter().cloned()),
-        )
+        .flat_map(|service| service.manifest.http_origins.iter().cloned())
         .collect()
 }
 
@@ -1027,15 +940,6 @@ pub(crate) fn write_notes(notes: &[String]) {
     for note in notes {
         let _ = writeln!(stderr, "{}", crate::mask::scrub(note));
     }
-}
-
-/// The note for a request an extension component made that its package does
-/// not declare and no value supplied.
-#[cfg(any(feature = "wasmtime", test))]
-pub(crate) fn refused_note(namespace_uri: &str, origin: &str) -> String {
-    format!(
-        "note: `{namespace_uri}` was refused outbound HTTP to `{origin}`: its package does not declare it, and no --env value supplied it\n  = help: a package declares its origins in its manifest's `http-origins`; a run supplies an origin through an `env` slot's value (a base URL, for example)"
-    )
 }
 
 fn split_uri(value: &str, message: &str) -> Result<(String, String), String> {
@@ -1058,7 +962,7 @@ mod tests {
         use sha2::Digest as _;
         let digest = format!("{:x}", sha2::Sha256::digest(SCHEMA.as_bytes()));
         format!(
-            r#"{{"format":"{EXTENSION_PACKAGE_FORMAT}","namespace-uri":"urn:x","package-version":"1","extension-artifact":"x.wasm","schema-artifact":"x.xsd","schema-sha256":"{digest}","wit-world":"stateforward:scxml/executable-content-extension","wit-version":"0.2.0","http-origins":["https://api.example"],"env-slots":["apikey"]{extra}}}"#
+            r#"{{"format":"{EXTENSION_PACKAGE_FORMAT}","namespace-uri":"urn:x","package-version":"1","extension-artifact":"x.wasm","schema-artifact":"x.xsd","schema-sha256":"{digest}","wit-world":"stateforward:scxml/executable-content-extension","wit-version":"0.2.0"{extra}}}"#
         )
     }
 
@@ -1067,8 +971,6 @@ mod tests {
         let manifest = ExtensionPackageManifest::from_json(manifest_json("").as_bytes())
             .expect("valid manifest");
         assert_eq!(manifest.namespace_uri, "urn:x");
-        assert_eq!(manifest.http_origins, ["https://api.example"]);
-        assert_eq!(manifest.env_slots, ["apikey"]);
         assert!(
             ExtensionPackageManifest::from_json(manifest_json(r#","extra":"1""#).as_bytes())
                 .expect_err("unknown fields fail closed")
@@ -1093,32 +995,14 @@ mod tests {
         let numeric =
             manifest_json("").replace(r#""package-version":"1""#, r#""package-version":1"#);
         assert!(ExtensionPackageManifest::from_json(numeric.as_bytes()).is_err());
-        for (from, to) in [
-            (r#""env-slots":["apikey"]"#, r#""env-slots":"apikey""#),
-            (r#""env-slots":["apikey"]"#, r#""env-slots":[1]"#),
-            (r#","env-slots":["apikey"]"#, ""),
-        ] {
+        for removed in [r#","http-origins":[]"#, r#","env-slots":[]"#] {
             assert!(
-                ExtensionPackageManifest::from_json(manifest_json("").replace(from, to).as_bytes())
-                    .is_err(),
-                "{to}"
+                ExtensionPackageManifest::from_json(manifest_json(removed).as_bytes())
+                    .expect_err("extensions declare no I/O")
+                    .contains("unknown field"),
+                "{removed}"
             );
         }
-        let many = format!(
-            r#""env-slots":[{}]"#,
-            (0..=scxml_validator_core::MAX_EXTENSION_PACKAGE_LIST_ITEMS)
-                .map(|index| format!(r#""s{index}""#))
-                .collect::<Vec<_>>()
-                .join(",")
-        );
-        assert!(
-            ExtensionPackageManifest::from_json(
-                manifest_json("")
-                    .replace(r#""env-slots":["apikey"]"#, &many)
-                    .as_bytes()
-            )
-            .is_err()
-        );
     }
 
     #[test]
@@ -1161,18 +1045,6 @@ mod tests {
             .is_err(),
             "--schema may not name a package's namespace"
         );
-        fs::write(
-            &path,
-            manifest_json("").replace(r#"["apikey"]"#, r#"["ApiKey"]"#),
-        )
-        .expect("manifest");
-        assert!(
-            load(std::slice::from_ref(&path), &[])
-                .expect_err("an invalid slot fails verification")
-                .to_string()
-                .contains("does not verify")
-        );
-        fs::write(&path, manifest_json("")).expect("manifest");
         fs::write(dir.join("x.xsd"), "<changed/>").expect("schema");
         assert!(
             load(std::slice::from_ref(&path), &[])
@@ -1184,7 +1056,7 @@ mod tests {
     }
 
     #[test]
-    fn the_document_scopes_each_variable_to_the_elements_naming_it() {
+    fn the_document_scopes_each_variable_to_the_invokes_naming_it() {
         let dir = std::env::temp_dir().join(format!("scx-env-flags-{}", std::process::id()));
         fs::create_dir_all(&dir).expect("temporary directory");
         let file = dir.join(".env");
@@ -1203,9 +1075,9 @@ mod tests {
             flags.accept("--env", "KEY@urn:a").is_err(),
             "the NAME@URI grammar is gone"
         );
-        let source = br#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:x="urn:x" xmlns:y="urn:y" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" version="1.0"><state id="s"><onentry><x:a env:apikey="KEY"/><y:b env:baseurl="FILED"/></onentry><invoke type="urn:svc" env:apikey="KEY"/><invoke type="scxml" src="c.scx"/></state></scxml>"#;
+        let source = br#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:x="urn:x" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" version="1.0"><state id="s"><onentry><x:a env:apikey="IGNORED"/></onentry><invoke type="urn:y" env:baseurl="FILED"/><invoke type="urn:svc" env:apikey="KEY"/><invoke type="urn:x" env:apikey="KEY"/><invoke type="scxml" src="c.scx"/></state></scxml>"#;
         let uses = slot_uses(source);
-        assert_eq!(uses.len(), 3, "{uses:?}");
+        assert_eq!(uses.len(), 3, "only invokes bind slots: {uses:?}");
         let values = flags.values(&uses).expect("values");
         assert_eq!(
             values,
@@ -1223,10 +1095,8 @@ mod tests {
             ],
             "a flag's value wins over the file; a variable no slot names is dropped"
         );
-        assert!(values[1].grants("KEY", "urn:svc"));
-        assert!(!values[1].grants("KEY", "urn:y"), "out of scope");
         assert!(!format!("{values:?}").contains("from-flag"), "Debug masks");
-        let expression = br#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:x="urn:x" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" version="1.0"><state id="s"><onentry><x:a env:apikeyexpr="'UNNAMED'"/></onentry></state></scxml>"#;
+        let expression = br#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" version="1.0"><state id="s"><invoke type="urn:x" env:apikeyexpr="'UNNAMED'"/></state></scxml>"#;
         let values = flags.values(&slot_uses(expression)).expect("values");
         assert!(
             values
@@ -1244,8 +1114,8 @@ mod tests {
     }
 
     #[test]
-    fn the_summary_lists_what_an_element_consents_to_and_never_a_value() {
-        let source = br#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:x="urn:x" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" version="1.0"><state id="s"><onentry><x:a env:apikey="API_KEY" env:baseurlexpr="b"/></onentry><invoke type="urn:svc" env:apikey="API_KEY"/></state></scxml>"#;
+    fn the_summaries_list_consents_and_never_a_value() {
+        let source = br#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" version="1.0"><state id="s"><invoke type="urn:svc" env:apikey="API_KEY" env:baseurlexpr="b"/></state></scxml>"#;
         let manifest =
             ExtensionPackageManifest::from_json(manifest_json("").as_bytes()).expect("manifest");
         let packages = Packages {
@@ -1261,29 +1131,21 @@ mod tests {
             slot_uses: slot_uses(source),
             ..Packages::default()
         };
-        let summary = packages.summary(Some(&[])).join("\n");
+        let summary = packages.summary().join("\n");
         assert!(summary.contains("element `urn:x`"), "{summary}");
         assert!(summary.contains(&format!("release v1 (commit {})", "c".repeat(40))));
-        assert!(summary.contains("outbound HTTP: https://api.example"));
-        assert!(
-            summary.contains("apikey <- API_KEY (no value)"),
-            "{summary}"
-        );
-        assert!(summary.contains("baseurl <- (expression)"));
-        let held = |uri: &str| HeldValue {
+        let held = HeldValue {
             name: "API_KEY".into(),
             value: "secret-value".into(),
-            packages: vec![uri.into()],
+            packages: vec!["urn:svc".into()],
         };
-        let granted = packages.summary(Some(&[held("urn:x")])).join("\n");
-        assert!(!granted.contains("no value"), "{granted}");
-        let env = env_summary(&packages.slot_uses, &[held("urn:x")]).join("\n");
+        let env = env_summary(&packages.slot_uses, &[held]).join("\n");
         assert!(
-            env.contains("env `API_KEY`\n  = to: <a> of `urn:x` env:apikey, <invoke type=\"urn:svc\"> env:apikey"),
+            env.contains("env `API_KEY`\n  = to: <invoke type=\"urn:svc\"> env:apikey"),
             "{env}"
         );
         assert!(
-            env.contains("env (expression)\n  = to: <a> of `urn:x` env:baseurlexpr"),
+            env.contains("env (expression)\n  = to: <invoke type=\"urn:svc\"> env:baseurlexpr"),
             "{env}"
         );
         assert!(!env.contains("secret-value"), "never a value: {env}");
@@ -1314,6 +1176,5 @@ mod tests {
                 .expect_err("flags naming unbound URIs are rejected")
                 .contains("urn:")
         );
-        assert!(refused_note("urn:a", "https://x.example").contains("`https://x.example`"));
     }
 }

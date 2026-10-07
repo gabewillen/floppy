@@ -152,23 +152,6 @@ pub fn run_suite_with_snapshot_sink(
     let extensions = executor.extensions();
     let validator = Validator::new(FileSchemaResolver::new(), XsdSchemaBackend)
         .with_schema_mode(options.schema_mode);
-    // The `env` slots of every bound namespace's package (`SCXML083`); a run
-    // that binds none judges no slot, as before extensions existed.
-    let validator = if extensions.is_empty() {
-        validator
-    } else {
-        validator.with_extension_slots(
-            extensions
-                .iter()
-                .map(|bound| {
-                    (
-                        bound.manifest.namespace_uri.clone(),
-                        bound.manifest.env_slots.clone(),
-                    )
-                })
-                .collect(),
-        )
-    };
     let compiler = Compiler::new(validator);
     let mut cases = Vec::new();
     for case in &suite.cases {
