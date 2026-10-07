@@ -42,11 +42,16 @@
 //! sent.
 //!
 //! The `env` slots ([`API_KEY_SLOT`], [`BASE_URL_SLOT`]): `env:apikey="NAME"`
-//! (sent as a bearer token) and `env:baseurl="NAME"` (the API base URL, for
-//! example `https://api.openai.com/v1`; it must not end with `/`). Both are
-//! required at run time and no backend URL is compiled in. The component
-//! holds opaque references only; the host substitutes the values into the
-//! one admitted request.
+//! (sent as a bearer token, required at run time) and `env:baseurl="NAME"`
+//! (the API base URL, for example `https://api.openai.com/v1`; it must not
+//! end with `/`). When no `baseurl` value is held (the slot names no
+//! variable, or one the run does not hold), the base URL is the package's
+//! first declared `http-origins` entry (`https://api.openai.com/v1`, read
+//! from `package/generate.service.json`), as the deleted scxml.rs `openai`
+//! namespace defaulted to `https://api.openai.com/v1`; the manifest stays
+//! the one place the origin is written. The component holds opaque
+//! references only; the host substitutes the values into the one admitted
+//! request.
 //!
 //! # Events
 //!
@@ -284,7 +289,7 @@ pub struct Generation {
 /// The closed failure codes of [`FAILED_EVENT`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FailureCode {
-    /// The `apikey` or `baseurl` slot names no variable the run holds.
+    /// The `apikey` slot names no variable the run holds.
     Unconfigured,
     /// The transport failed: no response.
     Transport,
@@ -517,12 +522,13 @@ pub fn parse_parameters<'a>(
     })
 }
 
-/// The Chat Completions request: `POST {base_url}/chat/completions` (the
-/// `baseurl` slot's reference) with the `apikey` slot's reference as a bearer
-/// key and a canonical JSON body: `messages`, `model`, `stream` (`true`), and,
-/// with a schema, `response_format`.
+/// The Chat Completions request: `POST {base}/chat/completions` (`base` is
+/// the `baseurl` slot's reference, or the package's declared origin when no
+/// value is held) with the `apikey` slot's reference as a bearer key and a
+/// canonical JSON body: `messages`, `model`, `stream` (`true`), and, with a
+/// schema, `response_format`.
 #[must_use]
-pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Request {
+pub fn build_request(base: Part, api_key: u32, generation: &Generation) -> Request {
     let mut body = Map::new();
     body.insert(
         "messages".into(),
@@ -550,10 +556,7 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
         );
     }
     Request {
-        url: vec![
-            Part::Reference(base_url),
-            Part::Literal(CHAT_COMPLETIONS_PATH.into()),
-        ],
+        url: vec![base, Part::Literal(CHAT_COMPLETIONS_PATH.into())],
         headers: vec![
             (
                 "authorization".into(),
@@ -723,6 +726,25 @@ pub fn outcome(generation: &Generation, answered: Result<Response, TransportFail
     }
 }
 
+/// The package's first declared `http-origins` entry: the base URL when no
+/// `baseurl` value is held. Read from the manifest the package ships, so the
+/// origin is written in one place; `None` only if that manifest declares no
+/// origin.
+#[cfg_attr(
+    not(any(target_arch = "wasm32", test)),
+    expect(dead_code, reason = "only the wasm component reads its package origin")
+)]
+fn package_origin() -> Option<String> {
+    let manifest: Json =
+        serde_json::from_str(include_str!("../package/generate.service.json")).ok()?;
+    manifest
+        .get("http-origins")?
+        .as_array()?
+        .first()?
+        .as_str()
+        .map(str::to_owned)
+}
+
 #[cfg(target_arch = "wasm32")]
 #[allow(
     clippy::same_length_and_capacity,
@@ -833,13 +855,17 @@ mod guest {
                 .map(|(name, value)| (name.as_str(), value)),
         )
         .map_err(|detail| error(ErrorCode::InvalidInput, detail))?;
-        let (Some(api_key), Some(base_url)) = (
-            slot(&request.references, super::API_KEY_SLOT),
-            slot(&request.references, super::BASE_URL_SLOT),
-        ) else {
+        let Some(api_key) = slot(&request.references, super::API_KEY_SLOT) else {
             return Ok(Plan::Return(Returned::failed(FailureCode::Unconfigured)));
         };
-        let built = super::build_request(base_url, api_key, &generation);
+        let base = match slot(&request.references, super::BASE_URL_SLOT) {
+            Some(reference) => super::Part::Reference(reference),
+            None => match super::package_origin() {
+                Some(origin) => super::Part::Literal(origin),
+                None => return Ok(Plan::Return(Returned::failed(FailureCode::Unconfigured))),
+            },
+        };
+        let built = super::build_request(base, api_key, &generation);
         let http = HttpRequest {
             method: "POST".into(),
             url: text_parts(&built.url),

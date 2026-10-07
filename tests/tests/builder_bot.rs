@@ -1288,12 +1288,6 @@ fn an_invalid_request_is_answered_with_builder_failed() {
 // ---------------------------------------------------------------------------
 // Live.
 
-/// `OpenAI`'s and `TypeSafe`'s base URLs, the live run's defaults (never
-/// compiled into a component), given as the calling shell's values: the env
-/// file's values win.
-const OPENAI_BASE_URL_DEFAULT: &str = "https://api.openai.com/v1";
-const TYPESAFE_BASE_URL_DEFAULT: &str = "https://api.typesafe.ai";
-
 /// Builds the spec with the real `generate` (and `decision`) backends on the
 /// wall clock (`NEMOBOT_LIVE_ENV_FILE`; `NEMOBOT_LIVE_MODEL`, default
 /// `gpt-6-luna`). Writes the produced bot under `target/builder-live/` and
@@ -1318,10 +1312,9 @@ fn live_builder_through_an_env_file() {
             "max_attempts": 4,
             "model": model,
         }),
-        &[
-            ("OPENAI_BASE_URL", OPENAI_BASE_URL_DEFAULT),
-            ("TYPESAFE_BASE_URL", TYPESAFE_BASE_URL_DEFAULT),
-        ],
+        // No base URL from the shell: each service uses its package's
+        // declared origin unless the env file sets one (decision D18).
+        &[],
     )
     .finish(Duration::from_mins(30));
     let out = workspace().join("target/builder-live");

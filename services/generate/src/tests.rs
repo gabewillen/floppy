@@ -60,7 +60,7 @@ fn a_prompt_with_a_system_message_builds_the_canonical_request() {
         ("prompt", text("Say hello.")),
     ])
     .expect("valid parameters");
-    let request = build_request(2, 1, &generation);
+    let request = build_request(Part::Reference(2), 1, &generation);
     assert_eq!(
         request.url,
         [
@@ -98,7 +98,9 @@ fn a_schema_asks_for_structured_output_with_its_name_and_strictness() {
         ("strict", Data::Bool(true)),
     ])
     .expect("valid parameters");
-    let body: Json = serde_json::from_slice(&build_request(2, 1, &generation).body).expect("JSON");
+    let body: Json =
+        serde_json::from_slice(&build_request(Part::Reference(2), 1, &generation).body)
+            .expect("JSON");
     assert_eq!(body["response_format"]["type"], "json_schema");
     assert_eq!(body["response_format"]["json_schema"]["name"], "verdict");
     assert_eq!(body["response_format"]["json_schema"]["strict"], true);
@@ -110,7 +112,8 @@ fn a_schema_asks_for_structured_output_with_its_name_and_strictness() {
     ])
     .expect("valid parameters");
     let text_body: Json =
-        serde_json::from_slice(&build_request(2, 1, &from_text).body).expect("JSON");
+        serde_json::from_slice(&build_request(Part::Reference(2), 1, &from_text).body)
+            .expect("JSON");
     assert_eq!(
         text_body["response_format"]["json_schema"]["name"],
         DEFAULT_SCHEMA_NAME
@@ -387,6 +390,26 @@ fn every_failure_code_and_both_events_satisfy_the_builder_event_schemas() {
     for data in ["{}", r#"{"text":1}"#, r#"{"text":"t","json":1}"#] {
         assert!(!result.admits(&Data::JsonObject(data.into())), "{data}");
     }
+}
+
+#[test]
+fn without_a_baseurl_value_the_base_is_the_packages_first_declared_origin() {
+    let manifest = scxml_validator_core::ServicePackageManifest::from_json(include_bytes!(
+        "../package/generate.service.json"
+    ))
+    .expect("the manifest parses");
+    let origin = super::package_origin().expect("the manifest declares an origin");
+    assert_eq!(Some(&origin), manifest.http_origins.first());
+    assert_eq!(origin, "https://api.openai.com/v1");
+    let generation = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
+    let request = build_request(Part::Literal(origin), 1, &generation);
+    assert_eq!(
+        request.url,
+        [
+            Part::Literal("https://api.openai.com/v1".into()),
+            Part::Literal(CHAT_COMPLETIONS_PATH.into())
+        ]
+    );
 }
 
 #[test]

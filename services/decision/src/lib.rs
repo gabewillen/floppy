@@ -53,10 +53,14 @@
 //!
 //! Any other parameter, a parameter given twice, or a malformed value
 //! rejects the start: the `<invoke>` raises `error.execution` and nothing is
-//! sent. The `env` slots: `env:apikey="NAME"` (a bearer token) and
-//! `env:baseurl="NAME"` (the API base URL, for example
-//! `https://api.typesafe.ai`; it must not end with `/`), both required at run
-//! time; no backend URL is compiled in.
+//! sent. The `env` slots: `env:apikey="NAME"` (a bearer token, required at
+//! run time) and `env:baseurl="NAME"` (the API base URL, for example
+//! `https://api.typesafe.ai`; it must not end with `/`). When no `baseurl`
+//! value is held, the base URL is the package's first declared
+//! `http-origins` entry (`https://api.typesafe.ai`, read from
+//! `package/decision.service.json`), as the deleted scxml.rs `openai`
+//! namespace defaulted to its provider's URL; the manifest stays the one
+//! place the origin is written.
 //!
 //! # `choose`
 //!
@@ -246,7 +250,7 @@ pub enum TransportFailure {
 /// The closed failure codes of [`FAILED_EVENT`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FailureCode {
-    /// The `apikey` or `baseurl` slot names no variable the run holds.
+    /// The `apikey` slot names no variable the run holds.
     Unconfigured,
     /// The transport failed: no response.
     Transport,
@@ -900,8 +904,8 @@ impl Prepared {
 
     /// The one request that asks the batch through `backend`.
     #[must_use]
-    pub fn request<B: Backend>(&self, backend: &B, api_key: u32, base_url: u32) -> Request {
-        backend.request(&self.batch, api_key, base_url)
+    pub fn request<B: Backend>(&self, backend: &B, api_key: u32, base: Part) -> Request {
+        backend.request(&self.batch, api_key, base)
     }
 
     /// The event the answer decides (see the crate documentation).
@@ -1016,6 +1020,25 @@ impl Prepared {
             }
         }
     }
+}
+
+/// The package's first declared `http-origins` entry: the base URL when no
+/// `baseurl` value is held. Read from the manifest the package ships, so the
+/// origin is written in one place; `None` only if that manifest declares no
+/// origin.
+#[cfg_attr(
+    not(any(target_arch = "wasm32", test)),
+    expect(dead_code, reason = "only the wasm component reads its package origin")
+)]
+fn package_origin() -> Option<String> {
+    let manifest: Json =
+        serde_json::from_str(include_str!("../package/decision.service.json")).ok()?;
+    manifest
+        .get("http-origins")?
+        .as_array()?
+        .first()?
+        .as_str()
+        .map(str::to_owned)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1135,13 +1158,17 @@ mod guest {
             Plan::Return(returned) => return Ok(Next::Return(returned)),
             Plan::Ask(prepared) => prepared,
         };
-        let (Some(api_key), Some(base_url)) = (
-            slot(&request.references, super::API_KEY_SLOT),
-            slot(&request.references, super::BASE_URL_SLOT),
-        ) else {
+        let Some(api_key) = slot(&request.references, super::API_KEY_SLOT) else {
             return Ok(Next::Return(Returned::failed(FailureCode::Unconfigured)));
         };
-        let built = prepared.request(&TypeSafe, api_key, base_url);
+        let base = match slot(&request.references, super::BASE_URL_SLOT) {
+            Some(reference) => super::Part::Reference(reference),
+            None => match super::package_origin() {
+                Some(origin) => super::Part::Literal(origin),
+                None => return Ok(Next::Return(Returned::failed(FailureCode::Unconfigured))),
+            },
+        };
+        let built = prepared.request(&TypeSafe, api_key, base);
         let http = HttpRequest {
             method: "POST".into(),
             url: text_parts(&built.url),

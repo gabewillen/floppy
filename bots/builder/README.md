@@ -164,12 +164,15 @@ Everything a run needs is in the document:
   embeds, so it needs no package and no fetch, and it runs within the
   default extension call fuel.
 
-No backend URL is compiled into a component, so each base URL comes from
-the env file, or, with a bare `--env NAME`, from the calling shell
-(`scx` takes a variable's value from `--env NAME=VALUE`, else its
-`--env-file`, else, for a bare `--env NAME`, the shell). A variable no source
-sets holds no value, so its slot is absent: without `TYPESAFE_API_KEY` (or
-`TYPESAFE_BASE_URL`) the builder triages with its fallback. Drafts are
+Each base URL comes from the env file, or, with a bare `--env NAME`, from
+the calling shell (`scx` takes a variable's value from `--env NAME=VALUE`,
+else its `--env-file`, else, for a bare `--env NAME`, the shell). When no
+`baseurl` value is held, a service uses its package's first declared
+`http-origins` entry: `https://api.openai.com/v1` for `generate` and
+`https://api.typesafe.ai` for `decision`, so an env file with only the two
+keys runs both services. Without `TYPESAFE_API_KEY` the decision service
+answers `decision.failed` (`unconfigured`) and the builder triages with its
+fallback. Drafts are
 validated without packages, so a built machine uses no extension namespace
 or service.
 
@@ -186,9 +189,7 @@ echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestria
 
 Standard output carries one JSON record per line: `log` records with the
 progress, then the `done` record whose `data` is the result, and the run
-exits 0. When the env file sets no base URL, give a default from the shell
-(the env file's value still wins): `OPENAI_BASE_URL=https://api.openai.com/v1
-scx run --env OPENAI_BASE_URL --env-file .env bots/builder/builder.scx`.
+exits 0.
 
 ## Proof
 

@@ -36,9 +36,6 @@ use support::{Finished, Run, labelled, logs, run_document, scratch, service_uri}
 
 /// The fake key (not a secret): the mock checks it arrives as the bearer.
 const FAKE_KEY: &str = "sk-nemobot-fake";
-/// `OpenAI`'s base URL, the live run's default (never compiled into the
-/// component).
-const OPENAI_BASE_URL_DEFAULT: &str = "https://api.openai.com/v1";
 
 fn generate() -> String {
     service_uri("generate")
@@ -569,8 +566,7 @@ fn live_generate_through_an_env_file() {
         panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets OPENAI_API_KEY");
     };
     let model = std::env::var("NEMOBOT_LIVE_MODEL").unwrap_or_else(|_| "gpt-6-luna".into());
-    let mut args = args(&path);
-    args.extend(["--env".to_owned(), "OPENAI_BASE_URL".to_owned()]);
+    let args = args(&path);
     let params = format!(
         r#"<param name="model" expr="'{model}'"/>
       <param name="system" expr="'Answer in JSON only.'"/>
@@ -579,15 +575,15 @@ fn live_generate_through_an_env_file() {
       <param name="schemaname" expr="'greeting'"/>
       <param name="strict" expr="true"/>"#
     );
-    // No backend URL is compiled in: OpenAI's is the calling shell's value,
-    // which the env file's overrides.
+    // The env file's OPENAI_BASE_URL wins; without one the service uses its
+    // package's declared origin (decision D18).
     let finished = open_with(
         &args,
         &document(
             &params,
             "typeof _event.data.json.greeting === 'string' &amp;&amp; _event.data.json.greeting.length &gt; 0",
         ),
-        &[("OPENAI_BASE_URL", OPENAI_BASE_URL_DEFAULT)],
+        &[],
         Duration::from_secs(180),
     );
     let pass = logs(&finished.records) == labelled(&[("reply", "true"), ("final", "done")]);

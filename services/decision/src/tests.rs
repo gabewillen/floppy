@@ -182,7 +182,7 @@ fn choose_asks_the_selection_and_the_grounded_members_in_one_batch() {
         "Ship the order."
     );
     assert_eq!(batch.state, json!({"qty": 2, "sku": "A-1"}));
-    let request = prepared.request(&TypeSafe, 1, 2);
+    let request = prepared.request(&TypeSafe, 1, Part::Reference(2));
     assert_eq!(
         request.url,
         [
@@ -532,7 +532,7 @@ fn another_backend_plugs_in_behind_the_trait() {
     struct First;
 
     impl Backend for First {
-        fn request(&self, batch: &Batch, _api_key: u32, _base_url: u32) -> Request {
+        fn request(&self, batch: &Batch, _api_key: u32, _base: Part) -> Request {
             Request {
                 url: vec![Part::Literal("http://first.invalid".into())],
                 headers: Vec::new(),
@@ -554,7 +554,7 @@ fn another_backend_plugs_in_behind_the_trait() {
     }
 
     let prepared = choose();
-    assert_eq!(prepared.request(&First, 1, 2).body, b"4");
+    assert_eq!(prepared.request(&First, 1, Part::Reference(2)).body, b"4");
     let returned = prepared.decide(
         &First,
         Ok(Response {
@@ -599,4 +599,15 @@ fn argmax_prefers_probability_then_the_smallest_label() {
 fn the_event_name_bound_applies_to_wasm_builds_only() {
     let long = "e".repeat(300);
     assert_eq!(valid_event_name(&long), !cfg!(target_arch = "wasm32"));
+}
+
+#[test]
+fn without_a_baseurl_value_the_base_is_the_packages_first_declared_origin() {
+    let manifest = scxml_validator_core::ServicePackageManifest::from_json(include_bytes!(
+        "../package/decision.service.json"
+    ))
+    .expect("the manifest parses");
+    let origin = super::package_origin().expect("the manifest declares an origin");
+    assert_eq!(Some(&origin), manifest.http_origins.first());
+    assert_eq!(origin, "https://api.typesafe.ai");
 }

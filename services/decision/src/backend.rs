@@ -55,10 +55,10 @@ pub struct Distribution {
 
 /// A decision backend.
 pub trait Backend {
-    /// The one `POST` that asks `batch`: `base_url` is the `baseurl` slot's
-    /// reference (no backend URL is compiled in) and `api_key` the `apikey`
-    /// slot's.
-    fn request(&self, batch: &Batch, api_key: u32, base_url: u32) -> Request;
+    /// The one `POST` that asks `batch`: `base` is the `baseurl` slot's
+    /// reference, or the package's declared origin when no value is held,
+    /// and `api_key` the `apikey` slot's.
+    fn request(&self, batch: &Batch, api_key: u32, base: Part) -> Request;
 
     /// The distributions of a successful response body, one per question of
     /// `batch`, in order.
@@ -121,7 +121,7 @@ impl TypeSafe {
 }
 
 impl Backend for TypeSafe {
-    fn request(&self, batch: &Batch, api_key: u32, base_url: u32) -> Request {
+    fn request(&self, batch: &Batch, api_key: u32, base: Part) -> Request {
         let questions: Map<String, Json> = batch
             .questions
             .iter()
@@ -147,10 +147,7 @@ impl Backend for TypeSafe {
             "state": batch.state,
         });
         Request {
-            url: vec![
-                Part::Reference(base_url),
-                Part::Literal(Self::SYSTEM_ONE_PATH.into()),
-            ],
+            url: vec![base, Part::Literal(Self::SYSTEM_ONE_PATH.into())],
             headers: vec![
                 (
                     "authorization".into(),

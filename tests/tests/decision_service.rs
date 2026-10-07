@@ -422,10 +422,6 @@ fn classify_returns_every_labels_probability() {
     assert_eq!(mock.received().len(), 1);
 }
 
-/// `TypeSafe`'s base URL (its SDK's default), the live run's default (never
-/// compiled into the component).
-const TYPESAFE_BASE_URL_DEFAULT: &str = "https://api.typesafe.ai";
-
 /// One real `system_one` decision through an env file
 /// (`NEMOBOT_LIVE_ENV_FILE`). Passes when the machine reaches one of its
 /// schema transitions with data its schema admits, or abstains. Prints
@@ -436,19 +432,12 @@ fn live_decision_through_an_env_file() {
     let Some(path) = std::env::var_os("NEMOBOT_LIVE_ENV_FILE").map(PathBuf::from) else {
         panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets TYPESAFE_API_KEY");
     };
-    // No backend URL is compiled in: TypeSafe's is the calling shell's
-    // value, which the env file's overrides.
+    // The env file sets no TYPESAFE_BASE_URL: the service uses its package's
+    // declared origin (decision D18).
     let params = r#"<param name="state" expr="order"/>
       <param name="instructions" expr="'A customer paid for order A-1 and asked for fast delivery. Choose what to do with the order.'"/>"#;
-    let mut args = args(&path);
-    args.extend(["--env".to_owned(), "TYPESAFE_BASE_URL".to_owned()]);
-    let records = open(
-        &args,
-        &document(params),
-        &[("TYPESAFE_BASE_URL", TYPESAFE_BASE_URL_DEFAULT)],
-        Duration::from_secs(120),
-    )
-    .records;
+    let args = args(&path);
+    let records = open(&args, &document(params), &[], Duration::from_secs(120)).records;
     let logs = logs(&records);
     let admitted = |schema: &str, data: &str| {
         let resolved = scxml_event_schema::resolve(schema.as_bytes(), None).ok();
