@@ -1,0 +1,16 @@
+error[XSD-cvc-complex-type.3.2.2]: attribute `chanel` is not allowed on `<x:notify>`
+ --> tests/ui/xsd-extension-attribute-typo.scx:5:17
+  |
+5 |       <x:notify chanel="ops" message="started"/>
+  |                 ^^^^^^ unknown attribute
+  |
+  = note: the schema registered for `urn:example:action` rejects this under XML Schema constraint `cvc-complex-type.3.2.2`: Attribute 'chanel' is not allowed for this element
+  = help: did you mean `channel`?
+  = spec: XML Schema 1.0 Part 1 §3.4.4 Element Locally Valid (Complex Type) (`cvc-complex-type.3.2.2`)
+help: `<x:notify>` has an attribute with a similar name: `channel`
+  |
+5 |       <x:notify channel="ops" message="started"/>
+  |                 ~~~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scx --explain XSD-cvc-complex-type.3.2.2`.

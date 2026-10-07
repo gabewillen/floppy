@@ -382,6 +382,37 @@ scoping are superseded rather than duplicated:
 | `<donedata>` outside `<final>` or repeated | `SCXML032` |
 | `<content>`/`<param>` out of place in a `<donedata>` that has both | `SCXML018` |
 
+Unknown names get rename suggestions, and a rename is machine-applicable
+only when it is the one unambiguous repair and keeps the value:
+
+- An undeclared attribute on an SCXML element that the W3C schema declares
+  on a related element (`vocabulary::COUNTERPARTS`, each entry citing SCXML
+  1.0 and checked against the bundled schema) is renamed to the element's own
+  attribute for that role: `sendid` on `<send>` to `id` (§6.2.1, §6.3.1),
+  `id` on `<cancel>` to `sendid`, and `expr` on `<transition>`, `<if>`, or
+  `<elseif>` to `cond` (§3.5.1, §4.3.1, §4.4.1) are machine-applicable;
+  `target` on `<state>` to `initial` (§3.3.1) is maybe-incorrect, because a
+  `<transition target>` child may be what was meant. The help says which
+  element owns the written attribute, and the owner's section is cited.
+- Otherwise the attribute names closest to the unknown one (the bounded
+  distance `SCXML005` uses, without its tie-break) among those the element
+  declares and does not already carry are suggested: one closest name whose
+  declared values admit the value (any value, unless the attribute is an
+  enumeration) is machine-applicable (`evnt` to `event`); a tie offers every
+  closest name as its own maybe-incorrect fix (`tage` on `<send>`: `target`
+  or `type`). On an element outside the SCXML namespace the candidates are
+  the unqualified attributes its package schema declares, directly, through
+  attribute groups, or from base types, and the rename is maybe-incorrect,
+  since the package's value types are not consulted; with no close name the
+  help lists them.
+- An undeclared SCXML element is renamed the same way to the closest
+  children its parent's content model accepts: one closest element that
+  declares every unprefixed attribute the misspelled one carries is
+  machine-applicable (`<trasition>` to `<transition>`), otherwise each
+  closest name is maybe-incorrect. An element in an extension namespace
+  under the schema's lax `##other` wildcards is not an XSD finding.
+- A rename onto an attribute the element already carries is never offered.
+
 ### Schema values of white-space-collapsing attributes
 
 XML Schema 1.1 Part 2 §4.3.6 (`whiteSpace`) fixes the facet to `collapse`

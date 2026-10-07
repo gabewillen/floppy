@@ -1,0 +1,9 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="red">
+  <state id="red">
+    <onentry>
+      <send event="timer.green" delay="3s" sendid="send_timer_green"/>
+    </onentry>
+    <transition event="timer.green" target="green"/>
+  </state>
+  <final id="green"/>
+</scxml>

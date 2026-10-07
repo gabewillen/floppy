@@ -1,0 +1,10 @@
+<?ui-args --schema urn:example:action=tests/ui/schemas/action.xsd?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:x="urn:example:action" version="1.0" initial="a">
+  <state id="a">
+    <onentry>
+      <x:notify chanel="ops" message="started"/>
+    </onentry>
+    <transition event="go" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>

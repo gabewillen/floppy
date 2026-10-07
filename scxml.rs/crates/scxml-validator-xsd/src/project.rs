@@ -27,10 +27,13 @@ use scxml_validator_core::spans::{
 use scxml_validator_core::{
     Applicability, Diagnostic, Fix, FixEdit, Label, Report, SCXML_NAMESPACE, Severity,
 };
+use xsd_schema::parser::frames::{AttributeUseKind, AttributeUseResult};
 use xsd_schema::validation::{
     AttributeView, ElementStartView, EndElementInfo, EndOfAttributesView, SchemaInfo, TextKind,
     ValidationError, ValidationEventHandler, ValidationSink, ValidationWarning,
 };
+
+use xsd_schema::{SchemaSet, TypeKey};
 
 use crate::vocabulary::{self, ElementSpec};
 
@@ -123,15 +126,22 @@ impl ValidationSink for SharedSink<'_> {
 /// Driver hooks that attribute findings to validator events.
 pub(crate) struct Tagger<'a> {
     pub findings: &'a RefCell<Findings>,
+    schema_set: &'a SchemaSet,
+    /// Unqualified attribute names the governing schema declares for each
+    /// element outside the SCXML namespace that it declares, keyed by
+    /// document-order index (suggestions for unknown extension attributes).
+    pub declared: BTreeMap<usize, Vec<String>>,
     /// Document-order index of the next element to start.
     next: usize,
     open: Vec<usize>,
 }
 
 impl<'a> Tagger<'a> {
-    pub fn new(findings: &'a RefCell<Findings>) -> Self {
+    pub fn new(findings: &'a RefCell<Findings>, schema_set: &'a SchemaSet) -> Self {
         Self {
             findings,
+            schema_set,
+            declared: BTreeMap::new(),
             next: 0,
             open: Vec::new(),
         }
@@ -153,9 +163,18 @@ impl ValidationEventHandler for Tagger<'_> {
 
     fn after_element(
         &mut self,
-        _view: ElementStartView<'_>,
-        _info: &SchemaInfo,
+        view: ElementStartView<'_>,
+        info: &SchemaInfo,
     ) -> Result<(), Self::Error> {
+        if view.namespace_uri != SCXML_NAMESPACE
+            && info.element_decl.is_some()
+            && let Some(schema_type) = info.schema_type
+        {
+            self.declared.insert(
+                self.current(),
+                declared_attributes(self.schema_set, schema_type),
+            );
+        }
         let phase = Phase::ElementStart(self.current());
         self.findings.borrow_mut().claim(&phase);
         Ok(())
@@ -201,6 +220,61 @@ impl ValidationEventHandler for Tagger<'_> {
             .claim(&Phase::EndElement(element));
         Ok(())
     }
+}
+
+/// Most base types and attribute groups one type's attribute walk follows.
+const MAX_ATTRIBUTE_SOURCES: usize = 64;
+
+/// Unqualified attribute names a complex type declares, directly, through
+/// its attribute groups, or inherited from its base types (less those a
+/// restriction prohibits), sorted. Global attribute references are
+/// namespace-qualified, so they are not candidates for an unprefixed name.
+fn declared_attributes(schema_set: &SchemaSet, schema_type: TypeKey) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut prohibited = Vec::new();
+    let mut collect = |uses: &[AttributeUseResult]| {
+        for attribute_use in uses {
+            let attribute = &attribute_use.attribute;
+            let (Some(name), None) = (attribute.name, &attribute.ref_name) else {
+                continue;
+            };
+            if attribute.form.as_deref() == Some("qualified") {
+                continue;
+            }
+            let name = schema_set.name_table.resolve(name);
+            if attribute_use.use_kind == AttributeUseKind::Prohibited {
+                prohibited.push(name);
+            } else {
+                names.push(name);
+            }
+        }
+    };
+    let mut groups = Vec::new();
+    let mut next = Some(schema_type);
+    let mut sources = 0_usize;
+    while let Some(TypeKey::Complex(key)) = next
+        && sources < MAX_ATTRIBUTE_SOURCES
+        && let Some(complex) = schema_set.arenas.get_complex_type(key)
+    {
+        sources += 1;
+        collect(&complex.attributes);
+        groups.extend(complex.resolved_attribute_groups.iter().copied());
+        next = complex.resolved_base_type;
+    }
+    while let Some(key) = groups.pop()
+        && sources < MAX_ATTRIBUTE_SOURCES
+    {
+        sources += 1;
+        if let Some(group) = schema_set.arenas.get_attribute_group(key) {
+            collect(&group.attributes);
+            groups.extend(group.resolved_ref);
+            groups.extend(group.resolved_attribute_groups.iter().copied());
+        }
+    }
+    names.retain(|name| !prohibited.contains(name));
+    names.sort();
+    names.dedup();
+    names
 }
 
 /// Resolution context for one parsed instance document.
@@ -384,8 +458,14 @@ fn xsd_reference(constraint: &str) -> String {
     format!("XML Schema 1.0 {section} (`{constraint}`)")
 }
 
-/// Projects tagged findings into span-exact diagnostics.
-pub(crate) fn project(document: &Document, findings: Vec<Finding>) -> Report {
+/// Projects tagged findings into span-exact diagnostics. `declared` holds
+/// the attribute names the governing schema declares for extension elements
+/// (see [`Tagger::declared`]).
+pub(crate) fn project(
+    document: &Document,
+    findings: Vec<Finding>,
+    declared: &BTreeMap<usize, Vec<String>>,
+) -> Report {
     let instance = Instance::new(document);
     let misnamed = misnamed_attributes(&instance, &findings);
     let mut report = Report::new();
@@ -429,7 +509,8 @@ pub(crate) fn project(document: &Document, findings: Vec<Finding>) -> Report {
         {
             continue;
         }
-        let mut diagnostic = diagnose(&instance, resolved, &finding);
+        let declared = element_offset.and_then(|offset| declared.get(&offset));
+        let mut diagnostic = diagnose(&instance, resolved, declared, &finding);
         if let Phase::Attribute {
             element: offset, ..
         } = &finding.phase
@@ -528,15 +609,20 @@ fn rename_to_required(
     let lexical = element.lexical_name.as_str();
     let unknown = attribute.lexical_name.as_str();
     let value = attribute.value.as_str();
+    let counterpart = vocabulary::counterpart(&element.name.local_name, &attribute.name.local_name)
+        .filter(|entry| entry.rename == required);
     diagnostic.message = format!(
         "`<{lexical}>` requires `{required}` but has `{unknown}`, which it does not accept"
     );
-    diagnostic.help = Some(format!(
-        "did you mean `{required}=\"{value}\"`? rename `{unknown}` to `{required}` to keep the value"
-    ));
+    diagnostic.help = Some(match counterpart {
+        Some(entry) => format!("did you mean `{required}=\"{value}\"`? {}", entry.reason),
+        None => format!(
+            "did you mean `{required}=\"{value}\"`? rename `{unknown}` to `{required}` to keep the value"
+        ),
+    });
     diagnostic.fixes = vec![Fix::replace(
         format!("rename `{unknown}` to `{required}`"),
-        Applicability::MaybeIncorrect,
+        applicability(counterpart.is_some_and(|entry| entry.same_value)),
         attribute_name_span(document, attribute),
         required,
     )];
@@ -579,6 +665,26 @@ fn quoted_list(values: &[&str]) -> String {
         .join(", ")
 }
 
+/// `a`, `a or b`, `a, b, or c`, each written by `quote`.
+fn alternatives(values: &[&str], quote: impl Fn(&str) -> String) -> String {
+    let quoted: Vec<String> = values.iter().map(|value| quote(value)).collect();
+    match quoted.as_slice() {
+        [] => String::new(),
+        [one] => one.clone(),
+        [first, second] => format!("{first} or {second}"),
+        [rest @ .., last] => format!("{}, or {last}", rest.join(", ")),
+    }
+}
+
+/// Machine-applicable when the repair is exact, maybe-incorrect otherwise.
+fn applicability(exact: bool) -> Applicability {
+    if exact {
+        Applicability::MachineApplicable
+    } else {
+        Applicability::MaybeIncorrect
+    }
+}
+
 fn tag_list(values: &[&str]) -> String {
     values
         .iter()
@@ -594,6 +700,7 @@ fn tag_list(values: &[&str]) -> String {
 fn diagnose(
     instance: &Instance<'_>,
     resolved: Option<(&Element, Option<&Element>)>,
+    declared: Option<&Vec<String>>,
     finding: &Finding,
 ) -> Diagnostic {
     let document = instance.document;
@@ -629,33 +736,50 @@ fn diagnose(
                 },
                 ElementSpec::allowed_children,
             );
-            if is_scxml(element)
-                && let Some(suggestion) =
-                    vocabulary::nearest(&element.name.local_name, candidates.iter().copied())
-            {
+            let suggestions = if is_scxml(element) {
+                vocabulary::closest(&element.name.local_name, candidates.iter().copied())
+            } else {
+                Vec::new()
+            };
+            if !suggestions.is_empty() {
                 let prefix = lexical
                     .split_once(':')
                     .map_or(String::new(), |(prefix, _)| format!("{prefix}:"));
-                let replacement = format!("{prefix}{suggestion}");
-                let mut edits = vec![FixEdit {
-                    span: name,
-                    replacement: replacement.clone(),
-                }];
-                if let Some(end) = end_tag_name_span(document, element) {
-                    edits.push(FixEdit {
-                        span: end,
-                        replacement,
-                    });
-                }
-                diagnostic = diagnostic
-                    .with_help(format!("did you mean `<{suggestion}>`?"))
-                    .with_fix(Fix {
+                // One closest element that declares every unprefixed
+                // attribute the misspelled one carries is the whole repair.
+                let exact = match suggestions.as_slice() {
+                    [suggestion] => vocabulary::element(suggestion).is_some_and(|spec| {
+                        element.attributes.iter().all(|attribute| {
+                            attribute.name.namespace_uri.is_some()
+                                || spec.attribute(&attribute.name.local_name).is_some()
+                        })
+                    }),
+                    _ => false,
+                };
+                diagnostic = diagnostic.with_help(format!(
+                    "did you mean {}?",
+                    alternatives(&suggestions, |suggestion| format!("`<{suggestion}>`"))
+                ));
+                for suggestion in &suggestions {
+                    let replacement = format!("{prefix}{suggestion}");
+                    let mut edits = vec![FixEdit {
+                        span: name,
+                        replacement: replacement.clone(),
+                    }];
+                    if let Some(end) = end_tag_name_span(document, element) {
+                        edits.push(FixEdit {
+                            span: end,
+                            replacement,
+                        });
+                    }
+                    diagnostic = diagnostic.with_fix(Fix {
                         message: format!(
                             "an SCXML element with a similar name exists: `<{suggestion}>`"
                         ),
-                        applicability: Applicability::MaybeIncorrect,
+                        applicability: applicability(exact),
                         edits,
                     });
+                }
             } else if let Some(parent_spec) = parent_spec {
                 diagnostic = diagnostic.with_help(format!(
                     "`<{}>` accepts {}; elements from another namespace must use a namespace prefix",
@@ -764,12 +888,6 @@ fn diagnose(
                     span,
                 )
                 .with_primary_message("unknown attribute");
-                let suggestion = spec.filter(|_| namespace_uri.is_empty()).and_then(|spec| {
-                    vocabulary::nearest(
-                        local_name,
-                        spec.attributes.iter().map(|attribute| attribute.name),
-                    )
-                });
                 let kind_as_attribute = attribute.filter(|attribute| {
                     local == "state"
                         && is_scxml(element)
@@ -777,32 +895,81 @@ fn diagnose(
                         && attribute.name.local_name == "type"
                         && matches!(attribute.value.as_str(), "final" | "parallel")
                 });
+                // Names the element declares that it does not already carry
+                // (a rename onto one of those would duplicate it).
+                let accepted: Vec<&str> = match (spec, declared) {
+                    (Some(spec), _) => spec
+                        .attributes
+                        .iter()
+                        .map(|attribute| attribute.name)
+                        .collect(),
+                    (None, Some(declared)) => declared.iter().map(String::as_str).collect(),
+                    (None, None) => Vec::new(),
+                };
+                let absent: Vec<&str> = accepted
+                    .iter()
+                    .copied()
+                    .filter(|candidate| find_attribute(element, "", candidate).is_none())
+                    .collect();
+                let counterpart = spec
+                    .filter(|_| namespace_uri.is_empty())
+                    .and_then(|_| vocabulary::counterpart(local, local_name))
+                    .filter(|entry| absent.contains(&entry.rename));
+                let suggestions = if namespace_uri.is_empty() {
+                    vocabulary::closest(local_name, absent.iter().copied())
+                } else {
+                    Vec::new()
+                };
                 if let Some(attribute) = kind_as_attribute {
                     diagnostic = state_kind_rename(document, element, attribute, diagnostic);
-                } else if let (Some(suggestion), Some(attribute)) = (suggestion, attribute) {
+                } else if let (Some(entry), Some(attribute)) = (counterpart, attribute) {
+                    let owner_spec = vocabulary::element(entry.owner).map(|owner| owner.spec);
                     diagnostic = diagnostic
-                        .with_help(format!("did you mean `{suggestion}`?"))
+                        .with_help(format!("did you mean `{}`? {}", entry.rename, entry.reason))
                         .with_fix(Fix::replace(
+                            format!("rename `{attribute_lexical}` to `{}`", entry.rename),
+                            applicability(entry.same_value),
+                            attribute_name_span(document, attribute),
+                            entry.rename,
+                        ));
+                    if let Some(owner_spec) = owner_spec {
+                        diagnostic = diagnostic.with_spec_reference(owner_spec);
+                    }
+                } else if let (false, Some(attribute)) = (suggestions.is_empty(), attribute) {
+                    // One closest name whose declared values admit this value
+                    // is the whole repair; a tie, or a value the attribute
+                    // does not accept, is a guess.
+                    let exact = match (suggestions.as_slice(), spec) {
+                        ([suggestion], Some(spec)) => {
+                            spec.attribute(suggestion).is_some_and(|target| {
+                                target.values.is_empty()
+                                    || target.values.contains(&attribute.value.as_str())
+                            })
+                        }
+                        _ => false,
+                    };
+                    diagnostic = diagnostic.with_help(format!(
+                        "did you mean {}?",
+                        alternatives(&suggestions, |suggestion| format!("`{suggestion}`"))
+                    ));
+                    for suggestion in &suggestions {
+                        diagnostic = diagnostic.with_fix(Fix::replace(
                             format!(
                                 "`<{lexical}>` has an attribute with a similar name: `{suggestion}`"
                             ),
-                            Applicability::MaybeIncorrect,
+                            applicability(exact),
                             attribute_name_span(document, attribute),
-                            suggestion,
+                            *suggestion,
                         ));
+                    }
                 } else {
-                    if let Some(spec) = spec {
-                        let names: Vec<&str> = spec
-                            .attributes
-                            .iter()
-                            .map(|attribute| attribute.name)
-                            .collect();
-                        diagnostic = diagnostic.with_help(if names.is_empty() {
+                    if spec.is_some() || declared.is_some() {
+                        diagnostic = diagnostic.with_help(if accepted.is_empty() {
                             format!("`<{lexical}>` declares no attributes; extension attributes must use a namespace prefix")
                         } else {
                             format!(
                                 "`<{lexical}>` accepts {}; extension attributes must use a namespace prefix",
-                                quoted_list(&names)
+                                quoted_list(&accepted)
                             )
                         });
                     }
