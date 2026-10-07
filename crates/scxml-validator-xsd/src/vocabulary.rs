@@ -420,30 +420,135 @@ impl ElementSpec {
 /// on ties (first in iteration order wins). Inputs are bounded to 64 chars.
 #[must_use]
 pub fn nearest<'a>(needle: &str, candidates: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    closest(needle, candidates).first().copied()
+}
+
+/// Every candidate at the smallest edit distance from `needle` within the
+/// length-scaled threshold (1 edit up to 3 characters, 2 up to 7, otherwise
+/// 3), in iteration order without repeats; empty when none is that close.
+/// More than one entry means the misspelling is ambiguous. Inputs are
+/// bounded to 64 chars.
+#[must_use]
+pub fn closest<'a>(needle: &str, candidates: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
     let needle: Vec<char> = needle.chars().take(65).collect();
     if needle.len() > 64 || needle.is_empty() {
-        return None;
+        return Vec::new();
     }
     let threshold = match needle.len() {
         0..=3 => 1,
         4..=7 => 2,
         _ => 3,
     };
-    let mut best: Option<(usize, &str)> = None;
+    let mut best = threshold;
+    let mut found: Vec<&str> = Vec::new();
     for candidate in candidates {
         let chars: Vec<char> = candidate.chars().take(65).collect();
         if chars.len() > 64 {
             continue;
         }
         let distance = edit_distance(&needle, &chars);
-        if distance == 0 || distance > threshold {
+        if distance == 0 || distance > best {
             continue;
         }
-        if best.is_none_or(|(current, _)| distance < current) {
-            best = Some((distance, candidate));
+        if distance < best {
+            best = distance;
+            found.clear();
+        }
+        if !found.contains(&candidate) {
+            found.push(candidate);
         }
     }
-    best.map(|(_, candidate)| candidate)
+    found
+}
+
+/// An attribute written on an SCXML element whose schema does not declare
+/// it, while the schema declares it on `owner` for the related role and
+/// declares `rename` on `element` for this element's side of that role.
+/// Each entry restates the bundled W3C schema and the cited Recommendation
+/// sections; a unit test checks every name against [`ELEMENTS`].
+#[derive(Clone, Copy, Debug)]
+pub struct Counterpart {
+    /// The element the attribute was written on.
+    pub element: &'static str,
+    /// The undeclared attribute.
+    pub attribute: &'static str,
+    /// An element whose schema declares `attribute`.
+    pub owner: &'static str,
+    /// The attribute `element` declares for the same role.
+    pub rename: &'static str,
+    /// Whether the value keeps its meaning under `rename`, so renaming is
+    /// the whole repair (machine-applicable); otherwise it is a guess
+    /// (maybe-incorrect).
+    pub same_value: bool,
+    /// Why `rename` is this element's attribute, for help.
+    pub reason: &'static str,
+}
+
+/// Attributes of one SCXML element that authors write on a related one.
+pub const COUNTERPARTS: &[Counterpart] = &[
+    // SCXML 1.0 §6.2.1: `id` is "the ID of the send"; §6.3.1: `sendid` is
+    // "The ID of the event which is to be cancelled".
+    Counterpart {
+        element: "send",
+        attribute: "sendid",
+        owner: "cancel",
+        rename: "id",
+        same_value: true,
+        reason: "a `<send>` declares its ID with `id`; `sendid` is how `<cancel>` refers to that ID",
+    },
+    Counterpart {
+        element: "cancel",
+        attribute: "id",
+        owner: "send",
+        rename: "sendid",
+        same_value: true,
+        reason: "`<cancel>` names the `id` of the `<send>` to cancel with `sendid`",
+    },
+    // SCXML 1.0 §3.5.1, §4.3.1, §4.4.1: the guard is `cond`, "a boolean
+    // expression"; `expr` is a value expression (§5.4 `<assign>`, §4.7 `<log>`).
+    Counterpart {
+        element: "transition",
+        attribute: "expr",
+        owner: "assign",
+        rename: "cond",
+        same_value: true,
+        reason: "a `<transition>` is guarded by the boolean expression `cond`; `expr` is a value expression of `<assign>`, `<log>`, `<data>`, `<param>`, and `<content>`",
+    },
+    Counterpart {
+        element: "if",
+        attribute: "expr",
+        owner: "assign",
+        rename: "cond",
+        same_value: true,
+        reason: "an `<if>` tests the boolean expression `cond`; `expr` is a value expression of `<assign>`, `<log>`, `<data>`, `<param>`, and `<content>`",
+    },
+    Counterpart {
+        element: "elseif",
+        attribute: "expr",
+        owner: "assign",
+        rename: "cond",
+        same_value: true,
+        reason: "an `<elseif>` tests the boolean expression `cond`; `expr` is a value expression of `<assign>`, `<log>`, `<data>`, `<param>`, and `<content>`",
+    },
+    // SCXML 1.0 §3.3.1: `initial` is "The id of the default initial state
+    // (or states) for this state"; §3.5.1: `target` belongs to `<transition>`,
+    // the only way to leave a state. Which one the author meant is a guess.
+    Counterpart {
+        element: "state",
+        attribute: "target",
+        owner: "transition",
+        rename: "initial",
+        same_value: false,
+        reason: "a `<state>` leaves through a `<transition target=\"…\">` child; its own `initial` names the child state entered first",
+    },
+];
+
+/// The counterpart of `attribute` written on `element`, when one is known.
+#[must_use]
+pub fn counterpart(element: &str, attribute: &str) -> Option<&'static Counterpart> {
+    COUNTERPARTS
+        .iter()
+        .find(|entry| entry.element == element && entry.attribute == attribute)
 }
 
 /// Optimal-string-alignment distance: insertions, deletions, substitutions,
@@ -572,5 +677,42 @@ mod tests {
             "a transposition is one edit"
         );
         assert_eq!(nearest(&"x".repeat(80), ["x"]), None);
+    }
+
+    #[test]
+    fn closest_lists_every_tie() {
+        assert_eq!(closest("evnt", ["event", "cond", "target"]), ["event"]);
+        let send =
+            element("send").map(|spec| spec.attributes.iter().map(|attribute| attribute.name));
+        assert_eq!(
+            closest("tage", send.into_iter().flatten()),
+            ["target", "type"],
+            "two edits from both"
+        );
+        assert!(closest("zzzzzz", ["event"]).is_empty());
+    }
+
+    /// Every counterpart restates the bundled schema: the attribute is
+    /// undeclared on its element and declared on the owner, and the rename
+    /// is declared on the element.
+    #[test]
+    fn counterparts_match_the_schema_vocabulary() {
+        for entry in COUNTERPARTS {
+            let spec = element(entry.element).expect("the element is SCXML");
+            assert!(spec.attribute(entry.attribute).is_none(), "{entry:?}");
+            assert!(spec.attribute(entry.rename).is_some(), "{entry:?}");
+            assert!(
+                element_attribute(entry.owner, entry.attribute).is_some(),
+                "{entry:?}"
+            );
+            assert!(
+                closest(
+                    entry.attribute,
+                    spec.attributes.iter().map(|attribute| attribute.name)
+                )
+                .is_empty(),
+                "a typo suggestion would compete with {entry:?}"
+            );
+        }
     }
 }

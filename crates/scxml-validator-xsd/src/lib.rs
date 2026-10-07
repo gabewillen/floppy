@@ -231,9 +231,10 @@ fn validate_bounded(
         (has_internal_subset(document) || has_tag(document)).then(|| infoset_text(document));
     let instance = infoset.as_deref().unwrap_or_else(|| document.source.text());
     let findings = RefCell::new(project::Findings::new(MAX_VALIDATION_MESSAGES));
+    let declared;
     {
         let mut runtime = validator.start_run(project::SharedSink(&findings));
-        let mut tagger = project::Tagger::new(&findings);
+        let mut tagger = project::Tagger::new(&findings, &schema_set);
         drive_quick_xml_with(instance.as_bytes(), &mut runtime, &schema_set, &mut tagger).map_err(
             |error| SchemaBackendError::new("XSD005", format!("instance driver failed: {error}")),
         )?;
@@ -246,6 +247,7 @@ fn validate_bounded(
                 format!("instance validation could not complete: {}", error.message),
             ));
         }
+        declared = tagger.declared;
     }
     let findings = findings.into_inner();
     if findings.truncated {
@@ -254,7 +256,7 @@ fn validate_bounded(
     let room = MAX_VALIDATION_MESSAGES.saturating_sub(findings.tagged.len());
     let element_only_text = project::non_xml_space_text(document, room)
         .ok_or_else(|| limit_error("validation messages", MAX_VALIDATION_MESSAGES))?;
-    let mut report = project::project(document, findings.tagged);
+    let mut report = project::project(document, findings.tagged, &declared);
     for diagnostic in element_only_text {
         report.push(diagnostic);
     }
@@ -967,7 +969,7 @@ fn limit_error(resource: &str, limit: usize) -> SchemaBackendError {
 mod tests {
     use scxml_syntax::telemetry::{Recorder, install_recorder};
     use scxml_syntax::{SourceId, SourceText, parse_xml};
-    use scxml_validator_core::SchemaSource;
+    use scxml_validator_core::{Applicability, SchemaSource};
 
     use super::*;
 
@@ -1775,5 +1777,179 @@ mod tests {
             .validate(&document(&fixed), &w3c_scxml_schema_set())
             .expect("schema validation runs");
         assert!(!revalidated.has_errors(), "{revalidated:?}");
+    }
+
+    /// The one fix of the first finding with `code`, applied, revalidated.
+    fn only_fix(xml: &str, schemas: &[SchemaSource], code: &str) -> scxml_validator_core::Fix {
+        let report = XsdSchemaBackend
+            .validate(&document(xml), schemas)
+            .expect("schema validation runs");
+        let diagnostic = report
+            .diagnostics()
+            .iter()
+            .find(|diagnostic| diagnostic.code == code)
+            .unwrap_or_else(|| panic!("{code} in {report:?}"));
+        assert_eq!(diagnostic.fixes.len(), 1, "{diagnostic:?}");
+        diagnostic.fixes[0].clone()
+    }
+
+    /// Each counterpart is one rename that keeps the value; the renamed
+    /// document is schema-valid. Applicability follows whether the value
+    /// keeps its meaning.
+    #[test]
+    fn cross_element_attributes_are_renamed_to_the_counterpart() {
+        let wrap = |body: &str| {
+            format!(
+                r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"><onentry>{body}</onentry><transition event="go" target="b"/></state><final id="b"/></scxml>"#
+            )
+        };
+        let cases = [
+            (
+                wrap(r#"<send event="t" delay="3s" sendid="s1"/>"#),
+                "XSD-cvc-complex-type.3.2.2",
+                r#"<send event="t" delay="3s" id="s1"/>"#,
+                Applicability::MachineApplicable,
+            ),
+            (
+                wrap(r#"<cancel id="s1"/>"#),
+                "XSD-cvc-complex-type.3.2.2",
+                r#"<cancel sendid="s1"/>"#,
+                Applicability::MachineApplicable,
+            ),
+            (
+                wrap(r#"<if expr="true"><log expr="1"/></if>"#),
+                "XSD-cvc-complex-type.3.2.2",
+                r#"<if cond="true">"#,
+                Applicability::MachineApplicable,
+            ),
+            (
+                r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"><transition event="go" expr="true" target="b"/></state><final id="b"/></scxml>"#.to_owned(),
+                "XSD-cvc-complex-type.3.2.2",
+                r#"<transition event="go" cond="true" target="b"/>"#,
+                Applicability::MachineApplicable,
+            ),
+            (
+                r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a" target="b"><state id="b"/></state></scxml>"#.to_owned(),
+                "XSD-cvc-complex-type.3.2.2",
+                r#"<state id="a" initial="b">"#,
+                Applicability::MaybeIncorrect,
+            ),
+        ];
+        let schemas = w3c_scxml_schema_set();
+        for (xml, code, expected, applicability) in cases {
+            let fix = only_fix(&xml, &schemas, code);
+            assert_eq!(fix.applicability, applicability, "{xml}: {fix:?}");
+            let fixed = apply(&xml, &fix);
+            assert!(fixed.contains(expected), "{fixed}");
+            let revalidated = XsdSchemaBackend
+                .validate(&document(&fixed), &schemas)
+                .expect("schema validation runs");
+            assert!(!revalidated.has_errors(), "{revalidated:?}");
+        }
+    }
+
+    /// A rename onto an attribute the element already carries would
+    /// duplicate it, so it is never offered.
+    #[test]
+    fn an_occupied_counterpart_is_not_a_rename() {
+        let xml = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"><onentry><send event="t" id="s0" sendid="s1"/></onentry></state></scxml>"#;
+        let fix = only_fix(xml, &w3c_scxml_schema_set(), "XSD-cvc-complex-type.3.2.2");
+        assert_eq!(fix.applicability, Applicability::MaybeIncorrect);
+        assert!(fix.message.starts_with("remove"), "{fix:?}");
+    }
+
+    /// One closest name is machine-applicable; a tie offers every closest
+    /// name as maybe-incorrect.
+    #[test]
+    fn typo_applicability_follows_ambiguity() {
+        let schemas = w3c_scxml_schema_set();
+        let unique = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"><transition evnt="go" target="b"/></state><final id="b"/></scxml>"#;
+        let fix = only_fix(unique, &schemas, "XSD-cvc-complex-type.3.2.2");
+        assert_eq!(fix.applicability, Applicability::MachineApplicable);
+
+        let enumeration = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"><transition event="go" tpye="inner" target="b"/></state><final id="b"/></scxml>"#;
+        let fix = only_fix(enumeration, &schemas, "XSD-cvc-complex-type.3.2.2");
+        assert_eq!(
+            fix.applicability,
+            Applicability::MaybeIncorrect,
+            "`inner` is not a `type` value"
+        );
+
+        let ambiguous = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"><onentry><send event="go" tage="#_internal"/></onentry></state></scxml>"##;
+        let report = XsdSchemaBackend
+            .validate(&document(ambiguous), &schemas)
+            .expect("schema validation runs");
+        let diagnostic = report
+            .diagnostics()
+            .iter()
+            .find(|diagnostic| diagnostic.code == "XSD-cvc-complex-type.3.2.2")
+            .expect("unknown attribute");
+        assert_eq!(
+            diagnostic.help.as_deref(),
+            Some("did you mean `target` or `type`?")
+        );
+        let renames: Vec<_> = diagnostic
+            .fixes
+            .iter()
+            .map(|fix| (fix.applicability, fix.edits[0].replacement.as_str()))
+            .collect();
+        assert_eq!(
+            renames,
+            [
+                (Applicability::MaybeIncorrect, "target"),
+                (Applicability::MaybeIncorrect, "type")
+            ]
+        );
+    }
+
+    /// An extension element's attributes come from its package schema,
+    /// including those of attribute groups and base types.
+    #[test]
+    fn extension_attribute_typos_are_suggested_from_the_package_schema() {
+        let package = r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:a="urn:action"
+            targetNamespace="urn:action" elementFormDefault="qualified">
+          <xs:attributeGroup name="addressed"><xs:attribute name="channel" type="xs:string"/></xs:attributeGroup>
+          <xs:complexType name="base"><xs:attribute name="priority" type="xs:int"/></xs:complexType>
+          <xs:element name="notify">
+            <xs:complexType><xs:complexContent><xs:extension base="a:base">
+              <xs:attribute name="message" type="xs:string"/>
+              <xs:attributeGroup ref="a:addressed"/>
+            </xs:extension></xs:complexContent></xs:complexType>
+          </xs:element>
+        </xs:schema>"#;
+        let mut schemas = w3c_scxml_schema_set();
+        schemas.push(SchemaSource::new("memory:action.xsd", package.as_bytes()));
+        let wrap = |attributes: &str| {
+            format!(
+                r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:x="urn:action" version="1.0" initial="a"><state id="a"><onentry><x:notify {attributes}/></onentry></state></scxml>"#
+            )
+        };
+        for (typo, name) in [
+            ("chanel", "channel"),
+            ("mesage", "message"),
+            ("priorty", "priority"),
+        ] {
+            let xml = wrap(&format!(r#"{typo}="1""#));
+            let fix = only_fix(&xml, &schemas, "XSD-cvc-complex-type.3.2.2");
+            assert_eq!(fix.applicability, Applicability::MaybeIncorrect, "{fix:?}");
+            let fixed = apply(&xml, &fix);
+            assert!(fixed.contains(&format!(r#"{name}="1""#)), "{fixed}");
+            let revalidated = XsdSchemaBackend
+                .validate(&document(&fixed), &schemas)
+                .expect("schema validation runs");
+            assert!(!revalidated.has_errors(), "{revalidated:?}");
+        }
+        let report = XsdSchemaBackend
+            .validate(&document(&wrap(r#"zzz="1""#)), &schemas)
+            .expect("schema validation runs");
+        let help = report
+            .diagnostics()
+            .iter()
+            .find_map(|diagnostic| diagnostic.help.clone())
+            .unwrap_or_default();
+        assert!(
+            help.starts_with("`<x:notify>` accepts `channel`, `message`, `priority`"),
+            "{help}"
+        );
     }
 }

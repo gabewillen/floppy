@@ -1,0 +1,21 @@
+error[XSD-cvc-complex-type.3.2.2]: attribute `tage` is not allowed on `<send>`
+ --> tests/ui/xsd-unknown-attribute-ambiguous.scx:4:26
+  |
+4 |       <send event="ping" tage="#_internal"/>
+  |                          ^^^^ unknown attribute
+  |
+  = note: the W3C SCXML 1.0 schema rejects this under XML Schema constraint `cvc-complex-type.3.2.2`: Attribute 'tage' is not allowed for this element
+  = help: did you mean `target` or `type`?
+  = spec: SCXML 1.0 §6.2 <send>
+  = spec: XML Schema 1.0 Part 1 §3.4.4 Element Locally Valid (Complex Type) (`cvc-complex-type.3.2.2`)
+help: `<send>` has an attribute with a similar name: `target`
+  |
+4 |       <send event="ping" target="#_internal"/>
+  |                          ~~~~~~
+help: `<send>` has an attribute with a similar name: `type`
+  |
+4 |       <send event="ping" type="#_internal"/>
+  |                          ~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scx --explain XSD-cvc-complex-type.3.2.2`.

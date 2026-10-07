@@ -148,6 +148,32 @@ fn machine_applicable_fixes_are_applied_and_the_fixed_text_validates() {
     assert_eq!(errors(&report(&again.report)), 0, "{}", again.report);
 }
 
+/// A builder draft that wrote `<cancel>`'s `sendid` on `<send>`: the
+/// rename to `id` is machine-applicable, so the fix pass repairs it.
+const SENDID_ON_SEND: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="red"><state id="red"><onentry><send event="timer.green" delay="3s" sendid="send_timer_green"/></onentry><transition event="timer.green" target="green"/></state><final id="green"/></scxml>"#;
+
+#[test]
+fn a_send_with_sendid_is_renamed_to_id_by_the_fix_pass() {
+    let validation = validate(
+        "draft.scx",
+        SENDID_ON_SEND,
+        EventSchemaResources::new(),
+        None,
+    )
+    .expect("the draft reports");
+    let value = report(&validation.report);
+    assert_eq!(codes(&value), ["XSD-cvc-complex-type.3.2.2"]);
+    assert_eq!(
+        value["validator"]["diagnostics"][0]["fixes"][0]["applicability"],
+        "machine-applicable"
+    );
+    let fixed = apply_machine_applicable(&validation.artifact).expect("the fixes apply");
+    assert_eq!(fixed, SENDID_ON_SEND.replace(" sendid=", " id="));
+    let again = validate("draft.scx", &fixed, EventSchemaResources::new(), None)
+        .expect("the fixed draft reports");
+    assert_eq!(errors(&report(&again.report)), 0, "{}", again.report);
+}
+
 #[test]
 fn a_draft_without_machine_applicable_fixes_is_unchanged() {
     let validation = validate(

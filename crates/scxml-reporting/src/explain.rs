@@ -1125,7 +1125,7 @@ pub const CODES: &[CodeDoc] = &[
     family!(
         "XSD-cvc-complex-type.3.2.2", "an attribute is not declared for this element",
         why: "SCXML elements accept only their declared attributes; extension attributes must be namespace-qualified",
-        help: "correct the attribute name, remove it, or qualify an extension attribute with a namespace prefix",
+        help: "correct the attribute name (an attribute of a related element becomes this element's own, such as `id` for `<cancel>`'s `sendid` on `<send>`), remove it, or qualify an extension attribute with a namespace prefix",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"a\"><state id=\"a\"><transition evnt=\"go\" target=\"b\"/></state><final id=\"b\"/></scxml>",
         fixed: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"a\"><state id=\"a\"><transition event=\"go\" target=\"b\"/></state><final id=\"b\"/></scxml>",
         checked: true,
