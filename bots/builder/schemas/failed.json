@@ -17,8 +17,9 @@
         "required": ["kind", "code", "message"],
         "additionalProperties": false
       }
-    }
+    },
+    "history": {"type": "array", "items": {"type": "object"}}
   },
-  "required": ["reason", "diagnostics"],
+  "required": ["reason", "diagnostics", "history"],
   "additionalProperties": false
 }

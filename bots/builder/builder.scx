@@ -10,7 +10,7 @@
 
   It ends in exactly one of two top-level final states, whose <donedata>
   carries the result: done {scxml, schemas, tests, report} or failed
-  {reason, diagnostics}. Run directly, scx run prints that data in its done
+  {reason, diagnostics, history}. Run directly, scx run prints that data in its done
   record; invoked, the parent receives it as done.invoke.<id> (SCXML 6.4).
   Progress goes to <log>, labelled with the stage. The event:schema
   contracts below are inline copies of schemas/*.json (an invoked child is
@@ -195,7 +195,7 @@
       <assign location="mode" expr="'author'"/>
     </transition>
     <transition event="done.invoke" cond="_event.invokeid === gen_id" target="retry_gate">
-      <assign location="diagnostics" expr="[{kind: 'generate', code: 'design-failed', message: 'the design generation failed (' + gen_failure + '): no plan within the plan schema'}]"/>
+      <assign location="diagnostics" expr="[{kind: 'generate', code: 'design-failed', message: 'the design generation failed (' + (gen_failure === null ? 'it ended without an event' : gen_failure) + '): no plan within the plan schema'}]"/>
     </transition>
     <!-- Only this stage run's own timeout; it preempts the call in flight
          (leaving design cancels the invocation). -->
@@ -203,10 +203,10 @@
       <assign location="diagnostics" expr="[{kind: 'timeout', code: 'design-timeout', message: 'the design generation did not answer within ' + generate_timeout_ms + ' ms and was cancelled'}]"/>
     </transition>
     <transition event="error.execution" target="retry_gate">
-      <assign location="diagnostics" expr="[{kind: 'generate', code: 'design-failed', message: 'the design generation could not start'}]"/>
+      <assign location="diagnostics" expr="[{kind: 'generate', code: 'design-failed', message: 'the design generation could not start (error.execution: an unbound service type, a rejected start, or a parameter that did not evaluate)'}]"/>
     </transition>
     <transition event="error.communication" cond="_event.invokeid === gen_id" target="retry_gate">
-      <assign location="diagnostics" expr="[{kind: 'generate', code: 'design-failed', message: 'the design generation failed'}]"/>
+      <assign location="diagnostics" expr="[{kind: 'generate', code: 'design-failed', message: 'the design generation failed after it started (error.communication: the generate service returned an error, trapped, or returned an invalid event)'}]"/>
     </transition>
   </state>
 
@@ -247,16 +247,16 @@
       <assign location="fix_passes" expr="0"/>
     </transition>
     <transition event="done.invoke" cond="_event.invokeid === gen_id" target="retry_gate">
-      <assign location="diagnostics" expr="[{kind: 'generate', code: 'author-failed', message: 'the author generation failed (' + gen_failure + '): no draft within the draft schema'}]"/>
+      <assign location="diagnostics" expr="[{kind: 'generate', code: 'author-failed', message: 'the author generation failed (' + (gen_failure === null ? 'it ended without an event' : gen_failure) + '): no draft within the draft schema'}]"/>
     </transition>
     <transition event="builder.timeout" cond="!_event.invokeid &amp;&amp; _event.data !== null &amp;&amp; typeof _event.data === 'object' &amp;&amp; _event.data.run === stage_run" target="retry_gate">
       <assign location="diagnostics" expr="[{kind: 'timeout', code: 'author-timeout', message: 'the author generation did not answer within ' + generate_timeout_ms + ' ms and was cancelled'}]"/>
     </transition>
     <transition event="error.execution" target="retry_gate">
-      <assign location="diagnostics" expr="[{kind: 'generate', code: 'author-failed', message: 'the author generation could not start'}]"/>
+      <assign location="diagnostics" expr="[{kind: 'generate', code: 'author-failed', message: 'the author generation could not start (error.execution: an unbound service type, a rejected start, or a parameter that did not evaluate)'}]"/>
     </transition>
     <transition event="error.communication" cond="_event.invokeid === gen_id" target="retry_gate">
-      <assign location="diagnostics" expr="[{kind: 'generate', code: 'author-failed', message: 'the author generation failed'}]"/>
+      <assign location="diagnostics" expr="[{kind: 'generate', code: 'author-failed', message: 'the author generation failed after it started (error.communication: the generate service returned an error, trapped, or returned an invalid event)'}]"/>
     </transition>
   </state>
 
@@ -410,7 +410,7 @@
       <assign location="failures" expr="failures + 1"/>
       <assign location="fingerprint" expr="JSON.stringify(diagnostics.map(function (d) { return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message); }).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; }))"/>
       <assign location="attempt_log" expr="attempt_log.concat([{failure: failures, attempt: attempt, diagnostics: diagnostics.slice(0, 5)}])"/>
-      <log label="retry_gate" expr="'failure ' + failures + (max_attempts === null ? '' : ' of ' + max_attempts) + (diagnostics.length &gt; 0 ? ': ' + diagnostics[0].kind + ' ' + diagnostics[0].code : '')"/>
+      <log label="retry_gate" expr="'failure ' + failures + (max_attempts === null ? '' : ' of ' + max_attempts) + (diagnostics.length &gt; 0 ? ': ' + diagnostics[0].kind + ' ' + diagnostics[0].code + ': ' + diagnostics[0].message : '')"/>
     </onentry>
     <transition cond="fingerprint === previous_fingerprint" target="failed">
       <assign location="failure_reason" expr="'no-progress'"/>
@@ -499,10 +499,10 @@
 
   <final id="failed">
     <onentry>
-      <log label="failed" expr="failure_reason"/>
+      <log label="failed" expr="failure_reason + (diagnostics.length &gt; 0 ? ': ' + diagnostics[0].kind + ' ' + diagnostics[0].code + ': ' + diagnostics[0].message : '')"/>
     </onentry>
-    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"failed","description":"The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation.","type":"object","properties":{"reason":{"enum":["invalid-request","no-progress","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","simulate","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}}},"required":["reason","diagnostics"],"additionalProperties":false}'>
-      <content expr="({reason: failure_reason, diagnostics: diagnostics.map(function (d) { return {kind: d.kind, code: d.code, message: d.message}; })})"/>
+    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"failed","description":"The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation.","type":"object","properties":{"reason":{"enum":["invalid-request","no-progress","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","simulate","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}},"history":{"type":"array","items":{"type":"object"}}},"required":["reason","diagnostics","history"],"additionalProperties":false}'>
+      <content expr="({reason: failure_reason, diagnostics: diagnostics.map(function (d) { return {kind: d.kind, code: d.code, message: d.message}; }), history: attempt_log})"/>
     </donedata>
   </final>
 </scxml>

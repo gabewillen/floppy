@@ -417,6 +417,9 @@ fn mock_reply(
         ("/flaky/v1/chat/completions", Some("topology_plan")) => {
             (plans != 2).then(|| completion(PLAN))
         }
+        ("/fastfail/v1/chat/completions", Some("topology_plan")) => {
+            (plans != 1).then(|| completion(PLAN))
+        }
         // The first plan is held (see `Mock::start`) and answered late.
         ("/slow/v1/chat/completions", Some("topology_plan")) => {
             Some(completion(if plans == 1 { LATE_PLAN } else { PLAN }))
@@ -451,9 +454,12 @@ fn mock_reply(
                 _ => draft(&traffic_light(&green_separate(), "red")),
             }))
         }
-        ("/broken/v1/chat/completions" | "/flaky/v1/chat/completions", Some("scxml_draft")) => {
-            Some(completion(&invalid_draft()))
-        }
+        (
+            "/broken/v1/chat/completions"
+            | "/flaky/v1/chat/completions"
+            | "/fastfail/v1/chat/completions",
+            Some("scxml_draft"),
+        ) => Some(completion(&invalid_draft())),
         ("/typesafe/v1/systemone", _) => system_one("triage.repair", body),
         ("/redesign/v1/systemone", _) => system_one("triage.redesign", body),
         _ => None,
@@ -508,7 +514,9 @@ impl Received {
 /// draft profile (`/unicode/v1` through a non-ASCII prefix, `/doctype/v1`
 /// through a DTD entity); `/impostor/v1` answers the plan, then a valid draft
 /// that sends the builder's control event names; `/flaky/v1` fails the
-/// second plan (404) and otherwise answers like `/broken/v1`; `/noplan/v1`
+/// second plan (404) and otherwise answers like `/broken/v1`; `/fastfail/v1`
+/// fails the first plan (404) at once and otherwise answers like
+/// `/broken/v1`; `/noplan/v1`
 /// fails every plan (404); `/slow/v1` holds its first plan until its
 /// second plan request arrives (at most [`SLOW_PLAN_HOLD_BOUND`]) and
 /// answers [`LATE_PLAN`], then answers the plan and
@@ -1101,6 +1109,57 @@ fn a_failed_redesign_keeps_the_previous_plan() {
     assert_eq!(
         designs[2].user_input()["diagnostics"][0]["code"],
         "design-failed"
+    );
+}
+
+/// A design generation that fails at once (the backend answers `404`), and
+/// a later failure that ends the build: the design failure's cause (the
+/// generate service's code, `status`) is in its `retry_gate` log and in the
+/// `failed` done data's history, though the diagnostics that ended the
+/// build are the later ones; the final `failed` log names the reason and
+/// the cause that ended the build.
+#[test]
+fn a_fast_design_failure_keeps_its_cause_in_the_log_and_the_failed_done_data() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "fastfail",
+        "fastfail",
+        &["CPA_API_KEY", "CPA_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "failed", "{failed}");
+    assert_eq!(failed["reason"], "no-progress");
+    assert_eq!(failed["diagnostics"][0]["code"], "SCXML005");
+    let logs: Vec<String> = records
+        .iter()
+        .filter(|record| record.get("parent").is_none() && record["type"] == "log")
+        .map(|record| format!("{} {record}", record["label"]))
+        .collect();
+    assert!(
+        logs.iter().any(|log| log.starts_with("\"retry_gate\"")
+            && log.contains("design-failed")
+            && log.contains("(status)")),
+        "the retry_gate log carries the design failure's cause: {logs:?}"
+    );
+    assert!(
+        logs.iter().any(|log| log.starts_with("\"failed\"")
+            && log.contains("no-progress")
+            && log.contains("SCXML005")),
+        "the failed log carries the reason and the cause that ended the build: {logs:?}"
+    );
+    let history = failed["history"]
+        .as_array()
+        .expect("the failed done data has a history");
+    assert_eq!(history.len(), 3, "{failed}");
+    assert_eq!(history[0]["diagnostics"][0]["code"], "design-failed");
+    assert!(
+        history[0]["diagnostics"][0]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("(status)")),
+        "{failed}"
     );
 }
 

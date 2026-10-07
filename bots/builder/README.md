@@ -32,13 +32,17 @@ final states and its parent receives that state's done data as
 | --- | --- | --- |
 | `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?}`: the specification, extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `sparks/qwen3.8-flash-next`, a reasoning model), and the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, tests, report}`: the built document, its input event schemas (`{event, schema}`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
-| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics}`: `invalid-request`, `no-progress` (the same failure twice in a row), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`) |
+| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history}`: `invalid-request`, `no-progress` (the same failure twice in a row), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`) and the failure history (every failure's attempt and diagnostics, as in `done`'s report) |
 
 The builder answers exactly once, by finishing. Run directly, `scx run`
 prints the done data in its `done` record and exits 0; invoked, the parent
 gets it as the data of `done.invoke.<id>`. Progress goes to `<log>`, each
 record labelled with the stage (`design`, `author`, `validate`,
-`simulate`, `retry_gate`, `triage`, then `done` or `failed`). `intake` has
+`simulate`, `retry_gate`, `triage`, then `done` or `failed`); the
+`retry_gate` record of each failure and the `failed` record name its first
+diagnostic's kind, code, and message, which carries the cause (for a
+generation, the generate service's failure code, a timeout, or which
+error event ended it). `intake` has
 no timeout: the invoker owns the builder's lifetime (cancel the invoke to
 stop it).
 
@@ -232,7 +236,9 @@ draft's only error is fixed by its machine-applicable fix, and the fixed
 draft runs its two test scripts as two invoked children (distinct invoke
 ids) before the builder ends in `done`; the repair request carries the failed draft and
 its tests. Other cases cover a redesign that sends the plan it replaces,
-a failed redesign keeping that plan, `triage.repair` not being offered
+a failed redesign keeping that plan, a design generation that fails at
+once keeping its cause (`status`) in its `retry_gate` log and in the
+`failed` history after a later failure ends the build, `triage.repair` not being offered
 without a plan, a draft that breaks the draft profile never running (also
 through a non-ASCII namespace prefix or a DTD), a candidate's
 `sim.settle` and `sim.drive` being recorded as outputs, a cancelled
