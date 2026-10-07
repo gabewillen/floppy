@@ -154,7 +154,11 @@ hard cutover.
   only the calling task, never the session. A batch run performs it through
   the embedder's transport (`ServiceComponents::with_outbound_http`); a live
   session performs it on a transport thread per request (at most 16 in
-  flight per invocation) and delivers the response as an external input
+  flight per invocation), with no time limit of its own: the invocation
+  bounds it, since leaving the invoking state cancels the invocation and
+  closes the request's connection (SCXML 6.4), and the document's own
+  `<send delay>` timers are its timeouts. It delivers the response as an
+  external input
   (`LiveSession::deliver_http_responses`, signaled through
   `LiveHttp::on_http_response`; `LiveSession::awaiting_http_responses`
   keeps a logical clock from moving past a request in flight). The

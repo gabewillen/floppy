@@ -222,9 +222,9 @@ pub use allowlist::{
 };
 #[cfg(feature = "http")]
 pub use http_client::{
-    DEFAULT_CONNECT_TIMEOUT, DEFAULT_EXTENSION_TOTAL_TIMEOUT, DEFAULT_MAX_IN_FLIGHT,
-    DEFAULT_TOTAL_TIMEOUT, ExtensionHttpClient, ExtensionHttpConfig, HttpClientConfig,
-    HttpClientError, MAX_IN_FLIGHT, MAX_RESPONSE_HEAD_BYTES, NetworkClient,
+    DEFAULT_CONNECT_TIMEOUT, DEFAULT_MAX_IN_FLIGHT, DEFAULT_TOTAL_TIMEOUT, ExtensionHttpClient,
+    ExtensionHttpConfig, HttpClientConfig, HttpClientError, MAX_IN_FLIGHT, MAX_RESPONSE_HEAD_BYTES,
+    NetworkClient,
 };
 #[cfg(feature = "http")]
 mod resolver;

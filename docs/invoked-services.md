@@ -123,10 +123,13 @@ Admission, in detail:
 - **The transport sends.** The `http` feature's `ExtensionHttpClient`
   follows no redirect (a 3xx is returned as the response) and uses no
   cookie, credential, or environment proxy; TLS is rustls against the
-  operating system's trust store. Network ingress and egress bounds apply on
-  every build: a 10 s connect and 120 s total timeout per request
-  (`ExtensionHttpConfig`), a response head of at most 16 KiB, and a response
-  body of at most 16 MiB (`payload-too-large` beyond it).
+  operating system's trust store. A response head of at most 16 KiB and a
+  response body of at most 16 MiB (`payload-too-large` beyond it) apply on
+  every build. A request has no time limit of its own: the invocation bounds
+  it, since leaving the invoking state cancels the invocation and closes
+  the connection (SCXML 6.4), so a document's timeout is a `<send delay>`
+  armed in the invoking state; an unreachable host fails when the operating
+  system gives up connecting.
 
 Without a transport every request fails with `unavailable`. The echo
 example's `fetch` event GETs the URL its `endpoint` slot references,

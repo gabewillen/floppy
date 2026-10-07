@@ -369,14 +369,16 @@ and `--replay` refuses a run whose services differ
 (`[replay-identity-mismatch]`). A service's `outbound-http.fetch` suspends
 only the calling task, never the session
 ([invoked-services.md](invoked-services.md#outbound-http)): `run` performs
-each request on a transport thread of its own (a 10 s connect and 120 s
-total timeout, at most 16 in flight per invocation), the session keeps
+each request on a transport thread of its own (no time limit of its own,
+at most 16 in flight per invocation), the session keeps
 taking input meanwhile, and the response is delivered by its own call
 (cause `http-response`); on `--clock logical` no delayed send fires while a
 request is in flight. `--record` records each response and `--replay`
 delivers it from the log without the network, for services that import
 WASI interfaces too. Leaving the invoking state cancels the invocation
-(SCXML 6.4) and closes its request's connection at once.
+(SCXML 6.4) and closes its request's connection at once: that, and the
+document's own `<send delay>` timers, bound a request; an unreachable host
+fails when the operating system gives up connecting.
 ## `run`
 
 `run` keeps one live session of a document open through the same components
