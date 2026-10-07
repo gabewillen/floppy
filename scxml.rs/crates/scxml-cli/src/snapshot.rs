@@ -927,12 +927,14 @@ pub(crate) mod host {
         args: &RunArgs,
         packages: &crate::extensions::Packages,
         services: &crate::services::Services,
-        documents: crate::documents::Documents,
+        mut documents: crate::documents::Documents,
         scripts: Vec<scxml_compiler_core::ScriptPackage>,
     ) -> Result<Vec<CheckpointDocument>, Box<dyn std::error::Error>> {
         use std::rc::Rc;
 
         use scxml_host_wasmtime::{ScriptedEvent, SessionRun, SnapshotPoints, SnapshotRequest};
+
+        bind_documents(&mut documents, packages, &args.services, services)?;
 
         let (ir_bytes, data_model) =
             compile(&args.document, &packages.all(), &services.packages, scripts)?;
@@ -1116,23 +1118,80 @@ pub(crate) mod host {
             })?;
             extensions = extensions.bind(package.host_package(), &component)?;
         }
-        if let Some(store) = &packages.store {
-            for package in &packages.repository {
-                let uri = &package.manifest.namespace_uri;
-                let resolved = store.resolve_component(uri)?;
-                let component = authenticate_extension_component(
-                    &resolved.bytes,
-                    TrustedComponentDigest::from_hex(&resolved.sha256)?,
-                )
-                .map_err(|error| {
-                    format!(
-                        "repository namespace `{uri}`: its extension component is rejected: {error}"
-                    )
-                })?;
-                extensions = extensions.bind(resolved.package.host_package(), &component)?;
-            }
+        for package in &packages.repository {
+            extensions = extensions.bind(
+                package.host_package(),
+                &repository_component(packages, package)?,
+            )?;
         }
         Ok((extensions, Notes(observer)))
+    }
+
+    /// The release's extension component of the repository namespace
+    /// `package`, authenticated by the SHA-256 its `SHA256SUMS` lists.
+    #[cfg(feature = "wasmtime")]
+    fn repository_component(
+        packages: &crate::extensions::Packages,
+        package: &crate::extensions::Package,
+    ) -> Result<scxml_host_wasmtime::AuthenticatedComponent, Box<dyn std::error::Error>> {
+        let store = packages
+            .store
+            .as_ref()
+            .ok_or("a repository namespace was resolved without a repository store")?;
+        let uri = package
+            .resolved_uri()
+            .ok_or("only a repository namespace comes from a release")?;
+        let resolved = store.resolve_component(uri)?;
+        Ok(scxml_host_wasmtime::authenticate_extension_component(
+            &resolved.bytes,
+            scxml_host_wasmtime::TrustedComponentDigest::from_hex(&resolved.sha256)?,
+        )
+        .map_err(|error| {
+            format!("repository namespace `{uri}`: its extension component is rejected: {error}")
+        })?)
+    }
+
+    /// Has every `<invoke src>` document that pins a release other than the
+    /// run's carry that release's components for its own sessions
+    /// ([`scxml_host_wasmtime::EmbeddedDocument`]), and lists them.
+    ///
+    /// # Errors
+    ///
+    /// A component that cannot be resolved or authenticated, or a binding
+    /// the host refuses.
+    #[cfg(feature = "wasmtime")]
+    pub(crate) fn bind_documents(
+        documents: &mut crate::documents::Documents,
+        packages: &crate::extensions::Packages,
+        service_flags: &crate::services::ServiceFlags,
+        services: &crate::services::Services,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for (url, bound) in &packages.documents {
+            let mut extensions = scxml_host_wasmtime::ExtensionComponents::new();
+            for package in bound {
+                extensions = extensions.bind(
+                    package.host_package(),
+                    &repository_component(packages, package)?,
+                )?;
+            }
+            documents.bind(url, Some(extensions), None);
+        }
+        for (url, bound, imports) in service_flags.document_components(services)? {
+            if let Some((_, packages)) = services.documents.iter().find(|(at, _)| *at == url) {
+                let lines: Vec<String> =
+                    crate::services::summary(packages, Some(service_flags), Some(&imports))
+                        .into_iter()
+                        .map(|line| {
+                            format!(
+                                "{line}\n  = for: the sessions of <invoke src> document `{url}`"
+                            )
+                        })
+                        .collect();
+                crate::extensions::write_notes(&lines);
+            }
+            documents.bind(&url, None, Some(bound));
+        }
+        Ok(())
     }
 
     /// Whether this build executes documents (it does under Wasmtime).

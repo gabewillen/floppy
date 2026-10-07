@@ -13,8 +13,9 @@
 //! content-addressed and pinned. No test touches the real network.
 //!
 //! The release serves the shipped example extension
-//! (`components/scxml-extension-example`): its package with the repository
-//! URI as its namespace (the schema's `targetNamespace` and the manifest's
+//! (`components/scxml-extension-example`): its package with the tagless
+//! repository URI as its namespace (the document pins `@v0.2.0`, which is
+//! never part of the namespace) (the schema's `targetNamespace` and the manifest's
 //! `schema-sha256` follow), and its component bytes as the release asset.
 //! The component answers its own fixed namespace URI, not the repository
 //! URI, so a session gets as far as the host's `namespace-uri` check of the
@@ -34,6 +35,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use sha2::{Digest as _, Sha256};
 
 const REPOSITORY_URI: &str = "https://github.com/stateforward/scxml.rs/namespaces/example@v0.2.0";
+/// The package's identity: the tagless URI its release's manifest and
+/// schema name, and the namespace every pinned use of it is in.
+const PACKAGE_URI: &str = "https://github.com/stateforward/scxml.rs/namespaces/example";
 const EXAMPLE_URI: &str = "https://stateforward.org/scxml/example";
 const ENV_NAMESPACE: &str = "https://github.com/stateforward/scxml.rs/namespaces/env";
 const ASSET: &str = "scxml_extension_example.virtualized.wasm";
@@ -236,7 +240,7 @@ fn package_file(name: &str) -> Vec<u8> {
         .expect("UTF-8")
         .replace(
             &format!("targetNamespace=\"{EXAMPLE_URI}\""),
-            &format!("targetNamespace=\"{REPOSITORY_URI}\""),
+            &format!("targetNamespace=\"{PACKAGE_URI}\""),
         )
         .into_bytes();
     match name {
@@ -245,7 +249,7 @@ fn package_file(name: &str) -> Vec<u8> {
             fs::read(source.join("example.extension.json")).expect("the example manifest"),
         )
         .expect("UTF-8")
-        .replace(EXAMPLE_URI, REPOSITORY_URI)
+        .replace(EXAMPLE_URI, PACKAGE_URI)
         .replace(&sha256(&original_schema), &sha256(&schema))
         .into_bytes(),
         other => panic!("no package file {other}"),
@@ -470,9 +474,20 @@ fn a_package_that_does_not_name_itself_exactly_fails_closed() {
             "uri",
             String::from_utf8(package_file("example.extension.json"))
                 .expect("UTF-8")
-                .replace("@v0.2.0", "@v0.1.0"),
+                .replace(
+                    PACKAGE_URI,
+                    "https://github.com/stateforward/scxml.rs/namespaces/other",
+                ),
             package_file("example.xsd"),
-            "not this URI",
+            "is `https://github.com/stateforward/scxml.rs/namespaces/other`, not `https://github.com/stateforward/scxml.rs/namespaces/example`",
+        ),
+        (
+            "pinned-uri",
+            String::from_utf8(package_file("example.extension.json"))
+                .expect("UTF-8")
+                .replace(PACKAGE_URI, REPOSITORY_URI),
+            package_file("example.xsd"),
+            "names the pinned URI `https://github.com/stateforward/scxml.rs/namespaces/example@v0.2.0`",
         ),
         (
             "schema-digest",
@@ -484,7 +499,7 @@ fn a_package_that_does_not_name_itself_exactly_fails_closed() {
             let schema = String::from_utf8(package_file("example.xsd"))
                 .expect("UTF-8")
                 .replace(
-                    &format!("targetNamespace=\"{REPOSITORY_URI}\""),
+                    &format!("targetNamespace=\"{PACKAGE_URI}\""),
                     "targetNamespace=\"https://example.org/other\"",
                 )
                 .into_bytes();
@@ -796,8 +811,202 @@ fn an_invoke_src_child_document_has_its_repository_element_resolved() {
     );
     assert_bound_then_refused(&run, &output);
     assert!(
-        text(&run.stderr).contains(&format!("element `{REPOSITORY_URI}`")),
+        text(&run.stderr).contains(&format!("element `{PACKAGE_URI}`")),
         "the child's element is listed: {}",
         text(&run.stderr)
     );
+}
+
+/// The commit a second release, `v0.3.0`, names (a lightweight tag).
+const COMMIT_V3: &str = "89abcdef0123456789abcdef0123456789abcdef";
+
+/// Adds the repository's latest release (`v0.2.0`) and a second release,
+/// `v0.3.0`, serving the same package and component, to `server`.
+fn more_releases(server: &Server) {
+    let release = release();
+    server.body(
+        &format!("/api/repos/{REPO}/releases/latest"),
+        r#"{"tag_name":"v0.2.0"}"#,
+    );
+    server.body(
+        &format!("/api/repos/{REPO}/git/ref/tags/v0.3.0"),
+        format!(r#"{{"ref":"refs/tags/v0.3.0","object":{{"type":"commit","sha":"{COMMIT_V3}"}}}}"#),
+    );
+    for file in ["example.extension.json", "example.xsd"] {
+        server.body(
+            &format!("/raw/{REPO}/{COMMIT_V3}/namespaces/example/package/{file}"),
+            package_file(file),
+        );
+    }
+    server.body(
+        &format!("/dl/{REPO}/releases/download/v0.3.0/SHA256SUMS"),
+        format!("{}  {ASSET}\n", sha256(&release.example)),
+    );
+    server.route(
+        &format!("/dl/{REPO}/releases/download/v0.3.0/{ASSET}"),
+        Route::Redirect(format!("{}/assets/example-v3", server.origin)),
+    );
+    server.body("/assets/example-v3", release.example.clone());
+}
+
+/// A document of the repository namespace bound as `uri` (tagless or
+/// pinned): the same element either way.
+fn document_binding(directory: &Path, name: &str, uri: &str) -> PathBuf {
+    let path = directory.join(name);
+    fs::write(
+        &path,
+        format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:repo="{uri}" version="1.0" datamodel="ecmascript" initial="ask">
+  <state id="ask">
+    <onentry><repo:raise event="asked"/></onentry>
+    <transition event="asked" target="answered"/>
+  </state>
+  <final id="answered"/>
+</scxml>"#
+        ),
+    )
+    .expect("the document");
+    path
+}
+
+/// A release whose manifest names the tagless URI serves a document that
+/// binds it tagless (the latest release) and one that pins it: the tag is
+/// resolution input, never part of the namespace, so both validate against
+/// the same schema.
+#[test]
+fn a_release_naming_its_tagless_uri_serves_tagless_and_pinned_documents() {
+    let server = github();
+    more_releases(&server);
+    let directory = scratch("tagless-and-pinned");
+    let flags = repository(&server, &directory.join("cache"));
+    for (name, uri) in [
+        ("tagless.scx", PACKAGE_URI),
+        ("pinned.scx", REPOSITORY_URI),
+        ("pinned-v3.scx", &format!("{PACKAGE_URI}@v0.3.0")),
+    ] {
+        let document = document_binding(&directory, name, uri);
+        let valid = validate(&document.display().to_string(), &flags);
+        assert!(valid.status.success(), "{name}: {}", text(&valid.stderr));
+    }
+    let requests = server.requests();
+    assert!(
+        requests.contains(&format!("GET /api/repos/{REPO}/releases/latest HTTP/1.1")),
+        "the tagless document asked for the latest release: {requests:?}"
+    );
+    assert!(
+        requests.contains(&format!(
+            "GET /raw/{REPO}/{COMMIT_V3}/namespaces/example/package/example.extension.json HTTP/1.1"
+        )),
+        "the pinned v0.3.0 document resolved its own release: {requests:?}"
+    );
+}
+
+/// A root that pins `@v0.2.0` and a tagless `<invoke src>` child: one
+/// package, resolved once, the root's release; the tagless child shares it
+/// (no latest-release lookup). A child that pins another release
+/// (`@v0.3.0`) gets that release for its own sessions, alongside the root's,
+/// and the consent listing names it with its document.
+#[test]
+fn a_tagless_child_shares_the_roots_pin_and_a_pinned_child_binds_its_own() {
+    for (child_uri, second_release) in [
+        (PACKAGE_URI.to_owned(), false),
+        (format!("{PACKAGE_URI}@v0.3.0"), true),
+    ] {
+        let server = github();
+        more_releases(&server);
+        let directory = scratch(if second_release {
+            "child-v3"
+        } else {
+            "child-tagless"
+        });
+        document_binding(&directory, "child.scx", &child_uri);
+        let document = directory.join("parent.scx");
+        fs::write(
+            &document,
+            format!(
+                r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:repo="{REPOSITORY_URI}" version="1.0" datamodel="ecmascript" initial="p"><state id="p"><onentry><repo:raise event="asked"/></onentry><invoke type="scxml" src="child.scx"/><transition event="done.invoke" target="done"/></state><final id="done"/></scxml>"#
+            ),
+        )
+        .expect("the document");
+        let output = directory.join("final.snapshot.json");
+        let run = snapshot_run(
+            &document.display().to_string(),
+            &output,
+            &repository(&server, &directory.join("cache")),
+        );
+        assert_bound_then_refused(&run, &output);
+        let requests = server.requests();
+        let stderr = text(&run.stderr);
+        assert!(
+            !requests.contains(&format!("GET /api/repos/{REPO}/releases/latest HTTP/1.1")),
+            "a tagless use shares the root's pin: {requests:?}"
+        );
+        assert!(
+            requests.contains(&format!("GET {} HTTP/1.1", download_path("SHA256SUMS"))),
+            "the root's release is bound before the session: {requests:?}"
+        );
+        let child_listing = "= for: the sessions of <invoke src> document";
+        if second_release {
+            assert!(
+                requests.contains(&"GET /assets/example-v3 HTTP/1.1".to_owned()),
+                "the child's own release is bound before the session: {requests:?}"
+            );
+            assert!(stderr.contains("release v0.3.0"), "{stderr}");
+            assert!(stderr.contains(child_listing), "{stderr}");
+        } else {
+            assert!(
+                !requests.iter().any(|request| request.contains("v0.3.0")),
+                "{requests:?}"
+            );
+            assert!(!stderr.contains(child_listing), "{stderr}");
+        }
+        assert_eq!(
+            stderr.matches(&format!("element `{PACKAGE_URI}`")).count(),
+            if second_release { 2 } else { 1 },
+            "{stderr}"
+        );
+    }
+}
+
+/// A malformed pin, and one document pinning two releases of a package,
+/// fail closed before anything is fetched.
+#[test]
+fn malformed_and_conflicting_pins_fail_closed() {
+    let server = github();
+    let directory = scratch("bad-pins");
+    let flags = repository(&server, &directory.join("cache"));
+    for (name, declarations, expected) in [
+        (
+            "empty-tag",
+            format!(r#"xmlns:repo="{PACKAGE_URI}@""#),
+            "malformed tag",
+        ),
+        (
+            "slash-after-tag",
+            format!(r#"xmlns:repo="{PACKAGE_URI}@v0.2.0/x""#),
+            "malformed tag",
+        ),
+        (
+            "two-releases",
+            format!(r#"xmlns:repo="{REPOSITORY_URI}" xmlns:other="{PACKAGE_URI}@v0.3.0""#),
+            "is pinned to both `@v0.2.0` and `@v0.3.0`",
+        ),
+    ] {
+        let path = directory.join(format!("{name}.scx"));
+        fs::write(
+            &path,
+            format!(
+                r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" {declarations} version="1.0" initial="s"><state id="s"/></scxml>"#
+            ),
+        )
+        .expect("the document");
+        let rejected = validate(&path.display().to_string(), &flags);
+        assert!(!rejected.status.success(), "{name}");
+        assert!(
+            text(&rejected.stderr).contains(expected),
+            "{name}: {}",
+            text(&rejected.stderr)
+        );
+    }
+    assert!(server.requests().is_empty(), "nothing is fetched");
 }

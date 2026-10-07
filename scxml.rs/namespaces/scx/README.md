@@ -15,10 +15,11 @@ extension component (`scx.virtualized.wasm`, authenticated by the SHA-256
 the release manifest lists for it, checked when `scx` is built). A document
 that binds the namespace uses it with no flag and no fetch, unless an
 `--extension-package` binds the same URI. Because it is versioned with the
-toolchain, its URI carries no release tag, like the
-[`env`](../env/README.md) and [`event`](../event/README.md) vocabularies;
-`scripts/check-namespace-versions.sh` and
-`scripts/set-namespace-version.sh` skip it.
+toolchain, a document never pins it with a release tag, like the
+[`env`](../env/README.md) and [`event`](../event/README.md) vocabularies
+(a pinned `scx` fails closed). Its manifest names its tagless URI, as every
+package's does, and `scripts/check-namespace-versions.sh` checks it with
+the release.
 
 | Path | What |
 |---|---|

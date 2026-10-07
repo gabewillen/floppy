@@ -12,8 +12,8 @@ use scxml_telemetry::{ErrorCategory, Module, Operation, SignalEvent};
 use super::loopback::{ChildCompile, LoopbackTransport, Routes, http_value};
 use super::run::{Constructed, DeferredRequest, MachineHandle, RunShared, SessionSpec, fatal};
 use super::{
-    DocumentKind as EmbedderDocumentKind, HostCore, LogEntry, RunFailure, SessionEmbedder,
-    SessionOutput, TraceObservation,
+    DocumentBindings, DocumentKind as EmbedderDocumentKind, HostCore, LogEntry, RunFailure,
+    SessionEmbedder, SessionOutput, TraceObservation,
 };
 use crate::basichttp_types::{
     BaggagePolicy as HttpBaggagePolicy, ErrorCode as HttpErrorCode, OutboundSend, Param,
@@ -67,6 +67,16 @@ pub(crate) struct SessionLinks {
     execution_context: Context,
     /// The session clock's current time, shared with the data model.
     time: crate::data_model::SessionTime,
+    /// The bindings of the `<invoke src>` document this session runs (or
+    /// that an inline `<content>` ancestor's runs); `None` for the host's.
+    bindings: Option<Rc<DocumentBindings>>,
+    /// The bindings of the `<invoke src>` document this session loaded last
+    /// (empty for one with none of its own), for the child it compiles
+    /// next.
+    loaded_bindings: Option<Rc<DocumentBindings>>,
+    /// The bindings of the child this session compiled last, for the
+    /// session it starts next.
+    compiled_bindings: Option<Rc<DocumentBindings>>,
 }
 
 pub(crate) fn invalid_input(detail: &'static str) -> ComponentError {
@@ -81,6 +91,9 @@ pub(crate) struct SessionPlace {
     pub(crate) key: SessionKey,
     /// The invoking session, for an invoked session.
     pub(crate) parent: Option<ParentLink>,
+    /// The bindings of the document the session runs; `None` for the
+    /// host's.
+    pub(crate) bindings: Option<Rc<DocumentBindings>>,
 }
 
 impl SessionLinks {
@@ -97,6 +110,7 @@ impl SessionLinks {
             session_id,
             key,
             parent,
+            bindings,
         } = place;
         Self {
             core,
@@ -109,6 +123,9 @@ impl SessionLinks {
             basichttp: None,
             execution_context,
             time,
+            bindings,
+            loaded_bindings: None,
+            compiled_bindings: None,
         }
     }
 
@@ -333,6 +350,10 @@ impl SessionLinks {
     /// the media type its source indicated, when that is visible ASCII. The
     /// host bounds neither; the machine applies the WIT `loaded-document`
     /// bounds itself.
+    ///
+    /// An `<invoke src>` document's own bindings are verified here and kept
+    /// for the child this session compiles and starts next; one that does
+    /// not verify fails the run.
     pub(crate) fn load_document(
         &mut self,
         kind: DocumentKind,
@@ -347,14 +368,23 @@ impl SessionLinks {
                 ErrorCode::Unavailable,
                 "document is not resolvable",
             )),
-            Some(document) => Ok(LoadedDocument {
-                text: document.text,
-                media_type: document.media_type.filter(|media_type| {
-                    media_type
-                        .bytes()
-                        .all(|byte| byte == b' ' || byte.is_ascii_graphic())
-                }),
-            }),
+            Some(document) => {
+                if kind == EmbedderDocumentKind::Invocation {
+                    let bindings = self
+                        .core
+                        .document_bindings(document.extensions, document.services)
+                        .map_err(|error| fatal(&self.shared, error.into()))?;
+                    self.loaded_bindings = Some(bindings);
+                }
+                Ok(LoadedDocument {
+                    text: document.text,
+                    media_type: document.media_type.filter(|media_type| {
+                        media_type
+                            .bytes()
+                            .all(|byte| byte == b' ' || byte.is_ascii_graphic())
+                    }),
+                })
+            }
         }
     }
 
@@ -592,10 +622,12 @@ impl SessionLinks {
     ) -> Result<(), ComponentError> {
         let span =
             scxml_telemetry::observe(Module::HostWasmtime, Operation::HostWasmtimeExtensionLoad);
-        match self
-            .core
-            .load_extensions(namespaces, namespace_uris, &self.execution_context)
-        {
+        match self.core.load_extensions(
+            namespaces,
+            namespace_uris,
+            &self.execution_context,
+            self.bindings.as_deref(),
+        ) {
             Ok(()) => {
                 span.event(SignalEvent::ArtifactAccepted);
                 Ok(())
@@ -659,7 +691,10 @@ impl SessionLinks {
                 "invoke id is already live",
             ));
         }
-        if !self.core.binds_service(&request.type_uri) {
+        if !self
+            .core
+            .binds_service(&request.type_uri, self.bindings.as_deref())
+        {
             return Err(component_error(
                 ErrorCode::Unavailable,
                 "no service component is bound to this invoke type",
@@ -681,6 +716,7 @@ impl SessionLinks {
             child,
             request: Box::new(request),
             execution_context: self.execution_context.clone(),
+            bindings: self.bindings.clone(),
         });
         if deferred.is_err() {
             self.shared.invoked_sessions.borrow_mut().remove(child);
@@ -689,7 +725,10 @@ impl SessionLinks {
         deferred
     }
 
-    /// Compiles one child document through the compiler component.
+    /// Compiles one child document through the compiler component, with
+    /// the packages its sessions bind: an `<invoke src>` document's own
+    /// bindings (the one this session loaded last), else this session's
+    /// for inline `<content>`.
     pub(crate) fn compile_invocation(
         &mut self,
         source_name: String,
@@ -697,8 +736,13 @@ impl SessionLinks {
     ) -> Result<Vec<u8>, ComponentError> {
         let span =
             scxml_telemetry::observe(Module::HostWasmtime, Operation::HostWasmtimeInvokeCompile);
+        let bindings = self
+            .loaded_bindings
+            .take()
+            .or_else(|| self.bindings.clone());
+        self.compiled_bindings.clone_from(&bindings);
         let core = Rc::clone(&self.core);
-        let packages = core.extension_packages();
+        let packages = core.extension_packages(bindings.as_deref());
         let compiled = self.shared.with_compiler(&core, |compiler| {
             compiler.compile(source_name, source, packages.iter())
         });
@@ -788,6 +832,7 @@ impl SessionLinks {
             data_model: request.data_model,
             machine_ir: request.machine_ir,
             clock_now,
+            bindings: self.compiled_bindings.take(),
         };
         let constructed = MachineHandle::construct(
             &self.core,

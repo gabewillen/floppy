@@ -767,3 +767,111 @@ fn bindings_are_checked_before_and_at_instantiation() {
         Err(HostError::Artifact(ArtifactError::ArtifactDigestMismatch))
     ));
 }
+
+/// The `<invoke src>` documents of one run: `child.scx`, carrying `bindings`
+/// of its own when given (the release it pins).
+struct ChildDocument {
+    text: String,
+    bindings: Option<ExtensionComponents>,
+}
+
+impl SessionEmbedder for ChildDocument {
+    fn document(&self, kind: DocumentKind, uri: &str) -> Option<EmbeddedDocument> {
+        (kind == DocumentKind::Invocation && uri == "child.scx").then(|| EmbeddedDocument {
+            text: self.text.clone(),
+            media_type: None,
+            extensions: self.bindings.clone(),
+            services: None,
+        })
+    }
+
+    fn scripts(&self) -> MachineScripts {
+        MachineScripts::none()
+    }
+}
+
+/// An `<invoke src>` document's own bindings serve its sessions (and the
+/// inline `<content>` sessions below them), alongside the host's, which
+/// serve every other session: here the host's release of the example
+/// namespace declares no `env` slot and the child's release declares `url`,
+/// so the same element is refused in the parent and runs in the child (and
+/// in the child's inline `<content>` session), and the child does not even
+/// compile when it carries no bindings of its own.
+#[test]
+fn an_invoke_src_document_binds_its_own_release_for_its_sessions() {
+    let mut host_release = package(EXAMPLE_URI);
+    host_release.env_slots = Vec::new();
+    let host = host_with(
+        &WasmtimeHostConfig::default(),
+        &TelemetryProviders::new(),
+        ExtensionComponents::new()
+            .bind(host_release, component(ArtifactKind::ExtensionExample))
+            .expect("the host's release binds"),
+    )
+    .expect("the verified components link");
+    let element = r#"<example:raise event="ran" env:url="ADDRESS"/>"#;
+    let env = "https://github.com/stateforward/scxml.rs/namespaces/env";
+    let child = |grandchild: &str| {
+        let ran = if grandchild.is_empty() {
+            r#"<transition target="ok"/>"#.to_owned()
+        } else {
+            format!(
+                r#"{grandchild}<transition event="done.invoke" target="ok"><assign location="result" expr="'ran, then ' + _event.data"/></transition>"#
+            )
+        };
+        format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="{EXAMPLE_URI}" xmlns:env="{env}" version="1.0" datamodel="ecmascript" initial="c"><datamodel><data id="result" expr="'ran'"/></datamodel><state id="c"><onentry>{element}</onentry><transition event="ran" target="ran"/><transition event="error.execution" target="refused"/></state><state id="ran">{ran}</state><final id="ok"><donedata><content expr="result"/></donedata></final><final id="refused"><donedata><content expr="'refused'"/></donedata></final></scxml>"#
+        )
+    };
+    let parent = format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="{EXAMPLE_URI}" xmlns:env="{env}" version="1.0" datamodel="ecmascript" initial="p"><state id="p"><onentry>{element}</onentry><transition event="ran" target="q"><log label="parent" expr="'ran'"/></transition><transition event="error.execution" target="q"><log label="parent" expr="'refused'"/></transition></state><state id="q"><invoke type="scxml" src="child.scx"/><transition event="done.invoke" target="done"><log label="child" expr="_event.data"/></transition><transition event="error.execution" target="done"><log label="child" expr="'failed'"/></transition></state><final id="done"/></scxml>"#
+    );
+    let run = |child_text: String, bindings: Option<ExtensionComponents>| {
+        let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
+            SOURCE,
+            "parent.scx",
+            parent.as_str(),
+        ))
+        .expect("the parent parses");
+        let ir = scxml_compiler_core::lower(&document).expect("the parent lowers");
+        let bytes = ir.to_json().expect("the parent's IR encodes");
+        let outcome = host
+            .run(&SessionRun {
+                machine_ir: &bytes,
+                data_model: ir.data_model.as_deref(),
+                session_id: "root",
+                events: &[],
+                external_client: None,
+                embedder: Rc::new(ChildDocument {
+                    text: child_text,
+                    bindings,
+                }),
+                max_commands: 1_024,
+                snapshots: SnapshotRequest::none(),
+            })
+            .expect("the run completes");
+        assert_eq!(outcome.configuration, ["done"]);
+        texts(&outcome)
+    };
+    let with_slots = || {
+        let mut release = package(EXAMPLE_URI);
+        release.package_version = "0.3.0".into();
+        ExtensionComponents::new()
+            .bind(release, component(ArtifactKind::ExtensionExample))
+            .expect("the child's release binds")
+    };
+    // The host's release serves both documents: the child, compiled against
+    // it, is rejected.
+    assert_eq!(run(child(""), None), ["refused", "failed"]);
+    // The child's own release serves the child; the parent keeps the host's.
+    assert_eq!(run(child(""), Some(with_slots())), ["refused", "ran"]);
+    // An inline `<content>` session below the child inherits the child's
+    // release.
+    let grandchild = format!(
+        r#"<invoke type="scxml"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="{EXAMPLE_URI}" xmlns:env="{env}" version="1.0" datamodel="ecmascript" initial="g"><state id="g"><onentry>{element}</onentry><transition event="ran" target="f"/><transition event="error.execution" target="r"/></state><final id="f"><donedata><content expr="'ran'"/></donedata></final><final id="r"><donedata><content expr="'refused'"/></donedata></final></scxml></content></invoke>"#
+    );
+    assert_eq!(
+        run(child(&grandchild), Some(with_slots())),
+        ["refused", "ran, then ran"]
+    );
+}

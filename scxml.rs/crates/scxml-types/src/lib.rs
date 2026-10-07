@@ -98,6 +98,81 @@ pub const ENV_NAMESPACE_URI: &str = "https://github.com/stateforward/scxml.rs/na
 /// schema, or component is bound to it, and it is never fetched (it is not a
 /// repository namespace URI: it names no release tag).
 pub const EVENT_NAMESPACE_URI: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
+/// Splits one trailing `@<tag>` off a repository package URI, the one place
+/// a namespace or `<invoke type>` URI is ever changed: documents are read
+/// through it once, when they are parsed, and everything after that (the
+/// validator, the compiler, the Machine IR, the engine, the data models,
+/// and the hosts) sees only the tagless URI, exactly. The tag pins the
+/// release the CLI's resolver binds; it is never part of the namespace.
+///
+/// A repository package URI is exactly
+/// `https://github.com/<owner>/<repo>/namespaces/<name>` or
+/// `https://github.com/<owner>/<repo>/services/<name>`, each segment
+/// `[A-Za-z0-9._-]` (not `.` or `..`, at most 100 bytes, so never `@`), and
+/// a tag `[A-Za-z0-9._+-]`, starting with an alphanumeric, without `..`, at
+/// most 128 bytes (so never `/` or `@`).
+///
+/// Returns `Some((uri, None))` for every other URI, byte for byte (an `@`
+/// anywhere else, `https://example.org/a@b/ns` or a `urn:` with `@`, is
+/// not a pin), and for a tagless repository package URI;
+/// `Some((tagless, Some(tag)))` for a pinned one; and `None` for a
+/// malformed pin: a repository package URI followed by `@` and anything
+/// that is not one tag (empty, or with `/` or another `@` after it).
+#[must_use]
+pub fn strip_tag(uri: &str) -> Option<(&str, Option<&str>)> {
+    let Some((tagless, tag)) = uri.split_once('@') else {
+        return Some((uri, None));
+    };
+    if !is_repository_package_uri(tagless) {
+        return Some((uri, None));
+    }
+    is_release_tag(tag).then_some((tagless, Some(tag)))
+}
+
+/// Whether `uri` is exactly a tagless repository package URI (see
+/// [`strip_tag`]).
+fn is_repository_package_uri(uri: &str) -> bool {
+    let Some(path) = uri.strip_prefix("https://github.com/") else {
+        return false;
+    };
+    let mut segments = path.split('/');
+    let mut next = || {
+        segments
+            .next()
+            .filter(|segment| is_package_segment(segment))
+    };
+    next().is_some()
+        && next().is_some()
+        && next().is_some_and(|folder| folder == "namespaces" || folder == "services")
+        && next().is_some()
+        && next().is_none()
+}
+
+/// `[A-Za-z0-9._-]`, not `.` or `..`, at most 100 bytes.
+fn is_package_segment(segment: &str) -> bool {
+    !segment.is_empty()
+        && segment.len() <= 100
+        && segment != "."
+        && segment != ".."
+        && segment
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+/// `[A-Za-z0-9._+-]`, starting with an alphanumeric, without `..`, at most
+/// 128 bytes.
+fn is_release_tag(tag: &str) -> bool {
+    tag.len() <= 128
+        && tag
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric())
+        && tag
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'+'))
+        && !tag.contains("..")
+}
+
 /// Maximum canonical bytes retained for one delayed send request.
 pub const MAX_DELAYED_SEND_BYTES: usize = 65_536;
 /// Maximum entries in one `<send>` message field list
@@ -1986,6 +2061,55 @@ impl std::error::Error for ExecutableContentExtensionError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strip_tag_splits_only_a_trailing_tag_of_a_repository_package_uri() {
+        let namespace = "https://github.com/o/r/namespaces/n";
+        let service = "https://github.com/o/r/services/s";
+        assert_eq!(
+            strip_tag("https://github.com/o/r/namespaces/n@v1.2.0"),
+            Some((namespace, Some("v1.2.0")))
+        );
+        assert_eq!(
+            strip_tag("https://github.com/o/r/services/s@v1+build"),
+            Some((service, Some("v1+build")))
+        );
+        assert_eq!(strip_tag(namespace), Some((namespace, None)));
+        assert_eq!(strip_tag(service), Some((service, None)));
+        // Built-in vocabularies are tagless and pass through exactly.
+        for built_in in [ENV_NAMESPACE_URI, EVENT_NAMESPACE_URI] {
+            assert_eq!(strip_tag(built_in), Some((built_in, None)));
+        }
+        // An `@` that is not a pin of a repository package URI is never
+        // touched: the URI passes through byte for byte.
+        for exact in [
+            "https://example.org/a@b/ns",
+            "urn:example:a@b",
+            "mailto:someone@example.org",
+            "https://github.com/o@x/r/namespaces/n",
+            "https://github.com/o/r@x/namespaces/n",
+            "https://github.com/o/r/other/n@v1",
+            "https://github.com/o/r/namespaces/n/extra@v1",
+            "http://github.com/o/r/namespaces/n@v1",
+            "https://github.com/o/r/Namespaces/n@v1",
+            "http://www.w3.org/2005/07/scxml",
+        ] {
+            assert_eq!(strip_tag(exact), Some((exact, None)), "{exact}");
+        }
+        // A malformed pin fails closed.
+        for malformed in [
+            "https://github.com/o/r/namespaces/n@",
+            "https://github.com/o/r/namespaces/n@v1/extra",
+            "https://github.com/o/r/namespaces/n@v1@v2",
+            "https://github.com/o/r/namespaces/n@-v1",
+            "https://github.com/o/r/namespaces/n@v1..2",
+            "https://github.com/o/r/services/s@/",
+        ] {
+            assert_eq!(strip_tag(malformed), None, "{malformed}");
+        }
+        let long_tag = format!("{namespace}@{}", "a".repeat(129));
+        assert_eq!(strip_tag(&long_tag), None);
+    }
 
     #[test]
     fn service_type_uris_are_exact_absolute_uris_that_are_not_scxml() {

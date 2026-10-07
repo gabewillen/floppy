@@ -14,7 +14,8 @@
 //!   manifest to the compiler, which requires one for every used extension
 //!   namespace.
 //! * A namespace the document uses whose URI is a repository namespace
-//!   (`https://github.com/<owner>/<repo>/namespaces/<name>@<tag>`, see
+//!   (`https://github.com/<owner>/<repo>/namespaces/<name>`, pinned to a
+//!   release with `@<tag>` where the document declares it, see
 //!   [`crate::repository`]) and that no flag binds is resolved from the
 //!   extension cache or its repository: its package for validation and
 //!   compilation, its extension component when a session starts.
@@ -78,7 +79,10 @@ pub(crate) enum PackageOrigin {
     /// A repository namespace (the extension cache or its repository), at the
     /// commit its release tag pinned.
     Repository {
-        /// The release tag (the URI's suffix).
+        /// The URI the resolver resolved: the tagless URI, or it with the
+        /// document's `@<tag>`.
+        uri: String,
+        /// The release tag (the pin, or the release a tagless URI resolved).
         tag: String,
         /// The commit the tag named when the cache pinned it.
         commit: String,
@@ -129,6 +133,22 @@ impl Package {
             manifest,
             schema,
         })
+    }
+
+    /// The URI the resolver resolved for a repository namespace (its tagless
+    /// URI, or it with the document's `@<tag>`); `None` otherwise.
+    #[cfg_attr(
+        not(feature = "wasmtime"),
+        allow(
+            dead_code,
+            reason = "only a run binds repository components, which needs the wasmtime feature"
+        )
+    )]
+    pub(crate) fn resolved_uri(&self) -> Option<&str> {
+        match &self.origin {
+            PackageOrigin::Repository { uri, .. } => Some(uri),
+            PackageOrigin::Manifest(_) | PackageOrigin::Embedded => None,
+        }
     }
 
     /// The package as messages name it: the manifest path, or the
@@ -232,8 +252,13 @@ pub(crate) fn load(
 pub(crate) struct Packages {
     /// `--extension-package` packages.
     pub(crate) explicit: Vec<Package>,
-    /// Repository namespaces the document uses.
+    /// Repository namespaces the document uses: the run's resolution of
+    /// each ([`crate::repository::plan`]).
     pub(crate) repository: Vec<Package>,
+    /// The `<invoke src>` documents that pin a release other than the
+    /// run's, each with the packages its sessions bind in place of the
+    /// run's.
+    pub(crate) documents: Vec<(url::Url, Vec<Package>)>,
     /// The repository store, opened only when the document uses one.
     #[cfg_attr(
         not(feature = "wasmtime"),
@@ -250,30 +275,44 @@ pub(crate) struct Packages {
 impl Packages {
     /// Loads the `--extension-package` manifests and resolves every
     /// repository namespace `source` or one of its `children` (the
-    /// `<invoke src>` documents a run loads) uses that neither they nor
-    /// `--schema` bind, each once.
+    /// `<invoke src>` documents a run loads, with their URLs) uses that
+    /// neither they nor `--schema` bind: each package once for the run (the
+    /// root's pin, else the first document's that uses it), and once more
+    /// for each child document that pins another release.
     ///
     /// # Errors
     ///
-    /// As [`load`], an unopenable extension cache, or a repository namespace
-    /// that cannot be resolved.
+    /// As [`load`], a malformed or conflicting pin
+    /// ([`crate::repository::document_pins`]), an unopenable extension
+    /// cache, or a repository namespace that cannot be resolved.
     pub(crate) fn resolve(
         source: &[u8],
-        children: &[Vec<u8>],
+        children: &[(url::Url, Vec<u8>)],
         manifests: &[PathBuf],
         schema_flags: &[(String, PathBuf)],
         repository: &RepositoryFlags,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut explicit = load(manifests, schema_flags)?;
-        let mut used = crate::repository::used_namespaces(source);
-        for child in children {
-            used.extend(crate::repository::used_namespaces(child));
+        let mut documents_uses = Vec::with_capacity(children.len().saturating_add(1));
+        for (name, bytes) in std::iter::once(("the document".to_owned(), source)).chain(
+            children
+                .iter()
+                .map(|(url, bytes)| (format!("`{url}`"), bytes.as_slice())),
+        ) {
+            let pins = crate::repository::document_pins(bytes, &name)?;
+            let all = crate::repository::used_namespaces(bytes);
+            let used: BTreeMap<String, Option<String>> = all
+                .iter()
+                .filter(|uri| RepositoryUri::parse(uri).is_some())
+                .map(|uri| (uri.clone(), pins.namespaces.get(uri).cloned().flatten()))
+                .collect();
+            documents_uses.push((used, all));
         }
-        used.sort();
-        used.dedup();
         // The scx namespace ships with scx: a document that uses it binds the
         // embedded package unless a flag binds the URI.
-        if used.iter().any(|uri| uri == SCX_NAMESPACE_URI)
+        if documents_uses
+            .iter()
+            .any(|(_, all)| all.iter().any(|uri| uri == SCX_NAMESPACE_URI))
             && !explicit
                 .iter()
                 .any(|package| package.manifest.namespace_uri == SCX_NAMESPACE_URI)
@@ -286,22 +325,50 @@ impl Packages {
             .map(|package| package.manifest.namespace_uri.clone())
             .chain(schema_flags.iter().map(|(uri, _)| uri.clone()))
             .collect();
-        let wanted = used
-            .iter()
-            .any(|uri| !bound.contains(uri) && RepositoryUri::parse(uri).is_some());
-        let (store, repository_packages) = if wanted {
-            let store = repository.open()?;
-            let packages = crate::repository::resolve_document_packages(&store, &used, &bound)?;
-            (Some(store), packages)
+        let uses: Vec<BTreeMap<String, Option<String>>> =
+            documents_uses.into_iter().map(|(used, _)| used).collect();
+        let plan = crate::repository::plan(&uses, &bound);
+        let (store, repository_packages, documents) = if plan.run.is_empty() {
+            (None, Vec::new(), Vec::new())
         } else {
-            (None, Vec::new())
+            let store = repository.open()?;
+            let mut packages = Vec::with_capacity(plan.run.len());
+            for uri in plan.run.values() {
+                packages.push(store.resolve_package(uri)?);
+            }
+            let mut documents: Vec<(url::Url, Vec<Package>)> = Vec::new();
+            for (index, tagless, pinned) in &plan.pinned {
+                let run_tag = packages.iter().find_map(|package| match &package.origin {
+                    PackageOrigin::Repository { tag, .. }
+                        if package.manifest.namespace_uri == *tagless =>
+                    {
+                        Some(tag.as_str())
+                    }
+                    _ => None,
+                });
+                // A pin naming the release the run already resolved shares it.
+                if run_tag == scxml_types::strip_tag(pinned).and_then(|(_, tag)| tag) {
+                    continue;
+                }
+                let Some((url, _)) = index.checked_sub(1).and_then(|child| children.get(child))
+                else {
+                    continue;
+                };
+                let package = store.resolve_package(pinned)?;
+                match documents.iter_mut().find(|(bound, _)| bound == url) {
+                    Some((_, packages)) => packages.push(package),
+                    None => documents.push((url.clone(), vec![package])),
+                }
+            }
+            (Some(store), packages, documents)
         };
         Ok(Self {
             explicit,
             repository: repository_packages,
+            documents,
             store,
             slot_uses: std::iter::once(source)
-                .chain(children.iter().map(Vec::as_slice))
+                .chain(children.iter().map(|(_, bytes)| bytes.as_slice()))
                 .flat_map(slot_uses)
                 .collect(),
         })
@@ -336,8 +403,18 @@ impl Packages {
     /// variables they name and, when `granted` is given, whether the run
     /// holds a value for each granted to that namespace). Never a value.
     pub(crate) fn summary(&self, granted: Option<&[HeldValue]>) -> Vec<String> {
+        let documents = self
+            .documents
+            .iter()
+            .flat_map(|(url, packages)| packages.iter().map(move |package| (package, Some(url))));
         let mut lines = Vec::new();
-        for package in self.explicit.iter().chain(&self.repository) {
+        for (package, document) in self
+            .explicit
+            .iter()
+            .chain(&self.repository)
+            .map(|package| (package, None))
+            .chain(documents)
+        {
             let manifest = &package.manifest;
             let uri = &manifest.namespace_uri;
             let version = match &package.origin {
@@ -346,7 +423,7 @@ impl Packages {
                     manifest.package_version,
                     path.display()
                 ),
-                PackageOrigin::Repository { tag, commit } => format!(
+                PackageOrigin::Repository { tag, commit, .. } => format!(
                     "release {tag} (commit {commit}), package {}",
                     manifest.package_version
                 ),
@@ -378,8 +455,11 @@ impl Packages {
                 .collect();
             slots.sort();
             slots.dedup();
+            let scope = document.map_or_else(String::new, |url| {
+                format!("\n  = for: the sessions of <invoke src> document `{url}`")
+            });
             lines.push(format!(
-                "element `{uri}`\n  = version: {version}\n  = outbound HTTP: {origins}\n  = env slots: {}",
+                "element `{uri}`\n  = version: {version}\n  = outbound HTTP: {origins}\n  = env slots: {}{scope}",
                 if slots.is_empty() {
                     "none".to_owned()
                 } else {
@@ -1171,6 +1251,7 @@ mod tests {
         let packages = Packages {
             repository: vec![Package {
                 origin: PackageOrigin::Repository {
+                    uri: "urn:x".into(),
                     tag: "v1".into(),
                     commit: "c".repeat(40),
                 },

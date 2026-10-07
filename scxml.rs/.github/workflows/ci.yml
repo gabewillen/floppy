@@ -277,9 +277,9 @@ jobs:
       # several upstream commits report version 0.2.0, so pin the revision.
       - name: Install the pinned wasi-virt revision
         run: cargo install --locked --git https://github.com/bytecodealliance/WASI-Virt --rev 448f6df8f688cee5d6995e96b1ffc31f9bf00742 wasi-virt
-      # A repository namespace's URI carries its release tag, so the
-      # tagged commit's package manifests must name exactly this tag.
-      - name: Check that every repository namespace names this tag
+      # Every namespace package names its tagless URI and this tag's
+      # package version.
+      - name: Check that every namespace package is this release
         run: sh scripts/check-namespace-versions.sh "$GITHUB_REF_NAME"
       - name: Build and verify every release component
         run: sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE"

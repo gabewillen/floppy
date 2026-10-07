@@ -1200,9 +1200,11 @@ fn parse_start(
         let value = entities.normalize_declared(&lexical_name, &lexical, value);
 
         if lexical == "xmlns" || lexical.starts_with("xmlns:") {
+            let (uri, tag) = split_tag(value);
             namespaces.push(NamespaceDeclaration {
                 prefix: lexical.strip_prefix("xmlns:").map(str::to_owned),
-                uri: value,
+                uri,
+                tag,
                 span,
                 value_span,
             });
@@ -1231,9 +1233,11 @@ fn parse_start(
                 // `seen` holds every name the tag specifies, `xmlns`
                 // declarations included.
                 if !seen.contains_key(default.name.as_bytes()) {
+                    let (uri, tag) = split_tag(default.value.to_owned());
                     namespaces.push(NamespaceDeclaration {
                         prefix: prefix.map(str::to_owned),
-                        uri: default.value.to_owned(),
+                        uri,
+                        tag,
                         span: default.span,
                         value_span: default.span,
                     });
@@ -1257,6 +1261,7 @@ fn parse_start(
     let element_prefix = lexical_name.split_once(':').map(|(prefix, _)| prefix);
     let namespace_uri = resolve_prefix(element_prefix, &namespaces, scopes, NameKind::Element)
         .map_err(|prefix| unbound_prefix(prefix, tag_span))?;
+    let invoke = namespace_uri.as_deref() == Some(SCXML_NAMESPACE) && local_name == "invoke";
     let mut attributes = Vec::with_capacity(specified.len());
     for (lexical, value, span, value_span) in specified {
         let (namespace, local) = match lexical.split_once(':') {
@@ -1267,10 +1272,16 @@ fn parse_start(
             ),
             None => (None, lexical.clone()),
         };
+        let (value, tag) = if invoke && namespace.is_none() && local == "type" {
+            split_tag(value)
+        } else {
+            (value, None)
+        };
         attributes.push(Attribute {
             lexical_name: lexical,
             name: ExpandedName::new(namespace, local),
             value,
+            tag,
             span,
             value_span,
         });
@@ -1289,6 +1300,22 @@ fn parse_start(
         attributes,
         children: Vec::new(),
     })
+}
+
+/// The SCXML namespace, whose `<invoke type>` is read through
+/// [`split_tag`].
+const SCXML_NAMESPACE: &str = "http://www.w3.org/2005/07/scxml";
+
+/// Reads one namespace declaration or `<invoke type>` value as the document
+/// is ingested: a repository package URI's trailing `@<tag>` is split off
+/// ([`scxml_types::strip_tag`]), once, so nothing after parsing sees it. A
+/// malformed pin is kept exactly as written, for the CLI's resolver to
+/// reject.
+fn split_tag(value: String) -> (String, Option<String>) {
+    match scxml_types::strip_tag(&value) {
+        Some((tagless, Some(tag))) => (tagless.to_owned(), Some(tag.to_owned())),
+        Some((_, None)) | None => (value, None),
+    }
 }
 
 /// The XML namespace name, bound to the `xml` prefix by definition.
@@ -2048,6 +2075,79 @@ mod tests {
         assert_eq!(
             item.attributes[0].name.namespace_uri.as_deref(),
             Some("urn:test:custom")
+        );
+    }
+
+    #[test]
+    fn ingestion_splits_a_repository_package_pin_and_nothing_else() {
+        let text = concat!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" "#,
+            r#"xmlns:x="https://github.com/o/r/namespaces/x@v1.0.0" "#,
+            r#"xmlns:y="https://example.org/a@b/ns" xmlns:z="urn:example:a@b" "#,
+            r#"xmlns:w="https://github.com/o/r/namespaces/w@v1/extra">"#,
+            r#"<state id="s"><invoke type="https://github.com/o/r/services/s@v2"/>"#,
+            r#"<invoke type="https://github.com/o/r/services/t"/>"#,
+            r#"<x:item type="https://github.com/o/r/services/s@v2" x:value="ok"/>"#,
+            r#"</state></scxml>"#,
+        );
+        let document = parse_xml(SourceText::new(SOURCE, "pins.scx", text))
+            .expect("the pin fixture must parse");
+        let declarations: Vec<(&str, Option<&str>)> = document
+            .root
+            .namespaces
+            .iter()
+            .map(|declaration| (declaration.uri.as_str(), declaration.tag.as_deref()))
+            .collect();
+        assert_eq!(
+            declarations,
+            [
+                ("http://www.w3.org/2005/07/scxml", None),
+                ("https://github.com/o/r/namespaces/x", Some("v1.0.0")),
+                ("https://example.org/a@b/ns", None),
+                ("urn:example:a@b", None),
+                // A malformed pin is kept as written for the resolver.
+                ("https://github.com/o/r/namespaces/w@v1/extra", None),
+            ]
+        );
+        // The value span still covers what the author wrote.
+        let pinned = &document.root.namespaces[1];
+        assert_eq!(
+            document.source.slice(pinned.value_span),
+            Some("https://github.com/o/r/namespaces/x@v1.0.0")
+        );
+        let Node::Element(state) = &document.root.children[0] else {
+            panic!("expected the state");
+        };
+        let elements: Vec<&Element> = state
+            .children
+            .iter()
+            .filter_map(|node| match node {
+                Node::Element(element) => Some(element),
+                Node::Text(_) => None,
+            })
+            .collect();
+        let invoke_type = elements[0].attribute("type").expect("invoke type");
+        assert_eq!(invoke_type.value, "https://github.com/o/r/services/s");
+        assert_eq!(invoke_type.tag.as_deref(), Some("v2"));
+        assert_eq!(
+            document.source.slice(invoke_type.value_span),
+            Some("https://github.com/o/r/services/s@v2")
+        );
+        let tagless = elements[1].attribute("type").expect("invoke type");
+        assert_eq!(tagless.value, "https://github.com/o/r/services/t");
+        assert_eq!(tagless.tag, None);
+        // Only an SCXML `<invoke type>` is read through the split.
+        let item = elements[2];
+        assert_eq!(
+            item.name.namespace_uri.as_deref(),
+            Some("https://github.com/o/r/namespaces/x")
+        );
+        let other = item.attribute("type").expect("type attribute");
+        assert_eq!(other.value, "https://github.com/o/r/services/s@v2");
+        assert_eq!(other.tag, None);
+        assert_eq!(
+            item.attributes[1].name.namespace_uri.as_deref(),
+            Some("https://github.com/o/r/namespaces/x")
         );
     }
 

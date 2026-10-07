@@ -39,10 +39,13 @@ hard cutover.
   under the Wasmtime host, with host-admitted outbound HTTP and read-only
   session snapshots. A document loads an element straight from a repository
   by naming it
-  (`https://github.com/<owner>/<repo>/namespaces/<name>[@<tag>]`: a release
-  tag, or the latest release): verified against the release's `SHA256SUMS`,
-  cached, pinned, resolved once per run, and bound before the session
-  starts. Elements receive the run's values only
+  (`https://github.com/<owner>/<repo>/namespaces/<name>`, the latest
+  release, or `...@<tag>` to pin one): verified against the release's
+  `SHA256SUMS`, cached, pinned, resolved once per run, and bound before the
+  session starts. The tag is never part of the namespace: it is split off
+  when the document is parsed (`scxml_types::strip_tag`), so release
+  manifests and schemas name the tagless URI and everything after the
+  parser sees it exactly. Elements receive the run's values only
   as references (`env:<slot>="NAME"`), and importing an element consents to
   the origins its manifest declares.
 - Both official W3C IRP corpora still pass every applicable case through
@@ -289,11 +292,23 @@ hard cutover.
   `unavailable`, and the browser host answers only through the page's
   `executeExtension` callback. New span `scxml.host-wasmtime.extension-load`.
 - Repository namespaces: a namespace URI of exactly
-  `https://github.com/<owner>/<repo>/namespaces/<name>[@<tag>]` names a package at
-  `namespaces/<name>/package/<name>.extension.json` in that repository:
-  `@<tag>` pins a release, and a tagless URI names the repository's latest
-  release (`releases/latest`), asked once per run; the `env`, `event`, and
-  `scx` vocabularies `scx` provides are matched first and never fetched. The
+  `https://github.com/<owner>/<repo>/namespaces/<name>` names a package at
+  `namespaces/<name>/package/<name>.extension.json` in that repository, at
+  the repository's latest release (`releases/latest`), asked once per run;
+  a document pins a release by writing `@<tag>` after it. The tag is split
+  off when the document is parsed (`scxml_types::strip_tag`,
+  `NamespaceDeclaration::tag`, `Attribute::tag` for a literal
+  `<invoke type>`) and read only by the resolver: release manifests and
+  schemas name the tagless URI (a manifest naming a pinned URI is refused),
+  and the validator (which validates such a document as its infoset),
+  compiler, IR, engine, data models, and hosts see only the tagless URI. A
+  malformed pin, one document pinning a package to two releases, and a
+  pinned built-in fail closed. The run binds the root's resolution of each
+  package, shared by every tagless use; an `<invoke src>` document that pins
+  another release binds it for its own sessions
+  (`EmbeddedDocument::extensions`, `EmbeddedDocument::services`). The
+  `env`, `event`, and `scx` vocabularies `scx` provides are matched first and
+  never fetched. The
   CLI (`crates/scxml-cli/src/repository.rs`) resolves every one the document,
   or a literal `<invoke src>` document it loads, uses that no flag binds: the
   tag to a commit through the GitHub API, the manifest and schema from that
@@ -328,8 +343,8 @@ hard cutover.
   the text it writes.
 - A `v*` tag publishes a GitHub release with every release component,
   `manifest.tsv`, and `SHA256SUMS` (CI job `release`, after every other job);
-  `scripts/set-namespace-version.sh` moves `namespaces/` to a tag and
-  `scripts/check-namespace-versions.sh` checks it.
+  `scripts/check-namespace-versions.sh` checks that every namespace package
+  names its tagless URI and the tag's package version.
 - `data-model-api` `event-data-field` (the automatic update of an empty
   `<finalize>`, SCXML 6.5.2) and `accepts-event-data` (an SCXML message
   whose data has no representation raises `error.communication` and is
@@ -503,13 +518,14 @@ hard cutover.
 
 - Every repository namespace lives in its own folder under the top-level
   `namespaces/` directory, and a repository namespace URI is exactly
-  `https://github.com/<owner>/<repo>/namespaces/<name>@<tag>`, and the
-  host's `env` vocabulary is
+  `https://github.com/<owner>/<repo>/namespaces/<name>` (pinned with
+  `@<tag>`), and the host's `env` vocabulary is
   `https://github.com/stateforward/scxml.rs/namespaces/env`. Any other
   repository path is an ordinary namespace URI the CLI never fetches. The
-  release scripts are `scripts/set-namespace-version.sh` and
-  `scripts/check-namespace-versions.sh`. Hard cutover from the folder used
-  during development; no alias remains.
+  release script is `scripts/check-namespace-versions.sh`
+  (`scripts/set-namespace-version.sh`, which rewrote URIs to a tag, is
+  deleted). Hard cutover from the folder used during development; no alias
+  remains.
 - Component artifacts are bounded by GitHub's per-file release-asset limit
   (each file in a release must be under 2 GiB), since components ship as
   release assets. `MAX_AUTHENTICATED_COMPONENT_BYTES` and

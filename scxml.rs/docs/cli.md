@@ -464,24 +464,29 @@ CLI loads it: no flag binds it.
   <weather:lookup env:token="WEATHER_TOKEN" location="forecast"/>
 ```
 
-The URI is exactly `https://github.com/<owner>/<repo>/namespaces/<name>[@<tag>]`, bound byte
-for byte: `@<tag>` pins that release, and a tagless URI names the repository's
-latest release (the `env`, `event`, and `scx` vocabularies `scx` provides are
-matched first and never fetched). `validate` and `compile` fetch the
+The URI is exactly `https://github.com/<owner>/<repo>/namespaces/<name>`, the
+package's identity, which names the repository's latest release; a document
+pins a release by writing `@<tag>` after it. The tag is split off when the
+document is parsed and read only by the resolver: everything else sees the
+tagless URI (the `env`, `event`, and `scx` vocabularies `scx` provides are
+matched first, never fetched, and take no tag). `validate` and `compile` fetch the
 package manifest (`namespaces/<name>/package/<name>.extension.json`) and its schema
 from the commit the tag (or the latest release's tag) names; before the
 session starts, `snapshot run` and `run` bind the release asset the manifest
 names, verified against that release's `SHA256SUMS`. The manifest names the
-exact URI the document binds. Every byte is verified, cached
+tagless URI. Every byte is verified, cached
 content-addressed under `${XDG_CACHE_HOME:-$HOME/.cache}/scxml/extensions`
 (`--cache-dir DIR` to change), and the URI is pinned to the commit and
 digests of its resolution (a tagless URI with its release tag); a pinned
 URI's later runs re-verify the cache and use no network, a tagless URI asks
 for the latest release once per run and re-pins when it moved, and
-`--offline` forbids any fetch. Each URI is resolved once per run, and the
-root and every invoked session (inline or `<invoke src>`) share its
-component; the namespaces of every literal `<invoke src>` document are
-resolved with the root's. Fetching needs a CLI built with `--features wasmtime`, which
+`--offline` forbids any fetch. Each resolution is made once per run; the
+root document's resolution of a package (or, for a package the root does not
+use, the first `<invoke src>` document's) is shared by every tagless use and
+every invoked session, and an `<invoke src>` document that pins another
+release binds that release for its own sessions. The namespaces of every
+literal `<invoke src>` document are resolved with the root's. A malformed
+pin, or one document pinning a package to two releases, fails closed. Fetching needs a CLI built with `--features wasmtime`, which
 links the network client; a build without it resolves only what the cache
 holds. Importing an element consents to what its manifest
 declares (the origins in `http-origins`); the run's values reach it only as

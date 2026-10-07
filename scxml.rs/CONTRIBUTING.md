@@ -308,10 +308,10 @@ A pushed `v*` tag also runs the `release` job, once every other job passed:
 it is the only job with `contents: write`, and it publishes the GitHub
 release repository namespaces load their extension components from
 ([docs/executable-content-extensions.md](docs/executable-content-extensions.md),
-"Loading an element from a repository"). Before tagging, move every repository
-namespace under `namespaces/` to the tag's namespace URI and commit the result
-(`sh scripts/set-namespace-version.sh vX.Y.Z`); the job checks it and then
-runs:
+"Loading an element from a repository"). A namespace package names its
+tagless URI (a document pins a release with `@<tag>`); before tagging, set
+every package's `package-version` under `namespaces/` to the tag's version and
+commit it. The job checks it and then runs:
 
 ```console
 sh scripts/check-namespace-versions.sh "$GITHUB_REF_NAME"

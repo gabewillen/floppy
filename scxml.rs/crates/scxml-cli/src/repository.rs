@@ -9,10 +9,10 @@
 //! repository namespace) or
 //! `https://github.com/<owner>/<repo>/services/<name>[@<tag>]` (a repository
 //! service), exactly: the literal `namespaces` or `services` folder, one name
-//! segment, no trailing slash, and, optionally, the release tag after the
-//! last `@`. With `@<tag>` the URI pins that release; without one (a
-//! tagless URI) it names the repository's latest GitHub release, resolved
-//! once per root session through the same bounded, verified path. The
+//! segment, no trailing slash, and, optionally, one release tag after `@`.
+//! With `@<tag>` the URI pins that release; without one (a tagless URI) it
+//! names the repository's latest GitHub release, resolved once per root
+//! session through the same bounded, verified path. The
 //! built-in tagless vocabularies `scx` embeds (`env`, `event`, `scx`, under
 //! `https://github.com/stateforward/scxml.rs/namespaces/`) are matched first
 //! and are never repository namespaces, so they are never fetched. Every
@@ -21,15 +21,33 @@
 //! path is an ordinary namespace or service type URI, and a `services/` URI
 //! is never a repository namespace (nor a `namespaces/` URI a repository
 //! service).
-//! A document binds that exact string (SCXML 1.0 section 4.10 namespace
-//! binding, and SCXML 6.4 `<invoke type>`, are byte-exact); the package
-//! manifest's `namespace-uri` (and the schema's `targetNamespace`), or
-//! `service-uri`, must equal it byte for byte, so a release serves its
-//! package under the URI its manifest names: a tagless URI needs a release
-//! whose manifest names the tagless URI, a pinned URI one whose manifest
-//! names that pinned URI. A pinned URI and a tagless one are distinct URIs
-//! and may both be bound in one session. Nothing about this is visible to
-//! SCXML: to a document it is an ordinary namespace or type URI. A
+//!
+//! # The tag is not part of the namespace
+//!
+//! A package's identity is its tagless URI. The `@<tag>` is split off once,
+//! when a document is parsed ([`scxml_types::strip_tag`], for namespace
+//! declarations and literal SCXML `<invoke type>`s only); from then on the
+//! validator, the compiler, the Machine IR, the engine, the data models,
+//! and the host see only the tagless URI, exactly, and the tag is
+//! resolution input for this resolver alone ([`document_pins`]). So a
+//! release's manifest names the tagless URI (`namespace-uri`, and its
+//! schema's `targetNamespace`, or `service-uri`), and a manifest that names
+//! a pinned URI is refused; a pinned and a tagless use of a release
+//! validate against the same schema. A malformed pin (an `@` not followed
+//! by exactly one tag) fails closed, and a built-in vocabulary takes no
+//! pin. Any other URI with an `@` (not a repository package URI) is an
+//! ordinary URI, byte for byte.
+//!
+//! # Which release a document binds
+//!
+//! One document binds one release of a package: different pins of one
+//! package in one document fail closed. The run binds, for each package,
+//! the root document's resolution (its pin, else the latest release), or,
+//! when the root does not use the package, the first `<invoke src>`
+//! document's that does; every tagless use anywhere in the tree shares that
+//! resolution. An `<invoke src>` document that pins another release binds
+//! that release for its own sessions (and their inline `<content>`
+//! sessions), alongside the run's ([`documents`](crate::documents)). A
 //! repository service is resolved only for a literal `<invoke type>` no
 //! `--service-package` binds.
 //!
@@ -167,8 +185,6 @@ const NAMESPACES_FOLDER: &str = "namespaces";
 const SERVICES_FOLDER: &str = "services";
 /// Maximum bytes of one owner, repository, or namespace name segment.
 const MAX_SEGMENT_BYTES: usize = 100;
-/// Maximum bytes of a tag.
-const MAX_TAG_BYTES: usize = 128;
 /// Maximum bytes of one GitHub API response.
 pub(crate) const MAX_API_BYTES: u64 = 64 * 1024;
 /// Maximum bytes of a package manifest (the `--extension-package` bound).
@@ -238,6 +254,8 @@ impl Kind {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct RepositoryUri {
     kind: Kind,
+    /// The package's identity: the URI without its tag.
+    tagless: String,
     owner: String,
     repo: String,
     /// The package's folder name under `namespaces/` or `services/`.
@@ -264,17 +282,11 @@ impl RepositoryUri {
         if uri.len() > MAX_URI_BYTES {
             return None;
         }
-        if kind == Kind::Namespace && BUILT_IN_NAMESPACES.contains(&uri) {
+        let (tagless, tag) = scxml_types::strip_tag(uri)?;
+        if kind == Kind::Namespace && BUILT_IN_NAMESPACES.contains(&tagless) {
             return None;
         }
-        let rest = uri.strip_prefix(GITHUB_PREFIX)?;
-        let (path, tag) = match rest.rsplit_once('@') {
-            Some((path, tag)) => (path, Some(tag)),
-            None => (rest, None),
-        };
-        if tag.is_some_and(|tag| !valid_tag(tag)) {
-            return None;
-        }
+        let path = tagless.strip_prefix(GITHUB_PREFIX)?;
         let mut segments = path.split('/');
         let owner = segments.next().filter(|segment| valid_segment(segment))?;
         let repo = segments.next().filter(|segment| valid_segment(segment))?;
@@ -287,6 +299,7 @@ impl RepositoryUri {
         }
         Some(Self {
             kind,
+            tagless: tagless.to_owned(),
             owner: owner.to_owned(),
             repo: repo.to_owned(),
             name: name.to_owned(),
@@ -315,18 +328,22 @@ fn valid_segment(segment: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
-/// `[A-Za-z0-9._+-]`, starting with an alphanumeric, within
-/// [`MAX_TAG_BYTES`].
+/// Whether `tag` is a release tag a URI can pin: the grammar of
+/// [`scxml_types::strip_tag`], its one definition.
 fn valid_tag(tag: &str) -> bool {
-    tag.len() <= MAX_TAG_BYTES
-        && tag
-            .bytes()
-            .next()
-            .is_some_and(|byte| byte.is_ascii_alphanumeric())
-        && tag
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'+'))
-        && !tag.contains("..")
+    matches!(
+        scxml_types::strip_tag(&format!("{GITHUB_PREFIX}o/r/{NAMESPACES_FOLDER}/n@{tag}")),
+        Some((_, Some(_)))
+    )
+}
+
+/// The URI the resolver resolves for the package `tagless`: with its pin
+/// (`<uri>@<tag>`), or tagless (the latest release).
+pub(crate) fn pinned_uri(tagless: &str, tag: Option<&str>) -> String {
+    match tag {
+        Some(tag) => format!("{tagless}@{tag}"),
+        None => tagless.to_owned(),
+    }
 }
 
 /// A relative path of [`valid_segment`] segments (an artifact inside the
@@ -843,7 +860,6 @@ impl std::fmt::Debug for Repository {
 
 /// A resolved extension component: its exact bytes and their SHA-256.
 pub(crate) struct ResolvedComponent {
-    pub(crate) package: Package,
     pub(crate) bytes: Vec<u8>,
     pub(crate) sha256: String,
 }
@@ -1464,11 +1480,7 @@ impl Repository {
                 MAX_COMPONENT_BYTES,
                 || self.download_url(&uri, &tag, &asset),
             )?;
-            Ok(ResolvedComponent {
-                package,
-                bytes,
-                sha256,
-            })
+            Ok(ResolvedComponent { bytes, sha256 })
         })();
         record_outcome(&span, result.is_ok());
         result
@@ -1612,21 +1624,15 @@ impl Repository {
                 MAX_COMPONENT_BYTES,
                 || self.download_url(&uri, &tag, &asset),
             )?;
-            Ok(ResolvedService {
-                package,
-                bytes,
-                sha256,
-            })
+            Ok(ResolvedService { bytes, sha256 })
         })();
         record_outcome(&span, result.is_ok());
         result
     }
 }
 
-/// A resolved repository service: its package and its component's exact
-/// bytes and SHA-256.
+/// A resolved repository service component: its exact bytes and SHA-256.
 pub(crate) struct ResolvedService {
-    pub(crate) package: ServicePackage,
     #[cfg_attr(
         not(feature = "wasmtime"),
         allow(
@@ -1661,12 +1667,7 @@ fn check_service_manifest(
     service_uri: &str,
     manifest: &scxml_validator_core::ServicePackageManifest,
 ) -> Result<(), String> {
-    if manifest.service_uri != service_uri {
-        return Err(format!(
-            "repository service `{service_uri}`: its manifest binds `{}`, not this URI\n  = help: a repository service's manifest names its own URI byte for byte (with its tag, or tagless for a tagless URI)",
-            manifest.service_uri
-        ));
-    }
+    check_identity(service_uri, &manifest.service_uri, "service-uri")?;
     if !valid_segment(&manifest.service_artifact) {
         return Err(format!(
             "repository service `{service_uri}`: its `service-artifact` is not a plain release asset name"
@@ -1708,40 +1709,12 @@ fn verify_service(
         .unwrap_or_default();
     Ok(ServicePackage {
         origin: ServiceOrigin::Repository {
+            uri: service_uri.to_owned(),
             tag,
             commit: entry.commit.clone(),
         },
         manifest,
     })
-}
-
-/// The literal `<invoke type>` values of a document that are repository
-/// service URIs `bound` does not name, sorted and unique; a document that
-/// does not parse names none here (the validator reports it).
-pub(crate) fn used_services(source: &[u8], bound: &[String]) -> Vec<String> {
-    let Ok(text) = std::str::from_utf8(source) else {
-        return Vec::new();
-    };
-    let Ok(document) = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
-        scxml_syntax::SourceId::new(1),
-        "document",
-        text,
-    )) else {
-        return Vec::new();
-    };
-    let mut uris = std::collections::BTreeSet::new();
-    document.root.visit(&mut |element| {
-        if element
-            .name
-            .is(Some(scxml_validator_core::SCXML_NAMESPACE), "invoke")
-            && let Some(type_uri) = element.attribute("type")
-            && RepositoryUri::parse_service(&type_uri.value).is_some()
-            && !bound.contains(&type_uri.value)
-        {
-            uris.insert(type_uri.value.clone());
-        }
-    });
-    uris.into_iter().collect()
 }
 
 /// The release tag of `uri`: its own, or, for a tagless URI, the one its
@@ -1772,6 +1745,32 @@ fn record_outcome(span: &scxml_telemetry::FunctionSpan, accepted: bool) {
     }
 }
 
+/// The package identity `uri` (resolved as written, its tag included)
+/// names: its tagless URI ([`scxml_types::strip_tag`]).
+fn identity(uri: &str) -> &str {
+    scxml_types::strip_tag(uri).map_or(uri, |(tagless, _)| tagless)
+}
+
+/// Checks that a release's manifest `field` names the package `uri`
+/// resolves: its tagless URI, byte for byte. A manifest naming a pinned URI
+/// is refused: the tag is never part of the namespace.
+fn check_identity(uri: &str, named: &str, field: &str) -> Result<(), String> {
+    let expected = identity(uri);
+    if named == expected {
+        return Ok(());
+    }
+    if let Some((tagless, Some(tag))) = scxml_types::strip_tag(named) {
+        return Err(format!(
+            "{} `{uri}`: its manifest's `{field}` names the pinned URI `{named}`\n  = help: a release's manifest names its package's tagless URI `{tagless}`; `@{tag}` is how a document pins a release, never part of the namespace",
+            label(uri)
+        ));
+    }
+    Err(format!(
+        "{} `{uri}`: its manifest's `{field}` is `{named}`, not `{expected}`\n  = help: a release's manifest names its package's tagless URI byte for byte",
+        label(uri)
+    ))
+}
+
 /// What a repository namespace's manifest must name beyond the format: its own
 /// URI exactly, and artifacts that are plain relative paths (the component a
 /// single release asset name).
@@ -1779,12 +1778,7 @@ fn check_manifest(
     namespace_uri: &str,
     manifest: &scxml_validator_core::ExtensionPackageManifest,
 ) -> Result<(), String> {
-    if manifest.namespace_uri != namespace_uri {
-        return Err(format!(
-            "repository namespace `{namespace_uri}`: its manifest binds `{}`, not this URI\n  = help: a repository namespace's manifest names its own URI byte for byte (with its tag, or tagless for a tagless URI)",
-            manifest.namespace_uri
-        ));
-    }
+    check_identity(namespace_uri, &manifest.namespace_uri, "namespace-uri")?;
     if !valid_segment(&manifest.extension_artifact) {
         return Err(format!(
             "repository namespace `{namespace_uri}`: its `extension-artifact` is not a plain release asset name"
@@ -1820,9 +1814,10 @@ fn verify_package(
     manifest.verify_schema(&schema).map_err(|error| {
         format!("repository namespace `{namespace_uri}`: its package does not verify: {error}")
     })?;
-    if schema_target_namespace(schema_bytes).as_deref() != Some(namespace_uri) {
+    if schema_target_namespace(schema_bytes).as_deref() != Some(identity(namespace_uri)) {
         return Err(format!(
-            "repository namespace `{namespace_uri}`: its schema's targetNamespace is not this URI"
+            "repository namespace `{namespace_uri}`: its schema's targetNamespace is not `{}`, its package's tagless URI",
+            identity(namespace_uri)
         ));
     }
     let tag = RepositoryUri::parse(namespace_uri)
@@ -1831,6 +1826,7 @@ fn verify_package(
         .unwrap_or_default();
     Ok(Package {
         origin: PackageOrigin::Repository {
+            uri: namespace_uri.to_owned(),
             tag,
             commit: entry.commit.clone(),
         },
@@ -1879,25 +1875,151 @@ fn sums_entry(bytes: &[u8], asset: &str) -> Option<String> {
     found
 }
 
-/// The `used` namespaces that a repository namespace serves and no other
-/// flag binds, resolved to their packages.
+/// The repository packages one document names, each with the release its
+/// URIs pin (`@<tag>`, which [`scxml_types::strip_tag`] split off when the
+/// document was parsed): the tagless URI of every repository namespace it
+/// declares and every repository service its literal SCXML `<invoke type>`s
+/// name.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct DocumentPins {
+    /// Repository namespace URIs and their pins.
+    pub(crate) namespaces: BTreeMap<String, Option<String>>,
+    /// Repository service URIs and their pins.
+    pub(crate) services: BTreeMap<String, Option<String>>,
+}
+
+/// The repository packages `source` (shown as `name` in messages) names,
+/// with their pins; a document that does not parse names none here (the
+/// validator reports it).
 ///
 /// # Errors
 ///
-/// The first resolution failure.
-pub(crate) fn resolve_document_packages(
-    repository: &Repository,
-    used: &[String],
-    bound: &[String],
-) -> Result<Vec<Package>, String> {
-    let mut packages = Vec::new();
-    for namespace_uri in used {
-        if bound.contains(namespace_uri) || RepositoryUri::parse(namespace_uri).is_none() {
-            continue;
+/// A malformed pin (an `@` after a repository package URI not followed by
+/// exactly one tag), a pin of a built-in vocabulary, or one package pinned
+/// to two releases in the document.
+pub(crate) fn document_pins(source: &[u8], name: &str) -> Result<DocumentPins, String> {
+    let Ok(text) = std::str::from_utf8(source) else {
+        return Ok(DocumentPins::default());
+    };
+    let Ok(document) = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
+        scxml_syntax::SourceId::new(1),
+        "document",
+        text,
+    )) else {
+        return Ok(DocumentPins::default());
+    };
+    let mut pins = DocumentPins::default();
+    let mut failure = None;
+    document.root.visit(&mut |element| {
+        let declarations = element.namespaces.iter().map(|declaration| {
+            (
+                declaration.uri.as_str(),
+                declaration.tag.as_deref(),
+                Kind::Namespace,
+            )
+        });
+        let invoke = element
+            .name
+            .is(Some(scxml_validator_core::SCXML_NAMESPACE), "invoke")
+            .then(|| element.attribute("type"))
+            .flatten()
+            .map(|attribute| {
+                (
+                    attribute.value.as_str(),
+                    attribute.tag.as_deref(),
+                    Kind::Service,
+                )
+            });
+        for (uri, tag, kind) in declarations.chain(invoke) {
+            if failure.is_none()
+                && let Err(error) = pins.add(uri, tag, kind, name)
+            {
+                failure = Some(error);
+            }
         }
-        packages.push(repository.resolve_package(namespace_uri)?);
+    });
+    failure.map_or(Ok(pins), Err)
+}
+
+impl DocumentPins {
+    fn add(&mut self, uri: &str, tag: Option<&str>, kind: Kind, name: &str) -> Result<(), String> {
+        if scxml_types::strip_tag(uri).is_none() {
+            return Err(format!(
+                "{name}: `{uri}` pins a release with a malformed tag\n  = help: a pin is one `@<tag>` at the very end of a repository package URI: `[A-Za-z0-9._+-]`, starting with a letter or digit, without `..`"
+            ));
+        }
+        if let Some(tag) = tag
+            && BUILT_IN_NAMESPACES.contains(&uri)
+        {
+            return Err(format!(
+                "{name}: `{uri}@{tag}` pins a built-in vocabulary\n  = help: `{uri}` ships with scx and is versioned with it; it takes no `@<tag>`"
+            ));
+        }
+        let (map, repository) = match kind {
+            Kind::Namespace => (&mut self.namespaces, RepositoryUri::parse(uri).is_some()),
+            Kind::Service => (
+                &mut self.services,
+                RepositoryUri::parse_service(uri).is_some(),
+            ),
+        };
+        if !repository {
+            return Ok(());
+        }
+        match map.get_mut(uri) {
+            None => {
+                map.insert(uri.to_owned(), tag.map(str::to_owned));
+            }
+            Some(pinned) => match (pinned.as_deref(), tag) {
+                (Some(first), Some(second)) if first != second => {
+                    return Err(format!(
+                        "{name}: {} `{uri}` is pinned to both `@{first}` and `@{second}`\n  = help: one document binds one release of a package; pin one tag (or none, for the root's release)",
+                        kind.label()
+                    ));
+                }
+                (None, Some(_)) => *pinned = tag.map(str::to_owned),
+                _ => {}
+            },
+        }
+        Ok(())
     }
-    Ok(packages)
+}
+
+/// How one run binds the repository packages of one kind, from each
+/// document's uses (`documents[0]` the root's, then every `<invoke src>`
+/// document's in load order; each a tagless URI and its pin) less the
+/// `bound` ones: the URI the run resolves for each package (the first
+/// document's that uses it, so the root's when the root does), and, per
+/// document, each package it pins to a resolution other than the run's.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct Plan {
+    /// Each package's tagless URI and the URI the run resolves for it.
+    pub(crate) run: BTreeMap<String, String>,
+    /// Each document index, tagless URI, and the pinned URI it resolves.
+    pub(crate) pinned: Vec<(usize, String, String)>,
+}
+
+/// Plans one kind's resolutions (see [`Plan`]).
+pub(crate) fn plan(documents: &[BTreeMap<String, Option<String>>], bound: &[String]) -> Plan {
+    let mut plan = Plan::default();
+    for uses in documents {
+        for (uri, tag) in uses {
+            if !bound.contains(uri) && !plan.run.contains_key(uri) {
+                plan.run
+                    .insert(uri.clone(), pinned_uri(uri, tag.as_deref()));
+            }
+        }
+    }
+    for (index, uses) in documents.iter().enumerate() {
+        for (uri, tag) in uses {
+            if let (Some(tag), Some(run)) = (tag, plan.run.get(uri)) {
+                let pinned = pinned_uri(uri, Some(tag));
+                if *run != pinned {
+                    plan.pinned.push((index, uri.clone(), pinned));
+                }
+            }
+        }
+    }
+    plan
 }
 
 /// Every namespace a document's element and attribute names use, sorted; a
@@ -2092,17 +2214,142 @@ mod tests {
         ] {
             assert!(RepositoryUri::parse_service(other).is_none(), "{other}");
         }
-        let source = br#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"><state id="s"><invoke type="https://github.com/o/r/services/b@v1"/><invoke type="https://github.com/o/r/services/a@v1"/><invoke type="https://github.com/o/r/services/a@v1"/><invoke type="urn:x"/><invoke typeexpr="'https://github.com/o/r/services/c@v1'"/></state></scxml>"#;
+    }
+
+    fn pins_of(source: &str) -> Result<DocumentPins, String> {
+        document_pins(source.as_bytes(), "the document")
+    }
+
+    #[test]
+    fn documents_pin_repository_packages_once_each() {
+        let source = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:x="https://github.com/o/r/namespaces/x@v1" xmlns:y="https://github.com/o/r/namespaces/y" xmlns:u="urn:a@b" xmlns:w="https://example.org/a@b/ns" version="1.0"><state id="s"><invoke type="https://github.com/o/r/services/b@v1"/><invoke type="https://github.com/o/r/services/a"/><invoke type="https://github.com/o/r/services/a@v2"/><invoke type="urn:x"/><invoke typeexpr="'https://github.com/o/r/services/c@v1'"/></state></scxml>"#;
+        let pins = pins_of(source).expect("one pin per package");
+        let entries = |map: &BTreeMap<String, Option<String>>| -> Vec<(String, Option<String>)> {
+            map.iter()
+                .map(|(uri, tag)| (uri.clone(), tag.clone()))
+                .collect()
+        };
         assert_eq!(
-            used_services(source, &[]),
+            entries(&pins.namespaces),
             [
-                "https://github.com/o/r/services/a@v1",
-                "https://github.com/o/r/services/b@v1"
+                (
+                    "https://github.com/o/r/namespaces/x".to_owned(),
+                    Some("v1".to_owned())
+                ),
+                ("https://github.com/o/r/namespaces/y".to_owned(), None),
             ]
         );
+        // A tagless use and a pinned one of one package in one document bind
+        // the pinned release; a `typeexpr` is never resolved.
         assert_eq!(
-            used_services(source, &["https://github.com/o/r/services/a@v1".to_owned()]),
-            ["https://github.com/o/r/services/b@v1"]
+            entries(&pins.services),
+            [
+                (
+                    "https://github.com/o/r/services/a".to_owned(),
+                    Some("v2".to_owned())
+                ),
+                (
+                    "https://github.com/o/r/services/b".to_owned(),
+                    Some("v1".to_owned())
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn different_pins_of_one_package_in_one_document_fail_closed() {
+        let namespaces = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:a="https://github.com/o/r/namespaces/x@v1" xmlns:b="https://github.com/o/r/namespaces/x@v2" version="1.0"/>"#;
+        let error = pins_of(namespaces).expect_err("two releases of x");
+        assert!(
+            error.contains("is pinned to both `@v1` and `@v2`"),
+            "{error}"
+        );
+        let services = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"><state id="s"><invoke type="https://github.com/o/r/services/s@v1"/><invoke type="https://github.com/o/r/services/s@v2"/></state></scxml>"#;
+        assert!(pins_of(services).is_err());
+    }
+
+    #[test]
+    fn malformed_pins_and_pinned_built_ins_fail_closed() {
+        for malformed in [
+            "https://github.com/o/r/namespaces/x@",
+            "https://github.com/o/r/namespaces/x@v1/extra",
+            "https://github.com/o/r/namespaces/x@v1@v2",
+        ] {
+            let source = format!(
+                r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:x="{malformed}" version="1.0"/>"#
+            );
+            let error = pins_of(&source).expect_err(malformed);
+            assert!(error.contains("malformed tag"), "{error}");
+            let source = format!(
+                r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"><state id="s"><invoke type="{}"/></state></scxml>"#,
+                malformed.replace("namespaces", "services")
+            );
+            assert!(pins_of(&source).is_err(), "{malformed}");
+        }
+        for built_in in ["env", "event", "scx"] {
+            let source = format!(
+                r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:b="https://github.com/stateforward/scxml.rs/namespaces/{built_in}@v1" version="1.0"/>"#
+            );
+            let error = pins_of(&source).expect_err(built_in);
+            assert!(error.contains("pins a built-in vocabulary"), "{error}");
+            // Tagless, a built-in is never a repository package.
+            let source = format!(
+                r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:b="https://github.com/stateforward/scxml.rs/namespaces/{built_in}" version="1.0"/>"#
+            );
+            assert_eq!(pins_of(&source), Ok(DocumentPins::default()));
+        }
+    }
+
+    #[test]
+    fn the_run_binds_the_roots_resolution_and_a_child_pin_alongside_it() {
+        let uri = "https://github.com/o/r/namespaces/x".to_owned();
+        let uses = |tag: Option<&str>| BTreeMap::from([(uri.clone(), tag.map(str::to_owned))]);
+        let none = BTreeMap::new();
+        // The root pins vA; a tagless child shares the root's resolution.
+        let plan_a = plan(&[uses(Some("vA")), uses(None)], &[]);
+        assert_eq!(
+            plan_a.run,
+            BTreeMap::from([(uri.clone(), format!("{uri}@vA"))])
+        );
+        assert!(plan_a.pinned.is_empty());
+        // The root is tagless; a child pinning vB binds vB for itself.
+        let plan_b = plan(&[uses(None), uses(Some("vB"))], &[]);
+        assert_eq!(plan_b.run, BTreeMap::from([(uri.clone(), uri.clone())]));
+        assert_eq!(plan_b.pinned, [(1, uri.clone(), format!("{uri}@vB"))]);
+        // The root pins vA and a child vB: both releases, each its own.
+        let plan_c = plan(&[uses(Some("vA")), uses(Some("vB"))], &[]);
+        assert_eq!(plan_c.run[&uri], format!("{uri}@vA"));
+        assert_eq!(plan_c.pinned, [(1, uri.clone(), format!("{uri}@vB"))]);
+        // The root does not use it: the first child's resolution is the
+        // run's, and a later tagless child shares it.
+        let plan_d = plan(&[none.clone(), uses(Some("vB")), uses(None)], &[]);
+        assert_eq!(plan_d.run[&uri], format!("{uri}@vB"));
+        assert!(plan_d.pinned.is_empty());
+        // A flag-bound package is never resolved.
+        assert_eq!(
+            plan(&[uses(Some("vA"))], std::slice::from_ref(&uri)),
+            Plan::default()
+        );
+    }
+
+    #[test]
+    fn a_release_manifest_names_the_tagless_uri() {
+        let uri = "https://github.com/o/r/namespaces/x";
+        assert_eq!(check_identity(uri, uri, "namespace-uri"), Ok(()));
+        assert_eq!(
+            check_identity(&format!("{uri}@v1"), uri, "namespace-uri"),
+            Ok(()),
+            "a pinned use resolves the same tagless identity"
+        );
+        let error = check_identity(uri, &format!("{uri}@v1"), "namespace-uri")
+            .expect_err("a manifest naming a pinned URI");
+        assert!(error.contains("names the pinned URI"), "{error}");
+        assert!(error.contains(&format!("tagless URI `{uri}`")), "{error}");
+        let error = check_identity(uri, "https://github.com/o/r/namespaces/y", "namespace-uri")
+            .expect_err("another package");
+        assert!(
+            error.contains("not `https://github.com/o/r/namespaces/x`"),
+            "{error}"
         );
     }
 

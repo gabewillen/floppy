@@ -1,19 +1,23 @@
 #!/bin/sh
 # Usage: check-namespace-versions.sh TAG
 #
-# Checks that every repository namespace under namespaces/ names exactly TAG:
-# namespaces/<name>/package/<name>.extension.json binds the namespace URI
-# https://github.com/stateforward/scxml.rs/namespaces/<name>@TAG, its schema's
-# targetNamespace is that exact URI, and its schema-sha256 is the schema's
-# SHA-256. The release job runs it before publishing TAG, so a release never
-# serves a package whose namespace names another version
+# Checks that every namespace package under namespaces/ is the package of
+# release TAG: namespaces/<name>/package/<name>.extension.json binds the
+# tagless namespace URI https://github.com/stateforward/scxml.rs/namespaces/<name>
+# (a package's identity; a document pins a release with `@<tag>`, which is
+# never part of the namespace), its schema's targetNamespace is that exact
+# URI, its schema-sha256 is the schema's SHA-256, and its package-version is
+# TAG without its leading `v`. The release job runs it before publishing TAG
 # (docs/executable-content-extensions.md, "Loading an element from a
-# repository"). scripts/set-namespace-version.sh moves every repository
-# namespace to a new tag.
+# repository").
 set -eu
 
 test "$#" -eq 1 || { echo "usage: check-namespace-versions.sh TAG" >&2; exit 2; }
 tag=$1
+case "$tag" in
+    v[0-9]*) version=${tag#v} ;;
+    *) echo "TAG must look like vMAJOR.MINOR.PATCH" >&2; exit 2 ;;
+esac
 workspace=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)
 . "$workspace/scripts/sha256.sh"
 repository='https://github.com/stateforward/scxml.rs'
@@ -27,12 +31,10 @@ for dir in "$workspace"/namespaces/*/; do
     dir=${dir%/}
     name=$(basename "$dir")
     manifest="$dir/package/$name.extension.json"
-    # A namespace directory is a repository namespace exactly when it ships
-    # the package manifest package/<name>.extension.json; only those carry a
-    # release tag in their URI. A directory without one is an unversioned
-    # vocabulary (namespaces/env and namespaces/event, the host's attribute
-    # vocabularies) and is skipped,
-    # but a directory that builds an extension component (it has a
+    # A namespace directory ships a package exactly when it has the manifest
+    # package/<name>.extension.json. A directory without one is a vocabulary
+    # the host interprets (namespaces/env and namespaces/event) and is
+    # skipped, but a directory that builds an extension component (it has a
     # Cargo.toml) cannot be loaded without its manifest, so it fails closed.
     if [ ! -f "$manifest" ]; then
         if [ -f "$dir/Cargo.toml" ]; then
@@ -41,17 +43,14 @@ for dir in "$workspace"/namespaces/*/; do
         fi
         continue
     fi
-    # namespaces/scx ships inside scx (it embeds the package and component),
-    # so its URI is the tagless https://github.com/stateforward/scxml.rs/namespaces/scx,
-    # versioned with the toolchain like the env and event vocabularies; it
-    # carries no release tag and is skipped.
-    if [ "$(field namespace-uri "$manifest")" = "$repository/namespaces/$name" ]; then
-        continue
-    fi
-    expected="$repository/namespaces/$name@$tag"
+    expected="$repository/namespaces/$name"
     uri=$(field namespace-uri "$manifest")
     test "$uri" = "$expected" || {
-        echo "namespace $name binds \`$uri\`, not \`$expected\`" >&2
+        echo "namespace $name binds \`$uri\`, not its tagless URI \`$expected\`" >&2
+        exit 1
+    }
+    test "$(field package-version "$manifest")" = "$version" || {
+        echo "namespace $name: package-version is not \`$version\`" >&2
         exit 1
     }
     schema="$dir/package/$(field schema-artifact "$manifest")"
@@ -65,5 +64,5 @@ for dir in "$workspace"/namespaces/*/; do
     }
     checked=$((checked + 1))
 done
-test "$checked" -gt 0 || { echo "no repository namespace under namespaces/" >&2; exit 1; }
-printf 'repository namespaces name %s: %s checked\n' "$tag" "$checked"
+test "$checked" -gt 0 || { echo "no namespace package under namespaces/" >&2; exit 1; }
+printf 'namespace packages are release %s: %s checked\n' "$tag" "$checked"

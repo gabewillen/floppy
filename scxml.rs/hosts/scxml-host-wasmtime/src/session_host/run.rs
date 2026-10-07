@@ -216,6 +216,8 @@ pub(crate) enum DeferredRequest {
         request: Box<crate::bindings::stateforward::scxml::types::InvokeRequest>,
         /// The invoking session's execution context.
         execution_context: Context,
+        /// The invoking session's document bindings.
+        bindings: Option<Rc<super::DocumentBindings>>,
     },
     /// Cancel the session `child`, whose cancellation began.
     Cancel { child: SessionKey },
@@ -422,6 +424,9 @@ pub(crate) struct SessionSpec {
     pub(crate) data_model: Option<String>,
     pub(crate) machine_ir: Vec<u8>,
     pub(crate) clock_now: u64,
+    /// The bindings of the document the session runs; `None` for the
+    /// host's.
+    pub(crate) bindings: Option<Rc<super::DocumentBindings>>,
 }
 
 /// Outcome of constructing one session.
@@ -501,6 +506,7 @@ impl MachineHandle {
                 session_id: spec.session_id.clone(),
                 key: spec.key,
                 parent: spec.parent,
+                bindings: spec.bindings.clone(),
             },
             io,
             execution_context.clone(),
@@ -508,7 +514,7 @@ impl MachineHandle {
         );
         // Every bound extension component gets its own instance for this
         // session, initialized before the machine runs anything.
-        let namespaces = core.session_namespaces(execution_context)?;
+        let namespaces = core.session_namespaces(execution_context, spec.bindings.as_deref())?;
         let (mut store, machine) = instantiate_session_machine(
             &core.engine,
             core.machine(),
@@ -929,6 +935,7 @@ impl RunSessions {
         child: SessionKey,
         request: crate::bindings::stateforward::scxml::types::InvokeRequest,
         execution_context: &Context,
+        bindings: Option<&super::DocumentBindings>,
     ) -> Result<(), ComponentError> {
         self.last_invocation = self.last_invocation.saturating_add(1);
         let http_offered = !matches!(self.requests, crate::service::RequestMode::None);
@@ -938,6 +945,7 @@ impl RunSessions {
             self.last_invocation,
             http_offered,
             execution_context,
+            bindings,
         );
         let (mut handle, report) = match started {
             Ok(Some(Ok(started))) => started,
@@ -1039,6 +1047,7 @@ impl RunSessions {
                         child,
                         request,
                         execution_context,
+                        bindings,
                     } => {
                         // A service runs no machine: its start runs here,
                         // and the suspended call continues at once.
@@ -1046,7 +1055,12 @@ impl RunSessions {
                             scxml_telemetry::Module::HostWasmtime,
                             scxml_telemetry::Operation::HostWasmtimeServiceStart,
                         );
-                        let outcome = self.start_service(child, *request, &execution_context);
+                        let outcome = self.start_service(
+                            child,
+                            *request,
+                            &execution_context,
+                            bindings.as_deref(),
+                        );
                         outcome.span_end(&span);
                         drop(span);
                         self.shared.touch(current);
@@ -1599,6 +1613,7 @@ impl RunEngine {
             data_model: root.data_model.map(str::to_owned),
             machine_ir: root.machine_ir.to_vec(),
             clock_now: 0,
+            bindings: None,
         };
         let handle =
             match MachineHandle::construct(core, shared, root.embedder, spec, execution_context)? {

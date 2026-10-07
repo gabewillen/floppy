@@ -31,7 +31,13 @@
 //!
 //! The documents an `<invoke src>` loads are part of the run: the
 //! repository namespaces and services they use are resolved with the
-//! root's, before the session starts ([`Documents::children`]).
+//! root's, before the session starts ([`Documents::children`]). A child
+//! document that pins a release other than the run's carries the
+//! components of that release to the host with its text, for its own
+//! sessions ([`Documents::bind`]). A `srcexpr` document is not known before
+//! the session, so its pins are never resolved: one that pins a release
+//! (`@<tag>`) fails to load (`error.execution`) rather than run with
+//! another.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -83,8 +89,19 @@ pub(crate) struct Documents {
     base: url::Url,
     /// Every literal URI, in discovery order.
     literals: Vec<Literal>,
-    /// The bytes of every `<invoke src>` document loaded before the session.
-    children: Vec<Vec<u8>>,
+    /// The URL and bytes of every `<invoke src>` document loaded before the
+    /// session.
+    children: Vec<(url::Url, Vec<u8>)>,
+    /// The components each child document that pins another release binds
+    /// for its own sessions, by URL.
+    #[cfg(feature = "wasmtime")]
+    bindings: BTreeMap<
+        String,
+        (
+            Option<scxml_host_wasmtime::ExtensionComponents>,
+            Option<scxml_host_wasmtime::ServiceComponents>,
+        ),
+    >,
 }
 
 impl std::fmt::Debug for Documents {
@@ -163,6 +180,8 @@ impl Documents {
             base: base.clone(),
             literals: Vec::new(),
             children: Vec::new(),
+            #[cfg(feature = "wasmtime")]
+            bindings: BTreeMap::new(),
         };
         let root = String::from_utf8_lossy(source).into_owned();
         let mut pending = vec![(base.clone(), root, true)];
@@ -199,7 +218,7 @@ impl Documents {
                             "the run loads more than {MAX_DOCUMENTS} documents through <invoke src>"
                         ));
                     }
-                    documents.children.push(child.bytes.clone());
+                    documents.children.push((url.clone(), child.bytes.clone()));
                     pending.push((
                         url.clone(),
                         String::from_utf8_lossy(&child.bytes).into_owned(),
@@ -212,11 +231,30 @@ impl Documents {
         Ok(documents)
     }
 
-    /// The bytes of every `<invoke src>` document loaded before the session,
-    /// whose repository namespaces and services the run binds with the
-    /// root's.
-    pub(crate) fn children(&self) -> &[Vec<u8>] {
+    /// The URL and bytes of every `<invoke src>` document loaded before the
+    /// session, whose repository namespaces and services the run binds with
+    /// the root's.
+    pub(crate) fn children(&self) -> &[(url::Url, Vec<u8>)] {
         &self.children
+    }
+
+    /// Has the child document at `url` carry `extensions` and `services` to
+    /// the host for its own sessions
+    /// ([`scxml_host_wasmtime::EmbeddedDocument`]).
+    #[cfg(feature = "wasmtime")]
+    pub(crate) fn bind(
+        &mut self,
+        url: &url::Url,
+        extensions: Option<scxml_host_wasmtime::ExtensionComponents>,
+        services: Option<scxml_host_wasmtime::ServiceComponents>,
+    ) {
+        let entry = self.bindings.entry(url.as_str().to_owned()).or_default();
+        if extensions.is_some() {
+            entry.0 = extensions;
+        }
+        if services.is_some() {
+            entry.1 = services;
+        }
     }
 
     /// The consent listing: every literal URI, the URL it loads, and its
@@ -391,14 +429,38 @@ mod embedder {
     }
 
     impl SessionEmbedder for Documents {
-        fn document(&self, _kind: DocumentKind, uri: &str) -> Option<EmbeddedDocument> {
+        fn document(&self, kind: DocumentKind, uri: &str) -> Option<EmbeddedDocument> {
             let (url, fetched) = self.load(uri)?;
             let media_type = fetched
                 .media_type
                 .clone()
                 .or_else(|| extension_media_type(&url).map(str::to_owned));
+            let (extensions, services) = if kind == DocumentKind::Invocation {
+                // A child loaded only now (a `srcexpr`) had no pin
+                // resolved before the session: a pinned one does not load.
+                if !self.children.iter().any(|(child, _)| *child == url) {
+                    let pins =
+                        crate::repository::document_pins(&fetched.bytes, url.as_str()).ok()?;
+                    if pins
+                        .namespaces
+                        .values()
+                        .chain(pins.services.values())
+                        .any(Option::is_some)
+                    {
+                        return None;
+                    }
+                }
+                self.bindings.get(url.as_str()).cloned().unwrap_or_default()
+            } else {
+                (None, None)
+            };
             let text = String::from_utf8(fetched.bytes).ok()?;
-            Some(EmbeddedDocument { text, media_type })
+            Some(EmbeddedDocument {
+                text,
+                media_type,
+                extensions,
+                services,
+            })
         }
 
         fn scripts(&self) -> MachineScripts {

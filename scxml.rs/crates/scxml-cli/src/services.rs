@@ -56,7 +56,10 @@ pub(crate) enum ServiceOrigin {
     /// A repository service (the extension cache or its repository), at the
     /// commit its release tag pinned; its component comes from the release.
     Repository {
-        /// The release tag (the URI's suffix).
+        /// The URI the resolver resolved: the tagless URI, or it with the
+        /// document's `@<tag>`.
+        uri: String,
+        /// The release tag (the pin, or the release a tagless URI resolved).
         tag: String,
         /// The commit the tag named when the cache pinned it.
         commit: String,
@@ -193,22 +196,56 @@ pub(crate) struct Services {
         )
     )]
     pub(crate) store: Option<std::sync::Arc<crate::repository::Repository>>,
+    /// The `<invoke src>` documents that pin a release other than the
+    /// run's, each with the packages its sessions bind in place of the
+    /// run's.
+    #[cfg_attr(
+        not(feature = "wasmtime"),
+        allow(
+            dead_code,
+            reason = "only a run binds repository components, which needs the wasmtime feature"
+        )
+    )]
+    pub(crate) documents: Vec<(url::Url, Vec<ServicePackage>)>,
+}
+
+impl ServicePackage {
+    /// The URI the resolver resolved for a repository service (its tagless
+    /// URI, or it with the document's `@<tag>`); `None` for a
+    /// `--service-package`.
+    #[cfg_attr(
+        not(feature = "wasmtime"),
+        allow(
+            dead_code,
+            reason = "only a run binds repository components, which needs the wasmtime feature"
+        )
+    )]
+    pub(crate) fn resolved_uri(&self) -> Option<&str> {
+        match &self.origin {
+            ServiceOrigin::Repository { uri, .. } => Some(uri),
+            ServiceOrigin::Manifest(_) => None,
+        }
+    }
 }
 
 /// Loads the `--service-package` manifests and resolves every repository
-/// service (`https://github.com/<owner>/<repo>/services/<name>[@<tag>]`) the
-/// document or one of its `children` (the `<invoke src>` documents a run
-/// loads) names as a literal `<invoke type>` that none of them binds, once,
-/// through the repository flags ([`crate::repository`]: bounded, pinned,
-/// content-addressed, `--offline`, fail closed).
+/// service (`https://github.com/<owner>/<repo>/services/<name>`, pinned to a
+/// release with `@<tag>`) the document or one of its `children` (the
+/// `<invoke src>` documents a run loads, with their URLs) names as a literal
+/// `<invoke type>` that none of them binds, through the repository flags
+/// ([`crate::repository`]: bounded, pinned, content-addressed, `--offline`,
+/// fail closed): each once for the run (the root's pin, else the first
+/// document's that names it), and once more for each child document that
+/// pins another release.
 ///
 /// # Errors
 ///
-/// As [`load`], an unopenable extension cache, or a repository service that
-/// cannot be resolved.
+/// As [`load`], a malformed or conflicting pin
+/// ([`crate::repository::document_pins`]), an unopenable extension cache, or
+/// a repository service that cannot be resolved.
 pub(crate) fn resolve(
     source: &[u8],
-    children: &[Vec<u8>],
+    children: &[(url::Url, Vec<u8>)],
     manifests: &[PathBuf],
     repository: &crate::repository::RepositoryFlags,
 ) -> Result<Services, Box<dyn std::error::Error>> {
@@ -217,25 +254,58 @@ pub(crate) fn resolve(
         .iter()
         .map(|package| package.manifest.service_uri.clone())
         .collect();
-    let mut wanted = crate::repository::used_services(source, &bound);
-    for child in children {
-        wanted.extend(crate::repository::used_services(child, &bound));
+    let mut uses = Vec::with_capacity(children.len().saturating_add(1));
+    for (name, bytes) in std::iter::once(("the document".to_owned(), source)).chain(
+        children
+            .iter()
+            .map(|(url, bytes)| (format!("`{url}`"), bytes.as_slice())),
+    ) {
+        uses.push(crate::repository::document_pins(bytes, &name)?.services);
     }
-    wanted.sort();
-    wanted.dedup();
-    if wanted.is_empty() {
+    let plan = crate::repository::plan(&uses, &bound);
+    if plan.run.is_empty() {
         return Ok(Services {
             packages,
             store: None,
+            documents: Vec::new(),
         });
     }
     let store = repository.open()?;
-    for uri in wanted {
-        packages.push(store.resolve_service_package(&uri)?);
+    let first = packages.len();
+    for uri in plan.run.values() {
+        packages.push(store.resolve_service_package(uri)?);
+    }
+    let mut documents: Vec<(url::Url, Vec<ServicePackage>)> = Vec::new();
+    for (index, tagless, pinned) in &plan.pinned {
+        let run_tag = packages
+            .get(first..)
+            .unwrap_or_default()
+            .iter()
+            .find_map(|package| match &package.origin {
+                ServiceOrigin::Repository { tag, .. }
+                    if package.manifest.service_uri == *tagless =>
+                {
+                    Some(tag.as_str())
+                }
+                _ => None,
+            });
+        // A pin naming the release the run already resolved shares it.
+        if run_tag == scxml_types::strip_tag(pinned).and_then(|(_, tag)| tag) {
+            continue;
+        }
+        let Some((url, _)) = index.checked_sub(1).and_then(|child| children.get(child)) else {
+            continue;
+        };
+        let package = store.resolve_service_package(pinned)?;
+        match documents.iter_mut().find(|(bound, _)| bound == url) {
+            Some((_, packages)) => packages.push(package),
+            None => documents.push((url.clone(), vec![package])),
+        }
     }
     Ok(Services {
         packages,
         store: Some(store),
+        documents,
     })
 }
 
@@ -280,7 +350,7 @@ pub(crate) fn summary(
                     manifest.package_version,
                     path.display()
                 ),
-                ServiceOrigin::Repository { tag, commit } => format!(
+                ServiceOrigin::Repository { tag, commit, .. } => format!(
                     "release {tag} (commit {commit}), package {}",
                     manifest.package_version
                 ),
@@ -312,6 +382,10 @@ pub(crate) fn summary(
 /// Each bound service component's imports, by service URI.
 #[cfg(feature = "wasmtime")]
 type Imports = BTreeMap<String, Vec<String>>;
+
+/// One `<invoke src>` document's own service components and their imports.
+#[cfg(feature = "wasmtime")]
+type DocumentServices = (url::Url, scxml_host_wasmtime::ServiceComponents, Imports);
 
 /// Maximum `--dir` and `--wasi` flags of one run.
 const MAX_WASI_FLAGS: usize = 64;
@@ -566,12 +640,12 @@ impl ServiceFlags {
         let mut identity = Vec::new();
         for package in &resolved.packages {
             let uri = &package.manifest.service_uri;
-            let sha256 = if let ServiceOrigin::Repository { .. } = package.origin {
+            let sha256 = if let Some(resolved_uri) = package.resolved_uri() {
                 resolved
                     .store
                     .as_ref()
                     .ok_or("a repository service was resolved without a repository store")?
-                    .service_component_sha256(uri)?
+                    .service_component_sha256(resolved_uri)?
             } else {
                 self.digests
                     .get(uri)
@@ -620,23 +694,10 @@ impl ServiceFlags {
         }
         for package in packages {
             let uri = &package.manifest.service_uri;
-            if let ServiceOrigin::Repository { .. } = package.origin {
-                // The release's component, authenticated by the SHA-256 its
-                // `SHA256SUMS` lists (pinned on first use).
-                let store = resolved
-                    .store
-                    .as_ref()
-                    .ok_or("a repository service was resolved without a repository store")?;
-                let fetched = store.resolve_service_component(uri)?;
-                let component = scxml_host_wasmtime::authenticate_service_component(
-                    &fetched.bytes,
-                    scxml_host_wasmtime::TrustedComponentDigest::from_hex(&fetched.sha256)?,
-                )
-                .map_err(|error| {
-                    format!("repository service `{uri}`: its component is rejected: {error}")
-                })?;
+            if let Some(resolved_uri) = package.resolved_uri() {
+                let component = repository_component(resolved, resolved_uri)?;
                 imports.insert(uri.clone(), component.imports()?);
-                services = services.bind(fetched.package.host_package(), &component)?;
+                services = services.bind(package.host_package(), &component)?;
                 continue;
             }
             let path = match self.components.get(uri) {
@@ -671,6 +732,66 @@ impl ServiceFlags {
         }
         Ok((services, imports))
     }
+}
+
+impl ServiceFlags {
+    /// The service components each `<invoke src>` document that pins
+    /// another release binds for its own sessions
+    /// ([`scxml_host_wasmtime::EmbeddedDocument::services`]), with the WASI
+    /// resources `--dir` and `--wasi` grant those services, and each
+    /// component's imports, by document URL and service URI, for the consent
+    /// listing.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::components`].
+    #[cfg(feature = "wasmtime")]
+    pub(crate) fn document_components(
+        &self,
+        resolved: &Services,
+    ) -> Result<Vec<DocumentServices>, Box<dyn std::error::Error>> {
+        let mut documents = Vec::with_capacity(resolved.documents.len());
+        for (url, packages) in &resolved.documents {
+            let mut services = scxml_host_wasmtime::ServiceComponents::new();
+            let mut imports = BTreeMap::new();
+            for package in packages {
+                let uri = &package.manifest.service_uri;
+                let resolved_uri = package
+                    .resolved_uri()
+                    .ok_or("a document binds only repository services of its own")?;
+                let component = repository_component(resolved, resolved_uri)?;
+                imports.insert(uri.clone(), component.imports()?);
+                if let Some(flags) = self.wasi.get(uri) {
+                    services = services.with_wasi(uri, flags.host());
+                }
+                services = services.bind(package.host_package(), &component)?;
+            }
+            documents.push((url.clone(), services, imports));
+        }
+        Ok(documents)
+    }
+}
+
+/// The release's component of the repository service `resolved_uri`
+/// resolves, authenticated by the SHA-256 its `SHA256SUMS` lists (pinned on
+/// first use).
+#[cfg(feature = "wasmtime")]
+fn repository_component(
+    resolved: &Services,
+    resolved_uri: &str,
+) -> Result<scxml_host_wasmtime::AuthenticatedComponent, Box<dyn std::error::Error>> {
+    let store = resolved
+        .store
+        .as_ref()
+        .ok_or("a repository service was resolved without a repository store")?;
+    let fetched = store.resolve_service_component(resolved_uri)?;
+    Ok(scxml_host_wasmtime::authenticate_service_component(
+        &fetched.bytes,
+        scxml_host_wasmtime::TrustedComponentDigest::from_hex(&fetched.sha256)?,
+    )
+    .map_err(|error| {
+        format!("repository service `{resolved_uri}`: its component is rejected: {error}")
+    })?)
 }
 
 fn split_uri(value: &str, usage: &str) -> Result<(String, String), String> {
