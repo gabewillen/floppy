@@ -108,9 +108,11 @@ phase 7; until then every backend is selected by its `env:baseurl` slot.
   resolve only from the dev cache `scripts/build-components.sh` publishes
   into (`scx run --offline --cache-dir target/components/package-cache`);
   phase 7 publishes releases, and the same documents then resolve the
-  latest one unedited. A release's manifests name the tagless URIs, so a
-  document that pins `@<tag>` resolves only a release whose manifests name
-  that pinned URI (scxml.rs matches namespace and type URIs byte for byte).
+  latest one unedited. A release's manifests name the tagless URIs, and a
+  document that pins `@<tag>` binds that release under the same tagless
+  namespace (decision D21: scxml.rs splits the tag off when it parses the
+  document). The dev cache pins each tagless URI to the local build, so a
+  pinned document resolves only against a published release.
 - Sessions that bind a package declaring a WASI permission cannot be
   recorded or replayed (scxml.rs refuses it); the builder binds none and is
   not recorded either.
