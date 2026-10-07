@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  XML Schema of nemobot's `decision` extension namespace (namespaces/decision).
+  XML Schema of floppy's `decision` extension namespace (namespaces/decision).
   It governs structure only; the extension component governs what the
   element does. Bind it with the prefix `decision` by convention.
 
@@ -11,7 +11,7 @@
                  synchronous and quick.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="https://github.com/stateforward/nemobot/namespaces/decision"
+           targetNamespace="https://github.com/stateforward/floppy/namespaces/decision"
            elementFormDefault="qualified">
   <xs:element name="menu">
     <xs:complexType>

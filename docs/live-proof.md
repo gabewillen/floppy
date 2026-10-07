@@ -1,10 +1,11 @@
 # Live proof
 
-Each row is one real run of an ignored live test. Keys came only from the
-env file named by `NEMOBOT_LIVE_ENV_FILE`
-(`mosfet/mosfet.py/.env`). No value was printed, logged, or committed.
-Each variable was granted only to its own package: `OPENAI_*` to `generate`,
-and `TYPESAFE_*` to `decision`.
+Each row is one real run of an ignored live test or of a bot. Keys came only
+from env files (named by `FLOPPY_LIVE_ENV_FILE` for the live tests, or given
+to `scx run` as `--env-file`). No value was printed, logged, or committed.
+Each variable was granted only to its own package by the document's `env`
+attributes. Entries are dated and keep the names of their day: the product
+was named nemobot before decision D23.
 
 ## 2026-10-07, repository packages resolved by the embedded GitHub resolver component (decision D22), model `gpt-6-luna`
 

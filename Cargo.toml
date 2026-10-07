@@ -6,7 +6,7 @@ members = [
     "services/decision",
 ]
 # scxml.rs is a squashed subtree with its own workspace, lockfile, and proof
-# matrix; nemobot depends on its crates by path and never absorbs it.
+# matrix; floppy depends on its crates by path and never absorbs it.
 exclude = ["scxml.rs"]
 resolver = "3"
 
@@ -16,10 +16,10 @@ edition = "2024"
 rust-version = "1.98"
 license = "Apache-2.0 OR MIT"
 authors = ["Stateforward contributors"]
-repository = "https://github.com/stateforward/nemobot"
-homepage = "https://github.com/stateforward/nemobot"
+repository = "https://github.com/stateforward/floppy"
+homepage = "https://github.com/stateforward/floppy"
 readme = "README.md"
-# Nothing is published to crates.io; nemobot ships as source plus the Wasm
+# Nothing is published to crates.io; floppy ships as source plus the Wasm
 # components built from this workspace.
 publish = false
 

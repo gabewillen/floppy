@@ -1,8 +1,8 @@
 {
   "format": "stateforward.scxml.service-package/v1",
-  "service-uri": "https://github.com/stateforward/nemobot/services/generate",
+  "service-uri": "https://github.com/stateforward/floppy/services/generate",
   "package-version": "0.1.0",
-  "service-artifact": "nemobot_service_generate.virtualized.wasm",
+  "service-artifact": "floppy_service_generate.virtualized.wasm",
   "schema-artifact": null,
   "schema-sha256": null,
   "wit-world": "stateforward:scxml/invoked-service",

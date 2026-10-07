@@ -1,14 +1,14 @@
 # shellcheck shell=sh
 # Sourced (not executed) by scripts that build release wasm32-wasip2 guests
 # (adapted from scxml.rs/scripts/reproducible-wasm-env.sh: the workspace
-# prefix is /nemobot).
+# prefix is /floppy).
 #
 # Contract: after sourcing with `workspace` set to the absolute repository
 # root, `CARGO_TARGET_WASM32_WASIP2_RUSTFLAGS` remaps every absolute build
 # path that rustc can embed into guest bytes (panic locations and file
 # names) to a fixed virtual prefix:
 #
-#   <workspace>                          -> /nemobot
+#   <workspace>                          -> /floppy
 #   <CARGO_HOME>/registry/src            -> /cargo/registry/src
 #   <CARGO_HOME>/git/checkouts           -> /cargo/git/checkouts
 #   <sysroot>/lib/rustlib/src/rust       -> /rustc/<commit-hash>
@@ -58,6 +58,6 @@ done
 
 # rustc applies the last matching mapping, so the most specific prefixes
 # come last.
-CARGO_TARGET_WASM32_WASIP2_RUSTFLAGS="-Dwarnings --remap-path-prefix=$workspace=/nemobot --remap-path-prefix=$reproducible_cargo_home/registry/src=/cargo/registry/src --remap-path-prefix=$reproducible_cargo_home/git/checkouts=/cargo/git/checkouts --remap-path-prefix=$reproducible_sysroot/lib/rustlib/src/rust=/rustc/$reproducible_commit"
+CARGO_TARGET_WASM32_WASIP2_RUSTFLAGS="-Dwarnings --remap-path-prefix=$workspace=/floppy --remap-path-prefix=$reproducible_cargo_home/registry/src=/cargo/registry/src --remap-path-prefix=$reproducible_cargo_home/git/checkouts=/cargo/git/checkouts --remap-path-prefix=$reproducible_sysroot/lib/rustlib/src/rust=/rustc/$reproducible_commit"
 export CARGO_TARGET_WASM32_WASIP2_RUSTFLAGS
 unset reproducible_cargo_home reproducible_sysroot reproducible_commit reproducible_path

@@ -10,7 +10,7 @@
 //!
 //! ```xml
 //! <onentry><decision:menu location="menu"/></onentry>
-//! <invoke type="https://github.com/stateforward/nemobot/services/decision" ...>
+//! <invoke type="https://github.com/stateforward/floppy/services/decision" ...>
 //!   <param name="menu" expr="menu"/>
 //!   <param name="state" expr="..."/>
 //! </invoke>
@@ -97,7 +97,7 @@ pub const NAMESPACE_NAME: &str = "decision";
 /// The exact namespace URI documents bind: tagless, so it names the
 /// repository's latest release (decision D19); the manifest and schema name
 /// it too.
-pub const NAMESPACE_URI: &str = "https://github.com/stateforward/nemobot/namespaces/decision";
+pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespaces/decision";
 
 /// Upper bound on a menu event name's bytes (wasm builds only).
 pub const MAX_EVENT_NAME_BYTES: usize = wasm_bound(256);

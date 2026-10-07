@@ -1,7 +1,7 @@
 //! Integration test of the `generate` service through `scx run`: a
-//! session binds the real `nemobot_service_generate` component (resolved
+//! session binds the real `floppy_service_generate` component (resolved
 //! from its repository URI) and invokes
-//! it (`<invoke type="https://github.com/stateforward/nemobot/services/generate">`)
+//! it (`<invoke type="https://github.com/stateforward/floppy/services/generate">`)
 //! against a deterministic fake Chat Completions backend on 127.0.0.1
 //! (nothing reaches the network). The request runs off the session thread
 //! (the service awaits `outbound-http.fetch`, an `async func`, which
@@ -12,7 +12,7 @@
 //! substitutes the values into the admitted request.
 //!
 //! The ignored `live_generate_through_an_env_file` test makes one real call:
-//! `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p nemobot-tests --test
+//! `FLOPPY_LIVE_ENV_FILE=<path> cargo test -p floppy-tests --test
 //! generate_service -- --ignored`. The file must set `OPENAI_API_KEY`;
 //! `OPENAI_BASE_URL` is the file's value, else `OpenAI`'s, given as the
 //! calling shell's value through `--env OPENAI_BASE_URL` (no backend URL is
@@ -35,7 +35,7 @@ use std::time::{Duration, Instant};
 use support::{Finished, Run, labelled, logs, run_document, scratch, service_uri};
 
 /// The fake key (not a secret): the mock checks it arrives as the bearer.
-const FAKE_KEY: &str = "sk-nemobot-fake";
+const FAKE_KEY: &str = "sk-floppy-fake";
 
 fn generate() -> String {
     service_uri("generate")
@@ -557,15 +557,15 @@ fn leaving_the_invoking_state_closes_the_streaming_model_call() {
 }
 
 /// One real structured generation through an env file
-/// (`NEMOBOT_LIVE_ENV_FILE`; `NEMOBOT_LIVE_MODEL`, default `gpt-6-luna`).
+/// (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, default `gpt-6-luna`).
 /// Prints nothing but pass or fail.
 #[test]
-#[ignore = "makes one real model call; needs NEMOBOT_LIVE_ENV_FILE"]
+#[ignore = "makes one real model call; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_generate_through_an_env_file() {
-    let Some(path) = std::env::var_os("NEMOBOT_LIVE_ENV_FILE").map(PathBuf::from) else {
-        panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets OPENAI_API_KEY");
+    let Some(path) = std::env::var_os("FLOPPY_LIVE_ENV_FILE").map(PathBuf::from) else {
+        panic!("set FLOPPY_LIVE_ENV_FILE to an env file that sets OPENAI_API_KEY");
     };
-    let model = std::env::var("NEMOBOT_LIVE_MODEL").unwrap_or_else(|_| "gpt-6-luna".into());
+    let model = std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "gpt-6-luna".into());
     let args = args(&path);
     let params = format!(
         r#"<param name="model" expr="'{model}'"/>

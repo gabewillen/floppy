@@ -22,7 +22,7 @@
 //!
 //! ```xml
 //! <onentry><decision:menu location="menu"/></onentry>
-//! <invoke type="https://github.com/stateforward/nemobot/services/decision"
+//! <invoke type="https://github.com/stateforward/floppy/services/decision"
 //!         env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
 //!   <param name="menu" expr="menu"/>
 //!   <param name="state" expr="({failures: failures})"/>
@@ -149,7 +149,7 @@ pub const SERVICE_NAME: &str = "decision";
 
 /// The exact service type URI documents name: tagless, so it names the
 /// repository's latest release (decision D19); the manifest names it too.
-pub const SERVICE_URI: &str = "https://github.com/stateforward/nemobot/services/decision";
+pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/decision";
 
 /// The `env` slot of the API key (`env:apikey`).
 pub const API_KEY_SLOT: &str = "apikey";

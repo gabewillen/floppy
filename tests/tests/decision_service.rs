@@ -12,7 +12,7 @@
 //! substitutes the values into the admitted request.
 //!
 //! The ignored `live_decision_through_an_env_file` test makes one real call:
-//! `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p nemobot-tests --test
+//! `FLOPPY_LIVE_ENV_FILE=<path> cargo test -p floppy-tests --test
 //! decision_service -- --ignored`. The file must set `TYPESAFE_API_KEY`;
 //! `TYPESAFE_BASE_URL` is the file's value, else `TypeSafe`'s, given as the
 //! calling shell's value through `--env TYPESAFE_BASE_URL` (no backend URL is
@@ -35,9 +35,9 @@ use std::time::Duration;
 use serde_json::{Map, Value as Json, json};
 use support::{Finished, labelled, logs, run_document, scratch, service_uri};
 
-const NAMESPACE_URI: &str = "https://github.com/stateforward/nemobot/namespaces/decision";
+const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespaces/decision";
 /// The fake key (not a secret): the mock checks it arrives as the bearer.
-const FAKE_KEY: &str = "ts-nemobot-fake";
+const FAKE_KEY: &str = "ts-floppy-fake";
 
 /// The flags of a run whose values come from `env_file`.
 fn args(env_file: &Path) -> Vec<String> {
@@ -423,14 +423,14 @@ fn classify_returns_every_labels_probability() {
 }
 
 /// One real `system_one` decision through an env file
-/// (`NEMOBOT_LIVE_ENV_FILE`). Passes when the machine reaches one of its
+/// (`FLOPPY_LIVE_ENV_FILE`). Passes when the machine reaches one of its
 /// schema transitions with data its schema admits, or abstains. Prints
 /// only pass or fail and the final state's id.
 #[test]
-#[ignore = "makes one real TypeSafe call; needs NEMOBOT_LIVE_ENV_FILE"]
+#[ignore = "makes one real TypeSafe call; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_decision_through_an_env_file() {
-    let Some(path) = std::env::var_os("NEMOBOT_LIVE_ENV_FILE").map(PathBuf::from) else {
-        panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets TYPESAFE_API_KEY");
+    let Some(path) = std::env::var_os("FLOPPY_LIVE_ENV_FILE").map(PathBuf::from) else {
+        panic!("set FLOPPY_LIVE_ENV_FILE to an env file that sets TYPESAFE_API_KEY");
     };
     // The env file sets no TYPESAFE_BASE_URL: the service uses its package's
     // declared origin (decision D18).

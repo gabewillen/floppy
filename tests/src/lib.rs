@@ -1,6 +1,6 @@
-//! nemobot's integration tests.
+//! floppy's integration tests.
 //!
-//! nemobot has no runtime of its own (decision D14 in `docs/decisions.md`):
+//! floppy has no runtime of its own (decision D14 in `docs/decisions.md`):
 //! its bots are SCXML documents and its namespaces and services are Wasm
 //! component packages, and all of them run on scxml.rs. The tests under
 //! `tests/` therefore drive `scx run`, built from the `scxml.rs/` subtree

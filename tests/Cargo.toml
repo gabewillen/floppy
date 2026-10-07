@@ -1,6 +1,6 @@
 [package]
-name = "nemobot-tests"
-description = "nemobot's integration tests: its bots, namespaces, and services run on scxml.rs through `scx run`"
+name = "floppy-tests"
+description = "floppy's integration tests: its bots, namespaces, and services run on scxml.rs through `scx run`"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -12,7 +12,7 @@
 //! [`SERVICE_URI`]:
 //!
 //! ```xml
-//! <invoke idlocation="gen" type="https://github.com/stateforward/nemobot/services/generate"
+//! <invoke idlocation="gen" type="https://github.com/stateforward/floppy/services/generate"
 //!         env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
 //!   <param name="model" expr="'gpt-6-luna'"/>
 //!   <param name="prompt" expr="'Say hello.'"/>
@@ -146,7 +146,7 @@ pub const SERVICE_NAME: &str = "generate";
 
 /// The exact service type URI documents name: tagless, so it names the
 /// repository's latest release (decision D19); the manifest names it too.
-pub const SERVICE_URI: &str = "https://github.com/stateforward/nemobot/services/generate";
+pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/generate";
 
 /// The `env` slot of the API key (`env:apikey`).
 pub const API_KEY_SLOT: &str = "apikey";

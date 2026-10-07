@@ -1,4 +1,4 @@
-# mosfet to nemobot port plan
+# mosfet to floppy port plan
 
 mosfet is a Python runtime for software robots: a bot is a **body** (lifetime,
 environment I/O, stimulus fan-out) and a **cognition** (interpretation,
@@ -7,7 +7,7 @@ state machine, abilities are the composition unit, devices face the
 environment, providers own SDKs, and learned **behaviors** are Starlark
 programs compiled to HSM behaviors.
 
-nemobot keeps that shape and replaces the substrate: every machine is an SCXML
+floppy keeps that shape and replaces the substrate: every machine is an SCXML
 document run by the scxml.rs engine inside the `scxml-machine` Wasm component,
 and every effect is a versioned Wasm component (an extension namespace or an
 invoked service). The decisions behind this plan are in
@@ -16,13 +16,13 @@ invoked service). The decisions behind this plan are in
 
 ## Concept map
 
-| mosfet | nemobot |
+| mosfet | floppy |
 | --- | --- |
-| `mosfet.Bot` (body + cognition) | One root SCXML document per bot under `bots/<name>/`, run as a live session by scxml.rs's `scx run` (nemobot has no runtime of its own, decision D14) |
+| `mosfet.Bot` (body + cognition) | One root SCXML document per bot under `bots/<name>/`, run as a live session by scxml.rs's `scx run` (floppy has no runtime of its own, decision D14) |
 | hsm state machines | SCXML documents (table below) |
 | Abilities (listening, speaking, cognition, memory, ...) | Invoked children: `<invoke type="scxml" src="abilities/<name>.scxml" id="<name>">`, talking to the parent through `#_parent` and to the child through `#_<invokeid>` |
 | Ability attachment protocol (`bot.ability.attachment.*`, yamux) | Not ported: `<invoke>` lifecycle is attach (start on state entry) and detach (cancel on state exit, `done.invoke.<id>` on completion) |
-| Devices (phone, audio, smart phone) | Invoked services: `<invoke type="https://github.com/stateforward/nemobot/services/<device>@<tag>">` (later phases) |
+| Devices (phone, audio, smart phone) | Invoked services: `<invoke type="https://github.com/stateforward/floppy/services/<device>@<tag>">` (later phases) |
 | Providers (SDK owners) | Invoked services (`services/`) for every effect: anything asynchronous, I/O-bound, or long-running (decision D13); extension namespaces (`namespaces/`) only for synchronous, quick executable content (table below) |
 | Starlark behaviors (compiled, stored, cached) | Validator-gated SCXML: the builder bot authors the behavior as an SCXML document, `scx:validate` gates it, and a simulation as an invoked child proves it before it is stored; a matched behavior runs as an invoked child |
 | Persistent routines (`hsm.every` / `hsm.at` across turns) | Long-lived invoked children whose schedules are self-rescheduling `<send delay>` loops; each tick is an event to the parent, which decides on it in a new turn |
@@ -62,7 +62,7 @@ component code.
 
 ## Providers to namespaces and services
 
-| mosfet provider | nemobot | Phase |
+| mosfet provider | floppy | Phase |
 | --- | --- | --- |
 | `openai_compat` | `services/generate`, OpenAI backend (`env:apikey`, `env:baseurl`) | 1 |
 | `gemini` (text) | `services/generate` through an OpenAI-compatible base URL | 7 |
@@ -81,7 +81,7 @@ phase 7; until then every backend is selected by its `env:baseurl` slot.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 0 | scxml.rs invoked services: slice 1 (`invoked-service` world, host and CLI binding, echo example) and slice 2 (WASI permissions and grants, event contracts, env slots on `<invoke>`, repository services), then deferred service requests (`outbound-http.begin`/`take`, outcomes through `wake`) and unbound invoke types failing at invocation start; nemobot repository scaffold (subtree, workspace, an embedder and its smoke test, namespace skeletons, rules, this plan; decision D14 deleted the embedder, and the smoke test now drives `scx run`) | Done (scxml.rs `feat/invoke-services` at `9971c05a`, now `5eb077c4`; this repository's first commits). Extension components get no WASI, by rule (decision D13), not as a gap |
+| 0 | scxml.rs invoked services: slice 1 (`invoked-service` world, host and CLI binding, echo example) and slice 2 (WASI permissions and grants, event contracts, env slots on `<invoke>`, repository services), then deferred service requests (`outbound-http.begin`/`take`, outcomes through `wake`) and unbound invoke types failing at invocation start; floppy repository scaffold (subtree, workspace, an embedder and its smoke test, namespace skeletons, rules, this plan; decision D14 deleted the embedder, and the smoke test now drives `scx run`) | Done (scxml.rs `feat/invoke-services` at `9971c05a`, now `5eb077c4`; this repository's first commits). Extension components get no WASI, by rule (decision D13), not as a gap |
 | 1 | Namespaces and services: `scxml` (now scxml.rs's embedded `scx` namespace, decision D17: `scx:validate` wrapping the validator component, returning canonical diagnostics and fixes), `generate` (OpenAI text and structured output), `decision` (enabled-transition candidates, TypeSafe ranking, schema fill and validation before emit) | `scxml` namespace implemented, then moved to scxml.rs as `scx` (`scx:validate`); `services/generate` implemented (one Chat Completions call per `<invoke>`, text or schema-validated structured output, `generate.result`/`generate.failed`, never blocking the session; `env:apikey`/`env:baseurl`); `decision` split per D13: the namespace's `decision:menu` (snapshot menu of `event:schema` transitions whose guards evaluate to true) and `services/decision` (request kinds `choose`, `rank`, `classify`; grounded per-member fill, validation against the menu's schema before emit, `decision.abstain`, `decision.failed`; TypeSafe `system_one` backend behind the `Backend` trait, `env:apikey`/`env:baseurl`) |
 | 2 | Builder bot: `bots/builder/` SCXML (intake, design, author, `scx:validate`, fix or regenerate with bounded retries as states, simulate the draft as an invoked child via `#_<invokeid>`, ending in the final states `done`/`failed` whose `<donedata>` carries the result), run with `scx run` | `bots/builder/builder.scx` implemented (contract schemas in `bots/builder/schemas`; design and author invoke the generate service and triage invokes the decision service on the `decision:menu` menu, each with `<finalize>`/`done.invoke` and a `builder.timeout` that preempts and cancels the call; cond-based fallback; simulation as an invoked child); runs with `scx run --env-file .env bots/builder/builder.scx` (decisions D14, D16; [bots/builder/README.md](../bots/builder/README.md#running)); deterministic harness in `tests/tests/builder_bot.rs`, which runs that command (including a timeout firing while a generation is in flight); live results in [live-proof.md](live-proof.md) |
 | 3 | Memory service on SQLite | Not started |
@@ -94,7 +94,7 @@ phase 7; until then every backend is selected by its `env:baseurl` slot.
 
 - By rule (decision D13), not as a gap: extension components get no WASI
   interface (scxml.rs refuses an extension package that declares a WASI
-  permission), and nemobot's extension packages declare no `http-origins`,
+  permission), and floppy's extension packages declare no `http-origins`,
   so no request of theirs is admitted. Every effect is an invoked service.
 - A cancelled service's request that is still resolving its host or
   opening its TCP connection ends only within the connect timeout (10 s;
@@ -104,7 +104,7 @@ phase 7; until then every backend is selected by its `env:baseurl` slot.
 - `scx run` lists, before running, each package's origins, slots, and
   WASI imports (with what the run grants), and each variable the document
   names with the elements and `<invoke>`s it goes to.
-- nemobot publishes no GitHub release yet, so its tagless repository URIs
+- floppy publishes no GitHub release yet, so its tagless repository URIs
   resolve only from the dev cache `scripts/build-components.sh` publishes
   into (`scx run --offline --cache-dir target/components/package-cache`);
   phase 7 publishes releases, and the same documents then resolve the

@@ -1,5 +1,5 @@
 [package]
-name = "nemobot-decision"
+name = "floppy-decision"
 description = "The `decision` namespace: `<decision:menu>`, the canonical menu of the enabled transitions and their event schemas (the synchronous half of a decision), as a Wasm extension component"
 version.workspace = true
 edition.workspace = true

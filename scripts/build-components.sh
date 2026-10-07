@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds and verifies nemobot's Wasm components for wasm32-wasip2, the way
+# Builds and verifies floppy's Wasm components for wasm32-wasip2, the way
 # scxml.rs builds its own (scxml.rs/scripts/verify-wasm-capabilities.sh).
 #
 # Usage: sh scripts/build-components.sh [--artifacts-dir DIR] [--session-only]
@@ -13,7 +13,7 @@
 #    SCXML_WASM_ARTIFACTS_DIR=DIR/scxml (README.md, "Running a bot"). Its
 #    CARGO_TARGET_DIR is target/scxml.rs (never the subtree's own target
 #    directory).
-# 2. Unless --session-only: every nemobot namespace component and invoked
+# 2. Unless --session-only: every floppy namespace component and invoked
 #    service component, built one cargo invocation per component (so
 #    features never unify across them) with the reproducible release flags
 #    (scripts/reproducible-wasm-env.sh), WASI virtualized by the pinned
@@ -30,7 +30,7 @@
 #    URI pinned in index/<sha256 of the URI>.json to this checkout's commit,
 #    the release tag v<package-version> (a tagless URI's entry records the
 #    release it was pinned to), and those digests. The documents' tagless
-#    repository URIs (https://github.com/stateforward/nemobot/namespaces/<name>
+#    repository URIs (https://github.com/stateforward/floppy/namespaces/<name>
 #    and .../services/<name>) then resolve from it with
 #    `scx --offline --cache-dir DIR/package-cache`, with no network, and
 #    every run re-verifies the bytes against the pins; the same documents
@@ -48,8 +48,8 @@ expected_wasi_virt='wasi-virt 0.2.0'
 expected_wasi_virt_source='https://github.com/bytecodealliance/WASI-Virt'
 expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
-namespace_components='nemobot_decision'
-service_components='nemobot_service_generate nemobot_service_decision'
+namespace_components='floppy_decision'
+service_components='floppy_service_generate floppy_service_decision'
 
 usage() {
     echo "usage: build-components.sh [--artifacts-dir DIR] [--session-only]" >&2
@@ -91,7 +91,7 @@ expected_imports() {
         # <decision:menu>: reads the transitions through the session
         # snapshot, evaluates their guards through the data model, and
         # assigns the menu there; no execution-host or outbound-http.
-        nemobot_decision)
+        floppy_decision)
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0' \
@@ -101,7 +101,7 @@ expected_imports() {
         # The generate and decision services: one async `invoke` export
         # (their events go to the stream it returns) and one request through
         # outbound-http's async `fetch`; they never read the logical clock.
-        nemobot_service_generate|nemobot_service_decision)
+        floppy_service_generate|floppy_service_decision)
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
                 'stateforward:scxml/outbound-http@0.2.0' \
@@ -122,7 +122,7 @@ session_manifest_sha256=$(sha256_file "$artifacts_dir/scxml/manifest.tsv")
 printf 'session-components dir=%s manifest-sha256=%s\n' "$artifacts_dir/scxml" "$session_manifest_sha256"
 [ "$session_only" = false ] || exit 0
 
-# 2. nemobot namespace and service components.
+# 2. floppy namespace and service components.
 actual_wasm_tools=$(wasm-tools --version | cut -d ' ' -f 1-2)
 test "$actual_wasm_tools" = "$expected_wasm_tools" || {
     echo "wasm-tools identity mismatch: expected $expected_wasm_tools, found $actual_wasm_tools" >&2
@@ -170,7 +170,7 @@ build_kind() {
     manifest="$kind_dir/components.tsv"
     manifest_tmp="$manifest.tmp"
     {
-        printf 'schema\tstateforward.nemobot.wasm-artifacts/v1\n'
+        printf 'schema\tstateforward.floppy.wasm-artifacts/v1\n'
         printf 'profile\trelease\n'
         printf 'target\twasm32-wasip2\n'
         printf 'wasm-tools\t%s\n' "$expected_wasm_tools"
@@ -193,7 +193,7 @@ build_component() {
     test -f "$raw" || { echo "missing release component artifact: $raw" >&2; exit 1; }
     virt_input=$raw
     case "$component" in
-        nemobot_decision|nemobot_service_generate|nemobot_service_decision)
+        floppy_decision|floppy_service_generate|floppy_service_decision)
         # <decision:menu> compiles each offered schema, the generate service
         # checks structured output, and the decision service checks the
         # menu's schemas and the filled event data with the same `event`
@@ -279,7 +279,7 @@ publish_entry() {
 }
 
 for component in $namespace_components; do
-    name=${component#nemobot_}
+    name=${component#floppy_}
     manifest="$workspace/namespaces/$name/package/$name.extension.json"
     uri=$(manifest_field "$manifest" namespace-uri)
     schema="$workspace/namespaces/$name/package/$(manifest_field "$manifest" schema-artifact)"
@@ -297,7 +297,7 @@ for component in $namespace_components; do
     printf 'published %s component-sha256=%s\n' "$uri" "$component_sha256"
 done
 for component in $service_components; do
-    name=${component#nemobot_service_}
+    name=${component#floppy_service_}
     manifest="$workspace/services/$name/package/$name.service.json"
     uri=$(manifest_field "$manifest" service-uri)
     [ -n "$uri" ] || { echo "malformed manifest: $manifest" >&2; exit 1; }

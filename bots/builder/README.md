@@ -9,7 +9,7 @@ request on standard input:
 # The locally built packages (the dev cache under target/).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx
-# nemobot's latest release, once one is published (phase 7).
+# floppy's latest release, once one is published (phase 7).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
   scx run --env-file .env bots/builder/builder.scx
 ```
@@ -63,7 +63,7 @@ intake -> design -> author -> validate -> simulate -> done
 ```
 
 * `design`: invokes the generate service
-  (`https://github.com/stateforward/nemobot/services/generate`, a
+  (`https://github.com/stateforward/floppy/services/generate`, a
   fresh invoke id in `gen_id` each time) with the `topology_plan`
   structured-output schema; its `<finalize>` takes the plan from
   `generate.result` (or the code from `generate.failed`), and
@@ -107,7 +107,7 @@ intake -> design -> author -> validate -> simulate -> done
   `triage.repair` (guarded by `plan !== null`, so it is on the menu only
   when there is a plan to repair from), `triage.redesign`, and
   `triage.abandon`. The decision service
-  (`https://github.com/stateforward/nemobot/services/decision`),
+  (`https://github.com/stateforward/floppy/services/decision`),
   invoked with that menu and the failure state, picks one, validates its
   data against the menu's schema, and returns it.
 * `fallback`: the cond-based triage when the decision is unavailable (no
@@ -153,8 +153,8 @@ Everything a run needs is in the document:
 
 * Its `decision` namespace and its `<invoke type>`s (`generate`,
   `decision`) are tagless repository URIs
-  (`https://github.com/stateforward/nemobot/namespaces/<name>`,
-  `.../services/<name>`), which name nemobot's latest release: `scx`
+  (`https://github.com/stateforward/floppy/namespaces/<name>`,
+  `.../services/<name>`), which name floppy's latest release: `scx`
   resolves them from that release, or, with `--offline --cache-dir
   target/components/package-cache`, from the dev cache
   `scripts/build-components.sh` publishes the locally built packages into
@@ -192,7 +192,7 @@ From the repository root, after `sh scripts/build-components.sh` and with
 # The locally built packages (the dev cache under target/).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx
-# nemobot's latest release, once one is published (phase 7).
+# floppy's latest release, once one is published (phase 7).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
   scx run --env-file .env bots/builder/builder.scx
 ```

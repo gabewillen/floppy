@@ -133,7 +133,7 @@ fn execution(result: Result<Executed, Failure<&'static str>>) -> &'static str {
 fn the_namespace_uri_is_the_tagless_repository_path_of_its_name() {
     assert_eq!(
         NAMESPACE_URI,
-        format!("https://github.com/stateforward/nemobot/namespaces/{NAMESPACE_NAME}")
+        format!("https://github.com/stateforward/floppy/namespaces/{NAMESPACE_NAME}")
     );
 }
 
@@ -146,7 +146,7 @@ fn the_package_binds_the_exact_uri_and_schema_and_declares_no_io() {
     assert_eq!(manifest.namespace_uri, NAMESPACE_URI);
     assert_eq!(
         manifest.extension_artifact,
-        "nemobot_decision.virtualized.wasm"
+        "floppy_decision.virtualized.wasm"
     );
     // Executable content is synchronous and does no I/O: the manifest
     // declares no origin and no slot (the decision service returns the

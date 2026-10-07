@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  The nemobot builder bot: builds one SCXML machine (never Rust) from a
+  The floppy builder bot: builds one SCXML machine (never Rust) from a
   natural-language specification. Run it directly with scx run, giving it
   an env file and the builder.request on standard input (README.md,
   "Running"), or invoke it as a child and send it the request:
@@ -66,7 +66,7 @@
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:scx="https://github.com/stateforward/scxml.rs/namespaces/scx"
-       xmlns:decision="https://github.com/stateforward/nemobot/namespaces/decision"
+       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="builder" initial="intake">
@@ -96,8 +96,8 @@
     <data id="decision_id" expr="null"/>
     <data id="menu" expr="[]"/>
     <data id="stage_run" expr="0"/>
-    <data id="design_system" expr="'You are the design stage of the nemobot builder bot. Plan the topology of one SCXML 1.0 state machine that implements the specification and honours every constraint. Use concise lowercase state ids (letters, digits, underscores). Name events with dotted lowercase names. Inputs are events the machine receives from its invoker; outputs are events it sends to its invoker. Model timing with delayed timer events, never with loops. When diagnostics or a previous plan are given, the previous attempt failed: plan again so that it cannot fail the same way. Answer with the plan only.'"/>
-    <data id="author_system" expr="'You are the author stage of the nemobot builder bot. Write one complete SCXML 1.0 document that implements the plan and the specification. Rules: the root element is scxml in the namespace http://www.w3.org/2005/07/scxml with version 1.0 and datamodel ecmascript; use only core SCXML elements, plus the schema attribute of the namespace https://github.com/stateforward/scxml.rs/namespaces/event (bound to the prefix event) to give each input event an inline JSON Schema on the transitions that take it, written as single-quoted JSON; no other namespaces, no src or srcexpr attributes, no script elements, no invoke elements, no type or typeexpr attribute on send (drafts that break these rules are refused before validation counts); every transition target names an existing state id; event descriptors are separated by spaces, never commas; send every output to the invoker with a send element whose target is #_parent, exactly once per occurrence (announce a state from its own onentry, not also from the transitions into it); the machine starts on its own in its initial state unless the specification names a start event; every state is reachable; implement timing with delayed sends (for example delay 3s) and cancel pending timers on exit. Also return schemas: one entry per input event, its schema as the JSON text of a JSON Schema object (for example {&quot;type&quot;:&quot;object&quot;}) equal to the inline one; and tests: one to eight test scripts, each with input events (name, data as JSON object text or the empty string, delay_ms from the start of the test), settle_ms (the total observation time from the start of the test, larger than every delay_ms), expect_events (the output event names the machine must send to #_parent, in order; other outputs may appear between them), and expect_done (whether the machine reaches a top-level final state within settle_ms; a machine that cycles forever never does). When the task is repair, previous_scxml and previous_tests failed with the given diagnostics: a simulate diagnostic means either the machine or the test expectation is wrong, so fix whichever disagrees with the specification, fix every other diagnostic, and keep what already works.'"/>
+    <data id="design_system" expr="'You are the design stage of the floppy builder bot. Plan the topology of one SCXML 1.0 state machine that implements the specification and honours every constraint. Use concise lowercase state ids (letters, digits, underscores). Name events with dotted lowercase names. Inputs are events the machine receives from its invoker; outputs are events it sends to its invoker. Model timing with delayed timer events, never with loops. When diagnostics or a previous plan are given, the previous attempt failed: plan again so that it cannot fail the same way. Answer with the plan only.'"/>
+    <data id="author_system" expr="'You are the author stage of the floppy builder bot. Write one complete SCXML 1.0 document that implements the plan and the specification. Rules: the root element is scxml in the namespace http://www.w3.org/2005/07/scxml with version 1.0 and datamodel ecmascript; use only core SCXML elements, plus the schema attribute of the namespace https://github.com/stateforward/scxml.rs/namespaces/event (bound to the prefix event) to give each input event an inline JSON Schema on the transitions that take it, written as single-quoted JSON; no other namespaces, no src or srcexpr attributes, no script elements, no invoke elements, no type or typeexpr attribute on send (drafts that break these rules are refused before validation counts); every transition target names an existing state id; event descriptors are separated by spaces, never commas; send every output to the invoker with a send element whose target is #_parent, exactly once per occurrence (announce a state from its own onentry, not also from the transitions into it); the machine starts on its own in its initial state unless the specification names a start event; every state is reachable; implement timing with delayed sends (for example delay 3s) and cancel pending timers on exit. Also return schemas: one entry per input event, its schema as the JSON text of a JSON Schema object (for example {&quot;type&quot;:&quot;object&quot;}) equal to the inline one; and tests: one to eight test scripts, each with input events (name, data as JSON object text or the empty string, delay_ms from the start of the test), settle_ms (the total observation time from the start of the test, larger than every delay_ms), expect_events (the output event names the machine must send to #_parent, in order; other outputs may appear between them), and expect_done (whether the machine reaches a top-level final state within settle_ms; a machine that cycles forever never does). When the task is repair, previous_scxml and previous_tests failed with the given diagnostics: a simulate diagnostic means either the machine or the test expectation is wrong, so fix whichever disagrees with the specification, fix every other diagnostic, and keep what already works.'"/>
     <data id="triage_instructions" expr="'An SCXML draft failed. Choose how the builder continues: repair the draft from its diagnostics when they are local mistakes, redesign the plan when the diagnostics show the topology is wrong or there is no plan, abandon only when the specification cannot be built as a state machine.'"/>
     <data id="plan_schema" expr='({"type":"object","properties":{"name":{"type":"string"},"summary":{"type":"string"},"states":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["atomic","compound","parallel","final"]},"parent":{"type":"string"},"purpose":{"type":"string"}},"required":["id","kind","parent","purpose"],"additionalProperties":false}},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"direction":{"type":"string","enum":["input","output","internal"]},"description":{"type":"string"}},"required":["name","direction","description"],"additionalProperties":false}},"transitions":{"type":"array","items":{"type":"object","properties":{"source":{"type":"string"},"event":{"type":"string"},"target":{"type":"string"},"description":{"type":"string"}},"required":["source","event","target","description"],"additionalProperties":false}}},"required":["name","summary","states","events","transitions"],"additionalProperties":false})'/>
     <data id="draft_schema" expr='({"type":"object","properties":{"scxml":{"type":"string"},"schemas":{"type":"array","items":{"type":"object","properties":{"event":{"type":"string"},"schema":{"type":"string"}},"required":["event","schema"],"additionalProperties":false}},"tests":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"data":{"type":"string"},"delay_ms":{"type":"integer"}},"required":["name","data","delay_ms"],"additionalProperties":false}},"settle_ms":{"type":"integer"},"expect_events":{"type":"array","items":{"type":"string"}},"expect_done":{"type":"boolean"}},"required":["name","events","settle_ms","expect_events","expect_done"],"additionalProperties":false}}},"required":["scxml","schemas","tests"],"additionalProperties":false})'/>
@@ -165,7 +165,7 @@
     <onexit>
       <cancel sendid="design-timeout"/>
     </onexit>
-    <invoke idlocation="gen_id" type="https://github.com/stateforward/nemobot/services/generate"
+    <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
       <param name="model" expr="model"/>
       <param name="system" expr="design_system"/>
@@ -216,7 +216,7 @@
     <onexit>
       <cancel sendid="author-timeout"/>
     </onexit>
-    <invoke idlocation="gen_id" type="https://github.com/stateforward/nemobot/services/generate"
+    <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
       <param name="model" expr="model"/>
       <param name="system" expr="author_system"/>
@@ -420,7 +420,7 @@
     <onexit>
       <cancel sendid="triage-timeout"/>
     </onexit>
-    <invoke idlocation="decision_id" type="https://github.com/stateforward/nemobot/services/decision"
+    <invoke idlocation="decision_id" type="https://github.com/stateforward/floppy/services/decision"
             env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
       <param name="menu" expr="menu"/>
       <param name="state" expr="({spec: spec, attempt: attempt, failures: failures, max_attempts: max_attempts, has_plan: plan !== null, diagnostics: diagnostics})"/>

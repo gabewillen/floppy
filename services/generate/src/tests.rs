@@ -422,11 +422,11 @@ fn the_package_manifest_binds_the_exact_uri_and_artifacts() {
     assert_eq!(manifest.service_uri, SERVICE_URI);
     assert_eq!(
         SERVICE_URI,
-        format!("https://github.com/stateforward/nemobot/services/{SERVICE_NAME}")
+        format!("https://github.com/stateforward/floppy/services/{SERVICE_NAME}")
     );
     assert_eq!(
         manifest.service_artifact,
-        "nemobot_service_generate.virtualized.wasm"
+        "floppy_service_generate.virtualized.wasm"
     );
     assert_eq!(manifest.env_slots, [API_KEY_SLOT, BASE_URL_SLOT]);
 }

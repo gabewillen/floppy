@@ -15,8 +15,8 @@
 //! it.
 //!
 //! The ignored `live_builder_through_an_env_file` test builds the same spec
-//! with the real backends: `NEMOBOT_LIVE_ENV_FILE=<path> cargo test -p
-//! nemobot-tests --test builder_bot -- --ignored`. The values are the
+//! with the real backends: `FLOPPY_LIVE_ENV_FILE=<path> cargo test -p
+//! floppy-tests --test builder_bot -- --ignored`. The values are the
 //! file's; the base URLs fall back to `OpenAI`'s and `TypeSafe`'s, given as
 //! the calling shell's values through `--env OPENAI_BASE_URL --env
 //! TYPESAFE_BASE_URL` (no backend URL is compiled into a component). It
@@ -41,8 +41,8 @@ use serde_json::{Map, Value as Json, json};
 use support::{Run, output, scratch, workspace, write};
 
 /// The fake keys (not secrets): the mock checks they arrive as bearers.
-const FAKE_OPENAI_KEY: &str = "sk-nemobot-fake";
-const FAKE_TYPESAFE_KEY: &str = "ts-nemobot-fake";
+const FAKE_OPENAI_KEY: &str = "sk-floppy-fake";
+const FAKE_TYPESAFE_KEY: &str = "ts-floppy-fake";
 const SPEC: &str = "a traffic light with a pedestrian button";
 
 fn builder_dir() -> PathBuf {
@@ -251,7 +251,7 @@ fn smuggling_draft() -> String {
 fn unicode_prefix_draft() -> String {
     draft(&traffic_light(&green_separate(), "red").replace(
         "version=\"1.0\"",
-        "xmlns:\u{e9}=\"https://github.com/stateforward/nemobot/namespaces/decision\" version=\"1.0\"",
+        "xmlns:\u{e9}=\"https://github.com/stateforward/floppy/namespaces/decision\" version=\"1.0\"",
     ).replace(
         "<onexit><cancel sendid=\"red-timer\"/>",
         "<onexit><\u{e9}:menu location=\"x\"/><cancel sendid=\"red-timer\"/>",
@@ -1288,16 +1288,16 @@ fn an_invalid_request_is_answered_with_builder_failed() {
 // Live.
 
 /// Builds the spec with the real `generate` (and `decision`) backends on the
-/// wall clock (`NEMOBOT_LIVE_ENV_FILE`; `NEMOBOT_LIVE_MODEL`, default
+/// wall clock (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, default
 /// `gpt-6-luna`). Writes the produced bot under `target/builder-live/` and
 /// prints only pass or fail and counts.
 #[test]
-#[ignore = "makes real model calls; needs NEMOBOT_LIVE_ENV_FILE"]
+#[ignore = "makes real model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_builder_through_an_env_file() {
-    let Some(path) = std::env::var_os("NEMOBOT_LIVE_ENV_FILE").map(PathBuf::from) else {
-        panic!("set NEMOBOT_LIVE_ENV_FILE to an env file that sets OPENAI_API_KEY");
+    let Some(path) = std::env::var_os("FLOPPY_LIVE_ENV_FILE").map(PathBuf::from) else {
+        panic!("set FLOPPY_LIVE_ENV_FILE to an env file that sets OPENAI_API_KEY");
     };
-    let model = std::env::var("NEMOBOT_LIVE_MODEL").unwrap_or_else(|_| "gpt-6-luna".into());
+    let model = std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "gpt-6-luna".into());
     let finished = start(
         &builder_document(),
         "wall",

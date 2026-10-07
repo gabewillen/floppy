@@ -1,6 +1,6 @@
-# nemobot
+# floppy
 
-nemobot is bots and the packages they use, run on
+floppy is bots and the packages they use, run on
 [scxml.rs](scxml.rs/README.md); it has no runtime of its own (decision D14).
 Every bot is an SCXML machine run by the scxml.rs Wasm engine through
 `scx run`, its abilities are invoked children, and its effects (model
@@ -8,7 +8,7 @@ generation, decisions, memory, speech, devices) are invoked services:
 versioned Wasm components that never block the machine. Extension namespaces
 hold only synchronous, quick executable content.
 
-nemobot is the successor of mosfet (a Python bot runtime of hsm state machines
+floppy is the successor of mosfet (a Python bot runtime of hsm state machines
 and Starlark behaviors); [docs/port-plan.md](docs/port-plan.md) maps one onto the
 other, and [docs/decisions.md](docs/decisions.md) records the decisions that shape it.
 
@@ -20,7 +20,7 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | `namespaces/decision/` | the canonical extension namespace (a Wasm component; synchronous executable content: `decision:menu`); the builder's `scx:validate` is scxml.rs's embedded `scx` namespace |
 | `services/{generate,decision}/` | canonical invoked services (Wasm components: model generation, decisions) |
 | `bots/builder/` | the builder bot: its SCXML document (`builder.scx`), schemas, and saved live examples |
-| `tests/` | `nemobot-tests`: integration tests that run the bots, namespaces, and services through `scx run` |
+| `tests/` | `floppy-tests`: integration tests that run the bots, namespaces, and services through `scx run` |
 | `scripts/` | build and proof scripts |
 
 ## Running a bot
@@ -36,13 +36,13 @@ SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml" \
   cargo install --locked --path scxml.rs/crates/scxml-cli
 # A bot, with the locally built packages.
 scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx
-# A bot, with the packages of nemobot's latest GitHub release (once phase 7
+# A bot, with the packages of floppy's latest GitHub release (once phase 7
 # publishes one).
 scx run --env-file .env bots/builder/builder.scx
 ```
 
 A bot's document is all a run needs: its namespaces and `<invoke type>`s are
-tagless repository URIs (`https://github.com/stateforward/nemobot/namespaces/<name>`,
+tagless repository URIs (`https://github.com/stateforward/floppy/namespaces/<name>`,
 `.../services/<name>`), which name the repository's latest release, so the
 same document runs against the dev cache `scripts/build-components.sh`
 fills (`--offline --cache-dir`) and against a release, unedited; its `env`

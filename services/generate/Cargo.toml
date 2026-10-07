@@ -1,5 +1,5 @@
 [package]
-name = "nemobot-service-generate"
+name = "floppy-service-generate"
 description = "The `generate` invoked service: one provider-neutral model generation (text or schema-validated structured output) per `<invoke>`, as a Wasm component whose `invoke` export is an `async func`"
 version.workspace = true
 edition.workspace = true

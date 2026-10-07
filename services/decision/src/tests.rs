@@ -96,7 +96,7 @@ fn choose() -> Prepared {
 fn the_service_uri_is_the_tagless_repository_path_of_its_name() {
     assert_eq!(
         SERVICE_URI,
-        format!("https://github.com/stateforward/nemobot/services/{SERVICE_NAME}")
+        format!("https://github.com/stateforward/floppy/services/{SERVICE_NAME}")
     );
 }
 
@@ -110,7 +110,7 @@ fn the_package_binds_the_exact_uri_slots_and_origin() {
     assert_eq!(manifest.service_uri, SERVICE_URI);
     assert_eq!(
         manifest.service_artifact,
-        "nemobot_service_decision.virtualized.wasm"
+        "floppy_service_decision.virtualized.wasm"
     );
     assert_eq!(manifest.env_slots, [API_KEY_SLOT, BASE_URL_SLOT]);
     assert_eq!(manifest.http_origins, ["https://api.typesafe.ai"]);

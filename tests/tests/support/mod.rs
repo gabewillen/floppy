@@ -44,11 +44,11 @@ pub const GRANTED: [&str; 4] = [
     "TYPESAFE_BASE_URL",
 ];
 
-/// The nemobot workspace root.
+/// The floppy workspace root.
 pub fn workspace() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .expect("the tests crate sits in the nemobot workspace")
+        .expect("the tests crate sits in the floppy workspace")
 }
 
 /// The SHA-256 of a file, lowercase hex.
@@ -88,9 +88,9 @@ impl Components {
     }
 }
 
-/// The exact type URI of the nemobot service `name`.
+/// The exact type URI of the floppy service `name`.
 pub fn service_uri(name: &str) -> String {
-    format!("https://github.com/stateforward/nemobot/services/{name}")
+    format!("https://github.com/stateforward/floppy/services/{name}")
 }
 
 /// The components `scripts/build-components.sh` builds and verifies.
