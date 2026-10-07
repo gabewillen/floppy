@@ -815,8 +815,8 @@ pipeline.
 
 | Data model | Corpus SHA-256 | Producer report digest | Canonical artifact SHA-256 | Passed / Applicable | Under errata | Not applicable | Failed | Unsupported | Invalid | HarnessError | Skipped |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ECMAScript | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `8f5ab67d3fdcaabfb32964c1728140a83b7aed7b8d87d8923867bda15d3c26c1` | `0b54ea5b2fe782eae5b16d20188b54eb55842e9147fa0e104e80480016ec0c92` | 201 / 201 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
-| XPath | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` | `85c6c5bd0f421a0c477818ade0f9aa5fdbf23c44124ea3a6e7f1ffce71d25a26` | `07a301af5f350c0e5040b24c3a68144e67ed996257894ee9cf554a94c351e91f` | 178 / 178 | 5 | 24 | 0 | 0 | 0 | 0 | 0 |
+| ECMAScript | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `d4244615f8aabc6d821b0338ae8d3a5f90012b26686e757edc2ea7897f072e4c` | `10fe0cad8b6b97cbcefd7ba7169f6662c59bccdb8bd8c45339a6ff5d5a25360c` | 201 / 201 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| XPath | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` | `1711b1f91e8a4c3640e8418d413b8a421fb709a47b8c001affce55a89f57c0d9` | `f44362b64b407c7453ce04c42ea50845931d13f71c3fa92d9da0d532e39363db` | 178 / 178 | 5 | 24 | 0 | 0 | 0 | 0 | 0 |
 
 ECMAScript: 201 passed; mandatory 167 / 167, optional 34 / 34; 436 (null
 profile, `datamodel="null"`) is `NotApplicable`. XPath: 178
@@ -865,11 +865,11 @@ sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
 ```
 
 That build's `manifest.tsv` has SHA-256
-`b0bff8b81a00395418c0a60be518f43f3a6c0fcc241cce251aa52311f4aea26c` (machine
+`912aa4edb17fd6641a8e55835eaaf635523f76a698078f92f807346fd5cb0eda` (machine
 component SHA-256
 `9e18f84d1bc893f97c5a31e57ebd7a436e6a3e5f4887108bc51bfd8d6dbbaf06`), and
 its example extension component SHA-256
-`264e74de399ccce880300af36c7821beaca25b13813eb606582211418d05062e`. Another
+`70c98d76924282209198a4cb0da1afcc7ae56e28234ac3decec39663d30db07d`. Another
 selection, such as the default (every component), writes a different
 manifest.
 
@@ -917,7 +917,7 @@ sh scripts/build-canonical-components.sh --artifacts-dir "$PWD/canonical-release
 
 Built from the source of the checked-in baselines on an arm64 macOS Docker
 host, the script produces manifest SHA-256
-`b0bff8b81a00395418c0a60be518f43f3a6c0fcc241cce251aa52311f4aea26c`, the
+`912aa4edb17fd6641a8e55835eaaf635523f76a698078f92f807346fd5cb0eda`, the
 components the baselines were generated from; the `irp-components`
 artifact of the same source must match it.
 
@@ -1028,7 +1028,7 @@ models run, since `env` evaluates its expression attributes in the
 document's data model and `event` must leave execution unchanged
 under each. The current baselines (same runner, engine, and release as the
 W3C baselines above; example extension component SHA-256
-`264e74de399ccce880300af36c7821beaca25b13813eb606582211418d05062e`):
+`70c98d76924282209198a4cb0da1afcc7ae56e28234ac3decec39663d30db07d`):
 
 | Suite | Assertions | Tests (rejections) | ECMAScript | XPath |
 | --- | ---: | ---: | ---: | ---: |

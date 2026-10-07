@@ -74,7 +74,10 @@ case "$target_root" in
     *) target_root="$workspace/$target_root" ;;
 esac
 export CARGO_TARGET_DIR="$target_root"
-artifacts="$target_root/wasm-artifacts/release"
+# Its own artifact directory: the default release directory is the one `scx`
+# embeds (crates/scxml-cli/build.rs), which a nine-guest subset must not
+# replace.
+artifacts="$target_root/wasm-artifacts/browser-host"
 ir="$artifacts/packaged/representative-machine.scxml-ir.json"
 check_dist="$target_root/browser-host/dist.determinism-check"
 tap="$target_root/browser-host/node-test.tap"
@@ -97,7 +100,7 @@ run_node_tests() {
     printf '%s\n' "$summary" | grep '^# \(tests\|pass\|fail\|todo\|skipped\|cancelled\) '
 }
 
-sh "$workspace/scripts/verify-wasm-capabilities.sh" \
+sh "$workspace/scripts/verify-wasm-capabilities.sh" --artifacts-dir "$artifacts" \
     scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
     scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine \
     scxml_snapshot_codec

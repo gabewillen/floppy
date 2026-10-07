@@ -181,11 +181,9 @@ fn component_expression_diagnostics_match_the_cli_snapshots() {
         .expect("tests/ui exists")
         .filter_map(|entry| {
             let path = entry.expect("tests/ui entry is readable").path();
-            (path
-                .extension()
-                .is_some_and(|extension| extension == "scxml"))
-            .then(|| path.file_stem()?.to_str().map(str::to_owned))
-            .flatten()
+            (path.extension().is_some_and(|extension| extension == "scx"))
+                .then(|| path.file_stem()?.to_str().map(str::to_owned))
+                .flatten()
         })
         .collect();
     cases.sort();
