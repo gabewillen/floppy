@@ -464,3 +464,200 @@ fn offline_without_the_cache_fails_closed_and_a_bound_uri_is_never_fetched() {
     );
     assert!(server.requests().is_empty());
 }
+
+/// The tagless URI of the echo service: the repository's latest release.
+const TAGLESS_URI: &str = "https://github.com/stateforward/nemobot/services/echo";
+/// The commit the latest release's tag (`v0.2.0`) names.
+const LATEST_COMMIT: &str = "fedcba9876543210fedcba9876543210fedcba98";
+
+fn latest_raw_path(file: &str) -> String {
+    format!("/raw/{REPO}/{LATEST_COMMIT}/services/echo/package/{file}")
+}
+
+fn latest_download_path(asset: &str) -> String {
+    format!("/dl/{REPO}/releases/download/v0.2.0/{asset}")
+}
+
+/// [`github`] plus a latest release `v0.2.0` (a lightweight tag of
+/// [`LATEST_COMMIT`]) whose manifest names the tagless URI.
+fn github_with_latest() -> Server {
+    let release = release();
+    let server = github(&manifest(SERVICE_URI));
+    server.body(
+        &format!("/api/repos/{REPO}/releases/latest"),
+        r#"{"tag_name":"v0.2.0","name":"v0.2.0"}"#,
+    );
+    server.body(
+        &format!("/api/repos/{REPO}/git/ref/tags/v0.2.0"),
+        format!(
+            r#"{{"ref":"refs/tags/v0.2.0","object":{{"type":"commit","sha":"{LATEST_COMMIT}"}}}}"#
+        ),
+    );
+    server.body(&latest_raw_path("echo.service.json"), manifest(TAGLESS_URI));
+    server.body(
+        &latest_download_path("SHA256SUMS"),
+        format!("{}  {ASSET}\n", sha256(&release.echo)),
+    );
+    server.body(&latest_download_path(ASSET), release.echo.clone());
+    server
+}
+
+/// A document at `directory/name` invoking each type URI of `types` and,
+/// when given, the child document `child` through `<invoke src>`.
+fn document_invoking(directory: &Path, name: &str, types: &[&str], child: Option<&str>) -> String {
+    let invokes = types
+        .iter()
+        .enumerate()
+        .map(|(index, uri)| format!(r#"<invoke type="{uri}" id="s{index}"/>"#))
+        .collect::<Vec<_>>()
+        .concat();
+    let child = child
+        .map(|src| format!(r#"<invoke type="scxml" src="{src}" id="child"/>"#))
+        .unwrap_or_default();
+    let path = directory.join(name);
+    fs::write(
+        &path,
+        format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s"><state id="s">{invokes}{child}<transition event="done.invoke.child" target="f"/></state><final id="f"/></scxml>"#
+        ),
+    )
+    .expect("the document is written");
+    path.display().to_string()
+}
+
+fn count(requests: &[String], path: &str) -> usize {
+    let line = format!("GET {path} HTTP/1.1");
+    requests.iter().filter(|request| **request == line).count()
+}
+
+#[test]
+fn a_tagless_uri_resolves_the_latest_release_and_the_consent_names_it() {
+    let server = github_with_latest();
+    let directory = scratch("tagless");
+    let cache = directory.join("cache");
+    let source = document_invoking(&directory, "root.scx", &[TAGLESS_URI], None);
+    let flags = repository(&server, &cache);
+    let first = validate(&source, &flags);
+    let stderr = text(&first.stderr);
+    assert!(first.status.success(), "{stderr}");
+    assert!(
+        stderr.contains(&format!(
+            "service `{TAGLESS_URI}`\n  = version: release v0.2.0 (commit {LATEST_COMMIT}), package 0.1.0"
+        )),
+        "the consent shows the resolved tag and commit: {stderr}"
+    );
+    assert_eq!(
+        server.requests(),
+        [
+            format!("GET /api/repos/{REPO}/releases/latest HTTP/1.1"),
+            format!("GET /api/repos/{REPO}/git/ref/tags/v0.2.0 HTTP/1.1"),
+            format!("GET {} HTTP/1.1", latest_raw_path("echo.service.json")),
+        ]
+    );
+    let entry = fs::read_to_string(
+        cache
+            .join("index")
+            .join(format!("{}.json", sha256(TAGLESS_URI.as_bytes()))),
+    )
+    .expect("the tagless URI is pinned");
+    assert!(entry.contains("\"tag\": \"v0.2.0\""), "{entry}");
+
+    // Offline, the tagless URI uses the release the cache pinned.
+    let before = server.requests().len();
+    let mut offline = flags.clone();
+    offline.push("--offline".into());
+    let again = validate(&source, &offline);
+    assert_eq!(text(&again.stderr), stderr);
+    assert_eq!(server.requests().len(), before);
+
+    // Online again, the latest release is asked once more (once per root
+    // session); the same commit needs no other request.
+    let third = validate(&source, &flags);
+    assert!(third.status.success(), "{}", text(&third.stderr));
+    assert_eq!(
+        server.requests()[before..],
+        [
+            format!("GET /api/repos/{REPO}/releases/latest HTTP/1.1"),
+            format!("GET /api/repos/{REPO}/git/ref/tags/v0.2.0 HTTP/1.1"),
+        ]
+    );
+}
+
+#[test]
+fn a_child_with_the_same_tagless_import_reuses_the_roots_single_fetch() {
+    let server = github_with_latest();
+    let directory = scratch("shared");
+    let cache = directory.join("cache");
+    document_invoking(&directory, "child.scx", &[TAGLESS_URI], None);
+    let source = document_invoking(&directory, "root.scx", &[TAGLESS_URI], Some("child.scx"));
+    let run = snapshot_run(
+        &source,
+        &directory.join("final.snapshot.json"),
+        &repository(&server, &cache),
+    );
+    let stderr = text(&run.stderr);
+    assert!(run.status.success(), "{stderr}");
+    let requests = server.requests();
+    for path in [
+        format!("/api/repos/{REPO}/releases/latest"),
+        format!("/api/repos/{REPO}/git/ref/tags/v0.2.0"),
+        latest_raw_path("echo.service.json"),
+        latest_download_path("SHA256SUMS"),
+        latest_download_path(ASSET),
+    ] {
+        assert_eq!(count(&requests, &path), 1, "{path}: {requests:?}");
+    }
+    assert_eq!(
+        stderr.matches(&format!("service `{TAGLESS_URI}`")).count(),
+        1,
+        "one binding for the root and the child: {stderr}"
+    );
+    // The child document was loaded before the session and listed.
+    let child = fs::canonicalize(directory.join("child.scx")).expect("the child exists");
+    assert!(
+        stderr.contains(&format!(
+            "document `file://{}`\n  = for: <invoke src=\"child.scx\">",
+            child.display()
+        )),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn a_pinned_child_coexists_with_a_tagless_root_and_is_resolved_for_the_child() {
+    let server = github_with_latest();
+    let directory = scratch("pinned");
+    let cache = directory.join("cache");
+    // The root never uses the pinned URI: only its child does.
+    document_invoking(&directory, "child.scx", &[SERVICE_URI], None);
+    let source = document_invoking(&directory, "root.scx", &[TAGLESS_URI], Some("child.scx"));
+    let run = snapshot_run(
+        &source,
+        &directory.join("final.snapshot.json"),
+        &repository(&server, &cache),
+    );
+    let stderr = text(&run.stderr);
+    assert!(run.status.success(), "{stderr}");
+    assert!(
+        stderr.contains(&format!(
+            "service `{TAGLESS_URI}`\n  = version: release v0.2.0 (commit {LATEST_COMMIT})"
+        )) && stderr.contains(&format!(
+            "service `{SERVICE_URI}`\n  = version: release v0.1.0 (commit {COMMIT})"
+        )),
+        "both versions are bound: {stderr}"
+    );
+    let requests = server.requests();
+    for sums in [
+        download_path("SHA256SUMS"),
+        latest_download_path("SHA256SUMS"),
+    ] {
+        assert_eq!(count(&requests, &sums), 1, "{sums}: {requests:?}");
+    }
+    // Both releases list the same component bytes, which the cache holds
+    // once (content-addressed): one download serves both.
+    assert_eq!(
+        count(&requests, &download_path(ASSET)) + count(&requests, &latest_download_path(ASSET)),
+        1,
+        "{requests:?}"
+    );
+}

@@ -196,8 +196,9 @@ pub(crate) struct Services {
 }
 
 /// Loads the `--service-package` manifests and resolves every repository
-/// service (`https://github.com/<owner>/<repo>/services/<name>@<tag>`) the
-/// document names as a literal `<invoke type>` that none of them binds,
+/// service (`https://github.com/<owner>/<repo>/services/<name>[@<tag>]`) the
+/// document or one of its `children` (the `<invoke src>` documents a run
+/// loads) names as a literal `<invoke type>` that none of them binds, once,
 /// through the repository flags ([`crate::repository`]: bounded, pinned,
 /// content-addressed, `--offline`, fail closed).
 ///
@@ -207,6 +208,7 @@ pub(crate) struct Services {
 /// cannot be resolved.
 pub(crate) fn resolve(
     source: &[u8],
+    children: &[Vec<u8>],
     manifests: &[PathBuf],
     repository: &crate::repository::RepositoryFlags,
 ) -> Result<Services, Box<dyn std::error::Error>> {
@@ -215,14 +217,19 @@ pub(crate) fn resolve(
         .iter()
         .map(|package| package.manifest.service_uri.clone())
         .collect();
-    let wanted = crate::repository::used_services(source, &bound);
+    let mut wanted = crate::repository::used_services(source, &bound);
+    for child in children {
+        wanted.extend(crate::repository::used_services(child, &bound));
+    }
+    wanted.sort();
+    wanted.dedup();
     if wanted.is_empty() {
         return Ok(Services {
             packages,
             store: None,
         });
     }
-    let store = std::sync::Arc::new(repository.open()?);
+    let store = repository.open()?;
     for uri in wanted {
         packages.push(store.resolve_service_package(&uri)?);
     }

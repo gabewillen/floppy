@@ -249,8 +249,9 @@ pub(crate) struct Packages {
 
 impl Packages {
     /// Loads the `--extension-package` manifests and resolves every
-    /// repository namespace `source` uses that neither they nor `--schema`
-    /// bind.
+    /// repository namespace `source` or one of its `children` (the
+    /// `<invoke src>` documents a run loads) uses that neither they nor
+    /// `--schema` bind, each once.
     ///
     /// # Errors
     ///
@@ -258,12 +259,18 @@ impl Packages {
     /// that cannot be resolved.
     pub(crate) fn resolve(
         source: &[u8],
+        children: &[Vec<u8>],
         manifests: &[PathBuf],
         schema_flags: &[(String, PathBuf)],
         repository: &RepositoryFlags,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut explicit = load(manifests, schema_flags)?;
-        let used = crate::repository::used_namespaces(source);
+        let mut used = crate::repository::used_namespaces(source);
+        for child in children {
+            used.extend(crate::repository::used_namespaces(child));
+        }
+        used.sort();
+        used.dedup();
         // The scx namespace ships with scx: a document that uses it binds the
         // embedded package unless a flag binds the URI.
         if used.iter().any(|uri| uri == SCX_NAMESPACE_URI)
@@ -283,8 +290,8 @@ impl Packages {
             .iter()
             .any(|uri| !bound.contains(uri) && RepositoryUri::parse(uri).is_some());
         let (store, repository_packages) = if wanted {
-            let store = Arc::new(repository.open()?);
-            let packages = crate::repository::resolve_document_packages(&store, source, &bound)?;
+            let store = repository.open()?;
+            let packages = crate::repository::resolve_document_packages(&store, &used, &bound)?;
             (Some(store), packages)
         } else {
             (None, Vec::new())
@@ -293,7 +300,10 @@ impl Packages {
             explicit,
             repository: repository_packages,
             store,
-            slot_uses: slot_uses(source),
+            slot_uses: std::iter::once(source)
+                .chain(children.iter().map(Vec::as_slice))
+                .flat_map(slot_uses)
+                .collect(),
         })
     }
 

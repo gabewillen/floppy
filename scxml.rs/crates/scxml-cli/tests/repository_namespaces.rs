@@ -8,7 +8,7 @@
 //! and nothing else, and `validate` and `snapshot run` resolve it from a mock
 //! GitHub this suite serves on 127.0.0.1 (`--github-api-base`,
 //! `--github-raw-base`, `--github-download-base`): the tag through the API,
-//! the manifest and schema at the commit, and, when the session starts, the
+//! the manifest and schema at the commit, and, before the session starts, the
 //! release asset authenticated by the release's `SHA256SUMS`, all cached
 //! content-addressed and pinned. No test touches the real network.
 //!
@@ -381,7 +381,7 @@ fn assert_bound_then_refused(run: &Output, output: &Path) {
 }
 
 #[test]
-fn a_repository_element_loads_at_session_start_and_then_from_the_cache_offline() {
+fn a_repository_element_loads_before_the_session_and_then_from_the_cache_offline() {
     let server = github();
     let directory = scratch("happy");
     let cache = directory.join("cache");
@@ -510,7 +510,7 @@ fn a_package_that_does_not_name_itself_exactly_fails_closed() {
 }
 
 #[test]
-fn a_component_its_release_does_not_vouch_for_fails_the_session_start() {
+fn a_component_its_release_does_not_vouch_for_fails_before_the_session() {
     let release = release();
     for (name, sums, expected) in [
         (
@@ -649,8 +649,8 @@ fn offline_without_the_cache_fails_closed_before_the_first_macrostep() {
     assert!(server.requests().is_empty(), "offline uses no network");
 
     // The package cached (validation needs only it), the component not: the
-    // machine asks for the element when its session starts, and that start
-    // fails closed without running anything.
+    // run resolves the element before its session starts, and fails closed
+    // without running anything.
     let online = validate(&hello(), &repository(&server, &cache));
     assert!(online.status.success(), "{}", text(&online.stderr));
     let before = server.requests().len();
@@ -716,10 +716,11 @@ fn a_misspelled_slot_is_caught_by_the_validator() {
 }
 
 /// An invoked child session that uses the repository namespace: the parent's
-/// document names it, so the parent's session start resolves and binds it
-/// (and fails closed at the bound component's check before anything runs).
+/// document names it, so the run resolves and binds it before the parent
+/// starts (and fails closed at the bound component's check before anything
+/// runs).
 #[test]
-fn an_invoked_session_binds_the_repository_element_at_the_parent_start() {
+fn an_invoked_session_binds_the_repository_element_before_the_parent_starts() {
     let server = github();
     let directory = scratch("invoked");
     let document = directory.join("parent.scxml");
@@ -757,6 +758,46 @@ fn an_invoked_session_binds_the_repository_element_at_the_parent_start() {
         server
             .requests()
             .contains(&"GET /assets/example HTTP/1.1".to_owned()),
-        "the parent's start fetched the child's element"
+        "the run fetched the child's element"
+    );
+}
+
+/// A repository namespace only an `<invoke src>` child document uses: the
+/// run loads the child before the session and resolves and binds its
+/// namespace with the root's, so the child compiles against it.
+#[test]
+fn an_invoke_src_child_document_has_its_repository_element_resolved() {
+    let server = github();
+    let directory = scratch("invoke-src");
+    fs::write(
+        directory.join("child.scx"),
+        format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:repo="{REPOSITORY_URI}" version="1.0" datamodel="ecmascript" initial="ask">
+  <state id="ask">
+    <onentry><repo:raise event="asked"/></onentry>
+    <transition event="asked" target="answered"/>
+  </state>
+  <final id="answered"/>
+</scxml>"#
+        ),
+    )
+    .expect("the child");
+    let document = directory.join("parent.scx");
+    fs::write(
+        &document,
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="p"><state id="p"><invoke type="scxml" src="child.scx"/><transition event="done.invoke" target="done"/></state><final id="done"/></scxml>"#,
+    )
+    .expect("the document");
+    let output = directory.join("final.snapshot.json");
+    let run = snapshot_run(
+        &document.display().to_string(),
+        &output,
+        &repository(&server, &directory.join("cache")),
+    );
+    assert_bound_then_refused(&run, &output);
+    assert!(
+        text(&run.stderr).contains(&format!("element `{REPOSITORY_URI}`")),
+        "the child's element is listed: {}",
+        text(&run.stderr)
     );
 }

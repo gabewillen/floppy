@@ -82,8 +82,11 @@ scope:
   bypasses of the build-time fuel metering of browser core modules;
 - the offline conformance preparation sandbox (`conformance prepare
   --offline`), including transformer argument or stylesheet screening bypasses;
-- repository namespace acquisition (`https://github.com/<owner>/<repo>/namespaces/<name>@<tag>`
-  namespaces resolved by the CLI): a manifest, schema, or component accepted
+- repository namespace and service acquisition (`https://github.com/<owner>/<repo>/namespaces/<name>[@<tag>]`
+  and `.../services/<name>[@<tag>]` resolved by the CLI), and the documents
+  `snapshot run` and `run` load by URI (`<invoke src>`, `<script src>`,
+  `<data src>`, `srcexpr`): a fetch over plain HTTP, with credentials, past
+  its size, redirect, or time bound, or under `--offline`: a manifest, schema, or component accepted
   without matching its pinned commit and digests or its release's
   `SHA256SUMS`, a cache entry accepted after tampering, a fetch under
   `--offline` or for a pinned, cached URI, a redirect followed to a
@@ -91,7 +94,8 @@ scope:
   configured API origin, or a bypass of the size, redirect, or timeout
   bounds. The trust boundary is what a document imports: binding or loading
   an element consents to the origins its manifest declares, at the release
-  tag its URI names, pinned to the commit of the first resolution;
+  tag its URI names (or, for a tagless URI, the latest release, listed
+  with its tag and commit), pinned to the commit of its resolution;
 - isolation between extension elements and of the run's values: an extension
   component that obtains a value (rather than a reference), a reference
   bound to another element or valid after its `execute` call, a value

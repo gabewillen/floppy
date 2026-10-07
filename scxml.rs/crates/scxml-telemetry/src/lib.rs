@@ -227,6 +227,10 @@ pub enum Operation {
     /// Reads the schema files a document's `event:schema` attributes
     /// reference, relative to the document.
     CliReadEventSchema,
+    /// Loads one document a run names by URL (`<invoke src>`,
+    /// `<script src>`, `<data src>`, `srcexpr`): a `file:` read or a bounded
+    /// `https:` fetch, once per root session.
+    CliReadDocument,
     /// Reads and verifies the CLI's extension-package manifests and schemas.
     CliReadExtensionPackage,
     /// Reads and verifies the CLI's `--service-package` manifests.
@@ -235,7 +239,7 @@ pub enum Operation {
     /// the cache or its repository.
     CliResolveExtensionPackage,
     /// Resolves one repository namespace's extension component from the cache
-    /// or its release, at session start.
+    /// or its release, before a run binds it.
     CliResolveExtensionComponent,
     /// Resolves one repository service's package (manifest, optional
     /// schema, and event schemas) from the cache or its repository.
@@ -559,6 +563,7 @@ impl Operation {
             Self::CliReadTemplate => "scxml.cli.read-template",
             Self::CliReadScript => "scxml.cli.read-script",
             Self::CliReadEventSchema => "scxml.cli.read-event-schema",
+            Self::CliReadDocument => "scxml.cli.read-document",
             Self::CliReadExtensionPackage => "scxml.cli.read-extension-package",
             Self::CliReadServicePackage => "scxml.cli.read-service-package",
             Self::CliResolveExtensionPackage => "scxml.cli.resolve-extension-package",

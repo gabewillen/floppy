@@ -327,7 +327,7 @@ the elements and `<invoke>`s it goes to (`env `NAME``, `= to: <invoke
 type="URI"> env:SLOT, <ELEMENT> of `URI` env:SLOT`), and each
 `env:<slot>expr` slot; names and URIs only, never a value.
 A literal `<invoke type>` of exactly
-`https://github.com/OWNER/REPO/services/NAME@TAG` that no `--service-package`
+`https://github.com/OWNER/REPO/services/NAME[@TAG]` that no `--service-package`
 binds is a repository service: it is resolved, verified, cached, and pinned
 exactly like a repository namespace (the same `--offline`, `--cache-dir`, and
 `--github-*` flags), its component authenticated by the release's
@@ -391,6 +391,32 @@ at once. `SIGINT` and `SIGTERM` close the session gracefully (exit 130 and
 2 for usage, compilation, and I/O failures, and 3 when the session closes
 while running.
 
+## Documents loaded by URI
+
+`snapshot run` and `run` load `<invoke src>`, `<script src>`, and
+`<data src>` by SCXML's defaults: an `https:` URL, a `file:` URL, or a
+relative URI resolved against the base URI of the document that names it
+(the run's document has its `file:` URL; an `<invoke src>` document the URL
+it was loaded from). Every literal URI of the document, and of every
+`<invoke src>` document it loads (at most 64 documents), is fetched once
+before the first macrostep and listed before running:
+
+```text
+document `file:///work/bots/child.scx`
+  = for: <invoke src="child.scx">
+  = loaded: 312 bytes, sha256 …
+```
+
+A `<script src>` of the document that cannot be fetched rejects it (SCXML
+1.0 §5.8); any other failure raises `error.execution` when its element runs.
+An `<invoke srcexpr>` URI is fetched when its `<invoke>` runs, through the
+same fetcher; a failure raises `error.execution`. Remote documents come over
+HTTPS only (16 MiB, at most 5 redirects, each to `https:`, the repository
+resolver's timeouts, no retry, no credentials, cookies, or proxies), and
+`--offline` forbids them. Everything is fetched once per run and shared by
+every session of the tree, and the repository namespaces and services of
+every literal `<invoke src>` document are bound with the root's.
+
 ## BasicHTTP over the network
 
 `run` speaks the BasicHTTP Event I/O Processor (SCXML C.2) over the network
@@ -438,23 +464,30 @@ CLI loads it: no flag binds it.
   <weather:lookup env:token="WEATHER_TOKEN" location="forecast"/>
 ```
 
-The URI is exactly `https://github.com/<owner>/<repo>/namespaces/<name>@<tag>`, bound byte
-for byte (a new version is a new namespace). `validate` and `compile` fetch the
+The URI is exactly `https://github.com/<owner>/<repo>/namespaces/<name>[@<tag>]`, bound byte
+for byte: `@<tag>` pins that release, and a tagless URI names the repository's
+latest release (the `env`, `event`, and `scx` vocabularies `scx` provides are
+matched first and never fetched). `validate` and `compile` fetch the
 package manifest (`namespaces/<name>/package/<name>.extension.json`) and its schema
-from the commit the tag names; when a session starts, the machine asks its host
-for every extension namespace its document uses, and the CLI supplies the
-release asset the manifest names, verified against that release's `SHA256SUMS`.
-Every byte is verified, cached content-addressed under
-`${XDG_CACHE_HOME:-$HOME/.cache}/scxml/extensions` (`--cache-dir DIR` to
-change), and the URI is pinned to the commit and digests of its first
-resolution; later runs re-verify the cache and use no network, and `--offline`
-forbids any fetch. Fetching needs a CLI built with `--features wasmtime`, which
+from the commit the tag (or the latest release's tag) names; before the
+session starts, `snapshot run` and `run` bind the release asset the manifest
+names, verified against that release's `SHA256SUMS`. The manifest names the
+exact URI the document binds. Every byte is verified, cached
+content-addressed under `${XDG_CACHE_HOME:-$HOME/.cache}/scxml/extensions`
+(`--cache-dir DIR` to change), and the URI is pinned to the commit and
+digests of its resolution (a tagless URI with its release tag); a pinned
+URI's later runs re-verify the cache and use no network, a tagless URI asks
+for the latest release once per run and re-pins when it moved, and
+`--offline` forbids any fetch. Each URI is resolved once per run, and the
+root and every invoked session (inline or `<invoke src>`) share its
+component; the namespaces of every literal `<invoke src>` document are
+resolved with the root's. Fetching needs a CLI built with `--features wasmtime`, which
 links the network client; a build without it resolves only what the cache
 holds. Importing an element consents to what its manifest
 declares (the origins in `http-origins`); the run's values reach it only as
 references, substituted into requests to those origins or to an origin a value
 supplies (a local base URL). Any failure fails closed: validation stops, or the
-session start fails before the first macrostep.
+run fails before the first macrostep.
 [executable-content-extensions.md](executable-content-extensions.md#loading-an-element-from-a-repository)
 specifies the URI, layout, trust model, cache, and bounds.
 

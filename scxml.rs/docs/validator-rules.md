@@ -111,6 +111,31 @@ Lowering also generates an ID for a `<state>` or `<parallel>` without one,
 as SCXML 1.0 §3.3 and §3.4 require (it did so only for `<final>`), so an
 anonymous state compiles.
 
+### Draft profile
+
+A profile restricts what one validation admits on top of SCXML 1.0. The
+schema policy (`--policy strict|lax|off`) governs only namespaces without a
+schema, and the validator had no rule-set concept, so the profile is a
+separate selection: `Validator::with_profile(Profile::Draft)` in
+`scxml-validator-core`, and `<scx:validate profile="draft">` in the
+[`scx` namespace](../namespaces/scx/README.md). The draft profile checks a
+document a machine writes and then runs as its own invoked child (a builder
+bot's draft): the document must load nothing, start nothing, and talk only
+through the SCXML Event I/O Processor. Every check reads the parsed tree
+(expanded names, never prefixes); `SCXML101` reads the prolog before the
+root element, skipping comments and processing instructions. Without the
+profile none of these codes is reported. `crates/scxml-validator-core/src/draft_profile.rs`
+holds the rules and their tests, and `namespaces/scx/src/tests.rs` drives
+them through the element.
+
+| Code | Severity | What it proves |
+| --- | --- | --- |
+| `SCXML097` | error | A namespace other than the SCXML namespace, the `event` attribute vocabulary, and the XML namespace is declared (at the declaration's URI) or used by an element or attribute whose namespace is declared on another element. An extension namespace or the host's `env` vocabulary would reach packages and variables the writing machine binds. The namespace is not also reported as a missing schema (`XSD001`). |
+| `SCXML098` | error | An `<invoke>` (SCXML 6.4) or `<script>` (5.8) element: a draft starts no session or service and runs no script. |
+| `SCXML099` | error | A `src` or `srcexpr` attribute on an SCXML element (`<data>`, `<script>`, `<invoke>`): a draft loads nothing. |
+| `SCXML100` | error | A `typeexpr` attribute, or a `<send type>` other than the SCXML Event I/O Processor's `http://www.w3.org/TR/scxml/#SCXMLEventProcessor` (SCXML 6.2, C.1). `<transition type>` and `<history type>` are not judged. |
+| `SCXML101` | error | A document type declaration (XML 1.0 §2.8): a draft declares no entity or attribute default. |
+
 ### Semantic machine graph rules
 
 Each `<scxml>` root (including inline `<invoke><content>` machines) is lowered
@@ -673,6 +698,11 @@ states more precisely are superseded by that rule (table above).
 | `SCXML092` | error | semantic | an `event:schema` has a reference the compiler cannot keep | [JSON Schema 2020-12 Core §8.2.3.1 Direct References with $ref](https://json-schema.org/draft/2020-12/json-schema-core#section-8.2.3.1) |
 | `SCXML093` | warning | semantic | an `<invoke type>` is a platform-specific value, not a URI | [SCXML 1.0 §6.4.1 Attribute Details](https://www.w3.org/TR/scxml/#invoke) |
 | `SCXML094` | warning | package | no service package binds a literal `<invoke type>` | [SCXML 1.0 §6.4 <invoke>](https://www.w3.org/TR/scxml/#invoke) |
+| `SCXML097` | error | semantic | a draft declares or uses a namespace the draft profile does not admit | [SCXML 1.0 §3.2 <scxml>](https://www.w3.org/TR/scxml/#scxml) |
+| `SCXML098` | error | semantic | a draft holds an `<invoke>` or `<script>` element | [SCXML 1.0 §6.4 <invoke>](https://www.w3.org/TR/scxml/#invoke) |
+| `SCXML099` | error | semantic | a draft has a `src` or `srcexpr` attribute | [SCXML 1.0 §5.3 <data>](https://www.w3.org/TR/scxml/#data) |
+| `SCXML100` | error | semantic | a draft names a type by expression or sends through another Event I/O Processor | [SCXML 1.0 §6.2 <send>](https://www.w3.org/TR/scxml/#send) |
+| `SCXML101` | error | semantic | a draft has a document type declaration | [XML 1.0 (Fifth Edition) §2.8 Prolog and Document Type Declaration](https://www.w3.org/TR/xml/#sec-prolog-dtd) |
 | `XML001` | error | syntax | the document is not well-formed XML | [XML 1.0 (Fifth Edition) §2.1 Well-Formed XML Documents](https://www.w3.org/TR/xml/#sec-well-formed) |
 | `XML002` | error | syntax | the document exceeds a configured XML resource limit | — |
 | `XML003` | error | syntax | an entity reference names no predefined or declared entity | [XML 1.0 (Fifth Edition) §4.6 Predefined Entities](https://www.w3.org/TR/xml/#sec-predefined-ent) |

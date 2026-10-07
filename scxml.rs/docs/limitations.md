@@ -131,8 +131,9 @@ disagree are in [spec-errata.md](spec-errata.md).
   exact URI (an `<invoke>` of a type no host binds, literal or `typeexpr`,
   raises `error.execution` when it runs, as SCXML 6.4 makes invocation a
   runtime action; the session start is unaffected), and a repository service
-  URI (`.../services/<name>@<tag>`) is resolved only for a literal
-  `<invoke type>` (a `typeexpr` naming one is not resolved, and no shipped
+  URI (`.../services/<name>[@<tag>]`) is resolved only for a literal
+  `<invoke type>` of the document or of an `<invoke src>` document the run
+  loads (a `typeexpr` naming one is not resolved, and no shipped
   component answers a repository service URI, so
   `crates/scxml-cli/tests/repository_services.rs` proves resolution,
   pinning, offline use, and authentication up to binding); a session
@@ -321,11 +322,23 @@ In detail:
   standalone proof host answers `unavailable`. Extension component instance
   state is not part of session snapshots, and the CLI's `conformance run`
   binds no extension packages.
-- Repository namespaces are GitHub repositories only. A child document an
-  `<invoke src>` loads at run time compiles against the namespaces already
-  bound, so a repository namespace only such a child uses is not resolved for
-  it (its invocation fails with `error.execution`); inline `<content>`
-  children use the namespaces their parent loads. A slot named by an
+- Repository namespaces are GitHub repositories only. A release serves its
+  package only under the URI its manifest names, so a pinned
+  `.../<name>@<tag>` URI resolves only against a release whose manifest
+  names that pinned URI, and a tagless one only against a latest release
+  whose manifest names the tagless URI (XML namespaces and invoke types are
+  byte-exact, and a schema's `targetNamespace` cannot be rewritten). The
+  repository namespaces and services of every literal `<invoke src>`
+  document are resolved with the root's before the session starts; a child
+  document an `<invoke srcexpr>` loads, or a `<content expr>` child, compiles
+  against what is already bound, so a repository namespace or service only
+  such a child uses is not resolved for it (its invocation fails with
+  `error.execution`). A relative `srcexpr` URI resolves against the root
+  document's base URI (the host's `load-document` call does not identify the
+  invoking document), and a literal relative URI that documents of
+  different bases resolve to different URLs does not load (its element
+  raises `error.execution`). The documents a run loads are fetched again by
+  a `--replay`, not read from its log. A slot named by an
   `env:<slot>expr` expression is evaluated per execution, so the CLI's element
   listing cannot say whether the run holds its value.
 - An `event:schema` ([namespaces/event](../namespaces/event/README.md))

@@ -44,6 +44,26 @@ const WASM_ONLY_BOUND: &str = "a resource bound of wasm builds only; the native 
 
 const NOT_REACHABLE_FROM_VALIDATE: &[(&str, &str)] = &[
     ("COMP001", "produced only by `compile` lowering"),
+    (
+        "SCXML097",
+        "produced only under the draft profile (`<scx:validate profile=\"draft\">`); covered by validator-core draft_profile and scx namespace tests",
+    ),
+    (
+        "SCXML098",
+        "produced only under the draft profile (`<scx:validate profile=\"draft\">`); covered by validator-core draft_profile and scx namespace tests",
+    ),
+    (
+        "SCXML099",
+        "produced only under the draft profile (`<scx:validate profile=\"draft\">`); covered by validator-core draft_profile and scx namespace tests",
+    ),
+    (
+        "SCXML100",
+        "produced only under the draft profile (`<scx:validate profile=\"draft\">`); covered by validator-core draft_profile and scx namespace tests",
+    ),
+    (
+        "SCXML101",
+        "produced only under the draft profile (`<scx:validate profile=\"draft\">`); covered by validator-core draft_profile and scx namespace tests",
+    ),
     ("SCXML027", WASM_ONLY_BOUND),
     ("SCXML028", WASM_ONLY_BOUND),
     ("SCXML041", WASM_ONLY_BOUND),

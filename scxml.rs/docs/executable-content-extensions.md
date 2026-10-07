@@ -448,13 +448,17 @@ document needs no flag to bind it:
        version="1.0" datamodel="ecmascript" initial="ask">
 ```
 
-- **The URI form.** Exactly `https://github.com/<owner>/<repo>/namespaces/<name>@<tag>`:
+- **The URI form.** Exactly `https://github.com/<owner>/<repo>/namespaces/<name>[@<tag>]`:
   the literal `namespaces` folder and one name segment (`[A-Za-z0-9._-]`;
   any other path, such as a bare or nested package path, is an ordinary
-  namespace URI), no trailing slash, and the release tag after the last `@`. Binding
-  stays byte-exact, so a new version is a new namespace. The package's
-  manifest `namespace-uri` and its schema's `targetNamespace` must equal the
-  URI byte for byte, tag included (`scripts/set-namespace-version.sh vX.Y.Z`
+  namespace URI), no trailing slash, and, optionally, the release tag after
+  the last `@`. `@<tag>` pins that release; a tagless URI names the
+  repository's latest GitHub release, resolved once per root session. The
+  `env`, `event`, and `scx` vocabularies `scx` provides are tagless too, and
+  are matched first and never fetched. Binding stays byte-exact. The
+  package's manifest `namespace-uri` and its schema's `targetNamespace` must
+  equal the URI byte for byte (with its tag, or tagless for a tagless URI),
+  so a release serves its package under exactly the URI its manifest names (`scripts/set-namespace-version.sh vX.Y.Z`
   moves this repository's namespaces to a new tag before it is tagged, and the
   release job checks it with `scripts/check-namespace-versions.sh`). To SCXML it
   is an ordinary namespace URI: nothing in a document names a version, ref,
@@ -463,20 +467,24 @@ document needs no flag to bind it:
   and its schema the manifest's relative `schema-artifact`; several
   namespaces live in one repository, one folder each under `namespaces/`. The extension component is the
   release asset the manifest's `extension-artifact` names, in the GitHub
-  release of `<tag>`, which must also carry a `SHA256SUMS` asset
+  release of `<tag>` (or the latest release), which must also carry a `SHA256SUMS` asset
   (`sha256sum` format) listing it. This repository's tag-triggered release job
   publishes exactly that.
 - **When it loads.** `validate` and `compile` (and the compile step of
   `snapshot run` and `run`) resolve the manifest and schema of every
   repository namespace the document uses that no `--extension-package` or
-  `--schema` binds; they never need the component. When a session starts,
-  root or invoked, the machine asks its host for every extension namespace its
-  document uses (`machine-capabilities.load-extensions`, before data binding
-  and the first macrostep), and the CLI's resolver supplies the component.
-  Any failure fails closed: validation or compilation stops, or the session
-  start fails and nothing runs. An invoked child whose document is inline in
-  its parent's uses the namespaces the parent loaded.
-- **The trust model.** The tag resolves to a commit through the GitHub API
+  `--schema` binds; they never need the component. `snapshot run` and `run`
+  also resolve the namespaces of every literal `<invoke src>` document the
+  run loads, and bind every component, authenticated, before the session
+  starts. Each URI is resolved once per root session; the root and every
+  invoked session (inline `<content>` or `<invoke src>`) share its compiled
+  component, one instance per session, and a child that pins a release gets
+  that release beside a tagless one. Any failure fails closed: validation or
+  compilation stops, or the run fails before the first macrostep.
+- **The trust model.** A tagless URI's tag is its repository's latest
+  release (`/repos/<owner>/<repo>/releases/latest`, its `tag_name`), and the
+  consent listing shows the tag and commit it resolved to. The tag resolves
+  to a commit through the GitHub API
   (`/repos/<owner>/<repo>/git/ref/tags/<tag>`, annotated tags dereferenced);
   the manifest and schema come from `raw.githubusercontent.com` at that
   commit, never at the tag, and must verify (exact URI, schema SHA-256,
@@ -484,20 +492,21 @@ document needs no flag to bind it:
   release's `SHA256SUMS` lists for it (an absent, duplicate, or mismatched
   entry fails closed) and is then authenticated by that digest like any
   caller component. The first resolution pins the URI: the cache records the
-  commit and the manifest, schema, and component digests, and every later use
-  re-verifies against them, so a moved tag or a re-uploaded asset is never
-  picked up silently.
+  commit (and a tagless URI's release tag) and the manifest, schema, and
+  component digests, and every later use re-verifies against them, so a
+  moved tag or a re-uploaded asset is never picked up silently; a tagless
+  URI is re-pinned only when its latest release names another commit.
 - **The cache.** Exact verified bytes, content-addressed:
   `<cache>/sha256/<hex>`, plus `<cache>/index/<sha256 of the URI>.json`
-  (`stateforward.scxml.extension-cache/v1`: the URI, commit, and digests). The
+  (`stateforward.scxml.extension-cache/v1`: the URI, a tagless URI's `tag`, the commit, and digests). The
   cache is `${XDG_CACHE_HOME:-$HOME/.cache}/scxml/extensions` (the same on
   macOS) unless `--cache-dir DIR` names another. A cached object that does not
   match its digest fails closed ("it was modified"); delete it and the next
   online run fetches and verifies it again.
 - **Offline.** A pinned URI whose bytes are cached uses no network at all.
   `--offline` forbids every fetch: a URI that is not in the cache fails
-  closed, before validation, or at session start for a component that was
-  never fetched.
+  closed, before validation, or before the session for a component that was
+  never fetched; a tagless URI uses the release the cache pinned.
 - **Network bounds.** HTTPS only; a redirect is followed only to an origin of
   the configured bases or GitHub's asset hosts (`objects.githubusercontent.com`,
   `release-assets.githubusercontent.com`), at most 5 times; a 10 s connect and
@@ -536,11 +545,12 @@ scx snapshot run weather.scx
   session capabilities); it does not instantiate extension components or load
   repository namespaces, and without that callback a document that uses an
   extension namespace fails its session start.
-- A child document an `<invoke src>` loads at run time is compiled with the
-  namespaces already bound; a repository namespace only such a child uses is
-  not resolved for it (its compilation fails closed, raising
-  `error.execution` in the invoking session). Inline `<content>` children use
-  the namespaces their parent loads.
+- A child document an `<invoke srcexpr>` loads at run time, or a
+  `<content expr>` child, is compiled with the namespaces already bound; a
+  repository namespace only such a child uses is not resolved for it (its
+  compilation fails closed, raising `error.execution` in the invoking
+  session). Literal `<invoke src>` documents and inline `<content>` children
+  have their namespaces resolved with the root's before the session starts.
 - Only GitHub repositories are repository namespaces.
 - Extension component instance state is not part of session snapshots (agentml-go's
   optional `Snapshotter` has no WIT counterpart yet).

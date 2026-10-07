@@ -373,7 +373,7 @@ looks like this:
 ```text
 scx snapshot run DOC.scx [--components DIR --components-manifest-sha256 HEX]
     [--event NAME]... [--at N]... | [--every] [--exclude SECTION]...
-    [--trace-context strip|preserve] [--output FILE | --output-dir DIR] [--resource URI=PATH]...
+    [--trace-context strip|preserve] [--output FILE | --output-dir DIR]
 scx snapshot show SNAP.json [--format human|json] [--color always|never]
 scx snapshot check SNAP.json [--format human|json]
 scx snapshot diff A.json B.json [--format human|json] [--include-trace-context] [--color always|never]
@@ -388,19 +388,24 @@ scx snapshot diff A.json B.json [--format human|json] [--include-trace-context] 
   the run with the `unreached` failure. A snapshot of a named checkpoint
   that fails (for example over a document bound) fails the command after
   the run. A build without the `wasmtime`
-  feature fails with `[wasmtime-disabled]`. Each `--resource URI=PATH`
-  serves the file at PATH for the exact URI (`<data src>`, `<invoke
-  src>`). A PATH ending in `.json` or `.xml` carries the media type that
-  extension registers (`application/json`, RFC 8259 §11;
-  `application/xml`, RFC 7303 §9.1), which the ECMAScript data model reads
-  as the indication SCXML B.2.1 lets it interpret `<data src>` content by;
-  any other file, `.txt` included, carries none and is read by content.
-  An `<invoke src>` no `--resource` names loads from the document's own
-  directory when it is a path an `event:schema` file reference may be
-  (relative, no scheme, query, fragment, `.` or `..` segment,
-  percent-decoded, a regular file that does not resolve outside the
-  directory through a symbolic link); anything else needs `--resource`.
-  `run` loads them the same way.
+  feature fails with `[wasmtime-disabled]`. `<invoke src>`,
+  `<script src>`, and `<data src>` load by SCXML's defaults: an `https:`
+  URL, a `file:` URL, or a relative URI resolved against the base URI of
+  the document that names it. Every literal one, of DOC and of every
+  `<invoke src>` document it loads, is fetched once before the first
+  macrostep and listed (`document `URL``, `= for: <invoke src="…">`, and
+  its size and SHA-256); a `<script src>` of DOC that cannot be fetched
+  rejects it (SCXML 5.8), and any other failure raises `error.execution`
+  when its element runs. An `<invoke srcexpr>` URI is fetched when the
+  invoke runs. Remote documents are fetched over HTTPS only, within 16 MiB,
+  at most 5 redirects (each to `https:`), and the connect and total
+  timeouts, with no retry and no credentials; `--offline` forbids them. A
+  document's HTTP `Content-Type`, or else a URL ending in `.json` or `.xml`
+  (`application/json`, RFC 8259 §11; `application/xml`, RFC 7303 §9.1), is
+  the media type the ECMAScript data model reads as the indication SCXML
+  B.2.1 lets it interpret `<data src>` content by; any other file, `.txt`
+  included, carries none and is read by content. `run` loads them the same
+  way.
 - **`show`** renders one view per session: identity, status,
   configuration, history, variables, queues, pending sends as `due +Nms`,
   transitions with their previews, and children. `--format json` re-emits the
