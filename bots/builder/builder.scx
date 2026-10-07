@@ -60,7 +60,7 @@
   Bindings: the scx namespace (built into scx), and the decision namespace
   package and the generate and decision service packages, resolved from their
   repository URIs; the env
-  attributes below scope OPENAI_API_KEY and OPENAI_BASE_URL to the generate
+  attributes below scope CPA_API_KEY and CPA_BASE_URL to the generate
   service's invokes and TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
   decision service's.
 -->
@@ -75,7 +75,7 @@
     <data id="spec" expr="''"/>
     <data id="constraints" expr="[]"/>
     <data id="max_attempts" expr="3"/>
-    <data id="model" expr="'gpt-6-luna'"/>
+    <data id="model" expr="'sparks/qwen3.8-flash-next'"/>
     <data id="generate_timeout_ms" expr="300000"/>
     <data id="decision_timeout_ms" expr="60000"/>
     <!-- The work. -->
@@ -140,7 +140,7 @@
       <assign location="spec" expr="_event.data.spec"/>
       <assign location="constraints" expr="_event.data.constraints === undefined ? [] : _event.data.constraints"/>
       <assign location="max_attempts" expr="_event.data.max_attempts === undefined ? 3 : _event.data.max_attempts"/>
-      <assign location="model" expr="_event.data.model === undefined ? 'gpt-6-luna' : _event.data.model"/>
+      <assign location="model" expr="_event.data.model === undefined ? 'sparks/qwen3.8-flash-next' : _event.data.model"/>
       <assign location="generate_timeout_ms" expr="_event.data.generate_timeout_ms === undefined ? generate_timeout_ms : _event.data.generate_timeout_ms"/>
     </transition>
     <transition event="builder.request" target="failed">
@@ -166,7 +166,7 @@
       <cancel sendid="design-timeout"/>
     </onexit>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
-            env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
+            env:apikey="CPA_API_KEY" env:baseurl="CPA_BASE_URL">
       <param name="model" expr="model"/>
       <param name="system" expr="design_system"/>
       <param name="prompt" expr="JSON.stringify({task: 'design', spec: spec, constraints: constraints, previous_plan: previous_plan, diagnostics: diagnostics})"/>
@@ -217,7 +217,7 @@
       <cancel sendid="author-timeout"/>
     </onexit>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
-            env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
+            env:apikey="CPA_API_KEY" env:baseurl="CPA_BASE_URL">
       <param name="model" expr="model"/>
       <param name="system" expr="author_system"/>
       <param name="prompt" expr="JSON.stringify({task: mode, spec: spec, constraints: constraints, plan: plan, previous_scxml: mode === 'repair' ? scxml_text : null, previous_tests: mode === 'repair' ? previous_tests : null, diagnostics: diagnostics})"/>

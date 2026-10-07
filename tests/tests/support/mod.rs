@@ -38,11 +38,22 @@ use sha2::{Digest as _, Sha256};
 /// them, so a test supplies values only through its env file (or an
 /// explicit `--env NAME=VALUE`).
 pub const GRANTED: [&str; 4] = [
-    "OPENAI_API_KEY",
-    "OPENAI_BASE_URL",
+    "CPA_API_KEY",
+    "CPA_BASE_URL",
     "TYPESAFE_API_KEY",
     "TYPESAFE_BASE_URL",
 ];
+
+/// The env files of a live test: `FLOPPY_LIVE_ENV_FILE`, one path or
+/// several joined like `PATH` (`:` on Unix), each given to `scx run` as an
+/// `--env-file` in order (a variable takes its last file's entry), so keys
+/// kept in separate files reach one run without being copied.
+pub fn live_env_files() -> Vec<PathBuf> {
+    let Some(paths) = std::env::var_os("FLOPPY_LIVE_ENV_FILE") else {
+        panic!("set FLOPPY_LIVE_ENV_FILE to the env file (or files) holding the test's keys");
+    };
+    std::env::split_paths(&paths).collect()
+}
 
 /// The floppy workspace root.
 pub fn workspace() -> &'static Path {

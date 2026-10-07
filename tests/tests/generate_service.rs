@@ -13,11 +13,11 @@
 //!
 //! The ignored `live_generate_through_an_env_file` test makes one real call:
 //! `FLOPPY_LIVE_ENV_FILE=<path> cargo test -p floppy-tests --test
-//! generate_service -- --ignored`. The file must set `OPENAI_API_KEY`;
-//! `OPENAI_BASE_URL` is the file's value, else `OpenAI`'s, given as the
-//! calling shell's value through `--env OPENAI_BASE_URL` (no backend URL is
-//! compiled into the component). It reports pass or fail only; no value is
-//! ever printed.
+//! generate_service -- --ignored`. The file must set `CPA_API_KEY`;
+//! `CPA_BASE_URL` is the file's value, else the package's declared origin
+//! (`https://cpa.willen.dev/v1`, decision D18). The model is
+//! `FLOPPY_LIVE_MODEL`, else `sparks/qwen3.8-flash-next`. It reports pass
+//! or fail only; no value is ever printed.
 
 #![allow(
     missing_docs,
@@ -62,7 +62,7 @@ fn open_with(args: &[String], document: &str, env: &[(&str, &str)], limit: Durat
     let consent = &finished.stderr;
     assert!(
         consent.contains(&format!("service `{}`", generate()))
-            && consent.contains("outbound HTTP: https://api.openai.com")
+            && consent.contains("outbound HTTP: https://cpa.willen.dev")
             && consent.contains("env slots: apikey, baseurl"),
         "the consent listing names the package, its origin, and its slots: {consent}"
     );
@@ -192,7 +192,7 @@ impl Mock {
 fn env_file(test: &str, base_url: &str) -> PathBuf {
     env_file_with(
         test,
-        &format!("OPENAI_API_KEY={FAKE_KEY}\nOPENAI_BASE_URL={base_url}\n"),
+        &format!("CPA_API_KEY={FAKE_KEY}\nCPA_BASE_URL={base_url}\n"),
     )
 }
 
@@ -213,7 +213,7 @@ fn document(params: &str, log_expr: &str) -> String {
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript" initial="ask">
   <state id="ask">
-    <invoke id="gen" type="{service}" env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
+    <invoke id="gen" type="{service}" env:apikey="CPA_API_KEY" env:baseurl="CPA_BASE_URL">
       {params}
     </invoke>
     <transition event="generate.result"><log label="reply" expr="{log_expr}"/></transition>
@@ -351,10 +351,7 @@ fn malformed_parameters_reject_the_start_and_send_nothing() {
 #[test]
 fn without_a_granted_key_nothing_is_sent() {
     let mock = Mock::start();
-    let env = env_file_with(
-        "nokey",
-        &format!("OPENAI_BASE_URL={}/text/v1\n", mock.origin),
-    );
+    let env = env_file_with("nokey", &format!("CPA_BASE_URL={}/text/v1\n", mock.origin));
     // Only the base URL has a value: the apikey slot stays absent.
     let args = args(&env);
     let finished = open(&args, &document(TEXT_PARAMS, "_event.data.text"));
@@ -376,7 +373,7 @@ fn two_services(params: &str) -> String {
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript" initial="ask">
   <state id="ask">
-    <invoke id="gen" type="{generate}" env:baseurl="OPENAI_BASE_URL">
+    <invoke id="gen" type="{generate}" env:baseurl="CPA_BASE_URL">
       {params}
     </invoke>
     <transition event="generate.result"><log label="reply" expr="_event.data.text"/></transition>
@@ -386,7 +383,7 @@ fn two_services(params: &str) -> String {
     <transition event="error.communication" target="rejected"/>
   </state>
   <state id="elsewhere">
-    <invoke id="other" type="{decision}" env:apikey="OPENAI_API_KEY"/>
+    <invoke id="other" type="{decision}" env:apikey="CPA_API_KEY"/>
   </state>
   <final id="done"><onentry><log label="final" expr="'done'"/></onentry></final>
   <final id="rejected"><onentry><log label="final" expr="'rejected'"/></onentry></final>
@@ -408,10 +405,10 @@ fn the_consent_lists_each_service_and_where_each_variable_goes_and_never_a_value
     );
     assert!(
         consent.contains(&format!(
-            "env `OPENAI_API_KEY`\n  = to: <invoke type=\"{}\"> env:apikey",
+            "env `CPA_API_KEY`\n  = to: <invoke type=\"{}\"> env:apikey",
             decision()
         )) && consent.contains(&format!(
-            "env `OPENAI_BASE_URL`\n  = to: <invoke type=\"{}\"> env:baseurl",
+            "env `CPA_BASE_URL`\n  = to: <invoke type=\"{}\"> env:baseurl",
             generate()
         )),
         "the listing shows each variable and the invoke it goes to: {consent}"
@@ -515,7 +512,7 @@ fn leaving_the_invoking_state_closes_the_streaming_model_call() {
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript" initial="ask">
   <state id="ask">
-    <invoke id="gen" type="{generate}" env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
+    <invoke id="gen" type="{generate}" env:apikey="CPA_API_KEY" env:baseurl="CPA_BASE_URL">
       {TEXT_PARAMS}
     </invoke>
     <transition event="generate.result"><log label="reply" expr="_event.data.text"/></transition>
@@ -557,16 +554,18 @@ fn leaving_the_invoking_state_closes_the_streaming_model_call() {
 }
 
 /// One real structured generation through an env file
-/// (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, default `gpt-6-luna`).
+/// (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, default
+/// `sparks/qwen3.8-flash-next`).
 /// Prints nothing but pass or fail.
 #[test]
 #[ignore = "makes one real model call; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_generate_through_an_env_file() {
-    let Some(path) = std::env::var_os("FLOPPY_LIVE_ENV_FILE").map(PathBuf::from) else {
-        panic!("set FLOPPY_LIVE_ENV_FILE to an env file that sets OPENAI_API_KEY");
-    };
-    let model = std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "gpt-6-luna".into());
-    let args = args(&path);
+    let args: Vec<String> = support::live_env_files()
+        .iter()
+        .flat_map(|path| args(path))
+        .collect();
+    let model =
+        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "sparks/qwen3.8-flash-next".into());
     let params = format!(
         r#"<param name="model" expr="'{model}'"/>
       <param name="system" expr="'Answer in JSON only.'"/>
@@ -575,7 +574,7 @@ fn live_generate_through_an_env_file() {
       <param name="schemaname" expr="'greeting'"/>
       <param name="strict" expr="true"/>"#
     );
-    // The env file's OPENAI_BASE_URL wins; without one the service uses its
+    // An env file's CPA_BASE_URL wins; without one the service uses its
     // package's declared origin (decision D18).
     let finished = open_with(
         &args,

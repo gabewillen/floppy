@@ -15,12 +15,13 @@
 //! it.
 //!
 //! The ignored `live_builder_through_an_env_file` test builds the same spec
-//! with the real backends: `FLOPPY_LIVE_ENV_FILE=<path> cargo test -p
-//! floppy-tests --test builder_bot -- --ignored`. The values are the
-//! file's; the base URLs fall back to `OpenAI`'s and `TypeSafe`'s, given as
-//! the calling shell's values through `--env OPENAI_BASE_URL --env
-//! TYPESAFE_BASE_URL` (no backend URL is compiled into a component). It
-//! writes the produced bot under `target/builder-live/`, and prints pass or
+//! with the real backends: `FLOPPY_LIVE_ENV_FILE=<paths> cargo test -p
+//! floppy-tests --test builder_bot -- --ignored`, the paths joined like
+//! `PATH` when `CPA_API_KEY` and `TYPESAFE_API_KEY` live in separate files.
+//! The values are the files'; without a `CPA_BASE_URL` or
+//! `TYPESAFE_BASE_URL`, each service uses its package's declared origin
+//! (decision D18). The model is `FLOPPY_LIVE_MODEL`, else
+//! `sparks/qwen3.8-flash-next`. It writes the produced bot under `target/builder-live/`, and prints pass or
 //! fail and counts only; no value is ever printed.
 
 #![allow(
@@ -41,7 +42,7 @@ use serde_json::{Map, Value as Json, json};
 use support::{Run, output, scratch, workspace, write};
 
 /// The fake keys (not secrets): the mock checks they arrive as bearers.
-const FAKE_OPENAI_KEY: &str = "sk-floppy-fake";
+const FAKE_CPA_KEY: &str = "sk-floppy-fake";
 const FAKE_TYPESAFE_KEY: &str = "ts-floppy-fake";
 const SPEC: &str = "a traffic light with a pedestrian button";
 
@@ -72,12 +73,14 @@ fn builder_args(document: &Path, clock: &str) -> Vec<String> {
 fn start(
     document: &Path,
     clock: &str,
-    env_file: &Path,
+    env_files: &[PathBuf],
     request: &Json,
     env: &[(&str, &str)],
 ) -> Run {
     let mut args = builder_args(document, clock);
-    args.extend(["--env-file".to_owned(), env_file.display().to_string()]);
+    for env_file in env_files {
+        args.extend(["--env-file".to_owned(), env_file.display().to_string()]);
+    }
     // The base URLs fall back to the calling shell's values (`env`).
     for (name, _) in env {
         args.extend(["--env".to_owned(), (*name).to_owned()]);
@@ -621,8 +624,8 @@ fn env_file(
 ) -> PathBuf {
     let origin = &mock.origin;
     let values = [
-        ("OPENAI_API_KEY", FAKE_OPENAI_KEY.to_owned()),
-        ("OPENAI_BASE_URL", format!("{origin}/{generate_route}/v1")),
+        ("CPA_API_KEY", FAKE_CPA_KEY.to_owned()),
+        ("CPA_BASE_URL", format!("{origin}/{generate_route}/v1")),
         ("TYPESAFE_API_KEY", FAKE_TYPESAFE_KEY.to_owned()),
         ("TYPESAFE_BASE_URL", format!("{origin}/{decision_route}")),
     ];
@@ -650,7 +653,7 @@ fn run_builder(mock: &Mock, test: &str, route: &str, builder: &str, request: &Js
     let dir = scratch("builder-variant");
     let document = write(&dir, &format!("{test}.scx"), builder);
     let env = env_file(test, mock, route, "typesafe", &ALL);
-    start(&document, "logical", &env, request, &[])
+    start(&document, "logical", &[env], request, &[])
         .finish(Duration::from_mins(5))
         .records
 }
@@ -666,7 +669,7 @@ fn run_deciding(
 ) -> Vec<Json> {
     let env = env_file(test, mock, route, decision_route, env);
     let finished =
-        start(&builder_document(), "logical", &env, request, &[]).finish(Duration::from_mins(5));
+        start(&builder_document(), "logical", &[env], request, &[]).finish(Duration::from_mins(5));
     assert!(
         !finished.records.is_empty(),
         "the session ran: {}",
@@ -890,7 +893,7 @@ fn assert_repair_requests(received: &[Received]) {
     for request in designs.iter().chain(&authors) {
         assert_eq!(
             request.authorization.as_deref(),
-            Some(format!("Bearer {FAKE_OPENAI_KEY}").as_str())
+            Some(format!("Bearer {FAKE_CPA_KEY}").as_str())
         );
     }
     let decisions: Vec<&Received> = received
@@ -980,7 +983,7 @@ fn the_builder_gives_up_after_max_attempts_with_the_fallback_triage() {
         &mock,
         "broken",
         "broken",
-        &["OPENAI_API_KEY", "OPENAI_BASE_URL"],
+        &["CPA_API_KEY", "CPA_BASE_URL"],
         &json!({"spec": SPEC, "max_attempts": 2}),
     );
     assert!(finished(&records), "{records:?}");
@@ -1114,7 +1117,7 @@ fn a_draft_that_breaks_the_draft_profile_never_runs() {
         &mock,
         "smuggle",
         "smuggle",
-        &["OPENAI_API_KEY", "OPENAI_BASE_URL"],
+        &["CPA_API_KEY", "CPA_BASE_URL"],
         &json!({"spec": SPEC, "max_attempts": 1}),
     );
     assert!(finished(&records), "{records:?}");
@@ -1289,19 +1292,18 @@ fn an_invalid_request_is_answered_with_builder_failed() {
 
 /// Builds the spec with the real `generate` (and `decision`) backends on the
 /// wall clock (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, default
-/// `gpt-6-luna`). Writes the produced bot under `target/builder-live/` and
+/// `sparks/qwen3.8-flash-next`). Writes the produced bot under `target/builder-live/` and
 /// prints only pass or fail and counts.
 #[test]
 #[ignore = "makes real model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_builder_through_an_env_file() {
-    let Some(path) = std::env::var_os("FLOPPY_LIVE_ENV_FILE").map(PathBuf::from) else {
-        panic!("set FLOPPY_LIVE_ENV_FILE to an env file that sets OPENAI_API_KEY");
-    };
-    let model = std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "gpt-6-luna".into());
+    let env_files = support::live_env_files();
+    let model =
+        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "sparks/qwen3.8-flash-next".into());
     let finished = start(
         &builder_document(),
         "wall",
-        &path,
+        &env_files,
         &json!({
             "spec": SPEC,
             "constraints": [

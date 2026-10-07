@@ -30,7 +30,7 @@ final states and its parent receives that state's done data as
 
 | What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?}`: the specification, extra constraints (strings), the failure budget (1 to 8, default 3), the generate service's model (default `gpt-6-luna`), and the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000) |
+| `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?}`: the specification, extra constraints (strings), the failure budget (1 to 8, default 3), the generate service's model (default `sparks/qwen3.8-flash-next`, a reasoning model), and the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, tests, report}`: the built document, its input event schemas (`{event, schema}`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
 | final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics}`: `invalid-request`, `attempts-exhausted`, or `abandoned`, with the last diagnostics (`{kind, code, message}`) |
 
@@ -160,8 +160,8 @@ Everything a run needs is in the document:
   `scripts/build-components.sh` publishes the locally built packages into
   (README, "Running a bot"). The consent listing shows the release tag and
   commit each one resolved to.
-* Its `env` attributes scope the variables: `OPENAI_API_KEY` and
-  `OPENAI_BASE_URL` go only to the generate service's `<invoke>`s
+* Its `env` attributes scope the variables: `CPA_API_KEY` and
+  `CPA_BASE_URL` go only to the generate service's `<invoke>`s
   (`env:apikey`, `env:baseurl`), and `TYPESAFE_API_KEY` and
   `TYPESAFE_BASE_URL` only to the decision service's. `scx run` lists each
   variable and the `<invoke>`s it goes to before running (names only).
@@ -174,9 +174,11 @@ Each base URL comes from the env file, or, with a bare `--env NAME`, from
 the calling shell (`scx` takes a variable's value from `--env NAME=VALUE`,
 else its `--env-file`, else, for a bare `--env NAME`, the shell). When no
 `baseurl` value is held, a service uses its package's first declared
-`http-origins` entry: `https://api.openai.com/v1` for `generate` and
-`https://api.typesafe.ai` for `decision`, so an env file with only the two
-keys runs both services. Without `TYPESAFE_API_KEY` the decision service
+`http-origins` entry: `https://cpa.willen.dev/v1` (the `OpenAI`-compatible
+gateway in front of the maintainer's two DGX Spark machines) for `generate`
+and `https://api.typesafe.ai` for `decision`, so env files with only the two
+keys run both services; `--env-file` repeats, so the keys may come from two
+files (`--env-file .env --env-file <typesafe env file>`). Without `TYPESAFE_API_KEY` the decision service
 answers `decision.failed` (`unconfigured`) and the builder triages with its
 fallback. Drafts are
 validated without packages, so a built machine uses no extension namespace

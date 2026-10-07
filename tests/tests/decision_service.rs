@@ -429,14 +429,14 @@ fn classify_returns_every_labels_probability() {
 #[test]
 #[ignore = "makes one real TypeSafe call; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_decision_through_an_env_file() {
-    let Some(path) = std::env::var_os("FLOPPY_LIVE_ENV_FILE").map(PathBuf::from) else {
-        panic!("set FLOPPY_LIVE_ENV_FILE to an env file that sets TYPESAFE_API_KEY");
-    };
     // The env file sets no TYPESAFE_BASE_URL: the service uses its package's
     // declared origin (decision D18).
     let params = r#"<param name="state" expr="order"/>
       <param name="instructions" expr="'A customer paid for order A-1 and asked for fast delivery. Choose what to do with the order.'"/>"#;
-    let args = args(&path);
+    let args: Vec<String> = support::live_env_files()
+        .iter()
+        .flat_map(|path| args(path))
+        .collect();
     let records = open(&args, &document(params), &[], Duration::from_secs(120)).records;
     let logs = logs(&records);
     let admitted = |schema: &str, data: &str| {

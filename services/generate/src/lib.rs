@@ -6,15 +6,16 @@
 //! in flight, a `<send delay>` timeout in the invoking state preempts it, and
 //! leaving that state cancels it. The wire protocol is the
 //! `OpenAI`-compatible Chat Completions API (`POST {base}/chat/completions`),
-//! which `OpenAI`, `NVIDIA`'s `integrate.api.nvidia.com/v1`, and local
-//! servers all speak; the backend is chosen by the run through the `baseurl`
+//! which `OpenAI`, `NVIDIA`'s `integrate.api.nvidia.com/v1`, the
+//! maintainer's DGX Spark gateway `https://cpa.willen.dev/v1` (the default),
+//! and local servers all speak; the backend is chosen by the run through the `baseurl`
 //! slot, never by the document or the component. Documents name
 //! [`SERVICE_URI`]:
 //!
 //! ```xml
 //! <invoke idlocation="gen" type="https://github.com/stateforward/floppy/services/generate"
-//!         env:apikey="OPENAI_API_KEY" env:baseurl="OPENAI_BASE_URL">
-//!   <param name="model" expr="'gpt-6-luna'"/>
+//!         env:apikey="CPA_API_KEY" env:baseurl="CPA_BASE_URL">
+//!   <param name="model" expr="'sparks/qwen3.8-flash-next'"/>
 //!   <param name="prompt" expr="'Say hello.'"/>
 //! </invoke>
 //! ```
@@ -46,9 +47,9 @@
 //! (the API base URL, for example `https://api.openai.com/v1`; it must not
 //! end with `/`). When no `baseurl` value is held (the slot names no
 //! variable, or one the run does not hold), the base URL is the package's
-//! first declared `http-origins` entry (`https://api.openai.com/v1`, read
-//! from `package/generate.service.json`), as the deleted scxml.rs `openai`
-//! namespace defaulted to `https://api.openai.com/v1`; the manifest stays
+//! first declared `http-origins` entry (`https://cpa.willen.dev/v1`, the
+//! `OpenAI`-compatible gateway in front of the maintainer's two DGX Spark
+//! machines, read from `package/generate.service.json`); the manifest stays
 //! the one place the origin is written. The component holds opaque
 //! references only; the host substitutes the values into the one admitted
 //! request.
@@ -98,15 +99,27 @@
 //! generation or billing (that is reported by its users, not guaranteed),
 //! and the prompt's tokens are billed whenever the request was accepted.
 //!
+//! The request sets no token limit (neither `max_tokens` nor
+//! `max_completion_tokens`), so the backend's own limit (by default the
+//! model's context left after the prompt) bounds the reasoning and the
+//! answer together. A reasoning model (the default
+//! `sparks/qwen3.8-flash-next`) streams its reasoning first, as
+//! `delta.reasoning` or `delta.reasoning_content`, and only then the
+//! answer as `delta.content`: a small limit can go entirely to reasoning
+//! and leave no answer (a 20-token limit did). The time bound is the
+//! invoking state's `<send delay>`, not a token count.
+//!
 //! # The reply
 //!
 //! The reply is the text the stream carries ([`reply_text`]): every
 //! `data:` event up to `data: [DONE]` is a chunk, and the
 //! `choices[0].delta.content` of the chunks are joined in order (a chunk
-//! without choices, such as a usage chunk, adds nothing). A refusal
+//! without choices, such as a usage chunk, adds nothing, and a reasoning
+//! model's reasoning is never part of the reply). A refusal
 //! (`choices[0].delta.refusal`), a `finish_reason` of `length` or
 //! `content_filter`, an `error` chunk, a stream without `[DONE]` or without
-//! content, or a body that is not such a stream is a failure. With a schema
+//! content (empty content counts as none: a reasoning model's stream opens
+//! with an empty `content`), or a body that is not such a stream is a failure. With a schema
 //! the whole text is parsed as JSON and checked against the compiled schema
 //! only once the stream ended ([`structured_value`]).
 //!
@@ -653,7 +666,9 @@ pub fn reply_text(body: &[u8]) -> Result<String, FailureCode> {
     if !refusal.is_empty() {
         return Err(FailureCode::Refusal);
     }
-    content.ok_or(FailureCode::Malformed)
+    content
+        .filter(|text| !text.is_empty())
+        .ok_or(FailureCode::Malformed)
 }
 
 /// The structured reply: `text` parsed as JSON, admitted by `schema`.

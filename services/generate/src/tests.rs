@@ -320,6 +320,40 @@ fn a_stream_is_joined_in_order_up_to_done() {
 }
 
 #[test]
+fn a_reasoning_models_reasoning_is_never_the_reply() {
+    // As vLLM streams it: an empty content first, then reasoning, then the
+    // answer.
+    let opening = chunk(
+        &serde_json::json!({ "role": "assistant", "content": "" }),
+        None,
+    );
+    let reasoning = chunk(&serde_json::json!({ "reasoning": "think" }), None);
+    let reasoning_content = chunk(&serde_json::json!({ "reasoning_content": "more" }), None);
+    let answer = chunk(&serde_json::json!({ "content": "hi" }), Some("stop"));
+    assert_eq!(
+        reply_text(&stream(&[
+            opening.clone(),
+            reasoning.clone(),
+            reasoning_content,
+            answer
+        ])),
+        Ok("hi".to_owned())
+    );
+    // A token limit spent entirely on reasoning is a truncated reply, and a
+    // stream that ends with only the empty content has none.
+    let spent = chunk(&serde_json::json!({ "reasoning": "still" }), Some("length"));
+    assert_eq!(
+        reply_text(&stream(&[opening.clone(), reasoning.clone(), spent])),
+        Err(FailureCode::Truncated)
+    );
+    let stopped = chunk(&serde_json::json!({}), Some("stop"));
+    assert_eq!(
+        reply_text(&stream(&[opening, reasoning, stopped])),
+        Err(FailureCode::Malformed)
+    );
+}
+
+#[test]
 fn a_stream_that_is_cut_short_or_malformed_is_never_a_reply() {
     let content = chunk(&serde_json::json!({ "content": "partial" }), None);
     let without_done = format!("data: {content}\n\n").into_bytes();
@@ -400,13 +434,13 @@ fn without_a_baseurl_value_the_base_is_the_packages_first_declared_origin() {
     .expect("the manifest parses");
     let origin = super::package_origin().expect("the manifest declares an origin");
     assert_eq!(Some(&origin), manifest.http_origins.first());
-    assert_eq!(origin, "https://api.openai.com/v1");
+    assert_eq!(origin, "https://cpa.willen.dev/v1");
     let generation = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
     let request = build_request(Part::Literal(origin), 1, &generation);
     assert_eq!(
         request.url,
         [
-            Part::Literal("https://api.openai.com/v1".into()),
+            Part::Literal("https://cpa.willen.dev/v1".into()),
             Part::Literal(CHAT_COMPLETIONS_PATH.into())
         ]
     );
