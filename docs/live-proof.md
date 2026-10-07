@@ -7,6 +7,54 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-07, the builder through the gateway's LAN address (no Cloudflare), model `sparks/qwen3.8-flash-next`
+
+The runs used floppy commit `4bd63aa0` (code and subtree scxml.rs
+`1a1defa7` as in the entry below), with the same dev cache and
+`target/scx-live` `scx`. The only change is the generate service's base
+URL: the same gateway, reached on the LAN at `http://192.168.2.128:8319/v1`
+instead of through Cloudflare at `https://cpa.willen.dev/v1`. It came from a
+third env file holding only `CPA_BASE_URL=http://192.168.2.128:8319/v1` (no
+key), given last, so neither `.env` was edited; the builder's
+`env:baseurl="CPA_BASE_URL"` names it, and the consent listing showed
+`CPA_BASE_URL` going only to the generate service's `<invoke>`s. No harness
+change was needed: `FLOPPY_LIVE_ENV_FILE` takes several files the same way.
+The host admitted the run-supplied `http:` origin, which a value supplies
+entirely: design generations answered in 15.7 s to 35.3 s and an author
+generation answered after 119.9 s. From a clean shell
+(`env -i HOME="$HOME" PATH="/usr/bin:/bin"`), in the floppy root:
+
+```console
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"model":"sparks/qwen3.8-flash-next"}}' |
+  target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
+    --env-file .env --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env \
+    --env-file <file with only CPA_BASE_URL> bots/builder/builder.scx
+```
+
+Durations are from the arrival of each stage's `log` record on standard
+output to the next one.
+
+| Run | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| builder, run 1 | `sparks/qwen3.8-flash-next` | fail | 1 of 3 | exit 0 in 621 s, final state `failed` (`no-progress`): design 0.2 s (`design-failed`; the log does not carry the cause), design 19.1 s, then both author generations cancelled at the builder's 300 s limit (`timeout author-timeout`, 300.0 s and 300.2 s), the same failure twice in a row |
+| builder, run 2 | `sparks/qwen3.8-flash-next` | pass | 2 of 3 | exit 0 in 321 s, final state `done` on attempt 3 after `simulate test-failed` (4 tests) and `validate SCXML008` (with `XSD-cvc-complex-type.3.2.2`, `<cancel event>`), triage `triage.repair` twice; generations 35.3 s (design), 63.8 s, 119.9 s, 37.6 s (author); simulations 27.6 s and 34.9 s (4 tests each); plan `traffic_light` |
+| builder, run 3 | `sparks/qwen3.8-flash-next` | pass | 3 of 3 | exit 0 in 448 s, final state `done` on attempt 4 after `timeout author-timeout` (300.3 s), `validate XML001` (an unclosed `event:schema` value), and `validate SCXML008` (`<cancel sendidref>`), triage `triage.repair` three times; generations 15.7 s (design), 300.3 s (cancelled), 69.3 s, 15.9 s, 10.4 s (author); simulation 34.4 s (3 tests); plan `traffic_light_pedestrian` |
+
+Compared with the Cloudflare runs (entry below: two passes in three, three
+author generations ended `status` at about 125 s): no generation ended at
+about 125 s and no `status` failure occurred, and an author generation that
+took 119.9 s, which Cloudflare would most likely have cut off, answered.
+Cloudflare's limit is gone, and the long generations now run into the
+builder's own `generate_timeout_ms` (300 s), which ended three of them. The
+LAN gateway also holds the reasoning back: a direct streamed request
+(`reasoning_effort` `high`, a short counting prompt) got its first `data:`
+event, the reasoning and the content together, after 19.2 s, and all 527
+events within 3.3 s after that, so the 0.35 s time to first byte measured
+for it earlier does not mean the output streams while the model reasons, and
+nothing showed whether the cancelled
+generations were still reasoning or had stalled. The built documents were
+not kept. Nothing in the tests was changed to make them pass.
+
 ## 2026-10-07, no `scx` time limit on service requests and the no-progress exit (decision D26), model `sparks/qwen3.8-flash-next`
 
 The runs used floppy commit `6f48bcc4` (subtree scxml.rs `1a1defa7`, which
