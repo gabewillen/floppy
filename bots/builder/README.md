@@ -6,6 +6,10 @@ machine, [`builder.scx`](builder.scx) (decision D9 in
 request on standard input:
 
 ```console
+# The locally built packages (the dev cache under target/).
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
+  scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx
+# nemobot's latest release, once one is published (phase 7).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
   scx run --env-file .env bots/builder/builder.scx
 ```
@@ -59,7 +63,7 @@ intake -> design -> author -> validate -> simulate -> done
 ```
 
 * `design`: invokes the generate service
-  (`https://github.com/stateforward/nemobot/services/generate@v0.1.0`, a
+  (`https://github.com/stateforward/nemobot/services/generate`, a
   fresh invoke id in `gen_id` each time) with the `topology_plan`
   structured-output schema; its `<finalize>` takes the plan from
   `generate.result` (or the code from `generate.failed`), and
@@ -74,9 +78,8 @@ intake -> design -> author -> validate -> simulate -> done
   delays, a settle time, the outputs expected in order, and whether the
   machine finishes). A repair sees the failed draft, its tests, and the
   diagnostics.
-* `validate`: the draft must keep the draft contract (below); its schemas
-  must parse; `scx:validate` with
-  `applyfixes="machine-applicable"`; when the fixes change the text,
+* `validate`: its schemas must parse; `scx:validate` with the draft profile
+  (below) and `applyfixes="machine-applicable"`; when the fixes change the text,
   `apply_fixes` takes them and validates again (at most 2 passes per draft);
   otherwise the error diagnostics feed back to `author`.
 * `simulate`: each test script runs the draft as a fresh invoked child
@@ -104,7 +107,7 @@ intake -> design -> author -> validate -> simulate -> done
   `triage.repair` (guarded by `plan !== null`, so it is on the menu only
   when there is a plan to repair from), `triage.redesign`, and
   `triage.abandon`. The decision service
-  (`https://github.com/stateforward/nemobot/services/decision@v0.1.0`),
+  (`https://github.com/stateforward/nemobot/services/decision`),
   invoked with that menu and the failure state, picks one, validates its
   data against the menu's schema, and returns it.
 * `fallback`: the cond-based triage when the decision is unavailable (no
@@ -127,33 +130,36 @@ own request timeout (600 s) is only a backstop. The simulation is bounded the sa
 `max_tests * sim_test_cap_ms` plus 60 s, longer than the longest simulation
 `validate` admits (8 tests of at most 120 s each).
 
-## The draft contract
+## The draft profile
 
 Drafts are model output, and a draft runs as an invoked child of the
 builder's session, which would inherit every namespace package and `env`
-value the run binds. So `validate` refuses, before `scx:validate`'s verdict
-counts, a draft that has a document type declaration (so no entity can
-hide markup), declares a namespace other than SCXML and `event`, mentions
-`xmlns` anywhere but such a declaration, or holds an `invoke` or `script`
-element (with any prefix), a `src` or `srcexpr` attribute, a `typeexpr`
-attribute, or a `type` other than `internal`, `external`, `deep`,
-`shallow`, or the SCXML Event I/O Processor (so no BasicHTTP send). The
-diagnostics (`draft-contract`) feed back to `author`. The check is textual
-and fails closed: a prefix is any run of characters other than XML white
-space and markup delimiters, so a non-ASCII prefix (`xmlns:é`, `<é:invoke>`)
-is read like any other, and a forbidden pattern inside a comment or a CDATA
-section is refused too.
+value the run binds. So `validate` runs `scx:validate` with
+`profile="draft"`, the validator's draft profile (scxml.rs
+`docs/validator-rules.md`, "Draft profile"): a draft that declares or uses
+a namespace other than SCXML and `event` (`SCXML097`), holds an `invoke` or
+`script` element (`SCXML098`), a `src` or `srcexpr` attribute (`SCXML099`),
+a `typeexpr` or a `<send type>` other than the SCXML Event I/O Processor
+(`SCXML100`, so no BasicHTTP send), or a document type declaration
+(`SCXML101`, so no entity can hide markup) is invalid, and those
+diagnostics feed back to `author` like any other validator error. The
+checks read the parsed XML by expanded name, so a namespace prefix of any
+spelling (`xmlns:é`, `<é:invoke>`) is judged like any other, and a comment
+or CDATA section is text, not markup.
 
 ## Bindings
 
 Everything a run needs is in the document:
 
 * Its `decision` namespace and its `<invoke type>`s (`generate`,
-  `decision`) are repository URIs
-  (`https://github.com/stateforward/nemobot/namespaces/<name>@v0.1.0`,
-  `.../services/<name>@v0.1.0`), which `scx` resolves from its
-  repository-package cache: `scripts/build-components.sh` publishes the
-  locally built packages there (README, "Running a bot").
+  `decision`) are tagless repository URIs
+  (`https://github.com/stateforward/nemobot/namespaces/<name>`,
+  `.../services/<name>`), which name nemobot's latest release: `scx`
+  resolves them from that release, or, with `--offline --cache-dir
+  target/components/package-cache`, from the dev cache
+  `scripts/build-components.sh` publishes the locally built packages into
+  (README, "Running a bot"). The consent listing shows the release tag and
+  commit each one resolved to.
 * Its `env` attributes scope the variables: `OPENAI_API_KEY` and
   `OPENAI_BASE_URL` go only to the generate service's `<invoke>`s
   (`env:apikey`, `env:baseurl`), and `TYPESAFE_API_KEY` and
@@ -183,6 +189,10 @@ From the repository root, after `sh scripts/build-components.sh` and with
 [README](../../README.md#running-a-bot)):
 
 ```console
+# The locally built packages (the dev cache under target/).
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
+  scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx
+# nemobot's latest release, once one is published (phase 7).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
   scx run --env-file .env bots/builder/builder.scx
 ```
@@ -202,8 +212,8 @@ draft runs its two test scripts as two invoked children (distinct invoke
 ids) before the builder ends in `done`; the repair request carries the failed draft and
 its tests. Other cases cover a redesign that sends the plan it replaces,
 a failed redesign keeping that plan, `triage.repair` not being offered
-without a plan, a draft that breaks the draft contract never running (also
-through a non-ASCII namespace prefix or an entity), a candidate's
+without a plan, a draft that breaks the draft profile never running (also
+through a non-ASCII namespace prefix or a DTD), a candidate's
 `sim.settle` and `sim.drive` being recorded as outputs, a cancelled
 candidate's `builder.timeout` not ending the next simulation, a failed
 invocation's `sim.drive` not driving the next test, the fallback triage

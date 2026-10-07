@@ -234,8 +234,8 @@ fn fixable_draft() -> String {
     draft(&traffic_light(&green_comma(), "red"))
 }
 
-/// A draft that breaks the draft contract: red invokes a nested machine
-/// from a string, which `scx:validate` does not look inside.
+/// A draft that breaks the draft profile: red invokes a nested machine
+/// from a string.
 fn smuggling_draft() -> String {
     draft(&traffic_light(&green_separate(), "red").replace(
         "<transition event=\"light.timer\" target=\"green\"/>",
@@ -249,7 +249,7 @@ fn smuggling_draft() -> String {
 fn unicode_prefix_draft() -> String {
     draft(&traffic_light(&green_separate(), "red").replace(
         "version=\"1.0\"",
-        "xmlns:\u{e9}=\"https://github.com/stateforward/nemobot/namespaces/decision@v0.1.0\" version=\"1.0\"",
+        "xmlns:\u{e9}=\"https://github.com/stateforward/nemobot/namespaces/decision\" version=\"1.0\"",
     ).replace(
         "<onexit><cancel sendid=\"red-timer\"/>",
         "<onexit><\u{e9}:menu location=\"x\"/><cancel sendid=\"red-timer\"/>",
@@ -490,8 +490,8 @@ impl Received {
 /// `/repair/v1` answers the plan, then the invalid draft, then the fixable
 /// one, then valid drafts; `/broken/v1` answers the plan, then only invalid
 /// drafts; `/smuggle/v1` answers the plan, then only drafts that break the
-/// draft contract (`/unicode/v1` through a non-ASCII prefix, `/doctype/v1`
-/// through an entity); `/impostor/v1` answers the plan, then a valid draft
+/// draft profile (`/unicode/v1` through a non-ASCII prefix, `/doctype/v1`
+/// through a DTD entity); `/impostor/v1` answers the plan, then a valid draft
 /// that sends the builder's control event names; `/flaky/v1` fails the
 /// second plan (404) and otherwise answers like `/broken/v1`; `/noplan/v1`
 /// fails every plan (404); `/slow/v1` holds its first plan for
@@ -1097,10 +1097,10 @@ fn repair_is_not_offered_without_a_plan() {
 }
 
 /// A draft that invokes, scripts, loads, or declares another namespace is
-/// refused before validation counts, so it never runs as a child with the
-/// run's packages and env values.
+/// invalid under the validator's draft profile, so it never runs as a child
+/// with the run's packages and env values.
 #[test]
-fn a_draft_that_breaks_the_draft_contract_never_runs() {
+fn a_draft_that_breaks_the_draft_profile_never_runs() {
     let mock = Mock::start();
     let records = run(
         &mock,
@@ -1113,25 +1113,22 @@ fn a_draft_that_breaks_the_draft_contract_never_runs() {
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed", "{failed}");
     assert_eq!(failed["reason"], "attempts-exhausted");
-    assert_eq!(failed["diagnostics"][0]["kind"], "draft");
-    assert_eq!(failed["diagnostics"][0]["code"], "draft-contract");
     assert!(
         failed["diagnostics"]
             .as_array()
-            .is_some_and(
-                |diagnostics| diagnostics.iter().any(|diagnostic| diagnostic["message"]
-                    .as_str()
-                    .is_some_and(|message| message.contains("invoke")))
-            ),
-        "{failed}"
+            .is_some_and(|diagnostics| diagnostics.iter().any(|diagnostic| {
+                diagnostic["kind"] == "validate" && diagnostic["code"] == "SCXML098"
+            })),
+        "the invoke is the draft profile's SCXML098: {failed}"
     );
 }
 
-/// The draft contract reads any namespace prefix, ASCII or not, and refuses a
-/// document type declaration, so neither hides a namespace or an element.
+/// The draft profile reads namespaces by expanded name, whatever the prefix,
+/// and refuses a document type declaration, so neither hides a namespace or
+/// an element.
 #[test]
-fn a_non_ascii_prefix_or_an_entity_does_not_get_past_the_draft_contract() {
-    for (route, needle) in [("unicode", "namespace"), ("doctype", "document type")] {
+fn a_non_ascii_prefix_or_an_entity_does_not_get_past_the_draft_profile() {
+    for (route, code) in [("unicode", "SCXML097"), ("doctype", "SCXML101")] {
         let mock = Mock::start();
         let records = run(
             &mock,
@@ -1143,18 +1140,12 @@ fn a_non_ascii_prefix_or_an_entity_does_not_get_past_the_draft_contract() {
         assert!(finished(&records), "{route}: {records:?}");
         let (label, failed) = answer(&records);
         assert_eq!(label, "failed", "{route}: {failed}");
-        assert_eq!(
-            failed["diagnostics"][0]["code"], "draft-contract",
-            "{route}: {failed}"
-        );
         assert!(
             failed["diagnostics"]
                 .as_array()
-                .is_some_and(|diagnostics| diagnostics.iter().any(|diagnostic| {
-                    diagnostic["message"]
-                        .as_str()
-                        .is_some_and(|message| message.contains(needle))
-                })),
+                .is_some_and(|diagnostics| diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic["code"] == code)),
             "{route}: {failed}"
         );
         let received = mock.received();
