@@ -125,7 +125,8 @@ the topology. `design` and `author` each arm `builder.timeout` after
 in flight leaves the state, which cancels the invocation: the service is
 cancelled, the host closes the request's streaming connection at once (so
 the backend stops sending tokens), and no answer reaches anyone. The host's
-own request timeout (600 s) is only a backstop. The simulation is bounded the same way:
+own request timeout (`scx`'s 120 s for a whole service request, body
+included) also ends a call that runs longer, as `transport`. The simulation is bounded the same way:
 `simulate-timeout` is a delayed send cancelled on exit that fires after
 `max_tests * sim_test_cap_ms` plus 60 s, longer than the longest simulation
 `validate` admits (8 tests of at most 120 s each).

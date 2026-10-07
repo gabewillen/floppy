@@ -7,6 +7,51 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-07, floppy (decision D23) on the DGX Sparks (decision D24), model `sparks/qwen3.8-flash-next`
+
+The runs used floppy commit `790785a2` (subtree scxml.rs `76654ac1`):
+`sh scripts/build-components.sh` publishing the decision namespace and both
+services into the dev cache `target/components/package-cache` (pinned to
+release tag `v0.1.0` at commit `790785a2`), and `scx` built from the
+subtree with those session components embedded
+(`SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml"
+CARGO_TARGET_DIR="$PWD/target/scx-live" cargo build --release --locked -p
+scxml-cli --manifest-path scxml.rs/Cargo.toml`). `CPA_API_KEY` came from
+floppy's `.env` and `TYPESAFE_API_KEY` from `mosfet/mosfet.py/.env`; no
+`CPA_BASE_URL` or `TYPESAFE_BASE_URL` was set, so each service used its
+package's declared origin (`https://cpa.willen.dev/v1`,
+`https://api.typesafe.ai`), as the consent listing showed. The live tests
+(which run `scx run --offline --cache-dir` against the test build's cache):
+`FLOPPY_LIVE_ENV_FILE=<env file> cargo test --locked -p floppy-tests --test
+<test> -- --ignored <name>`. The builder, from a clean shell
+(`env -i HOME="$HOME" PATH="/usr/bin:/bin"`), in the floppy root:
+
+```console
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"max_attempts":4}}' |
+  target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
+    --env-file .env --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env bots/builder/builder.scx
+```
+
+| Run | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| `live_generate_through_an_env_file` | `sparks/qwen3.8-flash-next` | pass | 1 | 14 s; strict `json_schema` structured output over `stream: true`, no token limit sent |
+| `live_decision_through_an_env_file` | TypeSafe `system_one` | pass | 2 | 12 s; final state `shipped`, data admitted by its schema. The first run failed before any call: the shell's `wasm-tools` was 1.240.0, not the pinned 1.244.0, so the component build refused |
+| builder | `sparks/qwen3.8-flash-next` | fail | 1 | exit 0 in 484 s, final state `failed` (`attempts-exhausted`): all 4 design generations failed as `transport` (`design-failed`); triage ran 3 times through the decision service |
+
+Why the builder failed: the gateway does not stream. Measured with the
+builder's own design prompt and `curl`, the first response byte arrives
+only with the last (time to first byte equals total time, with or without
+`accept: text/event-stream`): 8 s at a 600-token limit, 24 s at 1,500, all
+of them reasoning tokens. The unlimited design generation got Cloudflare's
+`524` after 125 s, and in the builder run `scx` ended each one first at its
+fixed 120 s limit for a whole invoked-service request
+(`DEFAULT_EXTENSION_TOTAL_TIMEOUT`). So a generation whose reasoning takes
+longer than about 100 s cannot succeed through `https://cpa.willen.dev/v1`
+as it is now, and the buffering also means that closing the connection does
+not stop the generation early. A token limit would not help: it ends the
+reasoning before the answer (`truncated`). Short generations (the generate
+live test) pass. Nothing in the tests was changed to make them pass.
+
 ## 2026-10-07, repository packages resolved by the embedded GitHub resolver component (decision D22), model `gpt-6-luna`
 
 The run used nemobot commit `a1367dbe` (subtree scxml.rs `f6b8a1c6`) with
