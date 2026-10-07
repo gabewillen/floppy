@@ -853,19 +853,20 @@ cargo run --release --locked -p scxml-conformance --features wasmtime \
 The generator regenerates every checked-in baseline: both W3C corpora and
 every namespace suite ([Namespace suites](#namespace-suites)). The
 checked-in bytes were generated from the canonical release: the eight
-components the conformance executor links and the example extension
-component the namespace suites bind, as the `irp-components` CI job builds
+components the conformance executor links, the example extension component
+the namespace suites bind, and the `scx` namespace and GitHub resolver
+components `scx` embeds with them, as the `irp-components` CI job builds
 them on Linux x86_64:
 
 ```console
 sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
   scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
   scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine \
-  scxml_extension_example
+  scxml_extension_example scxml_resolver_github scx
 ```
 
 That build's `manifest.tsv` has SHA-256
-`6a3ecaff9ce179e4c0e9be721dc3dbde161d875fd9ccfcef853356bca10c9192` (machine
+`aebfb0f67da2cc096dad7845855b51d9eb6d1acc363a9241fc2f5e1a165f231a` (machine
 component SHA-256
 `d676e0fd0feee4b6c3b0784886885d5c8504475085b4ec60854b06241c006f84`), and
 its example extension component SHA-256
@@ -917,7 +918,7 @@ sh scripts/build-canonical-components.sh --artifacts-dir "$PWD/canonical-release
 
 Built from the source of the checked-in baselines on an arm64 macOS Docker
 host, the script produces manifest SHA-256
-`6a3ecaff9ce179e4c0e9be721dc3dbde161d875fd9ccfcef853356bca10c9192`, the
+`aebfb0f67da2cc096dad7845855b51d9eb6d1acc363a9241fc2f5e1a165f231a`, the
 components the baselines were generated from; the `irp-components`
 artifact of the same source must match it.
 

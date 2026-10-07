@@ -53,21 +53,24 @@
 //!
 //! # Where the bytes come from
 //!
-//! * A tagless URI's release is the repository's latest release
-//!   (`/repos/<owner>/<repo>/releases/latest`, its `tag_name`), asked once
-//!   per repository per root session.
-//! * The tag resolves to a commit through the GitHub REST API
-//!   (`/repos/<owner>/<repo>/git/ref/tags/<tag>`, dereferencing annotated
-//!   tags).
-//! * The manifest (`namespaces/<name>/package/<name>.extension.json`, or
-//!   `services/<name>/package/<name>.service.json`), its schema
-//!   (`schema-artifact`, relative to the manifest; optional for a service)
-//!   come from `raw.githubusercontent.com` at that commit, never at the tag;
-//!   the schema must match the digest the manifest declares.
-//! * The component is the release asset the manifest's `extension-artifact`
-//!   or `service-artifact` names, from that release, authenticated by the
-//!   SHA-256 that release's `SHA256SUMS` asset lists for it, resolved when
-//!   `snapshot run` or `run` binds it, before the session starts.
+//! The GitHub resolver component `scx` embeds
+//! (`components/scxml-resolver-github`, `stateforward:scxml/resolver`,
+//! authenticated by its SHA-256 in the embedded release) knows what a
+//! repository URI and its tag mean and fetches through WASI 0.3
+//! `wasi:http`; this module never builds a GitHub URL. Given the bases
+//! (`--github-*-base`, or GitHub's own origins) as its configuration:
+//!
+//! * `resolve` reports the release a URI resolves to: the release its tag
+//!   names, or the repository's latest release, asked once per repository
+//!   per root session, and the commit of that release's tag;
+//! * `fetch` returns the manifest and its schema (`schema-artifact`) at that
+//!   commit, never at the tag, and the release's `SHA256SUMS` and component
+//!   asset (`extension-artifact` or `service-artifact`), the component only
+//!   when `snapshot run` or `run` binds it, before the session starts.
+//!
+//! This module keeps trust: the schema must match the digest the manifest
+//! declares, the component the SHA-256 the release's `SHA256SUMS` lists for
+//! it, and the manifest its exact URI and WIT identity.
 //!
 //! # Trust and the cache
 //!
@@ -91,15 +94,18 @@
 //!
 //! # Network bounds
 //!
-//! HTTPS only (plain HTTP only to a loopback host given through an explicit
-//! `--github-*-base`, for mirrors and tests); a redirect is followed only to
-//! an origin of the configured bases or GitHub's release-asset hosts, at most
-//! [`MAX_REDIRECTS`] times; connect and total timeouts; no retry; every body
-//! bounded ([`MAX_API_BYTES`], [`MAX_MANIFEST_BYTES`],
-//! `MAX_COMPONENT_SCHEMA_BYTES`, [`MAX_SUMS_BYTES`], [`MAX_COMPONENT_BYTES`]);
-//! no cookies, proxies from the environment, or credentials, except a GitHub
-//! token read from the variable `--github-token-env NAME` names, sent only
-//! to the API origin.
+//! The resolver component's requests reach only the origins of the bases
+//! and GitHub's release-asset hosts (the host refuses every other, so a
+//! redirect cannot leave them); a base is HTTPS (plain HTTP only to a
+//! loopback host given through an explicit `--github-*-base`, for mirrors
+//! and tests). The component follows at most five redirects and bounds
+//! every body by the limit this module gives each fetch
+//! ([`MAX_MANIFEST_BYTES`], `MAX_COMPONENT_SCHEMA_BYTES`, [`MAX_SUMS_BYTES`],
+//! [`MAX_COMPONENT_BYTES`]; an API answer 64 KiB); the host bounds connect
+//! and total time, with no retry, cookies, proxies from the environment, or
+//! credentials, except a GitHub token read from the variable
+//! `--github-token-env NAME` names, which the host (never the component)
+//! adds to requests for the API origin only.
 //!
 //! # Telemetry
 //!
@@ -108,7 +114,8 @@
 //! `scxml.cli.resolve-extension-component` (or
 //! `scxml.cli.resolve-service-component`) span per component resolution,
 //! each with its closed outcome only: no URI, URL, tag, commit, digest, or
-//! path is ever recorded.
+//! path is ever recorded. They cover the resolver component's calls, which
+//! record nothing of their own.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -129,8 +136,6 @@ use sha2::{Digest as _, Sha256};
 use crate::extensions::{Package, PackageOrigin};
 use crate::services::{ServiceOrigin, ServicePackage};
 
-/// The one repository host a repository namespace's URI names.
-const GITHUB_PREFIX: &str = "https://github.com/";
 /// Default GitHub REST API base.
 const DEFAULT_API_BASE: &str = "https://api.github.com";
 /// Default base of raw repository files.
@@ -183,10 +188,9 @@ const BUILT_IN_NAMESPACES: [&str; 3] = [
 const NAMESPACES_FOLDER: &str = "namespaces";
 /// The one repository folder every repository service lives in.
 const SERVICES_FOLDER: &str = "services";
-/// Maximum bytes of one owner, repository, or namespace name segment.
+/// Maximum bytes of a release asset name or a manifest artifact path
+/// segment.
 const MAX_SEGMENT_BYTES: usize = 100;
-/// Maximum bytes of one GitHub API response.
-pub(crate) const MAX_API_BYTES: u64 = 64 * 1024;
 /// Maximum bytes of a package manifest (the `--extension-package` bound).
 pub(crate) const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 /// Maximum bytes of a release's `SHA256SUMS`.
@@ -204,10 +208,8 @@ const MAX_ENTRY_BYTES: u64 = 16 * 1024;
 /// `<script src>`, `<data src>`, `srcexpr`): a network-ingress bound, on
 /// every build.
 pub(crate) const MAX_DOCUMENT_BYTES: u64 = 16 * 1024 * 1024;
-/// Maximum redirects one download follows.
+/// Maximum redirects one document download follows.
 pub(crate) const MAX_REDIRECTS: usize = 5;
-/// Maximum annotated-tag dereferences while resolving a tag.
-const MAX_TAG_DEREFERENCES: usize = 4;
 /// Time to establish one connection.
 #[cfg(feature = "wasmtime")]
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -250,7 +252,9 @@ impl Kind {
     }
 }
 
-/// One parsed repository namespace or service URI.
+/// One parsed repository namespace or service URI, split by
+/// [`scxml_types::strip_tag`] and [`scxml_types::RepositoryUri`] (the one
+/// definition of the pattern, which the resolver component shares).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct RepositoryUri {
     kind: Kind,
@@ -258,8 +262,6 @@ pub(crate) struct RepositoryUri {
     tagless: String,
     owner: String,
     repo: String,
-    /// The package's folder name under `namespaces/` or `services/`.
-    name: String,
     /// The pinned release tag; `None` for a tagless URI (the latest
     /// release).
     tag: Option<String>,
@@ -286,34 +288,14 @@ impl RepositoryUri {
         if kind == Kind::Namespace && BUILT_IN_NAMESPACES.contains(&tagless) {
             return None;
         }
-        let path = tagless.strip_prefix(GITHUB_PREFIX)?;
-        let mut segments = path.split('/');
-        let owner = segments.next().filter(|segment| valid_segment(segment))?;
-        let repo = segments.next().filter(|segment| valid_segment(segment))?;
-        if segments.next() != Some(kind.folder()) {
-            return None;
-        }
-        let name = segments.next().filter(|segment| valid_segment(segment))?;
-        if segments.next().is_some() {
-            return None;
-        }
-        Some(Self {
+        let parts = scxml_types::RepositoryUri::parse(tagless)?;
+        (parts.folder == kind.folder()).then(|| Self {
             kind,
             tagless: tagless.to_owned(),
-            owner: owner.to_owned(),
-            repo: repo.to_owned(),
-            name: name.to_owned(),
+            owner: parts.owner.to_owned(),
+            repo: parts.repo.to_owned(),
             tag: tag.map(str::to_owned),
         })
-    }
-
-    /// The package manifest's file name: `<name>.extension.json` or
-    /// `<name>.service.json`.
-    fn manifest_name(&self) -> String {
-        match self.kind {
-            Kind::Namespace => format!("{}.extension.json", self.name),
-            Kind::Service => format!("{}.service.json", self.name),
-        }
     }
 }
 
@@ -332,7 +314,9 @@ fn valid_segment(segment: &str) -> bool {
 /// [`scxml_types::strip_tag`], its one definition.
 fn valid_tag(tag: &str) -> bool {
     matches!(
-        scxml_types::strip_tag(&format!("{GITHUB_PREFIX}o/r/{NAMESPACES_FOLDER}/n@{tag}")),
+        scxml_types::strip_tag(&format!(
+            "https://github.com/o/r/{NAMESPACES_FOLDER}/n@{tag}"
+        )),
         Some((_, Some(_)))
     )
 }
@@ -500,6 +484,8 @@ impl RepositoryFlags {
             token,
             #[cfg(feature = "wasmtime")]
             client: OnceLock::new(),
+            #[cfg(feature = "wasmtime")]
+            resolver: OnceLock::new(),
             releases: Mutex::new(BTreeMap::new()),
             entries: Mutex::new(BTreeMap::new()),
             documents: Mutex::new(BTreeMap::new()),
@@ -555,23 +541,27 @@ struct Bases {
     download: url::Url,
 }
 
+#[cfg(feature = "wasmtime")]
 impl Bases {
-    fn join(base: &url::Url, path: &str) -> Result<url::Url, String> {
-        let text = format!("{}/{path}", base.as_str().trim_end_matches('/'));
-        url::Url::parse(&text).map_err(|_| "a repository URL does not parse".to_owned())
+    /// The resolver component's configuration: the three bases.
+    fn configuration(&self) -> [(String, String); 3] {
+        [
+            ("github-api-base".to_owned(), self.api.to_string()),
+            ("github-raw-base".to_owned(), self.raw.to_string()),
+            ("github-download-base".to_owned(), self.download.to_string()),
+        ]
     }
 
-    fn admits(&self, url: &url::Url) -> bool {
-        let origin = url.origin();
-        admissible_scheme(url)
-            && url.username().is_empty()
-            && url.password().is_none()
-            && ([&self.api, &self.raw, &self.download]
-                .iter()
-                .any(|base| base.origin() == origin)
-                || RELEASE_ASSET_ORIGINS.iter().any(|allowed| {
-                    url::Url::parse(allowed).is_ok_and(|allowed| allowed.origin() == origin)
-                }))
+    /// The origins the resolver component may reach: the bases' and
+    /// GitHub's release-asset hosts.
+    fn allowlist(&self) -> Result<scxml_host_wasmtime::HttpAllowlist, String> {
+        scxml_host_wasmtime::HttpAllowlist::new(
+            [&self.api, &self.raw, &self.download]
+                .into_iter()
+                .map(|base| base.origin().ascii_serialization())
+                .chain(RELEASE_ASSET_ORIGINS.map(str::to_owned)),
+        )
+        .map_err(|error| format!("a repository base is not admissible: {error}"))
     }
 }
 
@@ -793,7 +783,8 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-/// The bounded acquisition client.
+/// The bounded client of the documents a run loads
+/// ([`Repository::fetch_document`]).
 #[cfg(feature = "wasmtime")]
 struct Client {
     agent: ureq::Agent,
@@ -823,8 +814,8 @@ impl Client {
 }
 
 /// Resolves repository namespaces and services through the cache and,
-/// unless offline, their repository, and fetches the documents a run loads.
-/// One per root session ([`RepositoryFlags::open`]).
+/// unless offline, the embedded GitHub resolver component, and fetches the
+/// documents a run loads. One per root session ([`RepositoryFlags::open`]).
 pub(crate) struct Repository {
     cache: Cache,
     offline: bool,
@@ -832,6 +823,9 @@ pub(crate) struct Repository {
     token: Option<String>,
     #[cfg(feature = "wasmtime")]
     client: OnceLock<Client>,
+    /// The GitHub resolver component, compiled on first use.
+    #[cfg(feature = "wasmtime")]
+    resolver: OnceLock<Result<scxml_host_wasmtime::ResolverComponent, String>>,
     /// The latest release (tag, commit) of each repository a tagless URI
     /// named, asked once per root session.
     releases: Mutex<BTreeMap<(String, String), (String, String)>>,
@@ -864,10 +858,59 @@ pub(crate) struct ResolvedComponent {
     pub(crate) sha256: String,
 }
 
+/// One file of a release, as the resolver component fetches it
+/// (`resolver-api.artifact`).
+#[derive(Clone, Copy, Debug)]
+enum Artifact<'a> {
+    Manifest,
+    Schema(&'a str),
+    Component(&'a str),
+    Sha256Sums,
+}
+
+/// The message of a resolver component failure: its own detail, or the
+/// host's failure.
+#[cfg(feature = "wasmtime")]
+fn resolver_failure(error: scxml_host_wasmtime::HostError) -> String {
+    match error {
+        scxml_host_wasmtime::HostError::Component(detail) => detail,
+        error => format!("the repository resolver failed: {error}"),
+    }
+}
+
 impl Repository {
     #[cfg(feature = "wasmtime")]
     fn client(&self) -> &Client {
         self.client.get_or_init(Client::new)
+    }
+
+    /// The embedded GitHub resolver component, authenticated by its
+    /// SHA-256 and granted only the bases' origins and GitHub's
+    /// release-asset hosts; the token, if any, goes to the API origin only.
+    #[cfg(feature = "wasmtime")]
+    fn resolver(&self) -> Result<&scxml_host_wasmtime::ResolverComponent, String> {
+        self.resolver
+            .get_or_init(|| {
+                let digest = scxml_host_wasmtime::TrustedComponentDigest::from_hex(
+                    crate::components::embedded::RESOLVER_COMPONENT_SHA256,
+                )
+                .map_err(|error| format!("the embedded resolver's digest is invalid: {error}"))?;
+                scxml_host_wasmtime::ResolverComponent::new(
+                    crate::components::embedded::RESOLVER_COMPONENT,
+                    digest,
+                    self.bases.allowlist()?,
+                    scxml_host_wasmtime::ExtensionHttpConfig {
+                        connect_timeout: CONNECT_TIMEOUT,
+                        total_timeout: TOTAL_TIMEOUT,
+                    },
+                    self.token
+                        .clone()
+                        .map(|token| (self.bases.api.origin(), token)),
+                )
+                .map_err(|error| format!("the repository resolver does not load: {error}"))
+            })
+            .as_ref()
+            .map_err(Clone::clone)
     }
 
     fn require_online(&self, uri: &str, what: &str) -> Result<(), String> {
@@ -880,92 +923,75 @@ impl Repository {
         Ok(())
     }
 
-    /// Without Wasmtime this build links no network client: only what the
-    /// cache already holds resolves.
-    #[cfg(not(feature = "wasmtime"))]
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "the same signature as the networked build's"
-    )]
-    fn get(&self, url: url::Url, _limit: u64, _accept: &str) -> Result<Vec<u8>, String> {
-        let _ = (&self.token, self.bases.admits(&url));
-        Err(format!(
-            "cannot fetch `{url}`: this scx was built without `--features wasmtime`, which links its network client\n  = help: rebuild with `--features wasmtime`; repository namespaces already in the extension cache still resolve"
-        ))
+    /// The release (tag, commit) the package `uri` resolves to: `tag`'s,
+    /// or, without one, its repository's latest, as the resolver component
+    /// reports it.
+    #[cfg(feature = "wasmtime")]
+    fn release(&self, uri: &RepositoryUri, tag: Option<&str>) -> Result<(String, String), String> {
+        let release = self
+            .resolver()?
+            .resolve(&self.bases.configuration(), &uri.tagless, tag)
+            .map_err(resolver_failure)?
+            .ok_or_else(|| format!("the repository resolver does not serve `{}`", uri.tagless))?;
+        Ok((release.tag, release.commit))
     }
 
-    /// GETs `url` within `limit` bytes, following at most [`MAX_REDIRECTS`]
-    /// admitted redirects.
+    /// The bytes of `artifact` of the package `uri` at the release `(tag,
+    /// commit)`, within `limit`, as the resolver component fetches them;
+    /// the caller verifies them.
     #[cfg(feature = "wasmtime")]
-    fn get(&self, url: url::Url, limit: u64, accept: &str) -> Result<Vec<u8>, String> {
-        let shown = url.to_string();
-        let mut current = url;
-        for _ in 0..=MAX_REDIRECTS {
-            if !self.bases.admits(&current) {
-                return Err(format!(
-                    "`{shown}` leads to `{current}`, which is not a GitHub or configured repository origin"
-                ));
-            }
-            let mut request = self
-                .client()
-                .agent
-                .get(current.as_str())
-                .header("Accept", accept);
-            if let Some(token) = &self.token
-                && current.origin() == self.bases.api.origin()
-            {
-                request = request.header("Authorization", &format!("Bearer {token}"));
-            }
-            let mut response = request
-                .call()
-                .map_err(|error| format!("cannot fetch `{shown}`: {error}"))?;
-            let status = response.status().as_u16();
-            if matches!(status, 301 | 302 | 303 | 307 | 308) {
-                let location = response
-                    .headers()
-                    .get("location")
-                    .and_then(|value| value.to_str().ok())
-                    .ok_or_else(|| format!("`{shown}` redirects without a location"))?;
-                current = current
-                    .join(location)
-                    .map_err(|_| format!("`{shown}` redirects to an invalid location"))?;
-                continue;
-            }
-            if !(200..300).contains(&status) {
-                return Err(format!("`{shown}` answered HTTP {status}"));
-            }
-            let too_large = || format!("`{shown}` is larger than its {limit}-byte bound");
-            // A declared length over the bound fails before any body byte is
-            // read; an undeclared or understated one is still cut off below.
-            if response
-                .headers()
-                .get("content-length")
-                .and_then(|value| value.to_str().ok())
-                .and_then(|value| value.trim().parse::<u64>().ok())
-                .is_some_and(|length| length > limit)
-            {
-                return Err(too_large());
-            }
-            // ureq's limit rejects the read after `limit` bytes even at end of
-            // body, so it reads one byte past the bound and the length is
-            // checked here: a body of exactly `limit` bytes is admitted.
-            let bytes = response
-                .body_mut()
-                .with_config()
-                .limit(limit.saturating_add(1))
-                .read_to_vec()
-                .map_err(|error| match error {
-                    ureq::Error::BodyExceedsLimit(_) => too_large(),
-                    error => format!("cannot read `{shown}`: {error}"),
-                })?;
-            if u64::try_from(bytes.len()).map_or(true, |length| length > limit) {
-                return Err(too_large());
-            }
-            return Ok(bytes);
-        }
-        Err(format!(
-            "`{shown}` redirects more than {MAX_REDIRECTS} times"
-        ))
+    fn fetch(
+        &self,
+        uri: &RepositoryUri,
+        (tag, commit): (&str, &str),
+        artifact: Artifact<'_>,
+        limit: u64,
+    ) -> Result<Vec<u8>, String> {
+        use scxml_host_wasmtime::resolver_api;
+        let artifact = match artifact {
+            Artifact::Manifest => resolver_api::Artifact::Manifest,
+            Artifact::Schema(path) => resolver_api::Artifact::Schema(path.to_owned()),
+            Artifact::Component(asset) => resolver_api::Artifact::Component(asset.to_owned()),
+            Artifact::Sha256Sums => resolver_api::Artifact::Sha256sums,
+        };
+        let release = resolver_api::Release {
+            tag: tag.to_owned(),
+            commit: commit.to_owned(),
+        };
+        self.resolver()?
+            .fetch(
+                &self.bases.configuration(),
+                &uri.tagless,
+                &release,
+                &artifact,
+                limit,
+            )
+            .map_err(resolver_failure)?
+            .ok_or_else(|| format!("the repository resolver does not serve `{}`", uri.tagless))
+    }
+
+    /// Without Wasmtime this build runs no resolver component: only what
+    /// the cache already holds resolves.
+    #[cfg(not(feature = "wasmtime"))]
+    fn release(&self, uri: &RepositoryUri, tag: Option<&str>) -> Result<(String, String), String> {
+        let _ = (&self.token, &self.bases, tag);
+        Err(no_resolver(uri))
+    }
+
+    /// Without Wasmtime this build runs no resolver component.
+    #[cfg(not(feature = "wasmtime"))]
+    #[expect(
+        clippy::unused_self,
+        reason = "the same signature as the networked build's"
+    )]
+    fn fetch(
+        &self,
+        uri: &RepositoryUri,
+        _release: (&str, &str),
+        _artifact: Artifact<'_>,
+        _limit: u64,
+    ) -> Result<Vec<u8>, String> {
+        Err(no_resolver(uri))
     }
 
     /// The document at `url`, fetched once per root session (its outcome,
@@ -1117,12 +1143,6 @@ impl Repository {
         ))
     }
 
-    fn api_json(&self, path: &str) -> Result<serde_json::Value, String> {
-        let url = Bases::join(&self.bases.api, path)?;
-        let bytes = self.get(url, MAX_API_BYTES, "application/vnd.github+json")?;
-        serde_json::from_slice(&bytes).map_err(|_| "the GitHub API answered malformed JSON".into())
-    }
-
     /// The latest release of the repository a tagless `uri` names: its tag
     /// and the commit the tag names, asked once per repository per root
     /// session.
@@ -1136,65 +1156,12 @@ impl Repository {
         {
             return Ok(release.clone());
         }
-        let value = self.api_json(&format!("repos/{}/{}/releases/latest", uri.owner, uri.repo))?;
-        let tag = value
-            .get("tag_name")
-            .and_then(serde_json::Value::as_str)
-            .filter(|tag| valid_tag(tag))
-            .ok_or_else(|| {
-                format!(
-                    "the GitHub API answered no valid `tag_name` for the latest release of `{}/{}`",
-                    uri.owner, uri.repo
-                )
-            })?
-            .to_owned();
-        let commit = self.resolve_tag(uri, &tag)?;
-        let release = (tag, commit);
+        let release = self.release(uri, None)?;
         self.releases
             .lock()
             .map_err(|_| "the release memo is unavailable".to_owned())?
             .insert(key, release.clone());
         Ok(release)
-    }
-
-    /// The commit `tag` names (annotated tags dereferenced).
-    fn resolve_tag(&self, uri: &RepositoryUri, tag: &str) -> Result<String, String> {
-        let value = self.api_json(&format!(
-            "repos/{}/{}/git/ref/tags/{tag}",
-            uri.owner, uri.repo
-        ))?;
-        if value.get("ref").and_then(serde_json::Value::as_str)
-            != Some(format!("refs/tags/{tag}").as_str())
-        {
-            return Err(format!("the GitHub API does not name tag `{tag}` exactly"));
-        }
-        let mut object = value.get("object").cloned();
-        for _ in 0..MAX_TAG_DEREFERENCES {
-            let kind = object
-                .as_ref()
-                .and_then(|object| object.get("type"))
-                .and_then(serde_json::Value::as_str);
-            let sha = object
-                .as_ref()
-                .and_then(|object| object.get("sha"))
-                .and_then(serde_json::Value::as_str)
-                .filter(|sha| is_commit(sha))
-                .ok_or("the GitHub API answered a tag without a commit")?
-                .to_owned();
-            match kind {
-                Some("commit") => return Ok(sha),
-                Some("tag") => {
-                    object = self
-                        .api_json(&format!("repos/{}/{}/git/tags/{sha}", uri.owner, uri.repo))?
-                        .get("object")
-                        .cloned();
-                }
-                _ => return Err("the GitHub API answered a tag of an unknown kind".into()),
-            }
-        }
-        Err(format!(
-            "tag `{tag}` is nested deeper than {MAX_TAG_DEREFERENCES} annotated tags"
-        ))
     }
 
     /// The entry `text` (the URI `uri` parses from) resolves to in this root
@@ -1223,7 +1190,7 @@ impl Repository {
             (Some(_), Some(entry)) => entry,
             (Some(tag), None) => {
                 self.require_online(text, "package")?;
-                pin(None, self.resolve_tag(uri, tag)?)?
+                pin(None, self.release(uri, Some(tag))?.1)?
             }
             (None, Some(entry)) if self.offline => entry,
             (None, cached) => {
@@ -1249,46 +1216,21 @@ impl Repository {
         Ok(())
     }
 
-    fn raw_url(&self, uri: &RepositoryUri, commit: &str, file: &str) -> Result<url::Url, String> {
-        Bases::join(
-            &self.bases.raw,
-            &format!(
-                "{}/{}/{commit}/{}/{}/package/{file}",
-                uri.owner,
-                uri.repo,
-                uri.kind.folder(),
-                uri.name
-            ),
-        )
-    }
-
-    fn download_url(
-        &self,
-        uri: &RepositoryUri,
-        tag: &str,
-        asset: &str,
-    ) -> Result<url::Url, String> {
-        Bases::join(
-            &self.bases.download,
-            &format!("{}/{}/releases/download/{tag}/{asset}", uri.owner, uri.repo),
-        )
-    }
-
-    /// Cached bytes of `digest`, or (online) the bytes at `url`, which must
-    /// match `digest`.
+    /// Cached bytes of `digest`, or (online) the bytes `fetch` returns,
+    /// which must match `digest`.
     fn pinned(
         &self,
         namespace_uri: &str,
         what: &str,
         digest: &str,
         limit: u64,
-        url: impl FnOnce() -> Result<url::Url, String>,
+        fetch: impl FnOnce() -> Result<Vec<u8>, String>,
     ) -> Result<Vec<u8>, String> {
         if let Some(bytes) = self.cache.object(digest, limit)? {
             return Ok(bytes);
         }
         self.require_online(namespace_uri, what)?;
-        let bytes = self.get(url()?, limit, "*/*")?;
+        let bytes = fetch()?;
         if sha256_hex(&bytes) != digest {
             return Err(format!(
                 "{} `{namespace_uri}`: its {what} does not match the SHA-256 pinned for it (the release's {SUMS_ASSET}, its pinned manifest, or the cache's first resolution)",
@@ -1325,12 +1267,14 @@ impl Repository {
             .schema_sha256
             .clone()
             .ok_or("a namespace's cache index pins no schema")?;
+        let tag = release_tag(&uri, &entry)?;
+        let release = (tag.as_str(), entry.commit.as_str());
         let manifest = self.pinned(
             namespace_uri,
             "manifest",
             &entry.manifest_sha256,
             MAX_MANIFEST_BYTES,
-            || self.raw_url(&uri, &entry.commit, &uri.manifest_name()),
+            || self.fetch(&uri, release, Artifact::Manifest, MAX_MANIFEST_BYTES),
         )?;
         let parsed = scxml_validator_core::ExtensionPackageManifest::from_json(&manifest).map_err(
             |error| {
@@ -1339,12 +1283,20 @@ impl Repository {
                 )
             },
         )?;
+        check_manifest(namespace_uri, &parsed)?;
         let schema = self.pinned(
             namespace_uri,
             "schema",
             &schema_sha256,
             schema_limit,
-            || self.raw_url(&uri, &entry.commit, &parsed.schema_artifact),
+            || {
+                self.fetch(
+                    &uri,
+                    release,
+                    Artifact::Schema(&parsed.schema_artifact),
+                    schema_limit,
+                )
+            },
         )?;
         let package = verify_package(namespace_uri, &manifest, &schema, &entry)?;
         Ok((package, entry))
@@ -1361,11 +1313,12 @@ impl Repository {
         commit: String,
         schema_limit: u64,
     ) -> Result<Entry, String> {
-        let manifest = self.get(
-            self.raw_url(uri, &commit, &uri.manifest_name())?,
-            MAX_MANIFEST_BYTES,
-            "*/*",
-        )?;
+        let release_tag = tag
+            .clone()
+            .or_else(|| uri.tag.clone())
+            .ok_or("a tagless URI resolved to no release tag")?;
+        let release = (release_tag.as_str(), commit.as_str());
+        let manifest = self.fetch(uri, release, Artifact::Manifest, MAX_MANIFEST_BYTES)?;
         let parsed = scxml_validator_core::ExtensionPackageManifest::from_json(&manifest).map_err(
             |error| {
                 format!(
@@ -1374,10 +1327,11 @@ impl Repository {
             },
         )?;
         check_manifest(namespace_uri, &parsed)?;
-        let schema = self.get(
-            self.raw_url(uri, &commit, &parsed.schema_artifact)?,
+        let schema = self.fetch(
+            uri,
+            release,
+            Artifact::Schema(&parsed.schema_artifact),
             schema_limit,
-            "*/*",
         )?;
         let entry = Entry {
             uri: namespace_uri.to_owned(),
@@ -1434,10 +1388,11 @@ impl Repository {
                 Kind::Service => "service component digest",
             },
         )?;
-        let sums = self.get(
-            self.download_url(uri, &tag, SUMS_ASSET)?,
+        let sums = self.fetch(
+            uri,
+            (&tag, &entry.commit),
+            Artifact::Sha256Sums,
             MAX_SUMS_BYTES,
-            "*/*",
         )?;
         let digest = sums_entry(&sums, asset).ok_or_else(|| {
             format!(
@@ -1472,13 +1427,21 @@ impl Repository {
             let tag = release_tag(&uri, &entry)?;
             let sha256 = entry
                 .component_sha256
+                .clone()
                 .ok_or("the cache pinned no component digest")?;
             let bytes = self.pinned(
                 namespace_uri,
                 "extension component",
                 &sha256,
                 MAX_COMPONENT_BYTES,
-                || self.download_url(&uri, &tag, &asset),
+                || {
+                    self.fetch(
+                        &uri,
+                        (&tag, &entry.commit),
+                        Artifact::Component(&asset),
+                        MAX_COMPONENT_BYTES,
+                    )
+                },
             )?;
             Ok(ResolvedComponent { bytes, sha256 })
         })();
@@ -1509,26 +1472,28 @@ impl Repository {
         let entry = self.session_entry(service_uri, &uri, true, |tag, commit| {
             self.pin_service(service_uri, &uri, tag, commit)
         })?;
+        let tag = release_tag(&uri, &entry)?;
+        let release = (tag.as_str(), entry.commit.as_str());
         let manifest = self.pinned(
             service_uri,
             "manifest",
             &entry.manifest_sha256,
             MAX_MANIFEST_BYTES,
-            || self.raw_url(&uri, &entry.commit, &uri.manifest_name()),
+            || self.fetch(&uri, release, Artifact::Manifest, MAX_MANIFEST_BYTES),
         )?;
         let parsed = parse_service_manifest(service_uri, &manifest)?;
-        let schema = self.service_schema(service_uri, &uri, &entry.commit, &parsed)?;
+        let schema = self.service_schema(service_uri, &uri, release, &parsed)?;
         let package = verify_service(service_uri, &manifest, schema.as_deref(), &entry)?;
         Ok((package, entry))
     }
 
-    /// The optional schema of a repository service at `commit`, checked
+    /// The optional schema of a repository service at `release`, checked
     /// against the digest its manifest declares.
     fn service_schema(
         &self,
         service_uri: &str,
         uri: &RepositoryUri,
-        commit: &str,
+        release: (&str, &str),
         manifest: &scxml_validator_core::ServicePackageManifest,
     ) -> Result<Option<Vec<u8>>, String> {
         check_service_manifest(service_uri, manifest)?;
@@ -1538,7 +1503,14 @@ impl Repository {
                 "schema",
                 digest,
                 crate::services::MAX_SCHEMA_BYTES,
-                || self.raw_url(uri, commit, artifact),
+                || {
+                    self.fetch(
+                        uri,
+                        release,
+                        Artifact::Schema(artifact),
+                        crate::services::MAX_SCHEMA_BYTES,
+                    )
+                },
             )?),
             _ => None,
         };
@@ -1555,13 +1527,14 @@ impl Repository {
         tag: Option<String>,
         commit: String,
     ) -> Result<Entry, String> {
-        let manifest = self.get(
-            self.raw_url(uri, &commit, &uri.manifest_name())?,
-            MAX_MANIFEST_BYTES,
-            "*/*",
-        )?;
+        let release_tag = tag
+            .clone()
+            .or_else(|| uri.tag.clone())
+            .ok_or("a tagless URI resolved to no release tag")?;
+        let release = (release_tag.as_str(), commit.as_str());
+        let manifest = self.fetch(uri, release, Artifact::Manifest, MAX_MANIFEST_BYTES)?;
         let parsed = parse_service_manifest(service_uri, &manifest)?;
-        let schema = self.service_schema(service_uri, uri, &commit, &parsed)?;
+        let schema = self.service_schema(service_uri, uri, release, &parsed)?;
         let entry = Entry {
             uri: service_uri.to_owned(),
             tag,
@@ -1616,13 +1589,21 @@ impl Repository {
             let tag = release_tag(&uri, &entry)?;
             let sha256 = entry
                 .component_sha256
+                .clone()
                 .ok_or("the cache pinned no component digest")?;
             let bytes = self.pinned(
                 service_uri,
                 "service component",
                 &sha256,
                 MAX_COMPONENT_BYTES,
-                || self.download_url(&uri, &tag, &asset),
+                || {
+                    self.fetch(
+                        &uri,
+                        (&tag, &entry.commit),
+                        Artifact::Component(&asset),
+                        MAX_COMPONENT_BYTES,
+                    )
+                },
             )?;
             Ok(ResolvedService { bytes, sha256 })
         })();
@@ -1631,6 +1612,14 @@ impl Repository {
     }
 }
 
+/// Why a build without Wasmtime cannot resolve `uri` beyond the cache.
+#[cfg(not(feature = "wasmtime"))]
+fn no_resolver(uri: &RepositoryUri) -> String {
+    format!(
+        "cannot resolve `{}`: this scx was built without `--features wasmtime`, which runs its repository resolver component\n  = help: rebuild with `--features wasmtime`; repository namespaces already in the extension cache still resolve",
+        uri.tagless
+    )
+}
 /// A resolved repository service component: its exact bytes and SHA-256.
 pub(crate) struct ResolvedService {
     #[cfg_attr(
@@ -2049,14 +2038,15 @@ mod tests {
         .expect("a repository namespace URI");
         assert_eq!(uri.owner, "stateforward");
         assert_eq!(uri.repo, "scxml.rs");
-        assert_eq!(uri.name, "example");
+        assert_eq!(
+            uri.tagless,
+            "https://github.com/stateforward/scxml.rs/namespaces/example"
+        );
         assert_eq!(uri.tag.as_deref(), Some("v0.2.0"));
-        assert_eq!(uri.manifest_name(), "example.extension.json");
         let tagless =
             RepositoryUri::parse("https://github.com/stateforward/nemobot/namespaces/decision")
                 .expect("a tagless repository namespace URI");
         assert_eq!(tagless.tag, None);
-        assert_eq!(tagless.name, "decision");
         // The vocabularies scx provides are matched first: never fetched.
         for built_in in [
             "https://github.com/stateforward/scxml.rs/namespaces/env",
@@ -2101,9 +2091,10 @@ mod tests {
             "a".repeat(MAX_SEGMENT_BYTES + 1)
         );
         assert!(RepositoryUri::parse(&long).is_none());
-        let other = RepositoryUri::parse("https://github.com/o/r/namespaces/x.y-z@v1")
-            .expect("any owner and repository");
-        assert_eq!(other.manifest_name(), "x.y-z.extension.json");
+        assert!(
+            RepositoryUri::parse("https://github.com/o/r/namespaces/x.y-z@v1").is_some(),
+            "any owner and repository"
+        );
     }
 
     #[test]
@@ -2182,9 +2173,11 @@ mod tests {
         )
         .expect("a repository service URI");
         assert_eq!(uri.kind, Kind::Service);
-        assert_eq!(uri.name, "memory");
+        assert_eq!(
+            uri.tagless,
+            "https://github.com/stateforward/nemobot/services/memory"
+        );
         assert_eq!(uri.tag.as_deref(), Some("v0.1.0"));
-        assert_eq!(uri.manifest_name(), "memory.service.json");
         assert!(
             RepositoryUri::parse("https://github.com/stateforward/nemobot/services/memory@v0.1.0")
                 .is_none(),

@@ -21,6 +21,7 @@ COMPONENT_CRATES = (
     "scxml-machine",
     "scxml-reporter-rustc",
     "scxml-reporter-sarif",
+    "scxml-resolver-github",
     "scxml-script-example",
     "scxml-service-example",
     "scxml-service-files",

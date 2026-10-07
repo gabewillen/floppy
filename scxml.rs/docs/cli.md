@@ -486,9 +486,12 @@ use, the first `<invoke src>` document's) is shared by every tagless use and
 every invoked session, and an `<invoke src>` document that pins another
 release binds that release for its own sessions. The namespaces of every
 literal `<invoke src>` document are resolved with the root's. A malformed
-pin, or one document pinning a package to two releases, fails closed. Fetching needs a CLI built with `--features wasmtime`, which
-links the network client; a build without it resolves only what the cache
-holds. Importing an element consents to what its manifest
+pin, or one document pinning a package to two releases, fails closed. Fetching is the
+GitHub resolver component `scx` embeds (WASI 0.3 `wasi:http`, admitted only
+to the bases' origins and GitHub's asset hosts; the `--github-*-base` flags
+are its configuration), which needs a CLI built with `--features wasmtime`;
+a build without it resolves only what the cache holds. The CLI verifies
+everything the component returns. Importing an element consents to what its manifest
 declares (the origins in `http-origins`); the run's values reach it only as
 references, substituted into requests to those origins or to an origin a value
 supplies (a local base URL). Any failure fails closed: validation stops, or the

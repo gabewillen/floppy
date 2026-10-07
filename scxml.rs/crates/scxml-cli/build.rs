@@ -1,12 +1,13 @@
-//! Embeds the authenticated release session components, and the `scx`
-//! namespace's extension component (`namespaces/scx`), in `scx` (the
+//! Embeds the authenticated release session components, the `scx`
+//! namespace's extension component (`namespaces/scx`), and the GitHub
+//! resolver component (`components/scxml-resolver-github`) in `scx` (the
 //! `wasmtime` feature).
 //!
 //! The release directory is the one `scripts/verify-wasm-capabilities.sh`
 //! writes: `SCXML_WASM_ARTIFACTS_DIR` when set, else the script's default,
 //! `target/wasm-artifacts/release` under the workspace. Its `manifest.tsv`,
-//! the eight session components a session host links, and the `scx`
-//! extension component are read, each
+//! the eight session components a session host links, the `scx`
+//! extension component, and the resolver component are read, each
 //! component's SHA-256 and size are checked against its manifest line, and
 //! the verified bytes are copied into `OUT_DIR`, where `src/components.rs`
 //! includes them (`include_bytes!`) with the manifest's SHA-256 as the trust
@@ -34,6 +35,11 @@ const SESSION_COMPONENTS: [&str; 8] = [
 /// The extension components `scx` embeds, by manifest name: the `scx`
 /// namespace (`namespaces/scx`).
 const EXTENSION_COMPONENTS: [&str; 1] = ["scx"];
+
+/// The resolver component `scx` embeds, by manifest name: the GitHub
+/// resolver (`components/scxml-resolver-github`), which resolves
+/// repository packages.
+const RESOLVER_COMPONENT: &str = "scxml_resolver_github";
 
 /// How to produce the release directory.
 const HELP: &str = "build the release session components first: `sh scripts/verify-wasm-capabilities.sh` \
@@ -76,7 +82,12 @@ fn embed() -> Result<(), String> {
     let mut source = String::new();
     let mut artifacts = String::new();
     let mut extension_digest = String::new();
-    for name in SESSION_COMPONENTS.into_iter().chain(EXTENSION_COMPONENTS) {
+    let mut resolver_digest = String::new();
+    for name in SESSION_COMPONENTS
+        .into_iter()
+        .chain(EXTENSION_COMPONENTS)
+        .chain([RESOLVER_COMPONENT])
+    {
         let mut lines = text.lines().filter_map(|line| {
             let fields: Vec<&str> = line.split('\t').collect();
             (fields.first() == Some(&"artifact") && fields.get(1) == Some(&name)).then_some(fields)
@@ -115,6 +126,10 @@ fn embed() -> Result<(), String> {
             extension_digest = actual;
             continue;
         }
+        if name == RESOLVER_COMPONENT {
+            resolver_digest = actual;
+            continue;
+        }
         writeln!(
             artifacts,
             "    ({file:?}, include_bytes!(concat!(env!(\"OUT_DIR\"), \"/release/{file}\"))),"
@@ -133,7 +148,11 @@ fn embed() -> Result<(), String> {
          /// The embedded `scx` namespace's extension component (`namespaces/scx`).\n\
          pub(crate) const SCX_COMPONENT: &[u8] = include_bytes!(concat!(env!(\"OUT_DIR\"), \"/release/scx.virtualized.wasm\"));\n\
          /// The SHA-256 of [`SCX_COMPONENT`], checked against the release manifest.\n\
-         pub(crate) const SCX_COMPONENT_SHA256: &str = {extension_digest:?};",
+         pub(crate) const SCX_COMPONENT_SHA256: &str = {extension_digest:?};\n\
+         /// The embedded GitHub resolver component (`components/scxml-resolver-github`).\n\
+         pub(crate) const RESOLVER_COMPONENT: &[u8] = include_bytes!(concat!(env!(\"OUT_DIR\"), \"/release/scxml_resolver_github.virtualized.wasm\"));\n\
+         /// The SHA-256 of [`RESOLVER_COMPONENT`], checked against the release manifest.\n\
+         pub(crate) const RESOLVER_COMPONENT_SHA256: &str = {resolver_digest:?};",
         hex(&Sha256::digest(&manifest))
     )
     .map_err(|error| error.to_string())?;

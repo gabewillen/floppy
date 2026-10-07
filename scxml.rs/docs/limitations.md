@@ -317,7 +317,11 @@ In detail:
   answers `execute-extension` from the page's `executeExtension` callback
   (`handled` or `not-handled`, with no session capabilities and no queued
   events) and instantiates no extension component; it loads no repository
-  element, offers no `env` slot references, and without that callback a
+  element (nor repository service: it runs the GitHub resolver component
+  `scx` embeds nowhere, since nothing in it could use what it resolves, a
+  page cannot read `github.com` release downloads across origins, and a
+  page's `fetch` cannot hand a redirect to the component for the host to
+  admit; see the browser host's README), offers no `env` slot references, and without that callback a
   document that uses an extension namespace fails its session start. The
   standalone proof host answers `unavailable`. Extension component instance
   state is not part of session snapshots, and the CLI's `conformance run`

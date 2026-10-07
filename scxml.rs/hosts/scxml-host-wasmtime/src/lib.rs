@@ -222,6 +222,10 @@ pub use http_client::{
     HttpClientError, MAX_IN_FLIGHT, MAX_RESPONSE_HEAD_BYTES, NetworkClient,
 };
 #[cfg(feature = "http")]
+mod resolver;
+#[cfg(feature = "http")]
+pub use resolver::{RESOLVER_CALL_FUEL, ResolverComponent, resolver_api};
+#[cfg(feature = "http")]
 mod http_listener;
 #[cfg(feature = "http")]
 pub use http_listener::{

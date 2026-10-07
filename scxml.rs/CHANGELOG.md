@@ -516,6 +516,23 @@ hard cutover.
 
 ### Changed
 
+- Repository packages are resolved by a Wasm component (hard cutover):
+  `scx` embeds the GitHub resolver component
+  (`components/scxml-resolver-github`, the new `stateforward:scxml/resolver`
+  world and `resolver-api` interface, with `resolve` and `fetch`), which
+  knows what a repository URI and its `@<tag>` mean and fetches through WASI
+  0.3 `wasi:http/client` (`wasi:http@0.3.0` and the packages its worlds name
+  are vendored under `crates/scxml-wit/wit/scxml/deps`). The CLI's native
+  GitHub client is deleted; the CLI keeps trust (digests, exact URI and WIT
+  identity, `targetNamespace`, the cache, pins, `--offline`, resolving once
+  per root session), passes `--github-*-base` to the component as its
+  configuration, and runs it through `scxml-host-wasmtime`'s
+  `ResolverComponent` (feature `http`), which admits its requests only to
+  the bases' origins and GitHub's asset hosts and adds the
+  `--github-token-env` token itself. The URI pattern has one definition,
+  `scxml_types::RepositoryUri`, shared by the parser's `strip_tag`, the CLI,
+  and the component. The browser host still resolves no repository package.
+
 - Every repository namespace lives in its own folder under the top-level
   `namespaces/` directory, and a repository namespace URI is exactly
   `https://github.com/<owner>/<repo>/namespaces/<name>` (pinned with

@@ -98,6 +98,9 @@ pub const ENV_NAMESPACE_URI: &str = "https://github.com/stateforward/scxml.rs/na
 /// schema, or component is bound to it, and it is never fetched (it is not a
 /// repository namespace URI: it names no release tag).
 pub const EVENT_NAMESPACE_URI: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
+mod repository;
+pub use repository::RepositoryUri;
+
 /// Splits one trailing `@<tag>` off a repository package URI, the one place
 /// a namespace or `<invoke type>` URI is ever changed: documents are read
 /// through it once, when they are parsed, and everything after that (the
@@ -123,33 +126,14 @@ pub fn strip_tag(uri: &str) -> Option<(&str, Option<&str>)> {
     let Some((tagless, tag)) = uri.split_once('@') else {
         return Some((uri, None));
     };
-    if !is_repository_package_uri(tagless) {
+    if RepositoryUri::parse(tagless).is_none() {
         return Some((uri, None));
     }
     is_release_tag(tag).then_some((tagless, Some(tag)))
 }
 
-/// Whether `uri` is exactly a tagless repository package URI (see
-/// [`strip_tag`]).
-fn is_repository_package_uri(uri: &str) -> bool {
-    let Some(path) = uri.strip_prefix("https://github.com/") else {
-        return false;
-    };
-    let mut segments = path.split('/');
-    let mut next = || {
-        segments
-            .next()
-            .filter(|segment| is_package_segment(segment))
-    };
-    next().is_some()
-        && next().is_some()
-        && next().is_some_and(|folder| folder == "namespaces" || folder == "services")
-        && next().is_some()
-        && next().is_none()
-}
-
 /// `[A-Za-z0-9._-]`, not `.` or `..`, at most 100 bytes.
-fn is_package_segment(segment: &str) -> bool {
+pub(crate) fn is_package_segment(segment: &str) -> bool {
     !segment.is_empty()
         && segment.len() <= 100
         && segment != "."

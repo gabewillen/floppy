@@ -496,6 +496,14 @@ document needs no flag to bind it:
   `EmbeddedDocument::extensions`), and the consent listing names that
   document. Any failure fails closed: validation or compilation stops, or the
   run fails before the first macrostep.
+- **Who fetches.** The GitHub resolver component `scx` embeds
+  (`components/scxml-resolver-github`, the `stateforward:scxml/resolver`
+  world, authenticated by its SHA-256 in the embedded release) holds the URI
+  pattern's GitHub meaning: it resolves a URI to a release and fetches that
+  release's files through WASI 0.3 `wasi:http/client`, which the CLI's
+  Wasmtime host admits only to the origins below. It decides no trust: the
+  CLI verifies everything it returns and owns the cache, the pins,
+  `--offline`, and resolving each URI once per root session.
 - **The trust model.** A tagless URI's tag is its repository's latest
   release (`/repos/<owner>/<repo>/releases/latest`, its `tag_name`), and the
   consent listing shows the tag and commit it resolved to. The tag resolves
@@ -522,9 +530,11 @@ document needs no flag to bind it:
   `--offline` forbids every fetch: a URI that is not in the cache fails
   closed, before validation, or before the session for a component that was
   never fetched; a tagless URI uses the release the cache pinned.
-- **Network bounds.** HTTPS only; a redirect is followed only to an origin of
-  the configured bases or GitHub's asset hosts (`objects.githubusercontent.com`,
-  `release-assets.githubusercontent.com`), at most 5 times; a 10 s connect and
+- **Network bounds.** HTTPS only; the host admits a request (each redirect
+  the component follows included) only to an origin of the configured bases
+  or GitHub's asset hosts (`objects.githubusercontent.com`,
+  `release-assets.githubusercontent.com`), and the component follows at most
+  5 redirects; a 10 s connect and
   60 s total timeout per request and no retry; bodies bounded (64 KiB for API
   answers, the manifest, and `SHA256SUMS`, 4 MiB for the schema, and for the
   component 2 GiB − 1 bytes, GitHub's per-file release-asset limit and the
@@ -532,9 +542,11 @@ document needs no flag to bind it:
   bound fails before the body is read, and a body of exactly its bound is
   admitted); no cookies, no proxy from the environment, and no credentials,
   except a GitHub token read from the variable `--github-token-env NAME`
-  names, sent only to the API origin. `--github-api-base`,
-  `--github-raw-base`, and `--github-download-base` point at a mirror (or the
-  CLI's own tests); plain `http` is accepted only for a loopback host.
+  names, which the host (never the component) adds to requests for the API
+  origin only. `--github-api-base`, `--github-raw-base`, and
+  `--github-download-base` point at a mirror (or the CLI's own tests) and
+  reach the component as its configuration; plain `http` is accepted only
+  for a loopback host.
 - **Importing is consent.** Loading an element consents to the origins its
   manifest declares, exactly as binding its package does; the run's values
   still reach it only as references, substituted into requests to those
@@ -542,7 +554,8 @@ document needs no flag to bind it:
   document (`validate` in its human format) lists each element's namespace, release tag and pinned commit,
   declared origins, and the slots the document binds, before anything runs.
 - **Telemetry.** `scxml.cli.resolve-extension-package`,
-  `scxml.cli.resolve-extension-component`, and the host's
+  `scxml.cli.resolve-extension-component` (which cover the resolver
+  component's calls; it records nothing itself), and the host's
   `scxml.host-wasmtime.extension-load` spans carry only their closed outcome;
   no URI, URL, tag, commit, digest, or path is ever an attribute.
 

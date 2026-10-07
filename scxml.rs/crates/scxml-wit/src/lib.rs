@@ -5,11 +5,16 @@
 //!
 //! * `wit/scxml/scxml.wit` — `stateforward:scxml` (machine, data model, I/O
 //!   processor, invoked service, extension component, Wasm script component,
-//!   script bundle provider, session snapshot codec, and host worlds);
+//!   script bundle provider, session snapshot codec, repository resolver, and
+//!   host worlds);
 //! * `wit/scxml/deps/clock/clock.wit` — `stateforward:scxml-clock`;
 //! * `wit/scxml/deps/wasi-clocks/clocks.wit` — `wasi:clocks@0.3.0`, vendored
 //!   verbatim from WASI 0.3 (as `wasmtime-wasi` 49.0.2 ships it) for the
 //!   invoked-service world's `wasi:clocks/monotonic-clock` import;
+//! * `wit/scxml/deps/wasi-{http,cli,random,filesystem,sockets}/` —
+//!   `wasi:http@0.3.0` and the packages its worlds name, vendored verbatim
+//!   from WASI 0.3 (as `wasmtime-wasi-http` 49.0.2 ships them) for the
+//!   resolver world's `wasi:http/client` import;
 //! * `wit/basichttp/basichttp.wit` — `stateforward:scxml-basichttp` (the
 //!   `BasicHTTP` Event I/O Processor and its narrow `http-transport` import);
 //! * `wit/validator/validator.wit` — `stateforward:scxml-validator`;
@@ -136,6 +141,7 @@ mod tests {
             ("scxml", "scxml", "script"),
             ("scxml", "scxml", "script-bundle-provider"),
             ("scxml", "scxml", "session-snapshot"),
+            ("scxml", "scxml", "resolver"),
             ("scxml/deps/clock", "scxml-clock", "clock"),
             ("basichttp", "scxml-basichttp", "basichttp"),
             ("validator", "scxml-validator", "validator"),

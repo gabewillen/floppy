@@ -74,7 +74,7 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
 RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --all-features --locked
 cargo test -p scxml-wit --locked
-cargo clippy --locked --target wasm32-wasip2 -p scxml-telemetry -p scxml-validator-xsd -p scxml-clock -p scxml-compiler -p scxml-data-model-ecmascript -p scxml-data-model-null -p scxml-data-model-xpath -p scxml-ioprocessor-scxml -p scxml-ioprocessor-basichttp -p scxml-machine -p scxml-extension-example -p scxml-reporter-rustc -p scxml-reporter-sarif -p scxml-script-example -p scxml-service-example -p scxml-service-files -p scxml-snapshot-codec -p scxml-validator -p scx -- -D warnings
+cargo clippy --locked --target wasm32-wasip2 -p scxml-telemetry -p scxml-validator-xsd -p scxml-clock -p scxml-compiler -p scxml-data-model-ecmascript -p scxml-data-model-null -p scxml-data-model-xpath -p scxml-ioprocessor-scxml -p scxml-ioprocessor-basichttp -p scxml-machine -p scxml-extension-example -p scxml-reporter-rustc -p scxml-reporter-sarif -p scxml-script-example -p scxml-service-example -p scxml-service-files -p scxml-snapshot-codec -p scxml-validator -p scxml-resolver-github -p scx -- -D warnings
 cargo check -p scxml-host-wasmtime --features wasmtime --locked
 cargo test -p scxml-host-wasmtime --features wasmtime,http --locked
 cargo deny check
@@ -189,7 +189,7 @@ export SCXML_WASM_ARTIFACTS_DIR="$RELEASE"
 sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
   scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
   scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine \
-  scxml_extension_example scx
+  scxml_extension_example scxml_resolver_github scx
 MANIFEST_SHA256=$(sha256sum "$RELEASE/manifest.tsv" | cut -d ' ' -f 1)
 EXTENSION_SHA256=$(sha256sum "$RELEASE/scxml_extension_example.virtualized.wasm" | cut -d ' ' -f 1)
 # The uploaded release-components artifact carries the license texts.

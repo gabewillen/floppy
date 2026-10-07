@@ -10,7 +10,7 @@ use crate::{ArtifactError, HostError, component_size_admitted};
 const MAX_MANIFEST_BYTES: usize = 64 * 1024;
 const MAX_MANIFEST_PATH_BYTES: usize = 4 * 1024;
 const MANIFEST_HEADER_LINES: usize = 6;
-const MAX_ARTIFACTS: usize = 16;
+const MAX_ARTIFACTS: usize = 17;
 
 /// Closed component identities accepted from the deterministic artifact manifest.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -49,6 +49,11 @@ pub enum ArtifactKind {
     /// host links the crate natively and never instantiates it; the kind is
     /// known so a release manifest that lists it authenticates.
     SnapshotCodec,
+    /// The GitHub resolver component (`components/scxml-resolver-github`,
+    /// `stateforward:scxml/resolver`), which `scx` embeds and runs by its
+    /// SHA-256 ([`crate::ResolverComponent`]); the kind is known so a
+    /// release manifest that lists it authenticates.
+    ResolverGithub,
     /// The `scx` namespace's extension component (`namespaces/scx`,
     /// `<scx:validate>`), which `scx` embeds and binds by its SHA-256
     /// ([`authenticate_extension_component`]); the kind is known so a release
@@ -87,6 +92,7 @@ impl ArtifactKind {
             Self::Compiler => "compiler",
             Self::Machine => "machine",
             Self::SnapshotCodec => "session snapshot codec",
+            Self::ResolverGithub => "GitHub resolver",
             Self::Scx => "scx namespace",
             Self::ExtensionComponent => "extension component",
             Self::ServiceComponent => "invoked-service component",
@@ -116,6 +122,7 @@ impl ArtifactKind {
             Self::Compiler => "scxml_compiler",
             Self::Machine => "scxml_machine",
             Self::SnapshotCodec => "scxml_snapshot_codec",
+            Self::ResolverGithub => "scxml_resolver_github",
             Self::Scx => "scx",
             // Never parsed from a manifest (see `parse`): a caller's extension
             // component is authenticated by its own digest.
@@ -142,6 +149,7 @@ impl ArtifactKind {
             "scxml_compiler" => Some(Self::Compiler),
             "scxml_machine" => Some(Self::Machine),
             "scxml_snapshot_codec" => Some(Self::SnapshotCodec),
+            "scxml_resolver_github" => Some(Self::ResolverGithub),
             "scx" => Some(Self::Scx),
             _ => None,
         }
@@ -271,7 +279,7 @@ pub fn authenticate_service_component(
     )
 }
 
-fn authenticate_by_digest(
+pub(crate) fn authenticate_by_digest(
     component_bytes: &[u8],
     trusted_digest: TrustedComponentDigest,
     kind: ArtifactKind,
@@ -661,6 +669,7 @@ mod tests {
         ArtifactKind::Compiler,
         ArtifactKind::Machine,
         ArtifactKind::SnapshotCodec,
+        ArtifactKind::ResolverGithub,
         ArtifactKind::Scx,
     ];
 
@@ -720,17 +729,19 @@ mod tests {
     }
 
     #[test]
-    fn the_codec_and_scx_are_optional_and_ordered_after_the_machine() {
-        let without = manifest(&ALL[..MAX_ARTIFACTS - 2]);
+    fn the_codec_the_resolver_and_scx_are_optional_and_ordered_after_the_machine() {
+        let without = manifest(&ALL[..MAX_ARTIFACTS - 3]);
         authenticate(&without, ArtifactKind::Machine).expect("the codec is optional");
         assert!(matches!(
             authenticate(&without, ArtifactKind::SnapshotCodec),
             Err(HostError::Artifact(ArtifactError::ArtifactIdentity))
         ));
-        assert!(matches!(
-            authenticate(&without, ArtifactKind::Scx),
-            Err(HostError::Artifact(ArtifactError::ArtifactIdentity))
-        ));
+        for kind in [ArtifactKind::ResolverGithub, ArtifactKind::Scx] {
+            assert!(matches!(
+                authenticate(&without, kind),
+                Err(HostError::Artifact(ArtifactError::ArtifactIdentity))
+            ));
+        }
         let mut misordered = ALL;
         misordered.swap(MAX_ARTIFACTS - 3, MAX_ARTIFACTS - 2);
         assert!(matches!(

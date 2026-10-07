@@ -20,7 +20,8 @@
 #     the conformance executor links, the example extension component
 #     (components/scxml-extension-example) the namespace suites bind
 #     (namespaces/<name>/irp), and the scx namespace's component
-#     (namespaces/scx) that `scx` embeds with them, which sources
+#     (namespaces/scx) and the GitHub resolver component
+#     (components/scxml-resolver-github) that `scx` embeds with them, which sources
 #     scripts/reproducible-wasm-env.sh
 #     for the release rustflags.
 #
@@ -44,7 +45,7 @@ tools_image='scxml-canonical-components:1'
 wasm_tools_version='1.244.0'
 wasi_virt_source='https://github.com/bytecodealliance/WASI-Virt'
 wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
-components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine scxml_extension_example scx'
+components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine scxml_extension_example scxml_resolver_github scx'
 
 usage() {
     echo "usage: build-canonical-components.sh --artifacts-dir DIR" >&2
