@@ -258,9 +258,8 @@ impl OutboundHttp for NetworkClient {
     }
 }
 
-/// Default time for one whole extension-component request, from resolution to
-/// the end of the response body (model calls are slow; the `execute` call
-/// blocks on it).
+/// Default time for one whole invoked-service request, from resolution to
+/// the end of the response body (model calls are slow).
 pub const DEFAULT_EXTENSION_TOTAL_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Configuration of one [`ExtensionHttpClient`].
@@ -289,12 +288,12 @@ impl ExtensionHttpConfig {
     }
 }
 
-/// The outbound HTTP transport of extension components
+/// The outbound HTTP transport of invoked services
 /// ([`crate::ExtensionHttp`], supplied through
-/// [`crate::ExtensionComponents::with_outbound_http`]).
+/// [`crate::ServiceComponents::with_outbound_http`]).
 ///
 /// The session host admits every request before this transport sees it
-/// (the element's declared origins, or an origin a reference's value
+/// (the service's declared origins, or an origin a reference's value
 /// supplied), so the transport sends exactly the canonical request it is
 /// given (an absolute `http`/`https` URL without userinfo; anything else is
 /// refused). No redirect is followed (a 3xx is the response), and no cookie,
@@ -303,7 +302,7 @@ impl ExtensionHttpConfig {
 /// request runs on the calling (session) thread, bounded by the connect
 /// and total timeouts; the response head by [`MAX_RESPONSE_HEAD_BYTES`]
 /// and the body by [`crate::MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES`]. The
-/// caller's `extension-http-fetch` span covers the request; nothing about
+/// caller's `service-http-request` span covers the request; nothing about
 /// it is recorded here.
 pub struct ExtensionHttpClient {
     agent: ureq::Agent,

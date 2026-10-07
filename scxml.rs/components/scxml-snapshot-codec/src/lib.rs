@@ -155,9 +155,10 @@ mod guest {
                 api::TraceContextPolicy::Preserve => snap::TraceContextPolicy::Preserve,
                 api::TraceContextPolicy::Strip => snap::TraceContextPolicy::Strip,
             },
-            // The codec encodes checkpoint documents only;
-            // executable-content snapshots are a Wasmtime host feature.
-            point: snap::SnapshotPoint::Checkpoint,
+            point: match options.point {
+                api::SnapshotPoint::Checkpoint => snap::SnapshotPoint::Checkpoint,
+                api::SnapshotPoint::ExecutableContent => snap::SnapshotPoint::ExecutableContent,
+            },
         }
     }
 

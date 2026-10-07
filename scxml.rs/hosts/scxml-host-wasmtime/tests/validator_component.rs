@@ -22,7 +22,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use scxml_host_wasmtime::validator_types::{EventSchemaResource, SchemaPolicy, ValidationRequest};
+use scxml_host_wasmtime::validator_types::{
+    EventSchemaResource, Profile, SchemaPolicy, ValidationRequest,
+};
 use scxml_host_wasmtime::{
     ArtifactKind, AuthenticatedComponent, ComponentValidator, TelemetryProviders,
     TrustedManifestDigest, WasmtimeHostConfig, authenticate_component,
@@ -155,6 +157,7 @@ fn validate(validator: &ComponentValidator, source_name: &str, source: &str) -> 
         schemas: Vec::new(),
         packages: Vec::new(),
         event_schemas: ui_event_schemas(),
+        profile: None,
         trace_context: None,
     };
     let bytes = validator
@@ -426,6 +429,7 @@ fn guest_validate_span_records_its_events_and_error_category() {
         schemas: Vec::new(),
         packages: Vec::new(),
         event_schemas: Vec::new(),
+        profile: None,
         // A sampled remote parent, so the guest span is recorded whatever
         // the process-global provider is.
         trace_context: Some(scxml_host_wasmtime::validator_types::TraceContext {
@@ -478,6 +482,7 @@ fn guest_validate_span_without_a_carrier_is_a_root_span_under_a_noop_global_prov
         schemas: Vec::new(),
         packages: Vec::new(),
         event_schemas: Vec::new(),
+        profile: None,
         trace_context: None,
     });
     drop(validator);
@@ -501,4 +506,43 @@ fn guest_validate_span_without_a_carrier_is_a_root_span_under_a_noop_global_prov
         opentelemetry::trace::SpanId::INVALID,
         "the invalid ambient span is not its parent"
     );
+}
+
+/// The draft profile (`profile: draft`) runs the profile's rules in the
+/// component, exactly as `<scx:validate profile="draft">` runs them; absent,
+/// no profile rule runs.
+#[test]
+fn the_draft_profile_runs_its_rules_only_when_requested() {
+    let validator = ComponentValidator::new(
+        &artifacts().validator,
+        None,
+        &config(),
+        &TelemetryProviders::new(),
+    )
+    .expect("the validator component compiles and links");
+    let codes = |profile: Option<Profile>| -> Vec<String> {
+        let bytes = validator
+            .validate(&ValidationRequest {
+                source_name: "draft.scx".to_owned(),
+                source: r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"><invoke type="scxml" src="child.scx"/></state></scxml>"#.to_owned(),
+                policy: SchemaPolicy::Strict,
+                schemas: Vec::new(),
+                packages: Vec::new(),
+                event_schemas: Vec::new(),
+                profile,
+                trace_context: None,
+            })
+            .expect("a canonical report");
+        let report: serde_json::Value = serde_json::from_slice(&bytes).expect("JSON");
+        report["validator"]["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .map(|diagnostic| diagnostic["code"].as_str().expect("a code").to_owned())
+            .collect()
+    };
+    let plain = codes(None);
+    let draft = codes(Some(Profile::Draft));
+    assert!(!plain.iter().any(|code| code == "SCXML098"), "{plain:?}");
+    assert!(draft.iter().any(|code| code == "SCXML098"), "{draft:?}");
 }

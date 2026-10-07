@@ -402,7 +402,7 @@ impl RunHttp {
     /// record; with no transport (and no record) they are refused.
     pub(crate) fn service_requests(
         &self,
-        transport: Option<&Arc<dyn crate::extension::ExtensionHttp>>,
+        transport: Option<&Arc<dyn crate::outbound_http::ExtensionHttp>>,
     ) -> crate::service::RequestMode {
         use crate::service::RequestMode;
         if self.live && matches!(*self.journal.borrow(), OutboundJournal::Replaying(_)) {

@@ -77,7 +77,7 @@ use validator_bindings::stateforward::scxml_validator::types::ErrorCode as Valid
 /// `types`), as the generated bindings define them.
 pub mod validator_types {
     pub use super::validator_bindings::stateforward::scxml_validator::types::{
-        EventSchemaResource, ExtensionPackage, SchemaPolicy, SchemaResource, TraceContext,
+        EventSchemaResource, ExtensionPackage, Profile, SchemaPolicy, SchemaResource, TraceContext,
         ValidationRequest,
     };
 }

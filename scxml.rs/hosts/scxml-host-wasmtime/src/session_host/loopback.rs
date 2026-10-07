@@ -531,8 +531,6 @@ impl CompilerRuntime {
                         schema_sha256: package.schema_sha256.clone(),
                         wit_world: package.wit_world.clone(),
                         wit_version: package.wit_version.clone(),
-                        env_slots: package.env_slots.clone(),
-                        http_origins: package.http_origins.clone(),
                     },
                 )
             })

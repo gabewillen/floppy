@@ -267,7 +267,10 @@ An extension component may read the executing session's snapshot while it
 executes one executable-content extension
 (`stateforward:scxml/session-snapshot-host`,
 [executable-content-extensions.md](executable-content-extensions.md), "Reading
-the session snapshot"). Only the Wasmtime host offers it. The document has the
+the session snapshot"). Both hosts offer it: the Wasmtime host encodes it
+with the `scxml-snapshot` crate, and the browser host with the codec
+component (`snapshot-options.point` `executable-content`), byte for byte the
+same document. The document has the
 same format, with `options.point` set to `executable-content` (omitted, and so
 `checkpoint`, everywhere else). It is read-only like every other snapshot.
 

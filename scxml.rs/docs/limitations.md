@@ -25,17 +25,17 @@ disagree are in [spec-errata.md](spec-errata.md).
   errata SHA-256
   `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f`,
   producer report digest
-  `2b15f97fadfadf86c2ed33e6742e0c33eb50ea61f90d186fc4c80cc088a7635c`,
+  `c43bfea356ad2d52ab19eb18e13d5cae67d82a0b2e34dddc81912c3d08a86819`,
   and canonical artifact SHA-256
-  `9a8f284ac14f3ad3df8047555aded7fb1f7856df9b8dd2ddd454e6cf461a9306`.
+  `b994a5026496151d2bc94f1770346cdba1453d1f49c1c4bdbe67d793201c4853`.
   The XPath evidence binds corpus digest
   `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca`,
   errata SHA-256
   `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a`,
   producer report digest
-  `06d8d5356fb58931e52e078e68f63163fd1cb2dc3879972624f37f0a14303f13`,
+  `48fe81a79c96d1fed9b0ab023e66899fa76a2bcc4304c46bac973da3928fd5c6`,
   and canonical artifact SHA-256
-  `e2fe893e834e088e35cfc35db8945add8b8b4c208ff3ea191bd3c411d62138e7`.
+  `523960476ad080fd7e6cb6a90a7461551cf6324f502346b3400dc5c0b3b42fd7`.
   The report bytes are checked in under
   [`tests/conformance/w3c-irp/baselines`](../tests/conformance/w3c-irp/baselines).
   These are measured IRP results of the shipped components under the
@@ -272,9 +272,19 @@ disagree are in [spec-errata.md](spec-errata.md).
   runs the generic machine in runtime-IR mode, reproduces the representative
   trace in Node and headless Chromium, bundles the machine, compiler, the
   three data models, the SCXML and BasicHTTP Event I/O Processors, the
-  clock, and the session snapshot codec, runs delayed sends and `<invoke>` (children compiled in the host,
+  clock, the session snapshot codec, the validator, and the extension
+  components of the example namespace and `scx`, validates documents
+  (the `scx validate` report, byte for byte, plus the draft profile),
+  runs extension elements through bound extension components with the
+  Wasmtime host's semantics (session capabilities during `execute`,
+  per-session instances, per-call fuel, retirement after a trap, the
+  executable-content snapshot), takes `event:schema` files from the page,
+  runs delayed sends and `<invoke>` (children compiled in the host,
   or page-supplied pre-lowered child IR), and bounds every component call
-  with build-time metered fuel.
+  with build-time metered fuel. A shared corpus
+  (`tests/fixtures/host-parity`) and the `env` and `event` namespace
+  suites hold it to the Wasmtime host's outcomes in Node and headless
+  Chromium.
   BasicHTTP reaches only URLs the page's `http` option allowlists, and URLs
   load only through the page's allowlisted `resources` option or
   `loadDocument` provider; a runtime `srcexpr` URL loads through `resources`
@@ -313,17 +323,19 @@ In short:
 In detail:
 
 - Extension namespace elements execute through `executable-content-extension`
-  components only under the Wasmtime session host. The browser host still
-  answers `execute-extension` from the page's `executeExtension` callback
-  (`handled` or `not-handled`, with no session capabilities and no queued
-  events) and instantiates no extension component; it loads no repository
-  element (nor repository service: it runs the GitHub resolver component
-  `scx` embeds nowhere, since nothing in it could use what it resolves, a
-  page cannot read `github.com` release downloads across origins, and a
-  page's `fetch` cannot hand a redirect to the component for the host to
-  admit; see the browser host's README), offers no `env` slot references, and without that callback a
-  document that uses an extension namespace fails its session start. The
-  standalone proof host answers `unavailable`. Extension component instance
+  components under the Wasmtime session host and the browser host. The
+  browser host runs only the extension components it ships transpiled and
+  fuel-metered at build time (the example namespace and `scx`): a component
+  resolved at run time would need a browser build of its own, so it loads
+  no repository element (nor repository service: it runs the GitHub
+  resolver component `scx` embeds nowhere, a page cannot read `github.com`
+  release downloads across origins, and a page's `fetch` cannot hand a
+  redirect to the component for the host to admit; see the browser host's
+  README). Its async sessions (`async: 'auto'`) take no extension
+  components. Its fuel counts function entries and loop iterations, not
+  instructions, so a fuel bound stops a spinning element at a different
+  point than under Wasmtime (the outcome, `error.execution` and a retired
+  instance, is the same). The standalone proof host answers `unavailable`. Extension component instance
   state is not part of session snapshots, and the CLI's `conformance run`
   binds no extension packages.
 - Repository namespaces are GitHub repositories only. A release's manifest
@@ -348,21 +360,26 @@ In detail:
   references only files relative to the document, never a
   repository-namespace resource or another absolute URI. A child document
   the Wasmtime host compiles when it is invoked, and every document the
-  browser host compiles, get no schema files, so a schema-file reference
-  rejects it; inline schemas and `event:schemaexpr` work everywhere. A
+  browser host compiles without the page supplying them, get no schema
+  files, so a schema-file reference rejects it; a browser page supplies a
+  document's schema files to the validator and compiler
+  (`eventSchemas`), and inline schemas and `event:schemaexpr` work
+  everywhere. A
   session snapshot lists schemas on transitions only and never evaluates
   `event:schemaexpr`. An integer outside the 64-bit range in a schema is
   read as the nearest 64-bit float, without a diagnostic. Compiling a
   schema compiles every `pattern` it holds as a regular expression; the
   work of compiling a pathological pattern is bounded only by the schema's
   size (and, in the components, fuel), not by a pattern-specific bound.
-- Extension components' `outbound-http` requests block the executing session
-  until the response or the transport's timeout (10 s connect, 120 s total);
-  responses are delivered whole (no streaming), are not recorded in `run`
-  replay logs (so a recorded or replayed `run` offers extension components no
-  outbound HTTP: every request is refused the same way in both), and carry no
-  W3C trace headers. A slow request belongs in an invoked service, whose
-  `fetch` suspends only its own task, never the session.
+- By rule, not as a gap, extension components do no I/O: no WASI, no
+  `outbound-http`, and no `env` values or references (an `env` attribute on
+  an extension element is `SCXML084`). Network calls and secrets belong in
+  invoked services, whose `fetch` suspends only their own task.
+- The conformance runner binds no invoked services yet: a namespace suite
+  cannot exercise one at run time, so the `env` suite
+  ([namespaces/env/irp](../namespaces/env/irp/README.md)) holds only its
+  document-rejection statements, and the run-time `env` statements are
+  proven by the echo service's host and CLI tests instead.
 - The BasicHTTP network of live sessions (`LiveHttp`, `scx run
   --http-allow`/`--http-listen`): outbound requests carry no W3C trace headers (so `_event.raw` at a
   receiver never depends on telemetry) and their response bodies are never

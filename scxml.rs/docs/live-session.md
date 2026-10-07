@@ -279,9 +279,7 @@ line N: …`).
 It takes the same component, `--extension-package`,
 `--extension-component`, `--extension-component-sha256`, `--env`,
 `--env-file`, and repository namespace (`--offline`, `--cache-dir`,
-`--github-*`) flags as `snapshot run`, plus these (with `--record` or
-`--replay` extension components get no outbound HTTP: a replay log does not
-record their responses):
+`--github-*`) flags as `snapshot run`, plus these:
 
 | Flag | Meaning |
 | --- | --- |
@@ -422,7 +420,6 @@ under the session's single `session-run` span:
 | `scxml.host-wasmtime.session-communication-error` | one delivery of owed `error.communication` events |
 | `scxml.host-wasmtime.session-http-response` | one delivery of an invoked service's HTTP response |
 | `scxml.host-wasmtime.session-close` | the graceful close |
-| `scxml.host-wasmtime.extension-http-fetch` | one `outbound-http` request an extension component made, on the session thread, inside its `execute` call (blocking the call; bounded by the granted transport's timeouts) |
 | `scxml.host-wasmtime.basichttp-network-post` | one outbound request (`http` feature), on its own thread, a child of the send that issued it |
 | `scxml.host-wasmtime.basichttp-listener-request` | one inbound connection of the built-in listener (`http` feature) |
 | `scxml.host-wasmtime.basichttp-listener-accept` | one failed `accept` of the built-in listener (`http` feature): `input-read` for a connection that failed before it was accepted, `platform` for a listener failure, after which the listener waits (10 ms, doubling to 1 s) before accepting again |

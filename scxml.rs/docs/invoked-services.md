@@ -103,9 +103,36 @@ then:
   clock past a request in flight: its response is the next thing that
   happens.
 
+Admission, in detail:
+
+- **Substitute, then admit.** The host substitutes every reference with its
+  value, checks the request against the WIT bounds (method `GET` or `POST`;
+  an absolute `http`/`https` URL without userinfo, at most 16384 bytes; at
+  most 64 headers, none of `host`, `content-length`, `transfer-encoding`, or
+  `connection`, no CR, LF, or NUL in a value; a body of at most 4 MiB, empty
+  for `GET`; at most 64 parts per field), canonicalizes the URL with the
+  WHATWG parser, and admits it only to an origin or URL prefix the package
+  declares (compared in canonical form, so dot segments cannot escape a
+  prefix), or to an origin the run supplied: the URL's first part is a
+  reference whose value is itself an absolute `http`/`https` URL without
+  userinfo, and the rest of the URL, if any, begins its path, query, or
+  fragment. A literal that precedes or extends the authority (`https://` +
+  value, or value + `:8080/`) supplies no origin. Every other request is
+  refused before the transport sees it, so a value is never substituted
+  into a request that leaves for anywhere else.
+- **The transport sends.** The `http` feature's `ExtensionHttpClient`
+  follows no redirect (a 3xx is returned as the response) and uses no
+  cookie, credential, or environment proxy; TLS is rustls against the
+  operating system's trust store. Network ingress and egress bounds apply on
+  every build: a 10 s connect and 120 s total timeout per request
+  (`ExtensionHttpConfig`), a response head of at most 16 KiB, and a response
+  body of at most 16 MiB (`payload-too-large` beyond it).
+
 Without a transport every request fails with `unavailable`. The echo
-example's `fetch` event GETs the URL its `endpoint` slot references and
-returns `echo.fetched` carrying the status.
+example's `fetch` event GETs the URL its `endpoint` slot references,
+followed by the event's data when it is a string (a path, query, or
+fragment), with `authorization: Bearer <token>` when the `token` slot is
+bound, and returns `echo.fetched` carrying the status.
 
 ## Record and replay
 
@@ -162,8 +189,8 @@ an import without its grant (`ArtifactError::WasiResourceUngranted`), a
 grant whose interface the component does not import (`WasiGrantUndeclared`),
 a `wasi:*` import the host never links, such as `wasi:cli` or `wasi:http`
 (`UnknownImport`), and a grant outside its bounds
-(`WasiGrantInvalid`). Extension components get no WASI
-([executable-content-extensions.md](executable-content-extensions.md#wasi)).
+(`WasiGrantInvalid`). Extension components get no I/O at all
+([executable-content-extensions.md](executable-content-extensions.md#no-io)).
 [`components/scxml-service-files`](../components/scxml-service-files)
 imports `wasi:filesystem` and runs only with `--dir URI=HOST::/workspace`.
 
@@ -228,9 +255,8 @@ so a document needs no flag to bind it:
 
 ## Values are references: `env` slots
 
-A service never receives a secret value. Like an executable-content
-extension element ([executable-content-extensions.md](executable-content-extensions.md#values-are-references-env-slots)),
-its `<invoke>` names, per slot its service package declares (`env-slots`),
+A service never receives a secret value. Its `<invoke>` names, per slot its
+service package declares (`env-slots`),
 the variable whose value the host binds, in the host's `env` vocabulary
 (`https://github.com/stateforward/scxml.rs/namespaces/env`):
 
@@ -250,9 +276,8 @@ the variable whose value the host binds, in the host's `env` vocabulary
   value; names only).
 - The host binds each slot whose variable the run holds a value for to a
   fresh opaque reference, numbered per invocation, in
-  `invoke-request.references`. **Unlike an extension element's per-call
-  references, a service's references live for the whole invocation**, only
-  inside its own `outbound-http` requests, which the host admits only to an
+  `invoke-request.references`. A service's references live for the whole
+  invocation, only inside its own `outbound-http` requests, which the host admits only to an
   origin the package declares or one a reference's value supplies entirely.
   No other invocation or element ever receives them, and they end when the
   invocation's store is dropped.
@@ -265,13 +290,21 @@ the variable whose value the host binds, in the host's `env` vocabulary
   bound twice, or a name that is not a variable name rejects the start: the
   `<invoke>` raises `error.execution`.
 - Only an invoked service's `<invoke>` has slots: one on an SCXML session's
-  `<invoke>` is `SCXML084`, and a `typeexpr` that evaluates to the SCXML type
+  `<invoke>`, or on any element other than an `<invoke>` (an
+  executable-content extension element included), is `SCXML084`, and a `typeexpr` that evaluates to the SCXML type
   with slots bound raises `error.execution`. The validator judges a literal
   type's slots against its bound package (`SCXML083`, with a "did you mean"
   fix); a `typeexpr`'s slots only for their syntax.
-- The CLI supplies the run's values to services exactly as to extension
-  elements (`--env`, `--env-file`). The echo example declares the slot
-  `endpoint`.
+- The CLI supplies the run's values with `--env NAME=VALUE`, else the last
+  `--env-file PATH` entry (Docker's format: `NAME=VALUE` with the value taken
+  literally, a bare `NAME` from the shell, `#` comments, blank lines
+  ignored), else, for a bare `--env NAME`, the calling shell's; a variable no
+  slot can name is dropped. Nothing by default; there is no
+  whole-environment form. Before the run it lists each variable the document
+  names and the `<invoke>`s it goes to (names only). Values are masked
+  (`[masked]`) in the text the CLI writes; canonical snapshot documents are
+  written exactly (their `sha256` covers their bytes). The echo example
+  declares the slots `endpoint` and `token`.
 
 ## Event schemas
 

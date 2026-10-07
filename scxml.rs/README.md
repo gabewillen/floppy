@@ -67,8 +67,8 @@ and bind these digests:
 | --- | --- | --- |
 | corpus digest | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` |
 | errata SHA-256 | `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f` | `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a` |
-| producer report digest | `2b15f97fadfadf86c2ed33e6742e0c33eb50ea61f90d186fc4c80cc088a7635c` | `06d8d5356fb58931e52e078e68f63163fd1cb2dc3879972624f37f0a14303f13` |
-| canonical artifact SHA-256 | `9a8f284ac14f3ad3df8047555aded7fb1f7856df9b8dd2ddd454e6cf461a9306` | `e2fe893e834e088e35cfc35db8945add8b8b4c208ff3ea191bd3c411d62138e7` |
+| producer report digest | `c43bfea356ad2d52ab19eb18e13d5cae67d82a0b2e34dddc81912c3d08a86819` | `48fe81a79c96d1fed9b0ab023e66899fa76a2bcc4304c46bac973da3928fd5c6` |
+| canonical artifact SHA-256 | `b994a5026496151d2bc94f1770346cdba1453d1f49c1c4bdbe67d793201c4853` | `523960476ad080fd7e6cb6a90a7461551cf6324f502346b3400dc5c0b3b42fd7` |
 
 Each repository namespace also has its own implementation report plan in
 the same format, run through the same pipeline and reported separately
@@ -77,7 +77,7 @@ the same format, run through the same pipeline and reported separately
 
 | Namespace suite | Assertions | Tests | ECMAScript | XPath |
 | --- | ---: | ---: | ---: | ---: |
-| [`env`](namespaces/env/irp/README.md) | 7 | 20 | 20 / 20 | 20 / 20 |
+| [`env`](namespaces/env/irp/README.md) | 2 | 8 | 8 / 8 | 8 / 8 |
 | [`event`](namespaces/event/irp/README.md) | 9 | 29 | 29 / 29 | 29 / 29 |
 
 [docs/conformance.md](docs/conformance.md) describes the pipeline, the
@@ -236,9 +236,10 @@ admits outbound origins (deny-all by default). See
 [cli.md](docs/cli.md#basichttp-over-the-network).
 
 **Browser host.** An ES module package that runs the generic machine, the
-compiler, the three data models, both Event I/O Processors, and the clock in
-the page, with fuel-metered calls, an allowlist for URLs and BasicHTTP, and
-OpenTelemetry through the JS API. See the
+validator, the compiler, the three data models, both Event I/O Processors,
+the clock, and extension components in the page, with fuel-metered calls,
+an allowlist for URLs and BasicHTTP, and OpenTelemetry through the JS API; a
+shared corpus holds it to the Wasmtime host's outcomes. See the
 [browser host README](hosts/scxml-host-browser/README.md).
 
 **Wasm script components.** `<script src="x.wasm"/>` runs a Wasm component
@@ -250,11 +251,12 @@ SHA-256 at compile time or resolved at run time under a digest allowlist. See
 package: an XSD for structure plus a Wasm extension component that runs the
 elements. A namespace URI that names a GitHub repository at a release tag is
 loaded from that release, verified, cached, and pinned, so a document needs no
-flag to use it. Extension components never see secrets: an element names an
-`env` slot, the run supplies values with `--env` and `--env-file`, and the
-component receives only an opaque reference, which the host substitutes into
-its outbound requests to the origins the package declares or a base URL the
-run supplies.
+flag to use it. An extension element is executable content and does no I/O;
+work that waits on the network belongs in an invoked service, which never sees
+secrets either: its `<invoke>` names an `env` slot, the run supplies values
+with `--env` and `--env-file`, and the component receives only an opaque
+reference, which the host substitutes into its outbound requests to the
+origins the package declares or a base URL the run supplies.
 See [executable-content-extensions.md](docs/executable-content-extensions.md),
 the [`env` vocabulary](namespaces/env/README.md), and the
 [example extension](components/scxml-extension-example). `scx` itself ships
@@ -382,7 +384,8 @@ The full list, with evidence, is in
   (pinned or tagless), and a child loaded by `<invoke srcexpr>` or
   `<content expr>` compiles against what the run already bound.
 - An `event:schema` references only files relative to the document; child
-  documents compiled when invoked and the browser host get no schema files.
+  documents compiled when invoked get no schema files, and a browser page
+  supplies them to the validator and compiler itself.
 
 ## Security
 

@@ -88,7 +88,17 @@ export type HostErrorCode =
    * was in progress (a capability provider or data model calling back into
    * the session); nothing was entered and the session stays usable.
    */
-  | 'reentrant-call';
+  | 'reentrant-call'
+  /** An extension component's bytes do not hash to the trusted SHA-256. */
+  | 'artifact-digest-mismatch'
+  /** A component is not an extension component this package ships built. */
+  | 'artifact-kind-mismatch'
+  /** An extension package binding was refused (see ExtensionComponents.bind). */
+  | 'namespace-binding'
+  /** A bound extension component does not implement its namespace URI; the session start fails. */
+  | 'extension-component-uri-mismatch'
+  /** A bound extension component's `initialize` failed; the session start fails. */
+  | 'extension-component-initialize-failed';
 
 export type CompilerErrorCode =
   | 'invalid-request'
@@ -560,7 +570,6 @@ export interface CapabilityProviders {
   loadDocument?(kind: 'data' | 'invocation', uri: string): string | LoadedDocumentAnswer;
   compileInvocation?(sourceName: string, source: string): Uint8Array;
   raise?(event: WitEvent): void;
-  executeExtension?(element: ExecutableContentExtension): { tag: 'handled' } | { tag: 'not-handled' };
   loadScript?(reference: ScriptReference): void;
   runScript?(reference: ScriptReference, event: WitEvent | undefined): void;
 }
@@ -1114,6 +1123,12 @@ export function createSession(options: {
   invoke?: InvokeOptions;
   /** Invoke limits the page chooses (default: no limit). */
   invokeLimits?: InvokeLimits;
+  /**
+   * The extension components of the namespaces the document (and every
+   * document it invokes) uses; their packages also reach the `<invoke>`
+   * compiler. Not accepted by `async: 'auto'` sessions.
+   */
+  extensionComponents?: ExtensionComponents;
   /** 'off' (default): this synchronous session. See the `async: 'auto'` overload. */
   async?: 'off';
 }): Promise<MachineSession>;
@@ -1243,6 +1258,142 @@ export interface InvokeOptions {
   fuel?: number;
 }
 
+/**
+ * One extension package (SCXML 1.0 section 4.10): the manifest fields of a
+ * `stateforward.scxml.extension-package/v2` manifest and the schema bytes
+ * (the Wasmtime host's `ExtensionPackage`). The compiler, the validator, and
+ * the session's `<invoke>` compiler receive it; a session binds it with
+ * ExtensionComponents.
+ */
+export interface ExtensionPackage {
+  /** Exact namespace URI; the binding key. */
+  namespaceUri: string;
+  packageVersion: string;
+  extensionArtifact: string;
+  /** The schema's system id. */
+  schemaArtifact: string;
+  /** Lowercase SHA-256 of `schema`. */
+  schemaSha256: string;
+  witWorld: string;
+  witVersion: string;
+  /** The schema bytes (at most MAX_NAMESPACE_SCHEMA_BYTES). */
+  schema: Uint8Array;
+}
+
+/** The bytes of one schema file an `event:schema` references (`uri` as authored, before `#`). */
+export interface EventSchemaResource {
+  uri: string;
+  bytes: Uint8Array;
+}
+
+/** An extension component authenticateExtensionComponent accepted. */
+export interface AuthenticatedComponent {
+  readonly kind: 'extension-component';
+  /** The trusted SHA-256 of its bytes (its release artifact digest). */
+  readonly sha256: string;
+  /** The `dist/` component built from it. */
+  readonly component: string;
+}
+
+/**
+ * Authenticates one extension component: `bytes` must hash to `sha256` (64
+ * lowercase hex characters: the trust anchor), and that digest must be the
+ * release artifact of an extension component this package ships transpiled
+ * and fuel-metered (`dist/`: the example namespace and `scx`). Throws
+ * ScxmlHostError 'invalid-argument', 'artifact-digest-mismatch', or
+ * 'artifact-kind-mismatch'.
+ */
+export function authenticateExtensionComponent(bytes: Uint8Array, sha256: string): Promise<AuthenticatedComponent>;
+
+/**
+ * Extension components a session links, keyed by exact namespace URI (the
+ * Wasmtime host's `ExtensionComponents`; createSession `extensionComponents`).
+ *
+ * Every session (the root and each invoked child) gets its own instance of
+ * every bound component its document uses, before data binding: the host
+ * checks its `namespace-uri` and calls `initialize` (a mismatch or a failed
+ * `initialize` fails the session start with ScxmlHostError
+ * 'extension-component-uri-mismatch' or 'extension-component-initialize-failed'),
+ * and calls `shutdown` once when the session is dropped. A namespace the
+ * document uses that nothing binds fails the session start closed
+ * (ScxmlSessionError `unavailable`). The component's `data-model-host`
+ * and `execution-host` act on the executing session, and only during
+ * `execute`: `raise` queues an internal event, `send` routes through the
+ * session's SCXML Event I/O Processor exactly as `<send>` (only that
+ * processor), and the events it queues are handed to the machine with the
+ * element's outcome, in document order. A component that imports
+ * `session-snapshot-host` reads the executing session's canonical
+ * `executable-content` snapshot (at most MAX_EXTENSION_SNAPSHOTS per call).
+ * Each call runs with the per-call cap on the session's host-call budget; a
+ * trap (fuel exhaustion included) retires the instance (later elements
+ * raise error.execution). An extension component does no I/O: it gets no
+ * outbound HTTP, no WASI, and no `env` value.
+ */
+export class ExtensionComponents {
+  constructor();
+  /**
+   * Binds `component` to `pkg.namespaceUri` (byte for byte). Throws
+   * ScxmlHostError 'artifact-kind-mismatch', or 'namespace-binding' for a
+   * URI that is not absolute, over MAX_NAMESPACE_URI_BYTES, the SCXML or XML
+   * namespace, or already bound; a schema over MAX_NAMESPACE_SCHEMA_BYTES or
+   * not matching `schemaSha256`; or more than MAX_EXTENSION_COMPONENTS
+   * bindings.
+   */
+  bind(pkg: ExtensionPackage, component: AuthenticatedComponent): this;
+  /** The fuel cap of one extension component call (a positive safe integer; default DEFAULT_EXTENSION_CALL_FUEL). */
+  withCallFuel(fuel: number): this;
+  /** Whether no namespace is bound. */
+  isEmpty(): boolean;
+}
+
+/** Default fuel cap of one extension component call. */
+export const DEFAULT_EXTENSION_CALL_FUEL: number;
+/** Maximum namespaces one ExtensionComponents binds. */
+export const MAX_EXTENSION_COMPONENTS: number;
+/** Maximum bytes of one bound namespace URI. */
+export const MAX_NAMESPACE_URI_BYTES: number;
+/** Maximum bytes of one bound namespace schema. */
+export const MAX_NAMESPACE_SCHEMA_BYTES: number;
+/** Maximum `session-snapshot-host.snapshot` calls of one `execute` call. */
+export const MAX_EXTENSION_SNAPSHOTS: number;
+
+/** Request options shared by `compile` and `validate`. */
+export interface CompileRequestOptions {
+  sourceName?: string;
+  schemaPolicy?: SchemaPolicy;
+  /** The packages of the extension namespaces the document uses. */
+  packages?: ExtensionPackage[];
+  /** The schema files the document's `event:schema` attributes reference. */
+  eventSchemas?: EventSchemaResource[];
+}
+
+/**
+ * Instantiates one validator (the bundled validator component). Its
+ * expression checks use `dataModel` (a bundled ECMAScript or XPath data
+ * model): only documents whose `datamodel` is exactly that data model's name
+ * have their expressions checked; without one no expression is checked.
+ * Throws ScxmlHostError 'invalid-argument', 'fuel-exhausted', or
+ * 'instance-lost'.
+ */
+export function createValidator(options?: {
+  dataModel?: BundledDataModel;
+  telemetry?: TelemetryOption;
+  loadCoreModule?: CoreModuleLoader;
+  /** Per-validation fuel budget; a positive safe integer (default DEFAULT_COMPILE_FUEL). */
+  fuel?: number;
+}): Promise<{
+  /**
+   * Validates one SCXML document: `report` is the canonical
+   * `scxml.report/v3` validator report (`schemaPolicy` defaults to
+   * 'strict', as `scx validate`; `profile: 'draft'` adds the draft
+   * profile's rules). Throws ScxmlHostError 'invalid-argument' (the
+   * instance stays usable), 'fuel-exhausted', or 'instance-lost' (this and
+   * every later validation); ScxmlCompileError ('invalid-request' or
+   * 'canonical-report-failed') for a rejected request.
+   */
+  validate(source: string, options?: CompileRequestOptions & { profile?: 'draft' }): Promise<{ report: Uint8Array }>;
+}>;
+
 /** Options of the bundled data-model factories. */
 export interface DataModelOptions {
   telemetry?: TelemetryOption;
@@ -1298,7 +1449,7 @@ export function createCompiler(options?: {
    */
   compile(
     source: string,
-    options?: { sourceName?: string; schemaPolicy?: SchemaPolicy },
+    options?: CompileRequestOptions,
   ): Promise<{ status: CompileStatus; report: Uint8Array; ir: Uint8Array | undefined }>;
 }>;
 

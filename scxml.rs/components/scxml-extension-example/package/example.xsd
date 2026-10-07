@@ -9,11 +9,6 @@
   example:fail      (no attributes)
   example:spin      (no attributes)
   example:snapshot  location (required), exclude, at
-  example:fetch     url, path, location; the env:url and env:token slots
-
-  Every element admits the host's `env` attributes
-  (https://github.com/stateforward/scxml.rs/namespaces/env) laxly; the validator checks
-  them against the manifest's env-slots.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://stateforward.org/scxml/example"
@@ -22,7 +17,6 @@
     <xs:complexType>
       <xs:attribute name="event" type="xs:string"/>
       <xs:attribute name="in" type="xs:string"/>
-      <xs:anyAttribute namespace="https://github.com/stateforward/scxml.rs/namespaces/env" processContents="lax"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="send">
@@ -33,7 +27,6 @@
       <xs:attribute name="delay" type="xs:nonNegativeInteger"/>
       <xs:attribute name="id" type="xs:string"/>
       <xs:attribute name="eventid" type="xs:string"/>
-      <xs:anyAttribute namespace="https://github.com/stateforward/scxml.rs/namespaces/env" processContents="lax"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="fail">
@@ -47,15 +40,6 @@
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="exclude" type="xs:string"/>
       <xs:attribute name="at" type="xs:string"/>
-      <xs:anyAttribute namespace="https://github.com/stateforward/scxml.rs/namespaces/env" processContents="lax"/>
-    </xs:complexType>
-  </xs:element>
-  <xs:element name="fetch">
-    <xs:complexType>
-      <xs:attribute name="url" type="xs:string"/>
-      <xs:attribute name="path" type="xs:string"/>
-      <xs:attribute name="location" type="xs:string"/>
-      <xs:anyAttribute namespace="https://github.com/stateforward/scxml.rs/namespaces/env" processContents="lax"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

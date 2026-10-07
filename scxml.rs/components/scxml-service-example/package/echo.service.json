@@ -8,5 +8,5 @@
   "wit-world": "stateforward:scxml/invoked-service",
   "wit-version": "0.2.0",
   "http-origins": [],
-  "env-slots": ["endpoint"]
+  "env-slots": ["endpoint", "token"]
 }

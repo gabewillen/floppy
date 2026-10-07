@@ -20,7 +20,8 @@ pub const SUPPORTED_NAMESPACE_WIT_WORLD: &str = "stateforward:scxml/executable-c
 pub const SUPPORTED_NAMESPACE_WIT_VERSION: &str = "0.2.0";
 /// Maximum accepted UTF-8 bytes in one extension package manifest field.
 pub const MAX_EXTENSION_PACKAGE_FIELD_BYTES: usize = MAX_COMPONENT_METADATA_BYTES;
-/// Maximum entries of a manifest's `env-slots` and of its `http-origins`.
+/// Maximum entries of a service package manifest's `env-slots` and of its
+/// `http-origins`.
 pub const MAX_EXTENSION_PACKAGE_LIST_ITEMS: usize = 32;
 /// Maximum bytes of one `env-slots` entry.
 pub const MAX_ENV_SLOT_BYTES: usize = 64;
@@ -30,7 +31,7 @@ pub const MAX_HTTP_ORIGIN_BYTES: usize = 2_048;
 /// release reads.
 pub const EXTENSION_PACKAGE_FORMAT: &str = "stateforward.scxml.extension-package/v2";
 /// Manifest fields in their canonical order (`format` first).
-const EXTENSION_PACKAGE_FIELDS: [&str; 10] = [
+const EXTENSION_PACKAGE_FIELDS: [&str; 8] = [
     "format",
     "namespace-uri",
     "package-version",
@@ -39,8 +40,6 @@ const EXTENSION_PACKAGE_FIELDS: [&str; 10] = [
     "schema-sha256",
     "wit-world",
     "wit-version",
-    "http-origins",
-    "env-slots",
 ];
 
 /// Whether `slot` is an `env-slots` entry: `[a-z][a-z0-9-]*`, at most
@@ -113,22 +112,15 @@ pub struct ExtensionPackageManifest {
     pub wit_world: String,
     /// WIT package/world version.
     pub wit_version: String,
-    /// The `env` slots its elements accept (`env:<slot>` attributes): at most
-    /// [`MAX_EXTENSION_PACKAGE_LIST_ITEMS`] distinct [`is_env_slot`] entries.
-    pub env_slots: Vec<String>,
-    /// The origins or URL prefixes its extension component's requests may
-    /// reach: at most [`MAX_EXTENSION_PACKAGE_LIST_ITEMS`] distinct
-    /// [`is_http_origin`] entries. Binding the package consents to them.
-    pub http_origins: Vec<String>,
 }
 
 impl ExtensionPackageManifest {
     /// Parses one [`EXTENSION_PACKAGE_FORMAT`] manifest: a JSON object with
-    /// exactly the manifest fields, every value a string except
-    /// `http-origins` and `env-slots` (arrays of at most
-    /// [`MAX_EXTENSION_PACKAGE_LIST_ITEMS`] strings), and `format` equal to
-    /// [`EXTENSION_PACKAGE_FORMAT`]. The entries themselves are judged by
-    /// [`Self::verify_schema`]. Deterministic and side-effect-free; records
+    /// exactly the manifest fields, every value a string, and `format` equal
+    /// to [`EXTENSION_PACKAGE_FORMAT`]. The values themselves are judged by
+    /// [`Self::verify_schema`]. An extension element does no I/O, so the
+    /// manifest declares no `http-origins` and no `env-slots` (both are
+    /// unknown fields). Deterministic and side-effect-free; records
     /// no telemetry.
     ///
     /// # Errors
@@ -157,26 +149,6 @@ impl ExtensionPackageManifest {
                 None => Err(format!("missing field `{name}`")),
             }
         };
-        let list = |name: &str| -> Result<Vec<String>, String> {
-            match object.get(name) {
-                Some(serde_json::Value::Array(items))
-                    if items.len() <= MAX_EXTENSION_PACKAGE_LIST_ITEMS =>
-                {
-                    items
-                        .iter()
-                        .map(|item| match item {
-                            serde_json::Value::String(text) => Ok(text.clone()),
-                            _ => Err(format!("field `{name}` must be an array of strings")),
-                        })
-                        .collect()
-                }
-                Some(serde_json::Value::Array(_)) => Err(format!(
-                    "field `{name}` lists more than {MAX_EXTENSION_PACKAGE_LIST_ITEMS} entries"
-                )),
-                Some(_) => Err(format!("field `{name}` must be an array of strings")),
-                None => Err(format!("missing field `{name}`")),
-            }
-        };
         if field("format")? != EXTENSION_PACKAGE_FORMAT {
             return Err(format!(
                 "field `format` must be `{EXTENSION_PACKAGE_FORMAT}`"
@@ -190,8 +162,6 @@ impl ExtensionPackageManifest {
             schema_sha256: field("schema-sha256")?,
             wit_world: field("wit-world")?,
             wit_version: field("wit-version")?,
-            env_slots: list("env-slots")?,
-            http_origins: list("http-origins")?,
         })
     }
 
@@ -225,32 +195,6 @@ impl ExtensionPackageManifest {
                 return Err(format!(
                     "extension package field `{name}` exceeds {MAX_EXTENSION_PACKAGE_FIELD_BYTES} bytes"
                 ));
-            }
-        }
-        for (name, items, valid) in [
-            (
-                "env-slots",
-                &self.env_slots,
-                is_env_slot as fn(&str) -> bool,
-            ),
-            ("http-origins", &self.http_origins, is_http_origin),
-        ] {
-            if items.len() > MAX_EXTENSION_PACKAGE_LIST_ITEMS {
-                return Err(format!(
-                    "extension package field `{name}` lists more than {MAX_EXTENSION_PACKAGE_LIST_ITEMS} entries"
-                ));
-            }
-            for (index, item) in items.iter().enumerate() {
-                if !valid(item) {
-                    return Err(format!(
-                        "extension package field `{name}` has an invalid entry"
-                    ));
-                }
-                if items[..index].contains(item) {
-                    return Err(format!(
-                        "extension package field `{name}` lists an entry twice"
-                    ));
-                }
             }
         }
         if self.wit_world != SUPPORTED_NAMESPACE_WIT_WORLD {
@@ -892,66 +836,12 @@ mod tests {
             schema_sha256: hex::encode(Sha256::digest(&source.bytes)),
             wit_world: "stateforward:scxml/executable-content-extension".into(),
             wit_version: "0.2.0".into(),
-            env_slots: Vec::new(),
-            http_origins: Vec::new(),
         };
         assert_eq!(manifest.verify_schema(&source), Ok(()));
         let mut invalid = manifest.clone();
         invalid.schema_sha256 = "00".repeat(32);
         assert!(invalid.verify_schema(&source).is_err());
         assert_eq!(manifest.namespace_uri, "urn:example");
-    }
-
-    #[test]
-    fn package_manifest_bounds_its_declared_slots_and_origins() {
-        let source = SchemaSource::new("schemas/example.xsd", b"schema".to_vec());
-        let manifest = ExtensionPackageManifest {
-            namespace_uri: "urn:example".into(),
-            package_version: "1.0.0".into(),
-            extension_artifact: "components/example.wasm".into(),
-            schema_artifact: source.system_id.clone(),
-            schema_sha256: hex::encode(Sha256::digest(&source.bytes)),
-            wit_world: SUPPORTED_NAMESPACE_WIT_WORLD.into(),
-            wit_version: SUPPORTED_NAMESPACE_WIT_VERSION.into(),
-            env_slots: vec!["apikey".into(), "base-url2".into()],
-            http_origins: vec![
-                "https://api.example".into(),
-                "http://127.0.0.1:8080/v1".into(),
-            ],
-        };
-        assert_eq!(manifest.verify_schema(&source), Ok(()));
-        for slots in [
-            vec!["ApiKey".to_owned()],
-            vec!["1key".to_owned()],
-            vec!["keyexpr".to_owned()],
-            vec!["key".to_owned(), "key".to_owned()],
-            vec!["k".repeat(MAX_ENV_SLOT_BYTES + 1)],
-            (0..=MAX_EXTENSION_PACKAGE_LIST_ITEMS)
-                .map(|index| format!("s{index}"))
-                .collect(),
-        ] {
-            let mut invalid = manifest.clone();
-            invalid.env_slots = slots;
-            assert!(
-                invalid.verify_schema(&source).is_err(),
-                "{:?}",
-                invalid.env_slots
-            );
-        }
-        for origin in [
-            "ftp://a.example",
-            "https://",
-            "https:///path",
-            "https://user@a.example",
-            "https://a.example/?q",
-            "https://a.example/#f",
-            "https://a .example",
-            "a.example",
-        ] {
-            let mut invalid = manifest.clone();
-            invalid.http_origins = vec![origin.into()];
-            assert!(invalid.verify_schema(&source).is_err(), "{origin}");
-        }
     }
 
     #[test]
@@ -965,8 +855,6 @@ mod tests {
             schema_sha256: hex::encode(Sha256::digest(&source.bytes)),
             wit_world: "stateforward:scxml/other".into(),
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION.into(),
-            env_slots: Vec::new(),
-            http_origins: Vec::new(),
         };
         assert_eq!(
             manifest.verify_schema(&source),
@@ -1011,8 +899,6 @@ mod tests {
             schema_sha256: "00".repeat(32),
             wit_world: SUPPORTED_NAMESPACE_WIT_WORLD.into(),
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION.into(),
-            env_slots: Vec::new(),
-            http_origins: Vec::new(),
         };
         let oversized_system_id = SchemaSource::new(
             "x".repeat(MAX_COMPONENT_METADATA_BYTES + 1),
@@ -1050,8 +936,6 @@ mod tests {
             schema_sha256: hex::encode(Sha256::digest(&source.bytes)),
             wit_world: SUPPORTED_NAMESPACE_WIT_WORLD.into(),
             wit_version: SUPPORTED_NAMESPACE_WIT_VERSION.into(),
-            env_slots: Vec::new(),
-            http_origins: Vec::new(),
         };
         assert_eq!(
             manifest.verify_schema(&source),

@@ -193,8 +193,8 @@ pub enum DocumentKind {
 /// [`SessionHost::with_service_components`]); every other namespace and
 /// type URI stays the host's. An embedder binds this way a release a child
 /// document pinned that differs from the root's. Only their bindings (and,
-/// for services, their WASI grants) are read: values, transports,
-/// observers, call fuel, and the resolver stay the host's. A binding that
+/// for services, their WASI grants) are read: values, transports, call
+/// fuel, and the resolver stay the host's. A binding that
 /// does not verify fails the run as a host failure.
 #[derive(Clone, Debug)]
 pub struct EmbeddedDocument {
@@ -492,19 +492,13 @@ pub(crate) struct HostCore {
     /// The embedder's resolver of namespaces no binding names (none: such a
     /// document fails its session start).
     extension_resolver: Option<Arc<dyn crate::extension::ExtensionResolver>>,
-    /// The run's values elements' `env` slots may reference.
-    extension_values: Arc<crate::ExtensionEnvironment>,
-    /// The transport admitted extension requests go through (none: refused).
-    extension_http: Option<Arc<dyn crate::extension::ExtensionHttp>>,
-    /// The embedder's observer of refused requests and missing values.
-    extension_observer: Option<Arc<dyn crate::extension::ExtensionObserver>>,
     /// Fuel cap of one extension component call.
     pub(crate) namespace_call_fuel: u64,
     /// Invoked-service components keyed by exact type URI, compiled on first
     /// use; each invocation instantiates its own.
     services: Vec<ServiceEntry>,
     /// The transport admitted service requests go through (none: refused).
-    pub(crate) service_http: Option<Arc<dyn crate::extension::ExtensionHttp>>,
+    pub(crate) service_http: Option<Arc<dyn crate::outbound_http::ExtensionHttp>>,
     /// The fuel an invocation may run between two inputs.
     service_call_fuel: u64,
     /// The values services' `env` slots may reference.
@@ -694,12 +688,10 @@ impl HostCore {
         Ok(self.namespace_linker.get_or_init(|| linker))
     }
 
-    /// The instantiation runtime of one package's extension component: its
-    /// own declared slots and origins.
+    /// The instantiation runtime of an extension component.
     fn extension_runtime<'a>(
         &'a self,
         linker: &'a wasmtime::component::Linker<crate::extension::ExtensionStoreData>,
-        package: &'a crate::ExtensionPackage,
     ) -> crate::extension::ExtensionRuntime<'a> {
         crate::extension::ExtensionRuntime {
             engine: &self.engine,
@@ -707,10 +699,6 @@ impl HostCore {
             config: &self.config,
             providers: &self.providers,
             call_budget: &self.call_budget,
-            package,
-            values: &self.extension_values,
-            http: self.extension_http.as_ref(),
-            observer: self.extension_observer.as_ref(),
             call_fuel: self.namespace_call_fuel,
         }
     }
@@ -732,7 +720,7 @@ impl HostCore {
             namespaces.add(
                 &package.namespace_uri,
                 component,
-                &self.extension_runtime(linker, package),
+                &self.extension_runtime(linker),
                 execution_context,
             )?;
         }
@@ -765,12 +753,9 @@ impl HostCore {
             {
                 continue;
             }
-            let (package, component) = match scope.and_then(|scope| scope.namespace(namespace_uri))
-            {
-                Some((package, component)) => {
-                    (package.clone(), component.get(&self.shared)?.clone())
-                }
-                None => self.bound_or_resolved(namespace_uri)?,
+            let component = match scope.and_then(|scope| scope.namespace(namespace_uri)) {
+                Some((_, component)) => component.get(&self.shared)?.clone(),
+                None => self.bound_or_resolved(namespace_uri)?.1,
             };
             let linker = self.namespace_linker()?;
             namespaces
@@ -778,7 +763,7 @@ impl HostCore {
                 .add(
                     namespace_uri,
                     &component,
-                    &self.extension_runtime(linker, &package),
+                    &self.extension_runtime(linker),
                     execution_context,
                 )?;
         }
@@ -1074,9 +1059,6 @@ impl SessionHost {
             namespaces: RefCell::new(Vec::new()),
             namespace_linker: OnceCell::new(),
             extension_resolver: None,
-            extension_values: Arc::new(crate::ExtensionEnvironment::none()),
-            extension_http: None,
-            extension_observer: None,
             namespace_call_fuel: crate::extension::DEFAULT_EXTENSION_CALL_FUEL,
             services: Vec::new(),
             service_http: None,
@@ -1135,13 +1117,9 @@ impl SessionHost {
     /// that no binding names is loaded through the resolver
     /// [`crate::ExtensionComponents::with_resolver`] supplies when that session
     /// starts; without one, or when it cannot load it, the session start fails
-    /// closed. Extension components import no WASI interface (their linker
-    /// links none, so a component that imports one does not instantiate)
-    /// and never receive the embedder's values ([`crate::ExtensionComponents::with_values`]),
-    /// only per-execution references to the ones their element's `env` slots
-    /// name; their requests go through the embedder's transport (none by
-    /// default: every `outbound-http` request is refused), admitted only to an
-    /// origin their package declares or a reference's value supplies.
+    /// closed. Extension components do no I/O: their linker links no WASI
+    /// interface and no `outbound-http` (a component that imports either does
+    /// not instantiate), and they receive no `env` values or references.
     ///
     /// # Errors
     ///
@@ -1156,9 +1134,6 @@ impl SessionHost {
             .ok_or_else(|| HostError::Component("session-host-shared".into()))?;
         let crate::extension::ExtensionParts {
             bindings,
-            values,
-            http,
-            observer,
             call_fuel,
             resolver,
         } = extensions.into_parts();
@@ -1180,9 +1155,6 @@ impl SessionHost {
                 .collect(),
         );
         core.extension_resolver = resolver;
-        core.extension_values = values;
-        core.extension_http = http;
-        core.extension_observer = observer;
         core.namespace_call_fuel = call_fuel;
         Ok(self)
     }

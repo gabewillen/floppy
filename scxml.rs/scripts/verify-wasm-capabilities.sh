@@ -172,12 +172,12 @@ expected_imports() {
         # http-transport capability; wasi:sockets and wasi:http are denied.
         scxml_ioprocessor_basichttp) printf '%s\n' 'stateforward:scxml-basichttp/types@0.2.0' 'stateforward:scxml-basichttp/telemetry@0.2.0' 'stateforward:scxml-basichttp/http-transport@0.2.0' ;;
         # The example namespace exercises every session capability,
-        # including outbound-http (with slot references) and the read-only
-        # session-snapshot-host.
-        scxml_extension_example) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' 'stateforward:scxml/execution-host@0.2.0' 'stateforward:scxml/outbound-http@0.2.0' 'stateforward:scxml/session-snapshot-host@0.2.0' ;;
+        # including the read-only session-snapshot-host (an extension does
+        # no I/O: no outbound-http, no WASI).
+        scxml_extension_example) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' 'stateforward:scxml/execution-host@0.2.0' 'stateforward:scxml/session-snapshot-host@0.2.0' ;;
         scxml_script_example) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' ;;
         # <scx:validate> reads its source through the data model and assigns
-        # the report there; no execution-host, outbound-http, or snapshot.
+        # the report there; no execution-host or snapshot.
         scx) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/data-model-host@0.2.0' ;;
         scxml_reporter_rustc|scxml_reporter_sarif) printf '%s\n' 'stateforward:scxml-reporter/telemetry@0.2.0' 'stateforward:scxml-reporter/types@0.2.0' ;;
         scxml_validator) printf '%s\n' 'stateforward:scxml-validator/telemetry@0.2.0' 'stateforward:scxml-validator/expression-syntax@0.2.0' 'stateforward:scxml-validator/types@0.2.0' ;;

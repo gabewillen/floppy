@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Host parity: the example extension namespace
+  (components/scxml-extension-example) through both hosts. Every element of
+  the namespace but `spin` (whose fuel bound counts different units in each
+  host) runs, and the logs record what each did: an internal `raise`, a
+  guarded `raise`, a self-addressed external `send`, a send to `#_internal`,
+  a send through another processor (error.execution), `fail`
+  (error.execution), and the executing session's snapshot, read during execution and at
+  `initialize` (where it is unavailable).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:example="https://stateforward.org/scxml/example"
+       version="1.0" datamodel="ecmascript" initial="raising">
+  <datamodel>
+    <data id="snap" expr="''"/>
+    <data id="atInit" expr="''"/>
+    <data id="count" expr="0"/>
+  </datamodel>
+  <state id="raising">
+    <onentry>
+      <example:raise event="raised.one"/>
+      <example:raise event="raised.guarded" in="raising"/>
+      <example:raise event="raised.never" in="nowhere"/>
+    </onentry>
+    <transition event="raised.one">
+      <log label="event" expr="_event.name + ' ' + _event.type"/>
+    </transition>
+    <transition event="raised.guarded" target="sending">
+      <log label="event" expr="_event.name + ' ' + _event.type"/>
+    </transition>
+    <transition event="raised.never" target="failed"/>
+  </state>
+  <state id="sending">
+    <onentry>
+      <example:send event="sent.external"/>
+      <example:send event="sent.internal" target="#_internal" id="i1"/>
+    </onentry>
+    <transition event="sent.internal">
+      <log label="event" expr="_event.name + ' ' + _event.type + ' ' + _event.sendid"/>
+    </transition>
+    <transition event="sent.external" target="failing">
+      <log label="event" expr="_event.name + ' ' + _event.type"/>
+    </transition>
+  </state>
+  <state id="failing">
+    <onentry>
+      <example:send event="via.http" target="#_internal" type="http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"/>
+      <assign location="count" expr="count + 1"/>
+    </onentry>
+    <onentry>
+      <example:fail/>
+      <assign location="count" expr="count + 10"/>
+    </onentry>
+    <transition event="error.execution">
+      <log label="error" expr="_event.name + ' ' + _event.type"/>
+    </transition>
+    <transition event="go" target="snapshotting">
+      <log label="count" expr="count"/>
+    </transition>
+  </state>
+  <state id="snapshotting">
+    <onentry>
+      <raise event="queued.before"/>
+      <example:raise event="queued.by.extension"/>
+      <example:snapshot location="snap" exclude="system pending_sends"/>
+      <example:snapshot location="atInit" at="initialize"/>
+      <log label="snapshot" expr="JSON.stringify(JSON.parse(snap).options) + JSON.stringify(JSON.parse(snap).snapshot.root)"/>
+      <log label="at-initialize" expr="atInit"/>
+    </onentry>
+    <transition event="queued.before"/>
+    <transition event="queued.by.extension" target="done"/>
+  </state>
+  <final id="done"/>
+  <final id="failed"/>
+</scxml>

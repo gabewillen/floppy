@@ -296,7 +296,7 @@ mod tests {
             wit_world: SUPPORTED_SERVICE_WIT_WORLD.into(),
             wit_version: SUPPORTED_SERVICE_WIT_VERSION.into(),
             http_origins: Vec::new(),
-            env_slots: vec!["endpoint".into()],
+            env_slots: vec!["endpoint".into(), "token".into()],
         }
     }
 
@@ -332,7 +332,7 @@ mod tests {
                 .expect_err("unknown field")
                 .contains("unknown field `extra`")
         );
-        let missing = canonical.replace(",\"env-slots\":[\"endpoint\"]", "");
+        let missing = canonical.replace(",\"env-slots\":[\"endpoint\",\"token\"]", "");
         assert!(ServicePackageManifest::from_json(missing.as_bytes()).is_err());
         let wrong = canonical.replace(
             SERVICE_PACKAGE_FORMAT,

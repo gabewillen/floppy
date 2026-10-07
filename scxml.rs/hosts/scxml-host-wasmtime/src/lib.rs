@@ -162,15 +162,20 @@ pub use artifact::{
 mod extension;
 #[cfg(feature = "wasmtime")]
 pub use extension::{
-    DEFAULT_EXTENSION_CALL_FUEL, EnvVariable, ExtensionComponents, ExtensionEnvironment,
-    ExtensionHttp, ExtensionHttpFailure, ExtensionHttpMethod, ExtensionHttpRequest,
-    ExtensionHttpResponse, ExtensionObserver, ExtensionPackage, ExtensionResolveError,
-    ExtensionResolver, MAX_DECLARED_ITEMS, MAX_ENVIRONMENT_NAME_BYTES, MAX_ENVIRONMENT_VALUE_BYTES,
-    MAX_EXTENSION_COMPONENTS, MAX_EXTENSION_HTTP_HEADER_NAME_BYTES,
+    DEFAULT_EXTENSION_CALL_FUEL, ExtensionComponents, ExtensionPackage, ExtensionResolveError,
+    ExtensionResolver, MAX_EXTENSION_COMPONENTS, MAX_NAMESPACE_SCHEMA_BYTES,
+    MAX_NAMESPACE_URI_BYTES, ResolvedExtension,
+};
+#[cfg(feature = "wasmtime")]
+mod outbound_http;
+#[cfg(feature = "wasmtime")]
+pub use outbound_http::{
+    EnvVariable, ExtensionEnvironment, ExtensionHttp, ExtensionHttpFailure, ExtensionHttpMethod,
+    ExtensionHttpRequest, ExtensionHttpResponse, MAX_DECLARED_ITEMS, MAX_ENVIRONMENT_NAME_BYTES,
+    MAX_ENVIRONMENT_VALUE_BYTES, MAX_EXTENSION_HTTP_HEADER_NAME_BYTES,
     MAX_EXTENSION_HTTP_HEADER_VALUE_BYTES, MAX_EXTENSION_HTTP_HEADERS, MAX_EXTENSION_HTTP_PARTS,
     MAX_EXTENSION_HTTP_REQUEST_BODY_BYTES, MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES,
-    MAX_EXTENSION_HTTP_URL_BYTES, MAX_NAMESPACE_SCHEMA_BYTES, MAX_NAMESPACE_URI_BYTES,
-    ResolvedExtension,
+    MAX_EXTENSION_HTTP_URL_BYTES,
 };
 #[cfg(feature = "wasmtime")]
 mod service;

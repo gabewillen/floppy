@@ -815,8 +815,8 @@ pipeline.
 
 | Data model | Corpus SHA-256 | Producer report digest | Canonical artifact SHA-256 | Passed / Applicable | Under errata | Not applicable | Failed | Unsupported | Invalid | HarnessError | Skipped |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ECMAScript | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `2b15f97fadfadf86c2ed33e6742e0c33eb50ea61f90d186fc4c80cc088a7635c` | `9a8f284ac14f3ad3df8047555aded7fb1f7856df9b8dd2ddd454e6cf461a9306` | 201 / 201 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
-| XPath | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` | `06d8d5356fb58931e52e078e68f63163fd1cb2dc3879972624f37f0a14303f13` | `e2fe893e834e088e35cfc35db8945add8b8b4c208ff3ea191bd3c411d62138e7` | 178 / 178 | 5 | 24 | 0 | 0 | 0 | 0 | 0 |
+| ECMAScript | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `c43bfea356ad2d52ab19eb18e13d5cae67d82a0b2e34dddc81912c3d08a86819` | `b994a5026496151d2bc94f1770346cdba1453d1f49c1c4bdbe67d793201c4853` | 201 / 201 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| XPath | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` | `48fe81a79c96d1fed9b0ab023e66899fa76a2bcc4304c46bac973da3928fd5c6` | `523960476ad080fd7e6cb6a90a7461551cf6324f502346b3400dc5c0b3b42fd7` | 178 / 178 | 5 | 24 | 0 | 0 | 0 | 0 | 0 |
 
 ECMAScript: 201 passed; mandatory 167 / 167, optional 34 / 34; 436 (null
 profile, `datamodel="null"`) is `NotApplicable`. XPath: 178
@@ -870,7 +870,7 @@ That build's `manifest.tsv` has SHA-256
 component SHA-256
 `d676e0fd0feee4b6c3b0784886885d5c8504475085b4ec60854b06241c006f84`), and
 its example extension component SHA-256
-`66fa407675652e83b1c87113deb93dcd1276b6c3420161eb1faea93ff28acfe3`. Another
+`4028335f1ac401199302e60207c31dd7cea36cf687e19f90ccfbad99cc306468`. Another
 selection, such as the default (every component), writes a different
 manifest.
 
@@ -1000,17 +1000,11 @@ A run binds the extension packages the suite uses (the example extension,
 `--extension-package MANIFEST.json` names the package, whose
 `extension-artifact` is read from `--components DIR` and authenticated by
 `--extension-component-sha256 URI=HEX`. The runner then compiles with
-exactly those packages (and checks their `env` slots, `SCXML083`), treats
-their elements as executable content, and supplies each case's dependencies
-below its document's directory as its `event:schema` files. The run holds
-exactly the harness's fake values for `env` slots, and the extension
-components' only outbound transport is a deterministic in-process stand-in
-for the server `<example:fetch>` reaches
-(`crates/scxml-conformance/src/example_server.rs`, part of the runner
-identity): it serves the base URL one held value supplies, answers each
-request from its path (a documented table: whether the request carried a
-given key or none), and counts each case's requests so a test can prove
-that nothing was sent. Nothing touches the network. The
+exactly those packages, treats their elements as executable content, and
+supplies each case's dependencies below its document's directory as its
+`event:schema` files. Extension components do no I/O, and the runner binds
+no invoked service yet, so a suite's runtime cases cannot exercise a
+service; nothing touches the network. The
 report identity lists every bound extension package (`extensions`: its
 namespace URI, package version, and the SHA-256 of its manifest, schema,
 and component bytes).
@@ -1029,7 +1023,7 @@ models run, since `env` evaluates its expression attributes in the
 document's data model and `event` must leave execution unchanged
 under each. The current baselines (same runner, engine, and release as the
 W3C baselines above; example extension component SHA-256
-`66fa407675652e83b1c87113deb93dcd1276b6c3420161eb1faea93ff28acfe3`):
+`4028335f1ac401199302e60207c31dd7cea36cf687e19f90ccfbad99cc306468`):
 
 | Suite | Assertions | Tests (rejections) | ECMAScript | XPath |
 | --- | ---: | ---: | ---: | ---: |

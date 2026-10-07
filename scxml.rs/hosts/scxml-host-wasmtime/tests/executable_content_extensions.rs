@@ -124,8 +124,6 @@ fn package(namespace_uri: &str) -> ExtensionPackage {
         schema_sha256: format!("{:x}", Sha256::digest(&schema)),
         wit_world: "stateforward:scxml/executable-content-extension".into(),
         wit_version: "0.2.0".into(),
-        env_slots: vec!["url".into(), "token".into()],
-        http_origins: Vec::new(),
         schema,
     }
 }
@@ -792,25 +790,19 @@ impl SessionEmbedder for ChildDocument {
 
 /// An `<invoke src>` document's own bindings serve its sessions (and the
 /// inline `<content>` sessions below them), alongside the host's, which
-/// serve every other session: here the host's release of the example
-/// namespace declares no `env` slot and the child's release declares `url`,
-/// so the same element is refused in the parent and runs in the child (and
-/// in the child's inline `<content>` session), and the child does not even
+/// serve every other session: here the host binds no release of the example
+/// namespace and the child's own bindings do, so the child (and its inline
+/// `<content>` session) runs the element, and the child does not even
 /// compile when it carries no bindings of its own.
 #[test]
 fn an_invoke_src_document_binds_its_own_release_for_its_sessions() {
-    let mut host_release = package(EXAMPLE_URI);
-    host_release.env_slots = Vec::new();
     let host = host_with(
         &WasmtimeHostConfig::default(),
         &TelemetryProviders::new(),
-        ExtensionComponents::new()
-            .bind(host_release, component(ArtifactKind::ExtensionExample))
-            .expect("the host's release binds"),
+        ExtensionComponents::new(),
     )
     .expect("the verified components link");
-    let element = r#"<example:raise event="ran" env:url="ADDRESS"/>"#;
-    let env = "https://github.com/stateforward/scxml.rs/namespaces/env";
+    let element = r#"<example:raise event="ran"/>"#;
     let child = |grandchild: &str| {
         let ran = if grandchild.is_empty() {
             r#"<transition target="ok"/>"#.to_owned()
@@ -820,11 +812,11 @@ fn an_invoke_src_document_binds_its_own_release_for_its_sessions() {
             )
         };
         format!(
-            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="{EXAMPLE_URI}" xmlns:env="{env}" version="1.0" datamodel="ecmascript" initial="c"><datamodel><data id="result" expr="'ran'"/></datamodel><state id="c"><onentry>{element}</onentry><transition event="ran" target="ran"/><transition event="error.execution" target="refused"/></state><state id="ran">{ran}</state><final id="ok"><donedata><content expr="result"/></donedata></final><final id="refused"><donedata><content expr="'refused'"/></donedata></final></scxml>"#
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="{EXAMPLE_URI}" version="1.0" datamodel="ecmascript" initial="c"><datamodel><data id="result" expr="'ran'"/></datamodel><state id="c"><onentry>{element}</onentry><transition event="ran" target="ran"/><transition event="error.execution" target="refused"/></state><state id="ran">{ran}</state><final id="ok"><donedata><content expr="result"/></donedata></final><final id="refused"><donedata><content expr="'refused'"/></donedata></final></scxml>"#
         )
     };
     let parent = format!(
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="{EXAMPLE_URI}" xmlns:env="{env}" version="1.0" datamodel="ecmascript" initial="p"><state id="p"><onentry>{element}</onentry><transition event="ran" target="q"><log label="parent" expr="'ran'"/></transition><transition event="error.execution" target="q"><log label="parent" expr="'refused'"/></transition></state><state id="q"><invoke type="scxml" src="child.scx"/><transition event="done.invoke" target="done"><log label="child" expr="_event.data"/></transition><transition event="error.execution" target="done"><log label="child" expr="'failed'"/></transition></state><final id="done"/></scxml>"#
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="{EXAMPLE_URI}" version="1.0" datamodel="ecmascript" initial="p"><state id="p"><transition target="q"/></state><state id="q"><invoke type="scxml" src="child.scx"/><transition event="done.invoke" target="done"><log label="child" expr="_event.data"/></transition><transition event="error.execution" target="done"><log label="child" expr="'failed'"/></transition></state><final id="done"/></scxml>"#
     );
     let run = |child_text: String, bindings: Option<ExtensionComponents>| {
         let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
@@ -853,25 +845,25 @@ fn an_invoke_src_document_binds_its_own_release_for_its_sessions() {
         assert_eq!(outcome.configuration, ["done"]);
         texts(&outcome)
     };
-    let with_slots = || {
+    let with_release = || {
         let mut release = package(EXAMPLE_URI);
         release.package_version = "0.3.0".into();
         ExtensionComponents::new()
             .bind(release, component(ArtifactKind::ExtensionExample))
             .expect("the child's release binds")
     };
-    // The host's release serves both documents: the child, compiled against
-    // it, is rejected.
-    assert_eq!(run(child(""), None), ["refused", "failed"]);
-    // The child's own release serves the child; the parent keeps the host's.
-    assert_eq!(run(child(""), Some(with_slots())), ["refused", "ran"]);
+    // Without bindings of its own the child, compiled against the host's
+    // (none), is rejected.
+    assert_eq!(run(child(""), None), ["failed"]);
+    // The child's own release serves the child.
+    assert_eq!(run(child(""), Some(with_release())), ["ran"]);
     // An inline `<content>` session below the child inherits the child's
     // release.
     let grandchild = format!(
-        r#"<invoke type="scxml"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="{EXAMPLE_URI}" xmlns:env="{env}" version="1.0" datamodel="ecmascript" initial="g"><state id="g"><onentry>{element}</onentry><transition event="ran" target="f"/><transition event="error.execution" target="r"/></state><final id="f"><donedata><content expr="'ran'"/></donedata></final><final id="r"><donedata><content expr="'refused'"/></donedata></final></scxml></content></invoke>"#
+        r#"<invoke type="scxml"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="{EXAMPLE_URI}" version="1.0" datamodel="ecmascript" initial="g"><state id="g"><onentry>{element}</onentry><transition event="ran" target="f"/><transition event="error.execution" target="r"/></state><final id="f"><donedata><content expr="'ran'"/></donedata></final><final id="r"><donedata><content expr="'refused'"/></donedata></final></scxml></content></invoke>"#
     );
     assert_eq!(
-        run(child(&grandchild), Some(with_slots())),
-        ["refused", "ran, then ran"]
+        run(child(&grandchild), Some(with_release())),
+        ["ran, then ran"]
     );
 }

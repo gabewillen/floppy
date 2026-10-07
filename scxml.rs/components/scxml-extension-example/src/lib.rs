@@ -17,15 +17,6 @@
 //!   space-separated sections `S` excluded) to `L` as a string; with
 //!   `at="initialize"` it assigns instead the error code label the same
 //!   call answered during `initialize` (or `ok`);
-//! * `<example:fetch url="U" path="P" location="L" env:url="NAME"
-//!   env:token="NAME"/>` performs one `GET` through `outbound-http`: the URL
-//!   is the `url` slot's reference followed by `P` when the element binds
-//!   that slot, otherwise `U` then `P`; with the `token` slot it adds
-//!   `authorization: Bearer <token>`. The component holds only the slots'
-//!   references, never their values. It assigns `status=<S> slots=<names>`
-//!   to `L` (the response status, or `refused`, and the slots it was handed),
-//!   and raises `example.fetched` on a 2xx status; any other status or a
-//!   refused request fails with `execution`.
 //!
 //! Every other local name is `not-handled`. The decision is the portable
 //! [`ExampleNamespace::execute`], tested natively; the guest executes the
@@ -49,9 +40,6 @@ mod guest {
     wit_bindgen::generate!({
         world: "executable-content-extension",
         path: "../../crates/scxml-wit/wit/scxml",
-        // `execute` is synchronous executable content, so it lowers the
-        // `async func fetch` synchronously: the call blocks `execute`.
-        async: ["-import:stateforward:scxml/outbound-http@0.2.0#fetch"],
     });
 
     use std::cell::Cell;
@@ -61,10 +49,9 @@ mod guest {
     use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
     use stateforward::scxml::types::{
         BaggagePolicy, ComponentError, DataValue, ErrorCode, ErrorVersion, Event, EventType,
-        ExecutableContentExtension, ExtensionOutcome, SendMessage, SendRequest, SlotReference,
-        TraceContext,
+        ExecutableContentExtension, ExtensionOutcome, SendMessage, SendRequest, TraceContext,
     };
-    use stateforward::scxml::{data_model_host, execution_host, outbound_http};
+    use stateforward::scxml::{data_model_host, execution_host};
 
     use super::{ExampleAction, ExampleNamespace};
 
@@ -111,7 +98,6 @@ mod guest {
         fn execute(
             element: ExecutableContentExtension,
             context: Option<TraceContext>,
-            references: Vec<SlotReference>,
         ) -> Result<ExtensionOutcome, ComponentError> {
             let context = validate_context(context.as_ref());
             observed_context(Operation::Execute, context, |context| {
@@ -211,82 +197,12 @@ mod guest {
                         data_model_host::assign(&location, &DataValue::Text(text))?;
                         Ok(ExtensionOutcome::Handled)
                     }
-                    Some(ExampleAction::Fetch {
-                        url,
-                        path,
-                        location,
-                    }) => fetch(&references, url, path, location.as_deref(), context),
                 }
             })
         }
 
         fn shutdown() -> Result<(), ComponentError> {
             observed(Operation::Shutdown, None, || Ok(()))
-        }
-    }
-
-    /// `<example:fetch>`: one `GET` built from the element's slot references
-    /// (never their values, which this component cannot read).
-    fn fetch(
-        references: &[SlotReference],
-        url: Option<String>,
-        path: String,
-        location: Option<&str>,
-        context: Option<&TraceContext>,
-    ) -> Result<ExtensionOutcome, ComponentError> {
-        let slot = |name: &str| {
-            references
-                .iter()
-                .find(|bound| bound.slot == name)
-                .map(|bound| bound.reference)
-        };
-        let target = match slot("url") {
-            Some(reference) => vec![
-                outbound_http::TextPart::Reference(reference),
-                outbound_http::TextPart::Literal(path),
-            ],
-            None => vec![outbound_http::TextPart::Literal(format!(
-                "{}{path}",
-                url.unwrap_or_default()
-            ))],
-        };
-        let headers = slot("token")
-            .map(|reference| outbound_http::HttpHeader {
-                name: "authorization".into(),
-                value: vec![
-                    outbound_http::TextPart::Literal("Bearer ".into()),
-                    outbound_http::TextPart::Reference(reference),
-                ],
-            })
-            .into_iter()
-            .collect();
-        let response = outbound_http::fetch(&outbound_http::HttpRequest {
-            method: "GET".into(),
-            url: target,
-            headers,
-            body: Vec::new(),
-        });
-        let slots: Vec<&str> = references.iter().map(|bound| bound.slot.as_str()).collect();
-        let status = match &response {
-            Ok(response) => response.status.to_string(),
-            Err(_) => "refused".to_owned(),
-        };
-        if let Some(location) = location {
-            data_model_host::assign(
-                location,
-                &DataValue::Text(format!("status={status} slots={}", slots.join(","))),
-            )?;
-        }
-        match response {
-            Ok(response) if (200..300).contains(&response.status) => {
-                execution_host::raise(&event_named(
-                    "example.fetched",
-                    EventType::Internal,
-                    context,
-                ))?;
-                Ok(ExtensionOutcome::Handled)
-            }
-            _ => Err(error(ErrorCode::Execution, "example:fetch request failed")),
         }
     }
 
@@ -446,16 +362,6 @@ pub enum ExampleAction {
         /// `initialize` instead.
         at_initialize: bool,
     },
-    /// `GET` the URL its `url` slot's reference (or `url` attribute) and
-    /// `path` make, with its `token` slot's reference as a bearer key.
-    Fetch {
-        /// The `url` attribute (used when the `url` slot is not bound).
-        url: Option<String>,
-        /// The `path` attribute (empty when absent).
-        path: String,
-        /// The `location` attribute, which receives the outcome summary.
-        location: Option<String>,
-    },
 }
 
 /// Example extension component; it keeps no state between `execute` calls.
@@ -531,11 +437,6 @@ impl ExampleNamespace {
                         at_initialize: attribute("at").as_deref() == Some("initialize"),
                     })
                 }),
-            "fetch" => Ok(Some(ExampleAction::Fetch {
-                url: attribute("url"),
-                path: attribute("path").unwrap_or_default(),
-                location: attribute("location"),
-            })),
             _ => Ok(None),
         };
         if result.is_ok() {

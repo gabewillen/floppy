@@ -17,6 +17,16 @@ export {
 export { ASYNC_MECHANISMS, ASYNC_MODES, AsyncMachineSession, asyncMechanism } from './async-bridge.js';
 export { createEcmaScriptDataModel, createNullDataModel, createXPathDataModel } from './datamodel.js';
 export { COMPILE_STATUSES, MAX_REPORT_BYTES, SCHEMA_POLICIES, createCompiler } from './compiler.js';
+export { createValidator } from './validator.js';
+export {
+  DEFAULT_EXTENSION_CALL_FUEL,
+  ExtensionComponents,
+  MAX_EXTENSION_COMPONENTS,
+  MAX_EXTENSION_SNAPSHOTS,
+  MAX_NAMESPACE_SCHEMA_BYTES,
+  MAX_NAMESPACE_URI_BYTES,
+  authenticateExtensionComponent,
+} from './extension.js';
 export { DEFAULT_COMPILE_FUEL, DEFAULT_FUEL, FUEL_EXPORT, MAX_FUEL } from './fuel.js';
 export { COMPONENTS, cachedCoreModules, fetchCoreModules } from './loader.js';
 export {

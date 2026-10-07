@@ -91,10 +91,6 @@ interface types {
     schema-sha256: string,
     wit-world: string,
     wit-version: string,
-    /// The `env` slots its elements accept (`env:<slot>` attributes).
-    env-slots: list<string>,
-    /// The origins or URL prefixes its extension component's requests reach.
-    http-origins: list<string>,
   }
   /// How `<script src>` references are resolved (SCXML 1.0 section 5.8).
   enum script-resolution {

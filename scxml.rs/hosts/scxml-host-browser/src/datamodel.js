@@ -394,6 +394,20 @@ function provider(name, api, telemetry, meter, state, budget) {
       call(typeof script === 'string' && isOptionalEvent(event), () => api.execute(script, event));
     },
     /**
+     * `data-model-api.check-syntax`: parses one fragment without evaluating
+     * it (the validator's `expression-syntax` import forwards to it).
+     */
+    checkSyntax(kind, source) {
+      return call(typeof kind === 'string' && typeof source === 'string', () => api.checkSyntax(kind, source));
+    },
+    /**
+     * `data-model-api.check-effects`: the side effects of one document's
+     * fragments, evaluating nothing.
+     */
+    checkEffects(fragments, scripts) {
+      return call(Array.isArray(fragments) && typeof scripts === 'string', () => api.checkEffects(fragments, scripts));
+    },
+    /**
      * `data-model-api.snapshot`: read-only dump of the system values and
      * user variables (docs/session-snapshot.md, "Session object");
      * evaluates nothing.

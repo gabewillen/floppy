@@ -1,16 +1,15 @@
 # `env` attribute vocabulary
 
 `https://github.com/stateforward/scxml.rs/namespaces/env` is the host's
-attribute vocabulary for the slots of executable-content extension elements
-and invoked services: an extension element, or an invoked service's
-`<invoke>`, names, with an `env` attribute, the variable whose value the host
-binds to one of the slots its package declares. It is not an extension
-package. The namespace has attributes only: no elements, no executable
-content, no extension component, no package manifest, and no release asset.
-It is never fetched; the host recognises the URI byte for byte
-(`scxml_types::ENV_NAMESPACE_URI`). This folder exists so the URI names a real
-path in the repository, like every other `namespaces/<name>` URI; see
-[docs/executable-content-extensions.md](../../docs/executable-content-extensions.md#values-are-references-env-slots)
+attribute vocabulary for the slots of invoked services: an invoked service's
+`<invoke>` names, with an `env` attribute, the variable whose value the host
+binds to one of the slots its service package declares. It is not an
+extension package. The namespace has attributes only: no elements, no
+executable content, no extension component, no package manifest, and no
+release asset. It is never fetched; the host recognises the URI byte for
+byte (`scxml_types::ENV_NAMESPACE_URI`). This folder exists so the URI names
+a real path in the repository, like every other `namespaces/<name>` URI; see
+[docs/invoked-services.md](../../docs/invoked-services.md#values-are-references-env-slots)
 for the full contract.
 
 | Path | What |
@@ -21,37 +20,38 @@ for the full contract.
 
 ```xml
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:example="https://stateforward.org/scxml/example"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript">
   …
-  <example:fetch env:token="API_TOKEN" env:urlexpr="'API_BASE_URL'" path="/items"/>
+  <invoke type="https://stateforward.org/scxml/services/echo" id="echo"
+          env:token="API_TOKEN" env:endpointexpr="'API_BASE_URL'"/>
 ```
 
 - `env:<slot>="NAME"` binds the slot `<slot>` to the variable `NAME`. A name
   is `[A-Za-z_][A-Za-z0-9_]*`, at most 256 bytes. Names are not secrets;
   values never appear in a document.
 - `env:<slot>expr="EXPR"` binds the slot to the variable whose name `EXPR`
-  evaluates to, in the document's data model, each time the element executes
-  (SCXML's attribute/`expr` convention). A result that is not a string naming
-  a variable raises `error.execution`.
-- The slots an element has are the ones its package manifest declares
-  (`env-slots`: `[a-z][a-z0-9-]*`, at most 32). The example extension
-  ([`components/scxml-extension-example`](../../components/scxml-extension-example))
-  declares `url` and `token`.
-- An invoked service's `<invoke>` binds the slots its service package
-  declares the same way (`<invoke type="URI" env:endpoint="ECHO_URL"/>`); an
-  `env:<slot>expr` there is evaluated once, when the `<invoke>` runs
-  ([docs/invoked-services.md](../../docs/invoked-services.md#values-are-references-env-slots)).
+  evaluates to, in the document's data model, when the `<invoke>` runs
+  (SCXML's attribute/`expr` convention). A result that is not a string
+  naming a variable raises `error.execution`, and the service never starts.
+- The slots an `<invoke>` has are the ones its service package declares
+  (`env-slots`: `[a-z][a-z0-9-]*`, at most 32). The echo service
+  ([`components/scxml-service-example`](../../components/scxml-service-example))
+  declares `endpoint` and `token`.
+- Only an invoked service's `<invoke>` has slots. An executable-content
+  extension element has none: it runs synchronously inside a microstep and
+  does no I/O, so it never needs a value.
 
-The validator checks every `env` attribute against the element's package:
+The validator checks every `env` attribute:
 
-- `SCXML083`: a slot the package does not declare (with a "did you mean" fix
-  for a near miss), one slot bound twice (`env:<slot>` and
-  `env:<slot>expr`), or an `env:<slot>` value that is not a variable name.
+- `SCXML083`: a slot the service's package does not declare (with a "did you
+  mean" fix for a near miss; judged when the validator is given the
+  package), one slot bound twice (`env:<slot>` and `env:<slot>expr`), an
+  `env:<slot>` value that is not a variable name, or an attribute that names
+  no valid slot.
 - `SCXML084`: an element in the `env` namespace, or an `env` attribute on an
-  element in no namespace or on the `<invoke>` of an SCXML session (only
-  extension elements and invoked services have slots).
+  element in no namespace, on an executable-content extension element, or on
+  the `<invoke>` of an SCXML session.
 - `SCXML068`: an `env` attribute on any other SCXML element (an attribute in
   another namespace on an SCXML element).
 
@@ -61,31 +61,28 @@ with an example.
 ## Values, references, and masking
 
 - **The run holds the values.** An embedder supplies them
-  (`ExtensionComponents::with_values`), each variable granted to exact package
-  URIs; a slot naming a variable not granted to its element's namespace (or
-  its `<invoke>`'s service type URI) is absent, exactly as if no value were
-  held. The CLI derives the grants from the document: a variable goes to
-  the packages of the elements and `<invoke>`s whose `env` attributes name
-  it, and to the package of every `env:<slot>expr` slot. It holds the value
-  of `--env NAME=VALUE`, else the last `--env-file PATH` entry (Docker's
-  format: `NAME=VALUE` taken literally, a bare `NAME` from the shell, `#`
-  comments and blank lines ignored), else, for a bare `--env NAME`, the
-  calling shell's; a variable no slot can name is dropped. Nothing is held
-  by default, and there is no whole-environment form.
-- **The component holds references.** For each `execute` call the host binds
-  every slot the element names, whose variable the run holds, to a fresh
-  opaque `value-reference`. A reference is valid only during that call and
-  only for that element; another element, of the same or another namespace,
-  never receives it. The host substitutes the value only into that call's
-  `outbound-http` requests, admitted only to an origin the package declares
-  or one a reference's value supplies entirely. An invoked service's
-  references are bound once, when its invocation starts
-  (`invoke-request.references`), and stay valid for the whole invocation,
-  only inside that invocation's admitted `outbound-http` requests.
-- **A missing value leaves the slot absent.** The component decides what
-  that means (`<example:fetch>` sends no `authorization` without a token). Before a
-  run, the CLI lists each element's bound slots and names the `--env` flag
-  that would supply a literal name it does not hold.
+  (`ServiceComponents::with_values`), each variable granted to exact service
+  type URIs; a slot naming a variable not granted to its `<invoke>`'s type
+  is absent, exactly as if no value were held. The CLI derives the grants
+  from the document: a variable goes to the type of each `<invoke>` whose
+  `env` attributes name it, and to the type of every `env:<slot>expr` slot.
+  It holds the value of `--env NAME=VALUE`, else the last `--env-file PATH`
+  entry (Docker's format: `NAME=VALUE` taken literally, a bare `NAME` from
+  the shell, `#` comments and blank lines ignored), else, for a bare
+  `--env NAME`, the calling shell's; a variable no slot can name is dropped.
+  Nothing is held by default, and there is no whole-environment form.
+- **The component holds references.** When an invocation starts, the host
+  binds every slot its `<invoke>` names, whose variable the run holds, to a
+  fresh opaque `value-reference` (`invoke-request.references`), valid for the
+  whole invocation and only inside its own `outbound-http` requests, which
+  the host admits only to an origin the package declares or one a
+  reference's value supplies entirely. No other invocation ever receives
+  them.
+- **A missing value leaves the slot absent.** The service decides what that
+  means (the echo service sends no `authorization` without a `token`, and
+  fails its `fetch` without an `endpoint`). Before a run, the CLI lists each
+  variable the document names and the `<invoke>`s it goes to, and says when
+  the run holds no value for it.
 - **Values are masked.** As defense in depth (a component never receives a
   value, so one reaches output only if a document or a service echoes it),
   every value the run holds of at least 4 bytes, and its JSON-escaped form,
@@ -95,73 +92,74 @@ with an example.
 
 ## Statements
 
-The contract above as numbered statements, each tested by the vocabulary's
-own implementation report plan ([`irp/`](irp/README.md), below), through
-the example extension's `<example:fetch>`
-([`components/scxml-extension-example`](../../components/scxml-extension-example),
-whose package declares the `url` and `token` slots).
+The contract above as numbered statements. env-1 and env-2 are decided by
+a document alone and are tested by the vocabulary's implementation report
+plan ([`irp/`](irp/README.md), below); the others are about what a run does
+with values, which the conformance runner cannot observe (it binds no
+service yet), and are proven by the echo service's tests named under each.
 
-- <a id="env-1"></a>**env-1** (binding by name). `env:<slot>="NAME"` binds
-  the element's slot `<slot>` to the variable `NAME`; the host substitutes
-  `NAME`'s value.
-- <a id="env-2"></a>**env-2** (binding by expression).
+- <a id="env-1"></a>**env-1** (declared slots). An `<invoke>`'s slots are
+  the ones its service package declares (`env-slots`): a slot bound twice
+  (`env:<slot>` and `env:<slot>expr`), an `env:<slot>` value that is not a
+  variable name, or an attribute that names no valid slot is rejected
+  (`SCXML083`), and so is a slot the package does not declare, when the
+  validator is given the package (IRP, and
+  `crates/scxml-validator-core/src/env_attributes.rs`); at run time an
+  undeclared slot rejects the start (`service_invoke.rs`,
+  `an_unbound_out_of_scope_or_undeclared_env_slot_never_reaches_the_network`).
+- <a id="env-2"></a>**env-2** (placement). The vocabulary has attributes
+  only, and only an invoked service's `<invoke>` has slots: an element in
+  the `env` namespace, or an `env` attribute on an element in no namespace,
+  on an executable-content extension element, or on the `<invoke>` of an
+  SCXML session, is rejected (`SCXML084`), and an `env` attribute on another
+  SCXML element is rejected (`SCXML068`) (IRP).
+- <a id="env-3"></a>**env-3** (binding by name). `env:<slot>="NAME"` binds
+  the `<invoke>`'s slot `<slot>` to the variable `NAME`; the host substitutes
+  `NAME`'s value (`hosts/scxml-host-wasmtime/tests/service_invoke.rs`,
+  `an_env_slot_reference_lives_for_the_whole_invocation`;
+  `crates/scxml-cli/tests/env_values.rs`).
+- <a id="env-4"></a>**env-4** (binding by expression).
   `env:<slot>expr="EXPR"` binds the slot to the variable whose name `EXPR`
-  evaluates to in the document's data model when the element executes; a
+  evaluates to in the document's data model when the `<invoke>` runs; a
   value that is not a string naming a variable, or a failed evaluation,
-  raises `error.execution`.
-- <a id="env-3"></a>**env-3** (declared slots). An element's slots are the
-  ones its package declares (`env-slots`): a slot the package does not
-  declare, a slot bound twice (`env:<slot>` and `env:<slot>expr`), or an
-  `env:<slot>` value that is not a variable name is rejected (`SCXML083`).
-- <a id="env-4"></a>**env-4** (placement). The vocabulary has attributes
-  only: an element in the `env` namespace, or an `env` attribute on an
-  element in no namespace, is rejected (`SCXML084`), and an `env` attribute
-  on an SCXML element is rejected (`SCXML068`).
+  raises `error.execution` (`service_invoke.rs`,
+  `an_env_slot_reference_lives_for_the_whole_invocation`).
 - <a id="env-5"></a>**env-5** (missing values). A slot whose variable the
-  run holds no value for is absent: the element's component decides what
-  that means (`<example:fetch>` sends no `authorization` without a `token`,
-  and without a `url` slot it uses its `url` attribute, which only an origin
-  its package declares could admit).
-- <a id="env-6"></a>**env-6** (references are per element). Each execution
-  binds the element's own slots: another element, of the same or another
-  namespace, never receives them.
+  run holds no value for, or holds only for another service, is absent: the
+  service decides what that means (`service_invoke.rs`,
+  `an_unbound_out_of_scope_or_undeclared_env_slot_never_reaches_the_network`;
+  `env_values.rs`, `a_variable_goes_only_to_the_invokes_naming_it`).
+- <a id="env-6"></a>**env-6** (references are per invocation). An
+  invocation's references are its own, valid for its whole lifetime: no
+  other invocation receives them (`service_invoke.rs`,
+  `an_env_slot_reference_lives_for_the_whole_invocation`).
 - <a id="env-7"></a>**env-7** (admitted requests). The host substitutes a
-  value only into the element's requests admitted to an origin its package
-  declares or one a value supplies entirely; every other request is refused
-  before it is sent (the element raises `error.execution`).
-
-Not covered by the suite: masking, which applies to the text the CLI
-writes and is never observable by a document (`scx` tests cover it),
-and that an expression is evaluated anew at each execution (a portable
-test would need an expression that reads data-model state, which the W3C
-templates write differently for each data model).
+  value only into the invocation's requests admitted to an origin its
+  package declares or one a value supplies entirely; every other request is
+  refused before it is sent (`service_invoke.rs`,
+  `a_token_and_a_path_reach_only_a_request_whose_origin_a_value_supplies`;
+  `env_values.rs`, `values_reach_only_admitted_origins`).
 
 ## Conformance suite
 
 [`irp/`](irp/README.md) is this vocabulary's implementation report plan in
-the W3C IRP format: one assertion per statement above, 20 mandatory test
-documents written with the W3C `conf:` vocabulary, prepared for the
-ECMAScript and XPath data models by the W3C templates, and run through the
-shipped components exactly as the W3C IRP is, binding the example extension
-package ([docs/conformance.md](../../docs/conformance.md#namespace-suites)).
-The vocabulary itself does not depend on the data model; the suite runs
-both because `env:<slot>expr` evaluates in the document's. Both data models
-pass 20 of 20 (`irp/baselines/`).
+the W3C IRP format: env-1 and env-2, tested by 8 mandatory test documents
+written with the W3C `conf:` vocabulary, each of which the canonical
+compiler must reject with exactly the listed code (the document-rejection
+oracle), prepared for the ECMAScript and XPath data models by the W3C
+templates and run through the shipped components exactly as the W3C IRP is,
+binding the example extension package for env-2's extension element
+([docs/conformance.md](../../docs/conformance.md#namespace-suites)). Both
+data models pass 8 of 8 (`irp/baselines/`).
 
 ## Schema
 
-An extension schema admits the vocabulary on each of its elements laxly:
-
-```xml
-<xs:anyAttribute namespace="https://github.com/stateforward/scxml.rs/namespaces/env"
-                 processContents="lax"/>
-```
-
-(or `##other`). `package/env.xsd` has the `env` target namespace and
-declares only the `variable-name` and `value-expression` value types. XSD
-cannot enumerate an open set of attribute names, and the slots differ per
-package, so slot checking stays in the validator, driven by each element's
-manifest; the validator does not load this file.
+`package/env.xsd` has the `env` target namespace and declares only the
+`variable-name` and `value-expression` value types. XSD cannot enumerate an
+open set of attribute names, and the slots differ per package, so slot
+checking stays in the validator, driven by each service's manifest; the
+validator does not load this file. SCXML's own schema admits attributes in
+other namespaces on `<invoke>` laxly.
 
 ## Why the URI has no version
 

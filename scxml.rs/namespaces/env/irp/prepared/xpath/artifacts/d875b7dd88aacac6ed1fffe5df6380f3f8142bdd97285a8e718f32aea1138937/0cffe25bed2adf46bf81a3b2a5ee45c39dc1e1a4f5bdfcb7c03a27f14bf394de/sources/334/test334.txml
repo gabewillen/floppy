@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!-- env-2: an env attribute on the invoke of an SCXML session is rejected. The document must be rejected; it never runs. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env">
+<datamodel>
+  <data conf:id="1"/>
+</datamodel>
+<state id="s0">
+  <invoke type="scxml" env:token="IRP_KEY"><content><scxml version="1.0"><final id="f"/></scxml></content></invoke>
+  <transition conf:targetpass=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

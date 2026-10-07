@@ -1,6 +1,6 @@
 //! Masking of the run's `--env` and `--env-file` values in everything the CLI
-//! writes (defense in depth: extension components never receive a value, so
-//! one reaches output only if a document or a service echoes it).
+//! writes (defense in depth: components never receive a value, so one
+//! reaches output only if a document or a service echoes it).
 //!
 //! The values are installed once, at the composition root, before anything
 //! runs ([`install`]); afterwards every text the run writes (live-session
@@ -10,8 +10,8 @@
 //! covers its bytes, so it is never masked, and it gets the protections of
 //! the canonical artifacts it is (it holds data-model values). A value shorter
 //! than [`MIN_MASKED_BYTES`] is not masked (it would mask ordinary text), nor
-//! is a value that is byte for byte one of the bound packages' declared
-//! `http-origins`: that string is public (the package manifest declares it,
+//! is a value that is byte for byte one of the bound service packages'
+//! declared `http-origins`: that string is public (the package manifest declares it,
 //! and the consent listing must show it), so masking it would hide what the
 //! run consents to and protect nothing. The cost is bounded: at most the
 //! number of values times the output length.

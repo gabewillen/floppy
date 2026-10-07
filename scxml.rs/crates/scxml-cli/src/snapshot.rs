@@ -763,9 +763,9 @@ fn run(args: &RunArgs) -> Result<(), Box<dyn std::error::Error>> {
     let values = args.namespaces.values(&packages.slot_uses)?;
     crate::mask::install(
         &crate::extensions::HeldValue::pairs(&values),
-        &crate::extensions::declared_origins(&packages, &services.packages),
+        &crate::extensions::declared_origins(&services.packages),
     );
-    crate::extensions::write_notes(&packages.summary(Some(&values)));
+    crate::extensions::write_notes(&packages.summary());
     crate::extensions::write_notes(&crate::extensions::env_summary(
         &packages.slot_uses,
         &values,
@@ -877,17 +877,6 @@ pub(crate) mod host {
                 XsdSchemaBackend,
             )
             .with_schema_mode(scxml_validator_core::SchemaMode::default())
-            .with_extension_slots(
-                packages
-                    .iter()
-                    .map(|package| {
-                        (
-                            package.manifest.namespace_uri.clone(),
-                            package.manifest.env_slots.clone(),
-                        )
-                    })
-                    .collect(),
-            )
             .with_services(crate::services::bound_services(services))
             .with_expression_checker(std::sync::Arc::new(crate::expression::EcmaScriptSyntax))
             .with_expression_checker(std::sync::Arc::new(crate::expression::XPathSyntax)),
@@ -943,7 +932,7 @@ pub(crate) mod host {
             .session_host(scxml_host_wasmtime::DEFAULT_FUEL)?;
         let values = args.namespaces.values(&packages.slot_uses)?;
         let (services, _imports) = args.services.components(services, &values, true)?;
-        let (extensions, _notes) = extensions(&args.namespaces, packages, &values, true)?;
+        let extensions = extensions(&args.namespaces, packages)?;
         let host = host
             .with_extension_components(extensions)?
             .with_service_components(services)?;
@@ -1001,57 +990,7 @@ pub(crate) mod host {
         Ok(documents)
     }
 
-    /// The CLI's [`scxml_host_wasmtime::ExtensionObserver`]: it collects the
-    /// origins each namespace's requests were refused, and dropping it (when
-    /// the run's command ends, whatever its outcome) writes one note per
-    /// refused origin. A missing value was already noted before the run (the
-    /// element summary), so it is not repeated.
-    #[cfg(feature = "wasmtime")]
-    #[derive(Debug, Default)]
-    pub(crate) struct Observer {
-        refused: std::sync::Mutex<std::collections::BTreeSet<(String, String)>>,
-    }
-
-    #[cfg(feature = "wasmtime")]
-    impl scxml_host_wasmtime::ExtensionObserver for Observer {
-        fn request_refused(&self, namespace_uri: &str, origin: &str) {
-            if let Ok(mut refused) = self.refused.lock() {
-                refused.insert((namespace_uri.to_owned(), origin.to_owned()));
-            }
-        }
-
-        fn value_missing(&self, _namespace_uri: &str, _slot: &str, _name: &str) {}
-    }
-
-    /// Writes the notes of an [`Observer`] (shared with the host) when the
-    /// run's command ends.
-    #[cfg(feature = "wasmtime")]
-    #[derive(Debug)]
-    pub(crate) struct Notes(pub(crate) std::sync::Arc<Observer>);
-
-    #[cfg(feature = "wasmtime")]
-    impl Drop for Notes {
-        fn drop(&mut self) {
-            let notes: Vec<String> = self
-                .0
-                .refused
-                .lock()
-                .map(|refused| {
-                    refused
-                        .iter()
-                        .map(|(namespace_uri, origin)| {
-                            crate::extensions::refused_note(namespace_uri, origin)
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-            crate::extensions::write_notes(&notes);
-        }
-    }
-
-    /// The run's extension components: the values elements' `env` slots may
-    /// reference, the outbound transport (none with `outbound` false: every
-    /// request is refused), the CLI's observer, every `--extension-package`
+    /// The run's extension components: every `--extension-package`
     /// extension component authenticated by its pinned SHA-256 and bound, and
     /// every repository namespace the run's documents use (the root's and
     /// every literal `<invoke src>` child's), resolved once, authenticated by
@@ -1062,25 +1001,12 @@ pub(crate) mod host {
     pub(crate) fn extensions(
         flags: &crate::extensions::RunFlags,
         packages: &crate::extensions::Packages,
-        values: &[crate::extensions::HeldValue],
-        outbound: bool,
-    ) -> Result<(scxml_host_wasmtime::ExtensionComponents, Notes), Box<dyn std::error::Error>> {
+    ) -> Result<scxml_host_wasmtime::ExtensionComponents, Box<dyn std::error::Error>> {
         use scxml_host_wasmtime::{
             ExtensionComponents, TrustedComponentDigest, authenticate_extension_component,
         };
 
-        let observer = std::sync::Arc::new(Observer::default());
-        let mut extensions = ExtensionComponents::new()
-            .with_values(crate::extensions::HeldValue::environment(values)?)
-            .with_observer(std::sync::Arc::clone(&observer) as _);
-        if outbound {
-            extensions = extensions.with_outbound_http(std::sync::Arc::new(
-                scxml_host_wasmtime::ExtensionHttpClient::new(
-                    scxml_host_wasmtime::ExtensionHttpConfig::new(),
-                )
-                .map_err(|error| format!("[extension-http-invalid] {error}"))?,
-            ));
-        }
+        let mut extensions = ExtensionComponents::new();
         for package in &packages.explicit {
             if package.origin == crate::extensions::PackageOrigin::Embedded {
                 let component = authenticate_extension_component(
@@ -1124,7 +1050,7 @@ pub(crate) mod host {
                 &repository_component(packages, package)?,
             )?;
         }
-        Ok((extensions, Notes(observer)))
+        Ok(extensions)
     }
 
     /// The release's extension component of the repository namespace

@@ -26,11 +26,11 @@ const DATA_MODELS: [&str; 2] = ["ecmascript", "xpath"];
 const SUITES: [(&str, usize, usize, [&str; 2]); 2] = [
     (
         "env",
-        20,
-        6,
+        8,
+        8,
         [
-            "976563e289fad938c269a1a7f0f4a790adfcd83ba2b7aa1fd0dc828d0047f49c",
-            "320a7af83aad2d5377885f86fbca485a7d12394d17b97113292a110eeac0ffd8",
+            "85611d3e4ef5816a851be604b2f2037dc488614c06634fc8961d4afea3f78736",
+            "bdeacbd39888eb2e9920e2d283eaf155932751970638b19deb6cc6a1c4b45445",
         ],
     ),
     (
@@ -38,8 +38,8 @@ const SUITES: [(&str, usize, usize, [&str; 2]); 2] = [
         29,
         17,
         [
-            "9ff1105c36a369d6d729f844490dec558939054a1d07b05fb89b65427f3e33ba",
-            "1173d0e4a1fcc815ff2682061d7c0ba4a0627aa43feecf28697ed08e8885150b",
+            "ef2def32c343f64fab6d802a3c07888256de496d364b05405849ac7c8a9bb896",
+            "1ebec2ecabad17827bb08b4b5b3f305058e5f58d1169ccb748056a27a40e50c9",
         ],
     ),
 ];

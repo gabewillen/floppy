@@ -27,6 +27,69 @@ export const SCHEMA_POLICIES = Object.freeze(['strict', 'lax', 'off']);
 
 let defaultLoader;
 
+/** The `ExtensionPackage` fields the compiler and validator requests carry. */
+const PACKAGE_FIELDS = Object.freeze([
+  'namespaceUri',
+  'packageVersion',
+  'extensionArtifact',
+  'schemaArtifact',
+  'schemaSha256',
+  'witWorld',
+  'witVersion',
+]);
+
+/** True when `value` is an ExtensionPackage (manifest fields and schema bytes). */
+export function isExtensionPackage(value) {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    PACKAGE_FIELDS.every((field) => typeof value[field] === 'string') &&
+    value.schema instanceof Uint8Array
+  );
+}
+
+/**
+ * True when the request options of `compile` or `validate` are well-formed:
+ * `schemaPolicy` one of SCHEMA_POLICIES, `packages` ExtensionPackage[], and
+ * `eventSchemas` `{uri, bytes}[]` (the bytes of each schema file an
+ * `event:schema` references, by the reference as authored). The component
+ * checks every bound.
+ */
+export function isCompileRequestOptions(options, schemaPolicy) {
+  const { packages = [], eventSchemas = [] } = options ?? {};
+  return (
+    SCHEMA_POLICIES.includes(schemaPolicy) &&
+    Array.isArray(packages) &&
+    packages.every(isExtensionPackage) &&
+    Array.isArray(eventSchemas) &&
+    eventSchemas.every(
+      (resource) =>
+        resource !== null &&
+        typeof resource === 'object' &&
+        typeof resource.uri === 'string' &&
+        resource.bytes instanceof Uint8Array,
+    )
+  );
+}
+
+/**
+ * The WIT `schemas`, `packages`, and `event-schemas` of a request: each
+ * package's schema bound to its exact namespace URI under its schema
+ * artifact (as the Wasmtime host builds the request for a child document).
+ */
+export function compileRequestParts(options) {
+  const { packages = [], eventSchemas = [] } = options ?? {};
+  return {
+    schemas: packages.map((pkg) => ({
+      namespaceUri: pkg.namespaceUri,
+      systemId: pkg.schemaArtifact,
+      bytes: pkg.schema.slice(),
+    })),
+    packages: packages.map((pkg) => Object.fromEntries(PACKAGE_FIELDS.map((field) => [field, pkg[field]]))),
+    eventSchemas: eventSchemas.map(({ uri, bytes }) => ({ uri, bytes: bytes.slice() })),
+  };
+}
+
 /** The integrity fields of a canonical `scxml.report/v3` compiler report. */
 function reportOutput(report) {
   if (report.byteLength > MAX_REPORT_BYTES) throw new ScxmlHostError('report-mismatch');
@@ -64,7 +127,10 @@ export async function createCompiler(options) {
     /**
      * Compiles one SCXML document to lowered Machine IR.
      * @param {string} source SCXML text
-     * @param {{sourceName?: string, schemaPolicy?: 'strict' | 'lax' | 'off'}} [compileOptions]
+     * @param {{sourceName?: string, schemaPolicy?: 'strict' | 'lax' | 'off', packages?: object[], eventSchemas?: {uri: string, bytes: Uint8Array}[]}} [compileOptions]
+     *   `packages`: the ExtensionPackages of the namespaces the document
+     *   uses; `eventSchemas`: the bytes of each schema file its
+     *   `event:schema` attributes reference
      * @returns {Promise<{status: 'emitted' | 'rejected', report: Uint8Array, ir: Uint8Array | undefined}>}
      *   `report` is the canonical compiler report (render it with a
      *   reporter); `ir` is present only when the report says `emitted`.
@@ -128,26 +194,24 @@ export async function openCompiler(options) {
       if (
         typeof source !== 'string' ||
         typeof sourceName !== 'string' ||
-        !SCHEMA_POLICIES.includes(schemaPolicy)
+        !isCompileRequestOptions(compileOptions, schemaPolicy)
       ) {
         telemetry.observe('compile', 'rejected');
         throw new ScxmlHostError('invalid-argument');
       }
+      const { schemas, packages, eventSchemas } = compileRequestParts(compileOptions);
       const span = telemetry.start('compile');
       let result;
       try {
         result = budget.run(meter, () => telemetry.within(span, () => api.compile({
           sourceName,
           source,
-          schemas: [],
-          packages: [],
+          schemas,
+          packages,
           // Browser hosts resolve `<script src>` at document load through
           // the page's `loadScript` capability, so nothing is pinned here.
           scripts: [],
-          // The page supplies no schema files: a document compiled here
-          // describes its event data with inline `event:schema` JSON or
-          // `event:schemaexpr` (a schema-file reference is `SCXML088`).
-          eventSchemas: [],
+          eventSchemas,
           options: { schemaPolicy, requestedArtifact: 'lowered-ir', scriptResolution: 'runtime' },
           machineTemplate: undefined,
           traceContext: undefined,

@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>scxml-host-browser parity e2e</title>
+<!--
+  Loaded by test/browser.test.mjs in headless Chromium: runs the cross-host
+  parity corpus (tests/fixtures/host-parity) through the page's own
+  validator, compiler, and extension components with the default
+  fetch/compileStreaming loader, and reports each case's outcome next to its
+  Wasmtime golden through window.__result.
+-->
+<script type="importmap">
+  { "imports": { "@opentelemetry/api": "/node_modules/@opentelemetry/api/build/esm/index.js" } }
+</script>
+<script type="module">
+  import { createCompiler, createEcmaScriptDataModel, createValidator } from '../../src/index.js';
+  import { runParityCase } from '../parity-harness.js';
+
+  const bytes = async (url) => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+    return new Uint8Array(await response.arrayBuffer());
+  };
+  const read = (path) => bytes(`/workspace/${path}`);
+  const component = (file) => bytes(`/artifacts/${file}`);
+  const sha256 = async (data) =>
+    [...new Uint8Array(await crypto.subtle.digest('SHA-256', data))].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+
+  async function main() {
+    const compiler = await createCompiler();
+    const validator = await createValidator({ dataModel: await createEcmaScriptDataModel() });
+    const { cases } = JSON.parse(new TextDecoder().decode(await read('tests/fixtures/host-parity/cases.json')));
+    const results = [];
+    for (const testCase of cases) {
+      const result = await runParityCase({ testCase, read, component, sha256, compiler, validator });
+      const golden = JSON.parse(new TextDecoder().decode(await read(`tests/fixtures/host-parity/${testCase.name}.golden.json`)));
+      results.push({ name: testCase.name, result, golden });
+    }
+    return { cases: results };
+  }
+
+  main().then(
+    (value) => {
+      window.__result = { ok: true, value };
+    },
+    (error) => {
+      window.__result = { ok: false, error: `${error?.name}: ${error?.code ?? ''} ${error?.message ?? error}` };
+    },
+  );
+</script>

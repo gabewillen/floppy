@@ -105,8 +105,7 @@ media type, digest, byte count, or script payload is ever an attribute.
 Extension namespaces add the Wasmtime host's boundary spans
 `scxml.host-wasmtime.extension-instantiate` (per extension component per
 session), `extension-execute` (per executable-content extension),
-`extension-shutdown`, and `extension-http-fetch` (per `outbound-http` request an
-extension component makes), the existing `session-snapshot` (per
+and `extension-shutdown`, the existing `session-snapshot` (per
 `session-snapshot-host.snapshot` an extension component calls), and the CLI's
 `scxml.cli.read-extension-package`, the session-start
 `scxml.host-wasmtime.extension-load` (per `load-extensions` call), and the CLI's

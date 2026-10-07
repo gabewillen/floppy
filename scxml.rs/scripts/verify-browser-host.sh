@@ -6,8 +6,9 @@
 #   --skip-e2e   skip the headless Chromium run (reported as SKIPPED)
 #
 #  1. builds, virtualizes, and authenticates the release machine, compiler,
-#     ECMAScript, XPath, and null data-model, SCXML and BasicHTTP I/O
-#     processor, clock, and optional session snapshot codec guests
+#     validator, ECMAScript, XPath, and null data-model, SCXML and BasicHTTP
+#     I/O processor, clock, optional session snapshot codec, and extension
+#     (the example namespace and `scx`) guests
 #     (scripts/verify-wasm-capabilities.sh, reproducible flags), and compiles
 #     the representative fixture to lowered IR with the CLI;
 #  2. installs the pinned npm dependencies with `npm ci` from the committed
@@ -28,7 +29,12 @@
 #     inbound decoding), and the official W3C IRP cases (static `src`
 #     documents through resources, BasicHTTP over the in-process loopback)
 #     against the checked-in Wasmtime
-#     baselines, plus the session snapshot API and golden parity, and the
+#     baselines (and the `env` and `event` namespace suites against theirs),
+#     the validator, the extension components (bound packages, session
+#     capabilities, fuel, retirement, executable-content snapshots), the
+#     cross-host parity corpus (tests/fixtures/host-parity) against the
+#     goldens `scx run` produces, plus the session snapshot API and golden
+#     parity, and the
 #     async bridge (`async: 'auto'`: its worker mechanism in a real thread,
 #     prefetched resources sent to the worker, and its typed
 #     `dynamic-url-unavailable` fallback);
@@ -103,7 +109,7 @@ run_node_tests() {
 sh "$workspace/scripts/verify-wasm-capabilities.sh" --artifacts-dir "$artifacts" \
     scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
     scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine \
-    scxml_snapshot_codec
+    scxml_snapshot_codec scxml_validator scxml_extension_example scx
 test -f "$ir" || { echo "missing CLI-compiled lowered IR: $ir" >&2; exit 1; }
 cargo build --release --locked --manifest-path "$workspace/Cargo.toml" -p scxml-wasm-meter
 meter="$target_root/release/scxml-wasm-meter"
@@ -116,16 +122,17 @@ node scripts/build.mjs --artifacts "$artifacts" --meter "$meter" --out "$check_d
 diff -r dist "$check_dist" >/dev/null || { echo "non-deterministic jco transpile output" >&2; exit 1; }
 printf 'browser-host dist build-manifest sha256=%s\n' "$(sha256_file dist/build-manifest.json)"
 
-SCXML_BROWSER_IR="$ir" run_node_tests test/smoke.test.mjs test/contract.test.mjs \
-    test/capabilities.test.mjs test/resources.test.mjs test/basichttp.test.mjs \
-    test/irp-parity.test.mjs test/snapshot.test.mjs test/snapshot-parity.test.mjs \
-    test/async-bridge.test.mjs || exit 1
+SCXML_BROWSER_IR="$ir" SCXML_BROWSER_ARTIFACTS="$artifacts" run_node_tests test/smoke.test.mjs \
+    test/contract.test.mjs test/capabilities.test.mjs test/resources.test.mjs \
+    test/basichttp.test.mjs test/irp-parity.test.mjs test/snapshot.test.mjs \
+    test/snapshot-parity.test.mjs test/async-bridge.test.mjs test/validator.test.mjs \
+    test/extension.test.mjs test/host-parity.test.mjs || exit 1
 
 if [ "$skip_e2e" = 1 ]; then
     echo 'SKIPPED: headless Chromium e2e (--skip-e2e)'
     exit 0
 fi
-SCXML_BROWSER_IR="$ir" run_node_tests test/browser.test.mjs || {
+SCXML_BROWSER_IR="$ir" SCXML_BROWSER_ARTIFACTS="$artifacts" run_node_tests test/browser.test.mjs || {
     echo "headless Chromium e2e failed; if the pinned headless shell is missing, install it with:" >&2
     echo "  (cd hosts/scxml-host-browser && npx playwright-core install --only-shell chromium)" >&2
     echo "or skip it explicitly with --skip-e2e" >&2

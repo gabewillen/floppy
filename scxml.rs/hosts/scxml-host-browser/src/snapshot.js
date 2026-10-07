@@ -84,9 +84,13 @@ export function snapshotOptions(options) {
   return { exclude: new Set(exclude), traceContext };
 }
 
-/** The codec's WIT `snapshot-options` for validated options. */
-export function witSnapshotOptions({ exclude, traceContext }) {
-  return { exclude: SNAPSHOT_SECTIONS.filter((section) => exclude.has(section)), traceContext };
+/**
+ * The codec's WIT `snapshot-options` for validated options: a checkpoint
+ * document, or (`point` 'executable-content') the document an extension
+ * component reads during `execute`.
+ */
+export function witSnapshotOptions({ exclude, traceContext, point = 'checkpoint' }) {
+  return { exclude: SNAPSHOT_SECTIONS.filter((section) => exclude.has(section)), traceContext, point };
 }
 
 /**

@@ -4,14 +4,13 @@
 )]
 
 //! `env` values end to end through the CLI (`wasmtime` feature), through the
-//! example extension's `<example:fetch>` (`components/scxml-extension-example`,
-//! whose package declares the `url` and `token` slots) against a loopback
-//! server: each element receives references for its own slots only, a value
-//! reaches only requests to an origin its package declares or one a value
-//! supplies entirely, a variable goes only to the elements and `<invoke>`s
-//! whose `env` attributes name it, and `--env-file` values are masked in what
-//! the CLI writes. No test touches
-//! the real network.
+//! echo service (`components/scxml-service-example`, whose package declares
+//! the `endpoint` and `token` slots) against a loopback server: a value
+//! reaches only requests to an origin the service's package declares or one
+//! a value supplies entirely, a variable goes only to the `<invoke>`s whose
+//! `env` attributes name it, an extension element has no slots (`SCXML084`),
+//! and `--env-file` values are masked in what the CLI writes. No test
+//! touches the real network.
 
 use std::fs;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
@@ -22,7 +21,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use sha2::{Digest as _, Sha256};
 
-const EXAMPLE_URI: &str = "https://stateforward.org/scxml/example";
 const ECHO_URI: &str = "https://stateforward.org/scxml/services/echo";
 const ENV_NAMESPACE: &str = "https://github.com/stateforward/scxml.rs/namespaces/env";
 
@@ -33,7 +31,6 @@ const COMPONENTS: &[&str] = &[
     "scxml_data_model_xpath",
     "scxml_ioprocessor_scxml",
     "scxml_ioprocessor_basichttp",
-    "scxml_extension_example",
     "scxml_service_example",
     "scxml_compiler",
     "scxml_machine",
@@ -173,14 +170,13 @@ impl Server {
     }
 }
 
-/// The example element bound with `--extension-package`: its manifest
-/// declares `declared` as its outbound origins (written to `directory`).
-fn example_package(directory: &Path, declared: &[&str]) -> Vec<String> {
-    let source = workspace().join("components/scxml-extension-example/package");
-    let package = directory.join(format!("example-{}", declared.len()));
+/// The echo service bound with `--service-package`: its manifest declares
+/// `declared` as its outbound origins (written to `directory`).
+fn echo_package(directory: &Path, declared: &[&str]) -> Vec<String> {
+    let source = workspace().join("components/scxml-service-example/package");
+    let package = directory.join(format!("echo-{}", declared.len()));
     fs::create_dir_all(&package).expect("the package directory");
-    fs::copy(source.join("example.xsd"), package.join("example.xsd")).expect("the schema");
-    let manifest = fs::read_to_string(source.join("example.extension.json"))
+    let manifest = fs::read_to_string(source.join("echo.service.json"))
         .expect("the manifest")
         .replace(
             r#""http-origins": []"#,
@@ -193,52 +189,49 @@ fn example_package(directory: &Path, declared: &[&str]) -> Vec<String> {
                     .join(", ")
             ),
         );
-    let manifest_path = package.join("example.extension.json");
+    let manifest_path = package.join("echo.service.json");
     fs::write(&manifest_path, manifest).expect("the manifest");
     strings(&[
-        "--extension-package",
+        "--service-package",
         &manifest_path.display().to_string(),
-        "--extension-component",
+        "--service-component",
         &format!(
-            "{EXAMPLE_URI}={}/scxml_extension_example.virtualized.wasm",
+            "{ECHO_URI}={}/scxml_service_example.virtualized.wasm",
             release().dir
         ),
-        "--extension-component-sha256",
+        "--service-component-sha256",
         &format!(
-            "{EXAMPLE_URI}={}",
-            component_sha256("scxml_extension_example.virtualized.wasm")
+            "{ECHO_URI}={}",
+            component_sha256("scxml_service_example.virtualized.wasm")
         ),
     ])
 }
 
-/// A document whose first element (A) fetches with `a_attributes`, then
-/// whose second element (B) fetches with `b_attributes`, assigning their
-/// outcomes to `first` and `outcome`. `invoke` is placed in the first state.
-fn two_elements(directory: &Path, a_attributes: &str, b_attributes: &str, invoke: &str) -> String {
+/// A document that invokes the echo service with `attributes` and has it
+/// GET its `endpoint` slot's URL followed by `path`: it ends in `fetched`
+/// (the status in `status`) or, when the request is refused or fails, in
+/// `refused`. `extra` goes into the invoking state.
+fn echo_document(directory: &Path, attributes: &str, path: &str, extra: &str) -> String {
     let document = directory.join(format!(
-        "two-{:x}.scxml",
-        Sha256::digest(format!("{a_attributes}{b_attributes}{invoke}").as_bytes())
+        "echo-{:x}.scxml",
+        Sha256::digest(format!("{attributes}{path}{extra}").as_bytes())
     ));
     fs::write(
         &document,
         format!(
-            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="{EXAMPLE_URI}" xmlns:env="{ENV_NAMESPACE}" version="1.0" datamodel="ecmascript" initial="a">
-  <datamodel><data id="first" expr="''"/><data id="outcome" expr="''"/></datamodel>
+            r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="{ENV_NAMESPACE}" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel><data id="status" expr="''"/></datamodel>
   <state id="a">
-    {invoke}
-    <onentry><example:fetch {a_attributes} location="first"/></onentry>
-    <transition event="example.fetched" target="b"/>
-    <transition event="error.execution" target="failed"/>
-  </state>
-  <state id="b">
-    <onentry><example:fetch {b_attributes} location="outcome"/></onentry>
-    <transition event="example.fetched" target="fetched"/>
-    <transition event="error.execution" target="refused"/>
+    <onentry><send event="go"/></onentry>
+    <invoke type="{ECHO_URI}" id="echo" {attributes}/>
+    {extra}
+    <transition event="go"><send event="fetch" target="#_echo"><content expr="'{path}'"/></send></transition>
+    <transition event="echo.fetched" target="fetched"><assign location="status" expr="_event.data"/></transition>
+    <transition event="error.communication" target="refused"/>
   </state>
   <final id="fetched"/>
   <final id="refused"/>
-  <final id="failed"/>
-</scxml>"#
+</scxml>"##
         ),
     )
     .expect("the document");
@@ -271,157 +264,78 @@ fn snapshot_run(document: &str, output: &Path, extra: &[String]) -> (Output, Str
     (run, shown)
 }
 
-/// Each element receives references for its own slots only, and a value is
-/// substituted only into a request to an origin the element's package
-/// declares or the run supplied. The component never holds a value: it
-/// reports only the slot names it was handed.
+/// A value is substituted only into a request to an origin the service's
+/// package declares or the run supplied entirely (the `endpoint` value): a
+/// path that extends the authority a value starts is refused before it is
+/// sent, unless the package declares the resulting origin.
 #[test]
-fn values_reach_only_their_element_and_only_admitted_origins() {
+fn values_reach_only_admitted_origins() {
     let server = Server::start();
-    let directory = scratch("isolation");
+    let directory = scratch("admission");
     let output = directory.join("final.snapshot.json");
     let origin = server.origin.clone();
-    let echo = format!("{origin}/echo");
-    let grants = ["KEY=key-test".to_owned(), format!("A_BASE={origin}")];
-    // A's url slot names a value that is a whole origin, so its request is
-    // admitted though nothing declares it, carrying A's token.
-    let a = r#"env:url="A_BASE" path="/echo" env:token="KEY""#;
-    let run = |document: &str, declared: &[&str], extra: &[&str]| {
-        let mut flags = strings(&["--env", &grants[0], "--env", &grants[1]]);
-        flags.extend(example_package(&directory, declared));
-        flags.extend(strings(extra));
-        snapshot_run(document, &output, &flags)
+    let port = origin.rsplit(':').next().expect("a port").to_owned();
+    let slots = r#"env:endpoint="BASE" env:token="KEY""#;
+    let run = |base: &str, path: &str, declared: &[&str]| {
+        let mut flags = strings(&["--env", "KEY=key-test", "--env", &format!("BASE={base}")]);
+        flags.extend(echo_package(&directory, declared));
+        snapshot_run(&echo_document(&directory, slots, path, ""), &output, &flags)
     };
 
-    // B binds no slot: it gets no reference, though A bound KEY, and its
-    // request to a literal origin nothing declares is refused.
-    let (refused, shown) = run(
-        &two_elements(&directory, a, &format!(r#"url="{echo}""#), ""),
-        &[],
-        &[],
-    );
-    assert!(refused.status.success(), "{}", text(&refused.stderr));
-    assert!(shown.contains("configuration: atomic [refused]"), "{shown}");
-    assert!(
-        shown.contains(r#"first = "status=200 slots=url,token""#),
-        "{shown}"
-    );
-    assert!(
-        shown.contains(r#"outcome = "status=refused slots=""#),
-        "{shown}"
-    );
-    assert_eq!(
-        server.authorizations(),
-        ["Bearer key-test"],
-        "A's request carried its value"
-    );
-    assert_eq!(server.echoes(), 1, "B's request never left the host");
-    // The origin is A_BASE's value, so the note masks it too.
-    assert!(
-        text(&refused.stderr).contains(&format!(
-            "`{EXAMPLE_URI}` was refused outbound HTTP to `[masked]`"
-        )),
-        "{}",
-        text(&refused.stderr)
-    );
-
-    // B names KEY for its own token slot toward an undeclared origin:
-    // refused before anything is sent, so the key never leaves through B.
-    let toward = two_elements(
-        &directory,
-        a,
-        &format!(r#"url="{echo}" env:token="KEY""#),
-        "",
-    );
-    let (refused, shown) = run(&toward, &[], &[]);
-    assert!(refused.status.success(), "{}", text(&refused.stderr));
-    assert!(
-        shown.contains(r#"outcome = "status=refused slots=token""#),
-        "{shown}"
-    );
-    assert_eq!(server.echoes(), 2, "only A's request was sent");
-
-    // The same element whose package declares the origin: admitted, the
-    // reference substituted by the host.
-    let (admitted, shown) = run(&toward, &[&origin], &[]);
+    // The value is a whole origin: admitted though nothing declares it,
+    // carrying the token.
+    let (admitted, shown) = run(&origin, "/echo", &[]);
     assert!(admitted.status.success(), "{}", text(&admitted.stderr));
     assert!(shown.contains("configuration: atomic [fetched]"), "{shown}");
-    assert!(
-        shown.contains(r#"outcome = "status=200 slots=token""#),
-        "{shown}"
-    );
-    assert_eq!(server.echoes(), 4);
+    assert!(shown.contains("status = 200"), "{shown}");
+    assert_eq!(server.authorizations(), ["Bearer key-test"]);
+    assert_eq!(server.echoes(), 1);
+
+    // A literal that extends the authority a value starts (the port): no
+    // run-supplied origin, refused before anything is sent.
+    let (refused, shown) = run("http://127.0.0.1", &format!(":{port}/echo"), &[]);
+    assert!(refused.status.success(), "{}", text(&refused.stderr));
+    assert!(shown.contains("configuration: atomic [refused]"), "{shown}");
+    assert_eq!(server.echoes(), 1, "the request never left the host");
+
+    // The same request with the origin declared by the package: admitted.
+    let (declared, shown) = run("http://127.0.0.1", &format!(":{port}/echo"), &[&origin]);
+    assert!(declared.status.success(), "{}", text(&declared.stderr));
+    assert!(shown.contains("configuration: atomic [fetched]"), "{shown}");
+    assert_eq!(server.echoes(), 2);
     assert_eq!(
         server.authorizations().last().map(String::as_str),
         Some("Bearer key-test"),
         "the host substituted the value into the admitted request"
     );
-
-    // A literal that extends the authority a value starts (the port here)
-    // is no run-supplied origin: refused.
-    let port = origin.rsplit(':').next().expect("a port").to_owned();
-    let (split, shown) = run(
-        &two_elements(
-            &directory,
-            a,
-            &format!(r#"path=":{port}/echo" env:url="HOST_ONLY""#),
-            "",
-        ),
-        &[],
-        &["--env", "HOST_ONLY=http://127.0.0.1"],
-    );
-    assert!(split.status.success(), "{}", text(&split.stderr));
-    assert!(
-        shown.contains(r#"outcome = "status=refused slots=url""#),
-        "{shown}"
-    );
-    assert_eq!(server.echoes(), 5, "only A's request was sent");
 }
 
-/// A variable goes only to the elements and `<invoke>`s whose `env`
-/// attributes name it: the echo service's `<invoke>` names `KEY`, the
-/// example element names `OTHER` (which the run does not hold) for its
-/// token, so the example element's slot is absent even toward an origin its
-/// package declares, and the listing shows each variable and where it goes.
+/// A variable goes only to the `<invoke>`s whose `env` attributes name it:
+/// the token slot names `OTHER`, which the run does not hold, so it is
+/// absent, and the listing shows each variable and where it goes. An `env`
+/// attribute on an extension element is rejected (`SCXML084`): executable
+/// content has no slots.
 #[test]
-fn a_variable_goes_only_to_the_elements_naming_it() {
+fn a_variable_goes_only_to_the_invokes_naming_it() {
     let server = Server::start();
     let directory = scratch("scoped");
     let output = directory.join("final.snapshot.json");
-    let echo_manifest =
-        workspace().join("components/scxml-service-example/package/echo.service.json");
-    let mut flags = strings(&[
-        "--env",
-        "KEY=key-test",
-        "--service-package",
-        &echo_manifest.display().to_string(),
-        "--service-component",
-        &format!(
-            "{ECHO_URI}={}/scxml_service_example.virtualized.wasm",
-            release().dir
-        ),
-        "--service-component-sha256",
-        &format!(
-            "{ECHO_URI}={}",
-            component_sha256("scxml_service_example.virtualized.wasm")
-        ),
-    ]);
-    flags.extend(example_package(&directory, &[&server.origin]));
-    let document = two_elements(
+    let mut flags = strings(&["--env", &format!("KEY={}", server.origin)]);
+    flags.extend(echo_package(&directory, &[]));
+    let document = echo_document(
         &directory,
-        &format!(r#"url="{}" path="/echo" env:token="OTHER""#, server.origin),
-        &format!(r#"url="{}/echo""#, server.origin),
-        &format!(r#"<invoke type="{ECHO_URI}" id="echo" env:endpoint="KEY"/>"#),
+        r#"env:endpoint="KEY" env:token="OTHER""#,
+        "/echo",
+        "",
     );
     let (out_of_scope, shown) = snapshot_run(&document, &output, &flags);
     let stderr = text(&out_of_scope.stderr);
     assert!(out_of_scope.status.success(), "{stderr}");
-    assert!(shown.contains(r#"first = "status=200 slots=""#), "{shown}");
+    assert!(shown.contains("configuration: atomic [fetched]"), "{shown}");
     assert!(
         server.authorizations().is_empty(),
-        "no request carried the value"
+        "no request carried a token"
     );
-    assert!(stderr.contains("token <- OTHER (no value)"), "{stderr}");
     assert!(
         stderr.contains(&format!(
             "env `KEY`\n  = to: <invoke type=\"{ECHO_URI}\"> env:endpoint"
@@ -430,11 +344,32 @@ fn a_variable_goes_only_to_the_elements_naming_it() {
     );
     assert!(
         stderr.contains(&format!(
-            "env `OTHER` (no value)\n  = to: <fetch> of `{EXAMPLE_URI}` env:token"
+            "env `OTHER` (no value)\n  = to: <invoke type=\"{ECHO_URI}\"> env:token"
         )),
         "{stderr}"
     );
-    assert!(!stderr.contains("key-test"), "never a value: {stderr}");
+    assert!(!stderr.contains(&server.origin), "never a value: {stderr}");
+
+    let element = directory.join("element.scxml");
+    fs::write(
+        &element,
+        format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:scx="https://github.com/stateforward/scxml.rs/namespaces/scx" xmlns:env="{ENV_NAMESPACE}" version="1.0" initial="a"><state id="a"><onentry><scx:validate location="r" env:token="KEY"><scx:content>x</scx:content></scx:validate></onentry></state></scxml>"#
+        ),
+    )
+    .expect("the document");
+    let rejected = cli(&strings(&["validate", &element.display().to_string()]));
+    assert_eq!(
+        rejected.status.code(),
+        Some(1),
+        "{}",
+        text(&rejected.stderr)
+    );
+    assert!(
+        text(&rejected.stderr).contains("SCXML084"),
+        "{}",
+        text(&rejected.stderr)
+    );
 }
 
 /// Values from `--env-file` (Docker's format, CRLF included), masked in what
@@ -446,27 +381,23 @@ fn env_files_supply_values_that_are_masked_in_cli_output() {
     let server = Server::start();
     let directory = scratch("env-file");
     let env_file = directory.join(".env");
-    fs::write(&env_file, "# the key\r\nKEY=sk-file-secret-1\r\n").expect("the env file");
-    let document = directory.join("leak.scxml");
     fs::write(
-        &document,
+        &env_file,
         format!(
-            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="{EXAMPLE_URI}" xmlns:env="{ENV_NAMESPACE}" version="1.0" datamodel="ecmascript" initial="a">
-  <state id="a">
-    <onentry><example:fetch url="{}" path="/echo" env:token="KEY"/><log label="leak" expr="'echo sk-file-secret-1'"/></onentry>
-    <transition event="example.fetched" target="done"/>
-    <transition event="error.execution" target="failed"/>
-  </state>
-  <final id="done"/>
-  <final id="failed"/>
-</scxml>"#,
+            "# the key\r\nKEY=sk-file-secret-1\r\nBASE={}\r\n",
             server.origin
         ),
     )
-    .expect("the document");
+    .expect("the env file");
+    let document = echo_document(
+        &directory,
+        r#"env:endpoint="BASE" env:token="KEY""#,
+        "/echo",
+        r#"<onentry><log label="leak" expr="'echo sk-file-secret-1'"/></onentry>"#,
+    );
     let mut args = strings(&[
         "run",
-        &document.display().to_string(),
+        &document,
         "--components",
         &release.dir,
         "--components-manifest-sha256",
@@ -474,11 +405,11 @@ fn env_files_supply_values_that_are_masked_in_cli_output() {
         "--clock",
         "logical",
         "--on-eof",
-        "close",
+        "wait",
         "--env-file",
         &env_file.display().to_string(),
     ]);
-    args.extend(example_package(&directory, &[&server.origin]));
+    args.extend(echo_package(&directory, &[]));
     let live = cli(&args);
     let stdout = text(&live.stdout);
     assert_eq!(
@@ -498,13 +429,13 @@ fn env_files_supply_values_that_are_masked_in_cli_output() {
 
     // Without the file the key has no value: the listing says so.
     let output = directory.join("final.snapshot.json");
-    let mut flags = strings(&["--env", "OTHER=x-value"]);
-    flags.extend(example_package(&directory, &[&server.origin]));
-    let (missing, shown) = snapshot_run(&document.display().to_string(), &output, &flags);
+    let mut flags = strings(&["--env", &format!("BASE={}", server.origin)]);
+    flags.extend(echo_package(&directory, &[]));
+    let (missing, shown) = snapshot_run(&document, &output, &flags);
     assert!(missing.status.success(), "{}", text(&missing.stderr));
-    assert!(shown.contains("configuration: atomic [done]"), "{shown}");
+    assert!(shown.contains("configuration: atomic [fetched]"), "{shown}");
     assert!(
-        text(&missing.stderr).contains("token <- KEY (no value)"),
+        text(&missing.stderr).contains("env `KEY` (no value)"),
         "{}",
         text(&missing.stderr)
     );

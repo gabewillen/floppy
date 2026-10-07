@@ -11,7 +11,9 @@ pre-warm `<invoke>` children and to prefetch allowlisted URLs; see
 "Invocations" and "URL resources"), selects no transitions, and implements
 no microstep or macrostep semantics. Those all run inside the components: the same
 virtualized `scxml_machine`, data-model, SCXML and BasicHTTP Event I/O
-Processor, and clock release artifacts the Wasmtime session host runs. The
+Processor, clock, and extension component release artifacts the Wasmtime
+session host runs; the page validates and compiles with the same validator
+and compiler components. The
 host only links capabilities,
 bounds inputs and per-call work, maps failures to closed codes, delivers due
 delayed sends, and calls the lifecycle exports in order.
@@ -28,7 +30,8 @@ tool:
 ```console
 sh scripts/verify-wasm-capabilities.sh scxml_clock scxml_data_model_ecmascript \
   scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp \
-  scxml_compiler scxml_machine scxml_snapshot_codec
+  scxml_compiler scxml_machine scxml_snapshot_codec scxml_validator \
+  scxml_extension_example scx
 cargo build --release --locked -p scxml-wasm-meter
 cd hosts/scxml-host-browser
 npm ci --ignore-scripts
@@ -38,14 +41,21 @@ npm run build        # node scripts/build.mjs --artifacts ../../target/wasm-arti
 
 `scripts/build.mjs` authenticates each component (the machine, the
 ECMAScript, XPath, and null data models, the SCXML and BasicHTTP Event I/O
-Processors, the clock, the compiler, and the session snapshot codec) against the artifact
+Processors, the clock, the compiler, the validator, the session snapshot
+codec, and the extension components this package ships: the example
+namespace and `scx`) against the artifact
 manifest's SHA-256 and byte length. It then transpiles each component exactly once into
 `dist/<component>/`, using `@bytecodealliance/jco-transpile`
 with async instantiation, no Node.js compat, no WASI shim, and
 component-error wrapping. It then meters every emitted core module with
 `scxml-wasm-meter` (see [Fuel](#fuel)) and checks that each metered module
 compiles and exports the fuel global. It records the metering parameters and
-every output digest in `dist/build-manifest.json`.
+every output digest in `dist/build-manifest.json`, and each component's
+release digest and imported interfaces in `dist/identity.js`.
+
+The validator and `scx` components validate with the bundled, unmodified W3C
+SCXML 1.0 schema set, so the package carries its W3C notice (`NOTICE.md`,
+copied by `npm pack`).
 
 The virtualized components have no WASI imports, so the output never imports
 `@bytecodealliance/preview2-shim`. The build fails if it does. The shim is
@@ -71,15 +81,26 @@ resolve its bare specifier with their bundler or an import map, as
 
 ```js
 import {
-  createSession, createCompiler, createEcmaScriptDataModel, CapabilityError,
+  createSession, createCompiler, createValidator, createEcmaScriptDataModel,
+  ExtensionComponents, authenticateExtensionComponent, CapabilityError,
   ScxmlSessionError,
 } from '@stateforward/scxml-host-browser';
 
-// Optional: SCXML -> IR in the page (or ship IR compiled by the CLI).
+// Optional: validate and compile in the page (or ship IR compiled by the CLI).
+// `packages` are the ExtensionPackages of the namespaces the document uses;
+// `eventSchemas` the files its `event:schema` attributes reference.
+const validator = await createValidator({ dataModel: await createEcmaScriptDataModel() });
+const { report: validation } = await validator.validate(scxmlText, { packages, eventSchemas });
+// `validation` is the canonical scxml.report/v3 validator report, byte for
+// byte the report `scx validate --format json` writes.
 const compiler = await createCompiler();
-const { status, report, ir } = await compiler.compile(scxmlText);
+const { status, report, ir } = await compiler.compile(scxmlText, { packages, eventSchemas });
 // `report` (canonical scxml.report/v3) is the decision; `ir` is present only
 // when status is 'emitted' and matches the report's length and SHA-256.
+
+// Optional: the extension components of the namespaces the document uses.
+const extensions = new ExtensionComponents()
+  .bind(examplePackage, await authenticateExtensionComponent(componentBytes, componentSha256));
 
 const session = await createSession({
   ir,                                   // Uint8Array, at most 16 MiB
@@ -90,8 +111,9 @@ const session = await createSession({
     loadDocument(kind, uri) { /* 'data' | 'invocation'; return the text, or
                                  {text, mediaType} (see "URL resources") */ },
     // compileInvocation(sourceName, source) { /* optional override; see "Invocations" */ },
-    // raise, executeExtension, loadScript, runScript
+    // raise, loadScript, runScript
   },
+  extensionComponents: extensions,      // optional; see "Extension components"
   resources: {                          // optional; absent = no URL is ever
                                         // resolved (see "URL resources")
     // `url` is already canonical (dot segments removed); compare its parts.
@@ -200,8 +222,10 @@ the browser to the checked-in Wasmtime baselines.
 | `admit-command`, `observe` | optional session budget (`maxCommands`, `capacity-exhausted`); command count and optional trace (`trace: true`) | run-wide budget and trace |
 | `log` | always accepted (any length), recorded in the trace, passed to `capabilities.log` | trace and root logs |
 | `load-script`, `run-script` | an unpinned `<script src>` `resources` prefetched: ECMAScript text, the Wasmtime host's bounds and codes, run through the data model's `execute`; otherwise the `capabilities` providers, `unavailable` when missing | script loader under a digest allowlist |
-| `raise`, `execute-extension` | `capabilities` providers; `unavailable` when missing | `unavailable` |
-| `extension-snapshot-request` | always false: the page's `executeExtension` is no extension component, so the machine computes no executable-content image and the page gets no session snapshot (a gap: `session-snapshot-host` is a Wasmtime host feature, docs/session-snapshot.md "Snapshots during executable content") | true for a bound extension component that imports `session-snapshot-host` |
+| `raise` | the `capabilities` provider; `unavailable` when missing | `unavailable` |
+| `load-extensions` | each namespace the document uses gets this session's instance of the component `extensionComponents` binds to it (namespace URI checked, `initialize` called); a namespace nothing binds fails the session start closed (`unavailable`); see [Extension components](#extension-components) | as browser, plus the embedder's resolver |
+| `execute-extension` | the session's instance of the bound component, with its `data-model-host`, `execution-host`, and `session-snapshot-host` acting on this session during the call; the events it queues go back with the outcome | as browser |
+| `extension-snapshot-request` | true exactly for a bound component that imports `session-snapshot-host` | as browser |
 
 Why the unsupported ones stay unsupported:
 
@@ -218,10 +242,10 @@ Why the unsupported ones stay unsupported:
   is resolved by nothing here, and fails closed as any unbound one does.
   `scx` resolves them with its GitHub resolver component
   (`stateforward:scxml/resolver`), and jco-transpile 0.14.0 does transpile
-  it, but this host does not run it: (1) nothing here could use what it
-  resolves, since this host instantiates no extension or invoked-service
-  component (extensions go to the page's `executeExtension`, and services
-  are a Wasmtime host feature); (2) its only import, WASI 0.3
+  it, but this host does not run it: (1) a resolved component arrives at
+  run time, while this host runs only the components it ships transpiled
+  and fuel-metered at build time (see [Extension components](#extension-components)),
+  and invoked services are a Wasmtime host feature; (2) its only import, WASI 0.3
   `wasi:http/client.send`, has no browser implementation (preview3-shim
   0.6.1's browser `send` throws `Todo`), and a page's `fetch` cannot stand
   in for it with the same grant: `redirect: 'manual'` hides the `Location`
@@ -229,6 +253,97 @@ Why the unsupported ones stay unsupported:
   lets the browser reach any origin; (3) `github.com` release downloads
   (`SHA256SUMS` and the component asset) send no CORS headers, so a page
   cannot read them.
+
+### Validator
+
+`createValidator({dataModel})` instantiates the bundled validator component
+(the `scx validate` validator: XML well-formedness, the bundled W3C SCXML
+1.0 schema set, the semantic rules, the `event:schema` checks, and the
+packages' schemas), authenticated, transpiled, and fuel-metered like the
+compiler. `validate(source, {sourceName, schemaPolicy, packages,
+eventSchemas, profile})` returns `{report}`, the canonical
+`scxml.report/v3` validator report: for a document whose expressions use the
+linked data model, byte for byte what `scx validate --format json` writes
+(the parity test compares every `tests/ui` snapshot). `schemaPolicy`
+defaults to `strict`, as `scx validate`; `profile: 'draft'` adds the draft
+profile (`SCXML097` to `SCXML101`, the rules `<scx:validate
+profile="draft">` applies). Its `expression-syntax` import is linked to the
+`dataModel` the page passes (a bundled ECMAScript or XPath data model), as
+the Wasmtime host's `ComponentValidator` links one: only documents whose
+`datamodel` is exactly that name have their expressions checked, the others
+get the `SCXML045` note, and without one no expression is checked. Each
+validation runs on its own fuel budget (`fuel`, default
+`DEFAULT_COMPILE_FUEL`); a trap discards the instance.
+
+The page supplies what `scx` reads from disk: `packages`, the
+ExtensionPackages (manifest fields and schema bytes) of the namespaces the
+document uses, and `eventSchemas`, the bytes of each schema file an
+`event:schema` attribute references, keyed by the reference as authored
+(the part before `#`), read relative to the document. The compiler takes
+the same two options. The compiler component bundles no W3C schema, so a
+page validates first and compiles with `schemaPolicy: 'off'`, as the
+Wasmtime host compiles child documents.
+
+### Extension components
+
+An extension namespace (SCXML 1.0 section 4.10) runs its elements in its
+extension component, exactly as under the Wasmtime host's
+`ExtensionComponents` (the same names, checks, and semantics):
+
+```js
+const pkg = { namespaceUri, packageVersion, extensionArtifact, schemaArtifact,
+              schemaSha256, witWorld, witVersion, schema };  // the manifest + schema bytes
+const component = await authenticateExtensionComponent(bytes, sha256);
+const extensions = new ExtensionComponents().bind(pkg, component); // .withCallFuel(n)
+const session = await createSession({ ir, dataModel, extensionComponents: extensions });
+```
+
+- **Authentication.** `authenticateExtensionComponent(bytes, sha256)`
+  checks that the component bytes hash to the trusted SHA-256, and that the
+  digest is the release artifact of an extension component this package
+  ships transpiled and fuel-metered at build time (`dist/`: the example
+  namespace, `components/scxml-extension-example`, and `scx`,
+  `namespaces/scx`). A component this package does not ship is
+  `artifact-kind-mismatch`: browsers run only components built with the
+  package (a component resolved at run time needs a build of its own).
+- **Binding.** `bind(pkg, component)` checks what the Wasmtime host checks:
+  an absolute namespace URI of at most `MAX_NAMESPACE_URI_BYTES` that is not
+  the SCXML or XML namespace and is bound once, a schema of at most
+  `MAX_NAMESPACE_SCHEMA_BYTES` whose SHA-256 is `schemaSha256`, and at most
+  `MAX_EXTENSION_COMPONENTS` bindings (`namespace-binding` otherwise).
+  Every bound package also reaches the session's `<invoke>` compiler, so a
+  child may use its parent's namespaces.
+- **Lifecycle.** `createSession` compiles every bound component's core
+  modules. Each session (the root and every invoked child) instantiates its
+  own instance of each namespace its document uses, before data binding:
+  the `namespace-uri` must be the bound URI and `initialize` must succeed
+  (`extension-component-uri-mismatch`, `extension-component-initialize-failed`).
+  A namespace nothing binds fails the session start closed. `shutdown` runs
+  once when the session is dropped.
+- **Execution.** The component's `data-model-host` (`evaluate`, `assign`)
+  and `execution-host` act on the executing session, and only during
+  `execute` (`unavailable` outside it; `in-state` false and `now-ms` 0):
+  `raise` queues an internal event, `send` routes through the session's
+  SCXML Event I/O Processor exactly as `<send>` (another processor type is
+  `invalid-input`; `#_internal` cannot be delayed), and `cancel` cancels a
+  delayed send. The events it queues are handed back with the element's
+  outcome, and the machine queues them in document order. An error other
+  than the contract's codes becomes `protocol`, with static details.
+- **Session snapshot.** A component that imports `session-snapshot-host`
+  makes the machine pass its executable-content image with each of its
+  elements, and `snapshot(exclude)` returns the executing session's
+  canonical `executable-content` document (encoded by the bundled codec
+  component, which `createSession` then loads), at most
+  `MAX_EXTENSION_SNAPSHOTS` times per call. The parity test holds it to the
+  Wasmtime host's document.
+- **Bounds.** Each call runs with the per-call cap (`withCallFuel`, default
+  `DEFAULT_EXTENSION_CALL_FUEL`) on the session's host-call budget (see
+  [Fuel](#fuel)), so its work is charged to the machine call that made it.
+  A trap (fuel exhaustion included) retires the instance: later elements of
+  its namespace in that session raise `error.execution`.
+- **No I/O.** An extension element is executable content: its component
+  gets no `outbound-http`, no WASI, and no `env` value. Async sessions
+  (`async: 'auto'`) do not take `extensionComponents`.
 
 ### URL resources
 
@@ -868,13 +983,14 @@ sources.
 | Signal | Name | Attribute or field | Values | Cardinality |
 | --- | --- | --- | --- | --- |
 | host spans | tracer `scxml-host-browser`; span name = `scxml.operation` | `scxml.module` | `host-browser` | 1 |
-| host spans and counter | | `scxml.operation` | `create-session`, `ir-source`, `command`, `capability`, `data-model`, `compile`, `load-core-module`, `delayed-send`, `invocation`, `snapshot`, `snapshot-diff` | 11 |
+| host spans and counter | | `scxml.operation` | `create-session`, `ir-source`, `command`, `capability`, `data-model`, `compile`, `load-core-module`, `delayed-send`, `invocation`, `snapshot`, `snapshot-diff`, `validate`, `extension-load`, `extension-instantiate`, `extension-execute`, `extension-shutdown` | 16 |
 | host spans and counter | | `scxml.outcome` | `ok`, `rejected`, `failed` | 3 |
 | host counter | `scxml.host.operations` (`{operation}`) | the three attributes above | 1 × 11 × 3 | ≤ 33 series |
-| guest spans and point signals | tracer `scxml-component-guest`; span name = `scxml.operation` | `scxml.module` | `machine-component`, `data-model-component`, `compiler-component`, `snapshot-codec-component` | 4 |
-| guest spans | | `scxml.operation` | WIT telemetry `operation` enum (16), compiler `operation` enum (`compile`) | 17 |
+| guest spans and point signals | tracer `scxml-component-guest`; span name = `scxml.operation` | `scxml.module` | `machine-component`, `data-model-component`, `compiler-component`, `snapshot-codec-component`, `validator-component`, `executable-content-extension` | 6 |
+| guest spans | | `scxml.operation` | WIT telemetry `operation` enum (16), compiler `operation` enum (`compile`), validator `operation` enum (`validate`) | 18 |
 | guest spans | | `scxml.outcome` | WIT `outcome` enum (`ok`, `rejected`, `failed`) | 3 |
 | compiler guest spans | | `error.type` | compiler WIT `error-category` enum | 5 |
+| validator guest spans | | `error.type` | validator WIT `error-category` enum (`invalid-input`, `validation`, `report`) | 3 |
 | guest span events | event name | | WIT `signal-event` enum (11; the compiler's 2 events are among them) | 11 |
 | capability guest spans and point signals | tracer `scxml-capability-guest` (the Wasmtime host's); span name = `scxml.operation` | `scxml.module` | `capability-component` | 1 |
 | capability guest spans | | `scxml.operation` | WIT telemetry `operation` enum (the SCXML I/O processor), clock `operation` enum (7), BasicHTTP `operation` enum (4) | ≤ 27 |

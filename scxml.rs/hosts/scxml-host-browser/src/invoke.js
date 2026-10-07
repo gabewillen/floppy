@@ -178,14 +178,17 @@ export class InvocationCompiler {
   #open;
   #compiler;
   #telemetry;
+  /** The ExtensionPackages of every namespace the session binds. */
+  #packages;
   /** key -> {outcome, bytes}, oldest first. */
   #cache = new Map();
   #bytes = 0;
 
-  constructor(open, compiler, telemetry) {
+  constructor(open, compiler, telemetry, packages) {
     this.#open = open;
     this.#compiler = compiler;
     this.#telemetry = telemetry;
+    this.#packages = packages;
   }
 
   /**
@@ -196,10 +199,13 @@ export class InvocationCompiler {
    * @param {object} options.hostTelemetry the session's Telemetry
    * @param {number} [options.fuel] per-compile cap (default DEFAULT_COMPILE_FUEL)
    * @param {import('./fuel.js').FuelBudget} options.budget the session's budget
+   * @param {object[]} [options.packages] the ExtensionPackages the session
+   *   binds, forwarded with every child (as the Wasmtime host forwards its
+   *   bound packages), so a child may use its parent's namespaces
    */
-  static async open({ loadCoreModule, telemetry, hostTelemetry, fuel = DEFAULT_COMPILE_FUEL, budget }) {
+  static async open({ loadCoreModule, telemetry, hostTelemetry, fuel = DEFAULT_COMPILE_FUEL, budget, packages = [] }) {
     const open = () => openCompiler({ loadCoreModule, telemetry, fuel, budget });
-    return new InvocationCompiler(open, await open(), hostTelemetry);
+    return new InvocationCompiler(open, await open(), hostTelemetry, packages);
   }
 
   /** Number of cached outcomes. */
@@ -233,7 +239,7 @@ export class InvocationCompiler {
     if (hit !== undefined) return hit.outcome;
     let outcome;
     try {
-      const result = this.#compiler.compile(source, { sourceName, schemaPolicy: 'off' });
+      const result = this.#compiler.compile(source, { sourceName, schemaPolicy: 'off', packages: this.#packages });
       outcome = result.status === 'emitted' ? { ir: result.ir } : { rejected: true };
     } catch (error) {
       if (error instanceof ScxmlCompileError && error.code === 'invalid-request') {

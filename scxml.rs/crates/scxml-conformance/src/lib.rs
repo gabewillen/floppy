@@ -22,10 +22,6 @@ pub mod executor;
 pub mod external_client;
 /// Selects conformance cases by stable manifest metadata.
 pub mod filter;
-// The harness's outbound network for extension components (documented by
-// its own inner docs, whose links resolve in its scope).
-#[cfg(feature = "wasmtime")]
-pub mod example_server;
 /// Defines, validates, reads, and writes prepared corpus manifests.
 pub mod manifest;
 /// Documented automated equivalents of the W3C IRP manual-case instructions.
@@ -45,8 +41,8 @@ pub mod wasm;
 /// Every repository namespace's own implementation report plan
 /// (`namespaces/<name>/irp`, a [`CorpusKind::NamespaceIrp`] corpus) and the
 /// extension package manifests (workspace-relative paths) its runs bind, in
-/// name order. `env` exercises its slots through the example extension's
-/// `<example:fetch>`; `event` binds nothing.
+/// name order. `env` binds the example extension, whose elements carry no
+/// `env` slot (an `SCXML084` rejection); `event` binds nothing.
 pub const NAMESPACE_SUITES: [(&str, &[&str]); 2] = [
     (
         "env",
