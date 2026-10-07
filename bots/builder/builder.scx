@@ -26,8 +26,9 @@
   -> validate (scx:validate with the draft profile; machine-applicable
   fixes through apply_fixes, at most 2 passes per draft) -> simulate (each
   test script drives the draft as an invoked child with its own invoke id)
-  -> done. Every failure goes through retry_gate, which counts it
-  and gives up after max_attempts; triage then reads its enabled
+  -> done. Every failure goes through retry_gate, which takes its
+  fingerprint and gives up (no-progress) when it equals the previous
+  failure's, or at the request's optional max_attempts; triage then reads its enabled
   event:schema transitions with decision:menu and invokes the decision
   service to pick one (repair while there is a plan, redesign, abandon).
   When the decision is unavailable (no key granted, backend failure:
@@ -74,7 +75,8 @@
     <!-- The request. -->
     <data id="spec" expr="''"/>
     <data id="constraints" expr="[]"/>
-    <data id="max_attempts" expr="3"/>
+    <!-- An optional failure cap; null (no cap) unless the request sets it. -->
+    <data id="max_attempts" expr="null"/>
     <data id="model" expr="'sparks/qwen3.8-flash-next'"/>
     <data id="generate_timeout_ms" expr="300000"/>
     <data id="decision_timeout_ms" expr="60000"/>
@@ -101,7 +103,7 @@
     <data id="triage_instructions" expr="'An SCXML draft failed. Choose how the builder continues: repair the draft from its diagnostics when they are local mistakes, redesign the plan when the diagnostics show the topology is wrong or there is no plan, abandon only when the specification cannot be built as a state machine.'"/>
     <data id="plan_schema" expr='({"type":"object","properties":{"name":{"type":"string"},"summary":{"type":"string"},"states":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["atomic","compound","parallel","final"]},"parent":{"type":"string"},"purpose":{"type":"string"}},"required":["id","kind","parent","purpose"],"additionalProperties":false}},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"direction":{"type":"string","enum":["input","output","internal"]},"description":{"type":"string"}},"required":["name","direction","description"],"additionalProperties":false}},"transitions":{"type":"array","items":{"type":"object","properties":{"source":{"type":"string"},"event":{"type":"string"},"target":{"type":"string"},"description":{"type":"string"}},"required":["source","event","target","description"],"additionalProperties":false}}},"required":["name","summary","states","events","transitions"],"additionalProperties":false})'/>
     <data id="draft_schema" expr='({"type":"object","properties":{"scxml":{"type":"string"},"schemas":{"type":"array","items":{"type":"object","properties":{"event":{"type":"string"},"schema":{"type":"string"}},"required":["event","schema"],"additionalProperties":false}},"tests":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"data":{"type":"string"},"delay_ms":{"type":"integer"}},"required":["name","data","delay_ms"],"additionalProperties":false}},"settle_ms":{"type":"integer"},"expect_events":{"type":"array","items":{"type":"string"}},"expect_done":{"type":"boolean"}},"required":["name","events","settle_ms","expect_events","expect_done"],"additionalProperties":false}}},"required":["scxml","schemas","tests"],"additionalProperties":false})'/>
-    <!-- Counters (every loop is bounded by one of them). -->
+    <!-- Counters. -->
     <data id="attempt" expr="0"/>
     <data id="failures" expr="0"/>
     <data id="fix_passes" expr="0"/>
@@ -112,6 +114,14 @@
     <data id="decisions" expr="[]"/>
     <data id="attempt_log" expr="[]"/>
     <data id="failure_reason" expr="null"/>
+    <!-- The failure's fingerprint and the previous failure's (retry_gate):
+         the sorted, distinct kind|code|identity of its diagnostics, where a
+         validate diagnostic's identity is its primary label (no byte span,
+         which shifts between drafts) and any other's is its message (a
+         simulate message names the test, its expected and observed
+         outputs, and its done and error; the rest are the builder's own). -->
+    <data id="fingerprint" expr="null"/>
+    <data id="previous_fingerprint" expr="null"/>
     <!-- Simulation. -->
     <data id="max_tests" expr="8"/>
     <data id="sim_test_cap_ms" expr="120000"/>
@@ -139,7 +149,7 @@
                 target="design">
       <assign location="spec" expr="_event.data.spec"/>
       <assign location="constraints" expr="_event.data.constraints === undefined ? [] : _event.data.constraints"/>
-      <assign location="max_attempts" expr="_event.data.max_attempts === undefined ? 3 : _event.data.max_attempts"/>
+      <assign location="max_attempts" expr="_event.data.max_attempts === undefined ? null : _event.data.max_attempts"/>
       <assign location="model" expr="_event.data.model === undefined ? 'sparks/qwen3.8-flash-next' : _event.data.model"/>
       <assign location="generate_timeout_ms" expr="_event.data.generate_timeout_ms === undefined ? generate_timeout_ms : _event.data.generate_timeout_ms"/>
     </transition>
@@ -157,7 +167,7 @@
       <assign location="plan" expr="null"/>
       <assign location="gen_failure" expr="null"/>
       <assign location="stage_run" expr="stage_run + 1"/>
-      <log label="design" expr="(previous_plan === null ? 'planning' : 'replanning') + ' the topology; failures ' + failures + ' of ' + max_attempts"/>
+      <log label="design" expr="(previous_plan === null ? 'planning' : 'replanning') + ' the topology; failures ' + failures"/>
       <send id="design-timeout" event="builder.timeout" delayexpr="generate_timeout_ms + 'ms'">
         <param name="run" expr="stage_run"/>
       </send>
@@ -275,7 +285,7 @@
     <transition cond="report !== null &amp;&amp; typeof fixed === 'string' &amp;&amp; fixed !== scxml_text &amp;&amp; fix_passes &lt; 2"
                 target="apply_fixes"/>
     <transition cond="report !== null" target="retry_gate">
-      <assign location="diagnostics" expr="report.validator.diagnostics.filter(function (d) { return d.severity === 'error'; }).slice(0, 20).map(function (d) { return {kind: 'validate', code: d.code, message: d.help ? d.message + ' Help: ' + d.help : d.message}; })"/>
+      <assign location="diagnostics" expr="report.validator.diagnostics.filter(function (d) { return d.severity === 'error'; }).slice(0, 20).map(function (d) { return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, message: d.help ? d.message + ' Help: ' + d.help : d.message}; })"/>
     </transition>
     <transition event="error.execution" target="retry_gate">
       <assign location="diagnostics" expr="[{kind: 'draft', code: 'validator-failed', message: 'the validator could not check the draft (an oversized or unreadable document)'}]"/>
@@ -392,17 +402,25 @@
     </state>
   </state>
 
-  <!-- Counts one failure; gives up after max_attempts. -->
+  <!-- Counts one failure and takes its fingerprint; the same failure twice
+       in a row is no progress, so the build ends there (or at the request's
+       optional max_attempts). -->
   <state id="retry_gate">
     <onentry>
       <assign location="failures" expr="failures + 1"/>
+      <assign location="fingerprint" expr="JSON.stringify(diagnostics.map(function (d) { return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message); }).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; }))"/>
       <assign location="attempt_log" expr="attempt_log.concat([{failure: failures, attempt: attempt, diagnostics: diagnostics.slice(0, 5)}])"/>
-      <log label="retry_gate" expr="'failure ' + failures + ' of ' + max_attempts + (diagnostics.length &gt; 0 ? ': ' + diagnostics[0].kind + ' ' + diagnostics[0].code : '')"/>
+      <log label="retry_gate" expr="'failure ' + failures + (max_attempts === null ? '' : ' of ' + max_attempts) + (diagnostics.length &gt; 0 ? ': ' + diagnostics[0].kind + ' ' + diagnostics[0].code : '')"/>
     </onentry>
-    <transition cond="failures &gt;= max_attempts" target="failed">
+    <transition cond="fingerprint === previous_fingerprint" target="failed">
+      <assign location="failure_reason" expr="'no-progress'"/>
+    </transition>
+    <transition cond="max_attempts !== null &amp;&amp; failures &gt;= max_attempts" target="failed">
       <assign location="failure_reason" expr="'attempts-exhausted'"/>
     </transition>
-    <transition target="triage"/>
+    <transition target="triage">
+      <assign location="previous_fingerprint" expr="fingerprint"/>
+    </transition>
   </state>
 
   <!-- Picks the next step among the enabled event:schema transitions:
@@ -483,7 +501,7 @@
     <onentry>
       <log label="failed" expr="failure_reason"/>
     </onentry>
-    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"failed","description":"The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation.","type":"object","properties":{"reason":{"enum":["invalid-request","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","simulate","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}}},"required":["reason","diagnostics"],"additionalProperties":false}'>
+    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"failed","description":"The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation.","type":"object","properties":{"reason":{"enum":["invalid-request","no-progress","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","simulate","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}}},"required":["reason","diagnostics"],"additionalProperties":false}'>
       <content expr="({reason: failure_reason, diagnostics: diagnostics.map(function (d) { return {kind: d.kind, code: d.code, message: d.message}; })})"/>
     </donedata>
   </final>

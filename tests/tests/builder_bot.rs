@@ -410,7 +410,8 @@ fn mock_reply(
             | "/doctype/v1/chat/completions"
             | "/impostor/v1/chat/completions"
             | "/stale/v1/chat/completions"
-            | "/pings/v1/chat/completions",
+            | "/pings/v1/chat/completions"
+            | "/progress/v1/chat/completions",
             Some("topology_plan"),
         ) => Some(completion(PLAN)),
         ("/flaky/v1/chat/completions", Some("topology_plan")) => {
@@ -443,6 +444,13 @@ fn mock_reply(
             2 => fixable_draft(),
             _ => draft(&traffic_light(&green_separate(), "red")),
         })),
+        ("/progress/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&match authors {
+                1 => invalid_draft(),
+                2 => smuggling_draft(),
+                _ => draft(&traffic_light(&green_separate(), "red")),
+            }))
+        }
         ("/broken/v1/chat/completions" | "/flaky/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&invalid_draft()))
         }
@@ -493,7 +501,9 @@ impl Received {
 
 /// The deterministic fake backend on 127.0.0.1. `generate` routes:
 /// `/repair/v1` answers the plan, then the invalid draft, then the fixable
-/// one, then valid drafts; `/broken/v1` answers the plan, then only invalid
+/// one, then valid drafts; `/progress/v1` answers the plan, the invalid
+/// draft, a draft that breaks the draft profile, then valid drafts;
+/// `/broken/v1` answers the plan, then only invalid
 /// drafts; `/smuggle/v1` answers the plan, then only drafts that break the
 /// draft profile (`/unicode/v1` through a non-ASCII prefix, `/doctype/v1`
 /// through a DTD entity); `/impostor/v1` answers the plan, then a valid draft
@@ -936,7 +946,7 @@ fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
     });
     run.event(
         "builder.request",
-        &json!({"spec": SPEC, "max_attempts": 3, "generate_timeout_ms": 1000}),
+        &json!({"spec": SPEC, "generate_timeout_ms": 1000}),
     );
     run.end_input();
     records.extend(run.finish(Duration::from_mins(3)).records);
@@ -974,22 +984,23 @@ fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
 }
 
 /// Without the decision key the builder falls back to its cond-based
-/// triage; drafts that never validate exhaust `max_attempts` and the builder
-/// reports `builder.failed` with the last diagnostics.
+/// triage; a repair that fails with the same diagnostic as the draft before
+/// it is no progress, so the builder ends in `failed` (`no-progress`) with
+/// the repeated diagnostics, without a cap from the request.
 #[test]
-fn the_builder_gives_up_after_max_attempts_with_the_fallback_triage() {
+fn the_same_diagnostic_twice_ends_the_build_with_no_progress() {
     let mock = Mock::start();
     let records = run(
         &mock,
         "broken",
         "broken",
         &["CPA_API_KEY", "CPA_BASE_URL"],
-        &json!({"spec": SPEC, "max_attempts": 2}),
+        &json!({"spec": SPEC}),
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed", "{failed}");
-    assert_eq!(failed["reason"], "attempts-exhausted");
+    assert_eq!(failed["reason"], "no-progress");
     assert_eq!(failed["diagnostics"][0]["kind"], "validate");
     assert_eq!(failed["diagnostics"][0]["code"], "SCXML005");
     let received = mock.received();
@@ -1003,6 +1014,36 @@ fn the_builder_gives_up_after_max_attempts_with_the_fallback_triage() {
     );
 }
 
+/// A failure that differs from the one before it is progress: the builder
+/// keeps repairing (an invalid draft, then one that breaks the draft
+/// profile) until the fixed draft ends in `done`.
+#[test]
+fn a_different_diagnostic_each_time_keeps_repairing_until_done() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "progress",
+        "progress",
+        &["CPA_API_KEY", "CPA_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let report = &done["report"];
+    assert_eq!(report["attempts"], 3, "{report}");
+    assert_eq!(report["failures"], 2, "{report}");
+    assert_eq!(report["history"][0]["diagnostics"][0]["code"], "SCXML005");
+    assert!(
+        report["history"][1]["diagnostics"]
+            .as_array()
+            .is_some_and(|diagnostics| diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic["code"] == "SCXML098")),
+        "{report}"
+    );
+}
+
 /// A redesign sends the plan it replaces as `previous_plan`.
 #[test]
 fn a_redesign_sends_the_previous_plan() {
@@ -1013,7 +1054,7 @@ fn a_redesign_sends_the_previous_plan() {
         "broken",
         "redesign",
         &ALL,
-        &json!({"spec": SPEC, "max_attempts": 2}),
+        &json!({"spec": SPEC}),
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
@@ -1075,12 +1116,12 @@ fn repair_is_not_offered_without_a_plan() {
         "noplan",
         "redesign",
         &ALL,
-        &json!({"spec": SPEC, "max_attempts": 2}),
+        &json!({"spec": SPEC}),
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed", "{failed}");
-    assert_eq!(failed["reason"], "attempts-exhausted");
+    assert_eq!(failed["reason"], "no-progress");
     assert_eq!(failed["diagnostics"][0]["code"], "design-failed");
     let received = mock.received();
     assert_eq!(chat_requests(&received, "topology_plan").len(), 2);
@@ -1310,7 +1351,6 @@ fn live_builder_through_an_env_file() {
                 "send every light change and every walk signal to the invoker",
                 "a button press during green ends green early",
             ],
-            "max_attempts": 4,
             "model": model,
         }),
         // No base URL from the shell: each service uses its package's

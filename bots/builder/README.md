@@ -30,9 +30,9 @@ final states and its parent receives that state's done data as
 
 | What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?}`: the specification, extra constraints (strings), the failure budget (1 to 8, default 3), the generate service's model (default `sparks/qwen3.8-flash-next`, a reasoning model), and the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000) |
+| `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?}`: the specification, extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `sparks/qwen3.8-flash-next`, a reasoning model), and the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, tests, report}`: the built document, its input event schemas (`{event, schema}`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
-| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics}`: `invalid-request`, `attempts-exhausted`, or `abandoned`, with the last diagnostics (`{kind, code, message}`) |
+| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics}`: `invalid-request`, `no-progress` (the same failure twice in a row), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`) |
 
 The builder answers exactly once, by finishing. Run directly, `scx run`
 prints the done data in its `done` record and exits 0; invoked, the parent
@@ -100,8 +100,26 @@ intake -> design -> author -> validate -> simulate -> done
   failed to start) is dropped.
 * `done`: a final state whose `<donedata>` carries the result.
 * `retry_gate`: every failure (generation, draft, validation, simulation,
-  timeout) passes through it; it counts the failure and fails the build at
-  `max_attempts`, so every loop is bounded.
+  timeout) passes through it. It counts the failure and takes its
+  fingerprint, which the datamodel keeps (`fingerprint`, and the previous
+  failure's in `previous_fingerprint`), and a guarded transition
+  (`fingerprint === previous_fingerprint`) ends the build in `failed` with
+  the reason `no-progress` and the repeated diagnostics: the same failure
+  twice in a row means the repair loop is making no progress. A request's
+  optional `max_attempts` also ends it (`attempts-exhausted`). A fingerprint
+  is the sorted, distinct list of each diagnostic's kind, code, and
+  identity, taken from the canonical report rather than prose: a validator
+  diagnostic's identity is its primary label (the report gives no element
+  path, and byte spans shift between drafts), so two drafts fail the same
+  way when they have the same set of codes with the same primary labels; a
+  simulation diagnostic's identity is its message, which names the failing
+  test, its expected and observed outputs, its expected and observed
+  `done`, and its error, so the same test failing with the same mismatch is
+  the same failure; any other diagnostic (a generation failure, a timeout, a
+  draft schema that is not JSON) is identified by its message, which the
+  builder writes. A primary label often says only what kind of thing is
+  wrong (`SCXML005`'s is "unknown target identifier"), so a draft that
+  replaces one unknown target with another counts as the same failure.
 * `triage`: `decision:menu` (synchronous executable content) writes the
   state's enabled `event:schema` transitions as the canonical menu:
   `triage.repair` (guarded by `plan !== null`, so it is on the menu only
@@ -124,9 +142,9 @@ the topology. `design` and `author` each arm `builder.timeout` after
 (`stage_run`) and cancelled on exit. A timeout that fires while the call is
 in flight leaves the state, which cancels the invocation: the service is
 cancelled, the host closes the request's streaming connection at once (so
-the backend stops sending tokens), and no answer reaches anyone. The host's
-own request timeout (`scx`'s 120 s for a whole service request, body
-included) also ends a call that runs longer, as `transport`. The simulation is bounded the same way:
+the backend stops sending tokens), and no answer reaches anyone. `scx`
+puts no time limit of its own on a service request: the invoking state's
+`builder.timeout` is the bound. The simulation is bounded the same way:
 `simulate-timeout` is a delayed send cancelled on exit that fires after
 `max_tests * sim_test_cap_ms` plus 60 s, longer than the longest simulation
 `validate` admits (8 tests of at most 120 s each).
@@ -220,7 +238,10 @@ through a non-ASCII namespace prefix or a DTD), a candidate's
 `sim.settle` and `sim.drive` being recorded as outputs, a cancelled
 candidate's `builder.timeout` not ending the next simulation, a failed
 invocation's `sim.drive` not driving the next test, the fallback triage
-exhausting `max_attempts`, an invalid request, and, on the wall clock, a
+ending in `no-progress` when a repair fails with the same diagnostic again,
+a different diagnostic each time repairing on until `done`, a request's
+`max_attempts` ending the build (`attempts-exhausted`), an invalid request,
+and, on the wall clock, a
 `builder.timeout` that fires while the design generation is in flight (the
 fake backend holds its answer for 4 s): it preempts and cancels the call,
 the builder redesigns, and the late plan never reaches the report. The

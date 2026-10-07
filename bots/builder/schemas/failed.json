@@ -4,7 +4,7 @@
   "description": "The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation.",
   "type": "object",
   "properties": {
-    "reason": {"enum": ["invalid-request", "attempts-exhausted", "abandoned"]},
+    "reason": {"enum": ["invalid-request", "no-progress", "attempts-exhausted", "abandoned"]},
     "diagnostics": {
       "type": "array",
       "items": {
