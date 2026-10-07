@@ -148,10 +148,9 @@ fn the_package_binds_the_exact_uri_and_schema_and_declares_no_io() {
         manifest.extension_artifact,
         "nemobot_decision.virtualized.wasm"
     );
-    // Executable content is synchronous: no origin and no slot (the
-    // decision service returns the chosen event).
-    assert!(manifest.http_origins.is_empty());
-    assert!(manifest.env_slots.is_empty());
+    // Executable content is synchronous and does no I/O: the manifest
+    // declares no origin and no slot (the decision service returns the
+    // chosen event).
     manifest
         .verify_schema(&scxml_validator_core::SchemaSource::new(
             "decision.xsd",

@@ -442,10 +442,6 @@ mod guest {
     wit_bindgen::generate!({
         world: "executable-content-extension",
         path: "../../scxml.rs/crates/scxml-wit/wit/scxml",
-        // The world's `async func fetch` is lowered synchronously (this
-        // component never calls it): `execute` is synchronous executable
-        // content.
-        async: ["-import:stateforward:scxml/outbound-http@0.2.0#fetch"],
     });
 
     use std::cell::Cell;
@@ -454,7 +450,7 @@ mod guest {
     use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
     use stateforward::scxml::types::{
         ComponentError, DataValue, ErrorCode, ErrorVersion, ExecutableContentExtension,
-        ExtensionContent, ExtensionOutcome, SlotReference, TraceContext,
+        ExtensionContent, ExtensionOutcome, TraceContext,
     };
     use stateforward::scxml::{data_model_host, session_snapshot_host};
 
@@ -570,7 +566,6 @@ mod guest {
         fn execute(
             element: ExecutableContentExtension,
             context: Option<TraceContext>,
-            _references: Vec<SlotReference>,
         ) -> Result<ExtensionOutcome, ComponentError> {
             observed(Operation::Execute, context.as_ref(), || {
                 if element.name.namespace_uri.as_deref() != Some(super::NAMESPACE_URI) {

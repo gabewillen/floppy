@@ -6,7 +6,5 @@
   "schema-artifact": "decision.xsd",
   "schema-sha256": "ec7320b4aa45fa36443f1e21173b42d9d60693e55926e32c686d91fa7087ba29",
   "wit-world": "stateforward:scxml/executable-content-extension",
-  "wit-version": "0.2.0",
-  "http-origins": [],
-  "env-slots": []
+  "wit-version": "0.2.0"
 }
