@@ -36,6 +36,7 @@ members = [
     "components/scxml-compiler",
     "components/scxml-machine",
     "components/scxml-snapshot-codec",
+    "components/scxml-resolver-github",
     "namespaces/scx",
 ]
 default-members = [
@@ -65,6 +66,7 @@ default-members = [
     "components/scxml-extension-example",
     "components/scxml-script-example",
     "components/scxml-machine",
+    "components/scxml-resolver-github",
     "namespaces/scx",
 ]
 resolver = "3"
@@ -102,6 +104,16 @@ wasmtime = { version = "49.0.2", default-features = false, features = ["call-hoo
 # wasi:filesystem, wasi:sockets), each linked individually, never the whole
 # command world. No preview 1.
 wasmtime-wasi = { version = "49.0.2", default-features = false, features = ["p2", "p3"] }
+# `scxml-host-wasmtime` `http` feature only: WASI 0.3 `wasi:http` (`p3`),
+# the one import of the repository resolver component `scx` embeds. No
+# default features: the host sends each admitted request itself (through
+# ureq, above), so wasmtime-wasi-http's own client, TLS, and root
+# certificates are not linked.
+wasmtime-wasi-http = { version = "49.0.2", default-features = false, features = ["p3", "component-model-async"] }
+http = { version = "1.3.1", default-features = false, features = ["std"] }
+http-body = { version = "1.0.1", default-features = false }
+http-body-util = { version = "0.1.3", default-features = false }
+bytes = { version = "1.11.1", default-features = false, features = ["std"] }
 # The version wasmtime's parallel compilation already uses: the session host
 # asks it whether the current thread is a pool worker (which must never wait
 # on another thread's compilation), and a test races hosts on a small pool.

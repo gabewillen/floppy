@@ -213,6 +213,22 @@ Why the unsupported ones stay unsupported:
 - **URLs.** The host never fetches a URI by itself. Pages decide which URLs
   resolve: through the allowlisted `resources` option (static URLs,
   prefetched) or `capabilities.loadDocument` (synchronous).
+- **Repository packages.** A repository namespace or service
+  (`https://github.com/<owner>/<repo>/namespaces/<name>` or `.../services/<name>`)
+  is resolved by nothing here, and fails closed as any unbound one does.
+  `scx` resolves them with its GitHub resolver component
+  (`stateforward:scxml/resolver`), and jco-transpile 0.14.0 does transpile
+  it, but this host does not run it: (1) nothing here could use what it
+  resolves, since this host instantiates no extension or invoked-service
+  component (extensions go to the page's `executeExtension`, and services
+  are a Wasmtime host feature); (2) its only import, WASI 0.3
+  `wasi:http/client.send`, has no browser implementation (preview3-shim
+  0.6.1's browser `send` throws `Todo`), and a page's `fetch` cannot stand
+  in for it with the same grant: `redirect: 'manual'` hides the `Location`
+  the component must follow so each hop is admitted again, and `follow`
+  lets the browser reach any origin; (3) `github.com` release downloads
+  (`SHA256SUMS` and the component asset) send no CORS headers, so a page
+  cannot read them.
 
 ### URL resources
 

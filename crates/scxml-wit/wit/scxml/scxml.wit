@@ -1771,6 +1771,63 @@ interface outbound-http {
   fetch: async func(request: http-request) -> result<http-response, component-error>;
 }
 
+/// Resolves repository packages for the CLI: an extension namespace URI or
+/// an invoked-service type URI that names a package in a repository, at a
+/// release (the `@<tag>` a document pinned, split off when it was parsed)
+/// or at the repository's latest release.
+///
+/// A resolver never decides trust. It reports which release a URI resolves
+/// to and fetches that release's files; the host verifies every byte it
+/// returns (the manifest's exact URI and WIT identity, the schema against
+/// the manifest's digest and its `targetNamespace`, the component against
+/// the release's `SHA256SUMS`), and owns the content-addressed cache, the
+/// pin of each URI to its first resolution, `--offline`, and resolving each
+/// URI once per root session. A resolver reaches the network only through
+/// its `wasi:http` import, which the host admits only to the origins it
+/// grants, and receives no credential: a host that holds one adds it to the
+/// requests it admits.
+///
+/// `configuration` is the host's, as name and value pairs; a resolver
+/// refuses a missing, repeated, or unknown name with `invalid-input`. The
+/// GitHub resolver reads `github-api-base`, `github-raw-base`, and
+/// `github-download-base` (the CLI's `--github-*-base` flags, or GitHub's
+/// own origins), each an absolute URL without userinfo, query, or fragment.
+///
+/// Both functions return `none` for a URI this resolver does not serve, as
+/// an `ExtensionResolver` does; the host then treats it as an ordinary URI.
+/// Errors carry a `detail` the host shows: `invalid-input` for a malformed
+/// argument or configuration, `unavailable` for a request the host refused,
+/// a transport failure, a non-success status, or a redirect beyond its
+/// bound, and `payload-too-large` for a body over `limit`.
+interface resolver-api {
+  use types.{component-error};
+  /// A release of a package's repository: its tag and the 40-character
+  /// lowercase hexadecimal commit the tag names.
+  record release {
+    tag: string,
+    commit: string,
+  }
+  /// One file of a release.
+  variant artifact {
+    /// The package manifest, at the release's commit.
+    manifest,
+    /// A file of the package at the release's commit, by its path relative
+    /// to the manifest (the manifest's `schema-artifact`).
+    schema(string),
+    /// A release asset by name (the manifest's `extension-artifact` or
+    /// `service-artifact`).
+    component(string),
+    /// The release's `SHA256SUMS` asset.
+    sha256sums,
+  }
+  /// The release `uri` (a tagless package URI) resolves to: the release
+  /// `tag` names, or, without one, the repository's latest release.
+  resolve: async func(configuration: list<tuple<string, string>>, uri: string, tag: option<string>) -> result<option<release>, component-error>;
+  /// The exact bytes of `artifact` of `uri` at `release`, at most `limit`
+  /// bytes (at most 2147483647).
+  fetch: async func(configuration: list<tuple<string, string>>, uri: string, release: release, artifact: artifact, limit: u64) -> result<option<list<u8>>, component-error>;
+}
+
 /// Read-only snapshot of the executing session, offered to extension components
 /// (`docs/session-snapshot.md`, "Snapshots during executable content").
 ///
@@ -2318,6 +2375,13 @@ world script {
 /// A data-only script bundle emitted by the packager; it has no imports.
 world script-bundle-provider {
   export script-bundle;
+}
+/// A repository package resolver component (`resolver-api`). Its only
+/// capability is outbound HTTP through `wasi:http/client`, which the host
+/// admits only to the origins it grants.
+world resolver {
+  import wasi:http/client@0.3.0;
+  export resolver-api;
 }
 /// The host side of the runtime: links providers and exports capabilities.
 world scxml-host {

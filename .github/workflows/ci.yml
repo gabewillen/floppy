@@ -51,7 +51,7 @@ jobs:
       - run: RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
       - run: RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --all-features --locked
       - run: cargo test -p scxml-wit --locked
-      - run: cargo clippy --locked --target wasm32-wasip2 -p scxml-telemetry -p scxml-validator-xsd -p scxml-clock -p scxml-compiler -p scxml-data-model-ecmascript -p scxml-data-model-null -p scxml-data-model-xpath -p scxml-ioprocessor-scxml -p scxml-ioprocessor-basichttp -p scxml-machine -p scxml-extension-example -p scxml-reporter-rustc -p scxml-reporter-sarif -p scxml-script-example -p scxml-service-example -p scxml-service-files -p scxml-snapshot-codec -p scxml-validator -p scx -- -D warnings
+      - run: cargo clippy --locked --target wasm32-wasip2 -p scxml-telemetry -p scxml-validator-xsd -p scxml-clock -p scxml-compiler -p scxml-data-model-ecmascript -p scxml-data-model-null -p scxml-data-model-xpath -p scxml-ioprocessor-scxml -p scxml-ioprocessor-basichttp -p scxml-machine -p scxml-extension-example -p scxml-reporter-rustc -p scxml-reporter-sarif -p scxml-script-example -p scxml-service-example -p scxml-service-files -p scxml-snapshot-codec -p scxml-validator -p scxml-resolver-github -p scx -- -D warnings
       - run: cargo check -p scxml-host-wasmtime --features wasmtime --locked
       - run: cargo test -p scxml-host-wasmtime --features wasmtime,http --locked
         timeout-minutes: 75
@@ -142,15 +142,16 @@ jobs:
       # several upstream commits report version 0.2.0, so pin the revision.
       - name: Install the pinned wasi-virt revision
         run: cargo install --locked --git https://github.com/bytecodealliance/WASI-Virt --rev 448f6df8f688cee5d6995e96b1ffc31f9bf00742 wasi-virt
-      # The eight components the conformance executor links, and the
+      # The eight components the conformance executor links, the
       # example extension component the namespace suites
-      # (namespaces/<name>/irp) bind.
+      # (namespaces/<name>/irp) bind, and the scx namespace and GitHub
+      # resolver components `scx` embeds with them.
       - name: Build and verify the release components
         run: |
           sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
             scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
             scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine \
-            scxml_extension_example scx
+            scxml_extension_example scxml_resolver_github scx
           echo "MANIFEST_SHA256=$(sha256sum "$RELEASE/manifest.tsv" | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
           echo "EXTENSION_SHA256=$(sha256sum "$RELEASE/scxml_extension_example.virtualized.wasm" | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
       # The canonical release identity is this job's build (docs/conformance.md,

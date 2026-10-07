@@ -113,7 +113,7 @@ case "$proof_dir" in
 esac
 manifest="$proof_dir/manifest.tsv"
 manifest_tmp="$proof_dir/manifest.tsv.tmp"
-all_components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_service_example scxml_service_files scxml_extension_example scxml_script_example scxml_validator scxml_reporter_rustc scxml_reporter_sarif scxml_compiler scxml_machine scxml_snapshot_codec scx'
+all_components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_service_example scxml_service_files scxml_extension_example scxml_script_example scxml_validator scxml_reporter_rustc scxml_reporter_sarif scxml_compiler scxml_machine scxml_snapshot_codec scxml_resolver_github scx'
 if [ "$#" -eq 0 ]; then
     components=$all_components
 else
@@ -190,6 +190,10 @@ expected_imports() {
         # records live in machine-capability-types); types_only_imports
         # checks that below.
         scxml_snapshot_codec) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/machine-capability-types@0.2.0' 'stateforward:scxml/machine-api@0.2.0' 'stateforward:scxml/data-model-api@0.2.0' 'stateforward:scxml/io-processor-api@0.2.0' ;;
+        # The GitHub resolver reaches the network only through WASI 0.3
+        # wasi:http/client, which the host admits only to the origins it
+        # grants; wasi-virt denies the standard library's WASI 0.2 imports.
+        scxml_resolver_github) printf '%s\n' 'wasi:http/types@0.3.0' 'wasi:http/client@0.3.0' 'stateforward:scxml/types@0.2.0' ;;
         packaged_machine) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/machine-capability-types@0.2.0' ;;
         *) echo "no import allowlist for component: $1" >&2; exit 1 ;;
     esac
@@ -363,8 +367,8 @@ for component in $components; do
     world=$(wasm-tools component wit "$virtualized")
     imports=$(printf '%s\n' "$world" | sed -n 's/^  import \(.*\);$/\1/p')
     # A component may keep only a WASI interface its allowlist names (the
-    # example service its world's logical clock, and the files example the
-    # filesystem it imports).
+    # example service its world's logical clock, the files example the
+    # filesystem it imports, and the resolver wasi:http).
     allowed_wasi=$(expected_imports "$component" | grep -E '^wasi:' || true)
     if printf '%s\n' "$imports" | grep -E '^wasi:' | grep -Fxv "$allowed_wasi" | grep -q .; then
         echo "virtualized component retains a WASI capability: $component" >&2

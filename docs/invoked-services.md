@@ -205,7 +205,7 @@ so a document needs no flag to bind it:
   `<invoke src>` document's own pin for its own sessions
   (`EmbeddedDocument::services`). `validate` and `compile` (and the
   compile step of `snapshot run` and `run`) resolve the package: the tag (or
-  the latest release's tag) to a commit through the GitHub API, then the manifest and its schema at that
+  the latest release's tag) to a commit through the GitHub API (both fetched by the embedded GitHub resolver component, as for repository namespaces), then the manifest and its schema at that
   commit, each checked against the digest the manifest declares. `snapshot
   run` and `run` then resolve the component from the release, authenticated
   by its `SHA256SUMS` entry, and bind it before the session starts. Any
