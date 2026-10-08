@@ -1,0 +1,102 @@
+[
+  {
+    "events": [],
+    "expect_done": false,
+    "expect_events": [
+      "signal.green",
+      "signal.yellow",
+      "signal.red",
+      "signal.green"
+    ],
+    "name": "normal_cycle_no_button",
+    "settle_ms": 10000
+  },
+  {
+    "events": [
+      {
+        "data": "{}",
+        "delay_ms": 1000,
+        "name": "ped_button.press"
+      }
+    ],
+    "expect_done": false,
+    "expect_events": [
+      "signal.green",
+      "signal.yellow",
+      "signal.red",
+      "signal.ped_walk",
+      "signal.ped_clear",
+      "signal.green"
+    ],
+    "name": "button_press_during_green",
+    "settle_ms": 12000
+  },
+  {
+    "events": [
+      {
+        "data": "{}",
+        "delay_ms": 5000,
+        "name": "ped_button.press"
+      }
+    ],
+    "expect_done": false,
+    "expect_events": [
+      "signal.green",
+      "signal.yellow",
+      "signal.red",
+      "signal.ped_walk",
+      "signal.ped_clear",
+      "signal.green"
+    ],
+    "name": "button_press_during_red",
+    "settle_ms": 12000
+  },
+  {
+    "events": [
+      {
+        "data": "{}",
+        "delay_ms": 3500,
+        "name": "ped_button.press"
+      }
+    ],
+    "expect_done": false,
+    "expect_events": [
+      "signal.green",
+      "signal.yellow",
+      "signal.red",
+      "signal.ped_walk",
+      "signal.ped_clear",
+      "signal.green"
+    ],
+    "name": "button_press_during_yellow",
+    "settle_ms": 12000
+  },
+  {
+    "events": [
+      {
+        "data": "{}",
+        "delay_ms": 7000,
+        "name": "ped_button.press"
+      },
+      {
+        "data": "{}",
+        "delay_ms": 9500,
+        "name": "ped_button.press"
+      }
+    ],
+    "expect_done": false,
+    "expect_events": [
+      "signal.green",
+      "signal.yellow",
+      "signal.red",
+      "signal.green",
+      "signal.yellow",
+      "signal.red",
+      "signal.ped_walk",
+      "signal.ped_clear",
+      "signal.green"
+    ],
+    "name": "button_press_twice",
+    "settle_ms": 16000
+  }
+]

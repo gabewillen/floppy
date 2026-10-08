@@ -7,6 +7,29 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-08, the endpoint cutover (decision D31), direct vLLM, model `Qwen/Qwen3.8-Flash-Next`
+
+The runs used floppy commit `39c3b5df` (scxml.rs subtree `92742d65`): the
+generate package declares no origin, and floppy's `.env` holds
+`FLOPPY_BASE_URL` (the direct vLLM `http://192.168.2.89:8000/v1`) and
+`FLOPPY_API_KEY` (a copy of the vLLM key, made without printing it).
+`scx` was the debug binary the tests build from the subtree
+(`target/scx/debug/scx`), with the dev cache
+`target/components/package-cache`. The live test also had
+`TYPESAFE_API_KEY` from `mosfet/mosfet.py/.env`
+(`FLOPPY_LIVE_ENV_FILE=.env:$HOME/VSCode/stateforward/mosfet/mosfet.py/.env
+FLOPPY_LIVE_MODEL=Qwen/Qwen3.8-Flash-Next cargo test -p floppy-tests --test
+builder_bot -- --ignored`); the README runs used the README's command,
+`--env-file .env` only, so triage ran its fallback
+(`fallback:unavailable`).
+
+| Run | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| `live_builder_through_an_env_file` | `Qwen/Qwen3.8-Flash-Next` | pass | 1 | 1033 s, final state `done` on attempt 8 after 7 failures (`validate` and `simulate test-failed`), triage `triage.repair` seven times through TypeSafe, one machine-applicable fix |
+| README command, run 1 | `Qwen/Qwen3.8-Flash-Next` | fail | 1 of 2 | exit 0 in 615 s, final state `failed` (`no-progress`): both author generations cancelled at the builder's 300 s `author-timeout` |
+| README command, run 2 | `Qwen/Qwen3.8-Flash-Next` | pass | 2 of 2 | exit 0 in 380 s, final state `done` on attempt 5 after `validate SCXML008` (with `XSD-cvc-complex-type.3.2.2`), `simulate test-failed`, `validate XML001`, and `simulate test-failed`, fallback triage four times, one machine-applicable fix; plan `traffic_light_pedestrian`; saved as `bots/builder/examples/traffic_light_vllm/` (`scx validate`: 0 errors, 0 warnings) |
+| README command without `FLOPPY_BASE_URL` | none | pass (fail fast) | 1 | `--env-file mosfet/mosfet.py/.env` only: the consent listing showed `env FLOPPY_BASE_URL (no value)` and `env FLOPPY_API_KEY (no value)`, the design generation sent nothing, and the builder ended in `failed` (`unconfigured`, its diagnostic naming both variables) 76 ms after the request |
+
 ## 2026-10-07, the builder against vLLM directly (no gateway), model `Qwen/Qwen3.8-Flash-Next`
 
 The runs used floppy commit `4909f064` (the failure-cause logging below;

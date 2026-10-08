@@ -264,6 +264,10 @@ model output, kept as built: for example its `onexit` handlers do not
 cancel the phase timers, which its tests do not detect. The first live
 successful build of the current builder is
 [`examples/traffic_light_luna`](examples/traffic_light_luna) (2026-10-06,
-`gpt-6-luna`; three attempts, two `triage.repair` decisions).
+`gpt-6-luna`; three attempts, two `triage.repair` decisions). [`examples/traffic_light_vllm`](examples/traffic_light_vllm)
+is the README command above run on direct vLLM after the endpoint cutover
+(2026-10-08, `Qwen/Qwen3.8-Flash-Next`, `.env` only, so triage used its
+fallback; five attempts, one machine-applicable fix), kept as built; it
+validates with 0 errors and 0 warnings.
 [docs/live-proof.md](../../docs/live-proof.md) records that run and every
 other live result.

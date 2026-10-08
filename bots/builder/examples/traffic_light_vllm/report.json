@@ -1,0 +1,362 @@
+{
+  "attempts": 5,
+  "decisions": [
+    "fallback:unavailable",
+    "fallback:unavailable",
+    "fallback:unavailable",
+    "fallback:unavailable"
+  ],
+  "failures": 4,
+  "fixes_applied": 1,
+  "history": [
+    {
+      "attempt": 1,
+      "diagnostics": [
+        {
+          "code": "SCXML008",
+          "kind": "validate",
+          "label": "missing send identifier",
+          "message": "cancel requires exactly one of `sendid` or `sendidexpr` Help: use `sendid` for a literal send ID or `sendidexpr` for a computed ID"
+        },
+        {
+          "code": "XSD-cvc-complex-type.3.2.2",
+          "kind": "validate",
+          "label": "unknown attribute",
+          "message": "attribute `event` is not allowed on `<cancel>` Help: `<cancel>` accepts `sendid`, `sendidexpr`; extension attributes must use a namespace prefix"
+        },
+        {
+          "code": "SCXML008",
+          "kind": "validate",
+          "label": "missing send identifier",
+          "message": "cancel requires exactly one of `sendid` or `sendidexpr` Help: use `sendid` for a literal send ID or `sendidexpr` for a computed ID"
+        },
+        {
+          "code": "XSD-cvc-complex-type.3.2.2",
+          "kind": "validate",
+          "label": "unknown attribute",
+          "message": "attribute `event` is not allowed on `<cancel>` Help: `<cancel>` accepts `sendid`, `sendidexpr`; extension attributes must use a namespace prefix"
+        },
+        {
+          "code": "SCXML008",
+          "kind": "validate",
+          "label": "missing send identifier",
+          "message": "cancel requires exactly one of `sendid` or `sendidexpr` Help: use `sendid` for a literal send ID or `sendidexpr` for a computed ID"
+        }
+      ],
+      "failure": 1
+    },
+    {
+      "attempt": 2,
+      "diagnostics": [
+        {
+          "code": "test-failed",
+          "kind": "simulate",
+          "message": "test normal_cycle_no_button expected the outputs [\"signal.green\",\"signal.yellow\",\"signal.red\",\"signal.green\"] in order and done=false, observed [\"signal.green\"] and done=false"
+        },
+        {
+          "code": "test-failed",
+          "kind": "simulate",
+          "message": "test button_press_during_green expected the outputs [\"signal.green\",\"signal.yellow\",\"signal.red\",\"signal.ped_walk\",\"signal.ped_clear\",\"signal.green\"] in order and done=false, observed [\"signal.green\",\"signal.green\"] and done=false"
+        },
+        {
+          "code": "test-failed",
+          "kind": "simulate",
+          "message": "test button_press_during_red expected the outputs [\"signal.green\",\"signal.yellow\",\"signal.red\",\"signal.ped_walk\",\"signal.ped_clear\",\"signal.green\"] in order and done=false, observed [\"signal.green\",\"signal.green\"] and done=false"
+        }
+      ],
+      "failure": 2
+    },
+    {
+      "attempt": 3,
+      "diagnostics": [
+        {
+          "code": "XML001",
+          "kind": "validate",
+          "label": "an XML attribute needs `=` and a quoted value",
+          "message": "attribute `{\"type\":\"object\"}'\"'` on `<transition>` has no value Help: give `{\"type\":\"object\"}'\"'` a quoted value (`{\"type\":\"object\"}'\"'=\"\u2026\"`), or remove it"
+        }
+      ],
+      "failure": 3
+    },
+    {
+      "attempt": 4,
+      "diagnostics": [
+        {
+          "code": "test-failed",
+          "kind": "simulate",
+          "message": "test button_press_twice expected the outputs [\"signal.green\",\"signal.yellow\",\"signal.red\",\"signal.green\",\"signal.yellow\",\"signal.red\",\"signal.ped_walk\",\"signal.ped_clear\",\"signal.green\"] in order and done=false, observed [\"signal.green\",\"signal.yellow\",\"signal.red\",\"signal.green\",\"signal.yellow\",\"signal.red\",\"signal.ped_walk\"] and done=false"
+        }
+      ],
+      "failure": 4
+    }
+  ],
+  "plan": {
+    "events": [
+      {
+        "description": "pedestrian button press",
+        "direction": "input",
+        "name": "ped_button.press"
+      },
+      {
+        "description": "timer fired when green duration expires",
+        "direction": "internal",
+        "name": "t_green_timeout"
+      },
+      {
+        "description": "timer fired when yellow duration expires",
+        "direction": "internal",
+        "name": "t_yellow_timeout"
+      },
+      {
+        "description": "timer fired when red (no-ped) duration expires",
+        "direction": "internal",
+        "name": "t_red_timeout"
+      },
+      {
+        "description": "timer fired when pedestrian walk duration expires",
+        "direction": "internal",
+        "name": "t_walk_timeout"
+      },
+      {
+        "description": "timer fired when pedestrian clear duration expires",
+        "direction": "internal",
+        "name": "t_clear_timeout"
+      },
+      {
+        "description": "output: signal light is green for vehicles",
+        "direction": "output",
+        "name": "signal.green"
+      },
+      {
+        "description": "output: signal light is yellow for vehicles",
+        "direction": "output",
+        "name": "signal.yellow"
+      },
+      {
+        "description": "output: signal light is red for vehicles",
+        "direction": "output",
+        "name": "signal.red"
+      },
+      {
+        "description": "output: pedestrian walk signal active",
+        "direction": "output",
+        "name": "signal.ped_walk"
+      },
+      {
+        "description": "output: pedestrian signal clearing",
+        "direction": "output",
+        "name": "signal.ped_clear"
+      }
+    ],
+    "name": "traffic_light_pedestrian",
+    "states": [
+      {
+        "id": "vehicle_green",
+        "kind": "atomic",
+        "parent": "root",
+        "purpose": "normal green phase for vehicles; pedestrians wait"
+      },
+      {
+        "id": "vehicle_yellow",
+        "kind": "atomic",
+        "parent": "root",
+        "purpose": "yellow warning phase for vehicles"
+      },
+      {
+        "id": "vehicle_red",
+        "kind": "atomic",
+        "parent": "root",
+        "purpose": "red phase for vehicles; may be followed by pedestrian phase"
+      },
+      {
+        "id": "pedestrian_walk",
+        "kind": "atomic",
+        "parent": "root",
+        "purpose": "pedestrians may cross"
+      },
+      {
+        "id": "pedestrian_clear",
+        "kind": "atomic",
+        "parent": "root",
+        "purpose": "pedestrian signal countdown before clearing"
+      }
+    ],
+    "summary": "The machine starts in vehicle_green. Normal cycling proceeds green->yellow->red->green with short timers. If a pedestrian presses the button during green, yellow, or red, a flag (ped_requested) is set. Upon entering vehicle_red, if ped_requested is true the machine transitions to pedestrian_walk instead of returning to green, then proceeds through pedestrian_clear and back to green. All timing is handled via delayed internal timer events. Output signals (signal.green, signal.yellow, signal.red, signal.ped_walk, signal.ped_clear) are sent to the invoker on state entry.",
+    "transitions": [
+      {
+        "description": "green phase expired; advance to yellow",
+        "event": "t_green_timeout",
+        "source": "vehicle_green",
+        "target": "vehicle_yellow"
+      },
+      {
+        "description": "pedestrian pressed button during green; set flag",
+        "event": "ped_button.press",
+        "source": "vehicle_green",
+        "target": "vehicle_green"
+      },
+      {
+        "description": "yellow phase expired; advance to red",
+        "event": "t_yellow_timeout",
+        "source": "vehicle_yellow",
+        "target": "vehicle_red"
+      },
+      {
+        "description": "red phase expired with no pedestrian request; return to green",
+        "event": "t_red_timeout",
+        "source": "vehicle_red",
+        "target": "vehicle_green"
+      },
+      {
+        "description": "red phase expired with pedestrian request; enter walk",
+        "event": "t_red_timeout",
+        "source": "vehicle_red",
+        "target": "pedestrian_walk"
+      },
+      {
+        "description": "pedestrian pressed button during red; set flag",
+        "event": "ped_button.press",
+        "source": "vehicle_red",
+        "target": "vehicle_red"
+      },
+      {
+        "description": "walk phase expired; enter clear countdown",
+        "event": "t_walk_timeout",
+        "source": "pedestrian_walk",
+        "target": "pedestrian_clear"
+      },
+      {
+        "description": "clear phase expired; return to green",
+        "event": "t_clear_timeout",
+        "source": "pedestrian_clear",
+        "target": "vehicle_green"
+      }
+    ]
+  },
+  "simulation": [
+    {
+      "done": false,
+      "error": null,
+      "expect_done": false,
+      "expected": [
+        "signal.green",
+        "signal.yellow",
+        "signal.red",
+        "signal.green"
+      ],
+      "invokeid": "sim_run.session.18",
+      "name": "normal_cycle_no_button",
+      "observed": [
+        "signal.green",
+        "signal.yellow",
+        "signal.red",
+        "signal.green",
+        "signal.yellow"
+      ],
+      "passed": true
+    },
+    {
+      "done": false,
+      "error": null,
+      "expect_done": false,
+      "expected": [
+        "signal.green",
+        "signal.yellow",
+        "signal.red",
+        "signal.ped_walk",
+        "signal.ped_clear",
+        "signal.green"
+      ],
+      "invokeid": "sim_run.session.19",
+      "name": "button_press_during_green",
+      "observed": [
+        "signal.green",
+        "signal.yellow",
+        "signal.red",
+        "signal.ped_walk",
+        "signal.ped_clear",
+        "signal.green"
+      ],
+      "passed": true
+    },
+    {
+      "done": false,
+      "error": null,
+      "expect_done": false,
+      "expected": [
+        "signal.green",
+        "signal.yellow",
+        "signal.red",
+        "signal.ped_walk",
+        "signal.ped_clear",
+        "signal.green"
+      ],
+      "invokeid": "sim_run.session.20",
+      "name": "button_press_during_red",
+      "observed": [
+        "signal.green",
+        "signal.yellow",
+        "signal.red",
+        "signal.ped_walk",
+        "signal.ped_clear",
+        "signal.green"
+      ],
+      "passed": true
+    },
+    {
+      "done": false,
+      "error": null,
+      "expect_done": false,
+      "expected": [
+        "signal.green",
+        "signal.yellow",
+        "signal.red",
+        "signal.ped_walk",
+        "signal.ped_clear",
+        "signal.green"
+      ],
+      "invokeid": "sim_run.session.21",
+      "name": "button_press_during_yellow",
+      "observed": [
+        "signal.green",
+        "signal.yellow",
+        "signal.red",
+        "signal.ped_walk",
+        "signal.ped_clear",
+        "signal.green"
+      ],
+      "passed": true
+    },
+    {
+      "done": false,
+      "error": null,
+      "expect_done": false,
+      "expected": [
+        "signal.green",
+        "signal.yellow",
+        "signal.red",
+        "signal.green",
+        "signal.yellow",
+        "signal.red",
+        "signal.ped_walk",
+        "signal.ped_clear",
+        "signal.green"
+      ],
+      "invokeid": "sim_run.session.22",
+      "name": "button_press_twice",
+      "observed": [
+        "signal.green",
+        "signal.yellow",
+        "signal.red",
+        "signal.green",
+        "signal.yellow",
+        "signal.red",
+        "signal.ped_walk",
+        "signal.ped_clear",
+        "signal.green"
+      ],
+      "passed": true
+    }
+  ],
+  "warnings": 0
+}

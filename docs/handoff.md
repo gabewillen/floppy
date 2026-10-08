@@ -100,6 +100,11 @@ subtree matches, squash `9d1a67a7`, pull `dea16624`):
   clippy `-D warnings`, all workspace tests, and the `builder_bot` live
   test on direct vLLM; no floppy code or test named a moved code.
 
+- Model endpoint cutover (D31, floppy `39c3b5df`): `FLOPPY_BASE_URL` and
+  `FLOPPY_API_KEY` with no default backend; full proof green, the
+  `builder_bot` live test passed on direct vLLM, and the README run is saved
+  as `bots/builder/examples/traffic_light_vllm/` (docs/live-proof.md).
+
 Next: phase 4 (bot core and abilities), per
 `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 

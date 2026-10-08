@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0"
+       datamodel="ecmascript"
+       initial="vehicle_green">
+
+  <datamodel>
+    <data id="ped_requested" expr="false"/>
+  </datamodel>
+
+  <state id="vehicle_green">
+    <onentry>
+      <send event="signal.green" target="#_parent"/>
+      <send event="t_green_timeout" delay="3000ms" id="t_green_send"/>
+    </onentry>
+    <onexit>
+      <cancel sendid="t_green_send"/>
+    </onexit>
+    <transition event="t_green_timeout" target="vehicle_yellow"/>
+    <transition event="ped_button.press" event:schema="{&quot;type&quot;:&quot;object&quot;}">
+      <assign location="ped_requested" expr="true"/>
+    </transition>
+  </state>
+
+  <state id="vehicle_yellow">
+    <onentry>
+      <send event="signal.yellow" target="#_parent"/>
+      <send event="t_yellow_timeout" delay="1000ms" id="t_yellow_send"/>
+    </onentry>
+    <onexit>
+      <cancel sendid="t_yellow_send"/>
+    </onexit>
+    <transition event="t_yellow_timeout" target="vehicle_red"/>
+    <transition event="ped_button.press" event:schema="{&quot;type&quot;:&quot;object&quot;}">
+      <assign location="ped_requested" expr="true"/>
+    </transition>
+  </state>
+
+  <state id="vehicle_red">
+    <onentry>
+      <send event="signal.red" target="#_parent"/>
+      <send event="t_red_timeout" delay="2000ms" id="t_red_send"/>
+    </onentry>
+    <onexit>
+      <cancel sendid="t_red_send"/>
+    </onexit>
+    <transition event="t_red_timeout" cond="ped_requested" target="pedestrian_walk">
+      <assign location="ped_requested" expr="false"/>
+    </transition>
+    <transition event="t_red_timeout" target="vehicle_green"/>
+    <transition event="ped_button.press" event:schema="{&quot;type&quot;:&quot;object&quot;}">
+      <assign location="ped_requested" expr="true"/>
+    </transition>
+  </state>
+
+  <state id="pedestrian_walk">
+    <onentry>
+      <send event="signal.ped_walk" target="#_parent"/>
+      <send event="t_walk_timeout" delay="2000ms" id="t_walk_send"/>
+    </onentry>
+    <onexit>
+      <cancel sendid="t_walk_send"/>
+    </onexit>
+    <transition event="t_walk_timeout" target="pedestrian_clear"/>
+  </state>
+
+  <state id="pedestrian_clear">
+    <onentry>
+      <send event="signal.ped_clear" target="#_parent"/>
+      <send event="t_clear_timeout" delay="1000ms" id="t_clear_send"/>
+    </onentry>
+    <onexit>
+      <cancel sendid="t_clear_send"/>
+    </onexit>
+    <transition event="t_clear_timeout" target="vehicle_green"/>
+  </state>
+
+</scxml>
