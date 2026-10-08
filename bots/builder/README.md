@@ -82,8 +82,8 @@ intake -> design -> author -> validate -> simulate -> done
   delays, a settle time, the outputs expected in order, and whether the
   machine finishes). A repair sees the failed draft, its tests, and the
   diagnostics.
-* `validate`: its schemas must parse; `scx:validate` with the draft profile
-  (below) and `applyfixes="machine-applicable"`; when the fixes change the text,
+* `validate`: its schemas must parse; `scx:validate` with
+  `applyfixes="machine-applicable"`; when the fixes change the text,
   `apply_fixes` takes them and validates again (at most 2 passes per draft);
   otherwise the error diagnostics feed back to `author`.
 * `simulate`: each test script runs the draft as a fresh invoked child
@@ -153,22 +153,17 @@ puts no time limit of its own on a service request: the invoking state's
 `max_tests * sim_test_cap_ms` plus 60 s, longer than the longest simulation
 `validate` admits (8 tests of at most 120 s each).
 
-## The draft profile
+## Drafts are unrestricted
 
-Drafts are model output, and a draft runs as an invoked child of the
-builder's session, which would inherit every namespace package and `env`
-value the run binds. So `validate` runs `scx:validate` with
-`profile="draft"`, the validator's draft profile (scxml.rs
-`docs/validator-rules.md`, "Draft profile"): a draft that declares or uses
-a namespace other than SCXML and `event` (`SCXML097`), holds an `invoke` or
-`script` element (`SCXML098`), a `src` or `srcexpr` attribute (`SCXML099`),
-a `typeexpr` or a `<send type>` other than the SCXML Event I/O Processor
-(`SCXML100`, so no BasicHTTP send), or a document type declaration
-(`SCXML101`, so no entity can hide markup) is invalid, and those
-diagnostics feed back to `author` like any other validator error. The
-checks read the parsed XML by expanded name, so a namespace prefix of any
-spelling (`xmlns:é`, `<é:invoke>`) is judged like any other, and a comment
-or CDATA section is text, not markup.
+The builder does not limit what it builds (decision D28): a draft may use
+any SCXML, extension namespaces, `<invoke>` (SCXML children and services),
+`<script>`, and `src`, `srcexpr`, and `typeexpr`. A draft runs as an
+invoked child of the builder's session, so when it is simulated it can do
+exactly what any document of the run can, bounded only by the run's own
+consent and grants: the `env` scopes the builder's document names, the
+origins the bound packages declare, and the `--dir` and `--wasi` grants
+the run gives. A draft that invokes the `generate` service the run binds
+reaches it during its simulation like the builder does.
 
 ## Bindings
 
@@ -239,8 +234,8 @@ its tests. Other cases cover a redesign that sends the plan it replaces,
 a failed redesign keeping that plan, a design generation that fails at
 once keeping its cause (`status`) in its `retry_gate` log and in the
 `failed` history after a later failure ends the build, `triage.repair` not being offered
-without a plan, a draft that breaks the draft profile never running (also
-through a non-ASCII namespace prefix or a DTD), a candidate's
+without a plan, a draft that invokes the run's `generate` service being
+simulated through it, a candidate's
 `sim.settle` and `sim.drive` being recorded as outputs, a cancelled
 candidate's `builder.timeout` not ending the next simulation, a failed
 invocation's `sim.drive` not driving the next test, the fallback triage

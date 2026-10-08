@@ -239,38 +239,42 @@ fn fixable_draft() -> String {
     draft(&traffic_light(&green_comma(), "red"))
 }
 
-/// A draft that breaks the draft profile: red invokes a nested machine
-/// from a string.
-fn smuggling_draft() -> String {
+/// A draft whose green timer is a delayed send to `#_internal`
+/// (`SCXML070`, whose fix is only maybe-incorrect, so it is not applied).
+fn internal_delay_draft() -> String {
     draft(&traffic_light(&green_separate(), "red").replace(
-        "<transition event=\"light.timer\" target=\"green\"/>",
-        "<transition event=\"light.timer\" target=\"green\"/><invoke type=\"scxml\"><content expr=\"'&lt;scxml xmlns=&quot;http://www.w3.org/2005/07/scxml&quot; version=&quot;1.0&quot;/&gt;'\"/></invoke>",
+        "<send id=\"green-timer\" event=\"light.timer\" delay=\"30s\"/>",
+        "<send id=\"green-timer\" target=\"#_internal\" event=\"light.timer\" delay=\"30s\"/>",
     ))
 }
 
-/// A draft that hides the `decision` namespace behind a non-ASCII prefix:
-/// run as the simulation child, it would read the run's session snapshot
-/// through a package the run binds.
-fn unicode_prefix_draft() -> String {
-    draft(&traffic_light(&green_separate(), "red").replace(
-        "version=\"1.0\"",
-        "xmlns:\u{e9}=\"https://github.com/stateforward/floppy/namespaces/decision\" version=\"1.0\"",
-    ).replace(
-        "<onexit><cancel sendid=\"red-timer\"/>",
-        "<onexit><\u{e9}:menu location=\"x\"/><cancel sendid=\"red-timer\"/>",
-    ))
-}
-
-/// A draft that hides an `invoke` behind an internal entity of a document
-/// type declaration.
-fn doctype_draft() -> String {
-    draft(&format!(
-        "<!DOCTYPE scxml [<!ENTITY i \"&#60;invoke type='scxml'/&#62;\">]>{}",
-        traffic_light(&green_separate(), "red").replace(
-            "<transition event=\"light.timer\" target=\"green\"/>",
-            "<transition event=\"light.timer\" target=\"green\"/>&i;",
-        )
-    ))
+/// A draft that invokes the `generate` service the builder's run binds,
+/// with the builder's own `env` scopes, and reports its answer to its
+/// invoker: its test expects `answer.ready` and the child to finish.
+fn service_draft() -> String {
+    json!({
+        "scxml": r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" version="1.0" datamodel="ecmascript" name="asker" initial="ask">
+  <state id="ask">
+    <invoke type="https://github.com/stateforward/floppy/services/generate" env:apikey="CPA_API_KEY" env:baseurl="CPA_BASE_URL">
+      <param name="model" expr="'sparks/qwen3.8-flash-next'"/>
+      <param name="prompt" expr="'say hello'"/>
+    </invoke>
+    <transition event="generate.result" target="answered"/>
+    <transition event="generate.failed" target="unanswered"/>
+  </state>
+  <final id="answered"><onentry><send target="#_parent" event="answer.ready"/></onentry></final>
+  <final id="unanswered"><onentry><send target="#_parent" event="answer.failed"/></onentry></final>
+</scxml>"##,
+        "schemas": [],
+        "tests": [{
+            "name": "the draft asks generate and answers",
+            "events": [],
+            "settle_ms": 60000,
+            "expect_events": ["answer.ready"],
+            "expect_done": true,
+        }],
+    })
+    .to_string()
 }
 
 /// A valid draft whose green state sends the builder's own control event
@@ -405,9 +409,7 @@ fn mock_reply(
         (
             "/repair/v1/chat/completions"
             | "/broken/v1/chat/completions"
-            | "/smuggle/v1/chat/completions"
-            | "/unicode/v1/chat/completions"
-            | "/doctype/v1/chat/completions"
+            | "/service/v1/chat/completions"
             | "/impostor/v1/chat/completions"
             | "/stale/v1/chat/completions"
             | "/pings/v1/chat/completions"
@@ -427,10 +429,9 @@ fn mock_reply(
         ("/slow/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&draft(&traffic_light(&green_separate(), "red"))))
         }
-        ("/unicode/v1/chat/completions", Some("scxml_draft")) => {
-            Some(completion(&unicode_prefix_draft()))
-        }
-        ("/doctype/v1/chat/completions", Some("scxml_draft")) => Some(completion(&doctype_draft())),
+        ("/service/v1/chat/completions", Some("scxml_draft")) => Some(completion(&service_draft())),
+        // The draft's own generation: text, without a schema.
+        ("/service/v1/chat/completions", None) => Some(completion("hello")),
         ("/impostor/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&impostor_draft()))
         }
@@ -439,9 +440,6 @@ fn mock_reply(
             _ => draft(&traffic_light(&green_separate(), "red")),
         })),
         ("/pings/v1/chat/completions", Some("scxml_draft")) => Some(completion(&two_ping_draft())),
-        ("/smuggle/v1/chat/completions", Some("scxml_draft")) => {
-            Some(completion(&smuggling_draft()))
-        }
         ("/repair/v1/chat/completions", Some("scxml_draft")) => Some(completion(&match authors {
             1 => invalid_draft(),
             2 => fixable_draft(),
@@ -450,7 +448,7 @@ fn mock_reply(
         ("/progress/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&match authors {
                 1 => invalid_draft(),
-                2 => smuggling_draft(),
+                2 => internal_delay_draft(),
                 _ => draft(&traffic_light(&green_separate(), "red")),
             }))
         }
@@ -508,11 +506,10 @@ impl Received {
 /// The deterministic fake backend on 127.0.0.1. `generate` routes:
 /// `/repair/v1` answers the plan, then the invalid draft, then the fixable
 /// one, then valid drafts; `/progress/v1` answers the plan, the invalid
-/// draft, a draft that breaks the draft profile, then valid drafts;
+/// draft, a draft with a delayed internal send, then valid drafts;
 /// `/broken/v1` answers the plan, then only invalid
-/// drafts; `/smuggle/v1` answers the plan, then only drafts that break the
-/// draft profile (`/unicode/v1` through a non-ASCII prefix, `/doctype/v1`
-/// through a DTD entity); `/impostor/v1` answers the plan, then a valid draft
+/// drafts; `/service/v1` answers the plan, then a draft that invokes
+/// `generate`, and that draft's own generation with text; `/impostor/v1` answers the plan, then a valid draft
 /// that sends the builder's control event names; `/flaky/v1` fails the
 /// second plan (404) and otherwise answers like `/broken/v1`; `/fastfail/v1`
 /// fails the first plan (404) at once and otherwise answers like
@@ -1023,8 +1020,8 @@ fn the_same_diagnostic_twice_ends_the_build_with_no_progress() {
 }
 
 /// A failure that differs from the one before it is progress: the builder
-/// keeps repairing (an invalid draft, then one that breaks the draft
-/// profile) until the fixed draft ends in `done`.
+/// keeps repairing (an invalid draft, then one with a delayed internal send)
+/// until the fixed draft ends in `done`.
 #[test]
 fn a_different_diagnostic_each_time_keeps_repairing_until_done() {
     let mock = Mock::start();
@@ -1047,7 +1044,7 @@ fn a_different_diagnostic_each_time_keeps_repairing_until_done() {
             .as_array()
             .is_some_and(|diagnostics| diagnostics
                 .iter()
-                .any(|diagnostic| diagnostic["code"] == "SCXML098")),
+                .any(|diagnostic| diagnostic["code"] == "SCXML070")),
         "{report}"
     );
 }
@@ -1207,73 +1204,41 @@ fn repair_is_not_offered_without_a_plan() {
     );
 }
 
-/// A draft that invokes, scripts, loads, or declares another namespace is
-/// invalid under the validator's draft profile, so it never runs as a child
-/// with the run's packages and env values.
+/// The builder does not restrict drafts (decision D28): a draft that invokes
+/// the `generate` service the run binds validates, and its simulation
+/// reaches the service through the run's own `env` scopes and origins, so
+/// the build ends in `done`.
 #[test]
-fn a_draft_that_breaks_the_draft_profile_never_runs() {
+fn a_draft_that_invokes_the_runs_generate_service_is_simulated_through_it() {
     let mock = Mock::start();
     let records = run(
         &mock,
-        "smuggle",
-        "smuggle",
+        "service",
+        "service",
         &["CPA_API_KEY", "CPA_BASE_URL"],
-        &json!({"spec": SPEC, "max_attempts": 1}),
+        &json!({"spec": "ask generate to say hello", "max_attempts": 1}),
     );
     assert!(finished(&records), "{records:?}");
-    let (label, failed) = answer(&records);
-    assert_eq!(label, "failed", "{failed}");
-    assert_eq!(failed["reason"], "attempts-exhausted");
-    assert!(
-        failed["diagnostics"]
-            .as_array()
-            .is_some_and(|diagnostics| diagnostics.iter().any(|diagnostic| {
-                diagnostic["kind"] == "validate" && diagnostic["code"] == "SCXML098"
-            })),
-        "the invoke is the draft profile's SCXML098: {failed}"
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    assert_eq!(
+        done.pointer("/report/simulation/0/observed"),
+        Some(&json!(["answer.ready"])),
+        "{done}"
     );
-}
-
-/// The draft profile reads namespaces by expanded name, whatever the prefix,
-/// and refuses a document type declaration, so neither hides a namespace or
-/// an element.
-#[test]
-fn a_non_ascii_prefix_or_an_entity_does_not_get_past_the_draft_profile() {
-    for (route, code) in [("unicode", "SCXML097"), ("doctype", "SCXML101")] {
-        let mock = Mock::start();
-        let records = run(
-            &mock,
-            route,
-            route,
-            &ALL,
-            &json!({"spec": SPEC, "max_attempts": 1}),
-        );
-        assert!(finished(&records), "{route}: {records:?}");
-        let (label, failed) = answer(&records);
-        assert_eq!(label, "failed", "{route}: {failed}");
-        assert!(
-            failed["diagnostics"]
-                .as_array()
-                .is_some_and(|diagnostics| diagnostics
-                    .iter()
-                    .any(|diagnostic| diagnostic["code"] == code)),
-            "{route}: {failed}"
-        );
-        let received = mock.received();
-        assert_eq!(
-            chat_requests(&received, "scxml_draft").len(),
-            1,
-            "{route}: the draft never ran, so it generated nothing"
-        );
-        assert!(
-            received
-                .iter()
-                .all(|request| request.authorization.as_deref()
-                    != Some(&format!("Bearer {FAKE_TYPESAFE_KEY}"))
-                    || request.path.ends_with("/systemone")),
-            "{route}: the decision key reached no other backend"
-        );
-    }
+    let received = mock.received();
+    let own = received
+        .iter()
+        .filter(|request| {
+            request.path == "/service/v1/chat/completions" && request.schema_name().is_none()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(own.len(), 1, "the draft generated once: {received:?}");
+    assert_eq!(
+        own[0].authorization.as_deref(),
+        Some(format!("Bearer {FAKE_CPA_KEY}").as_str()),
+        "the draft's invoke reached the key through the builder's env scope"
+    );
 }
 
 /// A candidate that sends `sim.settle` or `sim.drive` to its parent has them

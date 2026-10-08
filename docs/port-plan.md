@@ -121,6 +121,6 @@ phase 7; until then every backend is selected by its `env:baseurl` slot.
   slot of any other package that names it is absent, exactly like an
   unheld value. The scope is by package URI, so a child session an
   `<invoke type="scxml">` compiles at run time (which inherits the parent's
-  packages) reaches a variable through those packages' elements too; the
-  builder's draft profile (decision D20) still
-  refuses drafts that use foreign namespaces.
+  packages) reaches a variable through those packages' elements too, which
+  is how a builder draft that invokes a bound service reaches it (decision
+  D28).

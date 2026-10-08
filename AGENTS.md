@@ -33,7 +33,7 @@ human or an AI coding agent. MUST, SHOULD, and MAY are used as in RFC 2119.
 - A bot MUST be an SCXML document; its abilities MUST be invoked children (`<invoke type="scxml">`) or invoked services, and its devices MUST be invoked services. mosfet's attachment protocol MUST NOT be ported: invoke lifecycle covers attach and detach.
 - Domain event names (`bot.*`, `bot.ability.*`, `phone.*`) MUST stay byte-for-byte as mosfet names them.
 - Retries, timeouts, and bounded loops MUST be modelled in the topology (states, `<send delay>`, counters in the data model), never in ad hoc host or component code. A timeout on an invoked service MUST be able to preempt it: arm it in the invoking state and leave that state when it fires, which cancels the invocation.
-- The builder bot builds SCXML only (never Rust): its drafts MUST pass `scx:validate` with the validator's draft profile (`profile="draft"`, decision D20) and a simulation as an invoked child before it ends in its final state `done`; the draft restrictions MUST live in the validator, never in a document expression.
+- The builder bot builds SCXML only (never Rust): its drafts MUST pass `scx:validate` and a simulation as an invoked child before it ends in its final state `done`. The builder MUST NOT restrict what a draft may use (decision D28): what a draft can do when simulated is bounded only by the run's own consent and grants, as for any document.
 
 ## Engineering
 
