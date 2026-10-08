@@ -64,9 +64,10 @@ Last updated: 2026-10-08.
     `~/VSCode/stateforward/mosfet/mosfet.py/.env`).
 - `.env` files are gitignored; never print or commit their values.
 
-## Where things stand (2026-10-07)
+## Where things stand (2026-10-08)
 
-Done (scxml.rs `main` and `feat/invoke-services` at `3bdcf97d`):
+Done (scxml.rs `main` and `feat/invoke-services` at `92742d65`; floppy's
+subtree matches, squash `9d1a67a7`, pull `dea16624`):
 
 - Invoked services on WASI 0.3 / Component Model async (one `invoke`
   export); SCXML §6.4 cancel closes connections; no host time limits on
@@ -78,57 +79,26 @@ Done (scxml.rs `main` and `feat/invoke-services` at `3bdcf97d`):
 - Validator: rustc-style fixes (closest-match, cross-element such as
   `sendid` → `id`), `package-validator` components (codes render as
   `<prefix>::<code>`), literal-payload `event:schema` checks, code families
-  (SCXML = spec only, XML, XSD, COMP, PKG, ENV, EVENT, LINT, LIMIT).
+  (SCXML = spec only, XML, XSD, COMP, PKG, ENV, EVENT, DATAMODEL, LINT,
+  LIMIT).
 - Browser parity slice 1 (validator and extension components in the browser).
 - floppy: `generate` and `decision` services, `decision:menu`, the builder
   bot (unrestricted, D28; `no-progress` exit, D26; failure causes logged),
   generate's package validator.
+- scxml.rs datamodel pass landed (`66f102b0` to `92742d65`, D30): data
+  models as packages (`datamodel:src`, `datamodels/` repository URIs,
+  example `datamodels/example`), foreign attributes and elements accepted
+  (`xml:base` honored, unbound namespaces are `LINT022`), `DATAMODEL001`/
+  `002` and `PKG005`, LIMIT size bounds only (`LIMIT007`-`009` renumbered
+  to `LIMIT005`-`007`), and `deny.toml` allowing ISC and
+  CDLA-Permissive-2.0. The flaky `repository_namespaces` test is fixed
+  (`f4f14cc8`: each test writes its document in its own scratch directory).
+- floppy is green on it (2026-10-08): `scripts/build-components.sh`, fmt,
+  clippy `-D warnings`, all workspace tests, and the `builder_bot` live
+  test on direct vLLM; no floppy code or test named a moved code.
 
-Stopped mid-pass (2026-10-08) — resume this first:
-
-- **scxml.rs pass "datamodel-packages" is UNFINISHED.** Its uncommitted work
-  (193 files) was saved as one WIP commit `00330f9e` on branch
-  `wip/datamodel-packages` in the scxml.rs repo. It is unproven (no
-  fmt/clippy/tests run to completion) and must NOT be merged as is.
-  `feat/invoke-services` and scxml.rs `main` are both clean at `3bdcf97d`,
-  and floppy's subtree matches.
-- To resume: `git -C ~/VSCode/stateforward/scxml.rs-services switch wip/datamodel-packages`,
-  inspect `git show --stat HEAD`, finish the work, run the full proof
-  (fmt; clippy `-D warnings` with all/no features and wasm32; workspace and
-  doc tests; UI goldens; `published_contract_docs`; both `cargo doc` runs;
-  `scripts/verify-wasm-capabilities.sh`; `scripts/verify-browser-host.sh`;
-  IRP dispositions unchanged, regenerating baselines with the Docker
-  linux/amd64 canonical build only if bytes move), then squash or split the
-  WIP into real commits on `feat/invoke-services`, fast-forward `main`, and
-  pull the subtree into floppy. The stopped agent was adding CHANGELOG
-  entries when it was stopped.
-- Scope of that pass (all user decisions):
-  - **Data models as packages**: a built-in attribute vocabulary
-    `https://github.com/stateforward/scxml.rs/namespaces/datamodel` (like `env`/`event`:
-    tagless, never fetched). Documents write
-    `<scxml datamodel="json" datamodel:src="https://github.com/<o>/<r>/datamodels/json[@tag]">`;
-    core `datamodel` stays a spec NMTOKEN (the W3C schema types it so).
-    The vocabulary defines ONLY `datamodel:src` (no `srcexpr`, no special
-    rule for it; other attributes get the generic unknown-attribute
-    did-you-mean). A `DATAMODEL` code family covers `datamodel:src` outside
-    `<scxml>` and a token that doesn't match the package's declared name
-    (with a fix). Built-ins `null`/`ecmascript`/`xpath` are embedded. A
-    non-built-in token with no `datamodel:src` is a `PKG` error. Data-model
-    packages resolve like namespaces/services (`datamodels/` repository
-    URIs, GitHub resolver component, `@tag` split, resolved once per run),
-    with an example data-model package in scxml.rs.
-  - **Foreign attributes and elements accepted** (the W3C schema allows
-    them): `xml:base` honored for URI resolution; `xml:lang`, `xml:space`,
-    `xsi:*` ignored; attributes/elements in a namespace no package binds
-    get a `LINT` warning ("… in an unbound namespace has no effect", with
-    a maybe-incorrect removal fix); those in a bound package's namespace go
-    to that package's validator and are not lowered outside executable
-    content. Executable-content custom actions keep their rules.
-  - **LIMIT is size bounds only**: delete LIMIT005 (unknown data model) and
-    LIMIT006 (foreign markup); renumber LIMIT007–009 → LIMIT005–007.
-  - Update `--explain`, docs/validator-rules.md, CHANGELOG (unreleased),
-    UI goldens, the browser host, AGENTS.md (built-in vocabularies,
-    `datamodels/` repository URIs), and floppy's decisions.md mapping.
+Next: phase 4 (bot core and abilities), per
+`~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 
 ## Port run decisions (user, 2026-10-08)
 
@@ -183,8 +153,6 @@ The remaining mosfet port runs as one ultracode run with these grants:
   stdout default, file/WebSocket/OTLP packages. Low priority.
 - Canonical (Docker Linux) builds of floppy's components so pinned digests
   reproduce (D27).
-- Flaky `repository_namespaces` test in scxml.rs (parallel tests share a
-  document file).
 - Rest of the mosfet port: bot core and abilities (phase 4), behaviors and
   routines (5), memory service SQLite then PGlite (3), speech/vision/devices
   as services (6).
