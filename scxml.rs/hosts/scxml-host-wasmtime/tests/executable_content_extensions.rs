@@ -780,6 +780,7 @@ impl SessionEmbedder for ChildDocument {
             media_type: None,
             extensions: self.bindings.clone(),
             services: None,
+            event_schemas: std::collections::BTreeMap::new(),
         })
     }
 

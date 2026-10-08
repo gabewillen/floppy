@@ -164,9 +164,18 @@ of `18446744073709551616`) is read, compared, and embedded as the nearest
   gets a "did you mean" fix).
 - `EVENT007`: an unsupported `$schema` dialect.
 - `EVENT008`: a reference the compiler cannot keep.
+- `EVENT009`: the literal data of a `<send>` or `<donedata>` does not
+  satisfy its own literal schema.
+- `EVENT010` (warning): a `<send>` or `<donedata>` creates data a
+  transition of the same document handling its event does not accept.
+- `EVENT011` (warning): a `<send>` between a document and a literal
+  `<invoke src>` document it invokes (`#_<id>` one way, `#_parent` the
+  other) creates data a transition of the receiving document handling its
+  event does not accept, judged when the caller supplies the invoked
+  documents (`scx validate`, `compile`, and `run` read the `file:` ones).
 
 An `event` attribute is never `LINT022`. `scx --explain EVENT001`
-through `--explain EVENT008` give each rule with an example.
+through `--explain EVENT011` give each rule with an example.
 
 ## Statements
 
@@ -239,11 +248,16 @@ that execution is unchanged under each. Both data models pass 29 of 29
 
 - A reference to a repository-namespace resource or any absolute URI: only
   files relative to the document.
-- Schema files for documents compiled without the CLI's file access: a child
-  document a host compiles when it is invoked gets no schema files, so it
-  may use inline schemas and `event:schemaexpr` only (a reference rejects
-  the document). A browser page supplies a document's schema files to the
-  validator and compiler (`eventSchemas`).
+- Schema files for documents compiled without the CLI's file access. A
+  literal `<invoke src>` child loaded from a `file:` URL gets its own files:
+  `snapshot run` and `run` read them relative to the child's directory
+  before the session and the Wasmtime host hands them to its compile
+  (`EmbeddedDocument::event_schemas`). Every other child document a host
+  compiles when it is invoked (inline `<content>`, a remote or `srcexpr`
+  `<invoke src>`, and every child the browser host compiles) gets no schema
+  files, so it may use inline schemas and `event:schemaexpr` only (a
+  reference rejects the document). A browser page supplies a document's
+  schema files to the validator and compiler (`eventSchemas`).
 - Evaluating `event:schemaexpr`: a session snapshot evaluates no expression
   (docs/session-snapshot.md), so readers get the expression.
 

@@ -880,6 +880,10 @@ pub(crate) mod host {
         services: &[crate::services::ServicePackage],
         data_models: std::collections::BTreeMap<String, String>,
         scripts: Vec<scxml_compiler_core::ScriptPackage>,
+        invoked_documents: std::collections::BTreeMap<
+            String,
+            scxml_validator_core::InvokedDocument,
+        >,
     ) -> Result<(Vec<u8>, Option<String>), Box<dyn std::error::Error>> {
         use scxml_compiler_core::{CompileInput, Compiler, MachineIr, ScriptResolution};
         use scxml_validator_core::{FileSchemaResolver, Validator};
@@ -899,6 +903,7 @@ pub(crate) mod host {
         .with_schema_mode(scxml_validator_core::SchemaMode::default())
         .with_services(crate::services::bound_services(services))
         .with_data_models(data_models)
+        .with_invoked_documents(invoked_documents)
         .with_expression_checker(std::sync::Arc::new(crate::expression::EcmaScriptSyntax))
         .with_expression_checker(std::sync::Arc::new(crate::expression::XPathSyntax));
         if let Some(linked) = crate::package_validators::linked(packages, services)? {
@@ -956,6 +961,7 @@ pub(crate) mod host {
             &services.packages,
             data_models.bound(),
             scripts,
+            documents.invoked_documents(),
         )?;
         let host = args
             .components

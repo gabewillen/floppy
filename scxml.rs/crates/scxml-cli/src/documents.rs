@@ -30,6 +30,15 @@
 //! Everything is fetched once per root session and shared by every session
 //! of the tree.
 //!
+//! A literal `<invoke src>` document loaded from a `file:` URL carries the
+//! schema files its `event:schema` attributes reference, read relative to
+//! its own directory before the session exactly as the root's are
+//! ([`crate::event_schemas`]), to its compile
+//! ([`scxml_host_wasmtime::EmbeddedDocument::event_schemas`]). A remote
+//! (`https:`) or `srcexpr` child gets none (nothing is fetched for a schema,
+//! and nothing is read while a document runs), so a schema-file reference
+//! rejects it and its `<invoke>` raises `error.execution`.
+//!
 //! The documents an `<invoke src>` loads are part of the run: the
 //! repository namespaces and services they use are resolved with the
 //! root's, before the session starts ([`Documents::children`]). A child
@@ -45,6 +54,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use scxml_compiler_core::ScriptPackage;
+use scxml_validator_core::InvokedDocument;
 use sha2::{Digest as _, Sha256};
 
 use crate::repository::{Fetched, Repository};
@@ -103,6 +113,14 @@ pub(crate) struct Documents {
             Option<scxml_host_wasmtime::ServiceComponents>,
         ),
     >,
+    /// The schema files each `file:` child document's `event:schema`
+    /// attributes reference, read relative to it before the session
+    /// ([`crate::event_schemas::load`]), by URL.
+    event_schemas: BTreeMap<String, scxml_event_schema::Resources>,
+    /// The documents the root's literal `<invoke src>` elements load, for
+    /// the validator (`EVENT011`).
+    #[cfg(feature = "wasmtime")]
+    invoked: BTreeMap<String, InvokedDocument>,
 }
 
 impl std::fmt::Debug for Documents {
@@ -168,6 +186,71 @@ fn literals_of(base: &url::Url, text: &str) -> Vec<Literal> {
     literals
 }
 
+/// The documents the literal `<invoke src>` elements of `text` (a document
+/// whose base URI is `base`) load, keyed by `src` as authored with its XML
+/// white space collapsed: each `src` resolved like an `<invoke src>` the run
+/// loads, and `load` reads the document at that URL.
+fn invoked_documents(
+    base: &url::Url,
+    text: &str,
+    mut load: impl FnMut(&url::Url) -> Option<InvokedDocument>,
+) -> BTreeMap<String, InvokedDocument> {
+    let Ok(document) = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
+        scxml_syntax::SourceId::new(1),
+        "document",
+        text,
+    )) else {
+        return BTreeMap::new();
+    };
+    let mut sites = Vec::new();
+    document.root.visit_with_base(&mut |element, xml_base| {
+        if element
+            .name
+            .is(Some(scxml_validator_core::SCXML_NAMESPACE), "invoke")
+            && let Some(src) = element.attribute("src")
+        {
+            let key = scxml_syntax::collapse_whitespace(&src.value).into_owned();
+            let authored = match xml_base {
+                Some(xml_base) => scxml_types::resolve_reference(xml_base, &key),
+                None => key.clone(),
+            };
+            sites.push((key, resolve(base, &authored)));
+        }
+    });
+    let mut invoked = BTreeMap::new();
+    for (key, url) in sites {
+        if invoked.contains_key(&key) {
+            continue;
+        }
+        if let Some(document) = url.as_ref().and_then(&mut load) {
+            invoked.insert(key, document);
+        }
+    }
+    invoked
+}
+
+/// The documents the literal `<invoke src>` elements of the document at
+/// `path` (holding `source`) load from `file:` URLs, each with its schema
+/// files read relative to it, for `validate` and `compile`, which fetch no
+/// document (a remote `src` is not judged).
+pub(crate) fn local_invoked_documents(
+    path: &Path,
+    source: &[u8],
+) -> BTreeMap<String, InvokedDocument> {
+    let Ok(base) = file_base(path) else {
+        return BTreeMap::new();
+    };
+    invoked_documents(&base, &String::from_utf8_lossy(source), |url| {
+        let child = url.to_file_path().ok()?;
+        let bytes = std::fs::read(&child).ok()?;
+        let event_schemas = crate::event_schemas::load(&child, &bytes);
+        Some(InvokedDocument {
+            text: String::from_utf8(bytes).ok()?,
+            event_schemas,
+        })
+    })
+}
+
 impl Documents {
     /// Fetches every literal URI of the root document at `path` (holding
     /// `source`) and of every `<invoke src>` document reached from it.
@@ -190,6 +273,9 @@ impl Documents {
             children: Vec::new(),
             #[cfg(feature = "wasmtime")]
             bindings: BTreeMap::new(),
+            event_schemas: BTreeMap::new(),
+            #[cfg(feature = "wasmtime")]
+            invoked: BTreeMap::new(),
         };
         let root = String::from_utf8_lossy(source).into_owned();
         let mut pending = vec![(base.clone(), root, true)];
@@ -226,6 +312,14 @@ impl Documents {
                             "the run loads more than {MAX_DOCUMENTS} documents through <invoke src>"
                         ));
                     }
+                    if let Ok(path) = url.to_file_path() {
+                        let schemas = crate::event_schemas::load(&path, &child.bytes);
+                        if !schemas.is_empty() {
+                            documents
+                                .event_schemas
+                                .insert(url.as_str().to_owned(), schemas);
+                        }
+                    }
                     documents.children.push((url.clone(), child.bytes.clone()));
                     pending.push((
                         url.clone(),
@@ -236,7 +330,29 @@ impl Documents {
                 documents.literals.push(literal);
             }
         }
+        #[cfg(feature = "wasmtime")]
+        {
+            documents.invoked = invoked_documents(&base, &String::from_utf8_lossy(source), |url| {
+                let (_, bytes) = documents.children.iter().find(|(child, _)| child == url)?;
+                Some(InvokedDocument {
+                    text: String::from_utf8(bytes.clone()).ok()?,
+                    event_schemas: documents
+                        .event_schemas
+                        .get(url.as_str())
+                        .cloned()
+                        .unwrap_or_default(),
+                })
+            });
+        }
         Ok(documents)
+    }
+
+    /// The documents the root's literal `<invoke src>` elements load, with
+    /// their schema files, as the validator takes them
+    /// ([`scxml_validator_core::Validator::with_invoked_documents`]).
+    #[cfg(feature = "wasmtime")]
+    pub(crate) fn invoked_documents(&self) -> BTreeMap<String, InvokedDocument> {
+        self.invoked.clone()
     }
 
     /// The URL and bytes of every `<invoke src>` document loaded before the
@@ -462,12 +578,23 @@ mod embedder {
             } else {
                 (None, None)
             };
+            // Only a literal `file:` child's schema files were read, before
+            // the session; nothing is read while it runs.
+            let event_schemas = if kind == DocumentKind::Invocation {
+                self.event_schemas
+                    .get(url.as_str())
+                    .cloned()
+                    .unwrap_or_default()
+            } else {
+                BTreeMap::new()
+            };
             let text = String::from_utf8(fetched.bytes).ok()?;
             Some(EmbeddedDocument {
                 text,
                 media_type,
                 extensions,
                 services,
+                event_schemas,
             })
         }
 

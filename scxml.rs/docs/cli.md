@@ -136,6 +136,15 @@ an `event:schema` attribute references
 ([namespaces/event](../namespaces/event/README.md)) relative to the
 document's directory, with no flag; a file they cannot read, or a reference
 that is not a relative path at or below that directory, is `EVENT004`.
+`snapshot run` and `run` read the files of every literal `<invoke src>`
+document loaded from a `file:` URL the same way, relative to that child's
+directory and before the session, and the host compiles the child with
+them; a remote or `srcexpr` child gets none, so a schema-file reference
+rejects it when it is invoked (`error.execution`). `validate` and `compile`
+also read each `file:` document a literal `<invoke src>` of the document
+names (fetching nothing), with its own schema files, and `snapshot run` and
+`run` pass the documents they loaded, so a `<send>` between the two whose
+literal data the receiving transition's schema rejects is `EVENT011`.
 
 ### Package a component for an ahead-of-time host
 

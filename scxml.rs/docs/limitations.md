@@ -370,13 +370,20 @@ In detail:
   listing cannot say whether the run holds its value.
 - An `event:schema` ([namespaces/event](../namespaces/event/README.md))
   references only files relative to the document, never a
-  repository-namespace resource or another absolute URI. A child document
-  the Wasmtime host compiles when it is invoked, and every document the
-  browser host compiles without the page supplying them, get no schema
-  files, so a schema-file reference rejects it; a browser page supplies a
+  repository-namespace resource or another absolute URI. A literal
+  `<invoke src>` child loaded from a `file:` URL gets the files it
+  references, read relative to its own directory before the session
+  (`EmbeddedDocument::event_schemas`); every other child document the
+  Wasmtime host compiles when it is invoked (inline `<content>`, a remote or
+  `srcexpr` `<invoke src>`), and every document the browser host compiles
+  without the page supplying them, get no schema files, so a schema-file
+  reference rejects it; a browser page supplies a
   document's schema files to the validator and compiler
   (`eventSchemas`), and inline schemas and `event:schemaexpr` work
-  everywhere. A
+  everywhere. `EVENT011` judges only the invoked documents its caller
+  supplies: `scx validate` and `compile` read `file:` ones and fetch no
+  remote `src`, a `srcexpr` document is never judged, and a browser page
+  supplies them (`invokedDocuments`). A
   session snapshot lists schemas on transitions only and never evaluates
   `event:schemaexpr`. An integer outside the 64-bit range in a schema is
   read as the nearest 64-bit float, without a diagnostic. Compiling a

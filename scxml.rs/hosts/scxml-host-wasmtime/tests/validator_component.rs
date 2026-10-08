@@ -22,7 +22,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use scxml_host_wasmtime::validator_types::{EventSchemaResource, SchemaPolicy, ValidationRequest};
+use scxml_host_wasmtime::validator_types::{
+    EventSchemaResource, InvokedDocument, SchemaPolicy, ValidationRequest,
+};
 use scxml_host_wasmtime::{
     ArtifactKind, AuthenticatedComponent, ComponentValidator, TelemetryProviders,
     TrustedManifestDigest, WasmtimeHostConfig, authenticate_component,
@@ -147,6 +149,29 @@ fn ui_event_schemas() -> Vec<EventSchemaResource> {
     resources
 }
 
+/// The documents under `tests/ui/invoked/` the case `source`'s literal
+/// `src` attributes name, supplied as `scx validate` reads them (their
+/// schemas are inline, so they reference no files).
+fn ui_invoked_documents(source: &str) -> Vec<InvokedDocument> {
+    let ui = artifacts().workspace.join("tests/ui");
+    let mut documents: Vec<InvokedDocument> = Vec::new();
+    for (src, _) in source
+        .split("src=\"")
+        .skip(1)
+        .filter_map(|rest| rest.split_once('"'))
+    {
+        if src.starts_with("invoked/") && documents.iter().all(|document| document.src != src) {
+            documents.push(InvokedDocument {
+                src: src.to_owned(),
+                text: String::from_utf8(read(&ui.join(src)))
+                    .expect("the invoked document is UTF-8"),
+                event_schemas: Vec::new(),
+            });
+        }
+    }
+    documents
+}
+
 fn validate(validator: &ComponentValidator, source_name: &str, source: &str) -> String {
     let request = ValidationRequest {
         source_name: source_name.to_owned(),
@@ -155,6 +180,7 @@ fn validate(validator: &ComponentValidator, source_name: &str, source: &str) -> 
         schemas: Vec::new(),
         packages: Vec::new(),
         event_schemas: ui_event_schemas(),
+        invoked_documents: ui_invoked_documents(source),
         trace_context: None,
     };
     let bytes = validator
@@ -234,6 +260,7 @@ fn component_expression_diagnostics_match_the_cli_snapshots() {
         "limit003-expression-over-bound",
         "limit003-xpath-over-nesting-bound",
         "scxml074-log-side-effects",
+        "event011-incompatible-invoked-event-data",
         "lint020-condition-side-effects",
         "scxml077-system-variable-writes",
         "lint019-undecidable-side-effects",
@@ -248,6 +275,61 @@ fn component_expression_diagnostics_match_the_cli_snapshots() {
             "{required} must be compared; compared: {compared:?}"
         );
     }
+}
+
+/// `invoked-documents` is bounded at the request boundary: a repeated or
+/// empty `src`, more than 64 documents, or more than 16 MiB of text and
+/// schema bytes together is `invalid-request`, and the instance stays
+/// usable.
+#[test]
+fn invoked_documents_are_bounded_at_the_request_boundary() {
+    let validator = linked(Some(&artifacts().ecmascript));
+    let document = |src: &str, text: String| InvokedDocument {
+        src: src.to_owned(),
+        text,
+        event_schemas: Vec::new(),
+    };
+    let request = |invoked_documents: Vec<InvokedDocument>| {
+        ValidationRequest {
+        source_name: "parent.scx".to_owned(),
+        source: r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"><final id="f"/></scxml>"#.to_owned(),
+        policy: SchemaPolicy::Strict,
+        schemas: Vec::new(),
+        packages: Vec::new(),
+        event_schemas: Vec::new(),
+        invoked_documents,
+        trace_context: None,
+    }
+    };
+    for (what, invoked) in [
+        (
+            "repeated src",
+            vec![
+                document("a.scx", String::new()),
+                document("a.scx", String::new()),
+            ],
+        ),
+        ("empty src", vec![document("", String::new())]),
+        (
+            "65 documents",
+            (0..65)
+                .map(|index| document(&format!("{index}.scx"), String::new()))
+                .collect(),
+        ),
+        (
+            "over 16 MiB",
+            vec![
+                document("a.scx", "x".repeat(8 * 1024 * 1024)),
+                document("b.scx", "x".repeat(8 * 1024 * 1024 + 1)),
+            ],
+        ),
+    ] {
+        assert!(validator.validate(&request(invoked)).is_err(), "{what}");
+    }
+    let at_bound = (0..64)
+        .map(|index| document(&format!("{index}.scx"), String::new()))
+        .collect();
+    assert!(validator.validate(&request(at_bound)).is_ok());
 }
 
 /// Resource bounds apply to wasm builds only (`scxml_types::wasm_bound`), so
@@ -426,6 +508,7 @@ fn guest_validate_span_records_its_events_and_error_category() {
         schemas: Vec::new(),
         packages: Vec::new(),
         event_schemas: Vec::new(),
+        invoked_documents: Vec::new(),
         // A sampled remote parent, so the guest span is recorded whatever
         // the process-global provider is.
         trace_context: Some(scxml_host_wasmtime::validator_types::TraceContext {
@@ -478,6 +561,7 @@ fn guest_validate_span_without_a_carrier_is_a_root_span_under_a_noop_global_prov
         schemas: Vec::new(),
         packages: Vec::new(),
         event_schemas: Vec::new(),
+        invoked_documents: Vec::new(),
         trace_context: None,
     });
     drop(validator);

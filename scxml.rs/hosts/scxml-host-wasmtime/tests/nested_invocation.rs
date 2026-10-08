@@ -914,3 +914,129 @@ fn a_document_runs_on_a_data_model_package() {
             .is_err()
     );
 }
+
+/// One document's schema files: each reference and the file's text.
+type SchemaFiles = Vec<(&'static str, &'static str)>;
+
+/// Documents keyed by URI, each with the schema files its embedder read for
+/// it ([`EmbeddedDocument::event_schemas`]); no scripts.
+struct DocumentsWithSchemas(Vec<(&'static str, String, SchemaFiles)>);
+
+impl SessionEmbedder for DocumentsWithSchemas {
+    fn document(&self, _kind: DocumentKind, uri: &str) -> Option<EmbeddedDocument> {
+        let (_, text, schemas) = self.0.iter().find(|(key, _, _)| *key == uri)?;
+        let mut document = EmbeddedDocument::from(text.clone());
+        document.event_schemas = schemas
+            .iter()
+            .map(|(reference, bytes)| ((*reference).to_owned(), bytes.as_bytes().to_vec()))
+            .collect();
+        Some(document)
+    }
+
+    fn scripts(&self) -> MachineScripts {
+        MachineScripts::none()
+    }
+}
+
+/// An `<invoke src>` document whose transitions reference `event:schema`
+/// files compiles with the files its embedder supplies, and its sessions
+/// run; without them (and for an inline `<content>` document, which never
+/// gets them) the schema reference rejects it and its `<invoke>` raises
+/// `error.execution` in the invoking session.
+#[test]
+fn an_invoke_src_document_compiles_with_the_schema_files_its_embedder_supplies() {
+    const EVENT: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
+    let child = format!(
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="{EVENT}" version="1.0" initial="c0">
+              <state id="c0">
+                <onentry><send target="#_parent" event="ready"/></onentry>
+                <transition event="go" event:schema="schemas/go.json#/$defs/Go" target="cdone"><log label="child-got-go"/></transition>
+              </state>
+              <final id="cdone"/>
+            </scxml>"##
+    );
+    let root = |invoke: &str| {
+        format!(
+            r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="r0">
+                  <state id="r0">
+                    {invoke}
+                    <transition event="ready"><send target="#_child" event="go"><content>{{"n": 1}}</content></send></transition>
+                    <transition event="done.invoke.child" target="pass"/>
+                    <transition event="error.execution" target="fail"/>
+                  </state>
+                  <final id="pass"><onentry><log label="pass"/></onentry></final>
+                  <final id="fail"><onentry><log label="fail"/></onentry></final>
+                </scxml>"##
+        )
+    };
+    let schema = r#"{"$defs": {"Go": {"type": "object", "required": ["n"]}}}"#;
+    let run_with = |root: &str, documents: DocumentsWithSchemas| {
+        let (ir, data_model) = lower(root);
+        host()
+            .run(&SessionRun {
+                machine_ir: &ir,
+                data_model: data_model.as_deref(),
+                session_id: "root",
+                events: &[],
+                external_client: None,
+                embedder: Rc::new(documents),
+                max_commands: 1_024,
+                snapshots: SnapshotRequest::none(),
+            })
+            .unwrap_or_else(|error| panic!("the run completes: {error}"))
+    };
+    let labels = |outcome: &SessionOutcome| {
+        logs(outcome)
+            .into_iter()
+            .map(|log| log.split_once(':').map(|(_, label)| label.to_owned()))
+            .collect::<Option<Vec<_>>>()
+            .expect("every log is session:label")
+    };
+    let src = r#"<invoke id="child" type="scxml" src="child.scx"/>"#;
+
+    let supplied = run_with(
+        &root(src),
+        DocumentsWithSchemas(vec![(
+            "child.scx",
+            child.clone(),
+            vec![("schemas/go.json", schema)],
+        )]),
+    );
+    assert_eq!(supplied.terminal, Terminal::Finished);
+    assert_eq!(labels(&supplied), ["child-got-go", "pass"]);
+
+    let missing = run_with(
+        &root(src),
+        DocumentsWithSchemas(vec![("child.scx", child.clone(), Vec::new())]),
+    );
+    assert_eq!(missing.terminal, Terminal::Finished);
+    assert_eq!(
+        labels(&missing),
+        ["fail"],
+        "the reference rejects the child"
+    );
+
+    // An inline `<content>` document gets no schema files, even when an
+    // `<invoke src>` document loaded before it carried some; the same
+    // document with the schema inline runs.
+    let inline = |child: &str| {
+        format!(r#"<invoke id="child" type="scxml"><content>{child}</content></invoke>"#)
+    };
+    let with_src_schemas = || {
+        DocumentsWithSchemas(vec![(
+            "child.scx",
+            child.clone(),
+            vec![("schemas/go.json", schema)],
+        )])
+    };
+    let content = run_with(&root(&inline(&child)), with_src_schemas());
+    assert_eq!(content.terminal, Terminal::Finished);
+    assert_eq!(labels(&content), ["fail"], "inline content gets no files");
+    let inline_schema = child.replace(
+        "schemas/go.json#/$defs/Go",
+        r"{&quot;type&quot;: &quot;object&quot;, &quot;required&quot;: [&quot;n&quot;]}",
+    );
+    let content = run_with(&root(&inline(&inline_schema)), with_src_schemas());
+    assert_eq!(content.terminal, Terminal::Finished);
+    assert_eq!(labels(&content), ["child-got-go", "pass"]);
+}

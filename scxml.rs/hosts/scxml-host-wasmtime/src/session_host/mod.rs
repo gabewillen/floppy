@@ -196,6 +196,14 @@ pub enum DocumentKind {
 /// for services, their WASI grants) are read: values, transports, call
 /// fuel, and the resolver stay the host's. A binding that
 /// does not verify fails the run as a host failure.
+///
+/// An `<invoke src>` document may also carry the schema files its
+/// `event:schema` attributes reference
+/// (`https://github.com/stateforward/scxml.rs/namespaces/event`), which the
+/// embedder read relative to the document: the host hands them to that
+/// document's compile, so its transitions may describe their event data with
+/// schema files as a root document's do. They reach only that document's
+/// compile; an inline `<content>` document below it gets none, as before.
 #[derive(Clone, Debug)]
 pub struct EmbeddedDocument {
     /// The document text exactly as the resource holds it.
@@ -208,17 +216,28 @@ pub struct EmbeddedDocument {
     /// For an `<invoke src>` document, the service components its sessions
     /// bind in place of the host's; `None` for the host's.
     pub services: Option<crate::ServiceComponents>,
+    /// For an `<invoke src>` document, the exact bytes of each schema file
+    /// its `event:schema` attributes reference, keyed by the reference's
+    /// resource part exactly as authored (the attribute value before `#`,
+    /// trimmed of XML white space), as the compiler's `event-schemas`
+    /// request field takes them; empty for none. A reference with no entry
+    /// rejects the document (`EVENT004`), so its `<invoke>` fails with
+    /// `error.execution`. The compiler component bounds them (at most 64
+    /// files and 16777216 bytes together); beyond that the document is
+    /// rejected the same way.
+    pub event_schemas: std::collections::BTreeMap<String, Vec<u8>>,
 }
 
 impl From<String> for EmbeddedDocument {
-    /// A document whose source indicated no media type and that binds
-    /// nothing of its own.
+    /// A document whose source indicated no media type, that binds
+    /// nothing of its own, and that carries no schema files.
     fn from(text: String) -> Self {
         Self {
             text,
             media_type: None,
             extensions: None,
             services: None,
+            event_schemas: std::collections::BTreeMap::new(),
         }
     }
 }

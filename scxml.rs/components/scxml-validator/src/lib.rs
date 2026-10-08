@@ -140,8 +140,9 @@ mod guest {
     use scxml_validator_core::{
         ComponentRequestBoundary, EffectCause, EffectCheck, EffectFinding, EffectFragment,
         EffectKind, EffectRole, EffectSpan, ExpressionCheck, ExpressionKind,
-        ExpressionSyntaxChecker, ExternalScripts, MemorySchemaResolver, PackageValidator,
-        PackageValidatorFailure, SchemaMode, SchemaSource, SyntaxIssue, Validator,
+        ExpressionSyntaxChecker, ExternalScripts, InvokedDocument, MemorySchemaResolver,
+        PackageValidator, PackageValidatorFailure, SchemaMode, SchemaSource, SyntaxIssue,
+        Validator,
         package_validator::{document, types as package_types},
     };
     use scxml_validator_xsd::{BundledSchemaResolver, XsdSchemaBackend};
@@ -157,7 +158,8 @@ mod guest {
     use stateforward::scxml_validator::package_validator_api as wit_package;
     use stateforward::scxml_validator::telemetry as wit_telemetry;
     use stateforward::scxml_validator::types::{
-        self as wit_types, ComponentError, ErrorCode, ErrorVersion, SchemaPolicy, ValidationRequest,
+        self as wit_types, ComponentError, ErrorCode, ErrorVersion,
+        InvokedDocument as InvokedDocumentRecord, SchemaPolicy, ValidationRequest,
     };
 
     /// The source id of the one document a validation reads: every span
@@ -501,6 +503,16 @@ mod guest {
                     code: ErrorCode::InvalidRequest,
                 });
             };
+            let Some(invoked_documents) =
+                invoked_documents(std::mem::take(&mut request.invoked_documents))
+            else {
+                span.event(SignalEvent::InputRejected);
+                span.fail(ErrorCategory::InvalidInput);
+                return Err(ComponentError {
+                    version: ErrorVersion::V1,
+                    code: ErrorCode::InvalidRequest,
+                });
+            };
             let result = (|| {
                 let source_name = request.source_name.clone();
                 let source_text = request.source.clone();
@@ -521,6 +533,7 @@ mod guest {
                         SchemaPolicy::Off => SchemaMode::Off,
                     })
                     .with_event_schema_resources(event_schemas)
+                    .with_invoked_documents(invoked_documents)
                     // The request carries no service packages, so no
                     // invoked-service type is bound: a literal one is
                     // `PKG004`, exactly as `scx validate` reports
@@ -623,6 +636,51 @@ mod guest {
 
     /// Bounds every request field before validation; runs inside the
     /// component's entry span, which records the rejection.
+    /// Maximum `invoked-documents` in one request (an interface bound on
+    /// every build).
+    const MAX_INVOKED_DOCUMENTS: usize = 64;
+    /// Maximum UTF-8 bytes of one invoked document's `src`.
+    const MAX_INVOKED_SRC_BYTES: usize = 16 * 1024;
+    /// Maximum text and schema bytes of every invoked document together.
+    const MAX_INVOKED_TOTAL_BYTES: usize = 16 * 1024 * 1024;
+
+    /// Collects a request's `invoked-documents`, or `None` when they break
+    /// a request bound or repeat a `src`.
+    fn invoked_documents(
+        documents: Vec<InvokedDocumentRecord>,
+    ) -> Option<std::collections::BTreeMap<String, InvokedDocument>> {
+        let mut collected = std::collections::BTreeMap::new();
+        let mut total = 0_usize;
+        for document in documents {
+            total = total.checked_add(document.text.len())?;
+            for schema in &document.event_schemas {
+                total = total.checked_add(schema.bytes.len())?;
+            }
+            if collected.len() >= MAX_INVOKED_DOCUMENTS
+                || document.src.is_empty()
+                || document.src.len() > MAX_INVOKED_SRC_BYTES
+                || total > MAX_INVOKED_TOTAL_BYTES
+                || collected.contains_key(&document.src)
+            {
+                return None;
+            }
+            let event_schemas = scxml_event_schema::request_resources(
+                document
+                    .event_schemas
+                    .into_iter()
+                    .map(|resource| (resource.uri, resource.bytes)),
+            )?;
+            collected.insert(
+                document.src,
+                InvokedDocument {
+                    text: document.text,
+                    event_schemas,
+                },
+            );
+        }
+        Some(collected)
+    }
+
     fn validate_request_boundary(request: &ValidationRequest) -> Result<(), ComponentError> {
         let mut boundary = ComponentRequestBoundary::new(
             &request.source_name,

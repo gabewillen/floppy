@@ -74,6 +74,10 @@ pub(crate) struct SessionLinks {
     /// (empty for one with none of its own), for the child it compiles
     /// next.
     loaded_bindings: Option<Rc<DocumentBindings>>,
+    /// The schema files of the `<invoke src>` document this session loaded
+    /// last ([`crate::EmbeddedDocument::event_schemas`]), for the child it
+    /// compiles next.
+    loaded_event_schemas: Option<std::collections::BTreeMap<String, Vec<u8>>>,
     /// The bindings of the child this session compiled last, for the
     /// session it starts next.
     compiled_bindings: Option<Rc<DocumentBindings>>,
@@ -125,6 +129,7 @@ impl SessionLinks {
             time,
             bindings,
             loaded_bindings: None,
+            loaded_event_schemas: None,
             compiled_bindings: None,
         }
     }
@@ -351,9 +356,9 @@ impl SessionLinks {
     /// host bounds neither; the machine applies the WIT `loaded-document`
     /// bounds itself.
     ///
-    /// An `<invoke src>` document's own bindings are verified here and kept
-    /// for the child this session compiles and starts next; one that does
-    /// not verify fails the run.
+    /// An `<invoke src>` document's own bindings are verified here and kept,
+    /// with its schema files, for the child this session compiles and
+    /// starts next; one that does not verify fails the run.
     pub(crate) fn load_document(
         &mut self,
         kind: DocumentKind,
@@ -375,6 +380,7 @@ impl SessionLinks {
                         .document_bindings(document.extensions, document.services)
                         .map_err(|error| fatal(&self.shared, error.into()))?;
                     self.loaded_bindings = Some(bindings);
+                    self.loaded_event_schemas = Some(document.event_schemas);
                 }
                 Ok(LoadedDocument {
                     text: document.text,
@@ -728,7 +734,8 @@ impl SessionLinks {
     /// Compiles one child document through the compiler component, with
     /// the packages its sessions bind: an `<invoke src>` document's own
     /// bindings (the one this session loaded last), else this session's
-    /// for inline `<content>`.
+    /// for inline `<content>`; and an `<invoke src>` document's schema
+    /// files (none for inline `<content>`).
     pub(crate) fn compile_invocation(
         &mut self,
         source_name: String,
@@ -740,11 +747,12 @@ impl SessionLinks {
             .loaded_bindings
             .take()
             .or_else(|| self.bindings.clone());
+        let event_schemas = self.loaded_event_schemas.take().unwrap_or_default();
         self.compiled_bindings.clone_from(&bindings);
         let core = Rc::clone(&self.core);
         let packages = core.extension_packages(bindings.as_deref());
         let compiled = self.shared.with_compiler(&core, |compiler| {
-            compiler.compile(source_name, source, packages.iter())
+            compiler.compile(source_name, source, packages.iter(), event_schemas)
         });
         match compiled {
             Ok(ChildCompile::Lowered(bytes)) => {

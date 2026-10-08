@@ -866,7 +866,7 @@ sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
 ```
 
 That build's `manifest.tsv` has SHA-256
-`c54ad6d0b832690deac124f02bfae3680d840bc470e3e53801bb4c0f566d77d6` (machine
+`03bc0069687c41dc55c8d41b4eda372ea651c0f4618e28f625cfc03c10059921` (machine
 component SHA-256
 `4696bf07b5c67d29ae8c717ea80031917b37fef1964a8606e20e985b286c711d`), and
 its example extension component SHA-256
@@ -918,7 +918,7 @@ sh scripts/build-canonical-components.sh --artifacts-dir "$PWD/canonical-release
 
 Built from the source of the checked-in baselines on an arm64 macOS Docker
 host, the script produces manifest SHA-256
-`c54ad6d0b832690deac124f02bfae3680d840bc470e3e53801bb4c0f566d77d6`, the
+`03bc0069687c41dc55c8d41b4eda372ea651c0f4618e28f625cfc03c10059921`, the
 components the baselines were generated from; the `irp-components`
 artifact of the same source must match it.
 

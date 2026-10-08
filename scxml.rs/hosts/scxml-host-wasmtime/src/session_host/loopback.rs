@@ -31,8 +31,8 @@ use crate::bindings::stateforward::scxml::types::{
 use crate::compiler_bindings::stateforward::scxml_compiler::telemetry as compiler_telemetry;
 use crate::compiler_bindings::stateforward::scxml_compiler::types::{
     ArtifactKind, CompileOptions, CompileRequest, ComponentError as CompilerError,
-    ErrorCode as CompilerErrorCode, ExtensionPackage, SchemaPolicy, SchemaResource,
-    ScriptResolution,
+    ErrorCode as CompilerErrorCode, EventSchemaResource, ExtensionPackage, SchemaPolicy,
+    SchemaResource, ScriptResolution,
 };
 use crate::guest_spans::GuestSpanTable;
 use crate::memory_growth::MeteredLimits;
@@ -506,13 +506,16 @@ impl CompilerRuntime {
     }
 
     /// Compiles one child document to lowered Machine IR with schema
-    /// validation off, runtime script resolution, and every namespace
-    /// package the host binds (so a child may use its parent's namespaces).
+    /// validation off, runtime script resolution, every namespace package
+    /// the host binds (so a child may use its parent's namespaces), and the
+    /// schema files its `event:schema` attributes reference (an `<invoke
+    /// src>` document's, [`crate::EmbeddedDocument::event_schemas`]).
     pub(crate) fn compile<'a>(
         &mut self,
         source_name: String,
         source: String,
         packages: impl Iterator<Item = &'a crate::ExtensionPackage>,
+        event_schemas: std::collections::BTreeMap<String, Vec<u8>>,
     ) -> Result<ChildCompile, HostError> {
         self.store.set_fuel(self.fuel)?;
         let (schemas, packages): (Vec<_>, Vec<_>) = packages
@@ -541,11 +544,14 @@ impl CompilerRuntime {
             schemas,
             packages,
             scripts: Vec::new(),
-            // A child document compiled at run time gets no schema files:
-            // it may describe its event data only with inline schemas or
-            // `event:schemaexpr` (a schema reference rejects the child, as
-            // any validation error does).
-            event_schemas: Vec::new(),
+            // An `<invoke src>` document's schema files, as its embedder
+            // read them; an inline `<content>` document gets none, so a
+            // schema reference there rejects the child, as any validation
+            // error does.
+            event_schemas: event_schemas
+                .into_iter()
+                .map(|(uri, bytes)| EventSchemaResource { uri, bytes })
+                .collect(),
             options: CompileOptions {
                 schema_policy: SchemaPolicy::Off,
                 requested_artifact: ArtifactKind::LoweredIr,

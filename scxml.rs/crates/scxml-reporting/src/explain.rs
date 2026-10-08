@@ -949,6 +949,15 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §3.12.1 Event Descriptors", url: "https://www.w3.org/TR/scxml/#EventDescriptors",
     ),
     doc!(
+        "EVENT011", "warning", "semantic", "a `<send>` between a document and an `<invoke src>` document creates event data the receiving transition does not accept",
+        why: "SCXML 6.4 lets a session and the session it invokes exchange events: the invoker sends to `#_<invokeid>`, and the invoked session sends to `#_parent`. When the caller supplies the documents a document's literal `<invoke src>` elements load (`scx validate`, `compile`, and `run` read `file:` ones; the validator component and the browser host take `invoked-documents`), a `<send event=\"x\">` with a literal target from an ECMAScript sender is judged against the receiving document's transitions handling `x` (SCXML 3.12.1 descriptor matching) exactly as `EVENT010` judges one document's own sends: only when the literal `<content>` data, or a witness of the sender's own literal schema, provably fails the transition's literal `event:schema`. Every label is in the validated document, which names the invoked document by its `src`. The schemas are metadata, so the transition is still taken",
+        help: "make the two documents' schemas agree, or change the data",
+        bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"s\"><state id=\"s\"><invoke id=\"kid\" src=\"child.scx\"/><onentry><send event=\"go\" target=\"#_kid\"><content>{\"n\": 1}</content></send></onentry></state></scxml>",
+        fixed: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"s\"><state id=\"s\"><invoke id=\"kid\" src=\"child.scx\"/><onentry><send event=\"go\" target=\"#_kid\"><content>{\"n\": \"one\"}</content></send></onentry></state></scxml>",
+        checked: false,
+        spec: "SCXML 1.0 §6.4 <invoke>", url: "https://www.w3.org/TR/scxml/#invoke",
+    ),
+    doc!(
         "DATAMODEL001", "error", "semantic", "the `datamodel` namespace is used outside `<scxml>`'s `datamodel:src`",
         why: "`https://github.com/stateforward/scxml.rs/namespaces/datamodel` is the host's attribute vocabulary for naming a data model's package: it defines exactly one attribute, `datamodel:src` on `<scxml>`, the only element that names a data model (SCXML 1.0 §3.2.1). It has no elements and no other attributes (an expression cannot select a data model: it needs one to be evaluated in), and an invoked document declares its own pair. The W3C schema admits attributes in other namespaces laxly, so only this rule catches a misplaced or misspelled one",
         help: "move `datamodel:src` to the `<scxml>` whose data model it names, correct its name, or remove it",
