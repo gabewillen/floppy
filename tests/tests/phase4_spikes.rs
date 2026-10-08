@@ -635,14 +635,22 @@ fn a_send_the_childs_schema_file_rejects_is_event011() {
 #[test]
 fn a_run_tagged_timer_guard_survives_self_reentry_of_a_state_holding_invokes() {
     // The wall clock: the logical clock would fire the first timer before
-    // the reboot arrives. The timers are 10 s, so a loaded machine still
-    // takes the reboot first.
+    // the reboot arrives. Each timer is armed 10 s before it fires, when
+    // its member announces itself, and the reboot is sent as soon as the
+    // first announcement is read, so a loaded machine still takes the
+    // reboot first.
     let mut run = Run::start(&args(&[], &fixture("reentry/root.scx")), &[]);
     let mut records = run.until(Duration::from_secs(60), is_log("member"));
     run.event("spike.reboot", &Json::Null);
     records.extend(run.until(Duration::from_secs(60), is_closed));
     assert!(support::finished(&records), "{records:?}");
-    let labels: Vec<(String, String)> = logs(&records);
+    let mut labels: Vec<(String, String)> = logs(&records);
+    // The second member's start (its compile) and the stale first timer
+    // race: either may come first, and only the stale timer's place before
+    // the second timer is the spike's claim.
+    if labels.get(4..6) == Some(&labelled(&[("stale", "1"), ("member", "up")])[..]) {
+        labels.swap(4, 5);
+    }
     assert_eq!(
         labels,
         labelled(&[

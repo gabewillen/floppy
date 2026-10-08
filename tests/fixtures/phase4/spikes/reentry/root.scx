@@ -1,8 +1,11 @@
-<!-- Spike (e): live holds an invoke and arms a run-tagged delayed send on
-     entry; spike.reboot re-enters live (exit cancels the child and
-     restarts it). The first entry's timer is not cancelled: when it fires
-     its run no longer matches, so the guarded transition skips it and the
-     catch-all logs it as stale; the second entry's timer is taken. -->
+<!-- Spike (e): live holds an invoke and, once its member is up, arms a
+     run-tagged delayed send (run is counted on entry); spike.reboot
+     re-enters live (exit cancels the child and restarts it). The first
+     entry's timer is not cancelled: when it fires its run no longer
+     matches, so the guarded transition skips it and the catch-all logs it
+     as stale; the second entry's timer is taken. Arming on the member's
+     announcement, not in onentry, keeps the member's compile out of the
+     window the test's spike.reboot must win. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        version="1.0" datamodel="ecmascript" initial="live">
   <datamodel>
@@ -13,12 +16,12 @@
     <onentry>
       <assign location="run" expr="run + 1"/>
       <log label="entered" expr="String(run)"/>
-      <send event="spike.timer" delayexpr="delay"><param name="run" expr="run"/></send>
     </onentry>
     <invoke id="member" type="scxml" src="member.scx"/>
     <transition event="spike.reboot" target="live"/>
     <transition event="spike.member" cond="_event.invokeid === 'member'">
       <log label="member" expr="_event.data.state"/>
+      <send event="spike.timer" delayexpr="delay"><param name="run" expr="run"/></send>
     </transition>
     <transition event="spike.timer" cond="!_event.invokeid &amp;&amp; _event.data.run === run" target="timed_out">
       <log label="timer" expr="String(_event.data.run)"/>
