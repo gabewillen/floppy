@@ -1,0 +1,14 @@
+<!-- Spike (d), EVENT011: root.scx with a ping whose data the child's
+     schema file rejects (additionalProperties is false). `scx validate`
+     reads the literal child and its schema file and warns EVENT011. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" initial="invoking">
+  <state id="invoking">
+    <invoke id="child" type="scxml" src="child.scx"/>
+    <transition event="spike.ready" cond="_event.invokeid === 'child'">
+      <send event="spike.ping" target="#_child"><content>{"unexpected": true}</content></send>
+    </transition>
+    <transition event="done.invoke.child" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

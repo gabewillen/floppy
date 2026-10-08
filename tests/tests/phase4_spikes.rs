@@ -21,8 +21,9 @@
 //!   event already pending, and lose `_event.invokeid` (the replay carries
 //!   it as `from`).
 //! * (d) `schema_file`: an invoked child whose transition references an
-//!   `event:schema` file fails to start with `error.execution` (gap G1:
-//!   the host compiles invoked children without schema files).
+//!   `event:schema` file starts and handles a schema-valid event (gap G1
+//!   closed by scxml.rs `EmbeddedDocument::event_schemas`), and `scx
+//!   validate` judges a `<send>` to the child against that file (`EVENT011`).
 //! * (e) `reentry`: a run-tagged `<send delay>` guard tells a stale timer
 //!   from the current one across self re-entry of a state holding invokes.
 //! * (f) `start_error`: the `error.execution` of an invoke whose `src` does
@@ -588,7 +589,7 @@ fn replayed_internal_events_run_before_a_pending_external_one_and_lose_their_inv
 // ---------------------------------------------------------------- spike (d)
 
 #[test]
-fn an_invoked_child_referencing_an_event_schema_file_fails_with_error_execution() {
+fn an_invoked_child_referencing_an_event_schema_file_starts_with_it() {
     let child = fixture("schema_file/child.scx");
     let validated = support::output(&["validate".to_owned(), child.display().to_string()]);
     assert!(
@@ -596,14 +597,36 @@ fn an_invoked_child_referencing_an_event_schema_file_fails_with_error_execution(
         "the child is valid on its own, schema file included: {}",
         validated.stderr
     );
-    let mut run = Run::start(&args(&[], &fixture("schema_file/root.scx")), &[]);
+    let root = fixture("schema_file/root.scx");
+    let validated = support::output(&["validate".to_owned(), root.display().to_string()]);
+    assert!(
+        validated.status.success() && validated.stderr.contains("0 error(s), 0 warning(s)"),
+        "the root's ping is valid against the child's schema file: {}",
+        validated.stderr
+    );
+    let mut run = Run::start(&args(&[], &root), &[]);
     run.end_input();
     let finished = run.finish(Duration::from_secs(60));
     assert_eq!(
         logs(&finished.records),
-        labelled(&[("error", "error.execution")]),
-        "gap G1: the child never starts: {:?}",
+        labelled(&[("ready", "child"), ("done", "child")]),
+        "the child compiles with its schema file, starts, and takes the ping: {:?}",
         finished.records
+    );
+}
+
+/// `scx validate` reads the literal child with its own schema file and
+/// warns `EVENT011` for a `<send>` whose data that file rejects.
+#[test]
+fn a_send_the_childs_schema_file_rejects_is_event011() {
+    let root = fixture("schema_file/root_rejected_ping.scx");
+    let validated = support::output(&["validate".to_owned(), root.display().to_string()]);
+    assert!(
+        validated.status.success()
+            && validated.stderr.contains("warning[EVENT011]")
+            && validated.stderr.contains("0 error(s), 1 warning(s)"),
+        "the rejected ping is EVENT011: {}",
+        validated.stderr
     );
 }
 
