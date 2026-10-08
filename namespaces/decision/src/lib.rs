@@ -22,9 +22,10 @@
 //! objects with `event` (an event name), `schema` (the transition's resolved
 //! `event:schema`), and `description` (the schema's `description`, else its
 //! `title`, first line; omitted when it has neither), canonical JSON with
-//! members sorted by key, in the session snapshot's walk order. Every other
-//! attribute (unqualified or namespaced), any child element, and any
-//! non-white-space text is refused.
+//! members sorted by key, in the session snapshot's walk order. `events`
+//! (optional) filters it: see "The filter". Every other attribute
+//! (unqualified or namespaced), any child element, and any non-white-space
+//! text is refused.
 //!
 //! * **The menu.** The transitions the session snapshot lists for the
 //!   current configuration (`session-snapshot-host`, `transitions` section,
@@ -49,6 +50,17 @@
 //!   event (author such guards without `event:schema`, or expect them not
 //!   to be offered). Conditions run once per element, so they must be free
 //!   of side effects, as SCXML conditions should be anyway.
+//! * **The filter.** `events="D1 D2 ..."` is a white-space separated list
+//!   of SCXML event descriptors (SCXML 3.12.1: `*`, or an event name with an
+//!   optional trailing `.*`). The menu keeps only the events one of them
+//!   matches (a token prefix match: `bot.ability` keeps
+//!   `bot.ability.cognition.ignore`), in menu order. The filter applies
+//!   after selection order is worked out, so a transition it leaves out
+//!   still takes its events from later transitions, as SCXML would select
+//!   it. An `events` that lists no descriptor, or one that is not an event
+//!   descriptor, is refused. Without `events` the menu is unfiltered. A
+//!   document uses it to offer a model only the events meant for it (tool
+//!   events) and not, say, its own input or completion events.
 //!
 //! The menu's schemas are the contracts of the events the decision service
 //! may return: it validates the chosen event's data against them before it
@@ -247,21 +259,31 @@ pub fn execute<H: MenuHost>(
         return Ok(Executed::NotHandled);
     }
     let mut location = None;
+    let mut events = None;
     for attribute in attributes {
-        if attribute.namespace_uri.is_some() || attribute.local_name != "location" {
-            return Err(Failure::Execution(
-                "decision:menu takes only the location attribute",
-            ));
-        }
-        if location.replace(attribute.value.trim()).is_some() {
+        let slot = match (
+            attribute.namespace_uri.as_deref(),
+            attribute.local_name.as_str(),
+        ) {
+            (None, "location") => &mut location,
+            (None, "events") => &mut events,
+            _ => {
+                return Err(Failure::Execution(
+                    "decision:menu takes only the location and events attributes",
+                ));
+            }
+        };
+        if slot.replace(attribute.value.as_str()).is_some() {
             return Err(Failure::Execution("decision:menu repeats an attribute"));
         }
     }
     let location = location
+        .map(str::trim)
         .filter(|location| !location.is_empty())
         .ok_or(Failure::Execution(
             "decision:menu requires a non-empty location",
         ))?;
+    let filter = events.map(event_filter).transpose()?;
     if content
         .iter()
         .any(|item| !matches!(item, Content::Text(text) if text.trim().is_empty()))
@@ -272,11 +294,46 @@ pub fn execute<H: MenuHost>(
         .snapshot(&MENU_SNAPSHOT_EXCLUDE)
         .map_err(Failure::Host)?
         .map_err(|()| Failure::Execution("the host offers no session snapshot"))?;
-    let menu = snapshot_menu(&document, &mut |cond| host.guard(cond))?;
+    let mut menu = snapshot_menu(&document, &mut |cond| host.guard(cond))?;
+    if let Some(filter) = filter {
+        menu.retain(|entry| {
+            filter
+                .iter()
+                .any(|descriptor| matches(descriptor, &entry.event))
+        });
+    }
     host.assign(location, &Data::JsonArray(menu_json(&menu)))
         .map_err(Failure::Host)?
         .map_err(|()| Failure::Execution("decision:menu could not assign the menu to location"))?;
     Ok(Executed::Handled)
+}
+
+/// The event descriptors of an `events` attribute: its white-space
+/// separated tokens, each `*` or an event name with an optional trailing
+/// `.*` (SCXML 3.12.1).
+///
+/// # Errors
+///
+/// [`Failure::Execution`] when the value lists no descriptor or one that
+/// is not an event descriptor.
+pub fn event_filter<E>(value: &str) -> Result<Vec<&str>, Failure<E>> {
+    let descriptors: Vec<&str> = value
+        .split(scxml_types::is_xml_space)
+        .filter(|token| !token.is_empty())
+        .collect();
+    if descriptors.is_empty() {
+        return Err(Failure::Execution(
+            "decision:menu events names no event descriptor",
+        ));
+    }
+    if descriptors.iter().any(|descriptor| {
+        *descriptor != "*" && !valid_event_name(descriptor.strip_suffix(".*").unwrap_or(descriptor))
+    }) {
+        return Err(Failure::Execution(
+            "decision:menu events holds a malformed event descriptor",
+        ));
+    }
+    Ok(descriptors)
 }
 
 /// The first line of the schema's `description`, else of its `title`.

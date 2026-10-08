@@ -11,7 +11,9 @@
 //! receives them; the component holds slot references and the host
 //! substitutes the values into the admitted request.
 //!
-//! The ignored `live_decision_through_an_env_file` test makes one real call:
+//! The ignored `live_decision_through_an_env_file` test makes one real call
+//! (`live_filtered_decision_through_an_env_file` another, with the menu
+//! filtered by `events`):
 //! `FLOPPY_LIVE_ENV_FILE=<path> cargo test -p floppy-tests --test
 //! decision_service -- --ignored`. The file must set `TYPESAFE_API_KEY`;
 //! `TYPESAFE_BASE_URL` is the file's value, else `TypeSafe`'s, given as the
@@ -227,6 +229,11 @@ const HOLD_SCHEMA: &str =
 /// `error.execution` (no schema, so never offered) finish in `abstained`
 /// and `failed`.
 fn document(params: &str) -> String {
+    filtered_document("", params)
+}
+
+/// [`document`] with `menu_attributes` added to its `<decision:menu>`.
+fn filtered_document(menu_attributes: &str, params: &str) -> String {
     format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:decision="{NAMESPACE_URI}"
@@ -236,7 +243,7 @@ fn document(params: &str) -> String {
   <datamodel><data id="order" expr="({{sku: 'A-1', qty: 2}})"/><data id="menu" expr="[]"/></datamodel>
   <state id="deciding">
     <onentry>
-      <decision:menu location="menu"/>
+      <decision:menu location="menu"{menu_attributes}/>
     </onentry>
     <invoke id="decide" type="{service}" env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
       <param name="menu" expr="menu"/>
@@ -284,6 +291,85 @@ fn run(route: &str, test: &str, env: &[&str]) -> (Vec<Json>, Mock) {
 }
 
 const BOTH: [&str; 2] = ["TYPESAFE_API_KEY", "TYPESAFE_BASE_URL"];
+
+/// The selection criteria (the menu's events plus abstain) the backend
+/// received for one run of the order machine whose `<decision:menu>`
+/// carries `menu_attributes`, and the run's log records.
+fn received_menu(menu_attributes: &str, route: &str, test: &str) -> (Json, Vec<(String, String)>) {
+    let mock = Mock::start();
+    let env_path = env_file(test, &format!("{}/{route}", mock.origin), &BOTH);
+    let finished = open(
+        &args(&env_path),
+        &filtered_document(menu_attributes, CHOOSE),
+        &[],
+        Duration::from_secs(60),
+    );
+    let received = mock.received();
+    assert_eq!(received.len(), 1, "exactly one request");
+    let body: Json = serde_json::from_slice(&received[0].body).expect("the body is JSON");
+    (
+        body["questions"]["selection"]["criteria"].clone(),
+        logs(&finished.records),
+    )
+}
+
+#[test]
+fn the_events_filter_narrows_the_menu_the_backend_receives() {
+    let (unfiltered, records) = received_menu("", "ship", "unfiltered");
+    assert_eq!(
+        unfiltered,
+        json!({
+            "order.ship": "Ship the order to the customer.",
+            "order.cancel": "Cancel the order.",
+            "order.hold": "Put the order on hold.",
+            "none of these": "None of these: take no event.",
+        }),
+        "without events every schema transition is offered"
+    );
+    assert_eq!(
+        records,
+        labelled(&[
+            ("data", r#"{"carrier":"fedex","sku":"A-1"}"#),
+            ("final", "shipped"),
+        ])
+    );
+    let (filtered, records) = received_menu(
+        r#" events="order.cancel order.hold.*""#,
+        "cancel",
+        "filtered",
+    );
+    assert_eq!(
+        filtered,
+        json!({
+            "order.cancel": "Cancel the order.",
+            "order.hold": "Put the order on hold.",
+            "none of these": "None of these: take no event.",
+        }),
+        "the filter keeps only the events its descriptors match"
+    );
+    assert_eq!(
+        records,
+        labelled(&[("data", r#"{"reason":"customer"}"#), ("final", "cancelled")])
+    );
+}
+
+#[test]
+fn a_menu_filtered_to_leave_out_the_chosen_event_never_fires_it() {
+    // The backend prefers order.ship, but the filter left it off the menu:
+    // the service's answer is outside the menu it was given.
+    let (filtered, records) = received_menu(r#" events="order.cancel""#, "ship", "excluded");
+    assert_eq!(
+        filtered,
+        json!({
+            "order.cancel": "Cancel the order.",
+            "none of these": "None of these: take no event.",
+        })
+    );
+    assert_eq!(
+        records,
+        labelled(&[("code", "malformed"), ("final", "failed")])
+    );
+}
 
 #[test]
 fn choose_fires_the_chosen_schema_transition_with_schema_valid_data() {
@@ -429,6 +515,24 @@ fn classify_returns_every_labels_probability() {
 #[test]
 #[ignore = "makes one real TypeSafe call; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_decision_through_an_env_file() {
+    live_decision("", &["shipped", "cancelled", "held"]);
+}
+
+/// [`live_decision_through_an_env_file`] with the menu filtered to
+/// `order.ship` and `order.cancel`: passes only when the machine reaches
+/// one of those with schema-valid data, or abstains (never `held`).
+#[test]
+#[ignore = "makes one real TypeSafe call; needs FLOPPY_LIVE_ENV_FILE"]
+fn live_filtered_decision_through_an_env_file() {
+    live_decision(
+        r#" events="order.ship order.cancel""#,
+        &["shipped", "cancelled"],
+    );
+}
+
+/// One real decision of the order machine whose `<decision:menu>` carries
+/// `menu_attributes`; `offered` are the final states its menu can reach.
+fn live_decision(menu_attributes: &str, offered: &[&str]) {
     // The env file sets no TYPESAFE_BASE_URL: the service uses its package's
     // declared origin (decision D18).
     let params = r#"<param name="state" expr="order"/>
@@ -437,7 +541,13 @@ fn live_decision_through_an_env_file() {
         .iter()
         .flat_map(|path| args(path))
         .collect();
-    let records = open(&args, &document(params), &[], Duration::from_secs(120)).records;
+    let records = open(
+        &args,
+        &filtered_document(menu_attributes, params),
+        &[],
+        Duration::from_secs(120),
+    )
+    .records;
     let logs = logs(&records);
     let admitted = |schema: &str, data: &str| {
         let resolved = scxml_event_schema::resolve(schema.as_bytes(), None).ok();
@@ -452,10 +562,11 @@ fn live_decision_through_an_env_file() {
             if data_label == "data" && final_label == "final" =>
         {
             match last.as_str() {
+                "abstained" => true,
+                last if !offered.contains(&last) => false,
                 "shipped" => admitted(SHIP_SCHEMA, data),
                 "cancelled" => admitted(CANCEL_SCHEMA, data),
                 "held" => admitted(HOLD_SCHEMA, data),
-                "abstained" => true,
                 _ => false,
             }
         }

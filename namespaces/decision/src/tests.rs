@@ -455,3 +455,192 @@ fn the_event_name_bound_applies_to_wasm_builds_only() {
         "a name at the wasm bound is offered on every build"
     );
 }
+
+/// The events of the menu `execute` writes for the order snapshot with
+/// `attributes`.
+fn executed_menu(attributes: &[Attribute]) -> Vec<String> {
+    let mut host = FakeHost {
+        menu_snapshot: Some(order_snapshot()),
+        ..FakeHost::default()
+    };
+    assert_eq!(
+        execute("menu", attributes, &[], &mut host),
+        Ok(Executed::Handled)
+    );
+    let [(location, Data::JsonArray(menu))] = host.assigned.as_slice() else {
+        panic!("one menu array is assigned: {:?}", host.assigned);
+    };
+    assert_eq!(location, "menu");
+    let menu: Json = serde_json::from_str(menu).expect("the menu is JSON");
+    menu.as_array()
+        .expect("the menu is an array")
+        .iter()
+        .map(|entry| entry["event"].as_str().expect("event").to_owned())
+        .collect()
+}
+
+#[test]
+fn the_events_filter_keeps_the_events_a_descriptor_names() {
+    assert_eq!(
+        executed_menu(&[location("menu"), attr("events", "order.cancel")]),
+        ["order.cancel"]
+    );
+    assert_eq!(
+        executed_menu(&[
+            location("menu"),
+            attr("events", " order.hold\n order.ship ")
+        ]),
+        ["order.ship", "order.hold"],
+        "menu order, not descriptor order"
+    );
+}
+
+#[test]
+fn the_events_filter_matches_descriptors_as_token_prefixes() {
+    assert_eq!(
+        executed_menu(&[location("menu"), attr("events", "order")]),
+        ["order.ship", "order.cancel", "order.hold"]
+    );
+    assert_eq!(
+        executed_menu(&[location("menu"), attr("events", "order.*")]),
+        ["order.ship", "order.cancel", "order.hold"]
+    );
+    assert_eq!(
+        executed_menu(&[location("menu"), attr("events", "*")]),
+        ["order.ship", "order.cancel", "order.hold"]
+    );
+    assert_eq!(
+        executed_menu(&[location("menu"), attr("events", "order.sh ord")]),
+        Vec::<String>::new(),
+        "a descriptor matches whole tokens only"
+    );
+}
+
+#[test]
+fn the_events_filter_with_no_match_writes_an_empty_menu() {
+    assert_eq!(
+        executed_menu(&[location("menu"), attr("events", "bot.input order.refund")]),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn without_the_events_attribute_the_menu_is_unfiltered() {
+    assert_eq!(
+        executed_menu(&[location("menu")]),
+        ["order.ship", "order.cancel", "order.hold"]
+    );
+    assert_eq!(
+        executed_menu(&[attr("events", "order.cancel"), location("menu")]),
+        ["order.cancel"],
+        "attribute order does not matter"
+    );
+}
+
+/// The filter applies after selection order: an earlier transition the
+/// filter leaves out still preempts a later one for its event.
+#[test]
+fn the_events_filter_keeps_selection_order_preemption() {
+    let schema = json!({"type": "object"});
+    let mut host = FakeHost {
+        menu_snapshot: Some(snapshot(&[
+            with_schema(&["bot.input"], &schema),
+            with_schema(&["bot.input.text", "bot.focus_device"], &schema),
+        ])),
+        ..FakeHost::default()
+    };
+    execute(
+        "menu",
+        &[
+            location("menu"),
+            attr("events", "bot.input.text bot.focus_device"),
+        ],
+        &[],
+        &mut host,
+    )
+    .expect("handled");
+    let Data::JsonArray(menu) = &host.assigned[0].1 else {
+        panic!("the menu is an array");
+    };
+    let menu: Json = serde_json::from_str(menu).expect("JSON");
+    assert_eq!(
+        menu.as_array()
+            .expect("array")
+            .iter()
+            .map(|entry| entry["event"].clone())
+            .collect::<Vec<_>>(),
+        [json!("bot.focus_device")],
+        "bot.input.text is taken by the earlier bot.input transition"
+    );
+}
+
+#[test]
+fn a_malformed_events_attribute_raises_error_execution() {
+    for (value, detail) in [
+        ("", "decision:menu events names no event descriptor"),
+        (" \t\n", "decision:menu events names no event descriptor"),
+        (
+            "a..b",
+            "decision:menu events holds a malformed event descriptor",
+        ),
+        (
+            "a.*.b",
+            "decision:menu events holds a malformed event descriptor",
+        ),
+        (
+            "ok .x",
+            "decision:menu events holds a malformed event descriptor",
+        ),
+    ] {
+        let mut host = FakeHost {
+            menu_snapshot: Some(order_snapshot()),
+            ..FakeHost::default()
+        };
+        assert_eq!(
+            execution(execute(
+                "menu",
+                &[location("menu"), attr("events", value)],
+                &[],
+                &mut host
+            )),
+            detail,
+            "{value:?}"
+        );
+        assert!(host.assigned.is_empty());
+        assert!(host.snapshot_requests.is_empty(), "refused before the read");
+    }
+    let mut host = FakeHost {
+        menu_snapshot: Some(order_snapshot()),
+        ..FakeHost::default()
+    };
+    assert_eq!(
+        execution(execute(
+            "menu",
+            &[location("menu"), attr("events", "a"), attr("events", "b")],
+            &[],
+            &mut host
+        )),
+        "decision:menu repeats an attribute"
+    );
+    let mut host = FakeHost {
+        menu_snapshot: Some(order_snapshot()),
+        ..FakeHost::default()
+    };
+    assert_eq!(
+        execution(execute(
+            "menu",
+            &[
+                location("menu"),
+                Attribute {
+                    namespace_uri: Some(NAMESPACE_URI.into()),
+                    local_name: "events".into(),
+                    value: "a".into(),
+                },
+            ],
+            &[],
+            &mut host
+        )),
+        "decision:menu takes only the location and events attributes",
+        "only the unqualified events attribute"
+    );
+}

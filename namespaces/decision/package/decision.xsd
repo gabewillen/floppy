@@ -5,8 +5,11 @@
   element does. Bind it with the prefix `decision` by convention.
 
   decision:menu  location (required): receives the canonical menu of the
-                 enabled event:schema transitions. No other attribute, no
-                 content. Choosing among them is the decision service's
+                 enabled event:schema transitions.
+                 events (optional): a white-space separated list of SCXML
+                 event descriptors; the menu keeps only the events one of
+                 them matches. No other attribute, no content.
+                 Choosing among them is the decision service's
                  work (services/decision): executable content stays
                  synchronous and quick.
 -->
@@ -16,6 +19,7 @@
   <xs:element name="menu">
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="events" type="xs:string" use="optional"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>
