@@ -167,6 +167,7 @@ impl ComponentValidator {
                     ArtifactKind::DataModelEcmascript
                         | ArtifactKind::DataModelNull
                         | ArtifactKind::DataModelXpath
+                        | ArtifactKind::DataModelComponent
                 )
             })
         {

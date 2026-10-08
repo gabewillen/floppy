@@ -819,3 +819,98 @@ fn a_ten_thousand_deep_chain_with_every_level_queued_drains_in_bounded_commands(
     assert_eq!(ups, DEEP, "every level's up reached its invoking session");
     assert_eq!(outcome.commands, 4 * DEEP as u64 + 2);
 }
+
+/// XML Base: an `<invoke src>` resolves against the `<invoke>`'s in-scope
+/// `xml:base` (each resolved against its parent's), so the embedder is asked
+/// for the URI the bases name, not the bare `src`.
+#[test]
+fn xml_base_changes_the_resolution_of_a_relative_invoke_src() {
+    let root = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="r0" xml:base="https://example.org/machines/"><state id="r0" xml:base="sub/"><invoke id="child" type="scxml" src="../children/child.scxml"/><transition event="done.invoke.child" target="rdone"><log label="root-got-done"/></transition></state><final id="rdone"/></scxml>"#;
+    let leaf = scxml(
+        "c0",
+        r#"<state id="c0"><onentry><log label="child-ran"/></onentry><transition target="cdone"/></state><final id="cdone"/>"#,
+    );
+    let outcome = run(
+        &host(),
+        root,
+        vec![(
+            "https://example.org/machines/children/child.scxml",
+            leaf.clone(),
+        )],
+        SnapshotRequest::none(),
+    );
+    assert_eq!(outcome.terminal, Terminal::Finished);
+    assert!(
+        logs(&outcome).iter().any(|log| log.ends_with(":child-ran")),
+        "{:?}",
+        logs(&outcome)
+    );
+    // Without the bases the same `src` names another document, which the
+    // embedder does not have: the invocation fails and the root never
+    // finishes.
+    let unbased = root
+        .replace(r#" xml:base="https://example.org/machines/""#, "")
+        .replace(r#" xml:base="sub/""#, "");
+    let outcome = run(
+        &host(),
+        &unbased,
+        vec![("https://example.org/machines/children/child.scxml", leaf)],
+        SnapshotRequest::none(),
+    );
+    assert!(
+        !logs(&outcome).iter().any(|log| log.ends_with(":child-ran")),
+        "{:?}",
+        logs(&outcome)
+    );
+}
+
+/// A data-model package's component is the data model of every session whose
+/// `datamodel` names it: `datamodels/example` repackages the null data
+/// model's component under the name `example`.
+#[test]
+fn a_document_runs_on_a_data_model_package() {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("host crate has a workspace parent");
+    let _ = components();
+    let bytes = std::fs::read(workspace.join(
+        "target/session-host-proof/wasm-artifacts/nested-invocation/scxml_data_model_null.virtualized.wasm",
+    ))
+    .expect("the release null data model is readable");
+    let component = scxml_host_wasmtime::authenticate_data_model_component(
+        &bytes,
+        scxml_host_wasmtime::TrustedComponentDigest::from_hex(&format!(
+            "{:x}",
+            Sha256::digest(&bytes)
+        ))
+        .expect("digest is canonical"),
+    )
+    .expect("the component authenticates");
+    let manifest = scxml_validator_core::DataModelPackageManifest::from_json(
+        &std::fs::read(workspace.join("datamodels/example/package/example.data-model.json"))
+            .expect("the example manifest is readable"),
+    )
+    .expect("the example manifest parses");
+    let host = host()
+        .with_data_model_components(
+            scxml_host_wasmtime::DataModelComponents::new()
+                .bind(&manifest.datamodel, &component)
+                .expect("the package binds"),
+        )
+        .expect("the host takes the data models");
+    let root = format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:datamodel="{}" version="1.0" datamodel="example" datamodel:src="{}" initial="a"><state id="a"><transition cond="In('a')" target="done"><log label="in-a"/></transition></state><final id="done"/></scxml>"#,
+        scxml_types::DATAMODEL_NAMESPACE_URI,
+        manifest.data_model_uri
+    );
+    let outcome = run(&host, &root, Vec::new(), SnapshotRequest::none());
+    assert_eq!(outcome.terminal, Terminal::Finished);
+    assert_eq!(logs(&outcome), ["root:in-a"]);
+    // A built-in name is never a package's.
+    assert!(
+        scxml_host_wasmtime::DataModelComponents::new()
+            .bind("null", &component)
+            .is_err()
+    );
+}

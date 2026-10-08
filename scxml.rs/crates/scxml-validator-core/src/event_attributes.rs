@@ -23,7 +23,7 @@
 //! * `EVENT007`: `$schema` names an unsupported dialect.
 //! * `EVENT008`: a reference that cannot be kept (another resource, a
 //!   missing target, or a schema a pointer cannot move).
-//! * `LIMIT007`: a schema over the Machine IR string bound (wasm builds
+//! * `LIMIT005`: a schema over the Machine IR string bound (wasm builds
 //!   only).
 //!
 //! `event:schemaexpr` is checked as a value expression by the data model's
@@ -400,7 +400,7 @@ fn schema_error_diagnostic(what: &str, error: &SchemaError, place: &Place) -> Di
             json_error(what, error, whole)
         }
         SchemaError::TooLarge { limit } => Diagnostic::error(
-            "LIMIT007",
+            "LIMIT005",
             format!("{what} exceeds the Machine IR string bound"),
             whole,
         )

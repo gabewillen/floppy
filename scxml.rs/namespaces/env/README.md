@@ -50,10 +50,8 @@ The validator checks every `env` attribute:
   `env:<slot>` value that is not a variable name, or an attribute that names
   no valid slot.
 - `ENV002`: an element in the `env` namespace, or an `env` attribute on an
-  element in no namespace, on an executable-content extension element, or on
-  the `<invoke>` of an SCXML session.
-- `LIMIT006`: an `env` attribute on any other SCXML element (an attribute in
-  another namespace on an SCXML element).
+  element in no namespace, on an executable-content extension element, on
+  the `<invoke>` of an SCXML session, or on any other SCXML element.
 
 `scx explain ENV001` and `scx explain ENV002` give each rule
 with an example.
@@ -110,9 +108,9 @@ service yet), and are proven by the echo service's tests named under each.
 - <a id="env-2"></a>**env-2** (placement). The vocabulary has attributes
   only, and only an invoked service's `<invoke>` has slots: an element in
   the `env` namespace, or an `env` attribute on an element in no namespace,
-  on an executable-content extension element, or on the `<invoke>` of an
-  SCXML session, is rejected (`ENV002`), and an `env` attribute on another
-  SCXML element is rejected (`LIMIT006`) (IRP).
+  on an executable-content extension element, on the `<invoke>` of an
+  SCXML session, or on any other SCXML element, is rejected (`ENV002`)
+  (IRP).
 - <a id="env-3"></a>**env-3** (binding by name). `env:<slot>="NAME"` binds
   the `<invoke>`'s slot `<slot>` to the variable `NAME`; the host substitutes
   `NAME`'s value (`hosts/scxml-host-wasmtime/tests/service_invoke.rs`,

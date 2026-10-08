@@ -242,13 +242,14 @@ pub struct Attribute {
     pub lexical_name: String,
     /// Namespace-resolved name.
     pub name: ExpandedName,
-    /// Decoded XML value; for the `type` of an SCXML `<invoke>`, a
+    /// Decoded XML value; for the `type` of an SCXML `<invoke>` and for a
+    /// `datamodel:src` ([`scxml_types::DATAMODEL_NAMESPACE_URI`]), a
     /// repository package URI's trailing `@<tag>` is split off into
     /// [`Self::tag`] ([`scxml_types::strip_tag`]).
     pub value: String,
-    /// The release tag an SCXML `<invoke type>` repository package URI
-    /// pinned (`@<tag>`), which only the CLI's resolver reads; `None` for
-    /// every other attribute.
+    /// The release tag an SCXML `<invoke type>` or `datamodel:src`
+    /// repository package URI pinned (`@<tag>`), which only the CLI's
+    /// resolver reads; `None` for every other attribute.
     pub tag: Option<String>,
     /// Span of the complete attribute.
     pub span: Span,
@@ -314,7 +315,41 @@ impl Element {
             }
         }
     }
+
+    /// Visits this element and every descendant in document order with its
+    /// in-scope XML Base (W3C XML Base, Second Edition): each `xml:base`
+    /// (the value collapsed of XML white space) resolved against its
+    /// parent's base with [`scxml_types::resolve_reference`], so a relative
+    /// one stays relative to the document's own base URI, which the host
+    /// knows; `None` where no ancestor-or-self has one. An element's own
+    /// `xml:base` applies to its own attributes. Iterative; bounded by the
+    /// parsed tree.
+    pub fn visit_with_base<'a>(&'a self, visitor: &mut impl FnMut(&'a Element, Option<&str>)) {
+        let mut pending: Vec<(&Element, Option<std::rc::Rc<str>>)> = vec![(self, None)];
+        while let Some((element, inherited)) = pending.pop() {
+            let base = match element
+                .attributes
+                .iter()
+                .find(|attribute| attribute.name.is(Some(XML_NAMESPACE), "base"))
+            {
+                Some(attribute) => Some(std::rc::Rc::from(scxml_types::resolve_reference(
+                    inherited.as_deref().unwrap_or_default(),
+                    &crate::collapse_whitespace(&attribute.value),
+                ))),
+                None => inherited,
+            };
+            visitor(element, base.as_deref());
+            for child in element.children.iter().rev() {
+                if let Node::Element(child) = child {
+                    pending.push((child, base.clone()));
+                }
+            }
+        }
+    }
 }
+
+/// The XML namespace, which binds `xml:base`.
+const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
 
 /// Parsed namespace-resolved XML document.
 #[derive(Clone, Debug, Eq, PartialEq)]

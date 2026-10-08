@@ -144,7 +144,7 @@ const NOT_SELF_CHECKING: &[(&str, &str)] = &[
     ),
     ("LIMIT002", "needs 65,536 states; the example is prose"),
     (
-        "LIMIT007",
+        "LIMIT005",
         "needs a 65-deep hierarchy or 1 MiB values; the example is prose",
     ),
     (
@@ -162,11 +162,11 @@ const NOT_SELF_CHECKING: &[(&str, &str)] = &[
         "needs an extension namespace without a registered schema",
     ),
     (
-        "LIMIT008",
+        "LIMIT006",
         "the example needs an ID of more than 1,013 bytes; tests/ui covers it",
     ),
     (
-        "LIMIT009",
+        "LIMIT007",
         "the example needs a name of more than 1,012 bytes; tests/ui covers it",
     ),
     (
@@ -184,6 +184,10 @@ const NOT_SELF_CHECKING: &[(&str, &str)] = &[
     (
         "PKG002",
         "the example needs a failing package validator component; the package validator tests cover it",
+    ),
+    (
+        "DATAMODEL002",
+        "the example needs the validator's bound data-model packages; the tests/ui case datamodel002-name-mismatch covers it",
     ),
     ("XSD002", "the example is a schema, not an SCXML document"),
     ("XSD003", "the example is a schema, not an SCXML document"),

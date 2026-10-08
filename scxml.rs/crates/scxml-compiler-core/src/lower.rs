@@ -45,6 +45,9 @@ struct Builder<'r> {
     /// once, by the first (innermost) [`Builder::locate`] that sees the
     /// error, so the compiler reports the responsible element.
     failure: Option<Span>,
+    /// The in-scope XML Base of each element that has one
+    /// ([`Element::visit_with_base`]), by the element's start offset.
+    bases: BTreeMap<usize, String>,
 }
 
 impl<'r> Builder<'r> {
@@ -57,7 +60,25 @@ impl<'r> Builder<'r> {
             transitions: Vec::new(),
             ids: BTreeMap::new(),
             failure: None,
+            bases: BTreeMap::new(),
         }
+    }
+
+    /// The in-scope XML Base of `element`, when an ancestor-or-self has an
+    /// `xml:base`.
+    fn base(&self, element: &Element) -> Option<String> {
+        self.bases.get(&element.span.start).cloned()
+    }
+
+    /// The `src` of a `<data>` or `<script>`, which always names a
+    /// document to load: resolved against the element's in-scope XML Base
+    /// ([`scxml_types::resolve_reference`]), so the host resolves the
+    /// result against the document's own base URI.
+    fn src(&self, element: &Element) -> Option<String> {
+        token_attr(element, "src").map(|src| match self.base(element) {
+            Some(base) => scxml_types::resolve_reference(&base, &src),
+            None => src,
+        })
     }
 
     /// Records `span` as the failure location when `result` is the first
@@ -81,6 +102,10 @@ impl<'r> Builder<'r> {
         node: &'n Node,
     ) -> Result<Option<&'n Element>, LowerError> {
         match node {
+            // Markup from another namespace outside executable content has
+            // no behavior: its package (or the validator's `LINT022`)
+            // judges it, and lowering has nothing to keep.
+            Node::Element(element) if is_foreign(element) => Ok(None),
             Node::Element(element) => Ok(Some(element)),
             Node::Text(text) if scxml_syntax::is_xml_blank(&text.value) => Ok(None),
             Node::Text(text) => self.fail_at(
@@ -512,7 +537,7 @@ impl<'r> Builder<'r> {
             data.push(DataIr {
                 document_order: self.order()?,
                 id,
-                src: token_attr(child, "src"),
+                src: self.src(child),
                 expr: optional_attr(child, "expr"),
                 content,
             });
@@ -604,6 +629,7 @@ impl<'r> Builder<'r> {
             typeexpr: optional_attr(element, "typeexpr"),
             src: token_attr(element, "src"),
             srcexpr: optional_attr(element, "srcexpr"),
+            xml_base: self.base(element),
             id: token_attr(element, "id"),
             idlocation: optional_attr(element, "idlocation"),
             namelist: optional_attr(element, "namelist")
@@ -839,6 +865,7 @@ impl<'r> Builder<'r> {
                             }
                             body.push_str(&text.value);
                         }
+                        Node::Element(child) if is_foreign(child) => {}
                         Node::Element(_) => {
                             return Err(LowerError::InvalidStructure(
                                 "script cannot contain child elements",
@@ -850,7 +877,8 @@ impl<'r> Builder<'r> {
                 // pins it from a script package (compile-time mode) or
                 // leaves it for the host's runtime loader.
                 Ok(ExecutableContentIr::Script {
-                    src: token_attr(element, "src")
+                    src: self
+                        .src(element)
                         .map(|uri| crate::ScriptSourceIr { uri, pinned: None }),
                     body,
                 })
@@ -1100,6 +1128,11 @@ pub(crate) fn lower_located(
 ) -> Result<MachineIr, (LowerError, Option<Span>)> {
     let span = observe(Module::CompilerCore, Operation::CompilerLower);
     let mut builder = Builder::new(resources);
+    document.root.visit_with_base(&mut |element, base| {
+        if let Some(base) = base {
+            builder.bases.insert(element.span.start, base.to_owned());
+        }
+    });
     let result = lower_inner(document, &mut builder);
     if result.is_err() {
         span.event(SignalEvent::InputRejected);
@@ -1234,20 +1267,9 @@ fn lower_inner(document: &Document, builder: &mut Builder<'_>) -> Result<Machine
     if root_target_ids.is_empty() {
         return Err(LowerError::UnknownInitial(String::new()));
     }
-    let mut extension_namespaces: Vec<_> = document
-        .used_namespaces()
-        .into_iter()
-        // The host's `env` and `event` attribute vocabularies are no
-        // extension namespaces: nothing loads for them.
-        .filter(|namespace| {
-            namespace != SCXML_NAMESPACE
-                && namespace != crate::XML_NAMESPACE
-                && namespace != scxml_types::ENV_NAMESPACE_URI
-                && namespace != EVENT_NAMESPACE_URI
-        })
-        .collect();
-    extension_namespaces.sort();
-    extension_namespaces.dedup();
+    // Only custom actions run in an extension component; any other markup
+    // from another namespace has no behavior to bind.
+    let extension_namespaces = scxml_validator_core::extension_namespaces(document);
     // The whole-machine checks own no single element, so the failure span
     // stays unset for them.
     std::mem::replace(builder, Builder::new(builder.resources)).finish(
@@ -1409,14 +1431,16 @@ fn check_attributes(element: &Element, allowed: &[&str]) -> Result<(), LowerErro
                 limit: crate::MAX_STRING_BYTES,
             });
         }
-        if is_event_schema_attribute(element, attribute)
-            || is_invoke_env_attribute(element, attribute)
-        {
+        // An attribute in another namespace (`xml:lang`, `xsi:*`, a
+        // package's, or one no package binds, which the validator's
+        // `LINT022` reports) carries no SCXML behavior: SCXML 1.0 and its
+        // schema allow it (`##other`), and lowering has nothing to keep.
+        // `xml:base` took effect on the `src` values it governs, and the
+        // `event` and `env` vocabularies lower on their owner elements.
+        if attribute.name.namespace_uri.is_some() {
             continue;
         }
-        if attribute.name.namespace_uri.is_some()
-            || !allowed.contains(&attribute.name.local_name.as_str())
-        {
+        if !allowed.contains(&attribute.name.local_name.as_str()) {
             return Err(LowerError::UnsupportedAttribute {
                 element: crate::safe_value(&element.lexical_name),
                 attribute: crate::safe_value(&attribute.lexical_name),
@@ -1483,18 +1507,6 @@ fn invoke_env(element: &Element) -> Result<Vec<crate::XmlAttributeIr>, LowerErro
     Ok(attributes)
 }
 
-/// Whether `attribute` is `event:schema` or `event:schemaexpr` on an element
-/// that may carry it (the `event` vocabulary, [`EVENT_NAMESPACE_URI`]).
-fn is_event_schema_attribute(element: &Element, attribute: &scxml_syntax::Attribute) -> bool {
-    attribute.name.namespace_uri.as_deref() == Some(EVENT_NAMESPACE_URI)
-        && matches!(
-            attribute.name.local_name.as_str(),
-            SCHEMA_ATTRIBUTE | SCHEMA_EXPR_ATTRIBUTE
-        )
-        && element.name.namespace_uri.as_deref() == Some(SCXML_NAMESPACE)
-        && scxml_event_schema::is_owner_element(&element.name.local_name)
-}
-
 /// The `event` vocabulary of one owner element: `event:schema` resolved
 /// (inline, or from `resources`) into canonical JSON with its SHA-256, or
 /// `event:schemaexpr` carried unevaluated. Lowering stores it as metadata
@@ -1559,10 +1571,20 @@ fn element_name_span(element: &Element) -> Span {
     )
 }
 
+/// Whether `element` is in a namespace other than SCXML's (an element in
+/// no namespace is not: the schema rejects it, and so does lowering).
+fn is_foreign(element: &Element) -> bool {
+    element
+        .name
+        .namespace_uri
+        .as_deref()
+        .is_some_and(|namespace| namespace != SCXML_NAMESPACE)
+}
+
 fn require_no_content(element: &Element) -> Result<(), LowerError> {
     if element.children.iter().all(|node| match node {
         Node::Text(text) => scxml_syntax::is_xml_blank(&text.value),
-        Node::Element(_) => false,
+        Node::Element(child) => is_foreign(child),
     }) {
         Ok(())
     } else {

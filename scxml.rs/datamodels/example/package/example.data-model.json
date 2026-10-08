@@ -1,0 +1,9 @@
+{
+  "format": "stateforward.scxml.data-model-package/v1",
+  "data-model-uri": "https://github.com/stateforward/scxml.rs/datamodels/example",
+  "datamodel": "example",
+  "package-version": "0.2.0",
+  "data-model-artifact": "scxml_data_model_null.virtualized.wasm",
+  "wit-world": "stateforward:scxml/data-model",
+  "wit-version": "0.2.0"
+}

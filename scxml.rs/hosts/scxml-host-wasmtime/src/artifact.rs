@@ -78,6 +78,11 @@ pub enum ArtifactKind {
     /// its exact SHA-256 through [`authenticate_package_validator_component`].
     /// Never listed in a release manifest.
     PackageValidatorComponent,
+    /// A caller's data-model component (`stateforward:scxml/data-model`, a
+    /// data-model package's), authenticated by its exact SHA-256 through
+    /// [`authenticate_data_model_component`]. Never listed in a release
+    /// manifest.
+    DataModelComponent,
 }
 
 impl ArtifactKind {
@@ -107,6 +112,7 @@ impl ArtifactKind {
             Self::ExtensionComponent => "extension component",
             Self::ServiceComponent => "invoked-service component",
             Self::PackageValidatorComponent => "package validator component",
+            Self::DataModelComponent => "data-model component",
         }
     }
 
@@ -142,6 +148,7 @@ impl ArtifactKind {
             // Never parsed from a manifest either.
             Self::ServiceComponent => "scxml_service",
             Self::PackageValidatorComponent => "scxml_package_validator",
+            Self::DataModelComponent => "scxml_data_model",
         }
     }
 
@@ -313,6 +320,28 @@ pub fn authenticate_package_validator_component(
         component_bytes,
         trusted_digest,
         ArtifactKind::PackageValidatorComponent,
+    )
+}
+
+/// Authenticates one data-model package's component
+/// (`stateforward:scxml/data-model`, named by the package manifest's
+/// `data-model-artifact`) without invoking Wasmtime, exactly as
+/// [`authenticate_extension_component`]. The result has kind
+/// [`ArtifactKind::DataModelComponent`]; [`crate::DataModelComponents::bind`]
+/// binds it to the data model's name.
+///
+/// # Errors
+///
+/// Fails closed with [`HostError::Artifact`] for oversized, empty, or
+/// digest-mismatched bytes.
+pub fn authenticate_data_model_component(
+    component_bytes: &[u8],
+    trusted_digest: TrustedComponentDigest,
+) -> Result<AuthenticatedComponent, HostError> {
+    authenticate_by_digest(
+        component_bytes,
+        trusted_digest,
+        ArtifactKind::DataModelComponent,
     )
 }
 

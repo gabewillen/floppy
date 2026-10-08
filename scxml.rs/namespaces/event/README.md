@@ -118,7 +118,7 @@ instead. A pointer extraction's bounds are listed under [Bounds](#bounds).
 ### Bounds
 
 On wasm builds (the shipped components) one schema, as read and as embedded,
-is at most 1 MiB (the Machine IR string bound, `LIMIT007`), a pointer
+is at most 1 MiB (the Machine IR string bound, `LIMIT005`), a pointer
 extraction bundles at most 256 referenced values (`EVENT008`), and a
 component request carries at most 64 schema files of at most 4 MiB each and
 16 MiB together (a request past one is answered with the WIT
@@ -165,7 +165,7 @@ of `18446744073709551616`) is read, compared, and embedded as the nearest
 - `EVENT007`: an unsupported `$schema` dialect.
 - `EVENT008`: a reference the compiler cannot keep.
 
-An `event` attribute is never `LIMIT006`. `scx --explain EVENT001`
+An `event` attribute is never `LINT022`. `scx --explain EVENT001`
 through `--explain EVENT008` give each rule with an example.
 
 ## Statements

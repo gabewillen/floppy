@@ -1,0 +1,12 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" xmlns:x="urn:example:ext" datamodel="ecmascript" initial="a">
+  <state id="a">
+    <onentry>
+      <log label="l"><x:note>reviewed</x:note></log>
+      <cancel sendid="s"><x:note>reviewed</x:note></cancel>
+      <send event="e"><param name="p" expr="1"><x:note>reviewed</x:note></param></send>
+      <script><x:note>reviewed</x:note></script>
+    </onentry>
+    <transition event="go" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

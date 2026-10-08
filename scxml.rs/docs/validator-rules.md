@@ -79,7 +79,7 @@ the root element with a note, and every other `COMP001` names the element
 lowering rejected. Machine IR bounds apply to wasm builds only (the shipped
 compiler and machine components): a native `scx compile` lowers a
 document of any size, and the same test proves that natively lowering
-accepts every bound fixture, `validate` reports no `LIMIT007`, and `compile`
+accepts every bound fixture, `validate` reports no `LIMIT005`, and `compile`
 reports no `COMP001`.
 
 | Code | Severity | What it proves |
@@ -90,10 +90,10 @@ reports no `COMP001`.
 | `SCXML067` | error | An `<scxml>` has no `<state>`, `<parallel>`, or `<final>` (SCXML 1.0 §3.2.2: "A conformant SCXML document MUST have at least one <state>, <parallel> or <final> child"). |
 | `LINT021` | warning | A `<parallel>` has no child state. SCXML 1.0 §3.4.2 allows it ("Occurs 0 or more times"), so it compiles and runs, but it is never atomic (§3.3), so no transition is enabled through it (§3.13) and it raises no `done.state`; a maybe-incorrect fix renames it to `<state>`. |
 | `SCXML080` | warning | A multi-target set names a `<history>` and a state below that history's parent (`target="h b1"` with `h` a history of `p` and `b1` in a region of `p`). SCXML 1.0 §3.10.2 enters the history's recorded or default configuration, which covers the parent's subtree, so the set yields a legal configuration only when that configuration contains the other target; otherwise the document is not conformant (§3.11: "A conformant SCXML document MUST place the state machine only in legal state configurations") and the processor's behavior is undefined (§A.2). The recorded configuration is known only at run time, so this is a warning. |
-| `LIMIT008` | error | A `<state>`, `<parallel>`, `<final>`, or `<history>` ID is longer than 1,024 bytes of UTF-8, the bound of every name the processor reports. Every build names the active states by their IDs (the configuration each call result reports, snapshots, `In()`), so the state could never be reported once entered. Also, with its own message, the ID of a state that can complete (one with a `<final>` child, or a `<parallel>` with a `<state>` region that has a `<final>` child and whose every region can be in a final state at once; a `<parallel>` whose regions are all `<parallel>` never raises `done.state`, SCXML 1.0 Appendix D) is longer than 1,013 bytes, so the `done.state.<ID>` event it raises (SCXML 1.0 §3.7: the processor "MUST generate the event done.state.id") is longer than the 1,024-byte bound of an event name. Every length is of the ID's schema value (white space collapsed), as lowering measures it. SCXML 1.0 §3.14 sets no length; this is the implementation's interface bound on every build ([spec errata L.6](spec-errata.md)). |
-| `LIMIT009` | error | A literal `<raise event>`, `<send event>`, `<send id>`, or `<invoke id>` is longer than 1,024 bytes of UTF-8, the bound every build sets on an event name, a send ID, and an invoke ID, so the element could never run as written; or, with its own message, an `<invoke id>` is longer than 1,012 bytes, so the `done.invoke.<ID>` event its invocation returns (SCXML 1.0 §6.4: the service "MUST return a special event 'done.invoke.id'") exceeds the event-name bound. Every length is of the attribute's schema value (white space collapsed: `event="  e…  "` with 1,024 bytes between the spaces is within the bound). A name computed at run time (`eventexpr`, a generated invoke ID) over the bound raises `error.execution` instead (SCXML 1.0 §3.12.2). SCXML 1.0 sets no length; this is the implementation's interface bound on every build ([spec errata L.6](spec-errata.md)). |
+| `LIMIT006` | error | A `<state>`, `<parallel>`, `<final>`, or `<history>` ID is longer than 1,024 bytes of UTF-8, the bound of every name the processor reports. Every build names the active states by their IDs (the configuration each call result reports, snapshots, `In()`), so the state could never be reported once entered. Also, with its own message, the ID of a state that can complete (one with a `<final>` child, or a `<parallel>` with a `<state>` region that has a `<final>` child and whose every region can be in a final state at once; a `<parallel>` whose regions are all `<parallel>` never raises `done.state`, SCXML 1.0 Appendix D) is longer than 1,013 bytes, so the `done.state.<ID>` event it raises (SCXML 1.0 §3.7: the processor "MUST generate the event done.state.id") is longer than the 1,024-byte bound of an event name. Every length is of the ID's schema value (white space collapsed), as lowering measures it. SCXML 1.0 §3.14 sets no length; this is the implementation's interface bound on every build ([spec errata L.6](spec-errata.md)). |
+| `LIMIT007` | error | A literal `<raise event>`, `<send event>`, `<send id>`, or `<invoke id>` is longer than 1,024 bytes of UTF-8, the bound every build sets on an event name, a send ID, and an invoke ID, so the element could never run as written; or, with its own message, an `<invoke id>` is longer than 1,012 bytes, so the `done.invoke.<ID>` event its invocation returns (SCXML 1.0 §6.4: the service "MUST return a special event 'done.invoke.id'") exceeds the event-name bound. Every length is of the attribute's schema value (white space collapsed: `event="  e…  "` with 1,024 bytes between the spaces is within the bound). A name computed at run time (`eventexpr`, a generated invoke ID) over the bound raises `error.execution` instead (SCXML 1.0 §3.12.2). SCXML 1.0 sets no length; this is the implementation's interface bound on every build ([spec errata L.6](spec-errata.md)). |
 | `ENV001` | error | An `env` attribute (`https://github.com/stateforward/scxml.rs/namespaces/env`) on the `<invoke>` of an invoked service names a slot its service package does not declare (`env-slots`; judged for a literal `type` a given service package binds, with a "did you mean" fix for a near miss), binds one slot twice (`env:<slot>` and `env:<slot>expr`), names no valid slot (`[a-z][a-z0-9-]*`), or gives `env:<slot>` a value that is not a variable name (`[A-Za-z_][A-Za-z0-9_]*`, at most 256 bytes). The host binds each slot to an opaque reference to the named variable's value for the whole invocation. |
-| `ENV002` | error | An element in the `env` namespace (an attribute vocabulary only), or an `env` attribute on an element in no namespace, on an executable-content extension element (executable content does no I/O, so it has no slots), or on the `<invoke>` of an SCXML session (an absent `type` or an SCXML invoke type): only an invoked service's `<invoke>` has slots. An `env` attribute on any other SCXML element is `LIMIT006`; on an `<invoke typeexpr>` the host judges it when the type is known. |
+| `ENV002` | error | An element in the `env` namespace (an attribute vocabulary only), or an `env` attribute on an element in no namespace, on an executable-content extension element (executable content does no I/O, so it has no slots), on the `<invoke>` of an SCXML session (an absent `type` or an SCXML invoke type), or on any other SCXML element: only an invoked service's `<invoke>` has slots. On an `<invoke typeexpr>` the host judges it when the type is known. |
 | `EVENT001` | error | An element in the `event` namespace (`https://github.com/stateforward/scxml.rs/namespaces/event`, an attribute vocabulary only), an `event` attribute on any element other than `<transition>`, `<send>`, `<raise>`, or `<donedata>` (maybe-incorrect removal), or an `event` attribute other than `schema` and `schemaexpr` (with a "did you mean" fix for a near miss). The W3C schema admits attributes in other namespaces laxly, so XSD cannot catch these; [namespaces/event](../namespaces/event/README.md) documents the vocabulary. |
 | `EVENT002` | error | One element has both `event:schema` and `event:schemaexpr` (the second is primary, with a maybe-incorrect removal of `event:schemaexpr`). |
 | `EVENT003` | error | An `event:schema` is not UTF-8 JSON: an inline schema (first non-white-space character `{`, or exactly `true` or `false`) at the exact byte the JSON parser stopped at, or a referenced file at the attribute value with the file's line and column in the message. |
@@ -101,13 +101,15 @@ reports no `COMP001`.
 | `EVENT005` | error | The fragment of an `event:schema` reference is not a JSON Pointer (RFC 6901; a plain-name fragment, a bad `~` escape, or bad percent-encoding) or names no value; the primary label is the fragment, and the message names the longest prefix that names no value. |
 | `EVENT006` | error | An `event:schema` violates its dialect's metaschema (the message names the location in the schema), or does not compile (for example a `pattern` that is not a regular expression). |
 | `EVENT007` | error | An `event:schema` declares a `$schema` other than JSON Schema 2020-12 (the default), 2019-09, or draft-07. |
-| `EVENT008` | error | An `event:schema` has a `$ref`, `$dynamicRef`, or `$recursiveRef` that names another resource (nothing is fetched), a fragment that names no value, or, when a pointer selects part of a file, a part that relies on `$id`, `$anchor`, `$dynamicAnchor`, `$recursiveAnchor`, plain-name fragments, or dynamic references and so cannot be bundled, or a bundle over its bounds: more than 256 referenced values (wasm builds only), more than 8 times its file plus 4096 bytes, or nested deeper than the 128 levels the Machine IR decoder reads back. A schema over the 1 MiB Machine IR string bound (wasm builds only) is `LIMIT007`. |
+| `EVENT008` | error | An `event:schema` has a `$ref`, `$dynamicRef`, or `$recursiveRef` that names another resource (nothing is fetched), a fragment that names no value, or, when a pointer selects part of a file, a part that relies on `$id`, `$anchor`, `$dynamicAnchor`, `$recursiveAnchor`, plain-name fragments, or dynamic references and so cannot be bundled, or a bundle over its bounds: more than 256 referenced values (wasm builds only), more than 8 times its file plus 4096 bytes, or nested deeper than the 128 levels the Machine IR decoder reads back. A schema over the 1 MiB Machine IR string bound (wasm builds only) is `LIMIT005`. |
 | `PKG003` | warning | A literal `<invoke type>` is a platform-specific value, not a URI: neither an SCXML invoke type (absent, `scxml`, or `http://www.w3.org/TR/scxml/`) nor an absolute service type URI of at most 4096 bytes. SCXML 1.0 §6.4.1 allows platform-specific types, but a service package binds an invoked service by an exact absolute URI, so on a host built from this repository the `<invoke>` raises `error.execution` when it runs; the document still compiles and runs. |
 | `PKG004` | warning | A literal `<invoke type>` names an invoked service no given service package binds (`--service-package`). Invocation is a runtime action (SCXML 6.4): the document compiles and runs, and without a bound package the `<invoke>` raises `error.execution` when it runs. |
 | `EVENT009` | error | In an ECMAScript document (`datamodel="ecmascript"`, or none), the literal JSON `<content>` of a `<send>` or `<donedata>` (no `expr`, text only, parsed after the data model's white-space normalization) does not satisfy the element's own literal `event:schema` (inline, or a file whose bytes were supplied). The primary label is the `<content>`, the secondary the schema. `event:schemaexpr` and schemas that do not resolve are skipped silently. |
 | `EVENT010` | warning | In an ECMAScript document, a `<send event="x">` delivered to its own session (no `target`, or `#_internal`, through the SCXML Event I/O Processor) or the `<donedata>` of a final child of a compound state (its `done.state.<id>`) creates data a transition of the same document handling that event (SCXML 3.12.1 descriptor matching, nested `<content>` documents excluded) does not accept: its literal JSON `<content>`, or a witness of its own literal schema, fails the transition's literal schema. Equal schemas are compatible; otherwise only a witness is reported, an instance the producer's schema admits and the transition's rejects, drawn from the producer's schema (`const`, `enum`, `examples`, `default`, then a minimal instance of each `type`, its required properties filled in), so the check never reports an incompatibility it cannot exhibit. `event:schemaexpr` is skipped silently. The schemas are metadata, so the transition is still taken; this is a warning. |
-| `LIMIT006` | error | An attribute in another namespace on an SCXML element that lowering visits (`xml:lang`, `xml:space`, `xml:base`, `xsi:schemaLocation`, or a custom attribute, but not an `event` attribute, which `EVENT001` owns; one finding per element, machine-applicable removal when every such attribute is `xml:*` or `xsi:*`, which carry no SCXML behavior), or an element in another namespace anywhere but executable content (where it is a custom action), including inside `<log>`, `<cancel>`, `<param>`, and `<script>`, which the schema's `##other` wildcards admit but lowering does not. A content model without a wildcard (`<donedata>`, `<raise>`, `<elseif>`) is left to the schema's `XSD-cvc-complex-type.2.4`, attributed to the W3C SCXML schema. The compiler lowers neither rather than drop it silently. This is a limit of this toolchain, not an SCXML rule: SCXML 1.0 and the bundled W3C schema allow both (`##other` wildcards), so the finding has category `internal` (like `COMP001`), cites no SCXML section, and says the construct cannot be lowered by this compiler. The `xsi` namespace, like `xml`, needs no registered schema (no `XSD001`). |
-| `LIMIT007` | error | The document exceeds a Machine IR bound: 65 nested states (a child of `<scxml>` and 64 levels below it), 64 levels of `<if>`/`<foreach>` nesting, 32 levels of inline XML in `<data>`, `<content>`, or `<assign>` (31 below a custom action, fewer inside deep executable content), 10,000 child nodes of an element, attributes of an inline element, tokens in a `target`, `initial`, `event`, or `namelist`, actions in an `<if>` branch, `<elseif>` branches, or `<data>` per scope, 100,000 targets across a machine's multi-target sets, 10,000 extension namespaces, or 1 MiB per attribute value, text run, script body, name, or namespace URI. At most 16 findings per machine; target-list findings are left to `LIMIT002` when the machine is over the graph's target-reference bound. |
+| `LINT022` | warning (lint) | An attribute or element in another namespace that nothing binds: no extension package or registered schema (`--extension-package`, `--schema`, or a repository namespace) binds its namespace, and it is none of the built-in ones. SCXML 1.0 and the bundled W3C schema allow both (`##other` wildcards) and the processor executes neither: an element in another namespace runs only as a custom action in executable content (its namespace is then an extension namespace, which needs a package: `XSD001`, `COMP002`), and any other foreign markup is metadata only its namespace's package reads (its schema validates it, and its package validator gets the SCXML elements that carry its attributes as targets along with its own elements). One finding per SCXML element for its attributes (the first primary, at most 16 more labeled), one per element for a foreign child outside executable content (including inside `<log>`, `<cancel>`, `<param>`, and `<script>`), each with a maybe-incorrect removal. The walk visits the SCXML elements lowering visits; a foreign child of `<donedata>`, `<raise>`, `<elseif>`, or `<else>`, whose content models have no wildcard, is the schema's `XSD-cvc-complex-type.2.4`. `xml:*` attributes are accepted silently (`xml:base` governs the `src` and `srcexpr` URIs in its scope, XML Base; `xml:lang` and `xml:space` carry no SCXML behavior), and so are `xsi:*`; the `env`, `event`, and `datamodel` vocabularies have their own rules. Lowering keeps none of this markup. |
+| `DATAMODEL001` | error | An element in the `datamodel` namespace (`https://github.com/stateforward/scxml.rs/namespaces/datamodel`, an attribute vocabulary only), a `datamodel` attribute on any element other than SCXML `<scxml>` (maybe-incorrect removal), or a `datamodel` attribute other than `src` (a near miss gets a did-you-mean fix). The vocabulary defines only `datamodel:src`; [namespaces/datamodel](../namespaces/datamodel/README.md) documents it. |
+| `DATAMODEL002` | error | The machine's `datamodel` token (or the default `ecmascript`) is not the name the data-model package its `datamodel:src` names declares (the manifest's `datamodel`; judged when the validator is given its data-model packages, as `scx validate` always is). A machine-applicable fix writes the declared name (or inserts `datamodel="NAME"`). |
+| `LIMIT005` | error | The document exceeds a Machine IR bound: 65 nested states (a child of `<scxml>` and 64 levels below it), 64 levels of `<if>`/`<foreach>` nesting, 32 levels of inline XML in `<data>`, `<content>`, or `<assign>` (31 below a custom action, fewer inside deep executable content), 10,000 child nodes of an element, attributes of an inline element, tokens in a `target`, `initial`, `event`, or `namelist`, actions in an `<if>` branch, `<elseif>` branches, or `<data>` per scope, 100,000 targets across a machine's multi-target sets, 10,000 extension namespaces, or 1 MiB per attribute value, text run, script body, name, or namespace URI. At most 16 findings per machine; target-list findings are left to `LIMIT002` when the machine is over the graph's target-reference bound. |
 
 Lowering also generates an ID for a `<state>` or `<parallel>` without one,
 as SCXML 1.0 §3.3 and §3.4 require (it did so only for `<final>`), so an
@@ -125,8 +127,10 @@ document order with its attributes, spans, children, and parent, the
 `<data>` and state ids, every `<transition>` with its source state, `event`,
 and resolved literal `event:schema`, and the root's `datamodel`) and calls
 each package's validator once with its targets: the elements in its
-namespace (an extension package), or the `<invoke>` elements whose literal
-`type` is its service URI (a service package). The world imports nothing:
+namespace and the elements that carry its attributes (an extension package:
+an SCXML element's metadata in the package's namespace is the package's to
+check), or the `<invoke>` elements whose literal `type` is its service URI
+(a service package). The world imports nothing:
 no WASI, no I/O; each call runs on a fresh fuel-bounded store, so its answer
 depends only on its input. Its diagnostics are reported with the code
 `<prefix>::<code>` and category `package`: the prefix is the document's
@@ -194,8 +198,9 @@ data model exactly: its `datamodel` attribute, or `ecmascript` when it has none
 §3.2.2 says "Platforms SHOULD document their default data model"; the compiler records the
 default in Machine IR, so every host links the ECMAScript data model for such a
 document, and the validator checks it exactly as `datamodel="ecmascript"`).
-Expressions are never skipped silently: an unrecognized `datamodel` is the
-`LIMIT005` error (with a typo fix such as `ecmascipt` to `ecmascript`), and a
+Expressions are never skipped silently: a `datamodel` that is neither built in
+nor named by a `datamodel:src` is the `PKG005` error (with a typo fix such as
+`ecmascipt` to `ecmascript`), and a
 machine whose recognized data model has no linked checker gets an `LINT010`
 note that its expressions were not checked. The component contract is `stateforward:scxml/data-model-api`
 `check-syntax(kind, source) -> result<list<syntax-issue>, component-error>`,
@@ -223,7 +228,7 @@ at most 4 issues are reported per fragment.
 | `LIMIT003` | error | With a checker: the checker declined a fragment over the data model's bound. On every build, the nesting bounds, which guard the native stack (ECMAScript: at most 128 structural nesting units, where each open bracket costs 8, so 16 brackets, 15 inside a value expression; XPath: 32 levels of parentheses, predicates, or function arguments, and a 128-deep expression tree); on wasm builds only, the size bounds (ECMAScript: 16 KiB expressions, 64 KiB scripts; XPath: 16 KiB expressions and 4,096 tree nodes), so the native `scx` reports `LIMIT003` for nesting only. Both providers decline a bound instead of reporting a syntax error, so a bound is never `SCXML038`. The data model applies the same bound when it evaluates the fragment, so it would be rejected at run time and `compile` refuses the document. |
 | `LIMIT004` | error | With a checker: the document exceeds the expression-checking bound; checking stops fail-closed. |
 | `LINT009` | warning (lint) | With a checker: an expression attribute is present but empty. A blank `<log expr>` lowers as the absent attribute (log without a value), so its removal fix is machine-applicable; any other empty expression, including `<transition cond>`, is still evaluated as an invalid expression and raises `error.execution` (a condition is then false), so its removal is maybe-incorrect and offered only when the attribute is optional (never `<if>`/`<elseif> cond`, `<assign>`, `<foreach array/item>`, or the only `<param>` value source); the help is worded for the element. |
-| `LIMIT005` | error | The `datamodel` value (its schema value, white space collapsed: `datamodel=" xpath "` is `xpath`) is not one this project recognizes (`ecmascript`, `null`, `xpath`); no expression could be evaluated or checked. Offers a maybe-incorrect typo fix. |
+| `PKG005` | error | The machine's data model is not available: its `datamodel` value (its schema value, white space collapsed: `datamodel=" xpath "` is `xpath`) is none of the built-in `ecmascript`, `null`, and `xpath` and the `<scxml>` has no `datamodel:src` (maybe-incorrect typo fix to a built-in one), or its `datamodel:src` is no tagless absolute URI, or no given data-model package binds it (a `--data-model-package`, or a repository data model `https://github.com/<owner>/<repo>/datamodels/<name>[@<tag>]` whose release resolved). No expression could be evaluated or checked. |
 | `LINT010` | note | Note: the machine's data model (its `datamodel`, or the default `ecmascript`) is a recognized data model other than null, and the run links no syntax checker for it (for example the Wasm validator component composed with another data model's checker), so nothing is claimed about its expressions. |
 | `SCXML056` | warning | With the XPath checker (a warning because evaluating an unbound variable raises `error.execution`, SCXML 1.0 §5.9.3 "If a value expression does not return a legal data value, the SCXML Processor MUST place the error 'error.execution' in the internal event queue"; official IRP cases 156 and 245 rely on it): a fragment that parses references `$name`, but no `<data id>`, `<foreach item/index>` or `idlocation` name, or system variable (`_event`, `_sessionid`, `_name`, `_ioprocessors`) of the machine declares it, so evaluating it raises `error.execution`. `$user.name` is one variable named `user.name` (`.` is an XPath name character) and gets a `$user/name` fix when `user` is declared; a typo gets a bounded did-you-mean fix. `-` is a name character too, so `$a1-1` is one variable named `a1-1`: when a declared variable is the part before a `-`, the finding explains it and offers `$a1 - 1` instead of a nearest-name fix that would drop the subtraction. |
 | `LINT011` | warning (lint) | With the XPath checker: a top-level relative path is evaluated against `<datamodel>`, whose children are the `<data id="…">` elements and the system variables, so a bare declared variable name (`location="count"`, fix `$count`), `true`/`false` (fix `true()`), or a dotted member access (`_event.data.ok`, fix `$_event/data/ok`) selects nothing. Any other first step that is not such a child is reported too; a `<foreach>` item is not one, because the item variable denotes the collection's own node (SCXML 1.0 §4.6), reached as `$item`. Predicate contents and `In()` arguments are not judged. |
@@ -455,9 +460,9 @@ attributes' collapsed values, exactly as lowering and therefore the engine
 do: `<state id=" s ">` declares `s`, so `target="s"`, `initial="s"`, and
 `In('s')` resolve to it and `<final id="s&#9;">` beside it is a duplicate
 (`SCXML002`); `datamodel=" xpath "` selects XPath; and every length bound
-(`LIMIT007`, `LIMIT008`, `LIMIT009`) measures the collapsed value, except
+(`LIMIT005`, `LIMIT006`, `LIMIT007`) measures the collapsed value, except
 inside inline XML (`<data>`, `<content>`, `<assign>`, and custom-action
-content): Machine IR keeps it byte for byte, so `LIMIT007` measures an
+content): Machine IR keeps it byte for byte, so `LIMIT005` measures an
 attribute there, even on an element in the SCXML namespace, by its exact
 value. A
 diagnostic labels the collapsed value's bytes when the value has no
@@ -614,11 +619,12 @@ code of any other shape (`scxml_reporting::is_known_code`):
 | `XML` | XML 1.0 well-formedness and the parser's limits |
 | `XSD` | XML Schema validation (`XSDnnn` setup codes and `XSD-<constraint>` findings) |
 | `COMP` | the compiler |
-| `PKG` | extension and service packages and their binding |
+| `PKG` | extension, service, and data-model packages and their binding |
 | `ENV` | the built-in `env` attribute vocabulary |
 | `EVENT` | the built-in `event` attribute vocabulary (`event:schema`) |
+| `DATAMODEL` | the built-in `datamodel` attribute vocabulary (`datamodel:src`) |
 | `LINT` | best-practice warnings on legal SCXML |
-| `LIMIT` | this implementation's bounds and support limits, not specification rules |
+| `LIMIT` | this implementation's bounds, not specification rules |
 
 A package validator's findings keep `<prefix>::<code>` ([package
 validators](#package-validators)).
@@ -635,7 +641,7 @@ requirement with respect to performance characteristics of the SCXML 1.0
 Processor"). Resource bounds apply to wasm builds only
 (`scxml_types::wasm_bound`): the validator and compiler components report
 them, and the native `scx` never reports `LIMIT001`, `LIMIT004`,
-`LIMIT007`, or `COMP001`, nor `LIMIT002`, `LIMIT003`, `XML002`, or `XSD006`
+`LIMIT005`, or `COMP001`, nor `LIMIT002`, `LIMIT003`, `XML002`, or `XSD006`
 for a size bound. What stays on every build guards against amplification or
 the native stack rather than bounding a resource: the XML depth (256), the
 DTD expansion limits, the XSD content-model expansion and compilation
@@ -643,8 +649,7 @@ budgets, the ECMAScript side-effect analysis budget (200,000 steps per
 checked fragment; exhausting it is one undecidable `LINT019`
 warning, not a rejection), the graph analysis work budget (`LIMIT002`,
 above), and the ECMAScript (128 units) and XPath (32 levels) parse nesting.
-`LIMIT005` and `LIMIT006` reject a data model or foreign markup this
-processor does not support. `SCXML074` is the processor's own way of
+`SCXML074` is the processor's own way of
 meeting SCXML 1.0 §4.7.3 ("The SCXML processor MUST ensure that <log> has no
 side-effects on document interpretation"), not a document constraint.
 
@@ -767,7 +772,7 @@ states more precisely are superseded by that rule (table above).
 | `COMP002` | error | package | a used extension namespace has no verified extension package | [SCXML 1.0 §4.10 Extensibility of Executable Content](https://www.w3.org/TR/scxml/#extensibility) |
 | `COMP003` | error | package | a `<script src>` cannot be resolved or authenticated at compile time | [SCXML 1.0 §5.8 <script>](https://www.w3.org/TR/scxml/#script) |
 
-### `PKG`: extension and service packages and their binding
+### `PKG`: extension, service, and data-model packages and their binding
 
 | Code | Severity | Category | Summary | Specification |
 | --- | --- | --- | --- | --- |
@@ -775,6 +780,7 @@ states more precisely are superseded by that rule (table above).
 | `PKG002` | error | package | a package validator failed or returned diagnostics outside its contract | [SCXML 1.0 §4.10 Extensibility of Executable Content](https://www.w3.org/TR/scxml/#extensibility) |
 | `PKG003` | warning | semantic | an `<invoke type>` is a platform-specific value, not a URI | [SCXML 1.0 §6.4.1 Attribute Details](https://www.w3.org/TR/scxml/#invoke) |
 | `PKG004` | warning | package | no service package binds a literal `<invoke type>` | [SCXML 1.0 §6.4 <invoke>](https://www.w3.org/TR/scxml/#invoke) |
+| `PKG005` | error | package | a machine's data model is neither built in nor available from a package | [SCXML 1.0 §5.1 Data Model](https://www.w3.org/TR/scxml/#data-module) |
 
 ### `ENV`: the built-in `env` attribute vocabulary
 
@@ -797,6 +803,13 @@ states more precisely are superseded by that rule (table above).
 | `EVENT008` | error | semantic | an `event:schema` has a reference the compiler cannot keep | [JSON Schema 2020-12 Core §8.2.3.1 Direct References with $ref](https://json-schema.org/draft/2020-12/json-schema-core#section-8.2.3.1) |
 | `EVENT009` | error | semantic | the literal data of a `<send>` or `<donedata>` does not satisfy its own `event:schema` | [JSON Schema 2020-12 Validation](https://json-schema.org/draft/2020-12/json-schema-validation) |
 | `EVENT010` | warning | semantic | a `<send>` or `<donedata>` creates event data a transition handling it does not accept | [SCXML 1.0 §3.12.1 Event Descriptors](https://www.w3.org/TR/scxml/#EventDescriptors) |
+
+### `DATAMODEL`: the built-in `datamodel` attribute vocabulary (`datamodel:src`)
+
+| Code | Severity | Category | Summary | Specification |
+| --- | --- | --- | --- | --- |
+| `DATAMODEL001` | error | semantic | the `datamodel` namespace is used outside `<scxml>`'s `datamodel:src` | — |
+| `DATAMODEL002` | error | semantic | the `datamodel` token is not the name of the package `datamodel:src` names | [SCXML 1.0 §5.1 Data Model](https://www.w3.org/TR/scxml/#data-module) |
 
 ### `LINT`: best-practice warnings on legal SCXML
 
@@ -823,8 +836,9 @@ states more precisely are superseded by that rule (table above).
 | `LINT019` | warning | lint | the validator cannot prove a condition or `<log expr>` has no side effect | [SCXML 1.0 Appendix B Data Models](https://www.w3.org/TR/scxml/#profiles) |
 | `LINT020` | warning | lint | a condition has a side effect | [SCXML 1.0 §5.9.1 Conditional Expressions](https://www.w3.org/TR/scxml/#ConditionalExpressions) |
 | `LINT021` | warning | lint | a `<parallel>` has no child states, so no transition is enabled through it | [SCXML 1.0 §3.4 <parallel>](https://www.w3.org/TR/scxml/#parallel) |
+| `LINT022` | warning | lint | an attribute or element in an unbound namespace has no effect | — |
 
-### `LIMIT`: this implementation's bounds and support limits, not specification rules
+### `LIMIT`: this implementation's bounds, not specification rules
 
 | Code | Severity | Category | Summary | Specification |
 | --- | --- | --- | --- | --- |
@@ -832,11 +846,9 @@ states more precisely are superseded by that rule (table above).
 | `LIMIT002` | error | semantic | a machine is too large for bounded semantic graph analysis | [SCXML 1.0 §3.11 Legal State Configurations and Specifications](https://www.w3.org/TR/scxml/#LegalStateConfigurations) |
 | `LIMIT003` | error | semantic | an expression exceeds the data model's size or nesting bound | [SCXML 1.0 §5.9 Expressions](https://www.w3.org/TR/scxml/#expressions) |
 | `LIMIT004` | error | semantic | a document has too many expressions for bounded syntax checking | [SCXML 1.0 §5.9 Expressions](https://www.w3.org/TR/scxml/#expressions) |
-| `LIMIT005` | error | semantic | the `datamodel` attribute names a data model this validator does not recognize | [SCXML 1.0 §5.1 Data Model](https://www.w3.org/TR/scxml/#data-module) |
-| `LIMIT006` | error | internal | this compiler cannot lower an attribute or element from another namespace here | — |
-| `LIMIT007` | error | semantic | the document exceeds a Machine IR bound | — |
-| `LIMIT008` | error | semantic | a state ID is longer than a state name may be | [SCXML 1.0 §3.14 IDs](https://www.w3.org/TR/scxml/#IDs) |
-| `LIMIT009` | error | semantic | an event name or a send or invoke ID is longer than a name may be | [SCXML 1.0 §6.4 <invoke>](https://www.w3.org/TR/scxml/#invoke) |
+| `LIMIT005` | error | semantic | the document exceeds a Machine IR bound | — |
+| `LIMIT006` | error | semantic | a state ID is longer than a state name may be | [SCXML 1.0 §3.14 IDs](https://www.w3.org/TR/scxml/#IDs) |
+| `LIMIT007` | error | semantic | an event name or a send or invoke ID is longer than a name may be | [SCXML 1.0 §6.4 <invoke>](https://www.w3.org/TR/scxml/#invoke) |
 
 <!-- END GENERATED: diagnostic codes -->
 

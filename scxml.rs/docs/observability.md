@@ -133,7 +133,10 @@ a service makes, from admission to its response), `service-http-request`
 `session-http-response` (per delivery of a service's HTTP response to a
 live session), and
 the CLI's `scxml.cli.read-service-package` and, for repository services,
-`scxml.cli.resolve-service-package` and `scxml.cli.resolve-service-component`;
+`scxml.cli.resolve-service-package` and `scxml.cli.resolve-service-component`,
+and, for data-model packages, `scxml.cli.read-data-model-package`,
+`scxml.cli.resolve-data-model-package`, and
+`scxml.cli.resolve-data-model-component`;
 each records only its closed
 outcome and signal event (and, on failure, its closed error category).
 Service guest signals carry the fixed `scxml.module` value

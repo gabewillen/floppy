@@ -175,19 +175,35 @@ const SERVICE_ENTRY_FIELDS: [&str; 6] = [
     "component-sha256",
 ];
 
+/// The cache index entry format of a repository data model. Its manifest's
+/// digest pins it; it has no schema.
+const DATA_MODEL_ENTRY_FORMAT: &str = "stateforward.scxml.data-model-cache/v1";
+/// Data-model cache index entry fields in their canonical order.
+const DATA_MODEL_ENTRY_FIELDS: [&str; 6] = [
+    "format",
+    "data-model-uri",
+    "tag",
+    "commit",
+    "manifest-sha256",
+    "component-sha256",
+];
+
 /// Maximum bytes of a repository namespace URI.
 pub(crate) const MAX_URI_BYTES: usize = 512;
 /// The tagless vocabularies `scx` itself provides, matched before any
 /// repository namespace and never fetched.
-const BUILT_IN_NAMESPACES: [&str; 3] = [
+const BUILT_IN_NAMESPACES: [&str; 4] = [
     scxml_types::ENV_NAMESPACE_URI,
     scxml_types::EVENT_NAMESPACE_URI,
+    scxml_types::DATAMODEL_NAMESPACE_URI,
     crate::extensions::SCX_NAMESPACE_URI,
 ];
 /// The one repository folder every repository namespace lives in.
 const NAMESPACES_FOLDER: &str = "namespaces";
 /// The one repository folder every repository service lives in.
 const SERVICES_FOLDER: &str = "services";
+/// The one repository folder every repository data model lives in.
+const DATA_MODELS_FOLDER: &str = "datamodels";
 /// Maximum bytes of a release asset name or a manifest artifact path
 /// segment.
 const MAX_SEGMENT_BYTES: usize = 100;
@@ -233,6 +249,8 @@ enum Kind {
     Namespace,
     /// An invoked service, under `services/`.
     Service,
+    /// A data model, under `datamodels/`.
+    DataModel,
 }
 
 impl Kind {
@@ -240,6 +258,7 @@ impl Kind {
         match self {
             Self::Namespace => NAMESPACES_FOLDER,
             Self::Service => SERVICES_FOLDER,
+            Self::DataModel => DATA_MODELS_FOLDER,
         }
     }
 
@@ -248,6 +267,7 @@ impl Kind {
         match self {
             Self::Namespace => "repository namespace",
             Self::Service => "repository service",
+            Self::DataModel => "repository data model",
         }
     }
 }
@@ -278,6 +298,12 @@ impl RepositoryUri {
     /// otherwise (an ordinary service type URI).
     pub(crate) fn parse_service(uri: &str) -> Option<Self> {
         Self::parse_kind(uri, Kind::Service)
+    }
+
+    /// Parses `uri` when it is exactly a repository data-model URI; `None`
+    /// otherwise (a URI only a `--data-model-package` can bind).
+    pub(crate) fn parse_data_model(uri: &str) -> Option<Self> {
+        Self::parse_kind(uri, Kind::DataModel)
     }
 
     fn parse_kind(uri: &str, kind: Kind) -> Option<Self> {
@@ -568,7 +594,9 @@ impl Bases {
 /// One cache index entry: what the first resolution of a URI pinned.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Entry {
-    /// The repository namespace or service URI.
+    /// What the URI names.
+    kind: Kind,
+    /// The repository namespace, service, or data-model URI.
     uri: String,
     /// The release a tagless URI was pinned to; `None` for a pinned URI,
     /// whose tag is part of it.
@@ -585,7 +613,8 @@ struct Entry {
 impl Entry {
     /// Canonical bytes: fixed field order, two-space indentation, a final
     /// newline; a namespace's entry in `stateforward.scxml.extension-cache/v1`,
-    /// a service's in `stateforward.scxml.service-cache/v1`.
+    /// a service's in `stateforward.scxml.service-cache/v1`, a data model's
+    /// in `stateforward.scxml.data-model-cache/v1`.
     fn encode(&self) -> Vec<u8> {
         let string = |value: &str| serde_json::Value::String(value.to_owned()).to_string();
         let tag = self
@@ -593,23 +622,21 @@ impl Entry {
             .as_deref()
             .map(|tag| format!("\n  \"tag\": {},", string(tag)))
             .unwrap_or_default();
-        let mut text = match &self.schema_sha256 {
-            Some(schema) => format!(
-                "{{\n  \"format\": {},\n  \"namespace-uri\": {},{tag}\n  \"commit\": {},\n  \"manifest-sha256\": {},\n  \"schema-sha256\": {}",
-                string(ENTRY_FORMAT),
-                string(&self.uri),
-                string(&self.commit),
-                string(&self.manifest_sha256),
-                string(schema),
-            ),
-            None => format!(
-                "{{\n  \"format\": {},\n  \"service-uri\": {},{tag}\n  \"commit\": {},\n  \"manifest-sha256\": {}",
-                string(SERVICE_ENTRY_FORMAT),
-                string(&self.uri),
-                string(&self.commit),
-                string(&self.manifest_sha256),
-            ),
+        let (format, uri_field) = match self.kind {
+            Kind::Namespace => (ENTRY_FORMAT, "namespace-uri"),
+            Kind::Service => (SERVICE_ENTRY_FORMAT, "service-uri"),
+            Kind::DataModel => (DATA_MODEL_ENTRY_FORMAT, "data-model-uri"),
         };
+        let mut text = format!(
+            "{{\n  \"format\": {},\n  \"{uri_field}\": {},{tag}\n  \"commit\": {},\n  \"manifest-sha256\": {}",
+            string(format),
+            string(&self.uri),
+            string(&self.commit),
+            string(&self.manifest_sha256),
+        );
+        if let Some(schema) = &self.schema_sha256 {
+            let _ = write!(text, ",\n  \"schema-sha256\": {}", string(schema));
+        }
         if let Some(component) = &self.component_sha256 {
             let _ = write!(text, ",\n  \"component-sha256\": {}", string(component));
         }
@@ -630,12 +657,15 @@ impl Entry {
         };
         let required = |name: &str| field(name)?.ok_or_else(|| format!("missing field `{name}`"));
         let format = required("format")?;
-        let (fields, uri_field): (&[&str], &str) = match format.as_str() {
-            ENTRY_FORMAT => (&ENTRY_FIELDS, "namespace-uri"),
-            SERVICE_ENTRY_FORMAT => (&SERVICE_ENTRY_FIELDS, "service-uri"),
+        let (kind, fields, uri_field): (Kind, &[&str], &str) = match format.as_str() {
+            ENTRY_FORMAT => (Kind::Namespace, &ENTRY_FIELDS, "namespace-uri"),
+            SERVICE_ENTRY_FORMAT => (Kind::Service, &SERVICE_ENTRY_FIELDS, "service-uri"),
+            DATA_MODEL_ENTRY_FORMAT => {
+                (Kind::DataModel, &DATA_MODEL_ENTRY_FIELDS, "data-model-uri")
+            }
             _ => {
                 return Err(format!(
-                    "field `format` must be `{ENTRY_FORMAT}` or `{SERVICE_ENTRY_FORMAT}`"
+                    "field `format` must be `{ENTRY_FORMAT}`, `{SERVICE_ENTRY_FORMAT}`, or `{DATA_MODEL_ENTRY_FORMAT}`"
                 ));
             }
         };
@@ -643,6 +673,7 @@ impl Entry {
             return Err(format!("unknown field `{}`", unknown.escape_debug()));
         }
         let entry = Self {
+            kind,
             uri: required(uri_field)?,
             tag: field("tag")?,
             commit: required("commit")?,
@@ -720,8 +751,8 @@ impl Cache {
         Ok(digest)
     }
 
-    /// The entry pinned for `uri`; `service` says which kind it must be.
-    fn entry(&self, namespace_uri: &str, service: bool) -> Result<Option<Entry>, String> {
+    /// The entry pinned for `uri`, which must be of `kind`.
+    fn entry(&self, namespace_uri: &str, kind: Kind) -> Result<Option<Entry>, String> {
         let path = self.entry_path(namespace_uri);
         if !path.exists() {
             return Ok(None);
@@ -732,15 +763,14 @@ impl Cache {
         let entry = Entry::decode(&bytes).map_err(|error| {
             format!("the cache index `{}` is malformed: {error}", path.display())
         })?;
-        if entry.uri != namespace_uri || entry.schema_sha256.is_none() != service {
+        if entry.uri != namespace_uri || entry.kind != kind {
             return Err(format!(
-                "the cache index `{}` names another namespace or service",
+                "the cache index `{}` names another namespace, service, or data model",
                 path.display()
             ));
         }
-        let tagless = RepositoryUri::parse(namespace_uri)
-            .or_else(|| RepositoryUri::parse_service(namespace_uri))
-            .is_some_and(|uri| uri.tag.is_none());
+        let tagless =
+            RepositoryUri::parse_kind(namespace_uri, kind).is_some_and(|uri| uri.tag.is_none());
         if entry.tag.is_some() != tagless {
             return Err(format!(
                 "the cache index `{}` records a release tag exactly when its URI has none, and this one does not",
@@ -1173,7 +1203,6 @@ impl Repository {
         &self,
         text: &str,
         uri: &RepositoryUri,
-        service: bool,
         pin: impl FnOnce(Option<String>, String) -> Result<Entry, String>,
     ) -> Result<Entry, String> {
         let memo = |entries: &Mutex<BTreeMap<String, Entry>>| {
@@ -1185,7 +1214,7 @@ impl Repository {
         if let Some(entry) = memo(&self.entries)? {
             return Ok(entry);
         }
-        let cached = self.cache.entry(text, service)?;
+        let cached = self.cache.entry(text, uri.kind)?;
         let entry = match (&uri.tag, cached) {
             (Some(_), Some(entry)) => entry,
             (Some(tag), None) => {
@@ -1260,7 +1289,7 @@ impl Repository {
             .ok_or_else(|| format!("`{namespace_uri}` is not a repository namespace URI"))?;
         let schema_limit = u64::try_from(MAX_COMPONENT_SCHEMA_BYTES)
             .map_err(|_| "the schema bound does not fit")?;
-        let entry = self.session_entry(namespace_uri, &uri, false, |tag, commit| {
+        let entry = self.session_entry(namespace_uri, &uri, |tag, commit| {
             self.pin_package(namespace_uri, &uri, tag, commit, schema_limit)
         })?;
         let schema_sha256 = entry
@@ -1384,6 +1413,7 @@ impl Repository {
             schema_limit,
         )?;
         let entry = Entry {
+            kind: Kind::Namespace,
             uri: namespace_uri.to_owned(),
             tag,
             commit,
@@ -1436,6 +1466,7 @@ impl Repository {
             match uri.kind {
                 Kind::Namespace => "extension component digest",
                 Kind::Service => "service component digest",
+                Kind::DataModel => "data-model component digest",
             },
         )?;
         let sums = self.fetch(
@@ -1519,7 +1550,7 @@ impl Repository {
     fn resolve_service_inner(&self, service_uri: &str) -> Result<(ServicePackage, Entry), String> {
         let uri = RepositoryUri::parse_service(service_uri)
             .ok_or_else(|| format!("`{service_uri}` is not a repository service URI"))?;
-        let entry = self.session_entry(service_uri, &uri, true, |tag, commit| {
+        let entry = self.session_entry(service_uri, &uri, |tag, commit| {
             self.pin_service(service_uri, &uri, tag, commit)
         })?;
         let tag = release_tag(&uri, &entry)?;
@@ -1593,6 +1624,7 @@ impl Repository {
         let parsed = parse_service_manifest(service_uri, &manifest)?;
         let schema = self.service_schema(service_uri, uri, release, &parsed)?;
         let entry = Entry {
+            kind: Kind::Service,
             uri: service_uri.to_owned(),
             tag,
             commit,
@@ -1667,6 +1699,147 @@ impl Repository {
         record_outcome(&span, result.is_ok());
         result
     }
+}
+
+impl Repository {
+    /// The verified manifest of the repository data model `data_model_uri`,
+    /// from the cache or its repository; pins the URI on first use.
+    ///
+    /// # Errors
+    ///
+    /// A message for every acquisition, bound, or verification failure.
+    pub(crate) fn resolve_data_model_package(
+        &self,
+        data_model_uri: &str,
+    ) -> Result<scxml_validator_core::DataModelPackageManifest, String> {
+        let span = observe(Module::Cli, Operation::CliResolveDataModelPackage);
+        let result = self.resolve_data_model_inner(data_model_uri);
+        record_outcome(&span, result.is_ok());
+        result.map(|(manifest, _)| manifest)
+    }
+
+    fn resolve_data_model_inner(
+        &self,
+        data_model_uri: &str,
+    ) -> Result<(scxml_validator_core::DataModelPackageManifest, Entry), String> {
+        let uri = RepositoryUri::parse_data_model(data_model_uri)
+            .ok_or_else(|| format!("`{data_model_uri}` is not a repository data-model URI"))?;
+        let entry = self.session_entry(data_model_uri, &uri, |tag, commit| {
+            let release_tag = tag
+                .clone()
+                .or_else(|| uri.tag.clone())
+                .ok_or("a tagless URI resolved to no release tag")?;
+            let manifest = self.fetch(
+                &uri,
+                (&release_tag, &commit),
+                Artifact::Manifest,
+                MAX_MANIFEST_BYTES,
+            )?;
+            let entry = Entry {
+                kind: Kind::DataModel,
+                uri: data_model_uri.to_owned(),
+                tag,
+                commit,
+                manifest_sha256: sha256_hex(&manifest),
+                schema_sha256: None,
+                component_sha256: None,
+            };
+            // Only a verified package is stored and pinned.
+            verify_data_model(data_model_uri, &manifest, &entry)?;
+            self.cache.store(&manifest)?;
+            self.cache.write_entry(&entry)?;
+            Ok(entry)
+        })?;
+        let tag = release_tag(&uri, &entry)?;
+        let manifest = self.pinned(
+            data_model_uri,
+            "manifest",
+            &entry.manifest_sha256,
+            MAX_MANIFEST_BYTES,
+            || {
+                self.fetch(
+                    &uri,
+                    (&tag, &entry.commit),
+                    Artifact::Manifest,
+                    MAX_MANIFEST_BYTES,
+                )
+            },
+        )?;
+        Ok((verify_data_model(data_model_uri, &manifest, &entry)?, entry))
+    }
+
+    /// The repository data model's component bytes and SHA-256, the digest
+    /// its release's `SHA256SUMS` lists (pinned on first use): from the
+    /// cache, or downloaded from the release and verified.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::resolve_data_model_package`], a release without the asset
+    /// in `SHA256SUMS`, and a download that does not match.
+    #[cfg(feature = "wasmtime")]
+    pub(crate) fn resolve_data_model_component(
+        &self,
+        data_model_uri: &str,
+    ) -> Result<ResolvedService, String> {
+        let span = observe(Module::Cli, Operation::CliResolveDataModelComponent);
+        let result = (|| {
+            let (manifest, entry) = self.resolve_data_model_inner(data_model_uri)?;
+            let uri = RepositoryUri::parse_data_model(data_model_uri)
+                .ok_or_else(|| format!("`{data_model_uri}` is not a repository data-model URI"))?;
+            let asset = manifest.data_model_artifact;
+            let entry = self.pin_component(&uri, data_model_uri, &asset, entry)?;
+            let tag = release_tag(&uri, &entry)?;
+            let sha256 = entry
+                .component_sha256
+                .clone()
+                .ok_or("the cache pinned no component digest")?;
+            let bytes = self.pinned(
+                data_model_uri,
+                "data-model component",
+                &sha256,
+                MAX_COMPONENT_BYTES,
+                || {
+                    self.fetch(
+                        &uri,
+                        (&tag, &entry.commit),
+                        Artifact::Component(&asset),
+                        MAX_COMPONENT_BYTES,
+                    )
+                },
+            )?;
+            Ok(ResolvedService { bytes, sha256 })
+        })();
+        record_outcome(&span, result.is_ok());
+        result
+    }
+}
+
+/// Verifies a repository data model's manifest against the pinned entry:
+/// its digest, format, its own URI exactly, and a plain release asset name.
+fn verify_data_model(
+    data_model_uri: &str,
+    manifest_bytes: &[u8],
+    entry: &Entry,
+) -> Result<scxml_validator_core::DataModelPackageManifest, String> {
+    if sha256_hex(manifest_bytes) != entry.manifest_sha256 {
+        return Err(format!(
+            "repository data model `{data_model_uri}`: its manifest does not match the SHA-256 pinned for it"
+        ));
+    }
+    let manifest = scxml_validator_core::DataModelPackageManifest::from_json(manifest_bytes)
+        .map_err(|error| {
+            format!("repository data model `{data_model_uri}`: its manifest is malformed: {error}")
+        })?;
+    check_identity(data_model_uri, &manifest.data_model_uri, "data-model-uri")?;
+    if !valid_segment(&manifest.data_model_artifact) {
+        return Err(format!(
+            "repository data model `{data_model_uri}`: its `data-model-artifact` is not a plain release asset name"
+        ));
+    }
+    manifest.verify().map_err(|error| {
+        format!("repository data model `{data_model_uri}`: its package does not verify: {error}")
+    })?;
+    Ok(manifest)
 }
 
 /// Why a build without Wasmtime cannot resolve `uri` beyond the cache.
@@ -1777,6 +1950,8 @@ fn release_tag(uri: &RepositoryUri, entry: &Entry) -> Result<String, String> {
 fn label(uri: &str) -> &'static str {
     if RepositoryUri::parse_service(uri).is_some() {
         Kind::Service.label()
+    } else if RepositoryUri::parse_data_model(uri).is_some() {
+        Kind::DataModel.label()
     } else {
         Kind::Namespace.label()
     }
@@ -1926,14 +2101,17 @@ fn sums_entry(bytes: &[u8], asset: &str) -> Option<String> {
 /// The repository packages one document names, each with the release its
 /// URIs pin (`@<tag>`, which [`scxml_types::strip_tag`] split off when the
 /// document was parsed): the tagless URI of every repository namespace it
-/// declares and every repository service its literal SCXML `<invoke type>`s
-/// name.
+/// declares, every repository service its literal SCXML `<invoke type>`s
+/// name, and every repository data model its `<scxml datamodel:src>`s name.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct DocumentPins {
     /// Repository namespace URIs and their pins.
     pub(crate) namespaces: BTreeMap<String, Option<String>>,
     /// Repository service URIs and their pins.
     pub(crate) services: BTreeMap<String, Option<String>>,
+    /// Repository data-model URIs (an `<scxml>`'s `datamodel:src`) and
+    /// their pins.
+    pub(crate) data_models: BTreeMap<String, Option<String>>,
 }
 
 /// The repository packages `source` (shown as `name` in messages) names,
@@ -1978,7 +2156,25 @@ pub(crate) fn document_pins(source: &[u8], name: &str) -> Result<DocumentPins, S
                     Kind::Service,
                 )
             });
-        for (uri, tag, kind) in declarations.chain(invoke) {
+        let data_model = element
+            .name
+            .is(Some(scxml_validator_core::SCXML_NAMESPACE), "scxml")
+            .then(|| {
+                element.attributes.iter().find(|attribute| {
+                    attribute
+                        .name
+                        .is(Some(scxml_types::DATAMODEL_NAMESPACE_URI), "src")
+                })
+            })
+            .flatten()
+            .map(|attribute| {
+                (
+                    attribute.value.as_str(),
+                    attribute.tag.as_deref(),
+                    Kind::DataModel,
+                )
+            });
+        for (uri, tag, kind) in declarations.chain(invoke).chain(data_model) {
             if failure.is_none()
                 && let Err(error) = pins.add(uri, tag, kind, name)
             {
@@ -2003,13 +2199,12 @@ impl DocumentPins {
                 "{name}: `{uri}@{tag}` pins a built-in vocabulary\n  = help: `{uri}` ships with scx and is versioned with it; it takes no `@<tag>`"
             ));
         }
-        let (map, repository) = match kind {
-            Kind::Namespace => (&mut self.namespaces, RepositoryUri::parse(uri).is_some()),
-            Kind::Service => (
-                &mut self.services,
-                RepositoryUri::parse_service(uri).is_some(),
-            ),
+        let map = match kind {
+            Kind::Namespace => &mut self.namespaces,
+            Kind::Service => &mut self.services,
+            Kind::DataModel => &mut self.data_models,
         };
+        let repository = RepositoryUri::parse_kind(uri, kind).is_some();
         if !repository {
             return Ok(());
         }
@@ -2159,6 +2354,7 @@ mod tests {
     #[test]
     fn cache_entries_are_canonical_and_closed() {
         let entry = Entry {
+            kind: Kind::Namespace,
             uri: "https://github.com/o/r/e@v1".into(),
             tag: None,
             commit: "a".repeat(40),
@@ -2183,6 +2379,7 @@ mod tests {
     #[test]
     fn tagless_entries_record_their_release_tag() {
         let entry = Entry {
+            kind: Kind::Service,
             uri: "https://github.com/o/r/services/s".into(),
             tag: Some("v2".into()),
             commit: "a".repeat(40),
@@ -2201,6 +2398,7 @@ mod tests {
     #[test]
     fn service_cache_entries_are_canonical_and_closed() {
         let entry = Entry {
+            kind: Kind::Service,
             uri: "https://github.com/o/r/services/s@v1".into(),
             tag: None,
             commit: "a".repeat(40),

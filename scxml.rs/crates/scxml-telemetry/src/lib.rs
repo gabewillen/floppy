@@ -247,6 +247,14 @@ pub enum Operation {
     /// Resolves one repository service's component from the cache or its
     /// release, before a run binds it.
     CliResolveServiceComponent,
+    /// Reads and verifies the CLI's `--data-model-package` manifests.
+    CliReadDataModelPackage,
+    /// Resolves one repository data model's manifest from the cache or its
+    /// repository.
+    CliResolveDataModelPackage,
+    /// Resolves one repository data model's component from the cache or its
+    /// release, before a run binds it.
+    CliResolveDataModelComponent,
     /// Runs compilation.
     CliCompile,
     /// Runs conformance.
@@ -573,6 +581,9 @@ impl Operation {
             Self::CliResolveExtensionComponent => "scxml.cli.resolve-extension-component",
             Self::CliResolveServicePackage => "scxml.cli.resolve-service-package",
             Self::CliResolveServiceComponent => "scxml.cli.resolve-service-component",
+            Self::CliReadDataModelPackage => "scxml.cli.read-data-model-package",
+            Self::CliResolveDataModelPackage => "scxml.cli.resolve-data-model-package",
+            Self::CliResolveDataModelComponent => "scxml.cli.resolve-data-model-component",
             Self::CliCompile => "scxml.cli.compile",
             Self::CliConformance => "scxml.cli.conformance",
             Self::CliConformanceSnapshotProof => "scxml.cli.conformance-snapshot-proof",

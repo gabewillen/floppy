@@ -262,13 +262,13 @@ fn the_wasm_validator_keeps_the_bounds_the_native_cli_lifts() {
     let ecmascript = linked(Some(&artifacts.ecmascript));
     let reports = |report: &str, code: &str| report.contains(&format!("\"code\":\"{code}\""));
 
-    let case = "valid-limit007-state-nesting-over-wasm-bound";
+    let case = "valid-limit005-state-nesting-over-wasm-bound";
     let ui = artifacts.workspace.join("tests/ui");
     let source = String::from_utf8(read(&ui.join(format!("{case}.scx")))).expect("UTF-8");
     let native = String::from_utf8(read(&ui.join(format!("{case}.json")))).expect("UTF-8");
-    assert!(!reports(&native, "LIMIT007"), "{native}");
+    assert!(!reports(&native, "LIMIT005"), "{native}");
     let wasm = validate(&ecmascript, &format!("tests/ui/{case}.scx"), &source);
-    assert!(reports(&wasm, "LIMIT007"), "{wasm}");
+    assert!(reports(&wasm, "LIMIT005"), "{wasm}");
 
     let chain = (0..65_536).fold(
         format!("{HEAD}\n<state id=\"a\"><transition event=\"go\" target=\"s0\"/></state>\n"),
@@ -327,7 +327,7 @@ fn the_wasm_validator_keeps_the_bounds_the_native_cli_lifts() {
 /// The wasm validator bounds an attribute value as the compiler stores it:
 /// a white-space-collapsing SCXML attribute by its collapsed value (an `id`
 /// padded past 1 MiB is the short `a`), and an attribute of inline XML,
-/// which the compiler keeps byte for byte, by its exact value (`LIMIT007`),
+/// which the compiler keeps byte for byte, by its exact value (`LIMIT005`),
 /// even on an element in the SCXML namespace.
 #[test]
 fn the_wasm_validator_bounds_attribute_values_as_the_compiler_stores_them() {
@@ -340,12 +340,12 @@ fn the_wasm_validator_bounds_attribute_values_as_the_compiler_stores_them() {
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="ecmascript"><state id="{padding}a"><transition event="go" target="b"/></state><final id="b"/></scxml>"#
     );
     let report = validate(&ecmascript, "padded-id.scxml", &padded_id);
-    assert!(!reports(&report, "LIMIT007"), "{report}");
+    assert!(!reports(&report, "LIMIT005"), "{report}");
     let padded_payload = format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="ecmascript"><state id="a"><onentry><send event="e"><content><state xmlns="http://www.w3.org/2005/07/scxml" id="{padding}x"/></content></send></onentry><transition event="go" target="b"/></state><final id="b"/></scxml>"#
     );
     let report = validate(&ecmascript, "padded-payload.scxml", &padded_payload);
-    assert!(reports(&report, "LIMIT007"), "{report}");
+    assert!(reports(&report, "LIMIT005"), "{report}");
 }
 
 #[test]

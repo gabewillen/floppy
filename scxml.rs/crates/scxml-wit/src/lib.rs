@@ -54,6 +54,8 @@
 //! | Extension cache index entry | none | `stateforward.scxml.extension-cache/v1` | `ENTRY_FORMAT` in `crates/scxml-cli/src/repository.rs` |
 //! | Service package manifest | none | `stateforward.scxml.service-package/v1` | `SERVICE_PACKAGE_FORMAT` in `crates/scxml-validator-core/src/service_package.rs` |
 //! | Service cache index entry | none | `stateforward.scxml.service-cache/v1` | `SERVICE_ENTRY_FORMAT` in `crates/scxml-cli/src/repository.rs` |
+//! | Data-model package manifest | none | `stateforward.scxml.data-model-package/v1` | `DATA_MODEL_PACKAGE_FORMAT` in `crates/scxml-validator-core/src/data_model_package.rs` |
+//! | Data-model cache index entry | none | `stateforward.scxml.data-model-cache/v1` | `DATA_MODEL_ENTRY_FORMAT` in `crates/scxml-cli/src/repository.rs` |
 //! | Rust crates and the browser npm package | `0.1.0` | `0.2.0` | `Cargo.toml` workspace version; `hosts/scxml-host-browser/package.json` |
 //!
 //! The `versioning_table_matches_the_governing_constants` test binds every
@@ -706,6 +708,14 @@ mod tests {
             include_str!("../../scxml-cli/src/repository.rs"),
             "SERVICE_ENTRY_FORMAT",
         );
+        let data_model_manifest = cli_format(
+            include_str!("../../scxml-validator-core/src/data_model_package.rs"),
+            "DATA_MODEL_PACKAGE_FORMAT",
+        );
+        let data_model_cache = cli_format(
+            include_str!("../../scxml-cli/src/repository.rs"),
+            "DATA_MODEL_ENTRY_FORMAT",
+        );
         // The `0.1.0` column is what the `v0.1.0` tag shipped; it never
         // changes.
         let expected = [
@@ -781,6 +791,12 @@ mod tests {
             ),
             format!(
                 "Service cache index entry | none | `{service_cache}` | `SERVICE_ENTRY_FORMAT` in `crates/scxml-cli/src/repository.rs` |"
+            ),
+            format!(
+                "Data-model package manifest | none | `{data_model_manifest}` | `DATA_MODEL_PACKAGE_FORMAT` in `crates/scxml-validator-core/src/data_model_package.rs` |"
+            ),
+            format!(
+                "Data-model cache index entry | none | `{data_model_cache}` | `DATA_MODEL_ENTRY_FORMAT` in `crates/scxml-cli/src/repository.rs` |"
             ),
             format!(
                 "Rust crates and the browser npm package | `0.1.0` | `{crate_version}` | `Cargo.toml` workspace version; `hosts/scxml-host-browser/package.json` |"

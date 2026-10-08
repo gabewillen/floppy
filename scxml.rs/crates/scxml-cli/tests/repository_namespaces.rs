@@ -315,15 +315,10 @@ fn repository(server: &Server, cache: &Path) -> Vec<String> {
 }
 
 /// A document whose one element is the repository namespace's `raise`,
-/// with `attributes` (written once under `target/`).
-fn document_with(attributes: &str) -> String {
-    let directory = workspace().join("target/cli-repository-namespaces");
-    fs::create_dir_all(&directory).expect("the document directory");
-    let path = directory.join(format!(
-        "{}-{}.scxml",
-        std::process::id(),
-        sha256(attributes.as_bytes())
-    ));
+/// with `attributes`, written in the test's own `directory` so no other
+/// test rewrites it while an `scx` reads it.
+fn document_with(directory: &Path, attributes: &str) -> String {
+    let path = directory.join(format!("{}.scxml", sha256(attributes.as_bytes())));
     fs::write(
         &path,
         format!(
@@ -343,8 +338,8 @@ fn document_with(attributes: &str) -> String {
     path.display().to_string()
 }
 
-fn hello() -> String {
-    document_with(r#"event="example.raised""#)
+fn hello(directory: &Path) -> String {
+    document_with(directory, r#"event="example.raised""#)
 }
 
 /// `snapshot run` of `document` with `extra` flags.
@@ -392,7 +387,7 @@ fn a_repository_element_loads_before_the_session_and_then_from_the_cache_offline
     let output = directory.join("final.snapshot.json");
     let flags = repository(&server, &cache);
 
-    let first = snapshot_run(&hello(), &output, &flags);
+    let first = snapshot_run(&hello(&directory), &output, &flags);
     assert_bound_then_refused(&first, &output);
     let fetched = server.requests();
     assert_eq!(
@@ -424,7 +419,7 @@ fn a_repository_element_loads_before_the_session_and_then_from_the_cache_offline
     // Offline: the same binding from the cache alone.
     let mut offline = flags.clone();
     offline.push("--offline".into());
-    let second = snapshot_run(&hello(), &output, &offline);
+    let second = snapshot_run(&hello(&directory), &output, &offline);
     assert_bound_then_refused(&second, &output);
     assert_eq!(server.requests(), fetched, "offline touches no GitHub URL");
 
@@ -436,7 +431,7 @@ fn a_repository_element_loads_before_the_session_and_then_from_the_cache_offline
             "f".repeat(40)
         ),
     );
-    let third = snapshot_run(&hello(), &output, &flags);
+    let third = snapshot_run(&hello(&directory), &output, &flags);
     assert_bound_then_refused(&third, &output);
     assert_eq!(server.requests(), fetched, "a pinned URI asks no network");
 }
@@ -446,10 +441,10 @@ fn validate_resolves_the_schema_and_never_the_component() {
     let server = github();
     let directory = scratch("validate");
     let flags = repository(&server, &directory.join("cache"));
-    let valid = validate(&hello(), &flags);
+    let valid = validate(&hello(&directory), &flags);
     assert!(valid.status.success(), "{}", text(&valid.stderr));
     let invalid = validate(
-        &document_with(r#"event="example.raised" stream="true""#),
+        &document_with(&directory, r#"event="example.raised" stream="true""#),
         &flags,
     );
     assert_eq!(
@@ -512,8 +507,9 @@ fn a_package_that_does_not_name_itself_exactly_fails_closed() {
         let server = github();
         server.body(&raw_path("example.extension.json"), manifest);
         server.body(&raw_path("example.xsd"), schema);
-        let cache = scratch(name).join("cache");
-        let rejected = validate(&hello(), &repository(&server, &cache));
+        let directory = scratch(name);
+        let cache = directory.join("cache");
+        let rejected = validate(&hello(&directory), &repository(&server, &cache));
         assert_eq!(rejected.status.code(), Some(2), "{name}");
         assert!(
             text(&rejected.stderr).contains(expected),
@@ -549,7 +545,7 @@ fn a_component_its_release_does_not_vouch_for_fails_before_the_session() {
         let directory = scratch(name);
         let output = directory.join("final.snapshot.json");
         let run = snapshot_run(
-            &hello(),
+            &hello(&directory),
             &output,
             &repository(&server, &directory.join("cache")),
         );
@@ -614,7 +610,7 @@ fn downloads_stay_on_github_origins_and_within_their_bounds() {
         let directory = scratch(name);
         let output = directory.join("final.snapshot.json");
         let run = snapshot_run(
-            &hello(),
+            &hello(&directory),
             &output,
             &repository(&server, &directory.join("cache")),
         );
@@ -641,7 +637,10 @@ fn a_download_of_exactly_its_bound_is_admitted() {
     manifest.resize(64 * 1024, b' ');
     server.body(&raw_path("example.extension.json"), manifest);
     let directory = scratch("exact-bound");
-    let valid = validate(&hello(), &repository(&server, &directory.join("cache")));
+    let valid = validate(
+        &hello(&directory),
+        &repository(&server, &directory.join("cache")),
+    );
     assert!(valid.status.success(), "{}", text(&valid.stderr));
 }
 
@@ -654,7 +653,7 @@ fn offline_without_the_cache_fails_closed_before_the_first_macrostep() {
     let mut flags = repository(&server, &cache);
     flags.push("--offline".into());
 
-    let empty = snapshot_run(&hello(), &output, &flags);
+    let empty = snapshot_run(&hello(&directory), &output, &flags);
     assert!(!empty.status.success());
     assert!(
         text(&empty.stderr).contains("--offline forbids fetching"),
@@ -666,10 +665,10 @@ fn offline_without_the_cache_fails_closed_before_the_first_macrostep() {
     // The package cached (validation needs only it), the component not: the
     // run resolves the element before its session starts, and fails closed
     // without running anything.
-    let online = validate(&hello(), &repository(&server, &cache));
+    let online = validate(&hello(&directory), &repository(&server, &cache));
     assert!(online.status.success(), "{}", text(&online.stderr));
     let before = server.requests().len();
-    let start = snapshot_run(&hello(), &output, &flags);
+    let start = snapshot_run(&hello(&directory), &output, &flags);
     assert!(!start.status.success());
     let stderr = text(&start.stderr);
     assert!(
@@ -687,7 +686,7 @@ fn a_tampered_cache_fails_closed() {
     let cache = directory.join("cache");
     let output = directory.join("final.snapshot.json");
     let flags = repository(&server, &cache);
-    let first = snapshot_run(&hello(), &output, &flags);
+    let first = snapshot_run(&hello(&directory), &output, &flags);
     assert_bound_then_refused(&first, &output);
     let object = cache.join("sha256").join(sha256(&release().example));
     let mut bytes = fs::read(&object).expect("the cached component");
@@ -695,7 +694,7 @@ fn a_tampered_cache_fails_closed() {
         *last ^= 1;
     }
     fs::write(&object, bytes).expect("tamper");
-    let tampered = snapshot_run(&hello(), &output, &flags);
+    let tampered = snapshot_run(&hello(&directory), &output, &flags);
     assert!(!tampered.status.success());
     let stderr = text(&tampered.stderr);
     assert!(
@@ -716,7 +715,10 @@ fn an_env_attribute_on_a_repository_element_is_rejected() {
     let server = github();
     let directory = scratch("env");
     let rejected = validate(
-        &document_with(r#"event="example.raised" env:token="REPO_TOKEN""#),
+        &document_with(
+            &directory,
+            r#"event="example.raised" env:token="REPO_TOKEN""#,
+        ),
         &repository(&server, &directory.join("cache")),
     );
     assert_eq!(

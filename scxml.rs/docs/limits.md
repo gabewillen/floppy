@@ -238,9 +238,9 @@ one of them is treated as follows:
   that starts a deep or heavy chain of invocations can exhaust it too.
 - **Rejected by the validator and compiler components**: a document over a
   Machine IR, graph, or expression-checking bound (`LIMIT001`, `LIMIT002`,
-  `LIMIT003` for size, `LIMIT004`, `LIMIT007`, `COMP001`; the bounds are
+  `LIMIT003` for size, `LIMIT004`, `LIMIT005`, `COMP001`; the bounds are
   listed in [validator-rules.md](validator-rules.md)), including an
-  `event:schema` over the 1 MiB string bound (`LIMIT007`), and a JSON
+  `event:schema` over the 1 MiB string bound (`LIMIT005`), and a JSON
   Pointer extraction that would bundle more than 256 referenced values
   (`EVENT008`). The native
   `scx` validates and compiles a document of any size and reports
@@ -364,7 +364,7 @@ These apply on every build, because they are not resource bounds:
   or invoke id over it, or a state or invoke id over 1,013 / 1,012 bytes,
   whose `done.state.` or `done.invoke.` event would be over it, is a
   compile error,
-  `LIMIT008`/`LIMIT009`, and a run-time `eventexpr` name or a generated
+  `LIMIT006`/`LIMIT007`, and a run-time `eventexpr` name or a generated
   invoke id over it raises `error.execution`), the `data-model-api` bounds of
   `initialize` (at most 256 declared `<data>` ids, whose placeholder
   encoding is at most 64 KiB, so every data model snapshot fits one

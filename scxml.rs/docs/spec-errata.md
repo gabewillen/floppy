@@ -441,7 +441,7 @@ matrix marks the requirements concerned as partial, not covered.
     with `invalid-input` (the data model's `initialize` declines it)
     before any state is entered;
   - in wasm builds only, the validator's and compiler's size bounds
-    (`LIMIT001`, `LIMIT004`, `LIMIT007`, `COMP001`, `LIMIT003` for size;
+    (`LIMIT001`, `LIMIT004`, `LIMIT005`, `COMP001`, `LIMIT003` for size;
     [validator-rules.md](validator-rules.md) lists them);
   - `SCXML074`: a `<log expr>` whose syntax certainly has a side effect,
     which REC 4.7.3 forbids the processor to let happen (see L.1);
@@ -456,14 +456,14 @@ matrix marks the requirements concerned as partial, not covered.
     little room for an invoked session's id (its `<invoke>` then raises
     `error.execution`);
   - the 1024-byte name bound, on every build: a `<state>`, `<parallel>`,
-    `<final>`, or `<history>` ID longer than that (`LIMIT008`), which no
+    `<final>`, or `<history>` ID longer than that (`LIMIT006`), which no
     configuration, snapshot, or `In()` could name once the state is
     entered, or the ID of a state that can complete longer than 1,013
     bytes, whose `done.state.<ID>` event (REC 3.7) the bound cannot hold
-    (`LIMIT008`); a literal `<raise event>`, `<send event>`, `<send id>`,
+    (`LIMIT006`); a literal `<raise event>`, `<send event>`, `<send id>`,
     or `<invoke id>` longer than the bound, or an `<invoke id>` longer
     than 1,012 bytes, whose `done.invoke.<ID>` event (REC 6.4) it cannot
-    hold (`LIMIT009`); and, for names known only at run time, a generated
+    hold (`LIMIT007`); and, for names known only at run time, a generated
     invoke id (`<state ID>.<_sessionid>.<n>`, REC 6.4.1, so a state ID
     within a few bytes of the bound) longer than that or longer than
     1,012 bytes, whose `done.invoke.<ID>` event the bound cannot hold,

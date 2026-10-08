@@ -24,13 +24,7 @@
 //! * `SCXML067` (error): an `<scxml>` has no child state.
 //! * `LINT021` (warning): a `<parallel>` has no child state; conformant,
 //!   but no transition is ever enabled through it.
-//! * `LIMIT006` (error, category `internal`): a limit of this toolchain, not
-//!   an SCXML rule. SCXML 1.0 allows an attribute in another namespace
-//!   (`xml:lang`, `xsi:schemaLocation`, an extension namespace) on an SCXML
-//!   element and an element in another namespace in its content models, but
-//!   the compiler lowers foreign elements only as executable content and
-//!   rejects the rest rather than drop them. No SCXML section is cited.
-//! * `LIMIT007` (error): the document exceeds a Machine IR bound: 65
+//! * `LIMIT005` (error): the document exceeds a Machine IR bound: 65
 //!   nested states, 64 levels of `<if>`/`<foreach>` nesting, 32 levels of
 //!   inline XML (31 below a custom action), 10,000 child nodes, attributes, targets, event
 //!   descriptors, names, branches, or data declarations per scope, 100,000
@@ -42,7 +36,7 @@
 //!   XML); each nested inline machine is walked as its own machine because
 //!   hosts compile it when it is invoked. Recursion follows the parsed tree,
 //!   whose depth the XML parser bounds (`XmlLimits::max_depth`), and at most
-//!   [`MAX_BOUND_FINDINGS`] `LIMIT007` findings are reported per machine.
+//!   [`MAX_BOUND_FINDINGS`] `LIMIT005` findings are reported per machine.
 //! * Pure and bounded by the validated document; it runs inside the
 //!   validator's boundary span and records no telemetry of its own.
 
@@ -52,13 +46,13 @@ use scxml_syntax::{Attribute, Document, Element, Node, Span, collapse_whitespace
 
 use crate::semantic::{Rule, SCXML_NAMESPACE, child_elements, is_scxml, machine_roots};
 use crate::spans::{attribute_insertion_point, attribute_removal_span};
-use crate::{Applicability, Diagnostic, DiagnosticCategory, Fix, FixEdit, Label, Report};
+use crate::{Applicability, Diagnostic, Fix, FixEdit, Label, Report};
 
 /// Machine IR bounds the compiler enforces while lowering, mirrored so the
 /// validator reports a document over them. `scxml-compiler-core` asserts
 /// that each equals its own constant. Every bound applies to wasm builds
 /// only ([`scxml_types::wasm_bound`]): natively each is `usize::MAX`, so a
-/// native `validate` never reports `LIMIT007`.
+/// native `validate` never reports `LIMIT005`.
 pub mod bounds {
     use scxml_types::wasm_bound;
 
@@ -81,10 +75,8 @@ use bounds::{MAX_CONTENT_DEPTH, MAX_MULTI_TARGET_ITEMS, MAX_NESTED_ITEMS, MAX_ST
 /// Maximum nested states: a child of `<scxml>` is at depth 0, and lowering
 /// rejects a state at depth greater than [`MAX_CONTENT_DEPTH`].
 const MAX_STATE_NESTING: usize = MAX_CONTENT_DEPTH.saturating_add(1);
-/// Maximum `LIMIT007` findings per machine.
+/// Maximum `LIMIT005` findings per machine.
 const MAX_BOUND_FINDINGS: usize = 16;
-/// Maximum further attributes labeled on one `LIMIT006` finding.
-const MAX_FOREIGN_LABELS: usize = 16;
 
 /// First level of inline XML (1 for a direct child) that lowering rejects
 /// inside `<data>`, `<content>`, or `<assign>` (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
@@ -93,9 +85,17 @@ const MAX_BODY_LEVEL: usize = scxml_types::wasm_bound(33);
 /// that lowering rejects (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
 const MAX_CUSTOM_LEVEL: usize = scxml_types::wasm_bound(32);
 
+/// Whether `child` is no SCXML element: lowering takes only SCXML children
+/// where this is asked, and skips any other (an element in another
+/// namespace is `crate::foreign_namespaces`' `LINT022` or its package's; one
+/// in no namespace is the schema's).
+fn foreign_child(child: &Element) -> bool {
+    child.name.namespace_uri.as_deref() != Some(SCXML_NAMESPACE)
+}
+
 const STATE_ELEMENTS: [&str; 4] = ["state", "parallel", "final", "history"];
 
-/// `SCXML064`-`SCXML067`, `LIMIT006`, and `LIMIT007`: structures the compiler cannot lower.
+/// `SCXML064`-`SCXML067` and `LIMIT005`: structures the compiler cannot lower.
 pub(crate) struct LoweringRule;
 
 impl Rule for LoweringRule {
@@ -145,7 +145,7 @@ struct Walk<'d> {
     multi_target_reported: bool,
     /// Tokens of every `target` and `initial` list of the machine.
     target_references: usize,
-    /// `LIMIT007` findings about target lists, dropped when the machine is
+    /// `LIMIT005` findings about target lists, dropped when the machine is
     /// over [`crate::MAX_GRAPH_TARGETS`] (then `LIMIT002`).
     target_findings: Vec<Diagnostic>,
 }
@@ -164,7 +164,7 @@ impl<'d> Walk<'d> {
         let mut data = 0_usize;
         let mut has_state = false;
         for child in child_elements(machine) {
-            if self.foreign_child(machine, child) {
+            if foreign_child(child) {
                 continue;
             }
             match child.name.local_name.as_str() {
@@ -207,7 +207,7 @@ impl<'d> Walk<'d> {
         let mut has_state = false;
         let mut initials: Vec<&Element> = Vec::new();
         for child in child_elements(state) {
-            if self.foreign_child(state, child) {
+            if foreign_child(child) {
                 continue;
             }
             match child.name.local_name.as_str() {
@@ -251,7 +251,7 @@ impl<'d> Walk<'d> {
         self.scxml_element(initial);
         self.child_count(initial, "child nodes");
         for child in child_elements(initial) {
-            if self.foreign_child(initial, child) || !is_scxml(child, "transition") {
+            if foreign_child(child) || !is_scxml(child, "transition") {
                 continue;
             }
             self.transition(child);
@@ -273,7 +273,7 @@ impl<'d> Walk<'d> {
         self.scxml_element(datamodel);
         self.child_count(datamodel, "child nodes");
         for child in child_elements(datamodel) {
-            if self.foreign_child(datamodel, child) || !is_scxml(child, "data") {
+            if foreign_child(child) || !is_scxml(child, "data") {
                 continue;
             }
             *data += 1;
@@ -307,14 +307,11 @@ impl<'d> Walk<'d> {
         let mut contents: Vec<&Element> = Vec::new();
         let mut finalizes: Vec<&Element> = Vec::new();
         for child in child_elements(invoke) {
-            if self.foreign_child(invoke, child) {
+            if foreign_child(child) {
                 continue;
             }
             match child.name.local_name.as_str() {
-                "param" => {
-                    self.scxml_element(child);
-                    self.no_foreign_children(child);
-                }
+                "param" => self.scxml_element(child),
                 "content" => {
                     contents.push(child);
                     self.scxml_element(child);
@@ -354,16 +351,12 @@ impl<'d> Walk<'d> {
         self.child_count(donedata, "child nodes");
         for child in child_elements(donedata) {
             // `<donedata>` admits only `<content>` and `<param>` (no
-            // `##other` wildcard), so the W3C schema already rejects an
-            // element from another namespace here; `LIMIT006` would claim
-            // SCXML allows it.
+            // `##other` wildcard), so the W3C schema rejects an element
+            // from another namespace here.
             if child.name.namespace_uri.as_deref() != Some(SCXML_NAMESPACE) {
                 continue;
             }
             self.scxml_element(child);
-            if is_scxml(child, "param") {
-                self.no_foreign_children(child);
-            }
             if is_scxml(child, "content") {
                 self.body(
                     child,
@@ -421,9 +414,7 @@ impl<'d> Walk<'d> {
                 self.actions(action, depth + 1);
             }
             "send" => self.send(action, depth),
-            "log" | "cancel" => self.no_foreign_children(action),
             "script" => {
-                self.no_foreign_children(action);
                 let body: usize = action
                     .children
                     .iter()
@@ -509,13 +500,10 @@ impl<'d> Walk<'d> {
         }
         let mut contents: Vec<&Element> = Vec::new();
         for child in child_elements(send) {
-            if self.foreign_child(send, child) {
+            if foreign_child(child) {
                 continue;
             }
             self.scxml_element(child);
-            if is_scxml(child, "param") {
-                self.no_foreign_children(child);
-            }
             if is_scxml(child, "content") {
                 contents.push(child);
                 self.body(
@@ -675,107 +663,26 @@ impl<'d> Walk<'d> {
     // Shared checks
     // -----------------------------------------------------------------------
 
-    /// Attribute checks every lowered SCXML element gets: attributes in
-    /// another namespace (`LIMIT006`) and 1 MiB values (`LIMIT007`).
+    /// The attribute-count and 1 MiB value bounds (`LIMIT005`) every
+    /// lowered SCXML element gets. What an attribute in another namespace
+    /// means is `crate::foreign_namespaces`' and the vocabularies' rules.
     fn scxml_element(&mut self, element: &Element) {
-        // The `event` attribute vocabulary lowers on its owner elements and
-        // is reported everywhere else by `EVENT001`; the `env` vocabulary
-        // lowers on `<invoke>` (`ENV001`/`ENV002` judge it there).
-        let invoke = element.name.local_name == "invoke";
-        let foreign: Vec<&Attribute> = element
-            .attributes
-            .iter()
-            .filter(|attribute| {
-                let namespace = attribute.name.namespace_uri.as_deref();
-                namespace.is_some()
-                    && namespace != Some(scxml_types::EVENT_NAMESPACE_URI)
-                    && !(invoke && namespace == Some(scxml_types::ENV_NAMESPACE_URI))
-            })
-            .collect();
-        if !foreign.is_empty() {
-            self.findings.push(foreign_attribute_diagnostic(
-                self.document,
-                element,
-                &foreign,
-            ));
+        let count = element.attributes.len();
+        if scxml_types::exceeds_wasm_bound(count, MAX_NESTED_ITEMS) {
+            self.bound(
+                element.start_tag_span,
+                format!(
+                    "`<{}>` has {count} attributes; the compiler lowers at most {MAX_NESTED_ITEMS} per element",
+                    element.lexical_name
+                ),
+                "remove the attributes the element does not need",
+            );
         }
         for attribute in &element.attributes {
             // The value lowering stores.
             let stored = schema_value(element, attribute).len();
             self.string_bound(attribute.value_span, stored, "attribute value");
         }
-    }
-
-    /// `LIMIT006` for an element in another namespace where lowering takes
-    /// only SCXML children; returns whether `child` is such an element.
-    fn foreign_child(&mut self, parent: &Element, child: &Element) -> bool {
-        let Some(namespace) = child.name.namespace_uri.as_deref() else {
-            return true;
-        };
-        if namespace == SCXML_NAMESPACE {
-            return false;
-        }
-        self.foreign_element(
-            parent,
-            child,
-            namespace,
-            format!(
-                "this compiler lowers only SCXML children of `<{}>`",
-                parent.name.local_name
-            ),
-        );
-        true
-    }
-
-    /// `LIMIT006` for each element in another namespace inside `leaf`
-    /// (`<log>`, `<cancel>`, `<param>`, `<script>`): the schema admits them
-    /// (`##other`), but lowering rejects any child element there.
-    fn no_foreign_children(&mut self, leaf: &Element) {
-        for child in child_elements(leaf) {
-            if let Some(namespace) = child.name.namespace_uri.as_deref()
-                && namespace != SCXML_NAMESPACE
-            {
-                self.foreign_element(
-                    leaf,
-                    child,
-                    namespace,
-                    format!(
-                        "this compiler lowers no child elements of `<{}>`",
-                        leaf.name.local_name
-                    ),
-                );
-            }
-        }
-    }
-
-    fn foreign_element(
-        &mut self,
-        parent: &Element,
-        child: &Element,
-        namespace: &str,
-        parent_label: String,
-    ) {
-        self.findings.push(
-            Diagnostic::error(
-                "LIMIT006",
-                format!(
-                    "this compiler cannot lower `<{}>` from namespace `{namespace}` inside `<{}>`",
-                    child.lexical_name, parent.name.local_name
-                ),
-                child.start_tag_span,
-            )
-            .with_category(DiagnosticCategory::Internal)
-            .with_primary_message("element from another namespace")
-            .with_secondary(Label::new(parent.start_tag_span).with_message(parent_label))
-            .with_note("this is a limit of this toolchain, not an SCXML rule: SCXML 1.0 allows elements from other namespaces in its content models (the W3C schema's `##other` wildcards), but the compiler lowers them only as executable content (custom actions in `<onentry>`, `<onexit>`, `<transition>`, `<finalize>`, `<if>`, or `<foreach>`) and rejects them anywhere else rather than drop them silently")
-            .with_help("to compile the document with this toolchain, move the element into executable content, or remove it")
-            .with_fix(Fix::replace(
-                format!("remove `<{}>`", child.lexical_name),
-                Applicability::MaybeIncorrect,
-                crate::graph::removal_span(self.document, child.span),
-                "",
-            )),
-        );
     }
 
     fn empty_required(&mut self, element: &Element, name: &str) {
@@ -859,7 +766,7 @@ impl<'d> Walk<'d> {
         }
     }
 
-    /// Records one `LIMIT007` finding, at most [`MAX_BOUND_FINDINGS`].
+    /// Records one `LIMIT005` finding, at most [`MAX_BOUND_FINDINGS`].
     fn bound(&mut self, span: Span, message: String, help: &str) {
         if self.bound_findings == MAX_BOUND_FINDINGS {
             return;
@@ -882,13 +789,13 @@ impl<'d> Walk<'d> {
 }
 
 fn bound_diagnostic(span: Span, message: String, help: &str) -> Diagnostic {
-    Diagnostic::error("LIMIT007", message, span)
+    Diagnostic::error("LIMIT005", message, span)
         .with_primary_message("over the Machine IR bound")
         .with_note("Machine IR has fixed bounds so lowering and execution stay bounded (65 nested states, 64 nested `<if>`/`<foreach>`, 10,000 children or list items per element or scope, 1 MiB per string); `compile` rejects a document over them, and they are far above any hand-written machine")
         .with_help(help)
 }
 
-/// `LIMIT007` for more than 10,000 distinct extension namespaces, or a used
+/// `LIMIT005` for more than 10,000 distinct extension namespaces, or a used
 /// namespace URI over 1 MiB (the compiler records each one).
 fn extension_namespace_bounds(document: &Document, report: &mut Report) {
     let used: BTreeSet<String> = document
@@ -1150,82 +1057,4 @@ fn no_state_diagnostic(document: &Document, element: &Element) -> Diagnostic {
         .with_note("a machine starts by entering its initial state, so without a `<state>`, `<parallel>`, or `<final>` child there is nothing to run")
         .with_help("add the machine's states, for example `<final id=\"done\"/>`")
         .with_spec_reference("SCXML 1.0 §3.2 <scxml>")
-}
-
-/// `LIMIT006` for the attributes in another namespace on one SCXML element
-/// (`foreign` is non-empty, in source order): one finding, the first
-/// attribute primary, at most [`MAX_FOREIGN_LABELS`] more labeled.
-fn foreign_attribute_diagnostic(
-    document: &Document,
-    element: &Element,
-    foreign: &[&Attribute],
-) -> Diagnostic {
-    let Some((first, rest)) = foreign.split_first() else {
-        return Diagnostic::error("LIMIT006", "", element.start_tag_span);
-    };
-    // `xml:*` and `xsi:*` attributes carry no SCXML behavior (language,
-    // whitespace, base URI, schema location), so removing them is exact.
-    let infrastructure = foreign.iter().all(|attribute| {
-        matches!(
-            attribute.name.namespace_uri.as_deref(),
-            Some(
-                "http://www.w3.org/XML/1998/namespace"
-                    | "http://www.w3.org/2001/XMLSchema-instance"
-            )
-        )
-    });
-    let local = element.name.local_name.as_str();
-    let mut diagnostic = Diagnostic::error(
-        "LIMIT006",
-        if rest.is_empty() {
-            format!(
-                "this compiler cannot lower attribute `{}` from another namespace on `<{local}>`",
-                first.lexical_name
-            )
-        } else {
-            format!(
-                "this compiler cannot lower {} attributes from other namespaces on `<{local}>`",
-                foreign.len()
-            )
-        },
-        first.span,
-    )
-    .with_category(DiagnosticCategory::Internal)
-    .with_primary_message(format!(
-        "namespace `{}`",
-        first.name.namespace_uri.as_deref().unwrap_or_default()
-    ));
-    for attribute in rest.iter().take(MAX_FOREIGN_LABELS) {
-        diagnostic = diagnostic.with_secondary(Label::new(attribute.span).with_message(format!(
-            "namespace `{}`",
-            attribute.name.namespace_uri.as_deref().unwrap_or_default()
-        )));
-    }
-    diagnostic
-        .with_note("this is a limit of this toolchain, not an SCXML rule: SCXML 1.0 allows attributes from other namespaces on its elements (the W3C schema's `##other` wildcards), but the compiler lowers only SCXML attributes on SCXML elements and rejects any other attribute rather than drop it silently; only custom actions (elements in another namespace) keep their attributes")
-        .with_help(match (infrastructure, rest.is_empty()) {
-            (true, true) => "to compile the document with this toolchain, remove the attribute: `xml:*` and `xsi:*` attributes carry no SCXML behavior",
-            (true, false) => "to compile the document with this toolchain, remove the attributes: `xml:*` and `xsi:*` attributes carry no SCXML behavior",
-            (false, true) => "to compile the document with this toolchain, remove the attribute, or move the extension data into a custom action",
-            (false, false) => "to compile the document with this toolchain, remove the attributes, or move the extension data into a custom action",
-        })
-        .with_fix(Fix {
-            message: if rest.is_empty() {
-                format!("remove `{}`", first.lexical_name)
-            } else {
-                format!("remove the {} attributes", foreign.len())
-            },
-            applicability: if infrastructure {
-                Applicability::MachineApplicable
-            } else {
-                Applicability::MaybeIncorrect
-            },
-            edits: foreign
-                .iter()
-                .map(|attribute| FixEdit {
-                    span: attribute_removal_span(document, attribute),
-                    replacement: String::new(),
-                })
-                .collect(),
-        })
 }

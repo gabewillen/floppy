@@ -83,6 +83,12 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
                 CommandResult::Value(value) => value,
                 CommandResult::Failed => return Ok(()),
             };
+        // XML Base: the URI resolves against the `<invoke>`'s in-scope
+        // base, and the result against the document's own base URI.
+        let reference = reference.map(|reference| match &invoke.xml_base {
+            Some(base) => scxml_types::resolve_reference(base, &reference),
+            None => reference,
+        });
         let (source_name, source) = if let Some(reference) = reference {
             match self
                 .caps

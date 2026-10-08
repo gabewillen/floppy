@@ -37,6 +37,9 @@ pub const RUN_OPTIONS: &[&str] = &[
     "--service-package",
     "--service-component",
     "--service-component-sha256",
+    "--data-model-package",
+    "--data-model-component",
+    "--data-model-component-sha256",
     "--dir",
     "--wasi",
     "--env",
@@ -109,6 +112,8 @@ pub struct RunArgs {
     pub(crate) namespaces: crate::extensions::RunFlags,
     /// Invoked-service packages and their components.
     pub(crate) services: crate::services::ServiceFlags,
+    /// Data-model packages and their components.
+    pub(crate) data_models: crate::datamodels::DataModelFlags,
     /// Store fuel of every host call.
     pub fuel: u64,
     /// Engine-command budget of each call (`u64::MAX`, no budget, unless
@@ -199,8 +204,10 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
         &|flag| match flag {
             "--components" => "DIR",
             "--components-manifest-sha256" => "HEX",
-            "--extension-package" | "--service-package" => "MANIFEST.json",
-            "--extension-component-sha256" | "--service-component-sha256" => "URI=HEX",
+            "--extension-package" | "--service-package" | "--data-model-package" => "MANIFEST.json",
+            "--extension-component-sha256"
+            | "--service-component-sha256"
+            | "--data-model-component-sha256" => "URI=HEX",
             "--dir" => "URI=HOST::GUEST",
             "--wasi" => "URI=inherit-network or URI=allow-ip-name-lookup",
             "--env" => "NAME or NAME=VALUE",
@@ -227,6 +234,7 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
     let mut manifest = None;
     let mut namespaces = crate::extensions::RunFlags::default();
     let mut services = crate::services::ServiceFlags::default();
+    let mut data_models = crate::datamodels::DataModelFlags::default();
     let mut fuel = None;
     let mut max_commands = None;
     let mut session_id = None;
@@ -294,6 +302,9 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
             service if crate::services::ServiceFlags::FLAGS.contains(&service) => {
                 services.accept(service, value)?;
             }
+            data_model if crate::datamodels::DataModelFlags::FLAGS.contains(&data_model) => {
+                data_models.accept(data_model, value)?;
+            }
             namespace => namespaces.accept(namespace, value)?,
         }
     }
@@ -343,6 +354,7 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
         components,
         namespaces,
         services,
+        data_models,
         fuel: fuel.unwrap_or(DEFAULT_FUEL),
         // Without `--max-commands` a call has no command budget: resource
         // limits apply to the Wasm components only, whose own per-call
@@ -2066,6 +2078,13 @@ mod live {
             &args.namespaces.repository,
         )?;
         args.services.check(&services.packages)?;
+        let data_models = crate::datamodels::resolve(
+            &source,
+            loaded.children(),
+            &args.data_models.packages,
+            &args.namespaces.repository,
+        )?;
+        args.data_models.check(&data_models)?;
         let values = args.namespaces.values(&packages.slot_uses)?;
         crate::mask::install(
             &crate::extensions::HeldValue::pairs(&values),
@@ -2076,11 +2095,13 @@ mod live {
             &packages.slot_uses,
             &values,
         ));
+        crate::extensions::write_notes(&data_models.summary());
         crate::extensions::write_notes(&loaded.summary());
         let (ir, data_model) = crate::snapshot::host::compile(
             &args.document,
             &packages.all(),
             &services.packages,
+            data_models.bound(),
             loaded.script_packages(&source)?,
         )?;
         let mut namespaces = Vec::new();
@@ -2146,7 +2167,8 @@ mod live {
         let extensions = crate::snapshot::host::extensions(&args.namespaces, &packages)?;
         let host = host
             .with_extension_components(extensions)?
-            .with_service_components(service_components)?;
+            .with_service_components(service_components)?
+            .with_data_model_components(args.data_models.components(&data_models)?)?;
         let messages = mpsc::channel();
         // A replay reproduces the recorded network without touching it: the
         // recorded public URL, no transport, and no listener.

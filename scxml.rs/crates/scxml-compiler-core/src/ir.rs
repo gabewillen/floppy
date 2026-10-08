@@ -602,6 +602,16 @@ pub struct InvokeIr {
     pub src: Option<String>,
     /// Source expression.
     pub srcexpr: Option<String>,
+    /// The `<invoke>`'s in-scope XML Base (its own or an ancestor's
+    /// `xml:base`, resolved against each enclosing one; a relative one
+    /// stays relative to the document's base URI), when an ancestor-or-self
+    /// has an `xml:base`: when the `<invoke>` starts an SCXML session from
+    /// its `src` or `srcexpr`, the
+    /// machine resolves the URI it loads against it
+    /// ([`scxml_types::resolve_reference`]). Omitted from the encoding when
+    /// absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xml_base: Option<String>,
     /// Literal invoke identifier.
     pub id: Option<String>,
     /// Location receiving a generated invoke identifier.
@@ -2136,6 +2146,7 @@ fn validate_invokes(invokes: &[InvokeIr]) -> Result<(), LowerError> {
             ("invoke typeexpr", invoke.typeexpr.as_deref()),
             ("invoke src", invoke.src.as_deref()),
             ("invoke srcexpr", invoke.srcexpr.as_deref()),
+            ("invoke xml:base", invoke.xml_base.as_deref()),
             ("invoke idlocation", invoke.idlocation.as_deref()),
         ] {
             bounded_optional(field, value)?;

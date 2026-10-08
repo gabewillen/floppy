@@ -20,7 +20,7 @@
     </test>
   </assert>
   <assert id="env-2" specnum="2" specid="#env-2">
-    <![CDATA[Only an invoked service's invoke has slots: an element in the env namespace, or an env attribute on an element in no namespace, on an executable-content extension element, or on the invoke of an SCXML session, is rejected (ENV002), and an env attribute on any other SCXML element is rejected (LIMIT006).]]>
+    <![CDATA[Only an invoked service's invoke has slots: an element in the env namespace, or an env attribute on an element in no namespace, on an executable-content extension element, on the invoke of an SCXML session, or on any other SCXML element, is rejected (ENV002).]]>
     <test id="330" conformance="mandatory" manual="false">
       <start uri="330/test330.txml"/>
       <reject code="ENV002"/>
@@ -31,7 +31,7 @@
     </test>
     <test id="332" conformance="mandatory" manual="false">
       <start uri="332/test332.txml"/>
-      <reject code="LIMIT006"/>
+      <reject code="ENV002"/>
     </test>
     <test id="333" conformance="mandatory" manual="false">
       <start uri="333/test333.txml"/>

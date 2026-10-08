@@ -127,6 +127,8 @@ pub struct RunArgs {
     pub(crate) namespaces: crate::extensions::RunFlags,
     /// Invoked-service packages and their components.
     pub(crate) services: crate::services::ServiceFlags,
+    /// Data-model packages and their components.
+    pub(crate) data_models: crate::datamodels::DataModelFlags,
 }
 
 /// One parsed `snapshot` subcommand.
@@ -182,6 +184,9 @@ pub const RUN_OPTIONS: &[&str] = &[
     "--service-package",
     "--service-component",
     "--service-component-sha256",
+    "--data-model-package",
+    "--data-model-component",
+    "--data-model-component-sha256",
     "--dir",
     "--wasi",
     "--env",
@@ -378,8 +383,10 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
         &|flag| match flag {
             "--components" | "--output-dir" => "DIR",
             "--components-manifest-sha256" => "HEX",
-            "--extension-package" | "--service-package" => "MANIFEST.json",
-            "--extension-component-sha256" | "--service-component-sha256" => "URI=HEX",
+            "--extension-package" | "--service-package" | "--data-model-package" => "MANIFEST.json",
+            "--extension-component-sha256"
+            | "--service-component-sha256"
+            | "--data-model-component-sha256" => "URI=HEX",
             "--dir" => "URI=HOST::GUEST",
             "--wasi" => "URI=inherit-network or URI=allow-ip-name-lookup",
             "--env" => "NAME or NAME=VALUE",
@@ -406,6 +413,7 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
     let mut out_dir = None;
     let mut namespaces = crate::extensions::RunFlags::default();
     let mut services = crate::services::ServiceFlags::default();
+    let mut data_models = crate::datamodels::DataModelFlags::default();
     for (flag, value) in parsed.options {
         let value = value.unwrap_or_default();
         match flag {
@@ -413,6 +421,9 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
             "--components-manifest-sha256" => manifest = Some(value.to_owned()),
             service if crate::services::ServiceFlags::FLAGS.contains(&service) => {
                 services.accept(service, value)?;
+            }
+            data_model if crate::datamodels::DataModelFlags::FLAGS.contains(&data_model) => {
+                data_models.accept(data_model, value)?;
             }
             "--event" => {
                 if value.is_empty() || value.chars().any(char::is_whitespace) {
@@ -472,6 +483,7 @@ fn parse_run(args: &[String]) -> Result<RunArgs, String> {
         output,
         namespaces,
         services,
+        data_models,
     })
 }
 
@@ -760,6 +772,13 @@ fn run(args: &RunArgs) -> Result<(), Box<dyn std::error::Error>> {
         &args.namespaces.repository,
     )?;
     args.services.check(&services.packages)?;
+    let data_models = crate::datamodels::resolve(
+        &source,
+        loaded.children(),
+        &args.data_models.packages,
+        &args.namespaces.repository,
+    )?;
+    args.data_models.check(&data_models)?;
     let values = args.namespaces.values(&packages.slot_uses)?;
     crate::mask::install(
         &crate::extensions::HeldValue::pairs(&values),
@@ -775,9 +794,10 @@ fn run(args: &RunArgs) -> Result<(), Box<dyn std::error::Error>> {
         Some(&args.services),
         None,
     ));
+    crate::extensions::write_notes(&data_models.summary());
     crate::extensions::write_notes(&loaded.summary());
     let scripts = loaded.script_packages(&source)?;
-    let documents = host::run(args, &packages, &services, loaded, scripts)?;
+    let documents = host::run(args, &packages, &services, &data_models, loaded, scripts)?;
     write_documents(&args.output, &documents)
 }
 
@@ -858,6 +878,7 @@ pub(crate) mod host {
         document: &std::path::Path,
         packages: &[crate::extensions::Package],
         services: &[crate::services::ServicePackage],
+        data_models: std::collections::BTreeMap<String, String>,
         scripts: Vec<scxml_compiler_core::ScriptPackage>,
     ) -> Result<(Vec<u8>, Option<String>), Box<dyn std::error::Error>> {
         use scxml_compiler_core::{CompileInput, Compiler, MachineIr, ScriptResolution};
@@ -877,6 +898,7 @@ pub(crate) mod host {
         )
         .with_schema_mode(scxml_validator_core::SchemaMode::default())
         .with_services(crate::services::bound_services(services))
+        .with_data_models(data_models)
         .with_expression_checker(std::sync::Arc::new(crate::expression::EcmaScriptSyntax))
         .with_expression_checker(std::sync::Arc::new(crate::expression::XPathSyntax));
         if let Some(linked) = crate::package_validators::linked(packages, services)? {
@@ -918,6 +940,7 @@ pub(crate) mod host {
         args: &RunArgs,
         packages: &crate::extensions::Packages,
         services: &crate::services::Services,
+        data_models: &crate::datamodels::DataModels,
         mut documents: crate::documents::Documents,
         scripts: Vec<scxml_compiler_core::ScriptPackage>,
     ) -> Result<Vec<CheckpointDocument>, Box<dyn std::error::Error>> {
@@ -927,8 +950,13 @@ pub(crate) mod host {
 
         bind_documents(&mut documents, packages, &args.services, services)?;
 
-        let (ir_bytes, data_model) =
-            compile(&args.document, &packages.all(), &services.packages, scripts)?;
+        let (ir_bytes, data_model) = compile(
+            &args.document,
+            &packages.all(),
+            &services.packages,
+            data_models.bound(),
+            scripts,
+        )?;
         let host = args
             .components
             .session_host(scxml_host_wasmtime::DEFAULT_FUEL)?;
@@ -937,7 +965,8 @@ pub(crate) mod host {
         let extensions = extensions(&args.namespaces, packages)?;
         let host = host
             .with_extension_components(extensions)?
-            .with_service_components(services)?;
+            .with_service_components(services)?
+            .with_data_model_components(args.data_models.components(data_models)?)?;
         // `Final` snapshots every checkpoint and keeps the last document;
         // the run itself is identical either way.
         let points = match &args.points {
@@ -1151,6 +1180,7 @@ pub(crate) mod host {
         _args: &RunArgs,
         _packages: &crate::extensions::Packages,
         _services: &crate::services::Services,
+        _data_models: &crate::datamodels::DataModels,
         _documents: crate::documents::Documents,
         _scripts: Vec<scxml_compiler_core::ScriptPackage>,
     ) -> Result<Vec<CheckpointDocument>, Box<dyn std::error::Error>> {

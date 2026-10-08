@@ -72,7 +72,7 @@ fn known_ids_variables_and_other_calls_are_not_reported() {
     // The null data model's `In(id)` form takes the ID unquoted.
     let (_, found) = findings(Some("null"), "In(done)");
     assert!(found.is_empty(), "{found:#?}");
-    // An unrecognized data model is LIMIT005's; nothing is claimed.
+    // An unrecognized data model is PKG005's; nothing is claimed.
     let (_, found) = findings(Some("lua"), "In('nope')");
     assert!(found.is_empty(), "{found:#?}");
 }

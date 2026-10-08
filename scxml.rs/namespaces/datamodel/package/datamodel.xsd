@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML Schema of the host's `datamodel` attribute vocabulary
+  (namespaces/datamodel).
+
+  The namespace has no elements: it is an attribute vocabulary only, never
+  fetched, with no component and no release asset. `datamodel:src` on
+  <scxml> names the package of the data model the core `datamodel` token
+  names: a repository data model,
+  https://github.com/<owner>/<repo>/datamodels/<name>, optionally followed
+  by one @<tag>, or the URI a given data-model package binds. The validator
+  checks it (DATAMODEL001, DATAMODEL002, PKG005). This file documents the
+  vocabulary for readers and tools that resolve a namespace to a schema; the
+  validator does not load it.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://github.com/stateforward/scxml.rs/namespaces/datamodel"
+           elementFormDefault="qualified">
+  <xs:attribute name="src" type="xs:anyURI"/>
+</xs:schema>

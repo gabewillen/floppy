@@ -67,8 +67,8 @@ and bind these digests:
 | --- | --- | --- |
 | corpus digest | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` |
 | errata SHA-256 | `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f` | `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a` |
-| producer report digest | `21423463af3896b33650ad06a2d34bbfbced051b80f8ecb375aba1eb91d593b9` | `a68e123338dbc2281c9f965ffdcbf2d8e192a707665765bcfe17a78da1e64af1` |
-| canonical artifact SHA-256 | `8a3bddb7d9cb81526de2f2752495d79c0bdb614f335a1951fc91c24b83845409` | `998bd148fc9338702b7a70db7f1b7871e47d0d326f54a494a70d599c85bbad71` |
+| producer report digest | `cb20e4887fd0fc1ce2f9c1f494ef6403ecc2c3968945cf69e6efe233babbc13f` | `6c5ee18542b5f49c16f36b43d17f356a744722380ce44411c7e40ab41a2254d0` |
+| canonical artifact SHA-256 | `85781edf96997b33c51da97e413dfec54a9d5b086a3fdc2aba24d188d1a0bba6` | `c943f27d655c5995ef6ab453c1f532c20e688afd5f9164f89d0a57342fde09df` |
 
 Each repository namespace also has its own implementation report plan in
 the same format, run through the same pipeline and reported separately
@@ -287,8 +287,10 @@ Workspace version `0.2.0` ships the `@0.2.0` WIT packages, Machine IR `5`,
 `scxml.session-snapshot/v2` (diff `scxml.session-snapshot-diff/v2`),
 delayed-send wire record `8`, the `scxml.live-log/v1` live-session log, the
 `stateforward.scxml.extension-package/v2` extension package manifest, and the
-`stateforward.scxml.extension-cache/v1` extension cache index entry, and the
-`stateforward.scxml.service-cache/v1` service cache index entry. Every
+`stateforward.scxml.extension-cache/v1` extension cache index entry, the
+`stateforward.scxml.service-cache/v1` service cache index entry, the
+`stateforward.scxml.data-model-package/v1` data-model package manifest, and
+the `stateforward.scxml.data-model-cache/v1` data-model cache index entry. Every
 contract whose shape changed since `v0.1.0` has a new version:
 
 | Contract | `0.1.0` | `0.2.0` |
@@ -307,6 +309,8 @@ contract whose shape changed since `v0.1.0` has a new version:
 | Extension package manifest | none | `stateforward.scxml.extension-package/v2` |
 | Extension cache index entry | none | `stateforward.scxml.extension-cache/v1` |
 | Service cache index entry | none | `stateforward.scxml.service-cache/v1` |
+| Data-model package manifest | none | `stateforward.scxml.data-model-package/v1` |
+| Data-model cache index entry | none | `stateforward.scxml.data-model-cache/v1` |
 | Rust crates and the browser package | `0.1.0` | `0.2.0` |
 
 A released version never changes in place. Because the project is pre-1.0,
@@ -366,6 +370,16 @@ The full list, with evidence, is in
 - The minimal proof hosts answer `raise`, `send`, `cancel`, and extension
   calls with `unavailable` (the machine's own `<raise>` is engine-internal);
   the Wasmtime session host, which the CLI uses, implements them.
+- Data-model packages run under the Wasmtime session host (every session
+  whose `datamodel` names a bound package) and, in the browser host, only as
+  the root session's page-supplied provider of a component the package
+  ships transpiled; the browser host resolves no package at run time, and an
+  invoked child there whose `datamodel` names a package gets no data model.
+  `scx validate` does not link a package's checker, so its expressions get
+  the `LINT010` note.
+- `xml:base` is resolved within one document: an inline `<content>`
+  machine starts from its own root, not from the bases of the elements
+  around it.
 - The browser host loads URLs only through the page (its allowlisted
   `resources` option or `loadDocument`; a runtime `srcexpr` URL through
   `resources` only in a cross-origin-isolated `async: 'auto'` worker

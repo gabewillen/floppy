@@ -874,6 +874,18 @@ The smoke test replays every recorded call of the shared fixture through the
 component and runs the whole representative session on it. Pages may still
 supply their own provider with the contract above.
 
+A data-model package (`<scxml datamodel="NAME" datamodel:src="URI">`,
+[namespaces/datamodel](../../namespaces/datamodel/README.md)) runs here as
+extension components do: only from a component this package ships
+transpiled and fuel-metered at build time. The page passes the provider of
+that component as `dataModel` (the example `datamodels/example`
+repackages the null data model, so `createNullDataModel()` runs it); the
+host resolves no package at run time, and an invoked child whose
+`datamodel` names a package gets no data model of its own (only the bundled
+`ecmascript`, `null`, and `xpath` are instantiated for children). Run-time
+package resolution stays with the CLI and the Wasmtime host
+(`SessionHost::with_data_model_components`).
+
 ### Fuel
 
 Browsers expose no Wasm fuel, epoch interruption, or deadline, and Boa's

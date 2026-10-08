@@ -65,7 +65,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt;
 
 use scxml_telemetry::{ErrorCategory, Module, Operation, SignalEvent, observe};
@@ -555,12 +555,18 @@ fn resolve_script_packages(
 ) -> Result<BTreeMap<String, ScriptPin>, Vec<Diagnostic>> {
     let root = document.root.start_tag_span;
     let mut sites = Vec::new();
-    document.root.visit(&mut |element| {
+    document.root.visit_with_base(&mut |element, xml_base| {
         if element.name.is(Some(SCXML_NAMESPACE), "script")
             && let Some(src) = element.attribute("src")
         {
+            // The URI lowering records: resolved against the in-scope XML
+            // Base.
+            let uri = scxml_syntax::collapse_whitespace(&src.value);
             sites.push((
-                scxml_syntax::collapse_whitespace(&src.value).into_owned(),
+                match xml_base {
+                    Some(base) => scxml_types::resolve_reference(base, &uri),
+                    None => uri.into_owned(),
+                },
                 src.value_span,
             ));
         }
@@ -863,16 +869,7 @@ fn verify_extension_packages(
             .into());
     }
 
-    let used_extension_namespaces = document
-        .used_namespaces()
-        .into_iter()
-        .filter(|namespace| {
-            namespace != SCXML_NAMESPACE
-                && namespace != XML_NAMESPACE
-                && namespace != scxml_types::ENV_NAMESPACE_URI
-                && namespace != scxml_types::EVENT_NAMESPACE_URI
-        })
-        .collect::<BTreeSet<_>>();
+    let used_extension_namespaces = scxml_validator_core::extension_namespaces(document);
     let mut linked_extension_components = used_extension_namespaces
         .iter()
         .map(|namespace| {

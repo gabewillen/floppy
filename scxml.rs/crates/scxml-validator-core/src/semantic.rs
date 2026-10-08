@@ -63,7 +63,7 @@ pub fn validate_semantics(document: &Document) -> Report {
     // the schema value of every SCXML attribute it bounds or compares.
     let source = document;
     let document = &*crate::schema_values::schema_values(document);
-    let rules: [&dyn Rule; 23] = [
+    let rules: [&dyn Rule; 22] = [
         &RootRule,
         &IdRule,
         &NameBoundRule,
@@ -81,7 +81,6 @@ pub fn validate_semantics(document: &Document) -> Report {
         &LivenessRule,
         &crate::graph::GraphRule,
         &crate::datamodel_check::NullDataModelRule,
-        &crate::datamodel_check::DataModelDeclarationRule,
         &crate::datamodel_check::InPredicateRule,
         &crate::datamodel_check::EcmaScriptDataIdRule,
         &crate::datamodel_check::ReservedDataIdRule,
@@ -329,7 +328,7 @@ fn is_state_element(element: &Element) -> bool {
         .any(|name| is_scxml(element, name))
 }
 
-/// `LIMIT008`: a state ID longer than the 1024-byte name bound. Every
+/// `LIMIT006`: a state ID longer than the 1024-byte name bound. Every
 /// build names the active states by these IDs (the configuration a step
 /// reports, a snapshot, `In()`), and a name over the bound has no
 /// representation, so the processor could never report the state once it
@@ -339,7 +338,7 @@ fn state_id_bound_diagnostic(id: &Attribute) -> Diagnostic {
     let preview = name_preview(&id.value);
     let bytes = id.value.len();
     Diagnostic::error(
-        "LIMIT008",
+        "LIMIT006",
         format!(
             "state ID `{preview}…` is {} bytes, more than the {} a state name may have",
             thousands(bytes),
@@ -408,13 +407,13 @@ fn name_preview(value: &str) -> String {
     value.chars().take(24).collect()
 }
 
-/// `LIMIT008`: a state that can complete whose ID leaves too little room
+/// `LIMIT006`: a state that can complete whose ID leaves too little room
 /// in the 1024-byte name bound for the `done.state.<ID>` event it raises.
 fn done_state_bound_diagnostic(id: &Attribute) -> Diagnostic {
     let bytes = id.value.len();
     let event_bytes = DONE_STATE_PREFIX.len().saturating_add(bytes);
     Diagnostic::error(
-        "LIMIT008",
+        "LIMIT006",
         format!(
             "state ID `{}…` is {} bytes, so the `done.state.` event it raises is {} bytes, more than the {} an event name may have",
             name_preview(&id.value),
@@ -440,7 +439,7 @@ fn done_state_bound_diagnostic(id: &Attribute) -> Diagnostic {
     .with_spec_reference("SCXML 1.0 §3.7 <final>")
 }
 
-/// `LIMIT009`: an event name, `<send>` ID, or `<invoke>` ID written in the
+/// `LIMIT007`: an event name, `<send>` ID, or `<invoke>` ID written in the
 /// document that the 1024-byte name bound cannot hold, or an `<invoke>` ID
 /// that leaves too little room for its `done.invoke.<ID>` event. Every
 /// build bounds these names (the processor's interface), so the element
@@ -450,7 +449,7 @@ struct NameBoundRule;
 
 impl Rule for NameBoundRule {
     fn code(&self) -> &'static str {
-        "LIMIT009"
+        "LIMIT007"
     }
 
     fn check(&self, document: &Document, report: &mut Report) {
@@ -484,7 +483,7 @@ impl Rule for NameBoundRule {
     }
 }
 
-/// `LIMIT009` for the literal `attribute` of `<element>` over the bound.
+/// `LIMIT007` for the literal `attribute` of `<element>` over the bound.
 fn literal_name_bound_diagnostic(
     element: &str,
     attribute: &str,
@@ -499,7 +498,7 @@ fn literal_name_bound_diagnostic(
         "ID"
     };
     Diagnostic::error(
-        "LIMIT009",
+        "LIMIT007",
         format!(
             "`<{element}>` {label} `{}…` is {} bytes, more than the {} {kind} may have",
             name_preview(&value.value),
@@ -520,13 +519,13 @@ fn literal_name_bound_diagnostic(
     .with_spec_reference(spec)
 }
 
-/// `LIMIT009` for an `<invoke>` ID that fits the bound but whose
+/// `LIMIT007` for an `<invoke>` ID that fits the bound but whose
 /// `done.invoke.<ID>` event does not.
 fn done_invoke_bound_diagnostic(id: &Attribute) -> Diagnostic {
     let bytes = id.value.len();
     let event_bytes = DONE_INVOKE_PREFIX.len().saturating_add(bytes);
     Diagnostic::error(
-        "LIMIT009",
+        "LIMIT007",
         format!(
             "`<invoke>` ID `{}…` is {} bytes, so the `done.invoke.` event it raises is {} bytes, more than the {} an event name may have",
             name_preview(&id.value),
@@ -3768,7 +3767,7 @@ mod tests {
             ))
             .diagnostics()
             .iter()
-            .filter(|diagnostic| diagnostic.code == "LIMIT008")
+            .filter(|diagnostic| diagnostic.code == "LIMIT006")
             .map(|diagnostic| diagnostic.message.clone())
             .collect::<Vec<_>>()
         };
@@ -3792,7 +3791,7 @@ mod tests {
             !report
                 .diagnostics()
                 .iter()
-                .any(|diagnostic| diagnostic.code == "LIMIT008")
+                .any(|diagnostic| diagnostic.code == "LIMIT006")
         );
     }
 
@@ -3819,9 +3818,9 @@ mod tests {
                 r#"<scxml xmlns="{SCXML_NAMESPACE}" initial="{id}"><state id="{id}"><final id="f"/></state></scxml>"#
             )
         };
-        assert!(messages(&compound(&fits), "LIMIT008").is_empty());
+        assert!(messages(&compound(&fits), "LIMIT006").is_empty());
         assert_eq!(
-            messages(&compound(&over), "LIMIT008"),
+            messages(&compound(&over), "LIMIT006"),
             [
                 "state ID `sxxxxxxxxxxxxxxxxxxxxxxx…` is 1,014 bytes, so the `done.state.` event it raises is 1,025 bytes, more than the 1,024 an event name may have"
             ]
@@ -3835,31 +3834,31 @@ mod tests {
         assert_eq!(
             messages(
                 &parallel(&over, r#"<state id="b"><final id="bf"/></state>"#),
-                "LIMIT008"
+                "LIMIT006"
             )
             .len(),
             1
         );
         // A state that can never complete raises no done event.
         assert!(
-            messages(&parallel(&over, r#"<state id="b"/>"#), "LIMIT008").is_empty(),
+            messages(&parallel(&over, r#"<state id="b"/>"#), "LIMIT006").is_empty(),
             "a parallel with an atomic region never completes"
         );
         let atomic = format!(
             r#"<scxml xmlns="{SCXML_NAMESPACE}" initial="{over}"><state id="{over}"/></scxml>"#
         );
-        assert!(messages(&atomic, "LIMIT008").is_empty());
+        assert!(messages(&atomic, "LIMIT006").is_empty());
         let nested = format!(
             r#"<scxml xmlns="{SCXML_NAMESPACE}" initial="{over}"><state id="{over}"><state id="inner"/></state></scxml>"#
         );
         assert!(
-            messages(&nested, "LIMIT008").is_empty(),
+            messages(&nested, "LIMIT006").is_empty(),
             "a compound state without a <final> child never completes"
         );
     }
 
     /// An event name, `<send>` ID, or `<invoke>` ID the document writes
-    /// literally is at most 1,024 bytes on every build (LIMIT009); an
+    /// literally is at most 1,024 bytes on every build (LIMIT007); an
     /// `<invoke>` ID must also leave room for the `done.invoke.` (12 bytes)
     /// event it raises (SCXML 1.0 §6.4).
     #[test]
@@ -3899,13 +3898,13 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                messages(&document(&template.replace("NAME", &over)), "LIMIT009"),
+                messages(&document(&template.replace("NAME", &over)), "LIMIT007"),
                 [message],
                 "{template}"
             );
             if !template.starts_with("<invoke") {
                 assert!(
-                    messages(&document(&template.replace("NAME", &at_bound)), "LIMIT009")
+                    messages(&document(&template.replace("NAME", &at_bound)), "LIMIT007")
                         .is_empty(),
                     "{template} at the bound"
                 );
@@ -3915,9 +3914,9 @@ mod tests {
         let fits = format!("i{}", "x".repeat(1_011));
         let done_over = format!("{fits}x");
         assert_eq!((fits.len(), done_over.len()), (1_012, 1_013));
-        assert!(messages(&invoke(&fits), "LIMIT009").is_empty());
+        assert!(messages(&invoke(&fits), "LIMIT007").is_empty());
         assert_eq!(
-            messages(&invoke(&done_over), "LIMIT009"),
+            messages(&invoke(&done_over), "LIMIT007"),
             [
                 "`<invoke>` ID `ixxxxxxxxxxxxxxxxxxxxxxx…` is 1,013 bytes, so the `done.invoke.` event it raises is 1,025 bytes, more than the 1,024 an event name may have"
             ]
