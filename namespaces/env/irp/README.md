@@ -52,15 +52,15 @@ scx conformance run --corpus namespaces/env/irp/prepared/xpath \
 ```
 
 The `generate_irp_baselines` example regenerates the baselines with every
-other suite's. The current baselines (manifest SHA-256 `a8408d22f1378bc67f4e2c357d8a68f49fcbeb9581396c0c81f43a62e60b9163`,
+other suite's. The current baselines (manifest SHA-256 `6a84d3fd35c2f15d10030b4a8ebf2562d1f843b742fd524f1ab415d224292d02`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 the canonical release of docs/conformance.md, empty filter identity) measure:
 
 | Data model | Passed / Applicable | Rejections | Not Passing | Corpus digest | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | --- | --- | --- |
-| ECMAScript | 8 / 8 | 8 | 0 | `ef457c292b3c0bf9f27ed6e2072574876ccadc9636448bcd78c209099c064679` | `1687ceb31dbdce3c9a55c710714b1305b58d9cbae2e5c9b686445ef37b69b3ac` | `901cc9eb7c4741a1a5acebdaf064dd61548254a0165a81c013e2f7e65dc85a6b` |
-| XPath | 8 / 8 | 8 | 0 | `9a0faf705e1b5a9d0135b926a2bc042d2c561f43242a0200456c919378094b33` | `54e7be46bc518f6206b6e237b866f0ffdd72722988a4742b5370d3f9e03bbf46` | `36d8d40cd043f73bbac3a5189a685092b95b369c2f8081d3e64f655deda80f89` |
+| ECMAScript | 8 / 8 | 8 | 0 | `915e73792e350c4840d1757bca1f29121f91053f606d96834cfef4791cfa90a9` | `e54a21a8b1109a87bc7a687a2e6ee7801c053ed75e06017b96e39e8bbd45f08c` | `a89e1d8ae8ef0ac558cf18a81ac767b311837d49deabb6ba2f420514fe15885c` |
+| XPath | 8 / 8 | 8 | 0 | `536c72c62e8d7932706eb974c7134bb5082443807c283103f8381f04b906d267` | `f6ac4665efa9771a23d11665c50e215252a3fe4342e6055c6024e465451f1fb0` | `ff1bf042a3efeb5d9dc3222c2f434e849031e4f901863f9fe61516203131bcf2` |
 
-The report identity lists the bound package: `https://stateforward.org/scxml/example` version `0.2.0`, manifest SHA-256 `9e7a178076fc07942946095c44acde1433c9878b4f2a23c3569aa9c6205d03b9`, schema SHA-256 `45074422d68df4d82aa82e7b0dec09183871c58e59566033fdeaaeb4576b28b3`, component SHA-256 `e3bb851bc5d94f0fedb17e874edb6c0a84ae8771bd413387a40f9cc61a3ecdd1`. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
+The report identity lists the bound package: `https://stateforward.org/scxml/example` version `0.2.0`, manifest SHA-256 `9e7a178076fc07942946095c44acde1433c9878b4f2a23c3569aa9c6205d03b9`, schema SHA-256 `45074422d68df4d82aa82e7b0dec09183871c58e59566033fdeaaeb4576b28b3`, component SHA-256 `d0d50e16339a5aed0309323b2233bd7f8b9ecf784f79e1736cc842bf53b845dc`. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
 the suite and its baselines statically, and `irp_components.rs` reproduces
 both baselines through the components byte for byte.

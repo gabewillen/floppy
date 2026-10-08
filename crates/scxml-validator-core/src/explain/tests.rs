@@ -10,6 +10,14 @@ const PRODUCER_SOURCES: &[(&str, &str)] = &[
     ("validator-core/semantic.rs", include_str!("../semantic.rs")),
     ("validator-core/graph.rs", include_str!("../graph.rs")),
     (
+        "validator-core/datamodel_attributes.rs",
+        include_str!("../datamodel_attributes.rs"),
+    ),
+    (
+        "validator-core/foreign_namespaces.rs",
+        include_str!("../foreign_namespaces.rs"),
+    ),
+    (
         "validator-core/datamodel_check.rs",
         include_str!("../datamodel_check.rs"),
     ),
@@ -83,7 +91,16 @@ const PRODUCER_SOURCES: &[(&str, &str)] = &[
 fn codes_in(text: &str) -> BTreeSet<String> {
     let mut codes = BTreeSet::new();
     for prefix in [
-        "\"SCXML", "\"XML", "\"XSD", "\"COMP", "\"PKG", "\"ENV", "\"EVENT", "\"LINT", "\"LIMIT",
+        "\"SCXML",
+        "\"XML",
+        "\"XSD",
+        "\"COMP",
+        "\"PKG",
+        "\"ENV",
+        "\"EVENT",
+        "\"DATAMODEL",
+        "\"LINT",
+        "\"LIMIT",
     ] {
         for (offset, _) in text.match_indices(prefix) {
             let rest = &text[offset + 1..];

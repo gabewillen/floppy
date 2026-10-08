@@ -9,9 +9,10 @@
 //!   an explicit [`ExpressionSyntaxChecker`] capability whose
 //!   [`ExpressionSyntaxChecker::data_model`] equals the machine root's
 //!   `datamodel` attribute exactly. The validator never guesses expression
-//!   syntax, and it never skips expressions silently: an unrecognized
-//!   `datamodel` value is an `LIMIT005` error, and a machine using a
-//!   recognized non-null data model gets an `LINT010` note when no checker
+//!   syntax, and it never skips expressions silently: a data model that is
+//!   neither built in nor named by a `datamodel:src` is the `PKG005` error
+//!   (`crate::datamodel_attributes`), and a machine using a built-in
+//!   non-null data model or a package's gets an `LINT010` note when no checker
 //!   for that data model is linked (another data model's checker, or none).
 //!   A machine without `datamodel` uses [`DEFAULT_DATA_MODEL`] (SCXML 1.0
 //!   §3.2.1: the attribute's default is "platform-specific"; §3.2.2:
@@ -36,7 +37,7 @@ use scxml_syntax::{Attribute, Document, Element, Node, Span, is_xml_space, xml_t
 use scxml_types::wasm_bound;
 
 use crate::graph::{attribute_removal_span, removal_span};
-use crate::semantic::{Rule, is_scxml, machine_roots, nearest, visit_machine};
+use crate::semantic::{Rule, is_scxml, machine_roots, visit_machine};
 use crate::{Applicability, Diagnostic, Fix, FixEdit, Label, Report, SCXML_NAMESPACE};
 
 /// Maximum expression fragments sent to a checker per document (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
@@ -455,54 +456,6 @@ impl Site<'_> {
 // ---------------------------------------------------------------------------
 // Data-model declaration (always on)
 // ---------------------------------------------------------------------------
-
-/// LIMIT005 (unrecognized `datamodel`).
-pub(crate) struct DataModelDeclarationRule;
-
-impl Rule for DataModelDeclarationRule {
-    fn code(&self) -> &'static str {
-        "LIMIT005"
-    }
-
-    fn check(&self, document: &Document, report: &mut Report) {
-        for machine in machine_roots(&document.root) {
-            if let Some(datamodel) = machine.attribute("datamodel")
-                && !KNOWN_DATA_MODELS.contains(&datamodel.value.as_str())
-            {
-                report.push(unknown_data_model_diagnostic(self.code(), datamodel));
-            }
-        }
-    }
-}
-
-fn unknown_data_model_diagnostic(code: &str, datamodel: &Attribute) -> Diagnostic {
-    let suggestion = KNOWN_DATA_MODELS
-        .iter()
-        .copied()
-        .find(|known| known.eq_ignore_ascii_case(&datamodel.value))
-        .or_else(|| nearest(&datamodel.value, KNOWN_DATA_MODELS.iter().copied()));
-    let diagnostic = Diagnostic::error(
-        code,
-        format!("unknown data model `{}`", datamodel.value),
-        datamodel.value_span,
-    )
-    .with_primary_message("not a data model this validator recognizes")
-    .with_note("SCXML 1.0 §5.1 defines the `ecmascript`, `null`, and `xpath` data models; an unrecognized data model fails closed because none of this machine's expressions can be evaluated or syntax-checked")
-    .with_spec_reference(SPEC_DATAMODEL);
-    match suggestion {
-        Some(suggestion) => diagnostic
-            .with_help(format!("did you mean `{suggestion}`?"))
-            .with_fix(Fix::replace(
-                format!("use the `{suggestion}` data model"),
-                Applicability::MaybeIncorrect,
-                datamodel.value_span,
-                suggestion,
-            )),
-        None => diagnostic.with_help(
-            "use `ecmascript` for JavaScript expressions, or `null` for a machine without data",
-        ),
-    }
-}
 
 fn unchecked_data_model_note(
     datamodel: &str,
@@ -948,8 +901,7 @@ pub fn validate_expressions_with(
             .iter()
             .find(|checker| checker.data_model() == datamodel)
         else {
-            if datamodel != "null"
-                && KNOWN_DATA_MODELS.contains(&datamodel)
+            if has_expression_syntax(machine, datamodel)
                 && let Some(first) = collect_sites(document, machine).first()
             {
                 let linked = checkers
@@ -1095,6 +1047,14 @@ fn valid_fragment_lints(
     findings
 }
 
+/// Whether `machine`'s data model `datamodel` has expressions a checker
+/// could check: a built-in one other than null, or a package's.
+fn has_expression_syntax(machine: &Element, datamodel: &str) -> bool {
+    datamodel != "null"
+        && (KNOWN_DATA_MODELS.contains(&datamodel)
+            || crate::datamodel_attributes::package_source(machine).is_some())
+}
+
 /// Reports, for a validator run with no expression checker linked, every
 /// machine whose recognized non-null data model has expressions: they were
 /// not syntax-checked, and the report must say so rather than stay silent.
@@ -1104,8 +1064,7 @@ pub fn report_unchecked_expressions(document: &Document) -> Report {
     let mut report = Report::new();
     for machine in machine_roots(&document.root) {
         let (datamodel, span) = machine_data_model(machine);
-        if datamodel != "null"
-            && KNOWN_DATA_MODELS.contains(&datamodel)
+        if has_expression_syntax(machine, datamodel)
             && let Some(first) = collect_sites(document, machine).first()
         {
             report.push(unchecked_data_model_note(datamodel, span, None, first));

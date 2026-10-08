@@ -1,0 +1,32 @@
+warning[LINT022]: element `<ed:layout>` in an unbound namespace has no effect
+ --> tests/ui/lint022-editor-metadata.scx:2:4
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ed="urn:example:editor" version="1.0" initial="a" xml:lang="en">
+  |  ----- not executable content: `<scxml>` runs no custom action
+2 |   <ed:layout width="640" height="480"/>
+  |    ^^^^^^^^^ namespace `urn:example:editor`
+  |
+  = note: SCXML 1.0 allows attributes and elements from other namespaces on and in its elements (the W3C schema's `##other` wildcards), and the processor executes none of them: only a package that binds the namespace (its schema and validator) reads them, and no extension package or registered schema binds this one
+  = help: bind the namespace's package (`--extension-package MANIFEST.json`) or register its schema (`--schema URI=PATH`), or remove the element if it is a leftover
+help: remove `<ed:layout>`
+  |
+2 -   <ed:layout width="640" height="480"/>
+
+warning[LINT022]: 2 attributes in unbound namespaces on `<state>` have no effect
+ --> tests/ui/lint022-editor-metadata.scx:3:17
+  |
+3 |   <state id="a" ed:x="10" ed:y="20">
+  |                 ^^^^^^^^^ --------- namespace `urn:example:editor`
+  |                 |
+  |                 namespace `urn:example:editor`
+  |
+  = note: SCXML 1.0 allows attributes and elements from other namespaces on and in its elements (the W3C schema's `##other` wildcards), and the processor executes none of them: only a package that binds the namespace (its schema and validator) reads them, and no extension package or registered schema binds this one
+  = help: bind the namespace's package (`--extension-package MANIFEST.json`) or register its schema (`--schema URI=PATH`), or remove the attribute if it is a leftover
+help: remove the 2 attributes
+  |
+3 -   <state id="a" ed:x="10" ed:y="20">
+3 +   <state id="a">
+
+diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
+For more information about this diagnostic, try `scx --explain LINT022`.
+validated tests/ui/lint022-editor-metadata.scx

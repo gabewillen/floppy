@@ -26,9 +26,12 @@ hard cutover.
   `scxml.session-snapshot-diff/v2`, the delayed-send wire record is `8`,
   and the prepared corpus manifest is `6`. The live-session log
   (`scxml.live-log/v1`) and the extension package manifest
-  (`stateforward.scxml.extension-package/v2`) and the extension and service
-  cache index entries (`stateforward.scxml.extension-cache/v1`,
-  `stateforward.scxml.service-cache/v1`) are new. The README's
+  (`stateforward.scxml.extension-package/v2`), the data-model package
+  manifest (`stateforward.scxml.data-model-package/v1`), and the extension,
+  service, and data-model cache index entries
+  (`stateforward.scxml.extension-cache/v1`,
+  `stateforward.scxml.service-cache/v1`,
+  `stateforward.scxml.data-model-cache/v1`) are new. The README's
   versioning table lists each contract at `0.1.0` and `0.2.0`.
 - Invoked sessions run at any depth on one shared logical clock, and
   live sessions (`scx run`, `SessionHost::open`) take events as they
@@ -59,6 +62,41 @@ hard cutover.
 
 ### Added
 
+- Data-model packages: a data model other than the built-in `ecmascript`,
+  `null`, and `xpath` is a package. The new built-in `datamodel` attribute
+  vocabulary (`https://github.com/stateforward/scxml.rs/namespaces/datamodel`,
+  `scxml_types::DATAMODEL_NAMESPACE_URI`, never fetched) defines one
+  attribute, `<scxml datamodel:src>`, the package's URI, while the core
+  `datamodel` stays the schema's `NMTOKEN` and must be the name the package
+  declares. A package is a `stateforward.scxml.data-model-package/v1`
+  manifest (`data-model-uri`, `datamodel`, `package-version`,
+  `data-model-artifact`, `wit-world` `stateforward:scxml/data-model`,
+  `wit-version`; `scxml_validator_core::DataModelPackageManifest`) bound by
+  `--data-model-package` (`validate`, `compile`, `snapshot run`, `run`;
+  `--data-model-component` and `--data-model-component-sha256` for the
+  runs), or a repository data model
+  `https://github.com/<owner>/<repo>/datamodels/<name>[@<tag>]` resolved,
+  pinned, cached (`stateforward.scxml.data-model-cache/v1`), and
+  digest-verified like a repository service, the `@<tag>` split off at
+  parsing. The Wasmtime host binds its component by name
+  (`DataModelComponents`, `SessionHost::with_data_model_components`,
+  `authenticate_data_model_component`, `ArtifactKind::DataModelComponent`),
+  and `ComponentValidator` links it as the `expression-syntax` checker.
+  `datamodels/example` is the example: the null data model's
+  component repackaged as `example`. New codes: `DATAMODEL001` (the
+  vocabulary anywhere but `<scxml>`'s `datamodel:src`), `DATAMODEL002` (a
+  `datamodel` token that is not the package's name), and `PKG005` (a data
+  model neither built in nor available from a package).
+- XML Base: `xml:base` governs the `<invoke src>`/`srcexpr`, `<data src>`,
+  and `<script src>` URIs in its scope (`scxml_types::resolve_reference`,
+  `Element::visit_with_base`): lowering resolves a `<data>` or `<script>`
+  `src` against it, and Machine IR records an `<invoke>`'s in-scope base
+  (`InvokeIr::xml_base`), against which the machine resolves the document
+  it loads, in both hosts.
+- `LINT022` (warning): an attribute or element in another namespace that no
+  package or registered schema binds has no effect (maybe-incorrect
+  removal). Attributes in a package's namespace on SCXML elements are that
+  package's to check: their elements are its package validator's targets.
 - Package validators: an extension or service package manifest may name a
   package validator component (`validator-artifact`, `validator-sha256`;
   the WIT world `stateforward:scxml-validator/package-validator`, which
@@ -385,11 +423,11 @@ hard cutover.
   `error.execution`); `LINT021` (a `<parallel>` with no regions), `SCXML079`
   (an expression under the null data model, which raises `error.execution`),
   and `SCXML080` (a target set that pairs a history with a state it
-  restores), `LIMIT008` (an error on every build: a state ID longer than
+  restores), `LIMIT006` (an error on every build: a state ID longer than
   the 1,024-byte name bound, which no configuration could report; such a
   document compiled and then failed at run time with a broken invariant; or
   the ID of a state that can complete, longer than 1,013 bytes, whose
-  `done.state.<ID>` event exceeds the bound), and `LIMIT009` (an error on
+  `done.state.<ID>` event exceeds the bound), and `LIMIT007` (an error on
   every build: a literal `<raise event>`, `<send event>`, `<send id>`, or
   `<invoke id>` longer than the bound, or an `<invoke id>` longer than
   1,012 bytes, whose `done.invoke.<ID>` event exceeds it; such a document
@@ -526,6 +564,18 @@ hard cutover.
 
 ### Changed
 
+- Attributes and elements from other namespaces are accepted on and in
+  SCXML elements, as SCXML 1.0 and its schema allow, instead of rejected
+  (`LIMIT006` is removed): `xml:*` and `xsi:*` attributes silently, any
+  other foreign markup outside executable content as metadata its
+  namespace's package checks (or `LINT022`); lowering keeps none of it, and
+  only custom actions make a namespace an extension namespace that needs a
+  package. An `env` attribute on an SCXML element other than an invoked
+  service's `<invoke>` is `ENV002`.
+- An unknown `datamodel` is `PKG005` (it was `LIMIT005`), so `LIMIT` codes
+  are only this implementation's bounds: the Machine IR bound is
+  `LIMIT005`, the state ID bound `LIMIT006`, and the event-name and ID
+  bound `LIMIT007` (they were `LIMIT007`-`LIMIT009`).
 - Repository packages are resolved by a Wasm component (hard cutover):
   `scx` embeds the GitHub resolver component
   (`components/scxml-resolver-github`, the new `stateforward:scxml/resolver`
@@ -604,7 +654,7 @@ hard cutover.
   bounds and native builds have none of their own:
   - validation and compilation: the native `scx` validates and
     compiles documents of any size and never reports `LIMIT001`,
-    `LIMIT004`, `LIMIT007`, or `COMP001`, nor `LIMIT002`, `LIMIT003`,
+    `LIMIT004`, `LIMIT005`, or `COMP001`, nor `LIMIT002`, `LIMIT003`,
     `XML002`, or `XSD006` for a size bound;
   - native-only code loses its caps outright. The Wasmtime session host
     and `scxml-scheduler` lose external events per session, the 64 KiB
@@ -843,9 +893,11 @@ hard cutover.
   `SCXML061`→`LINT015`, `SCXML062`→`LINT016`, `SCXML063`→`LINT017`,
   `SCXML072`→`LINT018`, `SCXML075`→`LINT019`, `SCXML076`→`LINT020`,
   `SCXML078`→`LINT021`; `SCXML027`→`LIMIT001`, `SCXML028`→`LIMIT002`,
-  `SCXML040`→`LIMIT003`, `SCXML041`→`LIMIT004`, `SCXML044`→`LIMIT005`,
-  `SCXML068`→`LIMIT006`, `SCXML069`→`LIMIT007`, `SCXML081`→`LIMIT008`,
-  `SCXML082`→`LIMIT009`; `SCXML083`→`ENV001`, `SCXML084`→`ENV002`;
+  `SCXML040`→`LIMIT003`, `SCXML041`→`LIMIT004`, `SCXML069`→`LIMIT005`,
+  `SCXML081`→`LIMIT006`, `SCXML082`→`LIMIT007`; `SCXML044`→`PKG005`;
+  `SCXML068` is removed (foreign attributes and elements are accepted,
+  and one in a namespace nothing binds is the `LINT022` warning);
+  `SCXML083`→`ENV001`, `SCXML084`→`ENV002`;
   `SCXML085`-`SCXML092`→`EVENT001`-`EVENT008`, `SCXML102`→`EVENT009`,
   `SCXML103`→`EVENT010`; `SCXML093`→`PKG003`, `SCXML094`→`PKG004`. The
   other `SCXML` codes keep their numbers.
@@ -1071,9 +1123,9 @@ hard cutover.
 - `validate` and `compile` bound an attribute value by the value the
   compiler stores, on wasm builds: a white-space-collapsing SCXML
   attribute by its collapsed value (an `id` padded past 1 MiB compiled
-  with `LimitExceeded` although `LIMIT007` did not fire) and an attribute
+  with `LimitExceeded` although `LIMIT005` did not fire) and an attribute
   of inline XML, which the compiler keeps byte for byte, by its exact
-  value even on an element in the SCXML namespace (`LIMIT007` measured
+  value even on an element in the SCXML namespace (`LIMIT005` measured
   its collapsed value).
 - An ECMAScript `<foreach>` over an XML (DOM) value raises
   `error.execution` and ends only its block (SCXML 4.6: not "a legal
@@ -1097,7 +1149,7 @@ hard cutover.
   schema by a test) as its collapsed value, as the schema and lowering
   do: a padded `id` (`<state id=" s ">`) was `SCXML003` and every
   reference to it `SCXML005`/`SCXML006`, a padded `datamodel` was
-  `LIMIT005`, and `LIMIT008`/`LIMIT009`/`LIMIT007` measured the padded
+  `PKG005`, and `LIMIT006`/`LIMIT007`/`LIMIT005` measured the padded
   length. A padded `id` now declares its collapsed value for duplicate
   detection (`SCXML002`), target and `initial` resolution, `In()`, the
   bounds, the engine, and snapshots, and `datamodel=" xpath "` selects
@@ -1136,7 +1188,7 @@ hard cutover.
   fuel and its copy allowance; an embedder must not replace either. `ComponentDataModel::memory_growth_copied_bytes`
   reports the copies, and `ComponentDataModel::last_call_fuel` reports the
   Wasm fuel and the copied bytes of the last call apart (`CallFuel`).
-- `LIMIT008` and Machine IR validation bound the `done.state.<ID>` event
+- `LIMIT006` and Machine IR validation bound the `done.state.<ID>` event
   of exactly the states the engine raises it for (SCXML 1.0 Appendix D): a
   `<parallel>` completes only through a `<state>` region with a `<final>`
   child, so one whose regions are all `<parallel>` no longer has its ID

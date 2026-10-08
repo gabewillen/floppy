@@ -1,14 +1,14 @@
 //! The GitHub resolver component (`stateforward:scxml/resolver`): resolves
-//! repository packages, the extension namespaces and invoked-service types
-//! whose URI is a package's folder in a GitHub repository
+//! repository packages, the extension namespaces, invoked-service types, and
+//! data models whose URI is a package's folder in a GitHub repository
 //! ([`scxml_types::RepositoryUri`]), to a release of that repository, and
 //! fetches the release's files. `scx` embeds it.
 //!
 //! # What a URI means here
 //!
 //! A package `https://github.com/<owner>/<repo>/<folder>/<name>` (`folder`
-//! is `namespaces` or `services`) lives in `<folder>/<name>/package/` of
-//! `<owner>/<repo>`. A tag (the `@<tag>` a document pinned) names the
+//! is `namespaces`, `services`, or `datamodels`) lives in
+//! `<folder>/<name>/package/` of `<owner>/<repo>`. A tag (the `@<tag>` a document pinned) names the
 //! release of the same tag; without one the package names the repository's
 //! latest GitHub release. So:
 //!
@@ -17,8 +17,8 @@
 //!   given, and resolves the tag to its commit
 //!   (`/repos/<owner>/<repo>/git/ref/tags/<tag>`, dereferencing at most
 //!   four annotated tags);
-//! * `fetch` reads the manifest (`<name>.extension.json` or
-//!   `<name>.service.json`) and the schema from raw repository files at the
+//! * `fetch` reads the manifest (`<name>.extension.json`,
+//!   `<name>.service.json`, or `<name>.data-model.json`) and the schema from raw repository files at the
 //!   release's commit, never at its tag, and the component and `SHA256SUMS`
 //!   from the release's assets.
 //!
@@ -209,10 +209,10 @@ fn join(base: &url::Url, path: &str) -> Result<url::Url, String> {
 
 /// The package manifest's file name.
 fn manifest_name(package: &RepositoryUri<'_>) -> String {
-    if package.folder == "services" {
-        format!("{}.service.json", package.name)
-    } else {
-        format!("{}.extension.json", package.name)
+    match package.folder {
+        "services" => format!("{}.service.json", package.name),
+        "datamodels" => format!("{}.data-model.json", package.name),
+        _ => format!("{}.extension.json", package.name),
     }
 }
 
@@ -643,6 +643,9 @@ mod tests {
         let service = RepositoryUri::parse("https://github.com/o/r/services/s")
             .expect("a repository service URI");
         assert_eq!(manifest_name(&service), "s.service.json");
+        let data_model = RepositoryUri::parse("https://github.com/o/r/datamodels/d")
+            .expect("a repository data-model URI");
+        assert_eq!(manifest_name(&data_model), "d.data-model.json");
     }
 
     #[test]

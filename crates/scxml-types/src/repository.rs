@@ -4,7 +4,7 @@ use crate::is_package_segment;
 
 /// The parts of a tagless repository package URI (see [`crate::strip_tag`]):
 /// `https://github.com/<owner>/<repo>/<folder>/<name>`, where `folder` is
-/// `namespaces` or `services`. This is the one definition of the pattern:
+/// `namespaces`, `services`, or `datamodels`. This is the one definition of the pattern:
 /// the parser splits pins with it, the CLI routes repository packages with
 /// it, and the repository resolver component builds its requests from it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -13,8 +13,8 @@ pub struct RepositoryUri<'a> {
     pub owner: &'a str,
     /// The repository's name.
     pub repo: &'a str,
-    /// `namespaces` (an extension namespace) or `services` (an invoked
-    /// service).
+    /// `namespaces` (an extension namespace), `services` (an invoked
+    /// service), or `datamodels` (a data model).
     pub folder: &'a str,
     /// The package's folder name.
     pub name: &'a str,
@@ -35,7 +35,8 @@ impl<'a> RepositoryUri<'a> {
         let parsed = Self {
             owner: next()?,
             repo: next()?,
-            folder: next().filter(|folder| matches!(*folder, "namespaces" | "services"))?,
+            folder: next()
+                .filter(|folder| matches!(*folder, "namespaces" | "services" | "datamodels"))?,
             name: next()?,
         };
         segments.next().is_none().then_some(parsed)

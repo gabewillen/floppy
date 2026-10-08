@@ -281,11 +281,10 @@ fn unknown_data_model_fails_closed_with_a_typo_fix() {
         ("lua", None),
     ] {
         let xml = machine(value, r#"<final id="f"/>"#);
-        let report = validate_semantics(&parse(&xml));
+        let report = crate::datamodel_attribute_diagnostics(&parse(&xml), None);
         let error = report
-            .diagnostics()
             .iter()
-            .find(|diagnostic| diagnostic.code == "LIMIT005")
+            .find(|diagnostic| diagnostic.code == "PKG005")
             .unwrap_or_else(|| panic!("`{value}` must be rejected"));
         assert_eq!(error.severity, Severity::Error);
         assert_eq!(text(&xml, error.primary.span), value);
@@ -301,10 +300,7 @@ fn unknown_data_model_fails_closed_with_a_typo_fix() {
     for known in KNOWN_DATA_MODELS {
         let xml = machine(known, r#"<final id="f"/>"#);
         assert!(
-            !validate_semantics(&parse(&xml))
-                .diagnostics()
-                .iter()
-                .any(|diagnostic| diagnostic.code == "LIMIT005"),
+            crate::datamodel_attribute_diagnostics(&parse(&xml), None).is_empty(),
             "{known}"
         );
     }

@@ -25,17 +25,17 @@ disagree are in [spec-errata.md](spec-errata.md).
   errata SHA-256
   `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f`,
   producer report digest
-  `21423463af3896b33650ad06a2d34bbfbced051b80f8ecb375aba1eb91d593b9`,
+  `cb20e4887fd0fc1ce2f9c1f494ef6403ecc2c3968945cf69e6efe233babbc13f`,
   and canonical artifact SHA-256
-  `8a3bddb7d9cb81526de2f2752495d79c0bdb614f335a1951fc91c24b83845409`.
+  `85781edf96997b33c51da97e413dfec54a9d5b086a3fdc2aba24d188d1a0bba6`.
   The XPath evidence binds corpus digest
   `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca`,
   errata SHA-256
   `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a`,
   producer report digest
-  `a68e123338dbc2281c9f965ffdcbf2d8e192a707665765bcfe17a78da1e64af1`,
+  `6c5ee18542b5f49c16f36b43d17f356a744722380ce44411c7e40ab41a2254d0`,
   and canonical artifact SHA-256
-  `998bd148fc9338702b7a70db7f1b7871e47d0d326f54a494a70d599c85bbad71`.
+  `c943f27d655c5995ef6ab453c1f532c20e688afd5f9164f89d0a57342fde09df`.
   The report bytes are checked in under
   [`tests/conformance/w3c-irp/baselines`](../tests/conformance/w3c-irp/baselines).
   These are measured IRP results of the shipped components under the
@@ -317,6 +317,16 @@ In short:
 - The proof hosts answer `raise`, `send`, `cancel`, and extension-namespace
   capability calls with `unavailable` (the machine's own `<raise>` is
   engine-internal).
+- Data-model packages run under the Wasmtime session host (every session
+  whose `datamodel` names a bound package) and, in the browser host, only as
+  the root session's page-supplied provider of a component the package
+  ships transpiled; the browser host resolves no package at run time, and an
+  invoked child there whose `datamodel` names a package gets no data model.
+  `scx validate` does not link a package's checker, so its expressions get
+  the `LINT010` note.
+- `xml:base` is resolved within one document: an inline `<content>`
+  machine starts from its own root, not from the bases of the elements
+  around it.
 - The browser host loads URLs only through the page (its allowlisted
   `resources` option or `loadDocument`; a runtime `srcexpr` URL through
   `resources` only in a cross-origin-isolated `async: 'auto'` worker

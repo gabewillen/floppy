@@ -1,0 +1,20 @@
+data model `example`
+  = package: https://github.com/stateforward/scxml.rs/datamodels/example 0.2.0
+error[DATAMODEL002]: the data model is `exampel`, but its package names it `example`
+ --> tests/ui/datamodel002-name-mismatch.scx:2:153
+  |
+2 | ...ersion="1.0" datamodel="exampel" datamodel:src="https://github.com/stateforward/scxml.rs/datamodels/example" initial="a"...
+  |                            ^^^^^^^                 ----------------------------------------------------------- this package declares `example`
+  |                            |
+  |                            not `example`
+  |
+  = note: the `datamodel` token names the data model the machine's expressions are written in, and the package `datamodel:src` names declares which one it implements; they must agree
+  = help: write `datamodel="example"`, or name the package of `exampel`
+  = spec: SCXML 1.0 §5.1 Data Model
+help: use `example`
+  |
+2 | ...ersion="1.0" datamodel="example" datamodel:src="https:/...
+  |                            ~~~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scx --explain DATAMODEL002`.

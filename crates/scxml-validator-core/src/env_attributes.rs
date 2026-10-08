@@ -16,9 +16,8 @@
 //!   attribute on any element other than an SCXML `<invoke>` of a service:
 //!   an element in no namespace, an executable-content extension element
 //!   (executable content does no I/O, so it has no slots), or an `<invoke>`
-//!   of an SCXML session (an absent `type` or an SCXML invoke type). An
-//!   `env` attribute on any other SCXML element is `LIMIT006`'s (an
-//!   attribute in another namespace on an SCXML element).
+//!   of an SCXML session (an absent `type` or an SCXML invoke type), or any
+//!   other SCXML element.
 
 use std::collections::BTreeMap;
 
@@ -87,9 +86,6 @@ pub fn env_attribute_diagnostics(
             Some(crate::SCXML_NAMESPACE) if element.name.local_name == "invoke" => {
                 invoke_slots(element, &env_attributes, services, &mut diagnostics);
             }
-            // `LIMIT006` reports every other attribute in another namespace
-            // on an SCXML element.
-            Some(crate::SCXML_NAMESPACE) => {}
             None | Some(_) => {
                 for attribute in env_attributes {
                     diagnostics.push(unplaced(element, attribute));
@@ -280,6 +276,11 @@ fn unplaced(element: &Element, attribute: &Attribute) -> Diagnostic {
             "`{}` is on an element in no namespace, which has no slots",
             attribute.lexical_name
         )
+    } else if element.name.namespace_uri.as_deref() == Some(crate::SCXML_NAMESPACE) {
+        format!(
+            "`{}` is on `<{}>`, which has no slots",
+            attribute.lexical_name, element.lexical_name
+        )
     } else {
         format!(
             "`{}` is on the executable-content extension `<{}>`, which has no slots",
@@ -396,10 +397,12 @@ mod tests {
                 "{body}"
             );
         }
-        // LIMIT006 owns attributes in other namespaces on SCXML elements.
-        assert!(
+        assert_eq!(
             env_attribute_diagnostics(&document(&machine(r#"<log env:key="K"/>"#)), None)
-                .is_empty()
+                .iter()
+                .map(|diagnostic| diagnostic.code.as_str())
+                .collect::<Vec<_>>(),
+            ["ENV002"]
         );
     }
 

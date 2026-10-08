@@ -708,3 +708,58 @@ impl telemetry::Host for DataModelStoreData {
         crate::component::guest_signal_recorded(&self.execution_context, &recorded);
     }
 }
+
+/// Maximum data-model components one session host binds.
+pub const MAX_DATA_MODEL_COMPONENTS: usize = 64;
+
+/// The data-model components of data-model packages one session host links,
+/// keyed by the data model's name (the `datamodel` token a document writes
+/// and its Machine IR records). The built-in `ecmascript`, `null`, and
+/// `xpath` are the release's own and are never bound here.
+#[derive(Clone, Debug, Default)]
+pub struct DataModelComponents {
+    bindings: Vec<(String, AuthenticatedComponent)>,
+}
+
+impl DataModelComponents {
+    /// No bindings.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Binds `component` to the data model named exactly `name` (the
+    /// package manifest's `datamodel`).
+    ///
+    /// # Errors
+    ///
+    /// [`HostError::Artifact`]: a component that is not
+    /// [`ArtifactKind::DataModelComponent`]
+    /// ([`ArtifactError::ArtifactKindMismatch`]); or a name that is empty,
+    /// longer than [`scxml_types::MAX_NAME_BYTES`], a built-in data model,
+    /// or bound twice, or past [`MAX_DATA_MODEL_COMPONENTS`] bindings
+    /// ([`ArtifactError::NamespaceBinding`]).
+    pub fn bind(
+        mut self,
+        name: &str,
+        component: &AuthenticatedComponent,
+    ) -> Result<Self, HostError> {
+        if component.kind() != ArtifactKind::DataModelComponent {
+            return Err(ArtifactError::ArtifactKindMismatch.into());
+        }
+        if name.is_empty()
+            || name.len() > scxml_types::MAX_NAME_BYTES
+            || matches!(name, "ecmascript" | "null" | "xpath")
+            || self.bindings.len() >= MAX_DATA_MODEL_COMPONENTS
+            || self.bindings.iter().any(|(bound, _)| bound == name)
+        {
+            return Err(ArtifactError::NamespaceBinding.into());
+        }
+        self.bindings.push((name.to_owned(), component.clone()));
+        Ok(self)
+    }
+
+    pub(crate) fn into_bindings(self) -> Vec<(String, AuthenticatedComponent)> {
+        self.bindings
+    }
+}

@@ -366,3 +366,59 @@ fn edits_inside_a_target_are_kept_with_their_applicability() {
     );
     assert_eq!(rendered.fixes[0].edits[0].replacement, "\"hello\"");
 }
+
+#[test]
+fn a_packages_attributes_on_scxml_elements_are_its_targets_and_not_lint022() {
+    let source = format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ex="{EXAMPLE}" xmlns:ed="urn:example:editor" version="1.0" initial="a">
+  <state id="a" ex:owner="team" ed:x="10">
+    <transition event="go" target="b"/>
+  </state>
+  <final id="b"/>
+</scxml>"#
+    );
+    let validator = scripted(|context, targets| {
+        let target = context
+            .elements
+            .get(usize::try_from(targets[0]).expect("small"))
+            .expect("targets index elements");
+        assert_eq!(target.name.local_name, "state");
+        Ok(vec![finding("unknown_owner", target.span, Vec::new())])
+    });
+    // The example namespace is bound (its schema is registered); the editor
+    // namespace is not.
+    let mut resolver = MemorySchemaResolver::new();
+    resolver.insert(
+        EXAMPLE,
+        SchemaSource::new(
+            "ex.xsd",
+            format!(
+                r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="{EXAMPLE}"><xs:attribute name="owner" type="xs:string"/></xs:schema>"#
+            ),
+        ),
+    );
+    let report = Validator::new(resolver, NoSchema)
+        .with_schema_mode(SchemaMode::Off)
+        .with_package_validator(validator.clone())
+        .validate_source(SourceId::new(1), "doc.scxml", source)
+        .report;
+    // Each namespace is offered to the linked validators, which answer only
+    // for the packages they bind; the example package gets the `<state>`.
+    assert!(
+        package_codes(&report).contains(&"ex::unknown_owner".to_owned()),
+        "{:?}",
+        package_codes(&report)
+    );
+    let calls = validator.calls.lock().expect("not poisoned").clone();
+    assert!(
+        calls.iter().any(|(package, _)| package == EXAMPLE),
+        "{calls:?}"
+    );
+    let lint: Vec<&crate::Diagnostic> = report
+        .diagnostics()
+        .iter()
+        .filter(|diagnostic| diagnostic.code == "LINT022")
+        .collect();
+    assert_eq!(lint.len(), 1, "{lint:?}");
+    assert!(lint[0].message.contains("`ed:x`"), "{}", lint[0].message);
+}

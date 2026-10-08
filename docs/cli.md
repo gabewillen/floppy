@@ -59,7 +59,7 @@ The semantic inventory covers (the generated table in
 - `LIMIT001`/`LIMIT002`: bounds on nested inline documents and on machine size for graph analysis;
 - `SCXML030`-`SCXML032`: incompatible multi-target sets, illegal `<final>` children, and misplaced `donedata`;
 - `LINT005`-`LINT008`: unreachable states, single-region `parallel`, shadowed transitions, and eventless transitions that loop through default entry (warnings like `LINT004`);
-- `SCXML037`-`SCXML039`, `SCXML079`, `LIMIT003`-`LIMIT005`, `LINT009`, and `LINT010`: data-model rules (null data-model misuse: every element SCXML 1.0 §B.1.7 does not support is an error, and every expression there the `SCXML079` warning; expression and script syntax and assignable locations; checker bounds and unrecognized data models (`LIMIT`); empty expressions and unchecked data models (`LINT`); syntax, location, empty-expression, and undeclared-XPath-variable findings are warnings, because SCXML 1.0 defines their run-time outcome, `error.execution`, §5.9);
+- `SCXML037`-`SCXML039`, `SCXML079`, `LIMIT003`/`LIMIT004`, `PKG005`, `LINT009`, and `LINT010`: data-model rules (null data-model misuse: every element SCXML 1.0 §B.1.7 does not support is an error, and every expression there the `SCXML079` warning; expression and script syntax and assignable locations; checker bounds (`LIMIT`); a data model that is neither built in nor available from a package (`PKG005`); empty expressions and unchecked data models (`LINT`); syntax, location, empty-expression, and undeclared-XPath-variable findings are warnings, because SCXML 1.0 defines their run-time outcome, `error.execution`, §5.9);
 - `SCXML050`/`SCXML051`: `<script>` with both `src` and content, and unfetchable `src`;
 - `SCXML052`/`SCXML053`: a `<send>` to the SCXML event processor with no event, and a `<data>` or `<content>` with more than one value source;
 - `SCXML055`/`SCXML056`: `<raise>`/`<send>` inside `<finalize>`, and XPath references to undeclared variables (warning);
@@ -68,7 +68,9 @@ The semantic inventory covers (the generated table in
 - `LINT015` (warning): an ECMAScript `<data id>` that is not an identifier (`retry-count`, `class`): the data model declares it (SCXML 1.0 §B.2.1), but no expression can name it, so a rename of the declaration and every reference is offered;
 - `LINT016`/`LINT017`: a Unicode bidirectional control character that changes how the source is displayed (Trojan Source; warning), and an ECMAScript condition that is an arrow function and so always true (warning);
 - `SCXML064`-`SCXML067`: a `<send>`, `<invoke>`, or `<state>` that repeats a child it allows once, an `<assign>` whose value does not fit its `type`, an empty required expression attribute, and an `<scxml>` with no child states (a `<parallel>` with none is conformant and only the `LINT021` warning);
-- `LIMIT006`/`LIMIT007`: an attribute or element from another namespace that lowering cannot place, and a document that exceeds a Machine IR bound;
+- `LINT022` (warning): an attribute or element in another namespace that no package or registered schema binds, which has no effect (`xml:*` and `xsi:*` attributes are accepted silently, and `xml:base` governs the `src` URIs in its scope);
+- `DATAMODEL001`/`DATAMODEL002`: the `datamodel` vocabulary used anywhere but `<scxml>`'s `datamodel:src`, and a `datamodel` token that is not the name of the package `datamodel:src` names;
+- `LIMIT005`: a document that exceeds a Machine IR bound;
 - `SCXML070`: a `delay` or `delayexpr` on a `<send>` to `#_internal`, which SCXML 1.0 §6.2 forbids;
 - `SCXML071`: an `<invoke>` with both a `namelist` and `<param>` children, which SCXML 1.0 §6.4 forbids;
 - `LINT018`: a state listed twice in one target list, which SCXML 1.0 §3.11 allows (a set of states) and the compiler enters once (warning);
@@ -76,8 +78,8 @@ The semantic inventory covers (the generated table in
 - `SCXML074`, `LINT019`, `LINT020`, and `SCXML077`: an ECMAScript `<log expr>` that certainly has a side effect (SCXML 1.0 §4.7.3), found by the data model's parse-only analysis across the document's static scripts; one whose side effects the analysis cannot decide (warning); a condition that certainly has one (warning: §5.9.1's SHOULD NOT, since official IRP test 444 contradicts Appendix B's MUST, docs/spec-errata.md §5); and (warning) an assignment, update, or `delete` of a system variable itself, which fails at run time with `error.execution` (SCXML 1.0 §5.10);
 - `LINT021` (warning): a `<parallel>` with no child state, which SCXML 1.0 §3.4.2 allows but through which no transition is ever enabled and which raises no `done.state`;
 - `SCXML080` (warning): a multi-target set that names a `<history>` and a state below that history's parent, which yields a legal configuration (SCXML 1.0 §3.11) only when the history's configuration contains the other target;
-- `LIMIT008`: a state ID longer than 1,024 bytes, which no configuration, snapshot, or `In()` can name on any build, or, for a state that can complete, longer than 1,013 bytes, so its `done.state.<ID>` event exceeds the 1,024-byte event-name bound (docs/spec-errata.md L.6);
-- `LIMIT009`: a literal `<raise event>`, `<send event>`, `<send id>`, or `<invoke id>` longer than 1,024 bytes, or an `<invoke id>` longer than 1,012 bytes, whose `done.invoke.<ID>` event exceeds the event-name bound (docs/spec-errata.md L.6);
+- `LIMIT006`: a state ID longer than 1,024 bytes, which no configuration, snapshot, or `In()` can name on any build, or, for a state that can complete, longer than 1,013 bytes, so its `done.state.<ID>` event exceeds the 1,024-byte event-name bound (docs/spec-errata.md L.6);
+- `LIMIT007`: a literal `<raise event>`, `<send event>`, `<send id>`, or `<invoke id>` longer than 1,024 bytes, or an `<invoke id>` longer than 1,012 bytes, whose `done.invoke.<ID>` event exceeds the event-name bound (docs/spec-errata.md L.6);
 - `XSD-*`: schema setup and spec-aligned instance constraints;
 - `XML001`-`XML006`: one code per XML failure kind (malformed, resource limit,
   undefined entity, invalid character reference, invalid caller limits, and an
@@ -359,6 +361,27 @@ service's component (`service-artifact` relative to the manifest, or
 version, declared origins, slots, the WASI interfaces its component imports
 (`= WASI imports:`), and the WASI resources the run grants it
 (`= WASI resources:`) before running.
+A data model other than the built-in `ecmascript`, `null`, and `xpath` is a
+package ([namespaces/datamodel](../namespaces/datamodel/README.md)): `<scxml datamodel="NAME"
+datamodel:src="URI">` (the `datamodel` vocabulary,
+`https://github.com/stateforward/scxml.rs/namespaces/datamodel`) names its
+package URI, and `NAME` must be the name the package declares
+(`DATAMODEL002`). `--data-model-package MANIFEST.json` (repeatable;
+`validate`, `compile`, `snapshot run`, and `run`) binds one: a
+`stateforward.scxml.data-model-package/v1` manifest with exactly the fields
+`format`, `data-model-uri`, `datamodel`, `package-version`,
+`data-model-artifact`, `wit-world` (`stateforward:scxml/data-model`), and
+`wit-version`. A `datamodel:src` of exactly
+`https://github.com/OWNER/REPO/datamodels/NAME[@TAG]` that no
+`--data-model-package` binds is a repository data model, resolved, verified,
+cached, and pinned exactly like a repository service; one that does not
+resolve, or any other URI no package binds, is `PKG005`. `snapshot run` and
+`run` execute each bound data model's component (`data-model-artifact`
+relative to the manifest, or `--data-model-component URI=PATH`,
+authenticated by the required `--data-model-component-sha256 URI=HEX`; a
+repository data model's from its release, authenticated by its
+`SHA256SUMS`) as the data model of every session whose `datamodel` names it,
+and list each bound data model's name, URI, and version before running.
 A service's WASI interfaces are its component's own `wasi:*` imports; only
 runtime resources need a grant, with wasmtime CLI's option names scoped to
 the service bound to exactly `URI` (up to the first `=`; `snapshot run` and

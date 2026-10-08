@@ -1,8 +1,0 @@
-<?ui-args --policy lax?>
-<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ed="urn:example:editor" version="1.0" initial="a">
-  <ed:layout width="640" height="480"/>
-  <state id="a" ed:x="10" ed:y="20">
-    <transition event="go" target="done"/>
-  </state>
-  <final id="done"/>
-</scxml>

@@ -6,8 +6,9 @@
 //! After the XSD and built-in checks, the validator builds the document's
 //! read-only [`document::Context`] once and calls the linked
 //! [`PackageValidator`] once per package that has targets: the elements in
-//! an extension namespace, or the `<invoke>` elements whose literal `type`
-//! is a service type URI. The package's diagnostics are reported as
+//! an extension namespace and the elements that carry its attributes (an
+//! SCXML element's metadata), or the `<invoke>` elements whose literal
+//! `type` is a service type URI. The package's diagnostics are reported as
 //! `<prefix>::<code>` ([`package_prefix`]). Everything a package returns is
 //! untrusted: a failure, more than [`MAX_PACKAGE_DIAGNOSTICS`] diagnostics,
 //! a code that is not `[a-z][a-z0-9_]*` of at most
@@ -18,7 +19,6 @@
 //! validator's boundary span and records no telemetry of its own.
 
 use scxml_syntax::{Document, Element, Node, Span};
-use scxml_types::{ENV_NAMESPACE_URI, EVENT_NAMESPACE_URI};
 
 use crate::{Diagnostic, DiagnosticCategory, EventSchemaResources, Fix, FixEdit, Label};
 
@@ -28,7 +28,6 @@ pub const MAX_PACKAGE_DIAGNOSTICS: usize = 256;
 pub const MAX_PACKAGE_CODE_BYTES: usize = 64;
 
 const SCXML_NAMESPACE: &str = crate::SCXML_NAMESPACE;
-const XML_NAMESPACE: &str = "http://www.w3.org/XML/1998/namespace";
 
 /// The read-only parsed document a package validator reads
 /// (`stateforward:scxml-validator/document`).
@@ -261,8 +260,9 @@ pub(crate) fn package_validator_diagnostics(
 }
 
 /// The packages with targets, in order of first target: each extension
-/// namespace with its elements, and each service type URI with the
-/// `<invoke>` elements naming it literally.
+/// namespace with its elements and the other elements that carry its
+/// attributes, and each service type URI with the `<invoke>` elements
+/// naming it literally.
 fn package_targets(document: &Document) -> Vec<(String, Vec<&Element>)> {
     let mut packages: Vec<(String, Vec<&Element>)> = Vec::new();
     document.root.visit(&mut |element| {
@@ -272,13 +272,27 @@ fn package_targets(document: &Document) -> Vec<(String, Vec<&Element>)> {
                 .map(|attribute| attribute.value.as_str())
                 .filter(|value| scxml_types::is_service_type_uri(value))
                 .filter(|_| element.attribute("typeexpr").is_none()),
-            Some(SCXML_NAMESPACE | XML_NAMESPACE | ENV_NAMESPACE_URI | EVENT_NAMESPACE_URI)
-            | None => None,
+            Some(namespace) if crate::foreign_namespaces::is_built_in(namespace) => None,
+            None => None,
             Some(namespace) => Some(namespace),
         };
-        if let Some(package) = package {
+        // An element of another namespace carrying a package's attributes
+        // (an SCXML element's metadata) is a target of that package too.
+        let attribute_packages = element
+            .attributes
+            .iter()
+            .filter_map(|attribute| attribute.name.namespace_uri.as_deref())
+            .filter(|namespace| {
+                !crate::foreign_namespaces::is_built_in(namespace)
+                    && Some(*namespace) != element.name.namespace_uri.as_deref()
+            });
+        for package in package.into_iter().chain(attribute_packages) {
             match packages.iter_mut().find(|(uri, _)| uri == package) {
-                Some((_, targets)) => targets.push(element),
+                Some((_, targets)) => {
+                    if !targets.iter().any(|target| std::ptr::eq(*target, element)) {
+                        targets.push(element);
+                    }
+                }
                 None => packages.push((package.to_owned(), vec![element])),
             }
         }

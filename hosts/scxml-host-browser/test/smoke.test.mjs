@@ -25,6 +25,7 @@ import {
   cachedCoreModules,
   createCompiler,
   createEcmaScriptDataModel,
+  createNullDataModel,
   createSession,
 } from '../src/index.js';
 import {
@@ -274,4 +275,28 @@ test('lifecycle rejections and shutdown follow the machine contract', async () =
   assert.equal(session.status(), 'shut-down');
   assert.deepEqual(session.configuration(), []);
   assert.throws(() => session.start(), (error) => error instanceof ScxmlSessionError && error.code === 'protocol');
+});
+
+test('a data-model package runs on the component this package ships for it', async () => {
+  // datamodels/example repackages the null data model's component.
+  const source =
+    '<scxml xmlns="http://www.w3.org/2005/07/scxml" ' +
+    'xmlns:datamodel="https://github.com/stateforward/scxml.rs/namespaces/datamodel" version="1.0" ' +
+    'datamodel="example" datamodel:src="https://github.com/stateforward/scxml.rs/datamodels/example" initial="a">' +
+    '<state id="a"><transition cond="In(\'a\')" target="done"><log label="in-a"/></transition></state>' +
+    '<final id="done"/></scxml>';
+  const compiler = await createCompiler({ loadCoreModule });
+  const compiled = await compiler.compile(source, { sourceName: 'example.scxml' });
+  assert.equal(compiled.status, 'emitted');
+  const logs = logSink();
+  const session = await createSession({
+    ir: compiled.ir,
+    dataModel: await createNullDataModel({ loadCoreModule }),
+    capabilities: logs,
+    loadCoreModule,
+  });
+  session.start();
+  assert.equal(logs.lines.length, 1);
+  assert.ok(logs.lines[0].startsWith('in-a'), logs.lines[0]);
+  assert.equal(session.status(), 'finished');
 });

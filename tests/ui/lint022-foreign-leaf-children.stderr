@@ -1,0 +1,63 @@
+warning[LINT022]: element `<x:note>` in an unbound namespace has no effect
+ --> tests/ui/lint022-foreign-leaf-children.scx:4:23
+  |
+4 |       <log label="l"><x:note>reviewed</x:note></log>
+  |        ---            ^^^^^^ namespace `urn:example:ext`
+  |        |
+  |        not executable content: `<log>` runs no custom action
+  |
+  = note: SCXML 1.0 allows attributes and elements from other namespaces on and in its elements (the W3C schema's `##other` wildcards), and the processor executes none of them: only a package that binds the namespace (its schema and validator) reads them, and no extension package or registered schema binds this one
+  = help: bind the namespace's package (`--extension-package MANIFEST.json`) or register its schema (`--schema URI=PATH`), or remove the element if it is a leftover
+help: remove `<x:note>`
+  |
+4 -       <log label="l"><x:note>reviewed</x:note></log>
+4 +       <log label="l"></log>
+
+warning[LINT022]: element `<x:note>` in an unbound namespace has no effect
+ --> tests/ui/lint022-foreign-leaf-children.scx:5:27
+  |
+5 |       <cancel sendid="s"><x:note>reviewed</x:note></cancel>
+  |        ------             ^^^^^^ namespace `urn:example:ext`
+  |        |
+  |        not executable content: `<cancel>` runs no custom action
+  |
+  = note: SCXML 1.0 allows attributes and elements from other namespaces on and in its elements (the W3C schema's `##other` wildcards), and the processor executes none of them: only a package that binds the namespace (its schema and validator) reads them, and no extension package or registered schema binds this one
+  = help: bind the namespace's package (`--extension-package MANIFEST.json`) or register its schema (`--schema URI=PATH`), or remove the element if it is a leftover
+help: remove `<x:note>`
+  |
+5 -       <cancel sendid="s"><x:note>reviewed</x:note></cancel>
+5 +       <cancel sendid="s"></cancel>
+
+warning[LINT022]: element `<x:note>` in an unbound namespace has no effect
+ --> tests/ui/lint022-foreign-leaf-children.scx:6:49
+  |
+6 |       <send event="e"><param name="p" expr="1"><x:note>reviewed</x:note></param></send>
+  |                        -----                    ^^^^^^ namespace `urn:example:ext`
+  |                        |
+  |                        not executable content: `<param>` runs no custom action
+  |
+  = note: SCXML 1.0 allows attributes and elements from other namespaces on and in its elements (the W3C schema's `##other` wildcards), and the processor executes none of them: only a package that binds the namespace (its schema and validator) reads them, and no extension package or registered schema binds this one
+  = help: bind the namespace's package (`--extension-package MANIFEST.json`) or register its schema (`--schema URI=PATH`), or remove the element if it is a leftover
+help: remove `<x:note>`
+  |
+6 -       <send event="e"><param name="p" expr="1"><x:note>reviewed</x:note></param></send>
+6 +       <send event="e"><param name="p" expr="1"></param></send>
+
+warning[LINT022]: element `<x:note>` in an unbound namespace has no effect
+ --> tests/ui/lint022-foreign-leaf-children.scx:7:16
+  |
+7 |       <script><x:note>reviewed</x:note></script>
+  |        ------  ^^^^^^ namespace `urn:example:ext`
+  |        |
+  |        not executable content: `<script>` runs no custom action
+  |
+  = note: SCXML 1.0 allows attributes and elements from other namespaces on and in its elements (the W3C schema's `##other` wildcards), and the processor executes none of them: only a package that binds the namespace (its schema and validator) reads them, and no extension package or registered schema binds this one
+  = help: bind the namespace's package (`--extension-package MANIFEST.json`) or register its schema (`--schema URI=PATH`), or remove the element if it is a leftover
+help: remove `<x:note>`
+  |
+7 -       <script><x:note>reviewed</x:note></script>
+7 +       <script></script>
+
+diagnostic summary: 0 error(s), 4 warning(s), 0 note(s), 4 total
+For more information about this diagnostic, try `scx --explain LINT022`.
+validated tests/ui/lint022-foreign-leaf-children.scx

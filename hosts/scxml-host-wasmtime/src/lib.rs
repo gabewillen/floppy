@@ -138,7 +138,10 @@ mod data_model;
 #[cfg(feature = "wasmtime")]
 mod guest_spans;
 #[cfg(feature = "wasmtime")]
-pub use data_model::{ComponentDataModel, DEFAULT_DATA_MODEL_CALL_FUEL, DataModelSystemValues};
+pub use data_model::{
+    ComponentDataModel, DEFAULT_DATA_MODEL_CALL_FUEL, DataModelComponents, DataModelSystemValues,
+    MAX_DATA_MODEL_COMPONENTS,
+};
 #[cfg(feature = "wasmtime")]
 mod validator;
 #[cfg(feature = "wasmtime")]
@@ -159,9 +162,9 @@ mod artifact;
 #[cfg(feature = "wasmtime")]
 pub use artifact::{
     ArtifactKind, AuthenticatedComponent, ComponentSource, TrustedComponentDigest,
-    TrustedManifestDigest, authenticate_component, authenticate_extension_component,
-    authenticate_package_validator_component, authenticate_packaged_machine,
-    authenticate_service_component,
+    TrustedManifestDigest, authenticate_component, authenticate_data_model_component,
+    authenticate_extension_component, authenticate_package_validator_component,
+    authenticate_packaged_machine, authenticate_service_component,
 };
 #[cfg(feature = "wasmtime")]
 mod extension;

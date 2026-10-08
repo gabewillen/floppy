@@ -52,9 +52,6 @@ fn package_diagnostics(
         .iter()
         .filter(|namespace_uri| namespace_uri.as_str() != SCXML_NAMESPACE)
         .filter(|namespace_uri| namespace_uri.as_str() != XML_NAMESPACE)
-        // The host's `env` and `event` attribute vocabularies have no package.
-        .filter(|namespace_uri| namespace_uri.as_str() != scxml_validator_core::ENV_NAMESPACE_URI)
-        .filter(|namespace_uri| namespace_uri.as_str() != scxml_validator_core::EVENT_NAMESPACE_URI)
     {
         let verification = verify_package_binding(namespace_uri, schemas, packages);
         if let Err(message) = verification {
@@ -569,10 +566,12 @@ mod guest {
                         validator_sha256: package.validator_sha256.as_deref(),
                     })
                     .collect::<Vec<_>>();
+                // Only an extension namespace (its custom actions) needs a
+                // package; other foreign markup without one is `LINT022`.
                 let used_namespaces = outcome
                     .document
                     .as_ref()
-                    .map_or_else(Vec::new, scxml_syntax::Document::used_namespaces);
+                    .map_or_else(Vec::new, scxml_validator_core::extension_namespaces);
                 let mut diagnostics =
                     super::package_diagnostics(&schemas, &packages, &used_namespaces);
                 if !diagnostics.is_empty() {

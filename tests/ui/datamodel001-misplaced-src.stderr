@@ -1,0 +1,24 @@
+error[DATAMODEL001]: `datamodel:srcexpr` is not an attribute of the `datamodel` vocabulary
+ --> tests/ui/datamodel001-misplaced-src.scx:1:165
+  |
+1 | ... datamodel="ecmascript" datamodel:srcexpr="'https://github.com/o/r/datamodels/json'" initial="a">
+  |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown on `<scxml>`
+  |
+  = note: the `datamodel` vocabulary has exactly one attribute: `datamodel:src`, the URI of the data model's package
+  = help: use `datamodel:src`, or remove the attribute
+
+error[DATAMODEL001]: `datamodel:src` is not allowed on `<state>`
+ --> tests/ui/datamodel001-misplaced-src.scx:2:17
+  |
+2 |   <state id="a" datamodel:src="https://github.com/o/r/datamodels/json">
+  |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ a `datamodel` attribute on an element that names no data model
+  |
+  = note: only `<scxml>` names a data model (SCXML 1.0 §3.2.1), so only `<scxml>` may name its package; an invoked document declares its own `datamodel` and `datamodel:src`
+  = help: move the attribute to the `<scxml>` whose data model it names, or remove it
+help: remove `datamodel:src`
+  |
+2 -   <state id="a" datamodel:src="https://github.com/o/r/datamodels/json">
+2 +   <state id="a">
+
+diagnostic summary: 2 error(s), 0 warning(s), 0 note(s), 2 total
+For more information about this error, try `scx --explain DATAMODEL001`.

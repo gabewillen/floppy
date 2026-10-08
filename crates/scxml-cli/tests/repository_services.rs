@@ -18,6 +18,10 @@
 //! host's `type-uri` check of the bound, authenticated component and then
 //! fails closed: that check is the proof the release's bytes were bound to
 //! the repository URI.
+//!
+//! Repository data models (`<scxml datamodel:src>`) resolve through the same
+//! mock: the null data model's release component repackaged as
+//! `example`, pinned by tag or tagless, and run.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -63,6 +67,7 @@ struct Release {
     manifest_sha256: String,
     echo: Vec<u8>,
     validator: Vec<u8>,
+    null: Vec<u8>,
 }
 
 fn release() -> &'static Release {
@@ -87,6 +92,7 @@ fn release() -> &'static Release {
             echo: fs::read(dir.join(ASSET)).expect("the echo component"),
             validator: fs::read(dir.join("scxml_package_validator_example.virtualized.wasm"))
                 .expect("the example package validator"),
+            null: fs::read(dir.join(NULL_ASSET)).expect("the null data model"),
         }
     })
 }
@@ -751,4 +757,140 @@ fn a_package_validator_the_release_does_not_list_fails_closed() {
         stderr.contains("does not list the manifest's `validator-sha256`"),
         "{stderr}"
     );
+}
+
+const DATA_MODEL_URI: &str = "https://github.com/stateforward/nemobot/datamodels/example";
+const NULL_ASSET: &str = "scxml_data_model_null.virtualized.wasm";
+
+fn data_model_manifest() -> String {
+    format!(
+        r#"{{"format":"stateforward.scxml.data-model-package/v1","data-model-uri":"{DATA_MODEL_URI}","datamodel":"example","package-version":"0.1.0","data-model-artifact":"{NULL_ASSET}","wit-world":"stateforward:scxml/data-model","wit-version":"0.2.0"}}"#
+    )
+}
+
+/// A mock GitHub serving the `example` data model at `tag` (a
+/// lightweight tag of `commit`), and as the latest release when `latest`.
+fn github_data_model(tag: &str, commit: &str, latest: bool) -> Server {
+    let server = Server::start();
+    server.body(
+        &format!("/api/repos/{REPO}/git/ref/tags/{tag}"),
+        format!(r#"{{"ref":"refs/tags/{tag}","object":{{"type":"commit","sha":"{commit}"}}}}"#),
+    );
+    if latest {
+        server.body(
+            &format!("/api/repos/{REPO}/releases/latest"),
+            format!(r#"{{"tag_name":"{tag}","name":"{tag}"}}"#),
+        );
+    }
+    server.body(
+        &format!("/raw/{REPO}/{commit}/datamodels/example/package/example.data-model.json"),
+        data_model_manifest(),
+    );
+    server.body(
+        &format!("/dl/{REPO}/releases/download/{tag}/SHA256SUMS"),
+        format!("{}  {NULL_ASSET}\n", sha256(&release().null)),
+    );
+    server.body(
+        &format!("/dl/{REPO}/releases/download/{tag}/{NULL_ASSET}"),
+        release().null.clone(),
+    );
+    server
+}
+
+/// A document whose data model is the repository data model `src`.
+fn data_model_document(directory: &Path, src: &str) -> String {
+    let path = directory.join("data-model.scxml");
+    fs::write(
+        &path,
+        format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:datamodel="https://github.com/stateforward/scxml.rs/namespaces/datamodel" version="1.0" datamodel="example" datamodel:src="{src}" initial="a"><state id="a"><transition cond="In('a')" target="f"/></state><final id="f"/></scxml>"#
+        ),
+    )
+    .expect("the document is written");
+    path.display().to_string()
+}
+
+#[test]
+fn a_pinned_repository_data_model_resolves_at_its_commit_and_runs() {
+    let server = github_data_model("v0.1.0", COMMIT, false);
+    let directory = scratch("data-model-pinned");
+    let cache = directory.join("cache");
+    let source = data_model_document(&directory, &format!("{DATA_MODEL_URI}@v0.1.0"));
+    let flags = repository(&server, &cache);
+    let checked = validate(&source, &flags);
+    let stderr = text(&checked.stderr);
+    assert!(checked.status.success(), "{stderr}");
+    assert!(!stderr.contains("PKG005"), "{stderr}");
+    assert!(stderr.contains("data model `example`"), "{stderr}");
+    assert_eq!(
+        server.requests(),
+        [
+            format!("GET /api/repos/{REPO}/git/ref/tags/v0.1.0 HTTP/1.1"),
+            format!(
+                "GET /raw/{REPO}/{COMMIT}/datamodels/example/package/example.data-model.json HTTP/1.1"
+            ),
+        ]
+    );
+    let entry = fs::read_to_string(cache.join("index").join(format!(
+        "{}.json",
+        sha256(format!("{DATA_MODEL_URI}@v0.1.0").as_bytes())
+    )))
+    .expect("the pinned URI is pinned");
+    assert!(
+        entry.contains("\"format\": \"stateforward.scxml.data-model-cache/v1\""),
+        "{entry}"
+    );
+    // The run binds the release's component, authenticated by its
+    // SHA256SUMS, as the session's data model, and the session finishes.
+    let output = directory.join("final.snapshot.json");
+    let run = snapshot_run(&source, &output, &flags);
+    assert!(run.status.success(), "{}", text(&run.stderr));
+    assert!(output.exists(), "the final snapshot is written");
+    assert!(
+        server.requests().ends_with(&[
+            format!("GET /dl/{REPO}/releases/download/v0.1.0/SHA256SUMS HTTP/1.1"),
+            format!("GET /dl/{REPO}/releases/download/v0.1.0/{NULL_ASSET} HTTP/1.1"),
+        ]),
+        "{:?}",
+        server.requests()
+    );
+}
+
+#[test]
+fn a_tagless_repository_data_model_resolves_to_the_latest_release() {
+    let server = github_data_model("v0.2.0", LATEST_COMMIT, true);
+    let directory = scratch("data-model-tagless");
+    let cache = directory.join("cache");
+    let source = data_model_document(&directory, DATA_MODEL_URI);
+    let checked = validate(&source, &repository(&server, &cache));
+    assert!(checked.status.success(), "{}", text(&checked.stderr));
+    assert_eq!(
+        server.requests(),
+        [
+            format!("GET /api/repos/{REPO}/releases/latest HTTP/1.1"),
+            format!("GET /api/repos/{REPO}/git/ref/tags/v0.2.0 HTTP/1.1"),
+            format!(
+                "GET /raw/{REPO}/{LATEST_COMMIT}/datamodels/example/package/example.data-model.json HTTP/1.1"
+            ),
+        ]
+    );
+    let entry = fs::read_to_string(
+        cache
+            .join("index")
+            .join(format!("{}.json", sha256(DATA_MODEL_URI.as_bytes()))),
+    )
+    .expect("the tagless URI is pinned");
+    assert!(entry.contains("\"tag\": \"v0.2.0\""), "{entry}");
+}
+
+#[test]
+fn a_repository_data_model_that_does_not_resolve_is_pkg005() {
+    // The mock serves no such release.
+    let server = Server::start();
+    let directory = scratch("data-model-missing");
+    let source = data_model_document(&directory, &format!("{DATA_MODEL_URI}@v9.9.9"));
+    let checked = validate(&source, &repository(&server, &directory.join("cache")));
+    let stderr = text(&checked.stderr);
+    assert!(!checked.status.success(), "{stderr}");
+    assert!(stderr.contains("error[PKG005]"), "{stderr}");
 }

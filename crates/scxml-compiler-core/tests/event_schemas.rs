@@ -244,7 +244,7 @@ fn every_failure_is_a_validator_error_without_an_artifact() {
             .iter()
             .any(|diagnostic| diagnostic.code == "SCXML038")
     );
-    // Anywhere else the vocabulary is EVENT001, never LIMIT006.
+    // Anywhere else the vocabulary is EVENT001.
     let misplaced = document(["", "", "", ""])
         .replace(r#"<state id="s">"#, r#"<state id="s" event:schema="true">"#);
     assert_eq!(codes(&compile_with(&misplaced, &[])), ["EVENT001"]);

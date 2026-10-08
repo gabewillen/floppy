@@ -1,0 +1,7 @@
+<?ui-args --data-model-package datamodels/example/package/example.data-model.json?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:datamodel="https://github.com/stateforward/scxml.rs/namespaces/datamodel" version="1.0" datamodel="example" datamodel:src="https://github.com/stateforward/scxml.rs/datamodels/example" initial="a">
+  <state id="a">
+    <transition event="go" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

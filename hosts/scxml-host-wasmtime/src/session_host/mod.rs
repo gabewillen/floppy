@@ -473,6 +473,9 @@ pub(crate) struct HostCore {
     pub(crate) machine_linker: wasmtime::component::Linker<crate::component::MachineStoreData>,
     compiler: LazyComponent,
     data_models: [(&'static str, LazyComponent); 3],
+    /// Data-model package components keyed by the data model's name,
+    /// compiled on first use ([`SessionHost::with_data_model_components`]).
+    data_model_packages: Vec<(String, LazyComponent)>,
     pub(crate) data_model_linker:
         wasmtime::component::Linker<crate::data_model::DataModelStoreData>,
     io: Compiled,
@@ -907,7 +910,14 @@ impl HostCore {
         self.data_models
             .iter()
             .find(|(linked, _)| *linked == name)
-            .map(|(_, component)| component.get(&self.shared))
+            .map(|(_, component)| component)
+            .or_else(|| {
+                self.data_model_packages
+                    .iter()
+                    .find(|(linked, _)| linked == name)
+                    .map(|(_, component)| component)
+            })
+            .map(|component| component.get(&self.shared))
             .transpose()
     }
 }
@@ -1050,6 +1060,7 @@ impl SessionHost {
                 ("xpath", LazyComponent::new(components.data_model_xpath)),
                 ("null", LazyComponent::new(components.data_model_null)),
             ],
+            data_model_packages: Vec::new(),
             data_model_linker: crate::data_model::data_model_linker(&engine)?,
             io: shared.compile(components.io_scxml)?,
             io_linker: crate::capability_graph::io_linker(&engine)?,
@@ -1156,6 +1167,34 @@ impl SessionHost {
         );
         core.extension_resolver = resolver;
         core.namespace_call_fuel = call_fuel;
+        Ok(self)
+    }
+
+    /// Binds the components of data-model packages to their data models'
+    /// names for every session this host runs (root and invoked children):
+    /// a session whose Machine IR names one of them (its `datamodel` token)
+    /// gets its own instance of that component as its data model, exactly
+    /// as a built-in data model. Each compiles on first use through the
+    /// process-wide cache.
+    ///
+    /// # Errors
+    ///
+    /// A component over the host's byte bound, or [`HostError::Component`]
+    /// (`session-host-shared`) when a run of this host is in progress.
+    pub fn with_data_model_components(
+        mut self,
+        data_models: crate::DataModelComponents,
+    ) -> Result<Self, HostError> {
+        let core = Rc::get_mut(&mut self.core)
+            .ok_or_else(|| HostError::Component("session-host-shared".into()))?;
+        let bindings = data_models.into_bindings();
+        for (_, component) in &bindings {
+            crate::capability_graph::validate_component(component, component.kind(), &core.config)?;
+        }
+        core.data_model_packages = bindings
+            .iter()
+            .map(|(name, component)| (name.clone(), LazyComponent::new(component)))
+            .collect();
         Ok(self)
     }
 

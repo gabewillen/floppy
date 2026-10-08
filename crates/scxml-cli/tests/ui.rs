@@ -47,7 +47,7 @@ const NOT_REACHABLE_FROM_VALIDATE: &[(&str, &str)] = &[
     ("LIMIT001", WASM_ONLY_BOUND),
     ("LIMIT002", WASM_ONLY_BOUND),
     ("LIMIT004", WASM_ONLY_BOUND),
-    ("LIMIT007", WASM_ONLY_BOUND),
+    ("LIMIT005", WASM_ONLY_BOUND),
     ("COMP002", "produced only by `compile` package binding"),
     (
         "PKG002",
@@ -360,8 +360,8 @@ fn introduced_diagnostics(
 /// that the original report could not contain, with the reason. Every other
 /// maybe-incorrect fix must introduce no new diagnostic of any severity.
 const MAYBE_INCORRECT_EXCEPTIONS: &[(&str, &str, &str)] = &[(
-    "limit005-unknown-datamodel",
-    "LIMIT005",
+    "pkg005-unknown-datamodel",
+    "PKG005",
     "selecting a recognized data model turns on expression checking, which reports the fixture's pre-existing invalid script",
 )];
 

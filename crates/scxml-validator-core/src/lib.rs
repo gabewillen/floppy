@@ -55,11 +55,14 @@
 
 #![forbid(unsafe_code)]
 
+mod data_model_package;
+mod datamodel_attributes;
 mod datamodel_check;
 mod diagnostic;
 mod env_attributes;
 mod event_attributes;
 mod event_payloads;
+mod foreign_namespaces;
 mod graph;
 mod invoke_types;
 mod lowering;
@@ -83,6 +86,11 @@ mod explain {
     mod tests;
 }
 
+pub use data_model_package::{
+    DATA_MODEL_PACKAGE_FIELDS, DATA_MODEL_PACKAGE_FORMAT, DataModelPackageManifest,
+    SUPPORTED_DATA_MODEL_WIT_VERSION, SUPPORTED_DATA_MODEL_WIT_WORLD, is_data_model_uri,
+};
+pub use datamodel_attributes::datamodel_attribute_diagnostics;
 pub use datamodel_check::{
     DEFAULT_DATA_MODEL, EffectCause, EffectCheck, EffectFinding, EffectFragment, EffectKind,
     EffectRole, EffectSpan, ExpressionCheck, ExpressionKind, ExpressionSyntaxChecker,
@@ -93,6 +101,7 @@ pub use datamodel_check::{
 pub use diagnostic::{Diagnostic, Fix, FixEdit, Label, Report, Severity, line_column_span};
 pub use env_attributes::{MAX_ENV_NAME_BYTES, env_attribute_diagnostics, env_slot, is_env_name};
 pub use event_attributes::event_attribute_diagnostics;
+pub use foreign_namespaces::extension_namespaces;
 pub use graph::{
     GRAPH_WORK_PER_ITEM, MAX_GRAPH_NODES, MAX_GRAPH_TARGETS, MAX_GRAPH_TRANSITIONS, MAX_GRAPH_WORK,
     graph_work_budget,
@@ -122,7 +131,7 @@ use scxml_syntax::telemetry::{
 use scxml_syntax::{
     Document, SourceId, SourceText, XmlLimits, parse_xml_with_limits, validate_document_limits,
 };
-pub use scxml_types::{ENV_NAMESPACE_URI, EVENT_NAMESPACE_URI};
+pub use scxml_types::{DATAMODEL_NAMESPACE_URI, ENV_NAMESPACE_URI, EVENT_NAMESPACE_URI};
 pub use semantic::{MAX_NESTED_SCXML_DEPTH, Rule, SCXML_NAMESPACE, validate_semantics};
 pub use service_package::{
     SERVICE_PACKAGE_FIELDS, SERVICE_PACKAGE_FORMAT, SUPPORTED_SERVICE_WIT_VERSION,
@@ -155,6 +164,10 @@ pub struct Validator<R, B> {
     /// bind, by exact type URI (`PKG004`, `ENV001` on `<invoke>`);
     /// `None` judges no binding.
     services: Option<std::collections::BTreeMap<String, Vec<String>>>,
+    /// The name each data-model package the caller's packages bind
+    /// declares, by exact data-model package URI (`PKG005`,
+    /// `DATAMODEL002`); `None` judges no binding.
+    data_models: Option<std::collections::BTreeMap<String, String>>,
     /// The bytes of each schema file an `event:schema` references, keyed by
     /// the reference's resource part as authored.
     event_schema_resources: EventSchemaResources,
@@ -173,6 +186,7 @@ impl<R, B> Validator<R, B> {
             xml_limits: XmlLimits::DEFAULT,
             expression_checkers: Vec::new(),
             services: None,
+            data_models: None,
             event_schema_resources: std::collections::BTreeMap::new(),
             packages: None,
         }
@@ -222,6 +236,21 @@ impl<R, B> Validator<R, B> {
         services: std::collections::BTreeMap<String, Vec<String>>,
     ) -> Self {
         self.services = Some(services);
+        self
+    }
+
+    /// The name each data-model package the caller binds declares, by
+    /// exact data-model package URI: an `<scxml datamodel:src>` naming a URI
+    /// none of them binds is `PKG005`, and one whose `datamodel` token is
+    /// not its package's name is `DATAMODEL002`. Without this call no
+    /// binding is judged (a data model that is neither built in nor named by
+    /// a `datamodel:src` is `PKG005` either way).
+    #[must_use]
+    pub fn with_data_models(
+        mut self,
+        data_models: std::collections::BTreeMap<String, String>,
+    ) -> Self {
+        self.data_models = Some(data_models);
         self
     }
 
@@ -361,6 +390,7 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
         }
         if self.schema_mode != SchemaMode::Off {
             let mut schemas = Vec::new();
+            let extension_namespaces = extension_namespaces(document);
             for namespace_uri in document.used_namespaces() {
                 // The XML namespace and the XML Schema instance namespace
                 // (`xsi:schemaLocation`, `xsi:type`, ...) are built into
@@ -373,6 +403,7 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
                     || namespace_uri == "http://www.w3.org/2001/XMLSchema-instance"
                     || namespace_uri == scxml_types::ENV_NAMESPACE_URI
                     || namespace_uri == scxml_types::EVENT_NAMESPACE_URI
+                    || namespace_uri == scxml_types::DATAMODEL_NAMESPACE_URI
                 {
                     continue;
                 }
@@ -386,6 +417,11 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
                 match self.resolver.resolve_documents(&namespace_uri) {
                     Ok(documents) => schemas.extend(documents),
                     Err(SchemaResolveError::NotFound) if self.schema_mode == SchemaMode::Lax => {}
+                    // Only an extension namespace (its custom actions) needs
+                    // a schema; any other foreign markup without one is
+                    // `LINT022`.
+                    Err(SchemaResolveError::NotFound)
+                        if !extension_namespaces.contains(&namespace_uri) => {}
                     Err(error) => report.push(unresolved_schema_diagnostic(
                         document,
                         &namespace_uri,
@@ -425,6 +461,11 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
             report.push(diagnostic);
         }
         for diagnostic in invoke_types::invoke_type_diagnostics(document, self.services.as_ref()) {
+            report.push(diagnostic);
+        }
+        datamodel_attributes::report_data_models(document, self.data_models.as_ref(), &mut report);
+        let is_bound = |namespace: &str| self.resolver.resolve_documents(namespace).is_ok();
+        for diagnostic in foreign_namespaces::unbound_namespace_diagnostics(document, &is_bound) {
             report.push(diagnostic);
         }
         if let Some(validator) = &self.packages {

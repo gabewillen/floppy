@@ -1,0 +1,17 @@
+warning[LINT022]: element `<x:note>` in an unbound namespace has no effect
+ --> tests/ui/lint022-foreign-element.scx:3:6
+  |
+2 |   <state id="a">
+  |    ----- not executable content: `<state>` runs no custom action
+3 |     <x:note>reviewed</x:note>
+  |      ^^^^^^ namespace `urn:example:ext`
+  |
+  = note: SCXML 1.0 allows attributes and elements from other namespaces on and in its elements (the W3C schema's `##other` wildcards), and the processor executes none of them: only a package that binds the namespace (its schema and validator) reads them, and no extension package or registered schema binds this one
+  = help: bind the namespace's package (`--extension-package MANIFEST.json`) or register its schema (`--schema URI=PATH`), or remove the element if it is a leftover
+help: remove `<x:note>`
+  |
+3 -     <x:note>reviewed</x:note>
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scx --explain LINT022`.
+validated tests/ui/lint022-foreign-element.scx

@@ -5,7 +5,8 @@
 //! # Which URIs load
 //!
 //! An `https:` URI, a `file:` URI, or a relative URI, resolved against the
-//! base URI of the document that names it (RFC 3986 §5; the root
+//! element's in-scope `xml:base` (XML Base; [`scxml_types::resolve_reference`])
+//! and then the base URI of the document that names it (RFC 3986 §5; the root
 //! document's base is its `file:` URL, an `<invoke src>` child's the URL it
 //! was loaded from). Any other scheme does not load. Remote documents come
 //! through the run's [`Repository`] with the repository resolver's bounds
@@ -138,7 +139,7 @@ fn literals_of(base: &url::Url, text: &str) -> Vec<Literal> {
         return Vec::new();
     };
     let mut literals = Vec::new();
-    document.root.visit(&mut |element| {
+    document.root.visit_with_base(&mut |element, xml_base| {
         let site = [Site::Invoke, Site::Script, Site::Data]
             .into_iter()
             .find(|site| {
@@ -149,7 +150,14 @@ fn literals_of(base: &url::Url, text: &str) -> Vec<Literal> {
         if let Some(site) = site
             && let Some(src) = element.attribute("src")
         {
-            let authored = scxml_syntax::collapse_whitespace(&src.value).into_owned();
+            // The URI as the engine passes it: resolved against the
+            // element's in-scope XML Base, as lowering resolves a `<data>`
+            // or `<script>` `src` and the machine an `<invoke>`'s.
+            let src = scxml_syntax::collapse_whitespace(&src.value);
+            let authored = match xml_base {
+                Some(base) => scxml_types::resolve_reference(base, &src),
+                None => src.into_owned(),
+            };
             literals.push(Literal {
                 site,
                 url: resolve(base, &authored),

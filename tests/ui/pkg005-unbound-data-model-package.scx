@@ -1,0 +1,6 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:datamodel="https://github.com/stateforward/scxml.rs/namespaces/datamodel" version="1.0" datamodel="json" datamodel:src="urn:example:datamodels:json" initial="a">
+  <state id="a">
+    <transition event="go" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

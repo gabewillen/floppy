@@ -1,0 +1,16 @@
+error[PKG005]: unknown data model `ecmascipt`
+ --> tests/ui/pkg005-unknown-datamodel.scx:1:85
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="ecmascipt">
+  |                                                                                     ^^^^^^^^^ neither a built-in data model nor one a `datamodel:src` names
+  |
+  = note: the built-in data models are `ecmascript`, `null`, and `xpath`; any other data model is a package, named on the same `<scxml>` by `datamodel:src`, and without one none of this machine's expressions can be evaluated
+  = help: did you mean `ecmascript`? Or name the data model's package with `datamodel:src`
+  = spec: SCXML 1.0 §5.1 Data Model
+help: use the `ecmascript` data model
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="ecmascript">
+  |                                                                                     ~~~~~~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scx --explain PKG005`.

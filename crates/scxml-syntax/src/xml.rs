@@ -1272,7 +1272,10 @@ fn parse_start(
             ),
             None => (None, lexical.clone()),
         };
-        let (value, tag) = if invoke && namespace.is_none() && local == "type" {
+        let (value, tag) = if (invoke && namespace.is_none() && local == "type")
+            || (namespace.as_deref() == Some(scxml_types::DATAMODEL_NAMESPACE_URI)
+                && local == "src")
+        {
             split_tag(value)
         } else {
             (value, None)
@@ -1306,7 +1309,8 @@ fn parse_start(
 /// [`split_tag`].
 const SCXML_NAMESPACE: &str = "http://www.w3.org/2005/07/scxml";
 
-/// Reads one namespace declaration or `<invoke type>` value as the document
+/// Reads one namespace declaration, `<invoke type>`, or `datamodel:src`
+/// value as the document
 /// is ingested: a repository package URI's trailing `@<tag>` is split off
 /// ([`scxml_types::strip_tag`]), once, so nothing after parsing sees it. A
 /// malformed pin is kept exactly as written, for the CLI's resolver to

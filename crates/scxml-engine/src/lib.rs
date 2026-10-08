@@ -4606,6 +4606,7 @@ mod tests {
             typeexpr: None,
             src: None,
             srcexpr: None,
+            xml_base: None,
             id: Some("inv".into()),
             idlocation: None,
             namelist: Vec::new(),

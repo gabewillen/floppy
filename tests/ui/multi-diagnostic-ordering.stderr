@@ -13,19 +13,6 @@ help: add `version="1.0"`
 3 |        initial="missing" version="1.0">
   |                         ++++++++++++++
 
-error[XSD001]: cannot resolve an XML Schema for namespace `urn:example:custom`
- --> tests/ui/multi-diagnostic-ordering.scx:2:17
-  |
-2 |        xmlns:c="urn:example:custom"
-  |                 ^^^^^^^^^^^^^^^^^^ no schema is registered for it
-...
-6 |     <c:mark value="not-an-integer"/>
-  |      ------ first use of this namespace
-  |
-  = note: schema lookup uses the exact namespace URI; the SCXML namespace uses the bundled W3C SCXML 1.0 schema by default, and every other namespace used under the strict policy needs an explicitly registered schema
-  = help: register a schema with `--schema urn:example:custom=PATH.xsd`, or validate with `--policy lax` to skip namespaces without a schema
-  = spec: SCXML 1.0 §4.10 Extensibility of Executable Content
-
 error[SCXML006]: initial state `missing` does not exist
  --> tests/ui/multi-diagnostic-ordering.scx:3:17
   |
@@ -67,17 +54,17 @@ help: a state with a similar name exists: `done`
  5 |     <transition event="finish, abort" target="done"/>
    |                                               ~~~~
 
-error[LIMIT006]: this compiler cannot lower `<c:mark>` from namespace `urn:example:custom` inside `<state>`
+warning[LINT022]: element `<c:mark>` in an unbound namespace has no effect
  --> tests/ui/multi-diagnostic-ordering.scx:6:6
   |
 4 |   <state id="ready">
-  |    ----- this compiler lowers only SCXML children of `<state>`
+  |    ----- not executable content: `<state>` runs no custom action
 5 |     <transition event="finish, abort" target="don"/>
 6 |     <c:mark value="not-an-integer"/>
-  |      ^^^^^^ element from another namespace
+  |      ^^^^^^ namespace `urn:example:custom`
   |
-  = note: this is a limit of this toolchain, not an SCXML rule: SCXML 1.0 allows elements from other namespaces in its content models (the W3C schema's `##other` wildcards), but the compiler lowers them only as executable content (custom actions in `<onentry>`, `<onexit>`, `<transition>`, `<finalize>`, `<if>`, or `<foreach>`) and rejects them anywhere else rather than drop them silently
-  = help: to compile the document with this toolchain, move the element into executable content, or remove it
+  = note: SCXML 1.0 allows attributes and elements from other namespaces on and in its elements (the W3C schema's `##other` wildcards), and the processor executes none of them: only a package that binds the namespace (its schema and validator) reads them, and no extension package or registered schema binds this one
+  = help: bind the namespace's package (`--extension-package MANIFEST.json`) or register its schema (`--schema URI=PATH`), or remove the element if it is a leftover
 help: remove `<c:mark>`
   |
 6 -     <c:mark value="not-an-integer"/>
@@ -113,6 +100,6 @@ error[SCXML002]: duplicate identifier `ready`
   = help: choose a unique identifier and update every reference to it
   = spec: SCXML 1.0 §3.14 IDs
 
-diagnostic summary: 8 error(s), 0 warning(s), 0 note(s), 8 total
-Some diagnostics have detailed explanations: LIMIT006, SCXML002, SCXML005, SCXML006, SCXML013, XSD-cvc-complex-type.2.4, XSD-cvc-complex-type.4, XSD001.
-For more information about a diagnostic, try `scx --explain LIMIT006`.
+diagnostic summary: 6 error(s), 1 warning(s), 0 note(s), 7 total
+Some diagnostics have detailed explanations: LINT022, SCXML002, SCXML005, SCXML006, SCXML013, XSD-cvc-complex-type.2.4, XSD-cvc-complex-type.4.
+For more information about a diagnostic, try `scx --explain LINT022`.

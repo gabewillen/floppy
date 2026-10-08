@@ -98,19 +98,31 @@ pub const ENV_NAMESPACE_URI: &str = "https://github.com/stateforward/scxml.rs/na
 /// schema, or component is bound to it, and it is never fetched (it is not a
 /// repository namespace URI: it names no release tag).
 pub const EVENT_NAMESPACE_URI: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
+/// The `datamodel` attribute vocabulary: `<scxml>` may carry
+/// `datamodel:src` in this exact namespace, naming the data-model package
+/// (`https://github.com/<owner>/<repo>/datamodels/<name>`, optionally
+/// `@<tag>`, or a URI a given data-model package binds) whose data model
+/// the core `datamodel` token names. The core attribute stays the token
+/// the SCXML schema requires (an `NMTOKEN`). No package, schema, or
+/// component is bound to the vocabulary itself, and it is never fetched.
+pub const DATAMODEL_NAMESPACE_URI: &str =
+    "https://github.com/stateforward/scxml.rs/namespaces/datamodel";
 mod repository;
 pub use repository::RepositoryUri;
+mod xml_base;
+pub use xml_base::resolve_reference;
 
 /// Splits one trailing `@<tag>` off a repository package URI, the one place
-/// a namespace or `<invoke type>` URI is ever changed: documents are read
+/// a namespace, `<invoke type>`, or `datamodel:src` URI is ever changed: documents are read
 /// through it once, when they are parsed, and everything after that (the
 /// validator, the compiler, the Machine IR, the engine, the data models,
 /// and the hosts) sees only the tagless URI, exactly. The tag pins the
 /// release the CLI's resolver binds; it is never part of the namespace.
 ///
 /// A repository package URI is exactly
-/// `https://github.com/<owner>/<repo>/namespaces/<name>` or
-/// `https://github.com/<owner>/<repo>/services/<name>`, each segment
+/// `https://github.com/<owner>/<repo>/namespaces/<name>`,
+/// `https://github.com/<owner>/<repo>/services/<name>`, or
+/// `https://github.com/<owner>/<repo>/datamodels/<name>`, each segment
 /// `[A-Za-z0-9._-]` (not `.` or `..`, at most 100 bytes, so never `@`), and
 /// a tag `[A-Za-z0-9._+-]`, starting with an alphanumeric, without `..`, at
 /// most 128 bytes (so never `/` or `@`).

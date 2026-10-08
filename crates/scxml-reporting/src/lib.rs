@@ -2005,16 +2005,23 @@ pub const CODE_FAMILIES: &[(&str, &str)] = &[
     ("XML", "XML 1.0 well-formedness and the XML parser's limits"),
     ("XSD", "XML Schema validation of the document"),
     ("COMP", "the compiler"),
-    ("PKG", "extension and service packages and their binding"),
+    (
+        "PKG",
+        "extension, service, and data-model packages and their binding",
+    ),
     ("ENV", "the built-in `env` attribute vocabulary"),
     (
         "EVENT",
         "the built-in `event` attribute vocabulary (`event:schema`)",
     ),
+    (
+        "DATAMODEL",
+        "the built-in `datamodel` attribute vocabulary (`datamodel:src`)",
+    ),
     ("LINT", "best-practice warnings on legal SCXML"),
     (
         "LIMIT",
-        "this implementation's bounds and support limits, not specification rules",
+        "this implementation's bounds, not specification rules",
     ),
 ];
 
@@ -3163,7 +3170,7 @@ mod tests {
             "ENV001",
             "EVENT010",
             "LINT021",
-            "LIMIT009",
+            "LIMIT007",
             "XSD-cvc-complex-type.2.4",
             "example::bad_value",
         ] {
