@@ -130,17 +130,36 @@ Stopped mid-pass (2026-10-08) — resume this first:
     UI goldens, the browser host, AGENTS.md (built-in vocabularies,
     `datamodels/` repository URIs), and floppy's decisions.md mapping.
 
+## Port run decisions (user, 2026-10-08)
+
+The remaining mosfet port runs as one ultracode run with these grants:
+
+- **Commits:** commit locally; when the full proof is green, fast-forward
+  scxml.rs `main` and subtree-pull into floppy. Never push, publish, or
+  release.
+- **Live proof:** may run unattended against the DGX Sparks (direct vLLM)
+  and the TypeSafe decision service.
+- **Names:** the no-invented-names rule applies to scxml.rs only. floppy
+  names freely; new scxml.rs names are batched for the user's approval.
+- **Order:** backlog order — phase 4 bot core and abilities, phase 3 memory
+  on SQLite, phase 5 behaviors and routines, phase 6 speech and vision,
+  phase 7 PGlite memory and refreshed defaults.
+- **Speech and vision:** OpenAI-compatible audio and vision APIs (served
+  from the Sparks); ElevenLabs is an optional backend.
+- **Devices (phone, audio):** out of scope for now.
+- **Phase 7:** PGlite yes; releases and `SHA256SUMS` wait for going public.
+- **Endpoint default:** neutral package default; the gitignored `.env` sets
+  `FLOPPY_BASE_URL` to direct vLLM with provider-neutral `FLOPPY_API_KEY`.
+- **Builder:** save the vLLM traffic-light run as
+  `bots/builder/examples/traffic_light_vllm/`; drafts reference schema
+  files instead of inline JSON.
+- **Browser slice 2:** after the port.
+- **Pacing:** run through all phases, report after each; stop only for a
+  real blocker or scxml.rs names needing approval.
+
 ## Open decisions (waiting on the user)
 
-1. Default endpoint: neutral package default plus a local `.env` pointing at
-   direct vLLM (`FLOPPY_BASE_URL`, provider-neutral `FLOPPY_API_KEY`)?
-2. Browser slice 2: bump pinned Node to 26 (JSPI for services in browsers),
-   pre-built browser artifact per release, GitHub Pages for CORS on release
-   assets.
-3. Save the direct-vLLM traffic-light run as `bots/builder/examples/traffic_light_vllm/`;
-   builder drafts should reference schema files instead of inline JSON in
-   attributes (the inline quoting caused an `XML001` failure).
-4. Send the gateway report (reasoning buffering, keep-alives, abort on disconnect).
+1. Send the gateway report (reasoning buffering, keep-alives, abort on disconnect).
 
 ## Backlog (agreed, not started)
 
