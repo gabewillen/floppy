@@ -69,8 +69,8 @@ Last updated: 2026-10-08.
 
 ## Where things stand (2026-10-08)
 
-Done (scxml.rs `main` and `feat/invoke-services` at `92742d65`; floppy's
-subtree matches, squash `9d1a67a7`, pull `dea16624`):
+Done (scxml.rs `main` and `feat/invoke-services` at `20fe0722`; floppy's
+subtree matches, squash `3bb60dbd`, pull `83852f6e`):
 
 - Invoked services on WASI 0.3 / Component Model async (one `invoke`
   export); SCXML §6.4 cancel closes connections; no host time limits on
@@ -96,7 +96,12 @@ subtree matches, squash `9d1a67a7`, pull `dea16624`):
   to `LIMIT005`-`007`), and `deny.toml` allowing ISC and
   CDLA-Permissive-2.0. The flaky `repository_namespaces` test is fixed
   (`f4f14cc8`: each test writes its document in its own scratch directory).
-- floppy is green on it (2026-10-08): `scripts/build-components.sh`, fmt,
+- scxml.rs `EmbeddedDocument::event_schemas` (`73df0554`) and `EVENT011`
+  (`674e2f6e`): event data judged across the invoke boundary; canonical
+  components recorded (`20fe0722`, manifest `03bc0069`, IRP baselines
+  unchanged). floppy is green on it with `<decision:choice>` (D32,
+  `e7c0a870`).
+- floppy is green on the datamodel pass (2026-10-08): `scripts/build-components.sh`, fmt,
   clippy `-D warnings`, all workspace tests, and the `builder_bot` live
   test on direct vLLM; no floppy code or test named a moved code.
 
