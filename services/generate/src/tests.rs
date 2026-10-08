@@ -60,7 +60,7 @@ fn a_prompt_with_a_system_message_builds_the_canonical_request() {
         ("prompt", text("Say hello.")),
     ])
     .expect("valid parameters");
-    let request = build_request(Part::Reference(2), 1, &generation);
+    let request = build_request(2, 1, &generation);
     assert_eq!(
         request.url,
         [
@@ -98,9 +98,7 @@ fn a_schema_asks_for_structured_output_with_its_name_and_strictness() {
         ("strict", Data::Bool(true)),
     ])
     .expect("valid parameters");
-    let body: Json =
-        serde_json::from_slice(&build_request(Part::Reference(2), 1, &generation).body)
-            .expect("JSON");
+    let body: Json = serde_json::from_slice(&build_request(2, 1, &generation).body).expect("JSON");
     assert_eq!(body["response_format"]["type"], "json_schema");
     assert_eq!(body["response_format"]["json_schema"]["name"], "verdict");
     assert_eq!(body["response_format"]["json_schema"]["strict"], true);
@@ -112,8 +110,7 @@ fn a_schema_asks_for_structured_output_with_its_name_and_strictness() {
     ])
     .expect("valid parameters");
     let text_body: Json =
-        serde_json::from_slice(&build_request(Part::Reference(2), 1, &from_text).body)
-            .expect("JSON");
+        serde_json::from_slice(&build_request(2, 1, &from_text).body).expect("JSON");
     assert_eq!(
         text_body["response_format"]["json_schema"]["name"],
         DEFAULT_SCHEMA_NAME
@@ -129,9 +126,7 @@ fn reasoning_effort_is_sent_as_given() {
         ("reasoning_effort", text("high")),
     ])
     .expect("valid parameters");
-    let body: Json =
-        serde_json::from_slice(&build_request(Part::Reference(2), 1, &generation).body)
-            .expect("JSON");
+    let body: Json = serde_json::from_slice(&build_request(2, 1, &generation).body).expect("JSON");
     assert_eq!(body["reasoning_effort"], "high");
 }
 
@@ -457,23 +452,23 @@ fn every_failure_code_and_both_events_satisfy_the_builder_event_schemas() {
 }
 
 #[test]
-fn without_a_baseurl_value_the_base_is_the_packages_first_declared_origin() {
+fn both_slots_are_required_and_the_package_declares_no_origin() {
     let manifest = scxml_validator_core::ServicePackageManifest::from_json(include_bytes!(
         "../package/generate.service.json"
     ))
     .expect("the manifest parses");
-    let origin = super::package_origin().expect("the manifest declares an origin");
-    assert_eq!(Some(&origin), manifest.http_origins.first());
-    assert_eq!(origin, "https://cpa.willen.dev/v1");
-    let generation = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
-    let request = build_request(Part::Literal(origin), 1, &generation);
-    assert_eq!(
-        request.url,
-        [
-            Part::Literal("https://cpa.willen.dev/v1".into()),
-            Part::Literal(CHAT_COMPLETIONS_PATH.into())
-        ]
+    assert!(
+        manifest.http_origins.is_empty(),
+        "no default backend: the baseurl value supplies the one origin"
     );
+    assert_eq!(endpoint(Some(2), Some(1)), Ok((2, 1)));
+    for (base_url, api_key) in [(None, Some(1)), (Some(2), None), (None, None)] {
+        assert_eq!(
+            endpoint(base_url, api_key),
+            Err(FailureCode::Unconfigured),
+            "{base_url:?} {api_key:?}"
+        );
+    }
 }
 
 #[test]

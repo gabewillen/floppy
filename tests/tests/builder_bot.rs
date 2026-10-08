@@ -17,11 +17,12 @@
 //! The ignored `live_builder_through_an_env_file` test builds the same spec
 //! with the real backends: `FLOPPY_LIVE_ENV_FILE=<paths> cargo test -p
 //! floppy-tests --test builder_bot -- --ignored`, the paths joined like
-//! `PATH` when `CPA_API_KEY` and `TYPESAFE_API_KEY` live in separate files.
-//! The values are the files'; without a `CPA_BASE_URL` or
-//! `TYPESAFE_BASE_URL`, each service uses its package's declared origin
-//! (decision D18). The model is `FLOPPY_LIVE_MODEL`, else
-//! `sparks/qwen3.8-flash-next`. It writes the produced bot under `target/builder-live/`, and prints pass or
+//! `PATH` when `FLOPPY_API_KEY` and `TYPESAFE_API_KEY` live in separate
+//! files. The values are the files'; `FLOPPY_BASE_URL` is required (the
+//! generate service has no default backend), and without a
+//! `TYPESAFE_BASE_URL` the decision service uses its package's declared
+//! origin (decision D18). The model is `FLOPPY_LIVE_MODEL`, else
+//! `Qwen/Qwen3.8-Flash-Next`. It writes the produced bot under `target/builder-live/`, and prints pass or
 //! fail and counts only; no value is ever printed.
 
 #![allow(
@@ -42,7 +43,7 @@ use serde_json::{Map, Value as Json, json};
 use support::{Run, output, scratch, workspace, write};
 
 /// The fake keys (not secrets): the mock checks they arrive as bearers.
-const FAKE_CPA_KEY: &str = "sk-floppy-fake";
+const FAKE_FLOPPY_KEY: &str = "sk-floppy-fake";
 const FAKE_TYPESAFE_KEY: &str = "ts-floppy-fake";
 const SPEC: &str = "a traffic light with a pedestrian button";
 
@@ -255,8 +256,8 @@ fn service_draft() -> String {
     json!({
         "scxml": r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" version="1.0" datamodel="ecmascript" name="asker" initial="ask">
   <state id="ask">
-    <invoke type="https://github.com/stateforward/floppy/services/generate" env:apikey="CPA_API_KEY" env:baseurl="CPA_BASE_URL">
-      <param name="model" expr="'sparks/qwen3.8-flash-next'"/>
+    <invoke type="https://github.com/stateforward/floppy/services/generate" env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
+      <param name="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
       <param name="prompt" expr="'say hello'"/>
     </invoke>
     <transition event="generate.result" target="answered"/>
@@ -639,8 +640,8 @@ fn env_file(
 ) -> PathBuf {
     let origin = &mock.origin;
     let values = [
-        ("CPA_API_KEY", FAKE_CPA_KEY.to_owned()),
-        ("CPA_BASE_URL", format!("{origin}/{generate_route}/v1")),
+        ("FLOPPY_API_KEY", FAKE_FLOPPY_KEY.to_owned()),
+        ("FLOPPY_BASE_URL", format!("{origin}/{generate_route}/v1")),
         ("TYPESAFE_API_KEY", FAKE_TYPESAFE_KEY.to_owned()),
         ("TYPESAFE_BASE_URL", format!("{origin}/{decision_route}")),
     ];
@@ -908,7 +909,7 @@ fn assert_repair_requests(received: &[Received]) {
     for request in designs.iter().chain(&authors) {
         assert_eq!(
             request.authorization.as_deref(),
-            Some(format!("Bearer {FAKE_CPA_KEY}").as_str())
+            Some(format!("Bearer {FAKE_FLOPPY_KEY}").as_str())
         );
     }
     let decisions: Vec<&Received> = received
@@ -999,7 +1000,7 @@ fn the_same_diagnostic_twice_ends_the_build_with_no_progress() {
         &mock,
         "broken",
         "broken",
-        &["CPA_API_KEY", "CPA_BASE_URL"],
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
         &json!({"spec": SPEC}),
     );
     assert!(finished(&records), "{records:?}");
@@ -1019,6 +1020,49 @@ fn the_same_diagnostic_twice_ends_the_build_with_no_progress() {
     );
 }
 
+/// No default model backend: without `FLOPPY_BASE_URL` the first
+/// generation answers `unconfigured` without sending anything, and the
+/// builder fails fast in `failed` (`unconfigured`) with a diagnostic naming
+/// both required variables, without retrying or asking the decision service.
+#[test]
+fn without_a_model_base_url_the_build_fails_fast_unconfigured() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "nobase",
+        "broken",
+        &["FLOPPY_API_KEY", "TYPESAFE_API_KEY", "TYPESAFE_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "failed", "{failed}");
+    assert_eq!(failed["reason"], "unconfigured", "{failed}");
+    assert_eq!(failed["diagnostics"][0]["code"], "unconfigured", "{failed}");
+    let message = failed["diagnostics"][0]["message"].as_str().unwrap_or("");
+    assert!(
+        message.contains("FLOPPY_BASE_URL") && message.contains("FLOPPY_API_KEY"),
+        "{failed}"
+    );
+    assert_eq!(failed["history"], json!([]), "no retry: {failed}");
+    let logs: Vec<String> = records
+        .iter()
+        .filter(|record| record.get("parent").is_none() && record["type"] == "log")
+        .map(|record| format!("{} {record}", record["label"]))
+        .collect();
+    assert!(
+        logs.iter().any(|log| log.starts_with("\"failed\"")
+            && log.contains("unconfigured")
+            && log.contains("FLOPPY_BASE_URL")),
+        "the failed log names the missing configuration: {logs:?}"
+    );
+    assert!(
+        mock.received().is_empty(),
+        "nothing is sent: {:?}",
+        mock.received().len()
+    );
+}
+
 /// A failure that differs from the one before it is progress: the builder
 /// keeps repairing (an invalid draft, then one with a delayed internal send)
 /// until the fixed draft ends in `done`.
@@ -1029,7 +1073,7 @@ fn a_different_diagnostic_each_time_keeps_repairing_until_done() {
         &mock,
         "progress",
         "progress",
-        &["CPA_API_KEY", "CPA_BASE_URL"],
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
         &json!({"spec": SPEC}),
     );
     assert!(finished(&records), "{records:?}");
@@ -1122,7 +1166,7 @@ fn a_fast_design_failure_keeps_its_cause_in_the_log_and_the_failed_done_data() {
         &mock,
         "fastfail",
         "fastfail",
-        &["CPA_API_KEY", "CPA_BASE_URL"],
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
         &json!({"spec": SPEC}),
     );
     assert!(finished(&records), "{records:?}");
@@ -1215,7 +1259,7 @@ fn a_draft_that_invokes_the_runs_generate_service_is_simulated_through_it() {
         &mock,
         "service",
         "service",
-        &["CPA_API_KEY", "CPA_BASE_URL"],
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
         &json!({"spec": "ask generate to say hello", "max_attempts": 1}),
     );
     assert!(finished(&records), "{records:?}");
@@ -1236,7 +1280,7 @@ fn a_draft_that_invokes_the_runs_generate_service_is_simulated_through_it() {
     assert_eq!(own.len(), 1, "the draft generated once: {received:?}");
     assert_eq!(
         own[0].authorization.as_deref(),
-        Some(format!("Bearer {FAKE_CPA_KEY}").as_str()),
+        Some(format!("Bearer {FAKE_FLOPPY_KEY}").as_str()),
         "the draft's invoke reached the key through the builder's env scope"
     );
 }
@@ -1357,14 +1401,14 @@ fn an_invalid_request_is_answered_with_builder_failed() {
 
 /// Builds the spec with the real `generate` (and `decision`) backends on the
 /// wall clock (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, default
-/// `sparks/qwen3.8-flash-next`). Writes the produced bot under `target/builder-live/` and
+/// `Qwen/Qwen3.8-Flash-Next`). Writes the produced bot under `target/builder-live/` and
 /// prints only pass or fail and counts.
 #[test]
 #[ignore = "makes real model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_builder_through_an_env_file() {
     let env_files = support::live_env_files();
     let model =
-        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "sparks/qwen3.8-flash-next".into());
+        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "Qwen/Qwen3.8-Flash-Next".into());
     let finished = start(
         &builder_document(),
         "wall",
@@ -1377,8 +1421,9 @@ fn live_builder_through_an_env_file() {
             ],
             "model": model,
         }),
-        // No base URL from the shell: each service uses its package's
-        // declared origin unless the env file sets one (decision D18).
+        // No values from the shell: the env files must hold FLOPPY_BASE_URL
+        // (generate has no default, D31); the decision service uses its
+        // package's declared origin unless they set TYPESAFE_BASE_URL (D18).
         &[],
     )
     .finish(Duration::from_mins(30));

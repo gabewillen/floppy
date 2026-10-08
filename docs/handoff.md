@@ -52,14 +52,17 @@ Last updated: 2026-10-08.
   with a `builder.request` event on stdin (see `bots/builder/README.md`).
 - Live tests: `FLOPPY_LIVE_ENV_FILE` (colon-separated env files) and
   `FLOPPY_LIVE_MODEL`.
-- Models run on the user's two DGX Sparks:
-  - **direct vLLM (preferred):** `http://192.168.2.89:8000/v1`, model
-    `Qwen/Qwen3.8-Flash-Next`, key `VLLM_API_KEY` in floppy's `.env`. Streams
-    reasoning immediately; 3/3 builder runs passed.
-  - gateway: `https://cpa.willen.dev/v1` (or LAN `http://192.168.2.128:8319/v1`),
-    model `sparks/qwen3.8-flash-next`, key `CPA_API_KEY`. Holds reasoning back,
-    so long generations time out; a report for the gateway's maintainer
-    was drafted in the 2026-10-07 session.
+- Model endpoint (decision D31): the `generate` service has no default
+  backend; every run needs `FLOPPY_BASE_URL` and `FLOPPY_API_KEY`, and
+  without either the builder ends at once in `failed` (`unconfigured`).
+  floppy's gitignored `.env` sets them to the user's two DGX Sparks:
+  - **direct vLLM:** `FLOPPY_BASE_URL=http://192.168.2.89:8000/v1`, model
+    `Qwen/Qwen3.8-Flash-Next` (the builder's default), `FLOPPY_API_KEY` (a
+    copy of the vLLM key, also kept as `VLLM_API_KEY`). Streams reasoning
+    immediately.
+  - the gateway in front of the Sparks is no longer used: it holds
+    reasoning back, so long generations time out (D24, D25, live-proof.md);
+    a report for its maintainer was drafted in the 2026-10-07 session.
   - decision service: TypeSafe (`TYPESAFE_API_KEY` in
     `~/VSCode/stateforward/mosfet/mosfet.py/.env`).
 - `.env` files are gitignored; never print or commit their values.
@@ -118,8 +121,9 @@ The remaining mosfet port runs as one ultracode run with these grants:
   from the Sparks); ElevenLabs is an optional backend.
 - **Devices (phone, audio):** out of scope for now.
 - **Phase 7:** PGlite yes; releases and `SHA256SUMS` wait for going public.
-- **Endpoint default:** neutral package default; the gitignored `.env` sets
-  `FLOPPY_BASE_URL` to direct vLLM with provider-neutral `FLOPPY_API_KEY`.
+- **Endpoint:** no package default (`FLOPPY_BASE_URL` required, fail fast
+  when unset; D31); the gitignored `.env` sets `FLOPPY_BASE_URL` to direct
+  vLLM with provider-neutral `FLOPPY_API_KEY`.
 - **Builder:** save the vLLM traffic-light run as
   `bots/builder/examples/traffic_light_vllm/`; drafts reference schema
   files instead of inline JSON.

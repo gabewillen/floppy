@@ -7,7 +7,7 @@
   "schema-sha256": null,
   "wit-world": "stateforward:scxml/invoked-service",
   "wit-version": "0.2.0",
-  "http-origins": ["https://cpa.willen.dev/v1"],
+  "http-origins": [],
   "env-slots": ["apikey", "baseurl"],
   "validator-artifact": "floppy_service_generate_validator.virtualized.wasm",
   "validator-sha256": "6a5b17fb03d223972e3801de759d3eec2db0cfcff77107af91c1b3e6ada3d24d"

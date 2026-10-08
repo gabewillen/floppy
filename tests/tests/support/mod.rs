@@ -38,8 +38,8 @@ use sha2::{Digest as _, Sha256};
 /// them, so a test supplies values only through its env file (or an
 /// explicit `--env NAME=VALUE`).
 pub const GRANTED: [&str; 4] = [
-    "CPA_API_KEY",
-    "CPA_BASE_URL",
+    "FLOPPY_API_KEY",
+    "FLOPPY_BASE_URL",
     "TYPESAFE_API_KEY",
     "TYPESAFE_BASE_URL",
 ];

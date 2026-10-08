@@ -56,9 +56,12 @@
   Bindings: the scx namespace (built into scx), and the decision namespace
   package and the generate and decision service packages, resolved from their
   repository URIs; the env
-  attributes below scope CPA_API_KEY and CPA_BASE_URL to the generate
+  attributes below scope FLOPPY_API_KEY and FLOPPY_BASE_URL to the generate
   service's invokes and TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
-  decision service's.
+  decision service's. The generate service has no default backend: when the
+  run holds no FLOPPY_BASE_URL or no FLOPPY_API_KEY it sends nothing and
+  answers generate.failed unconfigured, and the builder fails fast in
+  failed (unconfigured) instead of retrying.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:scx="https://github.com/stateforward/scxml.rs/namespaces/scx"
@@ -72,7 +75,7 @@
     <data id="constraints" expr="[]"/>
     <!-- An optional failure cap; null (no cap) unless the request sets it. -->
     <data id="max_attempts" expr="null"/>
-    <data id="model" expr="'sparks/qwen3.8-flash-next'"/>
+    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <data id="generate_timeout_ms" expr="300000"/>
     <data id="decision_timeout_ms" expr="60000"/>
     <!-- The work. -->
@@ -145,7 +148,7 @@
       <assign location="spec" expr="_event.data.spec"/>
       <assign location="constraints" expr="_event.data.constraints === undefined ? [] : _event.data.constraints"/>
       <assign location="max_attempts" expr="_event.data.max_attempts === undefined ? null : _event.data.max_attempts"/>
-      <assign location="model" expr="_event.data.model === undefined ? 'sparks/qwen3.8-flash-next' : _event.data.model"/>
+      <assign location="model" expr="_event.data.model === undefined ? 'Qwen/Qwen3.8-Flash-Next' : _event.data.model"/>
       <assign location="generate_timeout_ms" expr="_event.data.generate_timeout_ms === undefined ? generate_timeout_ms : _event.data.generate_timeout_ms"/>
     </transition>
     <transition event="builder.request" target="failed">
@@ -171,7 +174,7 @@
       <cancel sendid="design-timeout"/>
     </onexit>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
-            env:apikey="CPA_API_KEY" env:baseurl="CPA_BASE_URL">
+            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
       <param name="model" expr="model"/>
       <param name="system" expr="design_system"/>
       <param name="prompt" expr="JSON.stringify({task: 'design', spec: spec, constraints: constraints, previous_plan: previous_plan, diagnostics: diagnostics})"/>
@@ -188,6 +191,11 @@
     <transition event="generate.failed" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.failed","description":"The generation failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}'/>
     <transition event="done.invoke" cond="_event.invokeid === gen_id &amp;&amp; plan !== null" target="author">
       <assign location="mode" expr="'author'"/>
+    </transition>
+    <!-- No backend configured: no retry can help, so fail fast. -->
+    <transition event="done.invoke" cond="_event.invokeid === gen_id &amp;&amp; gen_failure === 'unconfigured'" target="failed">
+      <assign location="failure_reason" expr="'unconfigured'"/>
+      <assign location="diagnostics" expr="[{kind: 'generate', code: 'unconfigured', message: 'the generate service has no backend: the run holds no FLOPPY_BASE_URL or no FLOPPY_API_KEY (both are required; set them in the --env-file)'}]"/>
     </transition>
     <transition event="done.invoke" cond="_event.invokeid === gen_id" target="retry_gate">
       <assign location="diagnostics" expr="[{kind: 'generate', code: 'design-failed', message: 'the design generation failed (' + (gen_failure === null ? 'it ended without an event' : gen_failure) + '): no plan within the plan schema'}]"/>
@@ -222,7 +230,7 @@
       <cancel sendid="author-timeout"/>
     </onexit>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
-            env:apikey="CPA_API_KEY" env:baseurl="CPA_BASE_URL">
+            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
       <param name="model" expr="model"/>
       <param name="system" expr="author_system"/>
       <param name="prompt" expr="JSON.stringify({task: mode, spec: spec, constraints: constraints, plan: plan, previous_scxml: mode === 'repair' ? scxml_text : null, previous_tests: mode === 'repair' ? previous_tests : null, diagnostics: diagnostics})"/>
@@ -240,6 +248,11 @@
     <transition event="done.invoke" cond="_event.invokeid === gen_id &amp;&amp; draft !== null" target="validate">
       <assign location="scxml_text" expr="draft.scxml"/>
       <assign location="fix_passes" expr="0"/>
+    </transition>
+    <!-- No backend configured: no retry can help, so fail fast. -->
+    <transition event="done.invoke" cond="_event.invokeid === gen_id &amp;&amp; gen_failure === 'unconfigured'" target="failed">
+      <assign location="failure_reason" expr="'unconfigured'"/>
+      <assign location="diagnostics" expr="[{kind: 'generate', code: 'unconfigured', message: 'the generate service has no backend: the run holds no FLOPPY_BASE_URL or no FLOPPY_API_KEY (both are required; set them in the --env-file)'}]"/>
     </transition>
     <transition event="done.invoke" cond="_event.invokeid === gen_id" target="retry_gate">
       <assign location="diagnostics" expr="[{kind: 'generate', code: 'author-failed', message: 'the author generation failed (' + (gen_failure === null ? 'it ended without an event' : gen_failure) + '): no draft within the draft schema'}]"/>
@@ -496,7 +509,7 @@
     <onentry>
       <log label="failed" expr="failure_reason + (diagnostics.length &gt; 0 ? ': ' + diagnostics[0].kind + ' ' + diagnostics[0].code + ': ' + diagnostics[0].message : '')"/>
     </onentry>
-    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"failed","description":"The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation.","type":"object","properties":{"reason":{"enum":["invalid-request","no-progress","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","simulate","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}},"history":{"type":"array","items":{"type":"object"}}},"required":["reason","diagnostics","history"],"additionalProperties":false}'>
+    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"failed","description":"The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation.","type":"object","properties":{"reason":{"enum":["invalid-request","unconfigured","no-progress","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","simulate","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}},"history":{"type":"array","items":{"type":"object"}}},"required":["reason","diagnostics","history"],"additionalProperties":false}'>
       <content expr="({reason: failure_reason, diagnostics: diagnostics.map(function (d) { return {kind: d.kind, code: d.code, message: d.message}; }), history: attempt_log})"/>
     </donedata>
   </final>

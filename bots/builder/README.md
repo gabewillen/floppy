@@ -30,9 +30,9 @@ final states and its parent receives that state's done data as
 
 | What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?}`: the specification, extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `sparks/qwen3.8-flash-next`, a reasoning model), and the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000) |
+| `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?}`: the specification, extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), and the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, tests, report}`: the built document, its input event schemas (`{event, schema}`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
-| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history}`: `invalid-request`, `no-progress` (the same failure twice in a row), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`) and the failure history (every failure's attempt and diagnostics, as in `done`'s report) |
+| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL` or no `FLOPPY_API_KEY`; the first generation ends the build at once), `no-progress` (the same failure twice in a row), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`) and the failure history (every failure's attempt and diagnostics, as in `done`'s report) |
 
 The builder answers exactly once, by finishing. Run directly, `scx run`
 prints the done data in its `done` record and exits 0; invoked, the parent
@@ -71,7 +71,9 @@ intake -> design -> author -> validate -> simulate -> done
   fresh invoke id in `gen_id` each time) with the `topology_plan`
   structured-output schema; its `<finalize>` takes the plan from
   `generate.result` (or the code from `generate.failed`), and
-  `done.invoke` moves on to `author`, or to `retry_gate` without a plan. A
+  `done.invoke` moves on to `author`, or to `retry_gate` without a plan,
+  except that `unconfigured` (no `FLOPPY_BASE_URL` or no `FLOPPY_API_KEY`
+  held) goes straight to `failed`, since no retry can supply a backend. A
   redesign sends the plan it replaces (`previous_plan`) with the
   diagnostics; a redesign whose generation failed keeps that plan for the
   next one.
@@ -81,7 +83,7 @@ intake -> design -> author -> validate -> simulate -> done
   schemas as JSON text, and one to eight test scripts (input events with
   delays, a settle time, the outputs expected in order, and whether the
   machine finishes). A repair sees the failed draft, its tests, and the
-  diagnostics.
+  diagnostics; `unconfigured` ends the build in `failed` as in `design`.
 * `validate`: its schemas must parse; `scx:validate` with
   `applyfixes="machine-applicable"`; when the fixes change the text,
   `apply_fixes` takes them and validates again (at most 2 passes per draft);
@@ -178,8 +180,8 @@ Everything a run needs is in the document:
   `scripts/build-components.sh` publishes the locally built packages into
   (README, "Running a bot"). The consent listing shows the release tag and
   commit each one resolved to.
-* Its `env` attributes scope the variables: `CPA_API_KEY` and
-  `CPA_BASE_URL` go only to the generate service's `<invoke>`s
+* Its `env` attributes scope the variables: `FLOPPY_API_KEY` and
+  `FLOPPY_BASE_URL` go only to the generate service's `<invoke>`s
   (`env:apikey`, `env:baseurl`), and `TYPESAFE_API_KEY` and
   `TYPESAFE_BASE_URL` only to the decision service's. `scx run` lists each
   variable and the `<invoke>`s it goes to before running (names only).
@@ -190,13 +192,18 @@ Everything a run needs is in the document:
 
 Each base URL comes from the env file, or, with a bare `--env NAME`, from
 the calling shell (`scx` takes a variable's value from `--env NAME=VALUE`,
-else its `--env-file`, else, for a bare `--env NAME`, the shell). When no
-`baseurl` value is held, a service uses its package's first declared
-`http-origins` entry: `https://cpa.willen.dev/v1` (the `OpenAI`-compatible
-gateway in front of the maintainer's two DGX Spark machines) for `generate`
-and `https://api.typesafe.ai` for `decision`, so env files with only the two
-keys run both services; `--env-file` repeats, so the keys may come from two
-files (`--env-file .env --env-file <typesafe env file>`). Without `TYPESAFE_API_KEY` the decision service
+else its `--env-file`, else, for a bare `--env NAME`, the shell). The
+`generate` service has no default backend (its package declares no
+`http-origins`): `FLOPPY_BASE_URL` (any `OpenAI`-compatible Chat Completions
+base URL, for example the maintainer's direct vLLM on the DGX Sparks,
+`http://192.168.2.89:8000/v1`) and `FLOPPY_API_KEY` are both required, and
+without either the generate service sends nothing and answers
+`generate.failed` (`unconfigured`), so the builder ends at once in `failed`
+with the reason `unconfigured` and a diagnostic naming both variables. The
+`decision` service without a `baseurl` value uses its package's first
+declared `http-origins` entry, `https://api.typesafe.ai`. `--env-file`
+repeats, so the keys may come from two files (`--env-file .env --env-file
+<typesafe env file>`). Without `TYPESAFE_API_KEY` the decision service
 answers `decision.failed` (`unconfigured`) and the builder triages with its
 fallback. Drafts are
 validated without packages, so a built machine uses no extension namespace

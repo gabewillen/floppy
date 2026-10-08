@@ -6,16 +6,15 @@
 //! in flight, a `<send delay>` timeout in the invoking state preempts it, and
 //! leaving that state cancels it. The wire protocol is the
 //! `OpenAI`-compatible Chat Completions API (`POST {base}/chat/completions`),
-//! which `OpenAI`, `NVIDIA`'s `integrate.api.nvidia.com/v1`, the
-//! maintainer's DGX Spark gateway `https://cpa.willen.dev/v1` (the default),
-//! and local servers all speak; the backend is chosen by the run through the `baseurl`
-//! slot, never by the document or the component. Documents name
-//! [`SERVICE_URI`]:
+//! which `OpenAI`, `NVIDIA`'s `integrate.api.nvidia.com/v1`, vLLM (the
+//! maintainer's DGX Sparks), and other local servers all speak; the backend
+//! is chosen by the run through the `baseurl` slot, never by the document or
+//! the component, and there is no default. Documents name [`SERVICE_URI`]:
 //!
 //! ```xml
 //! <invoke idlocation="gen" type="https://github.com/stateforward/floppy/services/generate"
-//!         env:apikey="CPA_API_KEY" env:baseurl="CPA_BASE_URL">
-//!   <param name="model" expr="'sparks/qwen3.8-flash-next'"/>
+//!         env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
+//!   <param name="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
 //!   <param name="prompt" expr="'Say hello.'"/>
 //! </invoke>
 //! ```
@@ -45,17 +44,17 @@
 //! rejects the start: the `<invoke>` raises `error.execution` and nothing is
 //! sent.
 //!
-//! The `env` slots ([`API_KEY_SLOT`], [`BASE_URL_SLOT`]): `env:apikey="NAME"`
-//! (sent as a bearer token, required at run time) and `env:baseurl="NAME"`
-//! (the API base URL, for example `https://api.openai.com/v1`; it must not
-//! end with `/`). When no `baseurl` value is held (the slot names no
-//! variable, or one the run does not hold), the base URL is the package's
-//! first declared `http-origins` entry (`https://cpa.willen.dev/v1`, the
-//! `OpenAI`-compatible gateway in front of the maintainer's two DGX Spark
-//! machines, read from `package/generate.service.json`); the manifest stays
-//! the one place the origin is written. The component holds opaque
-//! references only; the host substitutes the values into the one admitted
-//! request.
+//! The `env` slots ([`API_KEY_SLOT`], [`BASE_URL_SLOT`]), both required at
+//! run time: `env:apikey="NAME"` (sent as a bearer token) and
+//! `env:baseurl="NAME"` (the API base URL, for example
+//! `http://192.168.2.89:8000/v1`; it must not end with `/`). The package
+//! declares no `http-origins`: the one origin a request may reach is the one
+//! the `baseurl` value supplies, which the host admits because the run, not
+//! the document or the component, chose it. When either slot names no
+//! variable the run holds, the invocation fails fast: it sends nothing and
+//! returns [`FAILED_EVENT`] with `unconfigured` ([`endpoint`]). The
+//! component holds opaque references only; the host substitutes the values
+//! into the one admitted request.
 //!
 //! # Events
 //!
@@ -106,15 +105,15 @@
 //! The request sets no token limit (neither `max_tokens` nor
 //! `max_completion_tokens`), so the backend's own limit (by default the
 //! model's context left after the prompt) bounds the reasoning and the
-//! answer together. A reasoning model (the default
-//! `sparks/qwen3.8-flash-next`) streams its reasoning first, as
+//! answer together. A reasoning model (such as
+//! `Qwen/Qwen3.8-Flash-Next`) streams its reasoning first, as
 //! `delta.reasoning` or `delta.reasoning_content`, and only then the
 //! answer as `delta.content`: a small limit can go entirely to reasoning
 //! and leave no answer (a 20-token limit did). The time bound is the
 //! invoking state's `<send delay>`, not a token count.
 //!
 //! The request always sends `reasoning_effort`, `low` by default. The
-//! default gateway holds a reasoning model's reasoning back until its answer
+//! maintainer's gateway (decision D25) held a reasoning model's reasoning back until its answer
 //! starts, so nothing reaches the connection while it reasons; without
 //! `reasoning_effort` the builder's design prompt reasoned past Cloudflare's
 //! limit (a `524`), and `low` had the best worst case of `low`, `medium`,
@@ -313,7 +312,7 @@ pub struct Generation {
 /// The closed failure codes of [`FAILED_EVENT`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FailureCode {
-    /// The `apikey` slot names no variable the run holds.
+    /// The `apikey` or the `baseurl` slot names no variable the run holds.
     Unconfigured,
     /// The transport failed: no response.
     Transport,
@@ -563,13 +562,31 @@ pub fn parse_parameters<'a>(
     })
 }
 
+/// The invocation's endpoint, `(baseurl, apikey)`: the references the host
+/// handed for the two slots. There is no default backend, so both are
+/// required.
+///
+/// # Errors
+///
+/// [`FailureCode::Unconfigured`] when either slot names no variable the run
+/// holds (the host hands no reference for it): nothing is sent.
+pub const fn endpoint(
+    base_url: Option<u32>,
+    api_key: Option<u32>,
+) -> Result<(u32, u32), FailureCode> {
+    match (base_url, api_key) {
+        (Some(base_url), Some(api_key)) => Ok((base_url, api_key)),
+        _ => Err(FailureCode::Unconfigured),
+    }
+}
+
 /// The Chat Completions request: `POST {base}/chat/completions` (`base` is
-/// the `baseurl` slot's reference, or the package's declared origin when no
-/// value is held) with the `apikey` slot's reference as a bearer key and a
-/// canonical JSON body: `messages`, `model`, `reasoning_effort`, `stream`
-/// (`true`), and, with a schema, `response_format`.
+/// the `baseurl` slot's reference) with the `apikey` slot's reference as a
+/// bearer key and a canonical JSON body: `messages`, `model`,
+/// `reasoning_effort`, `stream` (`true`), and, with a schema,
+/// `response_format`.
 #[must_use]
-pub fn build_request(base: Part, api_key: u32, generation: &Generation) -> Request {
+pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Request {
     let mut body = Map::new();
     body.insert(
         "messages".into(),
@@ -601,7 +618,10 @@ pub fn build_request(base: Part, api_key: u32, generation: &Generation) -> Reque
         );
     }
     Request {
-        url: vec![base, Part::Literal(CHAT_COMPLETIONS_PATH.into())],
+        url: vec![
+            Part::Reference(base_url),
+            Part::Literal(CHAT_COMPLETIONS_PATH.into()),
+        ],
         headers: vec![
             (
                 "authorization".into(),
@@ -773,25 +793,6 @@ pub fn outcome(generation: &Generation, answered: Result<Response, TransportFail
     }
 }
 
-/// The package's first declared `http-origins` entry: the base URL when no
-/// `baseurl` value is held. Read from the manifest the package ships, so the
-/// origin is written in one place; `None` only if that manifest declares no
-/// origin.
-#[cfg_attr(
-    not(any(target_arch = "wasm32", test)),
-    expect(dead_code, reason = "only the wasm component reads its package origin")
-)]
-fn package_origin() -> Option<String> {
-    let manifest: Json =
-        serde_json::from_str(include_str!("../package/generate.service.json")).ok()?;
-    manifest
-        .get("http-origins")?
-        .as_array()?
-        .first()?
-        .as_str()
-        .map(str::to_owned)
-}
-
 #[cfg(target_arch = "wasm32")]
 #[allow(
     clippy::same_length_and_capacity,
@@ -813,7 +814,7 @@ mod guest {
         SlotReference,
     };
 
-    use super::{FailureCode, Generation, Part, Response, Returned, TransportFailure};
+    use super::{Generation, Part, Response, Returned, TransportFailure};
 
     /// The invocation's result: `ok` (no done data), or its error.
     type Done = Result<Option<DataValue>, ComponentError>;
@@ -902,17 +903,14 @@ mod guest {
                 .map(|(name, value)| (name.as_str(), value)),
         )
         .map_err(|detail| error(ErrorCode::InvalidInput, detail))?;
-        let Some(api_key) = slot(&request.references, super::API_KEY_SLOT) else {
-            return Ok(Plan::Return(Returned::failed(FailureCode::Unconfigured)));
+        let (base_url, api_key) = match super::endpoint(
+            slot(&request.references, super::BASE_URL_SLOT),
+            slot(&request.references, super::API_KEY_SLOT),
+        ) {
+            Ok(endpoint) => endpoint,
+            Err(code) => return Ok(Plan::Return(Returned::failed(code))),
         };
-        let base = match slot(&request.references, super::BASE_URL_SLOT) {
-            Some(reference) => super::Part::Reference(reference),
-            None => match super::package_origin() {
-                Some(origin) => super::Part::Literal(origin),
-                None => return Ok(Plan::Return(Returned::failed(FailureCode::Unconfigured))),
-            },
-        };
-        let built = super::build_request(base, api_key, &generation);
+        let built = super::build_request(base_url, api_key, &generation);
         let http = HttpRequest {
             method: "POST".into(),
             url: text_parts(&built.url),

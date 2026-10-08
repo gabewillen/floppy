@@ -13,10 +13,9 @@
 //!
 //! The ignored `live_generate_through_an_env_file` test makes one real call:
 //! `FLOPPY_LIVE_ENV_FILE=<path> cargo test -p floppy-tests --test
-//! generate_service -- --ignored`. The file must set `CPA_API_KEY`;
-//! `CPA_BASE_URL` is the file's value, else the package's declared origin
-//! (`https://cpa.willen.dev/v1`, decision D18). The model is
-//! `FLOPPY_LIVE_MODEL`, else `sparks/qwen3.8-flash-next`. It reports pass
+//! generate_service -- --ignored`. The files must set `FLOPPY_API_KEY` and
+//! `FLOPPY_BASE_URL` (the service has no default backend). The model is
+//! `FLOPPY_LIVE_MODEL`, else `Qwen/Qwen3.8-Flash-Next`. It reports pass
 //! or fail only; no value is ever printed.
 
 #![allow(
@@ -52,7 +51,8 @@ fn args(env_file: &Path) -> Vec<String> {
 }
 
 /// Runs `document` with `args` to its end, checking the consent listing
-/// names the generate package, its origin, and its slots.
+/// names the generate package, that it declares no origin (the `baseurl`
+/// value supplies the one it reaches), and its slots.
 fn open(args: &[String], document: &str) -> Finished {
     open_with(args, document, &[], Duration::from_secs(60))
 }
@@ -62,9 +62,9 @@ fn open_with(args: &[String], document: &str, env: &[(&str, &str)], limit: Durat
     let consent = &finished.stderr;
     assert!(
         consent.contains(&format!("service `{}`", generate()))
-            && consent.contains("outbound HTTP: https://cpa.willen.dev")
+            && consent.contains("outbound HTTP: none")
             && consent.contains("env slots: apikey, baseurl"),
-        "the consent listing names the package, its origin, and its slots: {consent}"
+        "the consent listing names the package, no origin, and its slots: {consent}"
     );
     assert!(!consent.contains(FAKE_KEY), "names only: {consent}");
     finished
@@ -192,7 +192,7 @@ impl Mock {
 fn env_file(test: &str, base_url: &str) -> PathBuf {
     env_file_with(
         test,
-        &format!("CPA_API_KEY={FAKE_KEY}\nCPA_BASE_URL={base_url}\n"),
+        &format!("FLOPPY_API_KEY={FAKE_KEY}\nFLOPPY_BASE_URL={base_url}\n"),
     )
 }
 
@@ -213,7 +213,7 @@ fn document(params: &str, log_expr: &str) -> String {
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript" initial="ask">
   <state id="ask">
-    <invoke id="gen" type="{service}" env:apikey="CPA_API_KEY" env:baseurl="CPA_BASE_URL">
+    <invoke id="gen" type="{service}" env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
       {params}
     </invoke>
     <transition event="generate.result"><log label="reply" expr="{log_expr}"/></transition>
@@ -376,7 +376,10 @@ fn malformed_parameters_reject_the_start_and_send_nothing() {
 #[test]
 fn without_a_granted_key_nothing_is_sent() {
     let mock = Mock::start();
-    let env = env_file_with("nokey", &format!("CPA_BASE_URL={}/text/v1\n", mock.origin));
+    let env = env_file_with(
+        "nokey",
+        &format!("FLOPPY_BASE_URL={}/text/v1\n", mock.origin),
+    );
     // Only the base URL has a value: the apikey slot stays absent.
     let args = args(&env);
     let finished = open(&args, &document(TEXT_PARAMS, "_event.data.text"));
@@ -389,6 +392,51 @@ fn without_a_granted_key_nothing_is_sent() {
     assert!(mock.received().is_empty(), "no request without a key");
 }
 
+/// The package declares no `http-origins`, so the one origin a request may
+/// reach is the one the run's `FLOPPY_BASE_URL` value supplies (here the
+/// loopback mock, which no manifest names): the host admits it because the
+/// run chose it.
+#[test]
+fn a_held_base_url_outside_the_declared_origins_is_the_one_the_request_reaches() {
+    let mock = Mock::start();
+    let env = env_file("held-base", &format!("{}/text/v1", mock.origin));
+    let finished = open(&args(&env), &document(TEXT_PARAMS, "_event.data.text"));
+    assert_eq!(
+        logs(&finished.records),
+        labelled(&[("reply", "Hello from the fake backend!"), ("final", "done")]),
+        "{:?}",
+        finished.records
+    );
+    let received = mock.received();
+    assert_eq!(received.len(), 1, "exactly one request, to the held origin");
+    assert_eq!(
+        received[0].request_line,
+        "POST /text/v1/chat/completions HTTP/1.1"
+    );
+}
+
+/// No default backend: without a held `FLOPPY_BASE_URL` the invocation
+/// fails fast with `unconfigured` and sends nothing, and the consent
+/// listing shows the variable has no value.
+#[test]
+fn without_a_held_base_url_nothing_is_sent_and_the_generation_is_unconfigured() {
+    let mock = Mock::start();
+    let env = env_file_with("nobase", &format!("FLOPPY_API_KEY={FAKE_KEY}\n"));
+    let finished = open(&args(&env), &document(TEXT_PARAMS, "_event.data.text"));
+    assert_eq!(
+        logs(&finished.records),
+        labelled(&[("failed", "unconfigured"), ("final", "done")]),
+        "{:?}",
+        finished.records
+    );
+    assert!(
+        finished.stderr.contains("env `FLOPPY_BASE_URL` (no value)"),
+        "{}",
+        finished.stderr
+    );
+    assert!(mock.received().is_empty(), "no request without a base URL");
+}
+
 /// A document whose generate invocation names only the base URL and whose
 /// decision invocation (in a state the run never enters) names the key:
 /// each variable goes only to the `<invoke>` whose `env` attribute names it.
@@ -398,7 +446,7 @@ fn two_services(params: &str) -> String {
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript" initial="ask">
   <state id="ask">
-    <invoke id="gen" type="{generate}" env:baseurl="CPA_BASE_URL">
+    <invoke id="gen" type="{generate}" env:baseurl="FLOPPY_BASE_URL">
       {params}
     </invoke>
     <transition event="generate.result"><log label="reply" expr="_event.data.text"/></transition>
@@ -408,7 +456,7 @@ fn two_services(params: &str) -> String {
     <transition event="error.communication" target="rejected"/>
   </state>
   <state id="elsewhere">
-    <invoke id="other" type="{decision}" env:apikey="CPA_API_KEY"/>
+    <invoke id="other" type="{decision}" env:apikey="FLOPPY_API_KEY"/>
   </state>
   <final id="done"><onentry><log label="final" expr="'done'"/></onentry></final>
   <final id="rejected"><onentry><log label="final" expr="'rejected'"/></onentry></final>
@@ -430,10 +478,10 @@ fn the_consent_lists_each_service_and_where_each_variable_goes_and_never_a_value
     );
     assert!(
         consent.contains(&format!(
-            "env `CPA_API_KEY`\n  = to: <invoke type=\"{}\"> env:apikey",
+            "env `FLOPPY_API_KEY`\n  = to: <invoke type=\"{}\"> env:apikey",
             decision()
         )) && consent.contains(&format!(
-            "env `CPA_BASE_URL`\n  = to: <invoke type=\"{}\"> env:baseurl",
+            "env `FLOPPY_BASE_URL`\n  = to: <invoke type=\"{}\"> env:baseurl",
             generate()
         )),
         "the listing shows each variable and the invoke it goes to: {consent}"
@@ -537,7 +585,7 @@ fn leaving_the_invoking_state_closes_the_streaming_model_call() {
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript" initial="ask">
   <state id="ask">
-    <invoke id="gen" type="{generate}" env:apikey="CPA_API_KEY" env:baseurl="CPA_BASE_URL">
+    <invoke id="gen" type="{generate}" env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
       {TEXT_PARAMS}
     </invoke>
     <transition event="generate.result"><log label="reply" expr="_event.data.text"/></transition>
@@ -580,7 +628,7 @@ fn leaving_the_invoking_state_closes_the_streaming_model_call() {
 
 /// One real structured generation through an env file
 /// (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, default
-/// `sparks/qwen3.8-flash-next`).
+/// `Qwen/Qwen3.8-Flash-Next`).
 /// Prints nothing but pass or fail.
 #[test]
 #[ignore = "makes one real model call; needs FLOPPY_LIVE_ENV_FILE"]
@@ -590,7 +638,7 @@ fn live_generate_through_an_env_file() {
         .flat_map(|path| args(path))
         .collect();
     let model =
-        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "sparks/qwen3.8-flash-next".into());
+        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "Qwen/Qwen3.8-Flash-Next".into());
     let params = format!(
         r#"<param name="model" expr="'{model}'"/>
       <param name="system" expr="'Answer in JSON only.'"/>
@@ -599,8 +647,7 @@ fn live_generate_through_an_env_file() {
       <param name="schemaname" expr="'greeting'"/>
       <param name="strict" expr="true"/>"#
     );
-    // An env file's CPA_BASE_URL wins; without one the service uses its
-    // package's declared origin (decision D18).
+    // The env files must hold FLOPPY_BASE_URL: the service has no default.
     let finished = open_with(
         &args,
         &document(
