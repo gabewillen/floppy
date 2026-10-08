@@ -1,0 +1,10 @@
+<!-- Spike (e), member: announces each start and each stop to its parent. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" initial="up">
+  <state id="up">
+    <onentry><send event="spike.member" target="#_parent"><param name="state" expr="'up'"/></send></onentry>
+    <onexit><log label="member.exit" expr="'up'"/></onexit>
+    <transition event="spike.stop" target="stopped"/>
+  </state>
+  <final id="stopped"/>
+</scxml>

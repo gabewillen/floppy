@@ -1,0 +1,13 @@
+<!-- Spike (c), worker: sends two spike.work events to its parent on
+     entry, then waits. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" initial="working">
+  <state id="working">
+    <onentry>
+      <send event="spike.work" target="#_parent"><param name="tag" expr="'w1'"/></send>
+      <send event="spike.work" target="#_parent"><param name="tag" expr="'w2'"/></send>
+    </onentry>
+    <transition event="spike.stop" target="stopped"/>
+  </state>
+  <final id="stopped"/>
+</scxml>

@@ -1,0 +1,11 @@
+<!-- Spike (d), child: one transition's event:schema is the file
+     schemas/spike.ping.json beside this document. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" initial="waiting">
+  <state id="waiting">
+    <onentry><send event="spike.ready" target="#_parent"/></onentry>
+    <transition event="spike.ping" event:schema="schemas/spike.ping.json" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

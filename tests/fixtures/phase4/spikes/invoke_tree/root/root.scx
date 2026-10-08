@@ -1,0 +1,39 @@
+<!-- Spike (a), root: invokes ../x/child.scx (resolved against this
+     document's base URI), which invokes grandchild.scx (resolved against
+     the child's), which invokes the generate service. The root alone never
+     names the service. spike.ask {model, prompt} starts the tree;
+     spike.leave leaves the invoking state mid-request, which cancels the
+     child and, through it, the grandchild and its request. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" initial="waiting">
+  <datamodel>
+    <data id="model" expr="null"/>
+    <data id="prompt" expr="null"/>
+  </datamodel>
+  <state id="waiting">
+    <transition event="spike.ask" target="asking">
+      <assign location="model" expr="_event.data.model"/>
+      <assign location="prompt" expr="_event.data.prompt"/>
+    </transition>
+  </state>
+  <state id="asking">
+    <onexit><log label="root.exit" expr="'asking'"/></onexit>
+    <invoke id="child" type="scxml" src="../x/child.scx">
+      <param name="model" expr="model"/>
+      <param name="prompt" expr="prompt"/>
+    </invoke>
+    <transition event="spike.reply" cond="_event.invokeid === 'child'" target="answered">
+      <log label="reply" expr="_event.data.text"/>
+    </transition>
+    <transition event="spike.failed" cond="_event.invokeid === 'child'" target="failed">
+      <log label="failed" expr="_event.data.code"/>
+    </transition>
+    <transition event="spike.leave" target="left"/>
+    <transition event="error.*" target="failed">
+      <log label="error" expr="_event.name"/>
+    </transition>
+  </state>
+  <final id="answered"/>
+  <final id="left"><onentry><log label="final" expr="'left'"/></onentry></final>
+  <final id="failed"/>
+</scxml>

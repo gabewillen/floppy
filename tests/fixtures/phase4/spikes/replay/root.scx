@@ -1,0 +1,40 @@
+<!-- Spike (c): events deferred while busy are replayed on idle entry with
+     <send target="#_internal"> in <foreach>, while an external event the
+     releasing transition sent to this session is still pending. The worker
+     child sends two spike.work events while the root is busy; spike.release
+     (from the input) ends busy. Each handled spike.work logs its tag, its
+     _event.type, its _event.invokeid, and the from the replay carried. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" initial="live">
+  <datamodel>
+    <data id="queue" expr="[]"/>
+  </datamodel>
+  <state id="live" initial="busy">
+    <invoke id="worker" type="scxml" src="worker.scx"/>
+    <state id="busy">
+      <transition event="spike.work">
+        <script>queue.push({name: _event.name, data: _event.data, from: _event.invokeid});</script>
+        <log label="deferred" expr="_event.data.tag"/>
+      </transition>
+      <transition event="spike.release" target="idle">
+        <send event="spike.work"><param name="tag" expr="'ext'"/></send>
+      </transition>
+    </state>
+    <state id="idle">
+      <onentry>
+        <foreach array="queue" item="item">
+          <send eventexpr="item.name" target="#_internal">
+            <param name="tag" expr="item.data.tag"/>
+            <param name="from" expr="item.from"/>
+          </send>
+        </foreach>
+        <assign location="queue" expr="[]"/>
+      </onentry>
+      <transition event="spike.work">
+        <log label="handled" expr="_event.data.tag + ' type=' + _event.type + ' invokeid=' + String(_event.invokeid) + ' from=' + String(_event.data.from)"/>
+      </transition>
+      <transition event="spike.finish" target="done"/>
+    </state>
+  </state>
+  <final id="done"/>
+</scxml>

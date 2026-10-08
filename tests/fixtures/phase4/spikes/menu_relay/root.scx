@@ -1,0 +1,36 @@
+<!-- Spike (b), root: the offerer child builds its menu with
+     <decision:menu> and sends it here; the root hands it, as data, to a
+     third session (the decider), whose decision service invoke takes it as
+     its menu param. The chosen event comes back relayed as spike.chosen. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" initial="collecting">
+  <datamodel>
+    <data id="menu" expr="null"/>
+  </datamodel>
+  <state id="collecting">
+    <invoke id="offerer" type="scxml" src="offerer.scx"/>
+    <transition event="spike.menu" cond="_event.invokeid === 'offerer'" target="deciding">
+      <assign location="menu" expr="_event.data.menu"/>
+      <log label="root.menu.bytes" expr="String(JSON.stringify(menu).length)"/>
+    </transition>
+    <transition event="error.*" target="failed">
+      <log label="error" expr="_event.name"/>
+    </transition>
+  </state>
+  <state id="deciding">
+    <invoke id="decider" type="scxml" src="decider.scx">
+      <param name="menu" expr="menu"/>
+    </invoke>
+    <transition event="spike.chosen" cond="_event.invokeid === 'decider'" target="chosen">
+      <log label="chosen" expr="_event.data.event + ' ' + JSON.stringify(_event.data.data)"/>
+    </transition>
+    <transition event="spike.failed" cond="_event.invokeid === 'decider'" target="failed">
+      <log label="failed" expr="_event.data.reason"/>
+    </transition>
+    <transition event="error.*" target="failed">
+      <log label="error" expr="_event.name"/>
+    </transition>
+  </state>
+  <final id="chosen"/>
+  <final id="failed"/>
+</scxml>

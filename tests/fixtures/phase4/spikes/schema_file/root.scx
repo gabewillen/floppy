@@ -1,0 +1,16 @@
+<!-- Spike (d): the child's transition references an event:schema file
+     relative to the child. The Wasmtime host compiles an invoked child
+     with no schema files, so the invocation fails (gap G1). -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" initial="invoking">
+  <state id="invoking">
+    <invoke id="child" type="scxml" src="child.scx"/>
+    <transition event="spike.ready" cond="_event.invokeid === 'child'" target="done">
+      <log label="ready" expr="'child'"/>
+    </transition>
+    <transition event="error.*" target="done">
+      <log label="error" expr="_event.name"/>
+    </transition>
+  </state>
+  <final id="done"/>
+</scxml>

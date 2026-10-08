@@ -1,0 +1,34 @@
+<!-- Spike (b), decider: a session that never saw the offerer's
+     transitions; it invokes the decision service with the menu it was
+     given and relays the chosen event to its parent. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       version="1.0" datamodel="ecmascript" initial="deciding">
+  <datamodel>
+    <data id="menu" expr="null"/>
+  </datamodel>
+  <state id="deciding">
+    <invoke id="decide" type="https://github.com/stateforward/floppy/services/decision"
+            env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
+      <param name="menu" expr="menu"/>
+      <param name="state" expr="({sku: 'A-1'})"/>
+    </invoke>
+    <transition event="decision.abstain decision.failed" cond="_event.invokeid === 'decide'" target="done">
+      <send event="spike.failed" target="#_parent">
+        <param name="reason" expr="_event.name + ' ' + JSON.stringify(_event.data)"/>
+      </send>
+    </transition>
+    <transition event="done.invoke error.*" target="done">
+      <send event="spike.failed" target="#_parent">
+        <param name="reason" expr="_event.name"/>
+      </send>
+    </transition>
+    <transition event="*" cond="_event.invokeid === 'decide'" target="done">
+      <send event="spike.chosen" target="#_parent">
+        <param name="event" expr="_event.name"/>
+        <param name="data" expr="_event.data"/>
+      </send>
+    </transition>
+  </state>
+  <final id="done"/>
+</scxml>

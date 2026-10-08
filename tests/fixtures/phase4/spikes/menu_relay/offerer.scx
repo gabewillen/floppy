@@ -1,0 +1,26 @@
+<!-- Spike (b), offerer: its two event:schema transitions are its menu;
+     <decision:menu> writes them on entry and the menu goes to the parent as
+     data. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" initial="offering">
+  <datamodel>
+    <data id="menu" expr="[]"/>
+  </datamodel>
+  <state id="offering">
+    <onentry>
+      <decision:menu location="menu"/>
+      <log label="offerer.menu.bytes" expr="String(JSON.stringify(menu).length)"/>
+      <send event="spike.menu" target="#_parent">
+        <param name="menu" expr="menu"/>
+      </send>
+    </onentry>
+    <transition event="error.*" target="done">
+      <log label="offerer.error" expr="_event.name"/>
+    </transition>
+    <transition event="order.ship" event:schema='{"description":"Ship the order to the customer.","type":"object","properties":{"sku":{"type":"string"},"carrier":{"enum":["ups","fedex"]}},"required":["sku","carrier"],"additionalProperties":false}' target="done"/>
+    <transition event="order.cancel" event:schema='{"description":"Cancel the order.","type":"object","properties":{"reason":{"enum":["customer","stock"]}},"required":["reason"],"additionalProperties":false}' target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

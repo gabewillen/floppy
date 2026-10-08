@@ -1,0 +1,23 @@
+<!-- Spike (a), child: loaded from ../x/child.scx; its own relative
+     grandchild.scx resolves against this document's URL, so it is
+     x/grandchild.scx. It relays the grandchild's reply to its parent. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" initial="relaying">
+  <datamodel>
+    <data id="model" expr="null"/>
+    <data id="prompt" expr="null"/>
+  </datamodel>
+  <state id="relaying">
+    <onexit><log label="child.exit" expr="'relaying'"/></onexit>
+    <invoke id="grandchild" type="scxml" src="grandchild.scx">
+      <param name="model" expr="model"/>
+      <param name="prompt" expr="prompt"/>
+    </invoke>
+    <transition event="spike.reply spike.failed" cond="_event.invokeid === 'grandchild'" target="done">
+      <send eventexpr="_event.name" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+  </state>
+  <final id="done"/>
+</scxml>
