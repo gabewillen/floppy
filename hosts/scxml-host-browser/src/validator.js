@@ -28,6 +28,26 @@ import { fetchCoreModules } from './loader.js';
 import { isPackageValidators, packageValidatorImport } from './package-validator.js';
 import { GUEST_MODULES, Telemetry, compilerTelemetryImport, isTelemetryOption } from './telemetry.js';
 
+/**
+ * True when `documents` is `{src, text, eventSchemas?}[]`: the documents the
+ * validated document's literal `<invoke src>` elements load, each `src` as
+ * authored (XML white space collapsed), with the schema files their own
+ * `event:schema` attributes reference. The component checks every bound.
+ */
+function isInvokedDocuments(documents) {
+  return (
+    Array.isArray(documents) &&
+    documents.every(
+      (document) =>
+        document !== null &&
+        typeof document === 'object' &&
+        typeof document.src === 'string' &&
+        typeof document.text === 'string' &&
+        isCompileRequestOptions({ eventSchemas: document.eventSchemas }, 'strict'),
+    )
+  );
+}
+
 let defaultLoader;
 
 /** A data-model failure as the validator's closed `declined` value. */
@@ -127,7 +147,9 @@ export async function createValidator(options) {
      * @param {object} [validateOptions] `sourceName` (default
      *   'document.scxml'), `schemaPolicy` (default 'strict', as `scx
      *   validate`), `packages` (ExtensionPackage[]), `eventSchemas`
-     *   (`{uri, bytes}[]`)
+     *   (`{uri, bytes}[]`), `invokedDocuments` (`{src, text,
+     *   eventSchemas?}[]`, the documents its literal `<invoke src>` elements
+     *   load, for `EVENT011`)
      */
     async validate(source, validateOptions) {
       if (lost) {
@@ -139,6 +161,7 @@ export async function createValidator(options) {
         typeof source !== 'string' ||
         typeof sourceName !== 'string' ||
         !isCompileRequestOptions(validateOptions, schemaPolicy) ||
+        !isInvokedDocuments(validateOptions?.invokedDocuments ?? []) ||
         !(validateOptions?.packages ?? []).every((pkg) =>
           ['validatorArtifact', 'validatorSha256'].every(
             (field) => pkg[field] === undefined || typeof pkg[field] === 'string',
@@ -149,6 +172,11 @@ export async function createValidator(options) {
         throw new ScxmlHostError('invalid-argument');
       }
       const { schemas, packages: records, eventSchemas } = compileRequestParts(validateOptions);
+      const invokedDocuments = (validateOptions?.invokedDocuments ?? []).map((document) => ({
+        src: document.src,
+        text: document.text,
+        eventSchemas: compileRequestParts({ eventSchemas: document.eventSchemas }).eventSchemas,
+      }));
       // The validator's package record also carries the optional package
       // validator fields.
       const packages = records.map((pkg, index) => ({
@@ -168,6 +196,7 @@ export async function createValidator(options) {
               schemas,
               packages,
               eventSchemas,
+              invokedDocuments,
               traceContext: undefined,
             }),
           ),

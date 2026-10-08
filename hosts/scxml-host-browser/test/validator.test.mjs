@@ -64,14 +64,21 @@ test('validator reports equal the scx validate snapshots byte for byte', async (
     if (dataModel === undefined) continue;
     const validator = dataModel === 'xpath' ? xpath : ecmascript;
     const expected = (await readFile(join(ui, `${name}.json`), 'utf8')).trimEnd();
-    const { report } = await validator.validate(source, { sourceName: `tests/ui/${name}.scx`, eventSchemas });
+    // The documents under tests/ui/invoked/ its literal `src` attributes name,
+    // as `scx validate` reads them (their schemas are inline).
+    const invokedDocuments = [];
+    for (const [, src] of source.matchAll(/src="(invoked\/[^"]*)"/g)) {
+      if (invokedDocuments.some((document) => document.src === src)) continue;
+      invokedDocuments.push({ src, text: await readFile(join(ui, src), 'utf8') });
+    }
+    const { report } = await validator.validate(source, { sourceName: `tests/ui/${name}.scx`, eventSchemas, invokedDocuments });
     const actual = decode(report).trimEnd();
     if (actual !== expected) mismatches.push(name);
     compared.push(name);
   }
   assert.deepEqual(mismatches, []);
   assert.ok(compared.length > 20, `compared ${compared.length} cases`);
-  for (const required of ['scxml038-expression-syntax-error', 'scxml038-xpath-mixed-habits', 'scxml074-log-side-effects']) {
+  for (const required of ['scxml038-expression-syntax-error', 'scxml038-xpath-mixed-habits', 'scxml074-log-side-effects', 'event011-incompatible-invoked-event-data']) {
     assert.ok(compared.includes(required), required);
   }
 });
@@ -88,6 +95,14 @@ test('packages and event schema files reach the validator', async () => {
   assert.ok(codes((await ecmascript.validate(referencing)).report).includes('EVENT004'));
   const schema = { uri: 'schemas/go.json', bytes: new TextEncoder().encode('{"type": "object"}') };
   assert.deepEqual(codes((await ecmascript.validate(referencing, { eventSchemas: [schema] })).report), []);
+
+  // The documents its literal `<invoke src>` elements load reach EVENT011,
+  // each with its own schema files.
+  const parent = `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s"><state id="s"><invoke id="kid" src="child.scx"/><onentry><send event="go" target="#_kid"><content>{"n": 1}</content></send></onentry></state></scxml>`;
+  const child = { src: 'child.scx', text: referencing, eventSchemas: [{ uri: 'schemas/go.json', bytes: new TextEncoder().encode('{"type": "array"}') }] };
+  assert.deepEqual(codes((await ecmascript.validate(parent)).report), []);
+  assert.deepEqual(codes((await ecmascript.validate(parent, { invokedDocuments: [child] })).report), ['EVENT011']);
+  assert.deepEqual(codes((await ecmascript.validate(parent, { invokedDocuments: [{ ...child, eventSchemas: [schema] }] })).report), []);
 });
 
 test('malformed arguments are invalid-argument and the instance stays usable', async () => {
@@ -96,6 +111,8 @@ test('malformed arguments are invalid-argument and the instance stays usable', a
     ['<scxml/>', { schemaPolicy: 'none' }],
     ['<scxml/>', { packages: [{}] }],
     ['<scxml/>', { eventSchemas: [{ uri: 'x' }] }],
+    ['<scxml/>', { invokedDocuments: [{ src: 'x' }] }],
+    ['<scxml/>', { invokedDocuments: [{ src: 'x', text: '', eventSchemas: [{ uri: 'x' }] }] }],
   ]) {
     await assert.rejects(ecmascript.validate(source, options), (error) => error instanceof ScxmlHostError && error.code === 'invalid-argument');
   }

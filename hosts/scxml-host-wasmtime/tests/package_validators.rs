@@ -254,6 +254,7 @@ fn component_report(body: &str) -> serde_json::Value {
                 validator_sha256: None,
             }],
             event_schemas: Vec::new(),
+            invoked_documents: Vec::new(),
             trace_context: None,
         })
         .expect("the validator answers");

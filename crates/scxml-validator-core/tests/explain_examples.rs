@@ -135,6 +135,10 @@ const NOT_SELF_CHECKING: &[(&str, &str)] = &[
         "needs a schema file to point into; covered by the UI case event005-bad-pointer",
     ),
     (
+        "EVENT011",
+        "needs the invoked document `child.scx` (where `go`'s transition schema expects a string `n`) supplied with the example; covered by the UI case event011-incompatible-invoked-event-data",
+    ),
+    (
         "LINT010",
         "a note only when no checker for the machine's data model is linked, and this harness links both",
     ),

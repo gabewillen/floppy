@@ -1,0 +1,29 @@
+warning[EVENT011]: `invoked/event011-child.scx` sends `order.ready` to `#_parent` with data a transition here handling it does not accept
+ --> tests/ui/event011-incompatible-invoked-event-data.scx:5:29
+  |
+5 |     <invoke id="order" src="invoked/event011-child.scx"/>
+  |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^ its `<send event="order.ready">`: its literal data, `{"count":"two"}`, ...
+6 |     <transition event="order.ready"
+7 |                 event:schema='{"type":"object","properties":{"count":{"type":"integer"}},"required":["count"]}'>
+  |                 ----------------------------------------------------------------------------------------------- ... which fails the schema of this transition
+  |
+  = note: a transition's `event:schema` describes the `_event.data` it handles; the invoked document's `<send target="#_parent">` creates data this transition's event descriptor matches but its schema rejects (the schemas are metadata: the transition is still taken)
+  = help: make the two documents' schemas agree, or change the data the invoked document sends
+  = spec: SCXML 1.0 §6.4 <invoke>
+
+warning[EVENT011]: `<send>` sends `order.place` to the session of `invoked/event011-child.scx` with data a transition there handling it does not accept
+ --> tests/ui/event011-incompatible-invoked-event-data.scx:8:50
+  |
+5 |     <invoke id="order" src="invoked/event011-child.scx"/>
+  |                             -------------------------- the invoked document, invoked as `#_order`
+...
+8 |       <send event="order.place" target="#_order"><content>{"quantity": "two"}</content></send>
+  |                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ its literal data, `{"quantity":"two"}`, fails the schema of a transition of `invoked/event011-child.scx` handling `order.place`
+  |
+  = note: a transition's `event:schema` describes the `_event.data` it handles; a transition of the invoked document matches this event but its schema rejects this data (the schemas are metadata: the transition is still taken)
+  = help: make the two documents' schemas agree, or change the data
+  = spec: SCXML 1.0 §6.4 <invoke>
+
+diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
+For more information about this diagnostic, try `scx --explain EVENT011`.
+validated tests/ui/event011-incompatible-invoked-event-data.scx

@@ -4,6 +4,9 @@
 //! `validate`, `compile`, `snapshot run`, and `run` read every referenced
 //! file relative to the document's directory before validating, and hand the
 //! bytes to the validator and compiler keyed by the reference as authored.
+//! `snapshot run` and `run` also read, before the session, the files of
+//! every literal `<invoke src>` document loaded from a `file:` URL, relative
+//! to that child's directory, for its compile ([`crate::documents`]).
 //! Only a path the vocabulary accepts is read
 //! ([`scxml_event_schema::resource_problem`]): relative, without a scheme,
 //! query, or `.`/`..` segment, percent-decoded. A file that resolves outside

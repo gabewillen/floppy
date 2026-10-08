@@ -964,6 +964,7 @@ fn validate(
             .with_services(services::bound_services(&services))
             .with_data_models(data_models.bound())
             .with_event_schema_resources(event_schemas::load(path, &source))
+            .with_invoked_documents(documents::local_invoked_documents(path, &source))
             .with_schema_mode(mode)
             .with_expression_checker(std::sync::Arc::new(expression::EcmaScriptSyntax))
             .with_expression_checker(std::sync::Arc::new(expression::XPathSyntax));
@@ -1026,6 +1027,7 @@ fn compile(
         extensions::write_notes(&data_models.summary());
         let extension_packages = resolved.all();
         let event_schemas = event_schemas::load(path, &bytes);
+        let invoked_documents = documents::local_invoked_documents(path, &bytes);
         let source = utf8_source(path, bytes)?;
         // The template is read and bounded before compilation so a missing
         // or oversized template never yields a partial artifact.
@@ -1045,6 +1047,7 @@ fn compile(
         // so a document `validate` rejects is never compiled.
         let mut validator = Validator::new(schemas.resolver(&extension_packages), XsdSchemaBackend)
             .with_schema_mode(mode)
+            .with_invoked_documents(invoked_documents)
             .with_services(services::bound_services(&services))
             .with_data_models(data_models.bound())
             .with_expression_checker(std::sync::Arc::new(expression::EcmaScriptSyntax))

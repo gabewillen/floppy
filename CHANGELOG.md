@@ -115,6 +115,20 @@ hard cutover.
   `<send>` or `<donedata>` against its own literal `event:schema`) and
   `EVENT010` (provable incompatibility, with a witness, between what a
   `<send>` or `<donedata>` creates and a transition handling its event).
+- `EVENT011` (warning): the same provable incompatibility across documents,
+  between a `<send>` to `#_<id>` and the transitions of the literal
+  `<invoke src>` document that `<invoke>` loads, and between that
+  document's `<send target="#_parent">` and the invoking document's
+  transitions. The caller supplies the invoked documents, each with its own
+  schema files: `Validator::with_invoked_documents` and
+  `scxml_validator_core::InvokedDocument { text, event_schemas }` (keyed by
+  `src` as authored), the validator WIT `validation-request` field
+  `invoked-documents` (`invoked-document`), and the browser `validate`
+  option `invokedDocuments`. `scx validate` and `compile` read the `file:`
+  documents a document's literal `<invoke src>` elements name (with their
+  own schema files; a remote `src` is not judged, nothing is fetched), and
+  `snapshot run` and `run` pass the documents they loaded before the
+  session.
 - Browser host parity, slice 1: `createValidator` runs the bundled validator
   component (the `scx validate` report, byte for byte); the validator and
   compiler take the page's extension packages and `event:schema` files
@@ -538,6 +552,15 @@ hard cutover.
   take them as `event-schemas` (`event-schema-resource`), and the machine
   WIT `transition-snapshot` gains `event-schema`. New crate
   `scxml-event-schema`, which checks schemas with the `boon` crate.
+- A literal `<invoke src>` child document may reference `event:schema`
+  files: `EmbeddedDocument::event_schemas` carries the files an embedder
+  read for one `<invoke src>` document to the Wasmtime host, which hands
+  them to that document's compile (an inline `<content>` document below it
+  still gets none). `snapshot run` and `run` read a literal `file:` child's
+  files relative to the child's own directory before the session, exactly
+  as they read the root's; a remote or `srcexpr` child gets none (nothing
+  is fetched for a schema, and nothing is read while a document runs), so a
+  reference rejects it and its `<invoke>` raises `error.execution`.
 - Each repository namespace has its own implementation report plan,
   `namespaces/{env,event}/irp`: W3C IRP-format assertions over
   numbered statements added to each namespace's README, `.txml` documents
@@ -1296,10 +1319,12 @@ hard cutover.
   host; the browser host answers executable-content extensions from the
   page's `executeExtension` callback.
 - `event:schema` references only files relative to the document: no
-  repository-namespace resource or other absolute URI. Child documents the
-  Wasmtime host compiles when invoked, and documents the browser host
-  compiles, get no schema files (inline schemas and `event:schemaexpr`
-  only). A session snapshot never evaluates `event:schemaexpr`, and lists
+  repository-namespace resource or other absolute URI. Of the child
+  documents the Wasmtime host compiles when invoked, only an `<invoke src>`
+  document whose embedder supplies them gets schema files (the CLI: a
+  literal `file:` child); inline `<content>`, remote, and `srcexpr`
+  children, and documents the browser host compiles, get none (inline
+  schemas and `event:schemaexpr` only). A session snapshot never evaluates `event:schemaexpr`, and lists
   schemas on transitions only.
 - See "Known limitations (pending)" in docs/spec-errata.md: the ECMAScript
   engine gaps (run-time `<log>` side effects, reflective deletion of a

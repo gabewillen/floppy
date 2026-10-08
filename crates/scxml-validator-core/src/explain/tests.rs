@@ -59,6 +59,10 @@ const PRODUCER_SOURCES: &[(&str, &str)] = &[
         include_str!("../event_payloads.rs"),
     ),
     (
+        "validator-core/event_payloads/invoked.rs",
+        include_str!("../event_payloads/invoked.rs"),
+    ),
+    (
         "validator-core/package_validator.rs",
         include_str!("../package_validator.rs"),
     ),

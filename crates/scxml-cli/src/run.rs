@@ -2103,6 +2103,7 @@ mod live {
             &services.packages,
             data_models.bound(),
             loaded.script_packages(&source)?,
+            loaded.invoked_documents(),
         )?;
         let mut namespaces = Vec::new();
         for package in &packages.explicit {

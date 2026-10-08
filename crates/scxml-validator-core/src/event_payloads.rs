@@ -110,11 +110,7 @@ pub(crate) fn event_payload_diagnostics(
     document: &Document,
     resources: &EventSchemaResources,
 ) -> Vec<Diagnostic> {
-    let datamodel = document
-        .root
-        .attribute("datamodel")
-        .map_or(DEFAULT_DATA_MODEL, |attribute| attribute.value.as_str());
-    if datamodel != "ecmascript" {
+    if !is_ecmascript(document) {
         return Vec::new();
     }
     let mut handlers = Vec::new();
@@ -143,20 +139,7 @@ pub(crate) fn event_payload_diagnostics(
                 .iter()
                 .any(|descriptor| descriptor_matches(descriptor, event))
         }) {
-            let rejected = match (&producer.payload, &producer.schema) {
-                (Some((payload, content)), _) => compiled
-                    .rejects(&handler.schema.resolved.schema, payload)
-                    .then(|| (payload.clone(), content.span, true)),
-                (None, Some(schema))
-                    if schema.resolved.schema != handler.schema.resolved.schema =>
-                {
-                    compiled
-                        .witness(&schema.resolved.schema, &handler.schema.resolved.schema)
-                        .map(|witness| (witness, schema.attribute.span, false))
-                }
-                (None, _) => None,
-            };
-            if let Some((witness, span, literal)) = rejected {
+            if let Some((witness, span, literal)) = rejected(&mut compiled, producer, handler) {
                 diagnostics.push(incompatible(
                     producer.element,
                     event,
@@ -169,6 +152,37 @@ pub(crate) fn event_payload_diagnostics(
         }
     }
     diagnostics
+}
+
+/// Whether `document` is an ECMAScript document (`datamodel="ecmascript"`,
+/// or none), whose literal JSON `<content>` is known event data.
+fn is_ecmascript(document: &Document) -> bool {
+    document
+        .root
+        .attribute("datamodel")
+        .map_or(DEFAULT_DATA_MODEL, |attribute| attribute.value.as_str())
+        == "ecmascript"
+}
+
+/// The data `producer` creates that `handler`'s schema provably rejects:
+/// its literal data, else a witness of its own schema (never for two equal
+/// schemas), with the span that gives it and whether it is literal.
+fn rejected(
+    compiled: &mut Compiled,
+    producer: &Producer<'_>,
+    handler: &Handler<'_>,
+) -> Option<(Value, Span, bool)> {
+    match (&producer.payload, &producer.schema) {
+        (Some((payload, content)), _) => compiled
+            .rejects(&handler.schema.resolved.schema, payload)
+            .then(|| (payload.clone(), content.span, true)),
+        (None, Some(schema)) if schema.resolved.schema != handler.schema.resolved.schema => {
+            compiled
+                .witness(&schema.resolved.schema, &handler.schema.resolved.schema)
+                .map(|witness| (witness, schema.attribute.span, false))
+        }
+        (None, _) => None,
+    }
 }
 
 /// Collects the handlers and producers of one machine, never descending
@@ -536,6 +550,10 @@ fn incompatible(
     .with_help("make the two schemas agree, or change the data")
     .with_spec_reference("SCXML 1.0 §3.12.1 Event Descriptors")
 }
+
+mod invoked;
+
+pub(crate) use invoked::invoked_payload_diagnostics;
 
 #[cfg(test)]
 mod tests;

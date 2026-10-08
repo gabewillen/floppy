@@ -78,7 +78,12 @@ fn compiling_a_child_document_takes_its_growth_copies_from_the_allowance() {
     let mut compiler = CompilerRuntime::instantiate(&host.core).expect("the compiler instantiates");
     let before = host.core.call_budget.spent();
     let outcome = compiler
-        .compile("child.scxml".to_owned(), source, std::iter::empty())
+        .compile(
+            "child.scxml".to_owned(),
+            source,
+            std::iter::empty(),
+            std::collections::BTreeMap::new(),
+        )
         .expect("the compile call completes");
     assert!(
         matches!(outcome, ChildCompile::Lowered(_)),

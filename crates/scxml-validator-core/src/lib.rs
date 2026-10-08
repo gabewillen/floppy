@@ -151,6 +151,19 @@ pub enum SchemaMode {
     Strict,
 }
 
+/// One document a literal `<invoke src>` of the validated document loads,
+/// supplied by the caller ([`Validator::with_invoked_documents`]), which
+/// reads it as its host would; the validator performs no I/O.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct InvokedDocument {
+    /// The document text exactly as its resource holds it.
+    pub text: String,
+    /// The bytes of each schema file the document's own `event:schema`
+    /// attributes reference, keyed by the reference's resource part as
+    /// authored, read relative to that document.
+    pub event_schemas: EventSchemaResources,
+}
+
 /// First-class validation pipeline with independently testable phases.
 #[derive(Debug)]
 pub struct Validator<R, B> {
@@ -171,6 +184,9 @@ pub struct Validator<R, B> {
     /// The bytes of each schema file an `event:schema` references, keyed by
     /// the reference's resource part as authored.
     event_schema_resources: EventSchemaResources,
+    /// The documents the validated document's literal `<invoke src>`
+    /// elements load, keyed by `src` as authored (`EVENT011`).
+    invoked_documents: std::collections::BTreeMap<String, InvokedDocument>,
     /// The linked package validators; `None` runs none.
     packages: Option<std::sync::Arc<dyn PackageValidator>>,
 }
@@ -188,6 +204,7 @@ impl<R, B> Validator<R, B> {
             services: None,
             data_models: None,
             event_schema_resources: std::collections::BTreeMap::new(),
+            invoked_documents: std::collections::BTreeMap::new(),
             packages: None,
         }
     }
@@ -222,6 +239,23 @@ impl<R, B> Validator<R, B> {
     #[must_use]
     pub const fn event_schema_resources(&self) -> &EventSchemaResources {
         &self.event_schema_resources
+    }
+
+    /// The documents the validated document's literal `<invoke src>`
+    /// elements load, keyed by the `src` value as authored with its XML
+    /// white space collapsed, each with its own schema files. The caller
+    /// reads them as its host would load them; a `src` with no entry is not
+    /// judged. With them, a `<send>` between the document and an invoked
+    /// document (`#_<id>` from the document, `#_parent` from the invoked
+    /// one) whose literal data the receiving document's transition schema
+    /// rejects is `EVENT011`. The validator itself performs no I/O.
+    #[must_use]
+    pub fn with_invoked_documents(
+        mut self,
+        documents: std::collections::BTreeMap<String, InvokedDocument>,
+    ) -> Self {
+        self.invoked_documents = documents;
+        self
     }
 
     /// The `env` slots of each invoked service the caller's service packages
@@ -458,6 +492,14 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
             report.push(diagnostic);
         }
         for diagnostic in event_payloads::event_payload_diagnostics(document, event_schemas) {
+            report.push(diagnostic);
+        }
+        for diagnostic in event_payloads::invoked_payload_diagnostics(
+            document,
+            event_schemas,
+            &self.invoked_documents,
+            self.xml_limits,
+        ) {
             report.push(diagnostic);
         }
         for diagnostic in invoke_types::invoke_type_diagnostics(document, self.services.as_ref()) {

@@ -321,6 +321,120 @@ fn invoke_src_loads_relative_file_and_absolute_uris_and_lists_them() {
     }
 }
 
+/// A literal `<invoke src>` child's `event:schema` files are read relative
+/// to the child's own directory before the session and reach its compile,
+/// so it runs; a file outside its directory is never read (`EVENT004`
+/// rejects the child), and a `srcexpr` child gets none (nothing is read
+/// while the document runs), so their `<invoke>` raises `error.execution`.
+#[test]
+fn a_literal_invoke_src_child_compiles_with_its_own_event_schema_files() {
+    let directory = scratch("invoke-src-event-schemas");
+    fs::create_dir_all(directory.join("children/schemas")).expect("a child directory");
+    fs::write(
+        directory.join("children/schemas/go.json"),
+        r#"{"$defs": {"Go": {"type": "object"}}}"#,
+    )
+    .expect("the schema is writable");
+    fs::write(directory.join("go.json"), "{}").expect("the root-relative schema is writable");
+    let child = |reference: &str| {
+        format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript"><state id="c0"><transition event="go" event:schema="{reference}" target="f"/><transition cond="true" target="f"/></state><final id="f"/></scxml>"#
+        )
+    };
+    fs::write(
+        directory.join("children/child.scx"),
+        child("schemas/go.json#/$defs/Go"),
+    )
+    .expect("the child is writable");
+    fs::write(directory.join("children/outside.scx"), child("../go.json"))
+        .expect("the child is writable");
+    let body = |invoke: &str| {
+        format!(
+            r#"<state id="s0">{invoke}<transition event="done.invoke" target="done"/><transition event="error.execution" target="failed"/></state><final id="done"><donedata><content expr="'done'"/></donedata></final><final id="failed"><donedata><content expr="'failed'"/></donedata></final>"#
+        )
+    };
+    for (invoke, expected) in [
+        (r#"<invoke type="scxml" src="children/child.scx"/>"#, "done"),
+        (
+            r#"<invoke type="scxml" src="children/outside.scx"/>"#,
+            "failed",
+        ),
+        (
+            r#"<invoke type="scxml" srcexpr="'children/child.scx'"/>"#,
+            "failed",
+        ),
+    ] {
+        let output = run(
+            &document(&directory, &body(invoke)),
+            &["--clock", "logical", "--on-eof", "close"],
+            "",
+        );
+        let records = parse_records(&output);
+        let done = records
+            .iter()
+            .find(|record| record["type"] == "done")
+            .unwrap_or_else(|| panic!("{invoke}: {records:?}\n{}", stderr(&output)));
+        assert_eq!(done["data"], expected, "{invoke}: {records:?}");
+    }
+}
+
+/// `validate` reads a literal `<invoke src>` child from its `file:` URL with
+/// its own schema files (relative to the child), and `run` passes the child
+/// it loaded: a `<send>` to `#_<id>` whose literal data the child's
+/// transition schema rejects is `EVENT011` (a warning, so the session still
+/// opens).
+#[test]
+fn validate_and_run_judge_sends_to_a_literal_invoke_src_child() {
+    let directory = scratch("invoke-src-event011");
+    fs::create_dir_all(directory.join("children/schemas")).expect("a child directory");
+    fs::write(
+        directory.join("children/schemas/go.json"),
+        r#"{"type": "object", "required": ["n"], "properties": {"n": {"type": "string"}}}"#,
+    )
+    .expect("the schema is writable");
+    fs::write(
+        directory.join("children/child.scx"),
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript"><state id="c0"><transition event="go" event:schema="schemas/go.json" target="f"/></state><final id="f"/></scxml>"#,
+    )
+    .expect("the child is writable");
+    let body = |data: &str| {
+        format!(
+            r##"<state id="s0"><invoke id="kid" type="scxml" src="children/child.scx"/><onentry><send event="go" target="#_kid"><content>{data}</content></send></onentry><transition event="done.invoke" target="done"/></state><final id="done"><donedata><content expr="'done'"/></donedata></final>"##
+        )
+    };
+    let validate = |path: &Path| {
+        Command::new(env!("CARGO_BIN_EXE_scx"))
+            .arg("validate")
+            .arg(path)
+            .env("NO_COLOR", "1")
+            .output()
+            .expect("scx validate runs")
+    };
+    let bad = document(&directory, &body(r#"{"n": 1}"#));
+    let output = validate(&bad);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("warning[EVENT011]"),
+        "{}",
+        stderr(&output)
+    );
+    let output = run(&bad, &["--clock", "logical", "--on-eof", "close"], "");
+    assert!(
+        stderr(&output).contains("warning[EVENT011]"),
+        "{}",
+        stderr(&output)
+    );
+    let records = parse_records(&output);
+    assert!(
+        records.iter().any(|record| record["type"] == "opened"),
+        "the warning does not stop the run: {records:?}"
+    );
+
+    let good = document(&directory, &body(r#"{"n": "one"}"#));
+    let output = validate(&good);
+    assert!(!stderr(&output).contains("EVENT011"), "{}", stderr(&output));
+}
+
 /// A `srcexpr` URI is loaded when its `<invoke>` runs, through the same
 /// loader (relative to the root document); a URI that cannot be loaded
 /// raises `error.execution` (SCXML 6.4).

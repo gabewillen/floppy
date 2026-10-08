@@ -73,6 +73,17 @@ interface types {
     /// The file's exact bytes.
     bytes: list<u8>,
   }
+  /// One document a literal `<invoke src>` of the validated document
+  /// loads, read by the caller as its host would (nothing is fetched).
+  record invoked-document {
+    /// The `src` value exactly as authored, its XML white space collapsed.
+    src: string,
+    /// The document text exactly as its resource holds it.
+    text: string,
+    /// The schema files its own `event:schema` attributes reference, read
+    /// relative to that document.
+    event-schemas: list<event-schema-resource>,
+  }
   /// Request bounds (checked before any parsing; violations fail with
   /// `invalid-request` and produce no report): `source` at most 16777216
   /// bytes; at most 64 `schemas` and 64 `packages`; each schema's `bytes` at
@@ -86,6 +97,13 @@ interface types {
   /// at most 16384 bytes, URIs unique by exact byte comparison); its bytes
   /// are bounded separately and do not count toward the whole-request bound.
   /// A reference with no resource is an `EVENT004` diagnostic in the report.
+  /// `invoked-documents` holds at most 64 documents, their `src` values
+  /// non-empty, at most 16384 bytes, and unique (exact byte comparison),
+  /// each document's `event-schemas` bounded as the request's own, and every
+  /// document's text and schema bytes at most 16777216 bytes together,
+  /// bounded separately like `event-schemas`. With them, a `<send>` between
+  /// the document and an invoked document whose literal data the receiving
+  /// document's transition schema rejects is an `EVENT011` diagnostic.
   record validation-request {
     source-name: string,
     source: string,
@@ -93,6 +111,7 @@ interface types {
     schemas: list<schema-resource>,
     packages: list<extension-package>,
     event-schemas: list<event-schema-resource>,
+    invoked-documents: list<invoked-document>,
     trace-context: option<trace-context>,
   }
   /// Diagnostic severity (the canonical report's `severity`).
