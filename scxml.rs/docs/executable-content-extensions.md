@@ -145,7 +145,7 @@ microstep and must stay quick, so its component does no I/O, by rule. The
 interface, the Wasmtime host links neither into an extension component (one
 that imports either, `wasi:cli/environment`, `wasi:http`, and
 `wasi:sockets` included, fails to instantiate), and an element has no `env`
-slots: the validator rejects an `env` attribute on it (`SCXML084`), and the
+slots: the validator rejects an `env` attribute on it (`ENV002`), and the
 component receives no value and no reference. Anything asynchronous,
 I/O-bound, or long-running (a model call, a request to a network service,
 a file) belongs in an invoked service

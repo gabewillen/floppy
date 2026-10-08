@@ -44,18 +44,18 @@ for the full contract.
 
 The validator checks every `env` attribute:
 
-- `SCXML083`: a slot the service's package does not declare (with a "did you
+- `ENV001`: a slot the service's package does not declare (with a "did you
   mean" fix for a near miss; judged when the validator is given the
   package), one slot bound twice (`env:<slot>` and `env:<slot>expr`), an
   `env:<slot>` value that is not a variable name, or an attribute that names
   no valid slot.
-- `SCXML084`: an element in the `env` namespace, or an `env` attribute on an
+- `ENV002`: an element in the `env` namespace, or an `env` attribute on an
   element in no namespace, on an executable-content extension element, or on
   the `<invoke>` of an SCXML session.
-- `SCXML068`: an `env` attribute on any other SCXML element (an attribute in
+- `LIMIT006`: an `env` attribute on any other SCXML element (an attribute in
   another namespace on an SCXML element).
 
-`scx explain SCXML083` and `scx explain SCXML084` give each rule
+`scx explain ENV001` and `scx explain ENV002` give each rule
 with an example.
 
 ## Values, references, and masking
@@ -102,7 +102,7 @@ service yet), and are proven by the echo service's tests named under each.
   the ones its service package declares (`env-slots`): a slot bound twice
   (`env:<slot>` and `env:<slot>expr`), an `env:<slot>` value that is not a
   variable name, or an attribute that names no valid slot is rejected
-  (`SCXML083`), and so is a slot the package does not declare, when the
+  (`ENV001`), and so is a slot the package does not declare, when the
   validator is given the package (IRP, and
   `crates/scxml-validator-core/src/env_attributes.rs`); at run time an
   undeclared slot rejects the start (`service_invoke.rs`,
@@ -111,8 +111,8 @@ service yet), and are proven by the echo service's tests named under each.
   only, and only an invoked service's `<invoke>` has slots: an element in
   the `env` namespace, or an `env` attribute on an element in no namespace,
   on an executable-content extension element, or on the `<invoke>` of an
-  SCXML session, is rejected (`SCXML084`), and an `env` attribute on another
-  SCXML element is rejected (`SCXML068`) (IRP).
+  SCXML session, is rejected (`ENV002`), and an `env` attribute on another
+  SCXML element is rejected (`LIMIT006`) (IRP).
 - <a id="env-3"></a>**env-3** (binding by name). `env:<slot>="NAME"` binds
   the `<invoke>`'s slot `<slot>` to the variable `NAME`; the host substitutes
   `NAME`'s value (`hosts/scxml-host-wasmtime/tests/service_invoke.rs`,

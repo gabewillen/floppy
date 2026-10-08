@@ -8,7 +8,7 @@
 //! the `endpoint` and `token` slots) against a loopback server: a value
 //! reaches only requests to an origin the service's package declares or one
 //! a value supplies entirely, a variable goes only to the `<invoke>`s whose
-//! `env` attributes name it, an extension element has no slots (`SCXML084`),
+//! `env` attributes name it, an extension element has no slots (`ENV002`),
 //! and `--env-file` values are masked in what the CLI writes. No test
 //! touches the real network.
 
@@ -313,7 +313,7 @@ fn values_reach_only_admitted_origins() {
 /// A variable goes only to the `<invoke>`s whose `env` attributes name it:
 /// the token slot names `OTHER`, which the run does not hold, so it is
 /// absent, and the listing shows each variable and where it goes. An `env`
-/// attribute on an extension element is rejected (`SCXML084`): executable
+/// attribute on an extension element is rejected (`ENV002`): executable
 /// content has no slots.
 #[test]
 fn a_variable_goes_only_to_the_invokes_naming_it() {
@@ -366,7 +366,7 @@ fn a_variable_goes_only_to_the_invokes_naming_it() {
         text(&rejected.stderr)
     );
     assert!(
-        text(&rejected.stderr).contains("SCXML084"),
+        text(&rejected.stderr).contains("ENV002"),
         "{}",
         text(&rejected.stderr)
     );

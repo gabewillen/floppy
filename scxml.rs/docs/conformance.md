@@ -573,7 +573,7 @@ likewise raises `error.execution`. The upstream XPath template emits
 `cond=""` for case 534 on the transition that must be taken; that is a
 template defect, corrected by the digest-bound erratum
 `xpath-534-param-name`, not a runtime rule. Validator
-lint `SCXML042` flags every blank expression attribute.
+lint `LINT009` flags every blank expression attribute.
 
 Execution ownership in IRP runs is split exactly as follows:
 
@@ -815,8 +815,8 @@ pipeline.
 
 | Data model | Corpus SHA-256 | Producer report digest | Canonical artifact SHA-256 | Passed / Applicable | Under errata | Not applicable | Failed | Unsupported | Invalid | HarnessError | Skipped |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ECMAScript | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `7f1d659f3854805b4eea104103657b6ac70ef2edfa4bdc5fb63356a0515a2ef9` | `4bc7822631ee36c7bfb270d25d94cb0af336542febf8d73c03f95f9d37bd2b1e` | 201 / 201 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
-| XPath | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` | `c98011ec1f2d7bf0093a7f2ed1658de4b072b43a2da03b2850dd3c8ed5b6cff8` | `a315bfb269f48c9a79e52e5ac3bb9dbc2f285d0eada9fa1b249137db1c2fd264` | 178 / 178 | 5 | 24 | 0 | 0 | 0 | 0 | 0 |
+| ECMAScript | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `21423463af3896b33650ad06a2d34bbfbced051b80f8ecb375aba1eb91d593b9` | `8a3bddb7d9cb81526de2f2752495d79c0bdb614f335a1951fc91c24b83845409` | 201 / 201 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| XPath | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` | `a68e123338dbc2281c9f965ffdcbf2d8e192a707665765bcfe17a78da1e64af1` | `998bd148fc9338702b7a70db7f1b7871e47d0d326f54a494a70d599c85bbad71` | 178 / 178 | 5 | 24 | 0 | 0 | 0 | 0 | 0 |
 
 ECMAScript: 201 passed; mandatory 167 / 167, optional 34 / 34; 436 (null
 profile, `datamodel="null"`) is `NotApplicable`. XPath: 178
@@ -866,7 +866,7 @@ sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
 ```
 
 That build's `manifest.tsv` has SHA-256
-`6be30cdaf9ff217320b04c2e1b538d86aa60c9733fe02b1888861f525b9e3ca6` (machine
+`dc43d528ddcdb7cf434320496dfb1ca7d52da72bcc4b4e9d31fc0e27c688b0e8` (machine
 component SHA-256
 `adbdf0a3a16de5d6f68fbdeb0cf9e16ae30145b41f75bdaa09b0db839490c56a`), and
 its example extension component SHA-256
@@ -918,7 +918,7 @@ sh scripts/build-canonical-components.sh --artifacts-dir "$PWD/canonical-release
 
 Built from the source of the checked-in baselines on an arm64 macOS Docker
 host, the script produces manifest SHA-256
-`6be30cdaf9ff217320b04c2e1b538d86aa60c9733fe02b1888861f525b9e3ca6`, the
+`dc43d528ddcdb7cf434320496dfb1ca7d52da72bcc4b4e9d31fc0e27c688b0e8`, the
 components the baselines were generated from; the `irp-components`
 artifact of the same source must match it.
 

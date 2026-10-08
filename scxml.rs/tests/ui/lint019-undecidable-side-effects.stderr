@@ -1,0 +1,27 @@
+warning[LINT019]: cannot prove that `cond` on `<transition>` has no side effect
+ --> tests/ui/lint019-undecidable-side-effects.scx:4:34
+  |
+4 |     <transition event="go" cond="isReady()" target="f"/>
+  |                                  ^^^^^^^^^ calls `isReady`, which the validator cannot see
+  |
+  = note: conditional expressions in conformant documents "SHOULD NOT have side effects" (SCXML 1.0 §5.9.1); the validator could not decide this condition
+  = help: declare the functions it calls in an inline `<script>`, or compute the value in executable content and read the result here
+  = spec: SCXML 1.0 Appendix B Data Models
+  = spec: SCXML 1.0 §5.9.1 Conditional Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+warning[LINT019]: cannot prove that `cond` on `<transition>` has no side effect
+ --> tests/ui/lint019-undecidable-side-effects.scx:5:36
+  |
+5 |     <transition event="eval" cond="eval(code)" target="f"/>
+  |                                    ^^^^^^^^^^ `eval` runs text as code
+  |
+  = note: conditional expressions in conformant documents "SHOULD NOT have side effects" (SCXML 1.0 §5.9.1); the validator could not decide this condition
+  = help: declare the functions it calls in an inline `<script>`, or compute the value in executable content and read the result here
+  = spec: SCXML 1.0 Appendix B Data Models
+  = spec: SCXML 1.0 §5.9.1 Conditional Expressions
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
+For more information about this diagnostic, try `scx --explain LINT019`.
+validated tests/ui/lint019-undecidable-side-effects.scx

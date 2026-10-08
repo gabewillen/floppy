@@ -14,7 +14,7 @@ help: compare with `>=`
 6 -     <transition event="go" cond="$count &gt; = 3" target="b"/>
 6 +     <transition event="go" cond="$count &gt;= 3" target="b"/>
 
-warning[SCXML057]: `count` selects a child element named `count`, not the variable `$count`
+warning[LINT011]: `count` selects a child element named `count`, not the variable `$count`
  --> tests/ui/scxml038-xpath-spaced-comparison.scx:8:25
   |
 8 |       <assign location="count" expr="$count + 1"/>
@@ -30,6 +30,6 @@ help: use `$count`
   |                         ~~~~~~
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
-Some diagnostics have detailed explanations: SCXML038, SCXML057.
-For more information about a diagnostic, try `scx --explain SCXML038`.
+Some diagnostics have detailed explanations: LINT011, SCXML038.
+For more information about a diagnostic, try `scx --explain LINT011`.
 validated tests/ui/scxml038-xpath-spaced-comparison.scx

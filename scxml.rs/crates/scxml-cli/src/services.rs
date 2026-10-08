@@ -9,7 +9,7 @@
 //!   package consents to them), and the `env` slots it accepts. A schema
 //!   artifact, when named, is read relative to the manifest and checked
 //!   against its digest. `validate` reports a literal `<invoke type>` no
-//!   package binds (`SCXML094`); invoking it is a runtime action, so the
+//!   package binds (`PKG004`); invoking it is a runtime action, so the
 //!   document still compiles and its `<invoke>` raises `error.execution` when
 //!   it runs.
 //! * `snapshot run` and `run` execute each bound service's component,
@@ -320,7 +320,7 @@ pub(crate) fn resolve(
 }
 
 /// The `env` slots each bound service's package declares, by exact type
-/// URI (for `SCXML094` and `SCXML083` on `<invoke>`).
+/// URI (for `PKG004` and `ENV001` on `<invoke>`).
 pub(crate) fn bound_services(packages: &[ServicePackage]) -> BTreeMap<String, Vec<String>> {
     packages
         .iter()

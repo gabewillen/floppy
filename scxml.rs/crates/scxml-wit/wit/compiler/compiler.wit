@@ -157,7 +157,7 @@ interface types {
   /// (each resource's `bytes` at most 4194304 bytes, its `uri` non-empty and
   /// at most 16384 bytes, URIs unique by exact byte comparison); its bytes
   /// are bounded separately and do not count toward the whole-request bound.
-  /// A reference with no resource is an `SCXML088` diagnostic in the report.
+  /// A reference with no resource is an `EVENT004` diagnostic in the report.
   /// Each resolved schema is embedded in the lowered Machine IR on its
   /// element, as metadata that never changes execution.
   record compile-request {

@@ -177,7 +177,7 @@ pub struct CompileInput {
     /// The bytes of each schema file the document's `event:schema`
     /// attributes reference, keyed by the reference's resource part as
     /// authored (the value before `#`); the caller reads them relative to
-    /// the document. Validation reports a missing one (`SCXML088`), and
+    /// the document. Validation reports a missing one (`EVENT004`), and
     /// lowering embeds each resolved schema in the Machine IR.
     pub event_schemas: scxml_event_schema::Resources,
 }
@@ -1016,7 +1016,7 @@ pub enum LowerError {
     /// A closed structural invariant is invalid.
     InvalidStructure(&'static str),
     /// An `event:schema` does not resolve (bounded message); the validator
-    /// reports each cause first (`SCXML085`-`SCXML092`).
+    /// reports each cause first (`EVENT001`-`EVENT008`).
     InvalidEventSchema(String),
     /// A field the engine turns into an event name, send ID, or invoke ID
     /// (or a `done.state.<ID>` or `done.invoke.<ID>` event it raises) is

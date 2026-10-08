@@ -6,18 +6,18 @@
 //! slots an `<invoke>` accepts are the ones its service package declares
 //! (`env-slots`). These rules check them:
 //!
-//! * `SCXML083`: an `env` attribute names a slot the service's package does
+//! * `ENV001`: an `env` attribute names a slot the service's package does
 //!   not declare, names both `<slot>` and `<slot>expr`, or names a variable
 //!   that is not a valid name. Checked against the package for a literal
 //!   service type the validator was given ([`crate::Validator::with_services`]);
 //!   otherwise (an unbound type, or an `<invoke typeexpr>`, which names its
 //!   service only at run time) only what Machine IR requires of any binding.
-//! * `SCXML084`: an element in the `env` namespace (it has none), or an `env`
+//! * `ENV002`: an element in the `env` namespace (it has none), or an `env`
 //!   attribute on any element other than an SCXML `<invoke>` of a service:
 //!   an element in no namespace, an executable-content extension element
 //!   (executable content does no I/O, so it has no slots), or an `<invoke>`
 //!   of an SCXML session (an absent `type` or an SCXML invoke type). An
-//!   `env` attribute on any other SCXML element is `SCXML068`'s (an
+//!   `env` attribute on any other SCXML element is `LIMIT006`'s (an
 //!   attribute in another namespace on an SCXML element).
 
 use std::collections::BTreeMap;
@@ -61,7 +61,7 @@ pub fn env_slot<'a>(local_name: &'a str, declared: &[String]) -> Option<(&'a str
         .map(|slot| (slot, true))
 }
 
-/// Every `SCXML083` and `SCXML084` finding of `document`; `services` maps an
+/// Every `ENV001` and `ENV002` finding of `document`; `services` maps an
 /// invoked-service type URI to its package's `env` slots.
 #[must_use]
 pub fn env_attribute_diagnostics(
@@ -87,7 +87,7 @@ pub fn env_attribute_diagnostics(
             Some(crate::SCXML_NAMESPACE) if element.name.local_name == "invoke" => {
                 invoke_slots(element, &env_attributes, services, &mut diagnostics);
             }
-            // `SCXML068` reports every other attribute in another namespace
+            // `LIMIT006` reports every other attribute in another namespace
             // on an SCXML element.
             Some(crate::SCXML_NAMESPACE) => {}
             None | Some(_) => {
@@ -117,7 +117,7 @@ fn check_slots(
         if let Some((_, first)) = seen.iter().find(|(seen, _)| *seen == slot) {
             diagnostics.push(
                 Diagnostic::error(
-                    "SCXML083",
+                    "ENV001",
                     format!("`env` slot `{slot}` is named twice on `<{}>`", element.lexical_name),
                     attribute.span,
                 )
@@ -136,7 +136,7 @@ fn check_slots(
         if !expr && !is_env_name(&attribute.value) {
             diagnostics.push(
                 Diagnostic::error(
-                    "SCXML083",
+                    "ENV001",
                     format!("`env:{slot}` does not name a variable"),
                     attribute.value_span,
                 )
@@ -154,7 +154,7 @@ fn check_slots(
 }
 
 /// The `env` attributes of one `<invoke>`: judged against the bound service
-/// package of a literal service type, `SCXML084` on an SCXML session's, and
+/// package of a literal service type, `ENV002` on an SCXML session's, and
 /// left to the host for a `typeexpr`.
 fn invoke_slots(
     element: &Element,
@@ -187,7 +187,7 @@ fn invoke_slots(
             for attribute in attributes {
                 diagnostics.push(
                     Diagnostic::error(
-                        "SCXML084",
+                        "ENV002",
                         format!(
                             "`{}` is on an `<invoke>` of an SCXML session, which has no slots",
                             attribute.lexical_name
@@ -204,7 +204,7 @@ fn invoke_slots(
     }
 }
 
-/// `SCXML083` for the `env` attributes of an `<invoke>` whose package the
+/// `ENV001` for the `env` attributes of an `<invoke>` whose package the
 /// validator was not given (or whose type is a `typeexpr`): what Machine IR
 /// requires of any slot binding, whatever the package declares. A slot is an
 /// `env-slots` name, bound once, and a literal binding names a variable.
@@ -227,7 +227,7 @@ fn check_slot_syntax(
         if !crate::is_env_slot(slot) {
             diagnostics.push(
                 Diagnostic::error(
-                    "SCXML083",
+                    "ENV001",
                     format!("`{}` names no valid `env` slot", attribute.lexical_name),
                     attribute.span,
                 )
@@ -259,7 +259,7 @@ fn check_slot_syntax(
 
 fn env_element(element: &Element) -> Diagnostic {
     Diagnostic::error(
-        "SCXML084",
+        "ENV002",
         format!(
             "`<{}>` is an element in the `env` namespace, which has none",
             element.lexical_name
@@ -286,7 +286,7 @@ fn unplaced(element: &Element, attribute: &Attribute) -> Diagnostic {
             attribute.lexical_name, element.lexical_name
         )
     };
-    Diagnostic::error("SCXML084", message, attribute.span)
+    Diagnostic::error("ENV002", message, attribute.span)
         .with_category(DiagnosticCategory::Semantic)
         .with_primary_message("only an invoked service's `<invoke>` has slots")
         .with_note("executable content runs synchronously inside a microstep and does no I/O, so it never holds a value; work that needs one (a token for a network request, for example) belongs in an invoked service (SCXML 6.4)")
@@ -301,7 +301,7 @@ fn undeclared(
 ) -> Diagnostic {
     let local = attribute.name.local_name.as_str();
     let mut diagnostic = Diagnostic::error(
-        "SCXML083",
+        "ENV001",
         format!(
             "`<{}>` has no `env` slot `{}`",
             element.lexical_name,
@@ -392,11 +392,11 @@ mod tests {
                     .iter()
                     .map(|diagnostic| diagnostic.code.as_str())
                     .collect::<Vec<_>>(),
-                ["SCXML084"],
+                ["ENV002"],
                 "{body}"
             );
         }
-        // SCXML068 owns attributes in other namespaces on SCXML elements.
+        // LIMIT006 owns attributes in other namespaces on SCXML elements.
         assert!(
             env_attribute_diagnostics(&document(&machine(r#"<log env:key="K"/>"#)), None)
                 .is_empty()
@@ -419,13 +419,13 @@ mod tests {
         assert!(codes(r#"<invoke type="urn:svc" env:apikeyexpr="'KEY'"/>"#).is_empty());
         assert_eq!(
             codes(r#"<invoke type="urn:svc" env:apikye="KEY"/>"#),
-            ["SCXML083"]
+            ["ENV001"]
         );
         assert_eq!(
             codes(r#"<invoke type="urn:svc" env:apikey="KEY" env:apikeyexpr="'K'"/>"#),
-            ["SCXML083"]
+            ["ENV001"]
         );
-        // An unbound service is SCXML094's, and a `typeexpr`'s slots the
+        // An unbound service is PKG004's, and a `typeexpr`'s slots the
         // host's; only what Machine IR requires of any binding is judged.
         assert!(codes(r#"<invoke type="urn:other" env:x="K"/>"#).is_empty());
         assert!(codes(r#"<invoke typeexpr="'urn:svc'" env:x="K"/>"#).is_empty());
@@ -434,13 +434,13 @@ mod tests {
             r#"<invoke typeexpr="'urn:svc'" env:x="1K"/>"#,
             r#"<invoke typeexpr="'urn:svc'" env:Bad="K"/>"#,
         ] {
-            assert_eq!(codes(bad), ["SCXML083"], "{bad}");
+            assert_eq!(codes(bad), ["ENV001"], "{bad}");
         }
         for session in [
             r#"<invoke src="c.scxml" env:apikey="K"/>"#,
             r#"<invoke type="scxml" src="c.scxml" env:apikey="K"/>"#,
         ] {
-            assert_eq!(codes(session), ["SCXML084"], "{session}");
+            assert_eq!(codes(session), ["ENV002"], "{session}");
         }
     }
 }

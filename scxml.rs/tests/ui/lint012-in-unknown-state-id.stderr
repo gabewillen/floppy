@@ -1,0 +1,18 @@
+warning[LINT012]: `In()` names `bb`, which is not a state of this machine
+ --> tests/ui/lint012-in-unknown-state-id.scx:8:37
+  |
+8 |     <transition event="go" cond="In('bb')" target="b"/>
+  |                                  -------- in this `cond` on `<transition>`
+  |                                     ^^^^ no state has this ID
+  |
+  = note: `In()` is true only while a `<state>`, `<parallel>`, or `<final>` with this ID is active, so this condition is always false
+  = help: did you mean `b`?
+  = spec: SCXML 1.0 §5.9.1 Conditional Expressions
+help: use the state ID `b`
+  |
+8 |     <transition event="go" cond="In('b')" target="b"/>
+  |                                      ~
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scx --explain LINT012`.
+validated tests/ui/lint012-in-unknown-state-id.scx

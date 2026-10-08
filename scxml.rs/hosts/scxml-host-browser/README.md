@@ -261,17 +261,15 @@ Why the unsupported ones stay unsupported:
 1.0 schema set, the semantic rules, the `event:schema` checks, and the
 packages' schemas), authenticated, transpiled, and fuel-metered like the
 compiler. `validate(source, {sourceName, schemaPolicy, packages,
-eventSchemas, profile})` returns `{report}`, the canonical
+eventSchemas})` returns `{report}`, the canonical
 `scxml.report/v3` validator report: for a document whose expressions use the
 linked data model, byte for byte what `scx validate --format json` writes
 (the parity test compares every `tests/ui` snapshot). `schemaPolicy`
-defaults to `strict`, as `scx validate`; `profile: 'draft'` adds the draft
-profile (`SCXML097` to `SCXML101`, the rules `<scx:validate
-profile="draft">` applies). Its `expression-syntax` import is linked to the
+defaults to `strict`, as `scx validate`. Its `expression-syntax` import is linked to the
 `dataModel` the page passes (a bundled ECMAScript or XPath data model), as
 the Wasmtime host's `ComponentValidator` links one: only documents whose
 `datamodel` is exactly that name have their expressions checked, the others
-get the `SCXML045` note, and without one no expression is checked. Each
+get the `LINT010` note, and without one no expression is checked. Each
 validation runs on its own fuel budget (`fuel`, default
 `DEFAULT_COMPILE_FUEL`); a trap discards the instance.
 

@@ -2072,7 +2072,7 @@ fn invocation_failures_raise_error_execution_and_start_nothing() {
     assert_eq!(session.active(), ["exec"]);
     assert!(session.caps.invocations.is_empty());
     // A type no host binds (official case 216): a literal one must be a
-    // service URI (`SCXML093`), so the unsupported type is evaluated.
+    // service URI (`PKG003`), so the unsupported type is evaluated.
     let mut caps = Mock::default();
     caps.texts.insert("kind".into(), Ok(Some("nope".into())));
     let session = Session::started(

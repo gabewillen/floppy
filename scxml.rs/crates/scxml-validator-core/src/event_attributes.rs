@@ -8,22 +8,22 @@
 //! W3C schema admits attributes in other namespaces laxly, so these rules
 //! check them:
 //!
-//! * `SCXML085`: an element in the `event` namespace (it has none), an
+//! * `EVENT001`: an element in the `event` namespace (it has none), an
 //!   `event` attribute on any other element, or an attribute name the
 //!   vocabulary does not define.
-//! * `SCXML086`: one element carries both `event:schema` and
+//! * `EVENT002`: one element carries both `event:schema` and
 //!   `event:schemaexpr`.
-//! * `SCXML087`: the schema is not UTF-8 JSON.
-//! * `SCXML088`: a referenced schema file is not available (it names no
+//! * `EVENT003`: the schema is not UTF-8 JSON.
+//! * `EVENT004`: a referenced schema file is not available (it names no
 //!   relative path below the document's directory, or its bytes were not
 //!   supplied).
-//! * `SCXML089`: the fragment is not a JSON Pointer, or names no value.
-//! * `SCXML090`: the schema violates its dialect's metaschema or does not
+//! * `EVENT005`: the fragment is not a JSON Pointer, or names no value.
+//! * `EVENT006`: the schema violates its dialect's metaschema or does not
 //!   compile.
-//! * `SCXML091`: `$schema` names an unsupported dialect.
-//! * `SCXML092`: a reference that cannot be kept (another resource, a
+//! * `EVENT007`: `$schema` names an unsupported dialect.
+//! * `EVENT008`: a reference that cannot be kept (another resource, a
 //!   missing target, or a schema a pointer cannot move).
-//! * `SCXML069`: a schema over the Machine IR string bound (wasm builds
+//! * `LIMIT007`: a schema over the Machine IR string bound (wasm builds
 //!   only).
 //!
 //! `event:schemaexpr` is checked as a value expression by the data model's
@@ -105,7 +105,7 @@ fn is_owner(element: &Element) -> bool {
 
 fn event_element(element: &Element) -> Diagnostic {
     Diagnostic::error(
-        "SCXML085",
+        "EVENT001",
         format!(
             "`<{}>` is an element in the `event` namespace, which has none",
             element.lexical_name
@@ -122,7 +122,7 @@ fn event_element(element: &Element) -> Diagnostic {
 
 fn misplaced(document: &Document, element: &Element, attribute: &Attribute) -> Diagnostic {
     Diagnostic::error(
-        "SCXML085",
+        "EVENT001",
         format!(
             "`{}` is not allowed on `<{}>`",
             attribute.lexical_name, element.lexical_name
@@ -146,7 +146,7 @@ fn misplaced(document: &Document, element: &Element, attribute: &Attribute) -> D
 fn unknown(element: &Element, attribute: &Attribute) -> Diagnostic {
     let local = attribute.name.local_name.as_str();
     let mut diagnostic = Diagnostic::error(
-        "SCXML085",
+        "EVENT001",
         format!(
             "`{}` is not an attribute of the `event` vocabulary",
             attribute.lexical_name
@@ -197,7 +197,7 @@ fn both(
     expression: &Attribute,
 ) -> Diagnostic {
     Diagnostic::error(
-        "SCXML086",
+        "EVENT002",
         format!(
             "`<{}>` has both `event:schema` and `event:schemaexpr`",
             element.lexical_name
@@ -400,7 +400,7 @@ fn schema_error_diagnostic(what: &str, error: &SchemaError, place: &Place) -> Di
             json_error(what, error, whole)
         }
         SchemaError::TooLarge { limit } => Diagnostic::error(
-            "SCXML069",
+            "LIMIT007",
             format!("{what} exceeds the Machine IR string bound"),
             whole,
         )
@@ -409,7 +409,7 @@ fn schema_error_diagnostic(what: &str, error: &SchemaError, place: &Place) -> Di
         .with_help("split the schema, or describe less of the event data"),
         SchemaError::InvalidPointer { .. } | SchemaError::PointerNotFound { .. } => {
             let diagnostic = Diagnostic::error(
-                "SCXML089",
+                "EVENT005",
                 format!("the fragment of `event:schema` does not select a schema in {what}: {error}"),
                 place.fragment.unwrap_or(whole),
             )
@@ -435,7 +435,7 @@ fn schema_error_diagnostic(what: &str, error: &SchemaError, place: &Place) -> Di
             }
         }
         SchemaError::UnsupportedDialect { .. } => Diagnostic::error(
-            "SCXML091",
+            "EVENT007",
             format!("{what} uses an unsupported JSON Schema dialect: {error}"),
             at,
         )
@@ -446,7 +446,7 @@ fn schema_error_diagnostic(what: &str, error: &SchemaError, place: &Place) -> Di
         .with_spec_reference(SCHEMA_SPEC),
         SchemaError::InvalidSchema { .. } => {
             let diagnostic = Diagnostic::error(
-                "SCXML090",
+                "EVENT006",
                 format!("{what} is not a valid JSON Schema: {error}"),
                 at,
             )
@@ -471,7 +471,7 @@ fn schema_error_diagnostic(what: &str, error: &SchemaError, place: &Place) -> Di
             }
         }
         SchemaError::Reference { reason, .. } => Diagnostic::error(
-            "SCXML092",
+            "EVENT008",
             format!("{what} has a reference the compiler cannot keep: {error}"),
             at,
         )
@@ -490,7 +490,7 @@ fn schema_error_diagnostic(what: &str, error: &SchemaError, place: &Place) -> Di
 
 fn json_error(what: &str, error: &SchemaError, span: Span) -> Diagnostic {
     Diagnostic::error(
-        "SCXML087",
+        "EVENT003",
         format!("{what} is not JSON: {error}"),
         span,
     )
@@ -508,7 +508,7 @@ fn unavailable(
     problem: &str,
 ) -> Diagnostic {
     Diagnostic::error(
-        "SCXML088",
+        "EVENT004",
         format!(
             "the schema file `{resource}` of `<{}>` is not available",
             element.lexical_name
@@ -566,15 +566,15 @@ mod tests {
     #[test]
     fn placement_names_and_pairs_are_checked() {
         for (body, expected) in [
-            ("<event:schema/>", &["SCXML085"][..]),
-            (r#"<onentry event:schema="true"/>"#, &["SCXML085"]),
+            ("<event:schema/>", &["EVENT001"][..]),
+            (r#"<onentry event:schema="true"/>"#, &["EVENT001"]),
             (
                 r#"<transition event="e" event:schma="true"/>"#,
-                &["SCXML085"],
+                &["EVENT001"],
             ),
             (
                 r#"<transition event="e" event:schema="true" event:schemaexpr="x"/>"#,
-                &["SCXML086"],
+                &["EVENT002"],
             ),
         ] {
             assert_eq!(codes(body), expected, "{body}");
@@ -599,35 +599,35 @@ mod tests {
         for (body, expected) in [
             (
                 r#"<transition event="e" event:schema='{"type":}'/>"#,
-                &["SCXML087"][..],
+                &["EVENT003"][..],
             ),
             (
                 r#"<transition event="e" event:schema="broken.json"/>"#,
-                &["SCXML087"],
+                &["EVENT003"],
             ),
             (
                 r#"<transition event="e" event:schema="missing.json"/>"#,
-                &["SCXML088"],
+                &["EVENT004"],
             ),
             (
                 r#"<transition event="e" event:schema="../order.json"/>"#,
-                &["SCXML088"],
+                &["EVENT004"],
             ),
             (
                 r#"<transition event="e" event:schema="order.json#/$defs/Nope"/>"#,
-                &["SCXML089"],
+                &["EVENT005"],
             ),
             (
                 r#"<transition event="e" event:schema='{"type":"strin"}'/>"#,
-                &["SCXML090"],
+                &["EVENT006"],
             ),
             (
                 r#"<transition event="e" event:schema='{"$schema":"http://json-schema.org/draft-04/schema#"}'/>"#,
-                &["SCXML091"],
+                &["EVENT007"],
             ),
             (
                 r#"<transition event="e" event:schema='{"$ref":"other.json"}'/>"#,
-                &["SCXML092"],
+                &["EVENT008"],
             ),
             (
                 r#"<transition event="e" event:schema="order.json#/$defs/Order"/>"#,

@@ -102,7 +102,7 @@ attribute keeps exactly the Machine IR bytes it had.
 ### References
 
 Nothing is fetched. A `$ref`, `$dynamicRef`, or `$recursiveRef` whose value
-is not a fragment (`#…`) names another resource and is rejected (`SCXML092`).
+is not a fragment (`#…`) names another resource and is rejected (`EVENT008`).
 Without a pointer the file's schema is embedded whole, so every fragment
 reference keeps its meaning. With a pointer, a JSON Pointer `$ref` into the
 selected schema is rebased onto it (`#/$defs/Order/properties/x` becomes
@@ -118,15 +118,15 @@ instead. A pointer extraction's bounds are listed under [Bounds](#bounds).
 ### Bounds
 
 On wasm builds (the shipped components) one schema, as read and as embedded,
-is at most 1 MiB (the Machine IR string bound, `SCXML069`), a pointer
-extraction bundles at most 256 referenced values (`SCXML092`), and a
+is at most 1 MiB (the Machine IR string bound, `LIMIT007`), a pointer
+extraction bundles at most 256 referenced values (`EVENT008`), and a
 component request carries at most 64 schema files of at most 4 MiB each and
 16 MiB together (a request past one is answered with the WIT
 `invalid-request` code, with no diagnostic). The native CLI reads files of
 any size and bundles any number of values. On every build a pointer
 extraction's result is at most 8 times its file plus 4096 bytes and must
 nest no deeper than 128 levels, so the Machine IR decoder can read it back
-(`SCXML092`).
+(`EVENT008`).
 
 Numbers are read as JSON numbers in the range of a 64-bit integer or a
 64-bit float: an integer outside the 64-bit range (for example a `maximum`
@@ -150,23 +150,23 @@ of `18446744073709551616`) is read, compared, and embedded as the nearest
 
 ## Validator codes
 
-- `SCXML085`: an element in the `event` namespace, an `event` attribute on
+- `EVENT001`: an element in the `event` namespace, an `event` attribute on
   any other element (with a removal fix), or an attribute other than
   `schema` and `schemaexpr` (with a "did you mean" fix).
-- `SCXML086`: both `event:schema` and `event:schemaexpr` on one element.
-- `SCXML087`: the schema is not UTF-8 JSON (an inline schema at the exact
+- `EVENT002`: both `event:schema` and `event:schemaexpr` on one element.
+- `EVENT003`: the schema is not UTF-8 JSON (an inline schema at the exact
   byte, a file with its line and column).
-- `SCXML088`: a referenced file is not available (not a relative path at
+- `EVENT004`: a referenced file is not available (not a relative path at
   or below the document's directory, or it could not be read).
-- `SCXML089`: the fragment is not a JSON Pointer, or names no value.
-- `SCXML090`: the schema violates its dialect's metaschema or does not
+- `EVENT005`: the fragment is not a JSON Pointer, or names no value.
+- `EVENT006`: the schema violates its dialect's metaschema or does not
   compile (an inline schema at the offending value; a misspelled `type`
   gets a "did you mean" fix).
-- `SCXML091`: an unsupported `$schema` dialect.
-- `SCXML092`: a reference the compiler cannot keep.
+- `EVENT007`: an unsupported `$schema` dialect.
+- `EVENT008`: a reference the compiler cannot keep.
 
-An `event` attribute is never `SCXML068`. `scx --explain SCXML085`
-through `--explain SCXML092` give each rule with an example.
+An `event` attribute is never `LIMIT006`. `scx --explain EVENT001`
+through `--explain EVENT008` give each rule with an example.
 
 ## Statements
 
@@ -177,34 +177,34 @@ own implementation report plan ([`irp/`](irp/README.md), below).
   `event:schemaexpr` are allowed on `<transition>`, `<send>`, `<raise>`, and
   `<donedata>` only: an `event` attribute on any other element, an
   attribute other than `schema` and `schemaexpr`, or an element in the
-  `event` namespace is rejected (`SCXML085`).
+  `event` namespace is rejected (`EVENT001`).
 - <a id="event-2"></a>**event-2** (one attribute). An element has at most
-  one of `event:schema` and `event:schemaexpr` (`SCXML086`).
+  one of `event:schema` and `event:schemaexpr` (`EVENT002`).
 - <a id="event-3"></a>**event-3** (inline schemas). A value whose first
   non-white-space character is `{`, or that is exactly `true` or `false`,
   is an inline JSON schema; one that is not UTF-8 JSON is rejected
-  (`SCXML087`).
+  (`EVENT003`).
 - <a id="event-4"></a>**event-4** (schema files). Any other value references
   a file relative to the document, at or below its directory, optionally
   with a JSON Pointer fragment selecting a value of the file: an unavailable
   file, or a path outside the document's directory, is rejected
-  (`SCXML088`); a file that is not UTF-8 JSON (`SCXML087`); a fragment that
-  is not a JSON Pointer or names no value (`SCXML089`).
+  (`EVENT004`); a file that is not UTF-8 JSON (`EVENT003`); a fragment that
+  is not a JSON Pointer or names no value (`EVENT005`).
 - <a id="event-5"></a>**event-5** (dialects). The dialect is the selected
   schema's `$schema`, else the file's, else JSON Schema 2020-12; 2020-12,
   2019-09, and draft-07 are supported, each with or without its trailing
-  `#`, and any other `$schema` is rejected (`SCXML091`).
+  `#`, and any other `$schema` is rejected (`EVENT007`).
 - <a id="event-6"></a>**event-6** (valid schemas). A schema must satisfy
   its dialect's metaschema and compile, so every keyword has a valid value
-  and every `pattern` is a valid regular expression (`SCXML090`).
+  and every `pattern` is a valid regular expression (`EVENT006`).
 - <a id="event-7"></a>**event-7** (references). Nothing is fetched: a
   `$ref`, `$dynamicRef`, or `$recursiveRef` that is not a fragment names
-  another resource and is rejected (`SCXML092`); fragment references are
+  another resource and is rejected (`EVENT008`); fragment references are
   kept; with a pointer, references to elsewhere in the file are bundled so
   the selected schema stands alone, and a selected schema that relies on
   `$id`, `$anchor`, `$dynamicAnchor`, `$recursiveAnchor`, plain-name
   fragments, or dynamic references cannot be moved and is rejected
-  (`SCXML092`).
+  (`EVENT008`).
 - <a id="event-8"></a>**event-8** (unevaluated expressions).
   `event:schemaexpr` is carried unevaluated: the expression is never
   evaluated, so it never raises `error.execution`.

@@ -1,0 +1,37 @@
+error[EVENT001]: `event:schema` is not allowed on `<state>`
+ --> tests/ui/event001-event-vocabulary-misplaced.scx:4:20
+  |
+4 |   <state id="idle" event:schema='{"type": "object"}'>
+  |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ an `event` attribute on an element that handles or creates no event data
+  |
+  = note: the `event` vocabulary describes event data only on `<transition>`, `<send>`, `<raise>`, or `<donedata>`: the `_event.data` a transition handles, the data a `<send>` or `<raise>` creates its event with, or the data of the `done.state.<id>` event of a `<donedata>`
+  = help: move the attribute to `<transition>`, `<send>`, `<raise>`, or `<donedata>`, or remove it
+help: remove `event:schema`
+  |
+4 -   <state id="idle" event:schema='{"type": "object"}'>
+4 +   <state id="idle">
+
+error[EVENT001]: `<event:schema>` is an element in the `event` namespace, which has none
+ --> tests/ui/event001-event-vocabulary-misplaced.scx:6:8
+  |
+6 |       <event:schema/>
+  |        ^^^^^^^^^^^^ not an element of any vocabulary
+  |
+  = note: `https://github.com/stateforward/scxml.rs/namespaces/event` is an attribute vocabulary only: `event:schema` or `event:schemaexpr` on `<transition>`, `<send>`, `<raise>`, or `<donedata>` describes the event data the element handles or creates
+  = help: remove the element, and describe the event data with an `event:schema` attribute on the element that handles or creates it
+
+error[EVENT001]: `event:schma` is not an attribute of the `event` vocabulary
+ --> tests/ui/event001-event-vocabulary-misplaced.scx:8:45
+  |
+8 |     <transition event="order" target="done" event:schma="true"/>
+  |                                             ^^^^^^^^^^^^^^^^^^ unknown on `<transition>`
+  |
+  = note: the `event` vocabulary has exactly two attributes: `event:schema` (a JSON Schema, inline or by reference) and `event:schemaexpr` (an expression whose value is the schema)
+  = help: did you mean `schema`?
+help: use `schema`
+  |
+8 |     <transition event="order" target="done" event:schema="true"/>
+  |                                                   ~~~~~~
+
+diagnostic summary: 3 error(s), 0 warning(s), 0 note(s), 3 total
+For more information about this error, try `scx --explain EVENT001`.

@@ -1024,8 +1024,8 @@ pub enum ArtifactError {
     ConformanceDigestMismatch,
     /// A conformance case violates its authoritative cross-field invariants.
     InvalidConformanceCase(&'static str),
-    /// A stable diagnostic code was empty.
-    EmptyCode,
+    /// A diagnostic code is not a code of a known family ([`is_known_code`]).
+    UnknownCode,
     /// A source span is outside the source or not on UTF-8 boundaries.
     InvalidSpan(ByteSpan),
     /// Suggested edits are empty, unsorted, or overlapping.
@@ -1076,7 +1076,9 @@ impl fmt::Display for ArtifactError {
                     "invalid canonical conformance case field `{field}`"
                 )
             }
-            Self::EmptyCode => formatter.write_str("diagnostic code must not be empty"),
+            Self::UnknownCode => {
+                formatter.write_str("diagnostic code is not a code of a known family")
+            }
             Self::InvalidSpan(span) => write!(
                 formatter,
                 "invalid UTF-8 source span {}..{}",
@@ -1992,6 +1994,76 @@ fn validate_span(source: &str, span: ByteSpan) -> Result<(), ArtifactError> {
     Ok(())
 }
 
+/// The stable diagnostic code families, each with what its codes report.
+/// `SCXML` is reserved for W3C SCXML 1.0 conformance: every `SCXML` code
+/// cites the specification section it enforces.
+pub const CODE_FAMILIES: &[(&str, &str)] = &[
+    (
+        "SCXML",
+        "W3C SCXML 1.0 conformance; every code cites the section it enforces",
+    ),
+    ("XML", "XML 1.0 well-formedness and the XML parser's limits"),
+    ("XSD", "XML Schema validation of the document"),
+    ("COMP", "the compiler"),
+    ("PKG", "extension and service packages and their binding"),
+    ("ENV", "the built-in `env` attribute vocabulary"),
+    (
+        "EVENT",
+        "the built-in `event` attribute vocabulary (`event:schema`)",
+    ),
+    ("LINT", "best-practice warnings on legal SCXML"),
+    (
+        "LIMIT",
+        "this implementation's bounds and support limits, not specification rules",
+    ),
+];
+
+/// Upper bound on the local part of a package validator's code.
+const MAX_PACKAGE_CODE_BYTES: usize = 64;
+
+/// The family of a stable code: its leading ASCII capitals when they name a
+/// family of [`CODE_FAMILIES`].
+#[must_use]
+pub fn code_family(code: &str) -> Option<&'static str> {
+    let letters = code
+        .find(|character: char| !character.is_ascii_uppercase())
+        .map_or(code, |end| &code[..end]);
+    CODE_FAMILIES
+        .iter()
+        .map(|(family, _)| *family)
+        .find(|family| *family == letters)
+}
+
+/// Whether `code` is a stable diagnostic code: a family of
+/// [`CODE_FAMILIES`] followed by exactly three digits, an XML Schema
+/// constraint (`XSD-` and the constraint identifier), or a package
+/// validator's `<prefix>::<code>` (`<code>` is `[a-z][a-z0-9_]*` within 64
+/// bytes). Everything else, an unknown family included, fails closed.
+#[must_use]
+pub fn is_known_code(code: &str) -> bool {
+    if let Some((prefix, local)) = code.split_once("::") {
+        return !prefix.is_empty()
+            && !prefix
+                .chars()
+                .any(|character| character == ':' || character.is_whitespace())
+            && local.len() <= MAX_PACKAGE_CODE_BYTES
+            && local.starts_with(|first: char| first.is_ascii_lowercase())
+            && local
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_');
+    }
+    if let Some(constraint) = code.strip_prefix("XSD-") {
+        return !constraint.is_empty()
+            && constraint
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-');
+    }
+    code_family(code).is_some_and(|family| {
+        let digits = &code[family.len()..];
+        digits.len() == 3 && digits.bytes().all(|byte| byte.is_ascii_digit())
+    })
+}
+
 fn validate_diagnostic_payload(
     source: &str,
     diagnostics: &[Diagnostic],
@@ -2016,8 +2088,8 @@ fn validate_diagnostic_payload(
         return Err(ArtifactError::NonCanonicalOrdering);
     }
     for diagnostic in diagnostics {
-        if diagnostic.code.trim().is_empty() {
-            return Err(ArtifactError::EmptyCode);
+        if !is_known_code(&diagnostic.code) {
+            return Err(ArtifactError::UnknownCode);
         }
         validate_span(source, diagnostic.primary.span)?;
         for label in &diagnostic.secondary {
@@ -2619,6 +2691,11 @@ fn validate_conformance_case(case: &ConformanceCase) -> Result<(), ArtifactError
     )?;
     for diagnostic in &case.diagnostics {
         require_conformance_identity_string("case.diagnostic.code", &diagnostic.code)?;
+        if !is_known_code(&diagnostic.code) {
+            return Err(ArtifactError::InvalidConformanceCase(
+                "case.diagnostic.code",
+            ));
+        }
         require_conformance_identity_string("case.diagnostic.message", &diagnostic.message)?;
     }
     let mut configuration = BTreeSet::new();
@@ -3075,6 +3152,46 @@ mod tests {
     /// recipes to the canonical `stateforward:scxml` WIT package they name:
     /// its package version, its `machine` world, and its `ir-source`
     /// interface. A WIT version bump fails here until the constants follow.
+    #[test]
+    fn known_codes_are_exactly_the_families_and_package_codes() {
+        for code in [
+            "SCXML005",
+            "XML001",
+            "XSD001",
+            "COMP001",
+            "PKG003",
+            "ENV001",
+            "EVENT010",
+            "LINT021",
+            "LIMIT009",
+            "XSD-cvc-complex-type.2.4",
+            "example::bad_value",
+        ] {
+            assert!(is_known_code(code), "{code}");
+        }
+        for code in [
+            "",
+            "SCXML",
+            "SCXML05",
+            "SCXML0050",
+            "DRAFT001",
+            "FOO001",
+            "scxml005",
+            "LINT01x",
+            "XSD-",
+            "XSD-a b",
+            "::bad",
+            "x::",
+            "x::Bad",
+            "x:y::bad",
+        ] {
+            assert!(!is_known_code(code), "{code}");
+        }
+        assert_eq!(code_family("LIMIT001"), Some("LIMIT"));
+        assert_eq!(code_family("LINT001"), Some("LINT"));
+        assert_eq!(code_family("XSD-cvc-elt"), Some("XSD"));
+    }
+
     #[test]
     fn machine_template_constants_match_the_canonical_wit_package() {
         let wit = include_str!("../../scxml-wit/wit/scxml/scxml.wit");
@@ -3621,12 +3738,34 @@ mod tests {
 
     #[test]
     fn rustc_renderer_escapes_untrusted_terminal_controls_and_record_breaks() {
+        // A code is of a known family, so a hostile code never reaches a
+        // renderer: the canonical layer rejects it.
+        let hostile_code = ArtifactEnvelope::validator(
+            "hostile.scxml",
+            "<scxml/>",
+            vec![Diagnostic {
+                severity: Severity::Error,
+                code: "SCXML\u{1b}[2J\nFORGED".into(),
+                category: DiagnosticCategory::Semantic,
+                message: "message".into(),
+                primary: Label {
+                    span: ByteSpan { start: 0, end: 1 },
+                    message: None,
+                },
+                secondary: Vec::new(),
+                notes: Vec::new(),
+                help: None,
+                spec_references: Vec::new(),
+                fixes: Vec::new(),
+            }],
+        );
+        assert!(matches!(hostile_code, Err(ArtifactError::UnknownCode)));
         let artifact = ArtifactEnvelope::validator(
             "bad\u{1b}[2J\nerror[FORGED].scxml",
             "<scxml>\u{1b}[31m\u{85}payload</scxml>",
             vec![Diagnostic {
                 severity: Severity::Error,
-                code: "SCXML\u{1b}[2J\nFORGED".into(),
+                code: "SCXML999".into(),
                 category: DiagnosticCategory::Semantic,
                 message: "message\nerror[FORGED]: injected\u{9b}31m".into(),
                 primary: Label {
@@ -3771,7 +3910,7 @@ mod tests {
         };
         let diagnostic = Diagnostic {
             severity: Severity::Error,
-            code: "SCXML061".into(),
+            code: "LINT015".into(),
             category: DiagnosticCategory::Semantic,
             message: "far edits".into(),
             primary: Label {
@@ -3891,7 +4030,7 @@ mod tests {
         let diagnostics = (0..100_001_u64)
             .map(|offset| Diagnostic {
                 severity: Severity::Warning,
-                code: "SCXML029".into(),
+                code: "LINT005".into(),
                 category: DiagnosticCategory::Lint,
                 message: "unreachable".into(),
                 primary: Label {
@@ -4149,7 +4288,7 @@ mod tests {
             "x",
             vec![Diagnostic {
                 severity: Severity::Error,
-                code: "SCXML-PEAK".into(),
+                code: "SCXML999".into(),
                 category: DiagnosticCategory::Semantic,
                 message: large_message,
                 primary: Label {

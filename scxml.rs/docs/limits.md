@@ -65,7 +65,7 @@ with the known open defects under its "Known limitations (pending)".
   SCXML processor MUST ensure that <log> has no side-effects on document
   interpretation." The validator meets that duty by rejecting a `<log expr>`
   whose syntax certainly has a side effect (`SCXML074`, an error) and warning
-  on one it cannot prove free of them (`SCXML075`); the run-time half is the
+  on one it cannot prove free of them (`LINT019`); the run-time half is the
   known limitation L.1 of [spec-errata.md](spec-errata.md#l1-run-time-side-effects-of-log-expr).
 
 ### ECMAScript data model choices
@@ -237,14 +237,14 @@ one of them is treated as follows:
   Wasmtime, 75,000,000 metered charges in the browser), so a finite command
   that starts a deep or heavy chain of invocations can exhaust it too.
 - **Rejected by the validator and compiler components**: a document over a
-  Machine IR, graph, or expression-checking bound (`SCXML027`, `SCXML028`,
-  `SCXML040` for size, `SCXML041`, `SCXML069`, `COMP001`; the bounds are
+  Machine IR, graph, or expression-checking bound (`LIMIT001`, `LIMIT002`,
+  `LIMIT003` for size, `LIMIT004`, `LIMIT007`, `COMP001`; the bounds are
   listed in [validator-rules.md](validator-rules.md)), including an
-  `event:schema` over the 1 MiB string bound (`SCXML069`), and a JSON
+  `event:schema` over the 1 MiB string bound (`LIMIT007`), and a JSON
   Pointer extraction that would bundle more than 256 referenced values
-  (`SCXML092`). The native
+  (`EVENT008`). The native
   `scx` validates and compiles a document of any size and reports
-  these codes for no size bound; it reports `SCXML028` only when graph
+  these codes for no size bound; it reports `LIMIT002` only when graph
   analysis work grows faster than the machine (below).
 - **ECMAScript bounds inside the language**: loop iterations (100,000 per
   call frame), the value stack (16,384), and the distinct state IDs one
@@ -261,7 +261,7 @@ one of them is treated as follows:
 These apply on every build, because they are not resource bounds:
 
 - **Native stack guards**: the XML element depth (256), the ECMAScript parse
-  nesting (128 units, so `SCXML040` for nesting stays), recursion (128) and
+  nesting (128 units, so `LIMIT003` for nesting stays), recursion (128) and
   built-in value nesting (32), and the XPath parse nesting (32) and
   expression-tree depth (128). These parsers, walkers, and drops recurse
   once per level, so without a guard a deep input would overflow the stack
@@ -343,13 +343,13 @@ These apply on every build, because they are not resource bounds:
   declarations), XSD
   content-model expansion and schema-compilation work, the ECMAScript
   side-effect analysis (200,000 steps per checked fragment; past it the
-  fragment is one undecidable `SCXML075` warning), the graph analysis work
+  fragment is one undecidable `LINT019` warning), the graph analysis work
   budget (8,000,000 units per machine, or 1,024 per element and target
-  reference when that is more; past it `SCXML028`), the bundling of an
+  reference when that is more; past it `LIMIT002`), the bundling of an
   `event:schema` a JSON Pointer selects (a result at most 8 times its file
   plus 4096 bytes, checked as the copies grow, and nested no deeper than
   the 128 levels the Machine IR decoder reads back; past either
-  `SCXML092`), the 32 MiB rendered and SARIF report bounds, and the 64
+  `EVENT008`), the 32 MiB rendered and SARIF report bounds, and the 64
   documents `snapshot run` and `run` load through `<invoke src>` before the
   first macrostep. Each guards against output that grows faster than its
   input.
@@ -364,7 +364,7 @@ These apply on every build, because they are not resource bounds:
   or invoke id over it, or a state or invoke id over 1,013 / 1,012 bytes,
   whose `done.state.` or `done.invoke.` event would be over it, is a
   compile error,
-  `SCXML081`/`SCXML082`, and a run-time `eventexpr` name or a generated
+  `LIMIT008`/`LIMIT009`, and a run-time `eventexpr` name or a generated
   invoke id over it raises `error.execution`), the `data-model-api` bounds of
   `initialize` (at most 256 declared `<data>` ids, whose placeholder
   encoding is at most 64 KiB, so every data model snapshot fits one

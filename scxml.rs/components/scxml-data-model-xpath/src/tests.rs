@@ -960,10 +960,10 @@ fn check_syntax_reports_exact_spans() {
     );
     // One byte past the wasm expression bound (16 KiB) is checked natively,
     // where the bound does not apply; the host's validator tests check that
-    // the shipped data model declines it (SCXML040).
+    // the shipped data model declines it (LIMIT003).
     let long = "1".repeat(16_385);
     assert_eq!(check_syntax(SyntaxKind::Value, &long), Ok(Vec::new()));
-    // A parse over the nesting bound is declined (the validator's SCXML040),
+    // A parse over the nesting bound is declined (the validator's LIMIT003),
     // never reported as a syntax issue.
     let nested = format!("{}1{}", "(".repeat(200), ")".repeat(200));
     assert_eq!(

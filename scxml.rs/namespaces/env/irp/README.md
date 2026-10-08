@@ -52,14 +52,14 @@ scx conformance run --corpus namespaces/env/irp/prepared/xpath \
 ```
 
 The `generate_irp_baselines` example regenerates the baselines with every
-other suite's. The current baselines (manifest SHA-256 `76a666244f526ec93d6f72329880d05676744150431ed64fe833763a073d4860`,
+other suite's. The current baselines (manifest SHA-256 `a8408d22f1378bc67f4e2c357d8a68f49fcbeb9581396c0c81f43a62e60b9163`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 the canonical release of docs/conformance.md, empty filter identity) measure:
 
 | Data model | Passed / Applicable | Rejections | Not Passing | Corpus digest | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | --- | --- | --- |
-| ECMAScript | 8 / 8 | 8 | 0 | `a1a3f1b5aee8e8970a55efa5ba907c2fa0a95ec23917c9e167dc392f9b4b87a7` | `d6fd1cc308148cf87eda30e13dd4b3b1e51deff99b652a0fa1cc1d51e26f1f59` | `4f48c51a3812230354c641ab62ca9cbdc2d84cf4724fcaf2e533b9ae929aa8ce` |
-| XPath | 8 / 8 | 8 | 0 | `ccb8ed7623b83986df1d407ef6033d33f2843676ce1b51ad58b6bcfbb841372c` | `454c1e62a0d1d33d63cd06ad7f199585c04b05c931b48bc3ef6fdb5408e5f8e4` | `9d68d751865030dc883e0946e5c4a8ed407c06049b7137811cfaae66a6eb3b6a` |
+| ECMAScript | 8 / 8 | 8 | 0 | `ef457c292b3c0bf9f27ed6e2072574876ccadc9636448bcd78c209099c064679` | `1687ceb31dbdce3c9a55c710714b1305b58d9cbae2e5c9b686445ef37b69b3ac` | `901cc9eb7c4741a1a5acebdaf064dd61548254a0165a81c013e2f7e65dc85a6b` |
+| XPath | 8 / 8 | 8 | 0 | `9a0faf705e1b5a9d0135b926a2bc042d2c561f43242a0200456c919378094b33` | `54e7be46bc518f6206b6e237b866f0ffdd72722988a4742b5370d3f9e03bbf46` | `36d8d40cd043f73bbac3a5189a685092b95b369c2f8081d3e64f655deda80f89` |
 
 The report identity lists the bound package: `https://stateforward.org/scxml/example` version `0.2.0`, manifest SHA-256 `9e7a178076fc07942946095c44acde1433c9878b4f2a23c3569aa9c6205d03b9`, schema SHA-256 `45074422d68df4d82aa82e7b0dec09183871c58e59566033fdeaaeb4576b28b3`, component SHA-256 `e3bb851bc5d94f0fedb17e874edb6c0a84ae8771bd413387a40f9cc61a3ecdd1`. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
 the suite and its baselines statically, and `irp_components.rs` reproduces

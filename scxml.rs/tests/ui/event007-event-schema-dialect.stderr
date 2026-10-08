@@ -1,0 +1,12 @@
+error[EVENT007]: the inline schema of `<transition>` uses an unsupported JSON Schema dialect: unsupported `$schema` `http://json-schema.org/draft-04/schema#`
+ --> tests/ui/event007-event-schema-dialect.scx:6:43
+  |
+6 |                 event:schema='{"$schema": "http://json-schema.org/draft-04/schema#", "type": "object"}'/>
+  |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsupported `$schema`
+  |
+  = note: the supported dialects are JSON Schema 2020-12 (`https://json-schema.org/draft/2020-12/schema`, the default when `$schema` is absent), 2019-09 (`https://json-schema.org/draft/2019-09/schema`), and draft-07 (`http://json-schema.org/draft-07/schema#`)
+  = help: declare one of the supported dialects in `$schema`, or remove `$schema` to use 2020-12
+  = spec: JSON Schema 2020-12 Core
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scx --explain EVENT007`.

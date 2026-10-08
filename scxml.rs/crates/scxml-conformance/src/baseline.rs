@@ -389,7 +389,7 @@ mod tests {
             (true, "manual", |r| r.cases[0].manual = true),
             (true, "diagnostics", |r| {
                 r.cases[0].diagnostics.push(DiagnosticRecord {
-                    code: "X".into(),
+                    code: "SCXML999".into(),
                     severity: "warning".into(),
                     message: "x".into(),
                 });

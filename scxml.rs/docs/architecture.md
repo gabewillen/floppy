@@ -449,7 +449,7 @@ field and the exact supported constant, but never echo the supplied value.
 ### Event data schemas
 
 The validator checks the `event` attribute vocabulary
-([namespaces/event](../namespaces/event/README.md), `SCXML085`-`SCXML092`)
+([namespaces/event](../namespaces/event/README.md), `EVENT001`-`EVENT008`)
 from the document and the bytes of the schema files it references, which the
 caller supplies (`Validator::with_event_schema_resources`,
 `CompileInput.event_schemas`, and the WIT `event-schemas` request field);
@@ -484,9 +484,9 @@ component (one data model per validator; each request runs in fresh stores)
 and forwards every fragment unchanged to that component's
 `data-model-api.check-syntax`. Only documents whose `datamodel` names the
 linked data model are checked; with no data model or the null data model
-linked it answers `none`, and other recognized data models get the `SCXML045`
+linked it answers `none`, and other recognized data models get the `LINT010`
 note. Data-model failures and traps become closed declines, reported as
-`SCXML040`. The host never parses SCXML or expressions itself.
+`LIMIT003`. The host never parses SCXML or expressions itself.
 `hosts/scxml-host-wasmtime/tests/validator_component.rs` runs every
 single-data-model `tests/ui` case through the component and requires each
 canonical report to equal the CLI's snapshot byte for byte. The virtualized

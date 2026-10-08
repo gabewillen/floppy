@@ -35,25 +35,18 @@
 //!   Each holds the schema as text, or names it with `expr` (a string or a
 //!   JSON value). Nothing is ever read from a file or the network: a
 //!   reference whose bytes are not supplied is reported by the validator as
-//!   `SCXML088` (the file is not available), like any other diagnostic.
+//!   `EVENT004` (the file is not available), like any other diagnostic.
 //! * `applyfixes="machine-applicable"` with `fixedlocation="F"` (optional,
 //!   both or neither): every `machine-applicable` fix of the report is
 //!   applied to the text (fixes whose edits overlap an already accepted fix
 //!   are skipped, rustfix's rule) and the fixed text is assigned to `F` as a
 //!   string; the report still describes the original text. Validate the
 //!   fixed text again to see what remains.
-//! * `profile="draft"` (optional, [`PROFILE_DRAFT`]): also applies the
-//!   validator's draft profile ([`scxml_validator_core::Profile::Draft`],
-//!   `SCXML097` to `SCXML101`), for a document the machine runs as its own
-//!   invoked child: only the SCXML and `event` namespaces, no `<invoke>` or
-//!   `<script>`, no `src`/`srcexpr`, no `typeexpr`, no `<send type>` but the
-//!   SCXML Event I/O Processor's, and no DTD. Its findings are ordinary
-//!   diagnostics of the report.
 //!
 //! Without packages the validator binds no extension namespace and no
 //! invoked-service type, exactly as `scx validate` without
-//! `--extension-package` or `--service-package`: a draft that uses either is
-//! reported (no schema for its namespace; `SCXML094` for a literal service
+//! `--extension-package` or `--service-package`: a document that uses either is
+//! reported (no schema for its namespace; `PKG004` for a literal service
 //! type). The data model's expression-syntax checker is a separate component
 //! a extension component cannot call, so expressions are not
 //! syntax-checked.
@@ -109,9 +102,7 @@ use scxml_reporting::{
     Applicability, ArtifactEnvelope, ByteSpan, Diagnostic, Fix, Label, TextEdit, encode_canonical,
 };
 use scxml_types::{exceeds_wasm_bound, wasm_bound};
-use scxml_validator_core::{
-    EventSchemaResources, MemorySchemaResolver, Profile, SchemaMode, Validator,
-};
+use scxml_validator_core::{EventSchemaResources, MemorySchemaResolver, SchemaMode, Validator};
 use scxml_validator_xsd::{BundledSchemaResolver, XsdSchemaBackend};
 
 /// The namespace's name: the last path segment of its URI.
@@ -127,9 +118,6 @@ pub const DEFAULT_SOURCE_NAME: &str = "draft.scx";
 
 /// The only `applyfixes` value: the applicability of the fixes applied.
 pub const APPLY_MACHINE_APPLICABLE: &str = "machine-applicable";
-
-/// The only `profile` value: the validator's draft profile.
-pub const PROFILE_DRAFT: &str = "draft";
 
 /// Upper bound on the document's bytes (wasm builds only).
 pub const MAX_DOCUMENT_BYTES: usize = wasm_bound(4 * 1024 * 1024);
@@ -266,7 +254,6 @@ struct Parameters<'a> {
     expr: Option<&'a str>,
     name: Option<&'a str>,
     fixed_location: Option<&'a str>,
-    profile: Option<Profile>,
 }
 
 /// One `<scx:eventschema>` child.
@@ -299,8 +286,6 @@ fn parameters(attributes: &[Attribute]) -> Result<Parameters<'_>, &'static str> 
             "name" => parameters.name = Some(value),
             "applyfixes" => apply_fixes = Some(value),
             "fixedlocation" => parameters.fixed_location = Some(value),
-            "profile" if value == PROFILE_DRAFT => parameters.profile = Some(Profile::Draft),
-            "profile" => return Err("scx:validate profile accepts only draft"),
             _ => return Err("scx:validate has an attribute this package version does not define"),
         }
     }
@@ -499,7 +484,6 @@ fn validate_element<H: ScxmlHost>(
         parameters.name.unwrap_or(DEFAULT_SOURCE_NAME),
         &text,
         resources,
-        parameters.profile,
     )
     .map_err(Failure::Execution)?;
     let fixed = match parameters.fixed_location {
@@ -532,8 +516,7 @@ pub struct Validation {
 
 /// Validates `text` (named `source_name`) with the given `event:schema`
 /// resources, exactly as the scxml.rs validator component does without
-/// packages, plus `profile`'s rules when one is given, and returns the
-/// canonical report.
+/// packages, and returns the canonical report.
 ///
 /// # Errors
 ///
@@ -543,7 +526,6 @@ pub fn validate(
     source_name: &str,
     text: &str,
     event_schemas: EventSchemaResources,
-    profile: Option<Profile>,
 ) -> Result<Validation, &'static str> {
     // The bundled official W3C SCXML 1.0 schema set governs the core
     // namespace; no package binds any other namespace or service type.
@@ -554,10 +536,6 @@ pub fn validate(
     .with_schema_mode(SchemaMode::Strict)
     .with_event_schema_resources(event_schemas)
     .with_services(BTreeMap::new());
-    let validator = match profile {
-        Some(profile) => validator.with_profile(profile),
-        None => validator,
-    };
     let outcome = validator.validate_source(DOCUMENT_SOURCE, source_name, text);
     let diagnostics = outcome
         .report

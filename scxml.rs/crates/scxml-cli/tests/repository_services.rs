@@ -310,9 +310,9 @@ fn validate_resolves_the_package_at_its_commit_and_then_runs_offline() {
     let flags = repository(&server, &cache);
     let first = validate(&source, &flags);
     let stderr = text(&first.stderr);
-    // The package resolved (no SCXML094) and lists its consent.
+    // The package resolved (no PKG004) and lists its consent.
     assert!(first.status.success(), "{stderr}");
-    assert!(!stderr.contains("SCXML094"), "{stderr}");
+    assert!(!stderr.contains("PKG004"), "{stderr}");
     assert!(
         stderr.contains(&format!(
             "service `{TAGLESS_URI}`\n  = version: release v0.1.0 (commit {COMMIT}), package 0.1.0"

@@ -1,0 +1,33 @@
+warning[LINT007]: transition on `start` in `idle` can never be selected
+ --> tests/ui/lint007-same-events-no-reorder.scx:4:24
+  |
+3 |     <transition event="start" target="running"/>
+  |      ---------- this earlier transition has no `cond` and always matches first
+4 |     <transition event="start" target="failed"/>
+  |                        ^^^^^ shadowed transition
+  |
+  = note: within one state the interpreter selects the first enabled transition in document order; every event it matches is matched first by an earlier unconditional transition
+  = help: both transitions match the same events, so reordering would only shadow the other one: add a `cond` to the one that should be taken only sometimes, or remove this one
+  = spec: SCXML 1.0 §3.13 Selecting and Executing Transitions
+help: remove the unreachable transition
+  |
+4 -     <transition event="start" target="failed"/>
+
+warning[LINT007]: eventless transition in `running` can never be selected
+ --> tests/ui/lint007-same-events-no-reorder.scx:9:6
+  |
+8 |     <transition target="done"/>
+  |      ---------- this earlier transition has no `cond` and always matches first
+9 |     <transition target="running"/>
+  |      ^^^^^^^^^^ shadowed transition
+  |
+  = note: within one state the interpreter selects the first enabled transition in document order; an earlier eventless transition without `cond` is always enabled
+  = help: both transitions match the same events, so reordering would only shadow the other one: add a `cond` to the one that should be taken only sometimes, or remove this one
+  = spec: SCXML 1.0 §3.13 Selecting and Executing Transitions
+help: remove the unreachable transition
+  |
+9 -     <transition target="running"/>
+
+diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
+For more information about this diagnostic, try `scx --explain LINT007`.
+validated tests/ui/lint007-same-events-no-reorder.scx

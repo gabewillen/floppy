@@ -1,0 +1,18 @@
+warning[LINT011]: `true` selects a child element named `true`, not the boolean `true()`
+ --> tests/ui/lint011-xpath-bare-true.scx:8:34
+  |
+8 |     <transition event="go" cond="true" target="b"/>
+  |                                  ^^^^ relative path from `<datamodel>`
+  |
+  = note: the context node of every XPath expression is `<datamodel>`, whose children are `<data id="…">` elements and the system variables; an empty node-set is false, so this condition never holds
+  = help: XPath writes the boolean constants as function calls: `true()`
+  = spec: SCXML CR 2014 §C.3.1 Data Model
+  = spec: SCXML CR 2014 §C.3.3 Location Expressions
+help: use `true()`
+  |
+8 |     <transition event="go" cond="true()" target="b"/>
+  |                                  ~~~~~~
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scx --explain LINT011`.
+validated tests/ui/lint011-xpath-bare-true.scx

@@ -1,4 +1,4 @@
-//! `SCXML061` (warning): an ECMAScript `<data id>` that is not an
+//! `LINT015` (warning): an ECMAScript `<data id>` that is not an
 //! ECMAScript identifier.
 //!
 //! SCXML 1.0 §B.2.1: "For each `<data>` element in the document, the SCXML
@@ -30,17 +30,17 @@ use super::{ECMASCRIPT_RESERVED_WORDS, SPEC_ECMASCRIPT, Site, collect_sites};
 use crate::semantic::{Rule, is_scxml, machine_roots, visit_machine};
 use crate::{Applicability, Diagnostic, Fix, FixEdit, Label, Report};
 
-/// Maximum `SCXML061` findings per machine.
+/// Maximum `LINT015` findings per machine.
 const MAX_FINDINGS_PER_MACHINE: usize = 64;
 /// Maximum reference edits in one rename fix; a larger rename is not offered.
 const MAX_RENAME_EDITS: usize = 256;
 
-/// `SCXML061`: an ECMAScript `<data id>` the data model cannot declare.
+/// `LINT015`: an ECMAScript `<data id>` the data model cannot declare.
 pub(crate) struct EcmaScriptDataIdRule;
 
 impl Rule for EcmaScriptDataIdRule {
     fn code(&self) -> &'static str {
-        "SCXML061"
+        "LINT015"
     }
 
     fn check(&self, document: &Document, report: &mut Report) {
@@ -169,7 +169,7 @@ pub(crate) fn problem(name: &str) -> Option<Problem> {
 }
 
 /// A variable name for `name` that is also an XML `NCName`, so the rename
-/// clears `SCXML061` without introducing `SCXML003`: separators (including
+/// clears `LINT015` without introducing `SCXML003`: separators (including
 /// `$`, which `NCName` excludes) become camelCase boundaries (`retry-count`
 /// to `retryCount`, `$price` to `price`), leading `_` is dropped, a leading
 /// digit gets a `v` prefix (`1st` to `v1st`), and a keyword gets a `Value`
@@ -319,7 +319,7 @@ fn diagnostic(
             .map(|(start, end)| (site, site.span_of(*start, *end)))
     });
     let access = format!("globalThis['{name}']");
-    let mut diagnostic = Diagnostic::warning("SCXML061", message, id.value_span)
+    let mut diagnostic = Diagnostic::warning("LINT015", message, id.value_span)
         .with_primary_message(label)
         .with_note(match problem {
             Problem::Character('-') => format!(

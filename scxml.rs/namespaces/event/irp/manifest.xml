@@ -3,36 +3,36 @@
      numbered statement of namespaces/event/README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/scxml.rs/tree/main/namespaces/event/irp/sources">
   <assert id="event-1" specnum="1" specid="#event-1">
-    <![CDATA[event:schema and event:schemaexpr are allowed on <transition>, <send>, <raise>, and <donedata> only: an event attribute on any other element, an attribute other than schema and schemaexpr, or an element in the event namespace is rejected (SCXML085).]]>
+    <![CDATA[event:schema and event:schemaexpr are allowed on <transition>, <send>, <raise>, and <donedata> only: an event attribute on any other element, an attribute other than schema and schemaexpr, or an element in the event namespace is rejected (EVENT001).]]>
     <test id="400" conformance="mandatory" manual="false">
       <start uri="400/test400.txml"/>
     </test>
     <test id="401" conformance="mandatory" manual="false">
       <start uri="401/test401.txml"/>
-      <reject code="SCXML085"/>
+      <reject code="EVENT001"/>
     </test>
     <test id="402" conformance="mandatory" manual="false">
       <start uri="402/test402.txml"/>
-      <reject code="SCXML085"/>
+      <reject code="EVENT001"/>
     </test>
     <test id="403" conformance="mandatory" manual="false">
       <start uri="403/test403.txml"/>
-      <reject code="SCXML085"/>
+      <reject code="EVENT001"/>
     </test>
     <test id="404" conformance="mandatory" manual="false">
       <start uri="404/test404.txml"/>
-      <reject code="SCXML085"/>
+      <reject code="EVENT001"/>
     </test>
   </assert>
   <assert id="event-2" specnum="2" specid="#event-2">
-    <![CDATA[An element has at most one of event:schema and event:schemaexpr (SCXML086).]]>
+    <![CDATA[An element has at most one of event:schema and event:schemaexpr (EVENT002).]]>
     <test id="410" conformance="mandatory" manual="false">
       <start uri="410/test410.txml"/>
-      <reject code="SCXML086"/>
+      <reject code="EVENT002"/>
     </test>
   </assert>
   <assert id="event-3" specnum="3" specid="#event-3">
-    <![CDATA[A value whose first non-white-space character is {, or that is exactly true or false, is an inline JSON schema; one that is not UTF-8 JSON is rejected (SCXML087).]]>
+    <![CDATA[A value whose first non-white-space character is {, or that is exactly true or false, is an inline JSON schema; one that is not UTF-8 JSON is rejected (EVENT003).]]>
     <test id="420" conformance="mandatory" manual="false">
       <start uri="420/test420.txml"/>
     </test>
@@ -41,11 +41,11 @@
     </test>
     <test id="422" conformance="mandatory" manual="false">
       <start uri="422/test422.txml"/>
-      <reject code="SCXML087"/>
+      <reject code="EVENT003"/>
     </test>
   </assert>
   <assert id="event-4" specnum="4" specid="#event-4">
-    <![CDATA[Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (SCXML088); a file that is not UTF-8 JSON (SCXML087); a fragment that is not a JSON Pointer or names no value (SCXML089).]]>
+    <![CDATA[Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (EVENT004); a file that is not UTF-8 JSON (EVENT003); a fragment that is not a JSON Pointer or names no value (EVENT005).]]>
     <test id="430" conformance="mandatory" manual="false">
       <start uri="430/test430.txml"/>
       <dep uri="430/schemas/order.json"/>
@@ -56,58 +56,58 @@
     </test>
     <test id="432" conformance="mandatory" manual="false">
       <start uri="432/test432.txml"/>
-      <reject code="SCXML088"/>
+      <reject code="EVENT004"/>
     </test>
     <test id="433" conformance="mandatory" manual="false">
       <start uri="433/test433.txml"/>
-      <reject code="SCXML088"/>
+      <reject code="EVENT004"/>
     </test>
     <test id="434" conformance="mandatory" manual="false">
       <start uri="434/test434.txml"/>
       <dep uri="434/schemas/not-json.json"/>
-      <reject code="SCXML087"/>
+      <reject code="EVENT003"/>
     </test>
     <test id="435" conformance="mandatory" manual="false">
       <start uri="435/test435.txml"/>
       <dep uri="435/schemas/order.json"/>
-      <reject code="SCXML089"/>
+      <reject code="EVENT005"/>
     </test>
     <test id="436" conformance="mandatory" manual="false">
       <start uri="436/test436.txml"/>
       <dep uri="436/schemas/order.json"/>
-      <reject code="SCXML089"/>
+      <reject code="EVENT005"/>
     </test>
     <test id="437" conformance="mandatory" manual="false">
       <start uri="437/test437.txml"/>
-      <reject code="SCXML088"/>
+      <reject code="EVENT004"/>
     </test>
   </assert>
   <assert id="event-5" specnum="5" specid="#event-5">
-    <![CDATA[The dialect is the selected schema's $schema, else the file's, else JSON Schema 2020-12; 2020-12, 2019-09, and draft-07 are supported, each with or without its trailing #, and any other $schema is rejected (SCXML091).]]>
+    <![CDATA[The dialect is the selected schema's $schema, else the file's, else JSON Schema 2020-12; 2020-12, 2019-09, and draft-07 are supported, each with or without its trailing #, and any other $schema is rejected (EVENT007).]]>
     <test id="440" conformance="mandatory" manual="false">
       <start uri="440/test440.txml"/>
     </test>
     <test id="441" conformance="mandatory" manual="false">
       <start uri="441/test441.txml"/>
-      <reject code="SCXML091"/>
+      <reject code="EVENT007"/>
     </test>
   </assert>
   <assert id="event-6" specnum="6" specid="#event-6">
-    <![CDATA[A schema must satisfy its dialect's metaschema and compile, so every keyword has a valid value and every pattern is a valid regular expression (SCXML090).]]>
+    <![CDATA[A schema must satisfy its dialect's metaschema and compile, so every keyword has a valid value and every pattern is a valid regular expression (EVENT006).]]>
     <test id="450" conformance="mandatory" manual="false">
       <start uri="450/test450.txml"/>
-      <reject code="SCXML090"/>
+      <reject code="EVENT006"/>
     </test>
     <test id="451" conformance="mandatory" manual="false">
       <start uri="451/test451.txml"/>
-      <reject code="SCXML090"/>
+      <reject code="EVENT006"/>
     </test>
   </assert>
   <assert id="event-7" specnum="7" specid="#event-7">
-    <![CDATA[Nothing is fetched: a $ref, $dynamicRef, or $recursiveRef that is not a fragment names another resource and is rejected (SCXML092); fragment references are kept; with a pointer, references to elsewhere in the file are bundled so the selected schema stands alone, and a selected schema that relies on $id, $anchor, $dynamicAnchor, $recursiveAnchor, plain-name fragments, or dynamic references cannot be moved and is rejected (SCXML092).]]>
+    <![CDATA[Nothing is fetched: a $ref, $dynamicRef, or $recursiveRef that is not a fragment names another resource and is rejected (EVENT008); fragment references are kept; with a pointer, references to elsewhere in the file are bundled so the selected schema stands alone, and a selected schema that relies on $id, $anchor, $dynamicAnchor, $recursiveAnchor, plain-name fragments, or dynamic references cannot be moved and is rejected (EVENT008).]]>
     <test id="460" conformance="mandatory" manual="false">
       <start uri="460/test460.txml"/>
-      <reject code="SCXML092"/>
+      <reject code="EVENT008"/>
     </test>
     <test id="461" conformance="mandatory" manual="false">
       <start uri="461/test461.txml"/>
@@ -119,7 +119,7 @@
     <test id="463" conformance="mandatory" manual="false">
       <start uri="463/test463.txml"/>
       <dep uri="463/schemas/anchored.json"/>
-      <reject code="SCXML092"/>
+      <reject code="EVENT008"/>
     </test>
   </assert>
   <assert id="event-8" specnum="8" specid="#event-8">

@@ -377,7 +377,7 @@ fn process_references(line: &str) -> Vec<String> {
 /// review round or finding: "round" joined to a number ("round-11",
 /// "Round11"), "sec" followed by a round tag ("sec-r3", "SEC-R11-1"), or a
 /// round tag followed by a lettered finding ("R11-C1"), in any case. A round
-/// tag is `r` then digits only, so diagnostic codes such as `SCXML061`,
+/// tag is `r` then digits only, so diagnostic codes such as `LINT015`,
 /// `COMP003`, or `SNAP-*`, RFC numbers, and hex digests do not match.
 fn review_label(token: &str) -> bool {
     let digits = |part: &str| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit());
@@ -486,7 +486,7 @@ fn process_reference_detector_matches_its_targets() {
         "rounded to 2 places",
         "assert_eq!(number(\"round(2.5)\"), 3.0);",
         "SCXML 1.0 section 5.3",
-        "diagnostic SCXML061 at 3:7",
+        "diagnostic LINT015 at 3:7",
         "error[COMP003]: missing export",
         "XSD001 schema violation",
         "SNAP-001 snapshot mismatch",

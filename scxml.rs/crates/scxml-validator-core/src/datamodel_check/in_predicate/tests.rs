@@ -32,7 +32,7 @@ fn an_unknown_literal_state_id_gets_a_did_you_mean_in_every_data_model() {
     for datamodel in [Some("ecmascript"), Some("xpath"), Some("null"), None] {
         let (xml, found) = findings(datamodel, "In('bussy')");
         assert_eq!(found.len(), 1, "{datamodel:?}: {found:#?}");
-        assert_eq!(found[0].code, "SCXML058");
+        assert_eq!(found[0].code, "LINT012");
         assert!(found[0].message.contains("`bussy`"), "{}", found[0].message);
         assert_eq!(found[0].help.as_deref(), Some("did you mean `busy`?"));
         assert!(fixed(&xml, &found[0]).contains(r#"cond="In('busy')""#));
@@ -72,7 +72,7 @@ fn known_ids_variables_and_other_calls_are_not_reported() {
     // The null data model's `In(id)` form takes the ID unquoted.
     let (_, found) = findings(Some("null"), "In(done)");
     assert!(found.is_empty(), "{found:#?}");
-    // An unrecognized data model is SCXML044's; nothing is claimed.
+    // An unrecognized data model is LIMIT005's; nothing is claimed.
     let (_, found) = findings(Some("lua"), "In('nope')");
     assert!(found.is_empty(), "{found:#?}");
 }

@@ -73,13 +73,12 @@ hard cutover.
   component. The example package validator
   (`components/scxml-package-validator-example`) checks the example
   namespace's `<example:raise in>`.
-- Literal event data checks: `SCXML102` (literal JSON `<content>` of a
+- Literal event data checks: `EVENT009` (literal JSON `<content>` of a
   `<send>` or `<donedata>` against its own literal `event:schema`) and
-  `SCXML103` (provable incompatibility, with a witness, between what a
+  `EVENT010` (provable incompatibility, with a witness, between what a
   `<send>` or `<donedata>` creates and a transition handling its event).
 - Browser host parity, slice 1: `createValidator` runs the bundled validator
-  component (the `scx validate` report, byte for byte, plus the draft
-  profile: the validator WIT request gains `profile`); the validator and
+  component (the `scx validate` report, byte for byte); the validator and
   compiler take the page's extension packages and `event:schema` files
   (`packages`, `eventSchemas`); and extension components run in the page
   with the Wasmtime host's names and semantics (`ExtensionComponents`,
@@ -100,14 +99,6 @@ hard cutover.
   when the invoke runs (`error.execution` on failure). This replaces
   `--resource URI=PATH` and the at-or-below-the-document-directory rule for
   `<invoke src>`, both removed.
-- The validator's draft profile (`scxml_validator_core::Profile::Draft`,
-  `Validator::with_profile`; `<scx:validate profile="draft">`): for a
-  document a machine writes and runs as its own invoked child, `SCXML097`
-  (a namespace other than SCXML's, `event`, and `xml`), `SCXML098`
-  (`<invoke>`, `<script>`), `SCXML099` (`src`, `srcexpr`), `SCXML100`
-  (`typeexpr`, a `<send type>` other than the SCXML Event I/O Processor),
-  and `SCXML101` (a DTD), documented in `docs/validator-rules.md` and
-  `scx --explain`.
 - The `scx` extension namespace (`namespaces/scx`,
   `https://github.com/stateforward/scxml.rs/namespaces/scx`, tagless and
   versioned with the toolchain): `<scx:validate>` runs the validator on a
@@ -160,8 +151,8 @@ hard cutover.
   manifest `stateforward.scxml.service-package/v1` (`http-origins` and
   `env-slots`; no WASI and no events) and the CLI's `--service-package`,
   `--service-component`, and `--service-component-sha256`; validator
-  warnings `SCXML093` (a literal type that is a platform-specific value,
-  not a URI; SCXML 6.4.1 allows it) and `SCXML094` (no package binds it;
+  warnings `PKG003` (a literal type that is a platform-specific value,
+  not a URI; SCXML 6.4.1 allows it) and `PKG004` (no package binds it;
   the `<invoke>` raises `error.execution` when it runs). The example echo
   and timer service ships as `components/scxml-service-example`. The
   browser host binds no service, so every service `<invoke>` raises
@@ -215,7 +206,7 @@ hard cutover.
   (`ServiceComponents::with_values`), substituted only into that
   invocation's admitted `outbound-http` requests; an undeclared or repeated
   slot rejects the start (`error.execution`). The validator checks them
-  (`SCXML083` against the bound package, `SCXML084` on an SCXML session's
+  (`ENV001` against the bound package, `ENV002` on an SCXML session's
   `<invoke>`); the CLI passes `--env`/`--env-file` values and the outbound
   transport to services. The echo example declares the `endpoint` and
   `token` slots and GETs the endpoint (followed by the event's path) on
@@ -365,9 +356,9 @@ hard cutover.
   (`env:<slot>="NAME"`, `env:<slot>expr="EXPR"`) names, on an invoked
   service's `<invoke>`, the variable whose value the host binds to one of the
   slots its service package declares (`env-slots`); see the invoked-services
-  entry above. Validator codes `SCXML083` (a slot the package does not
+  entry above. Validator codes `ENV001` (a slot the package does not
   declare, with a fix; a slot bound twice; a name that is no variable name;
-  an attribute that names no valid slot) and `SCXML084` (the `env` namespace
+  an attribute that names no valid slot) and `ENV002` (the `env` namespace
   anywhere but an invoked service's `<invoke>`, executable-content extension
   elements included). The CLI lists each variable and the `<invoke>`s it goes
   to before running and masks the run's values in the text it writes.
@@ -388,17 +379,17 @@ hard cutover.
   parser does not read, and XSD validation runs over the infoset the
   declarations build; the data model's
   parse-only side-effect analysis reports `<log expr>` side effects
-  (`SCXML074`, an error), conditions with them (`SCXML076`, a warning, per
-  IRP 444), what it cannot decide (`SCXML075`), and writes of a system
+  (`SCXML074`, an error), conditions with them (`LINT020`, a warning, per
+  IRP 444), what it cannot decide (`LINT019`), and writes of a system
   variable (`SCXML077`, a warning; SCXML 5.10 defines the run-time
-  `error.execution`); `SCXML078` (a `<parallel>` with no regions), `SCXML079`
+  `error.execution`); `LINT021` (a `<parallel>` with no regions), `SCXML079`
   (an expression under the null data model, which raises `error.execution`),
   and `SCXML080` (a target set that pairs a history with a state it
-  restores), `SCXML081` (an error on every build: a state ID longer than
+  restores), `LIMIT008` (an error on every build: a state ID longer than
   the 1,024-byte name bound, which no configuration could report; such a
   document compiled and then failed at run time with a broken invariant; or
   the ID of a state that can complete, longer than 1,013 bytes, whose
-  `done.state.<ID>` event exceeds the bound), and `SCXML082` (an error on
+  `done.state.<ID>` event exceeds the bound), and `LIMIT009` (an error on
   every build: a literal `<raise event>`, `<send event>`, `<send id>`, or
   `<invoke id>` longer than the bound, or an `<invoke id>` longer than
   1,012 bytes, whose `done.invoke.<ID>` event exceeds it; such a document
@@ -412,7 +403,7 @@ hard cutover.
 - Validator codes: `SCXML070` (an error: `delay` or `delayexpr` on a
   `<send>` whose literal `target` is `#_internal`, SCXML 6.2), `SCXML071` (an
   error: an `<invoke>` with both `namelist` and `<param>` children, 6.4,
-  with a fix that rewrites the namelist as `<param location>`), `SCXML072`
+  with a fix that rewrites the namelist as `<param location>`), `LINT018`
   (a lint warning: a target list that names one state twice; such a list
   now lowers as the set and the state is entered once, 3.11), `SCXML073`
   (an error: a `<data id>` beginning with `_` under every data model but
@@ -503,7 +494,7 @@ hard cutover.
   `donedata`; absent otherwise, so existing IR bytes are unchanged); session
   snapshot transitions carry it (`event_schema`), and `event:schemaexpr` is
   carried unevaluated. Metadata only: execution and the IRP results are
-  unchanged. New validator codes `SCXML085`-`SCXML092` with explanations;
+  unchanged. New validator codes `EVENT001`-`EVENT008` with explanations;
   the CLI reads the referenced files relative to the document
   (`scxml.cli.read-event-schema`), the validator and compiler WIT requests
   take them as `event-schemas` (`event-schema-resource`), and the machine
@@ -612,8 +603,8 @@ hard cutover.
   `scxml_types::exceeds_wasm_bound`), so the shipped components keep their
   bounds and native builds have none of their own:
   - validation and compilation: the native `scx` validates and
-    compiles documents of any size and never reports `SCXML027`,
-    `SCXML041`, `SCXML069`, or `COMP001`, nor `SCXML028`, `SCXML040`,
+    compiles documents of any size and never reports `LIMIT001`,
+    `LIMIT004`, `LIMIT007`, or `COMP001`, nor `LIMIT002`, `LIMIT003`,
     `XML002`, or `XSD006` for a size bound;
   - native-only code loses its caps outright. The Wasmtime session host
     and `scxml-scheduler` lose external events per session, the 64 KiB
@@ -650,7 +641,7 @@ hard cutover.
   ECMAScript side-effect analysis's 200,000 steps per fragment; the graph
   analysis work budget of 8,000,000 units per machine or 1,024 per element
   and target reference, past which even the native `scx` reports
-  `SCXML028`; and the rendered and SARIF report size), the format and
+  `LIMIT002`; and the rendered and SARIF report size), the format and
   interchange contracts (WIT value bounds, the `data-model-api`
   `initialize` bounds, and the session snapshot format), network ingress
   (the BasicHTTP listener now reads each request within one deadline and
@@ -662,7 +653,7 @@ hard cutover.
   3.2.2: "Platforms SHOULD document their default data model").
   A document without `datamodel` is lowered with `ecmascript` in its Machine
   IR and validated as `datamodel="ecmascript"`; it no longer fails at start
-  with `unavailable` when it uses data or expressions. `SCXML045` is only
+  with `unavailable` when it uses data or expressions. `LINT010` is only
   the note that a run links no checker for the machine's data model.
 - `_name` of a document without a `name` attribute has no value (SCXML
   5.10): ECMAScript `undefined`, an empty XPath `<_name/>`; snapshots omit
@@ -676,7 +667,7 @@ hard cutover.
   and history transitions (`SCXML010`, `SCXML020`), a `<parallel>` with no
   regions, `<assign type="delete">` with an `expr` (which is ignored, CR
   C.3.6), every `<data id>` ECMAScript can declare (non-ASCII, hyphenated,
-  or reserved words; `SCXML061` warns when no expression can name one),
+  or reserved words; `LINT015` warns when no expression can name one),
   and `:` in event descriptors (`SCXML013`).
 - Transition content runs in document order (SCXML 3.13), and default
   history content runs when the history's parent stays active (3.10.2);
@@ -699,13 +690,13 @@ hard cutover.
 - CI runs the Wasmtime host tests with the `http` feature.
 - Validator: `SCXML004` reports every `<transition>` outside `<initial>`
   and `<history>` with no `event`, `cond`, or `target`, executable content
-  or not (SCXML 3.5.2), with a placeholder-event fix; `SCXML026` and
-  `SCXML036` (eventless loops) are lint warnings, since Appendix D allows a
+  or not (SCXML 3.5.2), with a placeholder-event fix; `LINT004` and
+  `LINT008` (eventless loops) are lint warnings, since Appendix D allows a
   macrostep that does not terminate; under `datamodel="null"`, `SCXML037`
   reports each outermost element B.1.7 rules out (`<datamodel>`, `<data>`,
   `<assign>`, `<donedata>`, `<content>`, `<param>`, `<script>`,
   `<foreach>`) with remove and switch-to-ecmascript fixes, and every
-  expression there is the `SCXML079` warning; `SCXML057` no longer exempts
+  expression there is the `SCXML079` warning; `LINT011` no longer exempts
   machines with a `<foreach>`; `COMP002` for an unbound extension namespace
   points at its first element or attribute, names the namespace, and
   suggests `--extension-package`.
@@ -836,6 +827,28 @@ hard cutover.
 
 ### Renames
 
+- Diagnostic codes are grouped into families by prefix
+  (`scxml_reporting::CODE_FAMILIES`; docs/validator-rules.md, "Diagnostic
+  code reference"): `SCXML` is reserved for W3C SCXML 1.0 conformance, and
+  every `SCXML` code cites the section it enforces; `XML`, `XSD`, `COMP`,
+  and `PKG` are unchanged; `ENV` and `EVENT` are the built-in vocabularies,
+  `LINT` best-practice warnings on legal SCXML, and `LIMIT` this
+  implementation's bounds. The canonical report decoders reject a code of
+  any other shape (`ArtifactError::UnknownCode`, replacing `EmptyCode`).
+  Renamed, with no alias: `SCXML023`→`LINT001`, `SCXML024`→`LINT002`,
+  `SCXML025`→`LINT003`, `SCXML026`→`LINT004`, `SCXML029`→`LINT005`,
+  `SCXML033`→`LINT006`, `SCXML034`→`LINT007`, `SCXML036`→`LINT008`,
+  `SCXML042`→`LINT009`, `SCXML045`→`LINT010`, `SCXML057`→`LINT011`,
+  `SCXML058`→`LINT012`, `SCXML059`→`LINT013`, `SCXML060`→`LINT014`,
+  `SCXML061`→`LINT015`, `SCXML062`→`LINT016`, `SCXML063`→`LINT017`,
+  `SCXML072`→`LINT018`, `SCXML075`→`LINT019`, `SCXML076`→`LINT020`,
+  `SCXML078`→`LINT021`; `SCXML027`→`LIMIT001`, `SCXML028`→`LIMIT002`,
+  `SCXML040`→`LIMIT003`, `SCXML041`→`LIMIT004`, `SCXML044`→`LIMIT005`,
+  `SCXML068`→`LIMIT006`, `SCXML069`→`LIMIT007`, `SCXML081`→`LIMIT008`,
+  `SCXML082`→`LIMIT009`; `SCXML083`→`ENV001`, `SCXML084`→`ENV002`;
+  `SCXML085`-`SCXML092`→`EVENT001`-`EVENT008`, `SCXML102`→`EVENT009`,
+  `SCXML103`→`EVENT010`; `SCXML093`→`PKG003`, `SCXML094`→`PKG004`. The
+  other `SCXML` codes keep their numbers.
 - Every public surface uses the SCXML 1.0 vocabulary, and host concepts
   use plain host words; no alias remains.
   - Session snapshots: the `actions` section is `transitions`, a list of
@@ -953,7 +966,7 @@ hard cutover.
   extension package manifest declares no `http-origins` and no `env-slots`
   (both unknown fields now), and the validator's and compiler's
   `extension-package` WIT records lose both fields; `env` attributes on an
-  extension element are `SCXML084`; `ExtensionComponents::with_values`,
+  extension element are `ENV002`; `ExtensionComponents::with_values`,
   `with_outbound_http`, and `with_observer`, `ExtensionObserver`,
   `ExtensionPackage::env_slots` and `http_origins`,
   `Validator::with_extension_slots`, the span
@@ -965,7 +978,7 @@ hard cutover.
 - Validator codes `SCXML035` (its findings are `SCXML004` errors),
   `SCXML043` (a value expression under the null data model, now the
   `SCXML079` warning), and `SCXML054` (an ECMAScript `=` in a condition,
-  now `SCXML074`/`SCXML076` with a `===` fix).
+  now `SCXML074`/`LINT020` with a `===` fix).
 - The null data model's literal extension: `null` and quoted strings are
   no longer values and an empty `<script>` no longer runs; every value,
   location, `<assign>`, `<foreach>`, and script raises `error.execution`
@@ -1058,9 +1071,9 @@ hard cutover.
 - `validate` and `compile` bound an attribute value by the value the
   compiler stores, on wasm builds: a white-space-collapsing SCXML
   attribute by its collapsed value (an `id` padded past 1 MiB compiled
-  with `LimitExceeded` although `SCXML069` did not fire) and an attribute
+  with `LimitExceeded` although `LIMIT007` did not fire) and an attribute
   of inline XML, which the compiler keeps byte for byte, by its exact
-  value even on an element in the SCXML namespace (`SCXML069` measured
+  value even on an element in the SCXML namespace (`LIMIT007` measured
   its collapsed value).
 - An ECMAScript `<foreach>` over an XML (DOM) value raises
   `error.execution` and ends only its block (SCXML 4.6: not "a legal
@@ -1084,7 +1097,7 @@ hard cutover.
   schema by a test) as its collapsed value, as the schema and lowering
   do: a padded `id` (`<state id=" s ">`) was `SCXML003` and every
   reference to it `SCXML005`/`SCXML006`, a padded `datamodel` was
-  `SCXML044`, and `SCXML081`/`SCXML082`/`SCXML069` measured the padded
+  `LIMIT005`, and `LIMIT008`/`LIMIT009`/`LIMIT007` measured the padded
   length. A padded `id` now declares its collapsed value for duplicate
   detection (`SCXML002`), target and `initial` resolution, `In()`, the
   bounds, the engine, and snapshots, and `datamodel=" xpath "` selects
@@ -1123,7 +1136,7 @@ hard cutover.
   fuel and its copy allowance; an embedder must not replace either. `ComponentDataModel::memory_growth_copied_bytes`
   reports the copies, and `ComponentDataModel::last_call_fuel` reports the
   Wasm fuel and the copied bytes of the last call apart (`CallFuel`).
-- `SCXML081` and Machine IR validation bound the `done.state.<ID>` event
+- `LIMIT008` and Machine IR validation bound the `done.state.<ID>` event
   of exactly the states the engine raises it for (SCXML 1.0 Appendix D): a
   `<parallel>` completes only through a `<state>` region with a `<final>`
   child, so one whose regions are all `<parallel>` no longer has its ID
@@ -1182,8 +1195,8 @@ hard cutover.
 - Hostile input no longer exhausts a native build: attribute defaults
   built from nested empty entities, or empty defaults supplied to many
   elements, are bounded; exponential local-function call chains end the
-  side-effect analysis with one undecidable `SCXML075`; quadratic graph
-  checks end with `SCXML028`; and a chain of invocations of any depth no
+  side-effect analysis with one undecidable `LINT019`; quadratic graph
+  checks end with `LIMIT002`; and a chain of invocations of any depth no
   longer nests native or JavaScript calls (see Changed), so a document
   that invokes itself without end runs until the caller's fuel or command
   budget ends it instead of overflowing the stack.

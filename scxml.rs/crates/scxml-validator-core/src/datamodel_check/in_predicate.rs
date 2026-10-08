@@ -1,4 +1,4 @@
-//! `SCXML058`: `In(stateID)` calls that can never be true.
+//! `LINT012`: `In(stateID)` calls that can never be true.
 //!
 //! `In()` is true only while a state with the given ID is active (SCXML 1.0
 //! §5.9.1), so a literal argument that names no `<state>`, `<parallel>`, or
@@ -20,12 +20,12 @@ use crate::{Diagnostic, DiagnosticCategory, Label, Report};
 /// Maximum `In()` findings per condition.
 const MAX_FINDINGS_PER_CONDITION: usize = 4;
 
-/// `SCXML058`: an `In()` argument that names no state of the machine.
+/// `LINT012`: an `In()` argument that names no state of the machine.
 pub(crate) struct InPredicateRule;
 
 impl Rule for InPredicateRule {
     fn code(&self) -> &'static str {
-        "SCXML058"
+        "LINT012"
     }
 
     fn check(&self, document: &Document, report: &mut Report) {
@@ -264,7 +264,7 @@ fn call_finding(
     Some(finish(site, span, message, primary, note, help, fix))
 }
 
-/// Builds one `SCXML058` finding.
+/// Builds one `LINT012` finding.
 fn finish(
     site: &Site<'_>,
     span: scxml_syntax::Span,
@@ -275,7 +275,7 @@ fn finish(
     fix: Option<crate::Fix>,
 ) -> Diagnostic {
     let what = &site.element.name.local_name;
-    let mut diagnostic = Diagnostic::warning("SCXML058", message, span)
+    let mut diagnostic = Diagnostic::warning("LINT012", message, span)
         .with_category(DiagnosticCategory::Lint)
         .with_primary_message(primary)
         .with_note(note)
@@ -296,7 +296,7 @@ fn finish(
 /// model's only condition takes the state ID as a quoted string, and its
 /// component rejects the unquoted form at run time. The fix quotes the ID
 /// (machine-applicable when it names a state; otherwise the nearest state ID,
-/// maybe-incorrect); `SCXML058` does not also judge the unquoted argument.
+/// maybe-incorrect); `LINT012` does not also judge the unquoted argument.
 pub(super) fn unquoted_null_in(
     document: &Document,
     datamodel: &scxml_syntax::Attribute,

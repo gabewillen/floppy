@@ -10,17 +10,17 @@
 //!   it raises `error.execution`. `$user.name` is one variable named
 //!   `user.name` (`.` is a name character), repaired to `$user/name`; a typo
 //!   gets a bounded did-you-mean.
-//! * `SCXML057` (warning): a relative path at the top level of the fragment
+//! * `LINT011` (warning): a relative path at the top level of the fragment
 //!   selects children of `<datamodel>` by element name, so `count`, `true`,
 //!   or `_event.data.ok` select no node: `$count`, `true()`, and
 //!   `$_event/data/ok` were meant. Unless the machine has a `<foreach>`
 //!   (whose item binds an element of any name under `<datamodel>`), the
 //!   children are exactly `data`, `_sessionid`, `_name`, `_ioprocessors`,
 //!   and `_event`, so any other first step selects nothing.
-//! * `SCXML059` (warning): a numeric predicate that is not a positive
+//! * `LINT013` (warning): a numeric predicate that is not a positive
 //!   integer (`$list/item[0]`) selects nothing, because positions start at
 //!   1; `[0]` is repaired to `[1]`.
-//! * `SCXML060` (warning): `+` with a non-numeric string literal operand
+//! * `LINT014` (warning): `+` with a non-numeric string literal operand
 //!   (`'a' + $b`) is numeric addition and yields `NaN`; an additive chain
 //!   without subtraction is repaired to `concat(…)`.
 //!
@@ -306,7 +306,7 @@ fn variable_finding(
 
 /// Whether the name at `index` is the first step of a relative location
 /// path evaluated against `<datamodel>` (not a step after `/`, an axis, or
-/// `@`, and not the argument of `In()`, which `SCXML058` owns).
+/// `@`, and not the argument of `In()`, which `LINT012` owns).
 fn starts_relative_path(tokens: &[Token], index: usize) -> bool {
     let previous = index.checked_sub(1).and_then(|before| tokens.get(before));
     let first = previous
@@ -400,7 +400,7 @@ fn path_finding(
             "an empty node-set yields no value (the empty string, `NaN`, or `false`)"
         }
     };
-    let mut diagnostic = Diagnostic::warning("SCXML057", message, span)
+    let mut diagnostic = Diagnostic::warning("LINT011", message, span)
         .with_category(DiagnosticCategory::Lint)
         .with_primary_message("relative path from `<datamodel>`")
         .with_note(format!(
@@ -455,7 +455,7 @@ fn positional_finding(
     let what = site.what.as_str();
     let zero = value == 0.0;
     let mut diagnostic = Diagnostic::warning(
-        "SCXML059",
+        "LINT013",
         format!("the predicate `[{text}]` selects no node: XPath positions start at 1"),
         span,
     )
@@ -591,7 +591,7 @@ fn string_addition_finding(
     let span = site.span_of(token.start, token.end);
     let what = site.what.as_str();
     let mut diagnostic = Diagnostic::warning(
-        "SCXML060",
+        "LINT014",
         format!("`+` adds numbers in XPath, so adding the string {literal} yields `NaN`"),
         span,
     )

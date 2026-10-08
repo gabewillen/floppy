@@ -11,7 +11,7 @@ warning[SCXML080]: transition targets `h` and `b1` can place the machine in an i
   = spec: SCXML 1.0 §3.10 <history>
   = spec: SCXML 1.0 §3.11 Legal State Configurations and Specifications
 
-warning[SCXML023]: compound state `b` has several child states but no explicit initial state
+warning[LINT001]: compound state `b` has several child states but no explicit initial state
  --> tests/ui/scxml080-history-and-region-target.scx:9:6
   |
 9 |     <state id="b"><state id="b0"/><state id="b1"/></state>
@@ -28,6 +28,6 @@ help: make the current entry state `b0` explicit
   |                  +++++++++++++
 
 diagnostic summary: 0 error(s), 2 warning(s), 0 note(s), 2 total
-Some diagnostics have detailed explanations: SCXML023, SCXML080.
-For more information about a diagnostic, try `scx --explain SCXML023`.
+Some diagnostics have detailed explanations: LINT001, SCXML080.
+For more information about a diagnostic, try `scx --explain LINT001`.
 validated tests/ui/scxml080-history-and-region-target.scx

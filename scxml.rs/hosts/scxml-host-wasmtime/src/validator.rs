@@ -17,13 +17,13 @@
 //!   syntax (`null`, whose provider answers every check `unavailable`). Only
 //!   documents whose `datamodel` equals that name exactly are checked; the
 //!   validator reports every other recognized data model's expressions with
-//!   the `SCXML045` note.
+//!   the `LINT010` note.
 //! * `check-syntax` forwards the fragment unchanged with a fresh fuel budget
 //!   ([`DEFAULT_DATA_MODEL_CALL_FUEL`](crate::DEFAULT_DATA_MODEL_CALL_FUEL)).
 //!   A data-model `payload-too-large` becomes `declined::too-large`,
 //!   `invalid-input` (a parser bound) `declined::too-complex`, and any other
 //!   failure or a trap `declined::unavailable`; the validator reports every
-//!   decline as `SCXML040`. A trap poisons the data-model instance, so later
+//!   decline as `LIMIT003`. A trap poisons the data-model instance, so later
 //!   checks decline as well.
 //! * `check-effects` forwards the request unchanged the same way and maps
 //!   the findings one to one; a failure declines as for `check-syntax`, and
@@ -81,7 +81,7 @@ pub mod validator_types {
     };
     pub use super::validator_bindings::stateforward::scxml_validator::types::{
         Applicability, Diagnostic, Edit, EventSchemaResource, ExtensionPackage, Fix, Label,
-        Profile, SchemaPolicy, SchemaResource, Severity, Span, TraceContext, ValidationRequest,
+        SchemaPolicy, SchemaResource, Severity, Span, TraceContext, ValidationRequest,
     };
 }
 

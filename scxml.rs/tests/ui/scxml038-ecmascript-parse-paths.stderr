@@ -26,7 +26,7 @@ help: compare with `===`
 5 |     <transition event="e2" cond="x + 1 === 2" target="b"/>
   |                                        ~~~
 
-warning[SCXML076]: `cond` on `<transition>` has a side effect
+warning[LINT020]: `cond` on `<transition>` has a side effect
  --> tests/ui/scxml038-ecmascript-parse-paths.scx:6:40
   |
 6 |     <transition event="e3" cond="o.a.b = 3" target="b"/>
@@ -95,6 +95,6 @@ warning[SCXML038]: ecmascript syntax error in `cond`: unterminated string litera
    = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
 
 diagnostic summary: 0 error(s), 7 warning(s), 0 note(s), 7 total
-Some diagnostics have detailed explanations: SCXML038, SCXML076.
-For more information about a diagnostic, try `scx --explain SCXML038`.
+Some diagnostics have detailed explanations: LINT020, SCXML038.
+For more information about a diagnostic, try `scx --explain LINT020`.
 validated tests/ui/scxml038-ecmascript-parse-paths.scx

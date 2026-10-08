@@ -73,13 +73,6 @@ interface types {
     /// The file's exact bytes.
     bytes: list<u8>,
   }
-  /// A validator rule profile (`scxml-validator-core`'s `Profile`).
-  enum profile {
-    /// What a document a machine writes and then runs as its own invoked
-    /// child may use (`SCXML097` to `SCXML101`; `<scx:validate
-    /// profile="draft">` applies the same profile).
-    draft,
-  }
   /// Request bounds (checked before any parsing; violations fail with
   /// `invalid-request` and produce no report): `source` at most 16777216
   /// bytes; at most 64 `schemas` and 64 `packages`; each schema's `bytes` at
@@ -92,7 +85,7 @@ interface types {
   /// (each resource's `bytes` at most 4194304 bytes, its `uri` non-empty and
   /// at most 16384 bytes, URIs unique by exact byte comparison); its bytes
   /// are bounded separately and do not count toward the whole-request bound.
-  /// A reference with no resource is an `SCXML088` diagnostic in the report.
+  /// A reference with no resource is an `EVENT004` diagnostic in the report.
   record validation-request {
     source-name: string,
     source: string,
@@ -100,8 +93,6 @@ interface types {
     schemas: list<schema-resource>,
     packages: list<extension-package>,
     event-schemas: list<event-schema-resource>,
-    /// An optional rule profile; absent, no profile rule runs.
-    profile: option<profile>,
     trace-context: option<trace-context>,
   }
   /// Diagnostic severity (the canonical report's `severity`).
@@ -199,7 +190,7 @@ interface package-validator-api {
 /// checker is linked: only data-model-neutral rules run and no expression is
 /// guessed at. Otherwise the validator sends each `cond`, value, location, and
 /// `<script>` fragment of documents whose `datamodel` attribute equals the
-/// returned name exactly (other recognized data models get the `SCXML045`
+/// returned name exactly (other recognized data models get the `LINT010`
 /// note that their expressions were not checked). Composition: link an
 /// adapter over one data-model component's
 /// `stateforward:scxml/data-model-api.check-syntax` (the bundled ECMAScript
@@ -216,7 +207,7 @@ interface expression-syntax {
   /// Why a fragment was declined. A checker declines only what its data
   /// model also rejects at evaluation (`too-large`: over the byte bound;
   /// `too-complex`: over a parser nesting or size bound, never reported as
-  /// a syntax issue), so validators report every decline as the `SCXML040`
+  /// a syntax issue), so validators report every decline as the `LIMIT003`
   /// error.
   enum declined { too-large, too-complex, unavailable }
   /// What one fragment passed to `check-effects` is in its document.

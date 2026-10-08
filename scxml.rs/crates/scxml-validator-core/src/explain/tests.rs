@@ -59,10 +59,6 @@ const PRODUCER_SOURCES: &[(&str, &str)] = &[
         include_str!("../invoke_types.rs"),
     ),
     (
-        "validator-core/draft_profile.rs",
-        include_str!("../draft_profile.rs"),
-    ),
-    (
         "validator-core/text_direction.rs",
         include_str!("../text_direction.rs"),
     ),
@@ -86,7 +82,9 @@ const PRODUCER_SOURCES: &[(&str, &str)] = &[
 
 fn codes_in(text: &str) -> BTreeSet<String> {
     let mut codes = BTreeSet::new();
-    for prefix in ["\"SCXML", "\"XML", "\"XSD", "\"COMP", "\"PKG"] {
+    for prefix in [
+        "\"SCXML", "\"XML", "\"XSD", "\"COMP", "\"PKG", "\"ENV", "\"EVENT", "\"LINT", "\"LIMIT",
+    ] {
         for (offset, _) in text.match_indices(prefix) {
             let rest = &text[offset + 1..];
             let end = rest.find('"').unwrap_or(0);
@@ -136,6 +134,19 @@ fn table_is_unique_complete_and_family_lookup_is_prefix_bounded() {
         );
         assert!(!entry.title.is_empty() && !entry.why.is_empty() && !entry.help.is_empty());
         assert!(matches!(entry.severity, "error" | "warning" | "note"));
+        assert!(
+            scxml_reporting::code_family(entry.code).is_some(),
+            "{} is in no code family",
+            entry.code
+        );
+        if scxml_reporting::code_family(entry.code) == Some("SCXML") {
+            assert!(
+                entry.spec.starts_with("SCXML 1.0 ")
+                    && entry.url.starts_with(scxml_recommendation_url()),
+                "{} cites no SCXML 1.0 section",
+                entry.code
+            );
+        }
         assert_eq!(
             entry.spec.is_empty(),
             entry.url.is_empty(),

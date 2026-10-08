@@ -376,7 +376,7 @@ fn findings_are_bounded_and_sorted() {
     assert!(found.windows(2).all(|pair| pair[0] <= pair[1]));
     // One request past the wasm fragment bound (16,384) is analyzed
     // natively, where the bound does not apply; the host's validator tests
-    // check that the shipped data model declines it (SCXML041).
+    // check that the shipped data model declines it (LIMIT004).
     let request = vec![condition("x"); 16_385];
     assert!(check_effects(&request, ExternalScripts::Absent).is_ok());
 }
@@ -510,7 +510,7 @@ fn log(source: &str) -> EffectFragment<'_> {
 /// (`sort`), an inline getter or conversion method that the expression
 /// triggers, a generator the expression drains, a global regular
 /// expression whose `lastIndex` advances, and built-ins reached through an
-/// alias. None may pass silently: each is at least undecidable (`SCXML075`),
+/// alias. None may pass silently: each is at least undecidable (`LINT019`),
 /// in a `<log expr>` as in a condition.
 #[test]
 fn effects_reached_through_callbacks_accessors_iterators_and_aliases_are_never_silent() {

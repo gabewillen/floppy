@@ -132,28 +132,28 @@ impl SchemaValidator for NoSchemaBackend {
 ///
 /// Every entry is a reviewed true finding on valid SCXML; any other lint is a
 /// false positive on idiomatic code, and a changed count must be re-reviewed.
-/// For example, `SCXML024` ("may never exit") is not reported for a state
+/// For example, `LINT002` ("may never exit") is not reported for a state
 /// that an ancestor transition or a sibling `<parallel>` region exits, so the
 /// corpus has none.
 const ECMASCRIPT_WARNINGS: &[(&str, usize)] = &[
     // compound `<scxml>`/`<state>` entry relies on document order
-    ("SCXML023", 16),
+    ("LINT001", 16),
     // states whose only exits are conditional and eventless
-    ("SCXML025", 3),
+    ("LINT003", 3),
     // states the tests never enter (reachability over-approximates)
-    ("SCXML029", 20),
+    ("LINT005", 20),
     // duplicate `done.state.s0` transitions in tests 343 and 488
-    ("SCXML034", 2),
+    ("LINT007", 2),
     // empty `<log expr>` in test 307
-    ("SCXML042", 2),
+    ("LINT009", 2),
     // `In('sh1')` of a `<history>` in test 580, which asserts that a history
     // pseudo-state never becomes active
-    ("SCXML058", 3),
+    ("LINT012", 3),
     // `cond="++var1==2"` in test 444 increments `var1`: a side effect in a
     // condition, which §5.9.1 says conformant documents SHOULD NOT have;
     // the test requires it to run (Appendix B's MUST yields to the IRP,
     // docs/spec-errata.md), so it is a warning
-    ("SCXML076", 1),
+    ("LINT020", 1),
 ];
 
 /// ECMAScript IRP documents that deliberately contain an unparsable
@@ -190,26 +190,26 @@ const ECMASCRIPT_DELIBERATE: &[(&str, &str, usize)] = &[
 /// graph findings are the ECMAScript corpus's (the same machines).
 const XPATH_WARNINGS: &[(&str, usize)] = &[
     // compound `<scxml>`/`<state>` entry relies on document order
-    ("SCXML023", 16),
+    ("LINT001", 16),
     // states whose only exits are conditional and eventless
-    ("SCXML025", 3),
+    ("LINT003", 3),
     // states the tests never enter (reachability over-approximates)
-    ("SCXML029", 20),
+    ("LINT005", 20),
     // duplicate `done.state.s0` transitions in tests 343 and 488
-    ("SCXML034", 2),
+    ("LINT007", 2),
     // empty `<log expr>` in test 307
-    ("SCXML042", 2),
+    ("LINT009", 2),
     // `In('sh1')` of a `<history>` in test 580, which asserts that a history
     // pseudo-state never becomes active
-    ("SCXML058", 3),
+    ("LINT012", 3),
     // `cond="++var1==2"` in test 444 increments `var1`: a side effect in a
     // condition, which §5.9.1 says conformant documents SHOULD NOT have;
     // the test requires it to run (Appendix B's MUST yields to the IRP,
     // docs/spec-errata.md), so it is a warning
-    ("SCXML076", 1),
+    ("LINT020", 1),
     // `location="foo.bar.baz "`: an illegal location by design (tests 286,
     // 298, 311, 331, 343, 401, 402); it selects no `<datamodel>` child
-    ("SCXML057", 7),
+    ("LINT011", 7),
 ];
 
 /// `XPath` IRP documents that deliberately contain an invalid expression or

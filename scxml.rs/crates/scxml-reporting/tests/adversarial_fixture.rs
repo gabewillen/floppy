@@ -38,7 +38,7 @@ fn broken_scxml_produces_ai_actionable_deterministic_artifacts() {
         .map(|diagnostic| (diagnostic.code.as_str(), diagnostic))
         .collect();
     for code in [
-        "SCXML003", "SCXML006", "SCXML010", "SCXML011", "SCXML013", "SCXML014", "SCXML026",
+        "SCXML003", "SCXML006", "SCXML010", "SCXML011", "SCXML013", "SCXML014", "LINT004",
     ] {
         assert!(
             by_code.contains_key(code),

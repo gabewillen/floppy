@@ -46,7 +46,7 @@ pub struct SyntaxIssue {
 /// [`DataModelError::InvalidInput`] when `source` exceeds its byte bound or
 /// its parse exceeds an `XPath` parser bound (nesting or size); the data
 /// model applies the same bound at evaluation, so a validator reports the
-/// decline as `SCXML040` rather than as a syntax error.
+/// decline as `LIMIT003` rather than as a syntax error.
 pub fn check_syntax(kind: SyntaxKind, source: &str) -> Result<Vec<SyntaxIssue>, DataModelError> {
     let span = observe(
         Module::DataModelXpathComponent,

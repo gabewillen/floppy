@@ -44,30 +44,10 @@ const WASM_ONLY_BOUND: &str = "a resource bound of wasm builds only; the native 
 
 const NOT_REACHABLE_FROM_VALIDATE: &[(&str, &str)] = &[
     ("COMP001", "produced only by `compile` lowering"),
-    (
-        "SCXML097",
-        "produced only under the draft profile (`<scx:validate profile=\"draft\">`); covered by validator-core draft_profile and scx namespace tests",
-    ),
-    (
-        "SCXML098",
-        "produced only under the draft profile (`<scx:validate profile=\"draft\">`); covered by validator-core draft_profile and scx namespace tests",
-    ),
-    (
-        "SCXML099",
-        "produced only under the draft profile (`<scx:validate profile=\"draft\">`); covered by validator-core draft_profile and scx namespace tests",
-    ),
-    (
-        "SCXML100",
-        "produced only under the draft profile (`<scx:validate profile=\"draft\">`); covered by validator-core draft_profile and scx namespace tests",
-    ),
-    (
-        "SCXML101",
-        "produced only under the draft profile (`<scx:validate profile=\"draft\">`); covered by validator-core draft_profile and scx namespace tests",
-    ),
-    ("SCXML027", WASM_ONLY_BOUND),
-    ("SCXML028", WASM_ONLY_BOUND),
-    ("SCXML041", WASM_ONLY_BOUND),
-    ("SCXML069", WASM_ONLY_BOUND),
+    ("LIMIT001", WASM_ONLY_BOUND),
+    ("LIMIT002", WASM_ONLY_BOUND),
+    ("LIMIT004", WASM_ONLY_BOUND),
+    ("LIMIT007", WASM_ONLY_BOUND),
     ("COMP002", "produced only by `compile` package binding"),
     (
         "PKG002",
@@ -82,7 +62,7 @@ const NOT_REACHABLE_FROM_VALIDATE: &[(&str, &str)] = &[
         "produced only by the validator component's package requests",
     ),
     (
-        "SCXML045",
+        "LINT010",
         "a note only when no checker for the machine's data model is linked, and `validate` links both; covered by the datamodel_check unit tests and the validator component test without_a_linked_checker_expressions_are_reported_unchecked",
     ),
     (
@@ -380,8 +360,8 @@ fn introduced_diagnostics(
 /// that the original report could not contain, with the reason. Every other
 /// maybe-incorrect fix must introduce no new diagnostic of any severity.
 const MAYBE_INCORRECT_EXCEPTIONS: &[(&str, &str, &str)] = &[(
-    "scxml044-unknown-datamodel",
-    "SCXML044",
+    "limit005-unknown-datamodel",
+    "LIMIT005",
     "selecting a recognized data model turns on expression checking, which reports the fixture's pre-existing invalid script",
 )];
 
@@ -487,7 +467,7 @@ fn generated_budget_cases() -> Vec<(&'static str, String)> {
         (
             // One more state than the wasm graph bound (65,536 nodes, with
             // the root), one per line.
-            "SCXML028",
+            "LIMIT002",
             format!(
                 "{HEAD}\n<state id=\"a\"><transition event=\"go\" target=\"s0\"/></state>\n{}<final id=\"s65536\"/>\n</scxml>",
                 (0..65_536).fold(String::new(), |mut states, index| {
@@ -501,10 +481,10 @@ fn generated_budget_cases() -> Vec<(&'static str, String)> {
             ),
         ),
         (
-            // One byte past the wasm expression bound (16 KiB). SCXML040
+            // One byte past the wasm expression bound (16 KiB). LIMIT003
             // stays reachable natively through the nesting guard, a stack
-            // guard on every build (`tests/ui/scxml040-*`).
-            "SCXML040",
+            // guard on every build (`tests/ui/limit003-*`).
+            "LIMIT003",
             format!(
                 r#"{HEAD}<state id="a"><onentry><log expr="1{}"/></onentry><transition event="go" target="b"/></state><final id="b"/></scxml>"#,
                 " ".repeat(16_384)
@@ -514,7 +494,7 @@ fn generated_budget_cases() -> Vec<(&'static str, String)> {
             // One more expression than the wasm checking bound (16,384), in
             // two blocks so no element exceeds the wasm Machine IR bound of
             // 10,000 child nodes either.
-            "SCXML041",
+            "LIMIT004",
             format!(
                 r#"{HEAD}<state id="a"><onentry>{}</onentry><onentry>{}</onentry><transition event="go" target="b"/></state><final id="b"/></scxml>"#,
                 r#"<log expr="1"/>"#.repeat(8_193),

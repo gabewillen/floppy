@@ -8,7 +8,7 @@
 //! ([`scxml_event_schema::resource_problem`]): relative, without a scheme,
 //! query, or `.`/`..` segment, percent-decoded. A file that resolves outside
 //! the document's directory (through a symbolic link), is not a regular file,
-//! or cannot be read is left out, and the validator reports it (`SCXML088`).
+//! or cannot be read is left out, and the validator reports it (`EVENT004`).
 //! Nothing is fetched, and nothing is read while a document runs.
 
 use std::fs;
@@ -182,7 +182,7 @@ mod tests {
     }
 
     /// A reference to a FIFO is not a regular file: it is left out (the
-    /// validator reports `SCXML088`) without opening it, which would block
+    /// validator reports `EVENT004`) without opening it, which would block
     /// until a writer appears.
     #[cfg(unix)]
     #[test]

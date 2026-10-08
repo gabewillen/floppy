@@ -133,7 +133,7 @@ events) have none.
 
 **This implementation** follows the IRP: an ECMAScript condition runs as
 ECMAScript, side effects included, and a condition whose syntax certainly
-has a side effect is the validator warning `SCXML076` (the document SHOULD
+has a side effect is the validator warning `LINT020` (the document SHOULD
 NOT, per 5.9.1), not an error, so test 444 compiles and passes. A `<log
 expr>` with a side effect stays the error `SCXML074`: REC 4.7.3 ("The SCXML
 processor MUST ensure that <log> has no side-effects on document
@@ -332,7 +332,7 @@ matrix marks the requirements concerned as partial, not covered.
   side-effects on document interpretation."
 - **This implementation** enforces it only statically: the validator
   rejects a `<log expr>` whose syntax certainly has a side effect
-  (`SCXML074`, an error) and warns on one that may have one (`SCXML075`).
+  (`SCXML074`, an error) and warns on one that may have one (`LINT019`).
   At run time the expression is evaluated as written, so a side effect the
   analysis cannot see (one reached through a call the analysis cannot
   resolve) still changes the data model. Enforcing it at run time needs a
@@ -419,10 +419,10 @@ matrix marks the requirements concerned as partial, not covered.
   - native stack guards, on every build: an XML element nesting deeper
     than 256 (`XML002`); an ECMAScript fragment over 128 structural nesting
     units, where each open bracket costs 8 (16 brackets, 15 inside a value
-    expression), or recursion past 128 (`SCXML040`, and at run time
+    expression), or recursion past 128 (`LIMIT003`, and at run time
     `error.execution`); an XPath expression nested deeper than 32
     parentheses, predicates, or arguments, or a tree deeper than 128
-    (`SCXML040`). The native validator applies exactly the bounds of the
+    (`LIMIT003`). The native validator applies exactly the bounds of the
     wasm data models every session runs in, so `compile` refuses what
     every session would decline;
   - the XML parser's amplification guards, on every build (`XML002`): an
@@ -432,7 +432,7 @@ matrix marks the requirements concerned as partial, not covered.
     past 1 MiB in one document or nest deeper than 16, and attribute-default
     normalization that expands more than 1,048,576 entity references;
   - the semantic graph analysis's work budget, on every build
-    (`SCXML028`): a machine whose reachability, target-legality, and
+    (`LIMIT002`): a machine whose reachability, target-legality, and
     liveness checks need more than 8,000,000 work units (or 1,024 per
     element and target reference, when that is more);
   - the bundled data models' variable bounds, on every build: a document
@@ -441,7 +441,7 @@ matrix marks the requirements concerned as partial, not covered.
     with `invalid-input` (the data model's `initialize` declines it)
     before any state is entered;
   - in wasm builds only, the validator's and compiler's size bounds
-    (`SCXML027`, `SCXML041`, `SCXML069`, `COMP001`, `SCXML040` for size;
+    (`LIMIT001`, `LIMIT004`, `LIMIT007`, `COMP001`, `LIMIT003` for size;
     [validator-rules.md](validator-rules.md) lists them);
   - `SCXML074`: a `<log expr>` whose syntax certainly has a side effect,
     which REC 4.7.3 forbids the processor to let happen (see L.1);
@@ -456,14 +456,14 @@ matrix marks the requirements concerned as partial, not covered.
     little room for an invoked session's id (its `<invoke>` then raises
     `error.execution`);
   - the 1024-byte name bound, on every build: a `<state>`, `<parallel>`,
-    `<final>`, or `<history>` ID longer than that (`SCXML081`), which no
+    `<final>`, or `<history>` ID longer than that (`LIMIT008`), which no
     configuration, snapshot, or `In()` could name once the state is
     entered, or the ID of a state that can complete longer than 1,013
     bytes, whose `done.state.<ID>` event (REC 3.7) the bound cannot hold
-    (`SCXML081`); a literal `<raise event>`, `<send event>`, `<send id>`,
+    (`LIMIT008`); a literal `<raise event>`, `<send event>`, `<send id>`,
     or `<invoke id>` longer than the bound, or an `<invoke id>` longer
     than 1,012 bytes, whose `done.invoke.<ID>` event (REC 6.4) it cannot
-    hold (`SCXML082`); and, for names known only at run time, a generated
+    hold (`LIMIT009`); and, for names known only at run time, a generated
     invoke id (`<state ID>.<_sessionid>.<n>`, REC 6.4.1, so a state ID
     within a few bytes of the bound) longer than that or longer than
     1,012 bytes, whose `done.invoke.<ID>` event the bound cannot hold,

@@ -1,0 +1,16 @@
+error[LIMIT005]: unknown data model `ecmascipt`
+ --> tests/ui/limit005-unknown-datamodel.scx:1:85
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="ecmascipt">
+  |                                                                                     ^^^^^^^^^ not a data model this validator recognizes
+  |
+  = note: SCXML 1.0 §5.1 defines the `ecmascript`, `null`, and `xpath` data models; an unrecognized data model fails closed because none of this machine's expressions can be evaluated or syntax-checked
+  = help: did you mean `ecmascript`?
+  = spec: SCXML 1.0 §5.1 Data Model
+help: use the `ecmascript` data model
+  |
+1 | <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="ecmascript">
+  |                                                                                     ~~~~~~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scx --explain LIMIT005`.

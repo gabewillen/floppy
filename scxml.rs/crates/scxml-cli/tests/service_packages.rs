@@ -4,7 +4,7 @@
 )]
 
 //! `--service-package` through the CLI binary: `validate` warns on a literal
-//! `<invoke type>` no package binds (`SCXML094`), `compile` still accepts it
+//! `<invoke type>` no package binds (`PKG004`), `compile` still accepts it
 //! (invoking it is a runtime action, SCXML 6.4), and binding the example
 //! service package
 //! (`components/scxml-service-example/package/echo.service.json`) lists what
@@ -64,12 +64,12 @@ fn validate_and_compile_judge_literal_service_types_by_their_bound_packages() {
     let unbound = cli(&["validate", source]);
     let stderr = String::from_utf8_lossy(&unbound.stderr);
     assert!(unbound.status.success(), "a warning only: {stderr}");
-    assert!(stderr.contains("warning[SCXML094]"), "{stderr}");
+    assert!(stderr.contains("warning[PKG004]"), "{stderr}");
 
     let bound = cli(&["validate", source, "--service-package", manifest]);
     let stderr = String::from_utf8_lossy(&bound.stderr);
     assert!(bound.status.success(), "{stderr}");
-    assert!(!stderr.contains("SCXML094"), "{stderr}");
+    assert!(!stderr.contains("PKG004"), "{stderr}");
     assert!(
         stderr.contains(&format!("service `{ECHO}`")) && stderr.contains("= outbound HTTP: none"),
         "the consent is listed: {stderr}"
