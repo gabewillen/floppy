@@ -11,7 +11,7 @@
 //!   budget ([`graph_work_budget`], every build) that grows with the machine,
 //!   so only super-linear work exhausts it natively.
 //!   When a bound is reached the machine receives exactly one fail-closed
-//!   `SCXML028` error and no partial graph findings.
+//!   `LIMIT002` error and no partial graph findings.
 //! * Honesty: graph findings are reported only when the static tree proves
 //!   them. Reachability assumes every event can arrive and every `cond` can be
 //!   true; liveness findings are reported only when no `cond` can change the
@@ -93,7 +93,7 @@ pub(crate) struct GraphRule;
 
 impl Rule for GraphRule {
     fn code(&self) -> &'static str {
-        "SCXML028"
+        "LIMIT002"
     }
 
     fn check(&self, document: &Document, report: &mut Report) {
@@ -312,9 +312,9 @@ struct Graph<'a> {
     /// Default entry of every node, computed once after construction.
     defaults: Vec<Entry>,
     /// Per transition: an earlier transition of the same state shadows it
-    /// (`SCXML034`), so it can never be selected. Reachability does not
-    /// follow it, as the `SCXML026` cycle check does not, so removing it (the
-    /// `SCXML034` fix) never reveals a new `SCXML029`.
+    /// (`LINT007`), so it can never be selected. Reachability does not
+    /// follow it, as the `LINT004` cycle check does not, so removing it (the
+    /// `LINT007` fix) never reveals a new `LINT005`.
     shadowed: Vec<bool>,
 }
 
@@ -675,7 +675,7 @@ impl<'a> Graph<'a> {
     }
 
     // -----------------------------------------------------------------------
-    // SCXML029: unreachable states
+    // LINT005: unreachable states
     // -----------------------------------------------------------------------
 
     /// Over-approximates every state that can ever be active.
@@ -928,7 +928,7 @@ impl<'a> Graph<'a> {
             }
             let descendants = self.descendant_count(index, budget)?;
             let mut diagnostic = Diagnostic::warning(
-                "SCXML029",
+                "LINT005",
                 format!(
                     "{} {} can never become active",
                     kind_noun(node.kind),
@@ -1069,7 +1069,7 @@ impl<'a> Graph<'a> {
 
     /// Evaluates removing the target token at `span`: `Ok(())` when every
     /// currently reachable state stays reachable, otherwise the topmost state
-    /// the removal would strand (a new `SCXML029`). `Err(())` when the
+    /// the removal would strand (a new `LINT005`). `Err(())` when the
     /// separate fix-safety budget is exhausted, so no removal is offered.
     fn removal_strands(&self, span: Span, safety: &mut RemovalSafety) -> Result<Option<usize>, ()> {
         let baseline = match &safety.baseline {
@@ -1136,7 +1136,7 @@ impl<'a> Graph<'a> {
                 };
                 // Offer a removal only when it strands no state: a removal
                 // that leaves a state unreachable would trade this error for
-                // a new SCXML029.
+                // a new LINT005.
                 let first = targets.first().map(|first| first.span);
                 let mut offered = 0_usize;
                 for (removed, kept) in [(later, earlier), (earlier, later)] {
@@ -1335,7 +1335,7 @@ impl<'a> Graph<'a> {
     }
 
     // -----------------------------------------------------------------------
-    // SCXML033: single-region parallel
+    // LINT006: single-region parallel
     // -----------------------------------------------------------------------
 
     fn check_single_region_parallel(&self, document: &Document, report: &mut Report) {
@@ -1347,7 +1347,7 @@ impl<'a> Graph<'a> {
                 continue;
             };
             let mut diagnostic = Diagnostic::warning(
-                "SCXML033",
+                "LINT006",
                 format!("<parallel> {} has only one region", node.name()),
                 node.element.start_tag_span,
             )
@@ -1369,7 +1369,7 @@ impl<'a> Graph<'a> {
     }
 
     // -----------------------------------------------------------------------
-    // SCXML034: shadowed transitions
+    // LINT007: shadowed transitions
     // -----------------------------------------------------------------------
 
     fn check_shadowed_transitions(
@@ -1431,7 +1431,7 @@ impl<'a> Graph<'a> {
     }
 
     // -----------------------------------------------------------------------
-    // SCXML036: eventless liveness
+    // LINT008: eventless liveness
     // -----------------------------------------------------------------------
 
     /// The transition the interpreter must select in every microstep while
@@ -1582,7 +1582,7 @@ impl<'a> Graph<'a> {
         let first = self.transitions.get(first_transition)?;
         let (first_target, _) = first.single_target()?;
         let mut diagnostic = Diagnostic::warning(
-            "SCXML036",
+            "LINT008",
             format!(
                 "eventless transitions loop forever without consuming an event: {}",
                 names.join(" -> ")
@@ -1635,7 +1635,7 @@ impl<'a> Graph<'a> {
         }
     }
 
-    /// Whether `SCXML026` already reports this loop as direct state-to-state
+    /// Whether `LINT004` already reports this loop as direct state-to-state
     /// targets (each target owns the next selected transition).
     fn direct_cycle_is_reported(&self, steps: &[(usize, usize)]) -> bool {
         steps.iter().enumerate().all(|(position, (_, transition))| {
@@ -1809,7 +1809,7 @@ fn shadow_diagnostic(
             "an earlier eventless transition without `cond` is always enabled",
         ),
     };
-    let mut diagnostic = Diagnostic::warning("SCXML034", message, primary)
+    let mut diagnostic = Diagnostic::warning("LINT007", message, primary)
         .with_category(DiagnosticCategory::Lint)
         .with_primary_message("shadowed transition")
         .with_secondary(
@@ -2015,7 +2015,7 @@ enum Conflict {
     Siblings(usize),
 }
 
-/// `SCXML072` (warning) for a state listed twice in one target set. SCXML
+/// `LINT018` (warning) for a state listed twice in one target set. SCXML
 /// 1.0 §3.11 defines "a legal state specification to be a set of states
 /// such that 1) no state is an ancestor of any other state on the list, and
 /// 2) a full legal state configuration results when all ancestors and
@@ -2031,7 +2031,7 @@ fn duplicate_target_diagnostic(
     targets: &[Target],
 ) -> Diagnostic {
     let diagnostic = Diagnostic::warning(
-        "SCXML072",
+        "LINT018",
         format!("{noun} `{}` is listed twice", later.token),
         later.span,
     )

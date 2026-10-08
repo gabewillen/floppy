@@ -84,21 +84,21 @@ fn declared_system_and_runtime_bound_variables_are_accepted() {
 fn bare_relative_paths_that_mean_a_variable_or_boolean_are_warnings_with_repairs() {
     check(
         r#"<state id="a"><onentry><assign location="count" expr="$count + 1"/></onentry></state>"#,
-        "SCXML057",
+        "LINT011",
         "`count` selects a child element named `count`, not the variable `$count`",
         "bound to the variable `$count`",
         &[r#"location="$count""#],
     );
     check(
         r#"<state id="a"><transition cond="true" target="a"/></state>"#,
-        "SCXML057",
+        "LINT011",
         "not the boolean `true()`",
         "`true()`",
         &[r#"cond="true()""#],
     );
     check(
         r#"<state id="a"><transition cond="_event.data.ok" target="a"/></state>"#,
-        "SCXML057",
+        "LINT011",
         "contains dots, not a member access",
         "`$_event/data/ok`",
         &[r#"cond="$_event/data/ok""#],
@@ -108,14 +108,14 @@ fn bare_relative_paths_that_mean_a_variable_or_boolean_are_warnings_with_repairs
     // loop still selects nothing.
     check(
         r#"<state id="a"><onentry><foreach array="$user/*" item="it"><log expr="name"/></foreach></onentry></state>"#,
-        "SCXML057",
+        "LINT011",
         "`name` selects no node",
         "relative path from `<datamodel>`",
         &[],
     );
     check(
         r#"<state id="a"><onentry><assign location="foo.bar.baz" expr="1"/></onentry></state>"#,
-        "SCXML057",
+        "LINT011",
         "`foo.bar.baz` selects no node",
         "relative path from `<datamodel>`",
         &[],

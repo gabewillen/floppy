@@ -11,7 +11,7 @@
 // documents whose `datamodel` equals that data model's name exactly have
 // their expressions checked; without one (or with the null data model, which
 // has no expression syntax) every check is declined `unavailable` and the
-// validator reports other data models' expressions with its `SCXML045` note.
+// validator reports other data models' expressions with its `LINT010` note.
 // A data-model `payload-too-large` declines `too-large`, `invalid-input`
 // `too-complex`, and anything else `unavailable`.
 //
@@ -27,9 +27,6 @@ import { DEFAULT_COMPILE_FUEL, FuelBudget, FuelMeter, isFuel } from './fuel.js';
 import { fetchCoreModules } from './loader.js';
 import { isPackageValidators, packageValidatorImport } from './package-validator.js';
 import { GUEST_MODULES, Telemetry, compilerTelemetryImport, isTelemetryOption } from './telemetry.js';
-
-/** Validator profiles (`Profile` of `scxml-validator-core`). */
-const PROFILES = Object.freeze(['draft']);
 
 let defaultLoader;
 
@@ -130,14 +127,14 @@ export async function createValidator(options) {
      * @param {object} [validateOptions] `sourceName` (default
      *   'document.scxml'), `schemaPolicy` (default 'strict', as `scx
      *   validate`), `packages` (ExtensionPackage[]), `eventSchemas`
-     *   (`{uri, bytes}[]`), `profile` ('draft')
+     *   (`{uri, bytes}[]`)
      */
     async validate(source, validateOptions) {
       if (lost) {
         telemetry.observe('validate', 'rejected');
         throw new ScxmlHostError('instance-lost');
       }
-      const { sourceName = 'document.scxml', schemaPolicy = 'strict', profile } = validateOptions ?? {};
+      const { sourceName = 'document.scxml', schemaPolicy = 'strict' } = validateOptions ?? {};
       if (
         typeof source !== 'string' ||
         typeof sourceName !== 'string' ||
@@ -146,8 +143,7 @@ export async function createValidator(options) {
           ['validatorArtifact', 'validatorSha256'].every(
             (field) => pkg[field] === undefined || typeof pkg[field] === 'string',
           ),
-        ) ||
-        (profile !== undefined && !PROFILES.includes(profile))
+        )
       ) {
         telemetry.observe('validate', 'rejected');
         throw new ScxmlHostError('invalid-argument');
@@ -172,7 +168,6 @@ export async function createValidator(options) {
               schemas,
               packages,
               eventSchemas,
-              profile,
               traceContext: undefined,
             }),
           ),

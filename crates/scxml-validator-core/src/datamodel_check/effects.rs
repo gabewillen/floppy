@@ -1,4 +1,4 @@
-//! `SCXML074` and `SCXML075`: side effects in conditions and `<log expr>`.
+//! `SCXML074` and `LINT019`: side effects in conditions and `<log expr>`.
 //!
 //! SCXML 1.0 requires the condition language of every data model to be free
 //! of side effects (Appendix B: "Specify the boolean expression language
@@ -15,10 +15,10 @@
 //! which can assign, so the validator enforces the rule statically through
 //! the linked checker's `check-effects` analysis: syntax that certainly has
 //! a side effect is the `SCXML074` error in a `<log expr>` (§4.7.3 is a
-//! processor MUST) and the `SCXML076` warning in a condition (§5.9.1's
+//! processor MUST) and the `LINT020` warning in a condition (§5.9.1's
 //! SHOULD NOT governs documents; Appendix B's MUST contradicts official IRP
 //! test 444, recorded in docs/spec-errata.md), and what the analysis cannot
-//! decide is the `SCXML075` warning. An assignment, update, or `delete` of a
+//! decide is the `LINT019` warning. An assignment, update, or `delete` of a
 //! system variable itself anywhere is the `SCXML077` warning: §5.10 defines
 //! its run-time outcome (the attempt fails with `error.execution`), so the
 //! document is not rejected. The runtime
@@ -180,7 +180,7 @@ fn external_scripts(machine: &Element) -> ExternalScripts {
 }
 
 /// Runs the checker's analysis over the machine's parsed `sites` and
-/// reports `SCXML074`/`SCXML075`.
+/// reports `SCXML074`/`LINT019`.
 pub(super) fn report_effects(
     document: &Document,
     checker: &dyn ExpressionSyntaxChecker,
@@ -261,10 +261,10 @@ fn trustworthy(fragments: &[EffectFragment<'_>], findings: &[EffectFinding]) -> 
     })
 }
 
-/// `SCXML075` when the checker cannot analyze the machine at all.
+/// `LINT019` when the checker cannot analyze the machine at all.
 fn not_analyzed(site: &Site<'_>) -> Diagnostic {
     Diagnostic::warning(
-        "SCXML075",
+        "LINT019",
         format!(
             "cannot prove that `{}` on `<{}>` has no side effect",
             site.what, site.element.name.local_name
@@ -416,13 +416,13 @@ fn diagnostic(
             .with_note("SCXML 1.0 §4.7.3: \"The SCXML processor MUST ensure that <log> has no side-effects on document interpretation.\"")
             .with_help("log a value without changing anything; move the change into `<assign>` or `<script>`")
     } else if finding.certain {
-        Diagnostic::warning("SCXML076", format!("{what} has a side effect"), primary)
+        Diagnostic::warning("LINT020", format!("{what} has a side effect"), primary)
             .with_primary_message(label)
             .with_note("SCXML 1.0 §5.9.1: \"Conditional expressions in conformant SCXML documents SHOULD NOT have side effects.\" (Appendix B's \"This language MUST not have side effects\" contradicts official IRP test 444, `cond=\"++var1==2\"`; see docs/spec-errata.md)")
             .with_help("compute the condition without changing anything; move the change into the transition's executable content (`<assign>` or `<script>`)")
     } else {
         Diagnostic::warning(
-            "SCXML075",
+            "LINT019",
             format!("cannot prove that {what} has no side effect"),
             primary,
         )

@@ -1437,7 +1437,7 @@ fn is_invoke_env_attribute(element: &Element, attribute: &scxml_syntax::Attribut
 /// `env:<slot>` names a variable and `env:<slot>expr` an expression
 /// evaluating to one (a slot never ends in `expr`). Only an invoked
 /// service's `<invoke>` binds slots; which slots its package declares is the
-/// validator's `SCXML083`.
+/// validator's `ENV001`.
 fn invoke_env(element: &Element) -> Result<Vec<crate::XmlAttributeIr>, LowerError> {
     let mut attributes: Vec<crate::XmlAttributeIr> = Vec::new();
     let mut slots = std::collections::BTreeSet::new();

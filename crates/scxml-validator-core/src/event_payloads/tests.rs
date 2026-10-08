@@ -3,7 +3,7 @@ use scxml_syntax::{SourceId, SourceText, parse_xml};
 use super::event_payload_diagnostics;
 use crate::{EventSchemaResources, Severity};
 
-/// The `SCXML102`/`SCXML103` findings of one ECMAScript machine whose
+/// The `EVENT009`/`EVENT010` findings of one ECMAScript machine whose
 /// first state holds `body`.
 fn findings(body: &str) -> Vec<(String, Severity, String)> {
     let source = format!(
@@ -35,7 +35,7 @@ fn literal_content_must_satisfy_its_own_schema() {
     );
     let found = findings(&bad);
     assert_eq!(found.len(), 1, "{found:?}");
-    assert_eq!(found[0].0, "SCXML102");
+    assert_eq!(found[0].0, "EVENT009");
     assert_eq!(found[0].1, Severity::Error);
     let good = format!(
         r#"<onentry><send event="x" event:schema='{OBJECT_N_STRING}'><content>{{"n": "one"}}</content></send></onentry>"#
@@ -46,7 +46,7 @@ fn literal_content_must_satisfy_its_own_schema() {
 #[test]
 fn literal_donedata_must_satisfy_its_own_schema() {
     let body = r#"<final id="f"><donedata event:schema='{"type":"array"}'><content>{"a":1}</content></donedata></final>"#;
-    assert_eq!(codes(body), ["SCXML102"]);
+    assert_eq!(codes(body), ["EVENT009"]);
     let fine = r#"<final id="f"><donedata event:schema='{"type":"array"}'><content>[1]</content></donedata></final>"#;
     assert!(codes(fine).is_empty());
 }
@@ -59,7 +59,7 @@ fn literal_content_must_satisfy_the_transitions_handling_its_event() {
     );
     let found = findings(&body);
     assert_eq!(found.len(), 1, "{found:?}");
-    assert_eq!(found[0].0, "SCXML103");
+    assert_eq!(found[0].0, "EVENT010");
     assert_eq!(found[0].1, Severity::Warning);
     // A send to the parent is never seen by this document's transitions.
     let parent = format!(
@@ -79,7 +79,7 @@ fn literal_content_must_satisfy_the_transitions_handling_its_event() {
 fn donedata_must_satisfy_the_transitions_handling_done_state() {
     let body = r#"<state id="inner"><final id="f"><donedata><content>{"ok":"yes"}</content></donedata></final></state>
         <transition event="done.state.inner" event:schema='{"type":"object","properties":{"ok":{"type":"boolean"}}}' target="s"/>"#;
-    assert_eq!(codes(body), ["SCXML103"]);
+    assert_eq!(codes(body), ["EVENT010"]);
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn provably_incompatible_schemas_are_reported_with_a_witness() {
     );
     let found = findings(&body);
     assert_eq!(found.len(), 1, "{found:?}");
-    assert_eq!(found[0].0, "SCXML103");
+    assert_eq!(found[0].0, "EVENT010");
 }
 
 #[test]

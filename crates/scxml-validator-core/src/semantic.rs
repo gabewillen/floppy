@@ -46,7 +46,7 @@ pub fn validate_semantics(document: &Document) -> Report {
         let mut report = Report::new();
         report.push(
             Diagnostic::error(
-                "SCXML027",
+                "LIMIT001",
                 format!("nested SCXML document depth exceeds {MAX_NESTED_SCXML_DEPTH}"),
                 machine.start_tag_span,
             )
@@ -98,14 +98,14 @@ pub fn validate_semantics(document: &Document) -> Report {
     report
 }
 
-/// Drops `SCXML024`/`SCXML025` findings inside a subtree `SCXML029` already
+/// Drops `LINT002`/`LINT003` findings inside a subtree `LINT005` already
 /// reports as unreachable: a state that can never be entered cannot get stuck,
 /// so those lints would only restate the one root cause.
 fn suppress_liveness_in_unreachable_states(document: &Document, report: &mut Report) {
     let unreachable: BTreeSet<Span> = report
         .diagnostics()
         .iter()
-        .filter(|diagnostic| diagnostic.code == "SCXML029")
+        .filter(|diagnostic| diagnostic.code == "LINT005")
         .map(|diagnostic| diagnostic.primary.span)
         .collect();
     if unreachable.is_empty() {
@@ -123,7 +123,7 @@ fn suppress_liveness_in_unreachable_states(document: &Document, report: &mut Rep
         pending.extend(child_elements(element).map(|child| (child, within)));
     }
     report.retain(|diagnostic| {
-        !(matches!(diagnostic.code.as_str(), "SCXML024" | "SCXML025")
+        !(matches!(diagnostic.code.as_str(), "LINT002" | "LINT003")
             && inside.contains(&diagnostic.primary.span))
     });
 }
@@ -329,7 +329,7 @@ fn is_state_element(element: &Element) -> bool {
         .any(|name| is_scxml(element, name))
 }
 
-/// `SCXML081`: a state ID longer than the 1024-byte name bound. Every
+/// `LIMIT008`: a state ID longer than the 1024-byte name bound. Every
 /// build names the active states by these IDs (the configuration a step
 /// reports, a snapshot, `In()`), and a name over the bound has no
 /// representation, so the processor could never report the state once it
@@ -339,7 +339,7 @@ fn state_id_bound_diagnostic(id: &Attribute) -> Diagnostic {
     let preview = name_preview(&id.value);
     let bytes = id.value.len();
     Diagnostic::error(
-        "SCXML081",
+        "LIMIT008",
         format!(
             "state ID `{preview}…` is {} bytes, more than the {} a state name may have",
             thousands(bytes),
@@ -408,13 +408,13 @@ fn name_preview(value: &str) -> String {
     value.chars().take(24).collect()
 }
 
-/// `SCXML081`: a state that can complete whose ID leaves too little room
+/// `LIMIT008`: a state that can complete whose ID leaves too little room
 /// in the 1024-byte name bound for the `done.state.<ID>` event it raises.
 fn done_state_bound_diagnostic(id: &Attribute) -> Diagnostic {
     let bytes = id.value.len();
     let event_bytes = DONE_STATE_PREFIX.len().saturating_add(bytes);
     Diagnostic::error(
-        "SCXML081",
+        "LIMIT008",
         format!(
             "state ID `{}…` is {} bytes, so the `done.state.` event it raises is {} bytes, more than the {} an event name may have",
             name_preview(&id.value),
@@ -440,7 +440,7 @@ fn done_state_bound_diagnostic(id: &Attribute) -> Diagnostic {
     .with_spec_reference("SCXML 1.0 §3.7 <final>")
 }
 
-/// `SCXML082`: an event name, `<send>` ID, or `<invoke>` ID written in the
+/// `LIMIT009`: an event name, `<send>` ID, or `<invoke>` ID written in the
 /// document that the 1024-byte name bound cannot hold, or an `<invoke>` ID
 /// that leaves too little room for its `done.invoke.<ID>` event. Every
 /// build bounds these names (the processor's interface), so the element
@@ -450,7 +450,7 @@ struct NameBoundRule;
 
 impl Rule for NameBoundRule {
     fn code(&self) -> &'static str {
-        "SCXML082"
+        "LIMIT009"
     }
 
     fn check(&self, document: &Document, report: &mut Report) {
@@ -484,7 +484,7 @@ impl Rule for NameBoundRule {
     }
 }
 
-/// `SCXML082` for the literal `attribute` of `<element>` over the bound.
+/// `LIMIT009` for the literal `attribute` of `<element>` over the bound.
 fn literal_name_bound_diagnostic(
     element: &str,
     attribute: &str,
@@ -499,7 +499,7 @@ fn literal_name_bound_diagnostic(
         "ID"
     };
     Diagnostic::error(
-        "SCXML082",
+        "LIMIT009",
         format!(
             "`<{element}>` {label} `{}…` is {} bytes, more than the {} {kind} may have",
             name_preview(&value.value),
@@ -520,13 +520,13 @@ fn literal_name_bound_diagnostic(
     .with_spec_reference(spec)
 }
 
-/// `SCXML082` for an `<invoke>` ID that fits the bound but whose
+/// `LIMIT009` for an `<invoke>` ID that fits the bound but whose
 /// `done.invoke.<ID>` event does not.
 fn done_invoke_bound_diagnostic(id: &Attribute) -> Diagnostic {
     let bytes = id.value.len();
     let event_bytes = DONE_INVOKE_PREFIX.len().saturating_add(bytes);
     Diagnostic::error(
-        "SCXML082",
+        "LIMIT009",
         format!(
             "`<invoke>` ID `{}…` is {} bytes, so the `done.invoke.` event it raises is {} bytes, more than the {} an event name may have",
             name_preview(&id.value),
@@ -2031,7 +2031,7 @@ impl Rule for StateInitialRule {
     }
 }
 
-/// SCXML023: a compound state (or the root) with several child states and no
+/// LINT001: a compound state (or the root) with several child states and no
 /// explicit initial state; entry follows document order.
 fn implicit_initial_diagnostic(document: &Document, element: &Element) -> Diagnostic {
     let subject = if is_scxml(element, "scxml") {
@@ -2047,7 +2047,7 @@ fn implicit_initial_diagnostic(document: &Document, element: &Element) -> Diagno
         is_scxml(child, "state") || is_scxml(child, "parallel") || is_scxml(child, "final")
     });
     let mut diagnostic = Diagnostic::warning(
-        "SCXML023",
+        "LINT001",
         format!("{subject} has several child states but no explicit initial state"),
         element.start_tag_span,
     )
@@ -2087,7 +2087,7 @@ struct LivenessRule;
 
 impl Rule for LivenessRule {
     fn code(&self) -> &'static str {
-        "SCXML024"
+        "LINT002"
     }
 
     fn check(&self, document: &Document, report: &mut Report) {
@@ -2158,7 +2158,7 @@ impl Rule for LivenessRule {
                 {
                     report.push(
                         Diagnostic::warning(
-                            "SCXML025",
+                            "LINT003",
                             state_message(element, "has only conditional eventless exits"),
                             element.start_tag_span,
                         )
@@ -2232,7 +2232,7 @@ fn detect_eventless_cycles(document: &Document, machine: &Element, report: &mut 
         if let Some(id) = state_id(element) {
             declarations.insert(id.value.clone(), id.value_span);
             // Only the first eventless, conditionless transition can ever be
-            // selected; any later one is shadowed by it (`SCXML034`), so it
+            // selected; any later one is shadowed by it (`LINT007`), so it
             // is never an edge of a cycle the interpreter can take.
             if let Some(transition) = child_elements(element).find(|child| {
                 is_scxml(child, "transition")
@@ -2271,7 +2271,7 @@ fn detect_eventless_cycles(document: &Document, machine: &Element, report: &mut 
             .collect::<Vec<_>>()
             .join(" -> ");
         let mut diagnostic = Diagnostic::warning(
-            "SCXML026",
+            "LINT004",
             format!("unconditional eventless transition cycle: {cycle_text}"),
             first.span,
         )
@@ -3129,7 +3129,7 @@ mod tests {
             r#"<scxml xmlns="{SCXML_NAMESPACE}" initial="a"><state id="a"><transition event="go" target="f"/></state><state id="f" type="final"/></scxml>"#
         ));
         assert!(
-            !codes(&report).contains("SCXML024"),
+            !codes(&report).contains("LINT002"),
             "`type=\"final\"` is one schema finding with a rename, not also a liveness lint: {report:?}"
         );
     }
@@ -3254,13 +3254,13 @@ mod tests {
     }
 
     #[test]
-    fn parallel_sibling_exits_and_unreachable_states_do_not_trigger_scxml024() {
+    fn parallel_sibling_exits_and_unreachable_states_do_not_trigger_lint002() {
         // IRP test451: `s1` has no transition, but its sibling region `s0`
         // leaves the whole `<parallel>`, which exits `s1` too.
         let sibling = format!(
             r#"<scxml xmlns="{SCXML_NAMESPACE}" version="1.0" initial="p"><parallel id="p"><state id="s0"><transition target="done"/></state><state id="s1"/></parallel><final id="done"/></scxml>"#
         );
-        assert!(!codes(&validate(&sibling)).contains("SCXML024"));
+        assert!(!codes(&validate(&sibling)).contains("LINT002"));
         // A region transition whose targets stay inside its own region never
         // exits the sibling regions, so a stuck sibling is still reported.
         let contained = format!(
@@ -3270,18 +3270,18 @@ mod tests {
         let stuck: Vec<_> = report
             .diagnostics()
             .iter()
-            .filter(|diagnostic| diagnostic.code == "SCXML024")
+            .filter(|diagnostic| diagnostic.code == "LINT002")
             .map(|diagnostic| diagnostic.message.as_str())
             .collect();
         assert_eq!(stuck.len(), 2, "{report:?}");
-        // IRP test278: an unreachable state is reported once, by SCXML029;
+        // IRP test278: an unreachable state is reported once, by LINT005;
         // "may never exit" would only repeat the same root cause.
         let unreachable = format!(
             r#"<scxml xmlns="{SCXML_NAMESPACE}" version="1.0" initial="a"><state id="a"><transition event="go" target="done"/></state><state id="island"><state id="inner"/></state><final id="done"/></scxml>"#
         );
         let report = validate(&unreachable);
-        assert!(codes(&report).contains("SCXML029"), "{report:?}");
-        assert!(!codes(&report).contains("SCXML024"), "{report:?}");
+        assert!(codes(&report).contains("LINT005"), "{report:?}");
+        assert!(!codes(&report).contains("LINT002"), "{report:?}");
     }
 
     #[test]
@@ -3367,7 +3367,7 @@ mod tests {
     }
 
     /// Natively the inline-machine depth is unbounded: a path one root past
-    /// the wasm bound (64) validates without `SCXML027`.
+    /// the wasm bound (64) validates without `LIMIT001`.
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn native_nested_scxml_validation_has_no_depth_budget() {
@@ -3378,7 +3378,7 @@ mod tests {
             report
                 .diagnostics()
                 .iter()
-                .all(|diagnostic| diagnostic.code != "SCXML027"),
+                .all(|diagnostic| diagnostic.code != "LIMIT001"),
             "{report:?}"
         );
     }
@@ -3708,11 +3708,11 @@ mod tests {
             r#"<scxml xmlns="{SCXML_NAMESPACE}" initial="a"><state id="a"><transition target="b"/></state><state id="b"><transition target="a"/><transition event="c" target="conditional"/><transition event="s" target="stuck"/><transition event="i" target="invoked"/></state><state id="conditional"><transition cond="ready" target="final"/></state><state id="stuck"/><state id="invoked"><invoke src="child.scxml"/></state><final id="final"/></scxml>"#
         ));
         let codes = codes(&report);
-        assert!(codes.contains("SCXML024"));
-        assert!(codes.contains("SCXML025"));
-        assert!(codes.contains("SCXML026"));
+        assert!(codes.contains("LINT002"));
+        assert!(codes.contains("LINT003"));
+        assert!(codes.contains("LINT004"));
         assert!(!report.diagnostics().iter().any(|diagnostic| {
-            diagnostic.code == "SCXML024" && diagnostic.message.contains("invoked")
+            diagnostic.code == "LINT002" && diagnostic.message.contains("invoked")
         }));
     }
 
@@ -3726,7 +3726,7 @@ mod tests {
             !report
                 .diagnostics()
                 .iter()
-                .any(|diagnostic| diagnostic.code == "SCXML025")
+                .any(|diagnostic| diagnostic.code == "LINT003")
         );
     }
 
@@ -3752,7 +3752,7 @@ mod tests {
             report
                 .diagnostics()
                 .iter()
-                .any(|diagnostic| diagnostic.code == "SCXML025")
+                .any(|diagnostic| diagnostic.code == "LINT003")
         );
         assert!(
             recorder.observations().is_empty(),
@@ -3768,7 +3768,7 @@ mod tests {
             ))
             .diagnostics()
             .iter()
-            .filter(|diagnostic| diagnostic.code == "SCXML081")
+            .filter(|diagnostic| diagnostic.code == "LIMIT008")
             .map(|diagnostic| diagnostic.message.clone())
             .collect::<Vec<_>>()
         };
@@ -3792,7 +3792,7 @@ mod tests {
             !report
                 .diagnostics()
                 .iter()
-                .any(|diagnostic| diagnostic.code == "SCXML081")
+                .any(|diagnostic| diagnostic.code == "LIMIT008")
         );
     }
 
@@ -3819,9 +3819,9 @@ mod tests {
                 r#"<scxml xmlns="{SCXML_NAMESPACE}" initial="{id}"><state id="{id}"><final id="f"/></state></scxml>"#
             )
         };
-        assert!(messages(&compound(&fits), "SCXML081").is_empty());
+        assert!(messages(&compound(&fits), "LIMIT008").is_empty());
         assert_eq!(
-            messages(&compound(&over), "SCXML081"),
+            messages(&compound(&over), "LIMIT008"),
             [
                 "state ID `sxxxxxxxxxxxxxxxxxxxxxxx…` is 1,014 bytes, so the `done.state.` event it raises is 1,025 bytes, more than the 1,024 an event name may have"
             ]
@@ -3835,31 +3835,31 @@ mod tests {
         assert_eq!(
             messages(
                 &parallel(&over, r#"<state id="b"><final id="bf"/></state>"#),
-                "SCXML081"
+                "LIMIT008"
             )
             .len(),
             1
         );
         // A state that can never complete raises no done event.
         assert!(
-            messages(&parallel(&over, r#"<state id="b"/>"#), "SCXML081").is_empty(),
+            messages(&parallel(&over, r#"<state id="b"/>"#), "LIMIT008").is_empty(),
             "a parallel with an atomic region never completes"
         );
         let atomic = format!(
             r#"<scxml xmlns="{SCXML_NAMESPACE}" initial="{over}"><state id="{over}"/></scxml>"#
         );
-        assert!(messages(&atomic, "SCXML081").is_empty());
+        assert!(messages(&atomic, "LIMIT008").is_empty());
         let nested = format!(
             r#"<scxml xmlns="{SCXML_NAMESPACE}" initial="{over}"><state id="{over}"><state id="inner"/></state></scxml>"#
         );
         assert!(
-            messages(&nested, "SCXML081").is_empty(),
+            messages(&nested, "LIMIT008").is_empty(),
             "a compound state without a <final> child never completes"
         );
     }
 
     /// An event name, `<send>` ID, or `<invoke>` ID the document writes
-    /// literally is at most 1,024 bytes on every build (SCXML082); an
+    /// literally is at most 1,024 bytes on every build (LIMIT009); an
     /// `<invoke>` ID must also leave room for the `done.invoke.` (12 bytes)
     /// event it raises (SCXML 1.0 §6.4).
     #[test]
@@ -3899,13 +3899,13 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                messages(&document(&template.replace("NAME", &over)), "SCXML082"),
+                messages(&document(&template.replace("NAME", &over)), "LIMIT009"),
                 [message],
                 "{template}"
             );
             if !template.starts_with("<invoke") {
                 assert!(
-                    messages(&document(&template.replace("NAME", &at_bound)), "SCXML082")
+                    messages(&document(&template.replace("NAME", &at_bound)), "LIMIT009")
                         .is_empty(),
                     "{template} at the bound"
                 );
@@ -3915,9 +3915,9 @@ mod tests {
         let fits = format!("i{}", "x".repeat(1_011));
         let done_over = format!("{fits}x");
         assert_eq!((fits.len(), done_over.len()), (1_012, 1_013));
-        assert!(messages(&invoke(&fits), "SCXML082").is_empty());
+        assert!(messages(&invoke(&fits), "LIMIT009").is_empty());
         assert_eq!(
-            messages(&invoke(&done_over), "SCXML082"),
+            messages(&invoke(&done_over), "LIMIT009"),
             [
                 "`<invoke>` ID `ixxxxxxxxxxxxxxxxxxxxxxx…` is 1,013 bytes, so the `done.invoke.` event it raises is 1,025 bytes, more than the 1,024 an event name may have"
             ]

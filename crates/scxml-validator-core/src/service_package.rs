@@ -3,7 +3,7 @@
 //! A service package binds one exact invoked-service type URI (SCXML 6.4
 //! `<invoke type>`) to the Wasm component that implements it. Like an
 //! extension package manifest it is declarative data: the validator and the
-//! compiler read only its URI and `env` slots (`SCXML094`, `SCXML083`); hosts
+//! compiler read only its URI and `env` slots (`PKG004`, `ENV001`); hosts
 //! bind its component and grant its declared outbound HTTP origins and `env`
 //! slots. The WASI interfaces the component may use are its own imports,
 //! which the embedder reads from the component itself.

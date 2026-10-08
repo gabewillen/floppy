@@ -160,8 +160,7 @@ mod guest {
     use stateforward::scxml_validator::package_validator_api as wit_package;
     use stateforward::scxml_validator::telemetry as wit_telemetry;
     use stateforward::scxml_validator::types::{
-        self as wit_types, ComponentError, ErrorCode, ErrorVersion, Profile, SchemaPolicy,
-        ValidationRequest,
+        self as wit_types, ComponentError, ErrorCode, ErrorVersion, SchemaPolicy, ValidationRequest,
     };
 
     /// The source id of the one document a validation reads: every span
@@ -527,13 +526,10 @@ mod guest {
                     .with_event_schema_resources(event_schemas)
                     // The request carries no service packages, so no
                     // invoked-service type is bound: a literal one is
-                    // `SCXML094`, exactly as `scx validate` reports
+                    // `PKG004`, exactly as `scx validate` reports
                     // it without `--service-package`.
                     .with_services(std::collections::BTreeMap::new())
                     .with_package_validator(std::sync::Arc::new(ImportedPackageValidator));
-                if let Some(Profile::Draft) = request.profile {
-                    validator = validator.with_profile(scxml_validator_core::Profile::Draft);
-                }
                 // The linked expression-syntax capability is explicit; a
                 // provider that reports no data model disables checking.
                 if let Some(data_model) = wit_syntax::supported_data_model()

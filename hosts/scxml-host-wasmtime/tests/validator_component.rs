@@ -13,7 +13,7 @@
 //!
 //! The same component linked with no data model (or with the null data
 //! model, which has no expression syntax) must report the unchecked
-//! expressions with the `SCXML045` note instead of checking them.
+//! expressions with the `LINT010` note instead of checking them.
 
 #![cfg(feature = "wasmtime")]
 
@@ -22,9 +22,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use scxml_host_wasmtime::validator_types::{
-    EventSchemaResource, Profile, SchemaPolicy, ValidationRequest,
-};
+use scxml_host_wasmtime::validator_types::{EventSchemaResource, SchemaPolicy, ValidationRequest};
 use scxml_host_wasmtime::{
     ArtifactKind, AuthenticatedComponent, ComponentValidator, TelemetryProviders,
     TrustedManifestDigest, WasmtimeHostConfig, authenticate_component,
@@ -157,7 +155,6 @@ fn validate(validator: &ComponentValidator, source_name: &str, source: &str) -> 
         schemas: Vec::new(),
         packages: Vec::new(),
         event_schemas: ui_event_schemas(),
-        profile: None,
         trace_context: None,
     };
     let bytes = validator
@@ -234,17 +231,17 @@ fn component_expression_diagnostics_match_the_cli_snapshots() {
         "scxml038-xpath-syntax-paths",
         "scxml039-location-not-assignable",
         "scxml039-xpath-location-not-a-path",
-        "scxml040-expression-over-bound",
-        "scxml040-xpath-over-nesting-bound",
+        "limit003-expression-over-bound",
+        "limit003-xpath-over-nesting-bound",
         "scxml074-log-side-effects",
-        "scxml076-condition-side-effects",
+        "lint020-condition-side-effects",
         "scxml077-system-variable-writes",
-        "scxml075-undecidable-side-effects",
+        "lint019-undecidable-side-effects",
         "valid-scxml074-local-writes",
         "scxml056-xpath-undeclared-variable-typo",
-        "scxml057-xpath-bare-true",
-        "scxml059-xpath-zero-position",
-        "scxml060-xpath-string-addition",
+        "lint011-xpath-bare-true",
+        "lint013-xpath-zero-position",
+        "lint014-xpath-string-addition",
     ] {
         assert!(
             compared.iter().any(|case| case == required),
@@ -265,13 +262,13 @@ fn the_wasm_validator_keeps_the_bounds_the_native_cli_lifts() {
     let ecmascript = linked(Some(&artifacts.ecmascript));
     let reports = |report: &str, code: &str| report.contains(&format!("\"code\":\"{code}\""));
 
-    let case = "valid-scxml069-state-nesting-over-wasm-bound";
+    let case = "valid-limit007-state-nesting-over-wasm-bound";
     let ui = artifacts.workspace.join("tests/ui");
     let source = String::from_utf8(read(&ui.join(format!("{case}.scx")))).expect("UTF-8");
     let native = String::from_utf8(read(&ui.join(format!("{case}.json")))).expect("UTF-8");
-    assert!(!reports(&native, "SCXML069"), "{native}");
+    assert!(!reports(&native, "LIMIT007"), "{native}");
     let wasm = validate(&ecmascript, &format!("tests/ui/{case}.scx"), &source);
-    assert!(reports(&wasm, "SCXML069"), "{wasm}");
+    assert!(reports(&wasm, "LIMIT007"), "{wasm}");
 
     let chain = (0..65_536).fold(
         format!("{HEAD}\n<state id=\"a\"><transition event=\"go\" target=\"s0\"/></state>\n"),
@@ -286,7 +283,7 @@ fn the_wasm_validator_keeps_the_bounds_the_native_cli_lifts() {
     ) + "<final id=\"s65536\"/>\n</scxml>";
     assert!(reports(
         &validate(&ecmascript, "chain.scxml", &chain),
-        "SCXML028"
+        "LIMIT002"
     ));
 
     let logs = format!(
@@ -296,7 +293,7 @@ fn the_wasm_validator_keeps_the_bounds_the_native_cli_lifts() {
     );
     assert!(reports(
         &validate(&ecmascript, "logs.scxml", &logs),
-        "SCXML041"
+        "LIMIT004"
     ));
 
     let long = format!(
@@ -305,7 +302,7 @@ fn the_wasm_validator_keeps_the_bounds_the_native_cli_lifts() {
     );
     assert!(reports(
         &validate(&ecmascript, "long.scxml", &long),
-        "SCXML040"
+        "LIMIT003"
     ));
     // The XPath data model declines an expression over the same byte bound.
     let xpath = linked(Some(&artifacts.xpath));
@@ -315,7 +312,7 @@ fn the_wasm_validator_keeps_the_bounds_the_native_cli_lifts() {
     );
     assert!(reports(
         &validate(&xpath, "long-xpath.scxml", &long_xpath),
-        "SCXML040"
+        "LIMIT003"
     ));
 
     // One inline machine past the 64 nested machines the component checks.
@@ -323,14 +320,14 @@ fn the_wasm_validator_keeps_the_bounds_the_native_cli_lifts() {
     let nested = root.repeat(65) + &"</scxml>".repeat(65);
     assert!(reports(
         &validate(&ecmascript, "nested.scxml", &nested),
-        "SCXML027"
+        "LIMIT001"
     ));
 }
 
 /// The wasm validator bounds an attribute value as the compiler stores it:
 /// a white-space-collapsing SCXML attribute by its collapsed value (an `id`
 /// padded past 1 MiB is the short `a`), and an attribute of inline XML,
-/// which the compiler keeps byte for byte, by its exact value (`SCXML069`),
+/// which the compiler keeps byte for byte, by its exact value (`LIMIT007`),
 /// even on an element in the SCXML namespace.
 #[test]
 fn the_wasm_validator_bounds_attribute_values_as_the_compiler_stores_them() {
@@ -343,12 +340,12 @@ fn the_wasm_validator_bounds_attribute_values_as_the_compiler_stores_them() {
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="ecmascript"><state id="{padding}a"><transition event="go" target="b"/></state><final id="b"/></scxml>"#
     );
     let report = validate(&ecmascript, "padded-id.scxml", &padded_id);
-    assert!(!reports(&report, "SCXML069"), "{report}");
+    assert!(!reports(&report, "LIMIT007"), "{report}");
     let padded_payload = format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="ecmascript"><state id="a"><onentry><send event="e"><content><state xmlns="http://www.w3.org/2005/07/scxml" id="{padding}x"/></content></send></onentry><transition event="go" target="b"/></state><final id="b"/></scxml>"#
     );
     let report = validate(&ecmascript, "padded-payload.scxml", &padded_payload);
-    assert!(reports(&report, "SCXML069"), "{report}");
+    assert!(reports(&report, "LIMIT007"), "{report}");
 }
 
 #[test]
@@ -356,7 +353,7 @@ fn without_a_linked_checker_expressions_are_reported_unchecked() {
     let source = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><final id="f"><onentry><log expr="1 +"/></onentry></final></scxml>"#;
     for data_model in [None, Some(&artifacts().null)] {
         let report = validate(&linked(data_model), "unchecked.scxml", source);
-        assert!(report.contains("\"code\":\"SCXML045\""), "{report}");
+        assert!(report.contains("\"code\":\"LINT010\""), "{report}");
         assert!(report.contains("\"severity\":\"note\""), "{report}");
         assert!(!report.contains("SCXML038"), "{report}");
     }
@@ -367,7 +364,7 @@ fn without_a_linked_checker_expressions_are_reported_unchecked() {
         source,
     );
     assert!(report.contains("\"code\":\"SCXML038\""), "{report}");
-    assert!(!report.contains("SCXML045"), "{report}");
+    assert!(!report.contains("LINT010"), "{report}");
 }
 
 /// The validator guest's `validate` span, as the host adapter exported it:
@@ -429,7 +426,6 @@ fn guest_validate_span_records_its_events_and_error_category() {
         schemas: Vec::new(),
         packages: Vec::new(),
         event_schemas: Vec::new(),
-        profile: None,
         // A sampled remote parent, so the guest span is recorded whatever
         // the process-global provider is.
         trace_context: Some(scxml_host_wasmtime::validator_types::TraceContext {
@@ -482,7 +478,6 @@ fn guest_validate_span_without_a_carrier_is_a_root_span_under_a_noop_global_prov
         schemas: Vec::new(),
         packages: Vec::new(),
         event_schemas: Vec::new(),
-        profile: None,
         trace_context: None,
     });
     drop(validator);
@@ -506,43 +501,4 @@ fn guest_validate_span_without_a_carrier_is_a_root_span_under_a_noop_global_prov
         opentelemetry::trace::SpanId::INVALID,
         "the invalid ambient span is not its parent"
     );
-}
-
-/// The draft profile (`profile: draft`) runs the profile's rules in the
-/// component, exactly as `<scx:validate profile="draft">` runs them; absent,
-/// no profile rule runs.
-#[test]
-fn the_draft_profile_runs_its_rules_only_when_requested() {
-    let validator = ComponentValidator::new(
-        &artifacts().validator,
-        None,
-        &config(),
-        &TelemetryProviders::new(),
-    )
-    .expect("the validator component compiles and links");
-    let codes = |profile: Option<Profile>| -> Vec<String> {
-        let bytes = validator
-            .validate(&ValidationRequest {
-                source_name: "draft.scx".to_owned(),
-                source: r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"><invoke type="scxml" src="child.scx"/></state></scxml>"#.to_owned(),
-                policy: SchemaPolicy::Strict,
-                schemas: Vec::new(),
-                packages: Vec::new(),
-                event_schemas: Vec::new(),
-                profile,
-                trace_context: None,
-            })
-            .expect("a canonical report");
-        let report: serde_json::Value = serde_json::from_slice(&bytes).expect("JSON");
-        report["validator"]["diagnostics"]
-            .as_array()
-            .expect("diagnostics")
-            .iter()
-            .map(|diagnostic| diagnostic["code"].as_str().expect("a code").to_owned())
-            .collect()
-    };
-    let plain = codes(None);
-    let draft = codes(Some(Profile::Draft));
-    assert!(!plain.iter().any(|code| code == "SCXML098"), "{plain:?}");
-    assert!(draft.iter().any(|code| code == "SCXML098"), "{draft:?}");
 }

@@ -444,7 +444,7 @@ pub(crate) struct SlotUse {
 
 /// Every `env` attribute on an `<invoke>` with a literal `type`, in document
 /// order; a document that does not parse binds none here (the validator's
-/// `SCXML084` rejects one anywhere else).
+/// `ENV002` rejects one anywhere else).
 pub(crate) fn slot_uses(source: &[u8]) -> Vec<SlotUse> {
     let Ok(text) = std::str::from_utf8(source) else {
         return Vec::new();

@@ -122,8 +122,8 @@ empty filter identity, every case including manual cases run) measure:
 
 | Data model | Passed / Applicable | Under errata | Not applicable | Mandatory Passed | Not Passing | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| ECMAScript | 201 / 201 | 0 | 1 | 167 / 167 | 0 | `7f1d659f3854805b4eea104103657b6ac70ef2edfa4bdc5fb63356a0515a2ef9` | `4bc7822631ee36c7bfb270d25d94cb0af336542febf8d73c03f95f9d37bd2b1e` |
-| XPath | 178 / 178 | 5 | 24 | 163 / 163 | 0 | `c98011ec1f2d7bf0093a7f2ed1658de4b072b43a2da03b2850dd3c8ed5b6cff8` | `a315bfb269f48c9a79e52e5ac3bb9dbc2f285d0eada9fa1b249137db1c2fd264` |
+| ECMAScript | 201 / 201 | 0 | 1 | 167 / 167 | 0 | `21423463af3896b33650ad06a2d34bbfbced051b80f8ecb375aba1eb91d593b9` | `8a3bddb7d9cb81526de2f2752495d79c0bdb614f335a1951fc91c24b83845409` |
+| XPath | 178 / 178 | 5 | 24 | 163 / 163 | 0 | `a68e123338dbc2281c9f965ffdcbf2d8e192a707665765bcfe17a78da1e64af1` | `998bd148fc9338702b7a70db7f1b7871e47d0d326f54a494a70d599c85bbad71` |
 
 The ECMAScript corpus digest is
 `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` and the

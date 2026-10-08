@@ -1,0 +1,13 @@
+warning[LINT002]: state `stuck` has no outgoing transition and may never exit
+ --> tests/ui/lint002-no-exit.scx:2:4
+  |
+2 |   <state id="stuck"/>
+  |    ^^^^^ non-final atomic state has no exit
+  |
+  = note: neither this state nor any enclosing `<state>` or `<parallel>` has a transition or `<invoke>`, and no transition in an enclosing `<parallel>` can leave that `<parallel>`, so once entered the machine can never leave it
+  = help: add an outgoing transition, make this a `final` state, or document an intentional externally terminated wait
+  = spec: SCXML 1.0 §3.3 <state>
+
+diagnostic summary: 0 error(s), 1 warning(s), 0 note(s), 1 total
+For more information about this diagnostic, try `scx --explain LINT002`.
+validated tests/ui/lint002-no-exit.scx

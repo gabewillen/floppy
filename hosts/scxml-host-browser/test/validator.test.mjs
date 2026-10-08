@@ -8,8 +8,8 @@
 // holds its ComponentValidator to the same snapshots). The schema files the
 // cases reference are supplied relative to `tests/ui`, as the CLI reads them.
 //
-// Then the request options (packages, event schema files, the draft
-// profile, schema policies), argument validation, and fuel exhaustion.
+// Then the request options (packages, event schema files, schema
+// policies), argument validation, and fuel exhaustion.
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -76,7 +76,7 @@ test('validator reports equal the scx validate snapshots byte for byte', async (
   }
 });
 
-test('packages, event schema files, and the draft profile reach the validator', async () => {
+test('packages and event schema files reach the validator', async () => {
   const pkg = await readPackage('components/scxml-extension-example/package/example.extension.json');
   const extension = `<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="${pkg.namespaceUri}" version="1.0" datamodel="ecmascript" initial="s"><state id="s"><onentry><example:raise event="e"/></onentry></state></scxml>`;
   const unbound = codes((await ecmascript.validate(extension)).report);
@@ -85,19 +85,14 @@ test('packages, event schema files, and the draft profile reach the validator', 
   assert.ok(!codes((await ecmascript.validate(extension, { schemaPolicy: 'lax' })).report).includes('XSD001'));
 
   const referencing = `<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript" initial="s"><state id="s"><transition event="go" target="f" event:schema="schemas/go.json"/></state><final id="f"/></scxml>`;
-  assert.ok(codes((await ecmascript.validate(referencing)).report).includes('SCXML088'));
+  assert.ok(codes((await ecmascript.validate(referencing)).report).includes('EVENT004'));
   const schema = { uri: 'schemas/go.json', bytes: new TextEncoder().encode('{"type": "object"}') };
   assert.deepEqual(codes((await ecmascript.validate(referencing, { eventSchemas: [schema] })).report), []);
-
-  const draft = `<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"><invoke type="scxml" src="child.scx"/></state></scxml>`;
-  assert.ok(!codes((await ecmascript.validate(draft)).report).includes('SCXML098'));
-  assert.ok(codes((await ecmascript.validate(draft, { profile: 'draft' })).report).includes('SCXML098'));
 });
 
 test('malformed arguments are invalid-argument and the instance stays usable', async () => {
   for (const [source, options] of [
     [1, undefined],
-    ['<scxml/>', { profile: 'strict' }],
     ['<scxml/>', { schemaPolicy: 'none' }],
     ['<scxml/>', { packages: [{}] }],
     ['<scxml/>', { eventSchemas: [{ uri: 'x' }] }],

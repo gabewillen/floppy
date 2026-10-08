@@ -346,7 +346,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §3.6 <initial>", url: "https://www.w3.org/TR/scxml/#initial",
     ),
     doc!(
-        "SCXML023", "warning", "lint", "a compound state relies on document order for its initial child",
+        "LINT001", "warning", "lint", "a compound state relies on document order for its initial child",
         why: "without `initial`, the first of several child states in document order is entered; reordering children silently changes behavior (a single child state is not reported)",
         help: "add an `initial` attribute (or an `<initial>` child) naming the intended first child",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\"><state id=\"p\"><state id=\"c\"><transition event=\"go\" target=\"d\"/></state><final id=\"d\"/></state></scxml>",
@@ -355,7 +355,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §3.3 <state>", url: "https://www.w3.org/TR/scxml/#state",
     ),
     doc!(
-        "SCXML024", "warning", "lint", "a non-final atomic state has no exit",
+        "LINT002", "warning", "lint", "a non-final atomic state has no exit",
         why: "a state with no transitions and no `<invoke>`, inside no `<state>` or `<parallel>` that has one and no `<parallel>` with a transition that can leave it, can never be left; the machine stalls there unless that is intentional",
         help: "add an outgoing transition, make it a `<final>` state, or document the intentional wait",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\"><state id=\"stuck\"/></scxml>",
@@ -364,7 +364,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §3.3 <state>", url: "https://www.w3.org/TR/scxml/#state",
     ),
     doc!(
-        "SCXML025", "warning", "lint", "every exit from a state is a conditional eventless transition",
+        "LINT003", "warning", "lint", "every exit from a state is a conditional eventless transition",
         why: "if every condition is false the state waits forever for a data change that no event will trigger re-evaluation for",
         help: "add an unconditional eventless fallback or an event-triggered exit",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"a\"><state id=\"a\"><transition cond=\"false\" target=\"b\"/></state><final id=\"b\"/></scxml>",
@@ -373,7 +373,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §3.13 Selecting and Executing Transitions", url: "https://www.w3.org/TR/scxml/#SelectingTransitions",
     ),
     doc!(
-        "SCXML026", "warning", "lint", "unconditional eventless transitions form a cycle",
+        "LINT004", "warning", "lint", "unconditional eventless transitions form a cycle",
         why: "eventless, conditionless transitions are taken immediately in the same macrostep; a cycle of them never reaches a stable configuration (a warning: SCXML 1.0 Appendix D says a macrostep that does not terminate \"is currently allowed\", so the document is conforming and compiles, and a host bounds the run)",
         help: "add an `event` or `cond` to one edge of the cycle, or remove one target",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"a\"><state id=\"a\"><transition target=\"b\"/></state><state id=\"b\"><transition target=\"a\"/></state></scxml>",
@@ -382,7 +382,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §3.13 Selecting and Executing Transitions", url: "https://www.w3.org/TR/scxml/#SelectingTransitions",
     ),
     doc!(
-        "SCXML027", "error", "semantic", "inline `<scxml>` documents nest deeper than the validation budget",
+        "LIMIT001", "error", "semantic", "inline `<scxml>` documents nest deeper than the validation budget",
         why: "each `<invoke><content><scxml>` is validated as an independent machine; the nesting depth is bounded (64 roots) so hostile input cannot exhaust the validator. The bound applies to wasm builds only (the shipped validator and compiler components); the native `scx` has no such bound and never reports this code",
         help: "reduce inline nesting or invoke deeper machines by `src` as separately validated documents",
         bad: "<scxml …><state><invoke><content><scxml …> … (65 levels) …",
@@ -391,7 +391,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §6.4 <invoke>", url: "https://www.w3.org/TR/scxml/#invoke",
     ),
     doc!(
-        "SCXML028", "error", "semantic", "a machine is too large for bounded semantic graph analysis",
+        "LIMIT002", "error", "semantic", "a machine is too large for bounded semantic graph analysis",
         why: "reachability, target legality, and liveness are computed within a work budget of 8,000,000 units per machine, or 1,024 per element and target reference when that is more, so work that grows faster than the machine (such as pairwise checks of thousands of transitions of one state) cannot exhaust the validator; when it is spent no partial graph findings are reported. The budget applies to every build. On wasm builds (the shipped validator and compiler components) the graph is also bounded in size (65,536 states and transitions, 131,072 target references) and the budget to 8,000,000 units",
         help: "split the machine into smaller machines composed with `<invoke>`, or reduce the number of states and transitions",
         bad: "<scxml …> … more than 65,536 states … </scxml>",
@@ -400,7 +400,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §3.11 Legal State Configurations and Specifications", url: "https://www.w3.org/TR/scxml/#LegalStateConfigurations",
     ),
     doc!(
-        "SCXML029", "warning", "lint", "a state can never become active",
+        "LINT005", "warning", "lint", "a state can never become active",
         why: "no transition, `initial`, or history default reachable from the initial configuration enters the state or any descendant, even assuming every event arrives and every `cond` can be true; unreachable states are usually a mistyped target or a forgotten transition",
         help: "target the state from a transition of a reachable state, make it the parent's initial state, or remove it",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"a\"><state id=\"a\"><transition event=\"go\" target=\"a\"/></state><final id=\"b\"/></scxml>",
@@ -410,8 +410,8 @@ pub const CODES: &[CodeDoc] = &[
     ),
     doc!(
         "SCXML030", "error", "semantic", "a multi-target set cannot be active at the same time",
-        why: "the targets of a transition or an `initial` attribute must form a legal state configuration, and the compiler requires each pair to lie in different regions of a common `<parallel>`: targets in different children of a compound `<state>` would require two active children; a target and its own ancestor or descendant name one region twice (a state listed twice is only the `SCXML072` warning)",
-        help: "keep only one of the conflicting targets and, when nothing else enters the other state, give it its own transition so it does not become unreachable (`SCXML029`); or move the targets into separate regions of a `<parallel>`. The suggested removal is offered only when it strands no state",
+        why: "the targets of a transition or an `initial` attribute must form a legal state configuration, and the compiler requires each pair to lie in different regions of a common `<parallel>`: targets in different children of a compound `<state>` would require two active children; a target and its own ancestor or descendant name one region twice (a state listed twice is only the `LINT018` warning)",
+        help: "keep only one of the conflicting targets and, when nothing else enters the other state, give it its own transition so it does not become unreachable (`LINT005`); or move the targets into separate regions of a `<parallel>`. The suggested removal is offered only when it strands no state",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"><transition event=\"go\" target=\"a b\"/></state><final id=\"a\"/><final id=\"b\"/></scxml>",
         fixed: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"><transition event=\"go\" target=\"a\"/><transition event=\"alt\" target=\"b\"/></state><final id=\"a\"/><final id=\"b\"/></scxml>",
         checked: true,
@@ -436,7 +436,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §5.5 <donedata>", url: "https://www.w3.org/TR/scxml/#donedata",
     ),
     doc!(
-        "SCXML033", "warning", "lint", "a `<parallel>` has a single region",
+        "LINT006", "warning", "lint", "a `<parallel>` has a single region",
         why: "a parallel state with one child runs nothing in parallel; it is usually a `<state>` written as `<parallel>` or a parallel state missing its other regions (completion semantics differ between the two)",
         help: "use `<state>`, or add the missing orthogonal regions",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\"><parallel id=\"p\"><final id=\"only\"/></parallel></scxml>",
@@ -445,7 +445,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §3.4 <parallel>", url: "https://www.w3.org/TR/scxml/#parallel",
     ),
     doc!(
-        "SCXML034", "warning", "lint", "a transition is shadowed by an earlier unconditional transition in the same state",
+        "LINT007", "warning", "lint", "a transition is shadowed by an earlier unconditional transition in the same state",
         why: "within one state the interpreter selects the first enabled transition in document order; an earlier transition without `cond` whose descriptors match every event of a later one (or an earlier eventless one) always wins, so the later transition is dead",
         help: "move the specific transition above the general one, add a `cond` to the earlier transition, or remove the dead one",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"><transition event=\"error\" target=\"f\"/><transition event=\"error.execution\" target=\"g\"/></state><final id=\"f\"/><final id=\"g\"/></scxml>",
@@ -454,7 +454,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §3.13 Selecting and Executing Transitions", url: "https://www.w3.org/TR/scxml/#SelectingTransitions",
     ),
     doc!(
-        "SCXML036", "warning", "lint", "eventless transitions loop forever through default entry",
+        "LINT008", "warning", "lint", "eventless transitions loop forever through default entry",
         why: "each step is the first eventless transition without `cond` on the active state's ancestor chain, and default entry through `initial` leads back to the start, so the interpreter never reaches a stable configuration (a warning: SCXML 1.0 Appendix D says a macrostep that does not terminate \"is currently allowed\", so the document is conforming and compiles, and a host bounds the run)",
         help: "add an `event` or `cond` to one transition in the loop, or retarget one so the macrostep can settle",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"a\"><state id=\"a\"><transition target=\"b\"/></state><state id=\"b\" initial=\"b1\"><state id=\"b1\"><transition target=\"a\"/></state></state></scxml>",
@@ -490,7 +490,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §5.9.2 Location Expressions", url: "https://www.w3.org/TR/scxml/#LocationExpressions",
     ),
     doc!(
-        "SCXML040", "error", "semantic", "an expression exceeds the data model's size or nesting bound",
+        "LIMIT003", "error", "semantic", "an expression exceeds the data model's size or nesting bound",
         why: "the data-model syntax capability declines fragments beyond its size or nesting bound (the ECMAScript provider: 16 KiB expressions, 64 KiB scripts, at most 128 structural nesting units, where each open bracket costs 8, so 16 brackets, 15 inside a value expression) instead of risking its parser stack; the data model applies the same bound when it evaluates the fragment, so the fragment would be rejected at run time and `compile` refuses the document. The size bounds apply to wasm builds only (the shipped validator and data-model components; the native `scx` checks fragments of any size); the nesting bound guards the parser's native stack and applies to every build",
         help: "split the expression or script into smaller parts, assigning intermediate results to variables (`<data>` or `<assign>`)",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\"><final id=\"f\"><onentry><log expr=\"((((((((((((((((1))))))))))))))))\"/></onentry></final></scxml>",
@@ -499,7 +499,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §5.9 Expressions", url: "https://www.w3.org/TR/scxml/#expressions",
     ),
     doc!(
-        "SCXML041", "error", "semantic", "a document has too many expressions for bounded syntax checking",
+        "LIMIT004", "error", "semantic", "a document has too many expressions for bounded syntax checking",
         why: "expression checking is bounded to 16,384 fragments and 4 MiB of expression text per document; beyond that the remaining expressions are unchecked, so the validator fails closed. The bound applies to wasm builds only (the shipped validator and compiler components); the native `scx` has no such bound and never reports this code",
         help: "split the document into smaller machines",
         bad: "<scxml …> … more than 16,384 expressions … </scxml>",
@@ -508,7 +508,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §5.9 Expressions", url: "https://www.w3.org/TR/scxml/#expressions",
     ),
     doc!(
-        "SCXML042", "warning", "lint", "an expression attribute is present but empty",
+        "LINT009", "warning", "lint", "an expression attribute is present but empty",
         why: "a blank `<log expr>` is treated as absent (the log has no value), while every other empty expression attribute, including `<transition cond>`, is still evaluated as an invalid expression and raises `error.execution` (a condition is then false); either way the empty value is almost always a mistake",
         help: "write the intended expression, or remove the attribute",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\"><final id=\"f\"><onentry><log label=\"done\" expr=\"\"/></onentry></final></scxml>",
@@ -517,7 +517,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §5.9 Expressions", url: "https://www.w3.org/TR/scxml/#expressions",
     ),
     doc!(
-        "SCXML044", "error", "semantic", "the `datamodel` attribute names a data model this validator does not recognize",
+        "LIMIT005", "error", "semantic", "the `datamodel` attribute names a data model this validator does not recognize",
         why: "SCXML 1.0 §5.1 defines the `ecmascript`, `null`, and `xpath` data models; an unrecognized value (often a typo) fails closed because none of the machine's expressions can be evaluated or syntax-checked. The value is `xsd:NMTOKEN`, whose white space collapses (XML Schema 1.1 Part 2 §4.3.6), so `datamodel=\" xpath \"` is `xpath`",
         help: "use `ecmascript` for JavaScript expressions, or `null` for a machine without data",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascipt\"><final id=\"f\"/></scxml>",
@@ -526,7 +526,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §5.1 Data Model", url: "https://www.w3.org/TR/scxml/#data-module",
     ),
     doc!(
-        "SCXML045", "note", "lint", "a machine's expressions were not syntax-checked",
+        "LINT010", "note", "lint", "a machine's expressions were not syntax-checked",
         why: "the validator checks expression syntax only with a checker linked for the machine's data model (its `datamodel`, or the default `ecmascript` when it declares none: SCXML 1.0 §3.2.1 leaves the default \"platform-specific\"); a run that links no checker for it (for example the Wasm validator component composed with only one data model's checker) says so instead of staying silent",
         help: "review the expressions manually, or validate with a host that links a syntax checker for this data model",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"xpath\"><final id=\"f\"><onentry><log expr=\"1\"/></onentry></final></scxml>",
@@ -586,10 +586,10 @@ pub const CODES: &[CodeDoc] = &[
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"xpath\"><datamodel><data id=\"count\" expr=\"0\"/></datamodel><final id=\"f\"><onentry><log expr=\"$cuont\"/></onentry></final></scxml>",
         fixed: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"xpath\"><datamodel><data id=\"count\" expr=\"0\"/></datamodel><final id=\"f\"><onentry><log expr=\"$count\"/></onentry></final></scxml>",
         checked: true,
-        spec: "SCXML CR 2014 §C.3.1 Data Model", url: "https://www.w3.org/TR/2014/CR-scxml-20140313/#xpath-datamodel",
+        spec: "SCXML 1.0 §5.9.3 Legal Data Values and Value Expressions", url: "https://www.w3.org/TR/scxml/#ValueExpressions",
     ),
     doc!(
-        "SCXML057", "warning", "lint", "an XPath expression starts with a relative path that selects no data",
+        "LINT011", "warning", "lint", "an XPath expression starts with a relative path that selects no data",
         why: "the context node of every XPath expression is `<datamodel>`, whose children are the `<data id=\"…\">` elements and the system variables, so a bare name such as `count`, `true`, or `_event.data.ok` is a path to a child element with that exact name and selects nothing: a location that selects nothing raises `error.execution`, and a condition is false. In a machine with a `<foreach>`, whose item binds an element of any name, only a declared variable name, `true`/`false`, and a dotted member access are reported",
         help: "reference the variable as `$count`, call `true()`/`false()`, or select a child with a path such as `$_event/data/ok`",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"xpath\"><datamodel><data id=\"count\" expr=\"0\"/></datamodel><final id=\"f\"><onentry><assign location=\"count\" expr=\"1\"/></onentry></final></scxml>",
@@ -598,7 +598,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML CR 2014 §C.3.1 Data Model", url: "https://www.w3.org/TR/2014/CR-scxml-20140313/#xpath-datamodel",
     ),
     doc!(
-        "SCXML058", "warning", "lint", "an `In()` condition names no state of the machine or passes the state ID unquoted",
+        "LINT012", "warning", "lint", "an `In()` condition names no state of the machine or passes the state ID unquoted",
         why: "`In(stateID)` is true only while a `<state>`, `<parallel>`, or `<final>` with that ID is active, so a literal ID that names no state (usually a typo) makes the condition always false; in the ECMAScript and XPath data models an unquoted ID is a variable or a relative path, not the ID",
         help: "name an existing state ID (the finding suggests the nearest one), and quote it as a string: `In('s1')`",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"a\"><state id=\"a\"><transition event=\"go\" cond=\"In('bb')\" target=\"b\"/></state><final id=\"b\"/></scxml>",
@@ -607,7 +607,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §5.9.1 Conditional Expressions", url: "https://www.w3.org/TR/scxml/#ConditionalExpressions",
     ),
     doc!(
-        "SCXML059", "warning", "lint", "an XPath predicate selects by a position that no node has",
+        "LINT013", "warning", "lint", "an XPath predicate selects by a position that no node has",
         why: "a numeric predicate `[n]` keeps only the node at position `n`, and XPath counts positions from 1, so `[0]` (the ECMAScript habit of indexing from 0), a negative number, or a fraction selects nothing: a location that selects nothing raises `error.execution`, a condition is false, and a value is empty",
         help: "select the first node with `[1]` and the last with `[last()]`",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"xpath\"><datamodel><data id=\"list\"><item>1</item></data></datamodel><final id=\"f\"><onentry><assign location=\"$list/item[0]\" expr=\"2\"/></onentry></final></scxml>",
@@ -616,7 +616,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "XPath 1.0 §2.4 Predicates", url: "https://www.w3.org/TR/1999/REC-xpath-19991116/#predicates",
     ),
     doc!(
-        "SCXML060", "warning", "lint", "an XPath expression adds a string with `+`",
+        "LINT014", "warning", "lint", "an XPath expression adds a string with `+`",
         why: "XPath converts both operands of `+` to numbers, so a string that is not numeric becomes `NaN` and the sum is `NaN`; `+` does not concatenate strings as it does in ECMAScript",
         help: "join strings with `concat()`, for example `concat('Hello, ', $name)`",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"xpath\"><datamodel><data id=\"name\" expr=\"'Ada'\"/></datamodel><final id=\"f\"><onentry><log expr=\"'Hello, ' + $name\"/></onentry></final></scxml>",
@@ -625,7 +625,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "XPath 1.0 §3.5 Numbers", url: "https://www.w3.org/TR/1999/REC-xpath-19991116/#numbers",
     ),
     doc!(
-        "SCXML061", "warning", "semantic", "an ECMAScript `<data id>` is not an identifier, so no expression can name it",
+        "LINT015", "warning", "lint", "an ECMAScript `<data id>` is not an identifier, so no expression can name it",
         why: "SCXML 1.0 §B.2.1: \"the SCXML Processor MUST create an ECMAScript variable object whose name is the value of the 'id' attribute of <data>\", and an XML ID such as `retry-count`, `max.tries`, or `class` is conformant (§5.10 reserves only a leading `_`, `SCXML073`), so the data model creates the variable as a property of the global object; but it is reachable only as `globalThis['retry-count']`, and a reference such as `retry-count < 3` parses as something else (it subtracts `count` from `retry`)",
         help: "to use the variable in expressions, rename it to an identifier such as `retryCount` in its declaration and every reference (the finding offers the rename)",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\"><datamodel><data id=\"retry-count\" expr=\"0\"/></datamodel><final id=\"f\"><onentry><log expr=\"retry-count\"/></onentry></final></scxml>",
@@ -634,7 +634,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §B.2 The ECMAScript Data Model", url: "https://www.w3.org/TR/scxml/#ecma-profile",
     ),
     doc!(
-        "SCXML062", "warning", "lint", "a Unicode bidirectional control character changes how the source is displayed",
+        "LINT016", "warning", "lint", "a Unicode bidirectional control character changes how the source is displayed",
         why: "an explicit embedding, override, or isolate (U+202A-U+202E, U+2066-U+2069) reorders how the text around it is displayed, so an editor or review can show a condition, ID, or script differently from what the machine executes (Trojan Source, CVE-2021-42574); rustc rejects the same characters in literals",
         help: "write an intended control as a character reference such as `&#x202E;`, which XML decodes to the same character in an attribute value or text and keeps visible (the finding offers this fix), or remove it",
         bad: "<log label=\"…\"/> whose label contains a raw U+202E RIGHT-TO-LEFT OVERRIDE",
@@ -643,7 +643,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "Unicode Standard Annex #9 §2 Directional Formatting Characters", url: "https://www.unicode.org/reports/tr9/#Directional_Formatting_Characters",
     ),
     doc!(
-        "SCXML063", "warning", "lint", "an ECMAScript condition is an arrow function, so it is always true",
+        "LINT017", "warning", "lint", "an ECMAScript condition is an arrow function, so it is always true",
         why: "`cond=\"count => 3\"` parses as a function whose parameter is `count`; a condition is converted to a boolean without calling it, and every function is truthy, so the transition is always enabled; `>=` was almost always intended",
         help: "compare with `>=` (the finding offers the fix when the parameter is a single name), or call the function to compute a boolean",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"a\"><datamodel><data id=\"count\" expr=\"0\"/></datamodel><state id=\"a\"><transition event=\"go\" cond=\"count => 3\" target=\"b\"/></state><final id=\"b\"/></scxml>",
@@ -676,7 +676,7 @@ pub const CODES: &[CodeDoc] = &[
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"a\"><state id=\"a\"><onentry><if cond=\"\"><log expr=\"1\"/></if></onentry><transition event=\"e\" target=\"f\"/></state><final id=\"f\"/></scxml>",
         fixed: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"a\"><state id=\"a\"><onentry><if cond=\"true\"><log expr=\"1\"/></if></onentry><transition event=\"e\" target=\"f\"/></state><final id=\"f\"/></scxml>",
         checked: true,
-        spec: "SCXML 1.0 §3.12 <if>", url: "https://www.w3.org/TR/scxml/#if",
+        spec: "SCXML 1.0 §4.3 <if>", url: "https://www.w3.org/TR/scxml/#if",
     ),
     doc!(
         "SCXML067", "error", "semantic", "an `<scxml>` has no child states",
@@ -688,7 +688,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §3.2 <scxml>", url: "https://www.w3.org/TR/scxml/#scxml",
     ),
     doc!(
-        "SCXML068", "error", "internal", "this compiler cannot lower an attribute or element from another namespace here",
+        "LIMIT006", "error", "internal", "this compiler cannot lower an attribute or element from another namespace here",
         why: "this is a limit of this toolchain, not an SCXML rule: SCXML 1.0 allows attributes from other namespaces (`xml:lang`, `xsi:schemaLocation`, editor or custom attributes) on its elements and elements from other namespaces in its content models (the W3C schema's `##other` wildcards), but the compiler lowers foreign elements only as executable content (custom actions) and carries no foreign attribute into Machine IR; it rejects the rest rather than drop them silently, so the document cannot compile",
         help: "to compile the document with this toolchain, remove the attribute or element (an `xml:*` or `xsi:*` attribute carries no SCXML behavior), or move extension data into a custom action in executable content",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" xml:lang=\"en\"><final id=\"f\"/></scxml>",
@@ -697,7 +697,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "", url: "",
     ),
     doc!(
-        "SCXML069", "error", "semantic", "the document exceeds a Machine IR bound",
+        "LIMIT007", "error", "semantic", "the document exceeds a Machine IR bound",
         why: "Machine IR has fixed bounds so lowering and execution stay bounded: 65 nested states, 64 levels of `<if>`/`<foreach>` nesting, 32 levels of inline XML, 10,000 child nodes, attributes, targets, event descriptors, names, branches, or data declarations per element or scope, 100,000 targets across a machine's multi-target sets, and 1 MiB per string; they are far above any hand-written machine, and `compile` rejects a document over them. These bounds apply to wasm builds only (the shipped validator and compiler components); the native `scx` has no such bound and never reports this code",
         help: "flatten the structure, split large lists or scopes, move a deep or large part into a machine it invokes, or load large data with `src`",
         bad: "a `<state>` nested 66 states deep (65 is the most the compiler lowers)",
@@ -724,7 +724,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §6.4 <invoke>", url: "https://www.w3.org/TR/scxml/#invoke",
     ),
     doc!(
-        "SCXML072", "warning", "lint", "a target list names the same state twice",
+        "LINT018", "warning", "lint", "a target list names the same state twice",
         why: "SCXML 1.0 §3.11 defines a legal state specification as \"a set of states such that 1) no state is an ancestor of any other state on the list, and 2) a full legal state configuration results when all ancestors and default initial descendants have been added\": a target list names a set, so a repeated state is legal and is entered once, and the repeat adds nothing",
         help: "remove the repeated target",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"><transition event=\"go\" target=\"f f\"/></state><final id=\"f\"/></scxml>",
@@ -751,7 +751,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §4.7.3 <log>", url: "https://www.w3.org/TR/scxml/#log",
     ),
     doc!(
-        "SCXML075", "warning", "lint", "the validator cannot prove a condition or `<log expr>` has no side effect",
+        "LINT019", "warning", "lint", "the validator cannot prove a condition or `<log expr>` has no side effect",
         why: "`<log>` values must have no side effects (SCXML 1.0 §4.7.3) and conditional expressions in conformant documents should have none (§5.9.1), and the validator decides that statically: it follows document functions declared in inline `<script>` elements or `<data expr>`, but it cannot see a function it has no source for, text run as code (`eval`, `Function`), a `with` scope, a `<script src>`, a getter or conversion method with a side effect, or a write through a reference it cannot trace",
         help: "declare the functions the expression calls in an inline `<script>`, or compute the value in executable content and read the result in the expression",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"a\"><state id=\"a\"><transition event=\"go\" cond=\"ready()\" target=\"b\"/></state><final id=\"b\"/></scxml>",
@@ -760,7 +760,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 Appendix B Data Models", url: "https://www.w3.org/TR/scxml/#profiles",
     ),
     doc!(
-        "SCXML076", "warning", "lint", "a condition has a side effect",
+        "LINT020", "warning", "lint", "a condition has a side effect",
         why: "SCXML 1.0 §5.9.1: \"Conditional expressions in conformant SCXML documents SHOULD NOT have side effects.\" Appendix B also says a data model's condition language \"MUST not have side effects\", but official W3C IRP test 444 requires `cond=\"++var1==2\"` to run and increment `var1`, so the processor follows the IRP (docs/spec-errata.md) and a certain side effect in an ECMAScript condition (an assignment, update, or `delete` outside the condition, a mutating built-in, `Math.random`, or a call of a document function that does one of those) is a warning, not an error",
         help: "compute the condition without changing anything, and move the change into the transition's executable content (`<assign>` or `<script>`); to compare, use `===`",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"a\"><datamodel><data id=\"tries\" expr=\"0\"/></datamodel><state id=\"a\"><transition event=\"retry\" cond=\"++tries &lt; 3\" target=\"a\"/><transition event=\"retry\" target=\"b\"/></state><final id=\"b\"/></scxml>",
@@ -778,7 +778,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §5.10 System Variables", url: "https://www.w3.org/TR/scxml/#SystemVariables",
     ),
     doc!(
-        "SCXML078", "warning", "semantic", "a `<parallel>` has no child states, so no transition is enabled through it",
+        "LINT021", "warning", "lint", "a `<parallel>` has no child states, so no transition is enabled through it",
         why: "SCXML 1.0 §3.4.2 allows a `<parallel>` with no regions (its `<state>` children occur \"0 or more times\"), but §3.13 enables a transition only \"in atomic state S\" and §3.3 defines an atomic state as \"a <state> that has no <state>, <parallel> or <final> children\", so a `<parallel>` is never atomic: while a regionless one is active, none of its own transitions is taken, its ancestors' transitions are taken only through other active atomic states, and no `done.state` event is raised for it",
         help: "give the `<parallel>` its regions as child `<state>` elements, or make it an atomic `<state>`",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"p\"><parallel id=\"p\"><transition event=\"go\" target=\"f\"/></parallel><final id=\"f\"/></scxml>",
@@ -805,7 +805,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §3.11 Legal State Configurations and Specifications", url: "https://www.w3.org/TR/scxml/#LegalStateConfigurations",
     ),
     doc!(
-        "SCXML081", "error", "semantic", "a state ID is longer than a state name may be",
+        "LIMIT008", "error", "semantic", "a state ID is longer than a state name may be",
         why: "every build names the active states by their IDs (the configuration each call result reports, snapshots, and `In()`), and a name holds at most 1,024 bytes of UTF-8, so a state with a longer ID could never be reported once entered. A state that can complete (one with a `<final>` child, or a `<parallel>` with a `<state>` region that has a `<final>` child and whose every region can be in a final state at once; SCXML 1.0 Appendix D: a `<parallel>` whose regions are all `<parallel>` never completes) also raises `done.state.<ID>` (SCXML 1.0 §3.7: the processor \"MUST generate the event done.state.id\"), an event name of 11 more bytes, so its ID may have at most 1,013. Lengths are of the ID with its white space collapsed (`xsd:ID`, XML Schema 1.1 Part 2 §4.3.6), as the compiler reads it. SCXML 1.0 §3.14 sets no length; this is the implementation's interface bound, listed in the specification errata (L.6), and it applies to every build",
         help: "shorten the ID to at most 1,024 bytes (1,013 for a state that can complete) and update every reference to it",
         bad: "<state id=\"s…\"><final id=\"f\"/></state> (an ID of 1,014 bytes or more)",
@@ -814,7 +814,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §3.14 IDs", url: "https://www.w3.org/TR/scxml/#IDs",
     ),
     doc!(
-        "SCXML082", "error", "semantic", "an event name or a send or invoke ID is longer than a name may be",
+        "LIMIT009", "error", "semantic", "an event name or a send or invoke ID is longer than a name may be",
         why: "every build bounds an event name, a `<send>` ID, and an `<invoke>` ID to 1,024 bytes of UTF-8 (the processor's interface bound), so a `<raise event>`, `<send event>`, `<send id>`, or `<invoke id>` written longer could never run as written. An `<invoke>` ID must also leave room for the `done.invoke.<ID>` event the invocation returns (SCXML 1.0 §6.4: the service \"MUST return a special event 'done.invoke.id'\"), 12 more bytes, so it may have at most 1,012. Lengths are of the value with its white space collapsed (XML Schema 1.1 Part 2 §4.3.6), as the compiler reads it. Names computed at run time (`eventexpr`, generated IDs) that exceed the bound raise `error.execution` instead (SCXML 1.0 §3.12.2). SCXML 1.0 sets no length; this is the implementation's bound, listed in the specification errata (L.6), and it applies to every build",
         help: "shorten the name to at most 1,024 bytes (1,012 for an `<invoke>` ID)",
         bad: "<raise event=\"e…\"/> (an event name of 1,025 bytes or more)",
@@ -823,7 +823,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §6.4 <invoke>", url: "https://www.w3.org/TR/scxml/#invoke",
     ),
     doc!(
-        "SCXML083", "error", "semantic", "an `env` attribute names a slot its invoked service does not have",
+        "ENV001", "error", "semantic", "an `env` attribute names a slot its invoked service does not have",
         why: "an invoked service's `<invoke>` names the variables whose values its host binds to it with `env:<slot>=\"NAME\"` (or `env:<slot>expr=\"EXPR\"`, an expression that evaluates to the name, evaluated when the `<invoke>` runs) in the `https://github.com/stateforward/scxml.rs/namespaces/env` namespace; the host gives the service component an opaque reference for each slot, for the whole invocation, never the value. The slots an `<invoke>` has are the ones its service package declares (`env-slots`), checked when the validator was given that package; without it (an unbound type, or a `typeexpr`), a slot bound twice (`env:<slot>` and `env:<slot>expr`), an `env:<slot>` value that is not a variable name (`[A-Za-z_][A-Za-z0-9_]*`), or an attribute that names no valid slot (`[a-z][a-z0-9-]*`) is still caught",
         help: "bind only a slot the service's package declares, once, to a variable name",
         bad: "<invoke type=\"https://stateforward.org/scxml/services/echo\" env:endpont=\"ECHO_URL\"/>",
@@ -832,8 +832,8 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §6.4 <invoke>", url: "https://www.w3.org/TR/scxml/#invoke",
     ),
     doc!(
-        "SCXML084", "error", "semantic", "the `env` namespace is used outside an invoked service's `<invoke>` attributes",
-        why: "`https://github.com/stateforward/scxml.rs/namespaces/env` is the host's attribute vocabulary for the slots of an invoked service's `<invoke>`: it has no elements, an element in no namespace (inline data, for example) has no slots, an executable-content extension element has none (executable content runs synchronously inside a microstep and does no I/O, so it never needs a value; work that does belongs in an invoked service), and neither has the `<invoke>` of an SCXML session (an absent `type`, `scxml`, or `http://www.w3.org/TR/scxml/`). An `env` attribute on any other SCXML element is `SCXML068`",
+        "ENV002", "error", "semantic", "the `env` namespace is used outside an invoked service's `<invoke>` attributes",
+        why: "`https://github.com/stateforward/scxml.rs/namespaces/env` is the host's attribute vocabulary for the slots of an invoked service's `<invoke>`: it has no elements, an element in no namespace (inline data, for example) has no slots, an executable-content extension element has none (executable content runs synchronously inside a microstep and does no I/O, so it never needs a value; work that does belongs in an invoked service), and neither has the `<invoke>` of an SCXML session (an absent `type`, `scxml`, or `http://www.w3.org/TR/scxml/`). An `env` attribute on any other SCXML element is `LIMIT006`",
         help: "remove the element or attribute, and bind the slot on the `<invoke>` of the service that needs the value",
         bad: "<example:raise env:token=\"API_TOKEN\"/>",
         fixed: "<invoke type=\"https://stateforward.org/scxml/services/echo\" env:token=\"API_TOKEN\"/>",
@@ -841,7 +841,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §6.4 <invoke>", url: "https://www.w3.org/TR/scxml/#invoke",
     ),
     doc!(
-        "SCXML085", "error", "semantic", "the `event` namespace is used outside the attributes of an element with event data",
+        "EVENT001", "error", "semantic", "the `event` namespace is used outside the attributes of an element with event data",
         why: "`https://github.com/stateforward/scxml.rs/namespaces/event` is the host's attribute vocabulary for describing event data: `event:schema` and `event:schemaexpr` on `<transition>` (the `_event.data` it handles), `<send>` and `<raise>` (the data their event is created with), and `<donedata>` (the data of the `done.state.<id>` event). It has no elements, no other attributes, and means nothing on any other element. The W3C schema admits attributes in other namespaces laxly, so only this rule catches a misplaced or misspelled one",
         help: "move the attribute to the element whose event data it describes, correct its name, or remove it",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" xmlns:event=\"https://github.com/stateforward/scxml.rs/namespaces/event\" version=\"1.0\" initial=\"s\"><state id=\"s\"><onentry event:schema=\"true\"/></state><final id=\"f\"/></scxml>",
@@ -850,7 +850,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "", url: "",
     ),
     doc!(
-        "SCXML086", "error", "semantic", "an element gives both `event:schema` and `event:schemaexpr`",
+        "EVENT002", "error", "semantic", "an element gives both `event:schema` and `event:schemaexpr`",
         why: "as with SCXML's other attribute and `expr` pairs (`event` and `eventexpr`, `target` and `targetexpr`), an element gives its schema either literally or as an expression whose value is the schema, not both",
         help: "keep one of the two attributes",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" xmlns:event=\"https://github.com/stateforward/scxml.rs/namespaces/event\" version=\"1.0\" initial=\"s\"><state id=\"s\"><transition event=\"go\" target=\"f\" event:schema=\"true\" event:schemaexpr=\"orderSchema\"/></state><final id=\"f\"/></scxml>",
@@ -859,7 +859,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "", url: "",
     ),
     doc!(
-        "SCXML087", "error", "syntax", "an `event:schema` is not JSON",
+        "EVENT003", "error", "syntax", "an `event:schema` is not JSON",
         why: "an `event:schema` value whose first non-white-space character is `{` (or that is exactly `true` or `false`) is the schema's JSON text, and a referenced schema file must hold UTF-8 JSON; the compiler embeds the parsed schema in the Machine IR, so it must parse",
         help: "write valid JSON; in a double-quoted XML attribute write `\"` as `&quot;`, or quote the attribute with `'`",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" xmlns:event=\"https://github.com/stateforward/scxml.rs/namespaces/event\" version=\"1.0\" initial=\"s\"><state id=\"s\"><transition event=\"go\" target=\"f\" event:schema='{\"type\": object}'/></state><final id=\"f\"/></scxml>",
@@ -868,7 +868,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "RFC 8259 The JavaScript Object Notation (JSON) Data Interchange Format", url: "https://www.rfc-editor.org/rfc/rfc8259",
     ),
     doc!(
-        "SCXML088", "error", "semantic", "an `event:schema` file is not available",
+        "EVENT004", "error", "semantic", "an `event:schema` file is not available",
         why: "a schema reference names a JSON file by a path relative to the document, at or below its directory (no scheme, absolute path, query, or `.`/`..` segment; repository-namespace resources are not supported). The compiler reads the file at compile time and embeds the schema in the Machine IR; nothing is read or fetched while the document runs, so a file the compiler cannot read rejects the document",
         help: "create the file next to the document, correct the path, or write the schema inline",
         bad: "<transition event=\"go\" target=\"done\" event:schema=\"schemas/missing.json\"/>",
@@ -877,7 +877,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "", url: "",
     ),
     doc!(
-        "SCXML089", "error", "semantic", "the fragment of an `event:schema` reference selects no schema",
+        "EVENT005", "error", "semantic", "the fragment of an `event:schema` reference selects no schema",
         why: "the fragment of a schema reference is a JSON Pointer (RFC 6901), percent-encoded as a URI fragment: `#/$defs/Order` selects member `Order` of member `$defs` of the file, with `~1` for `/` and `~0` for `~` in a member name. A plain-name fragment (`#Order`) is not supported",
         help: "point at an existing schema in the file, or drop the fragment to use the whole file",
         bad: "<transition event=\"go\" target=\"done\" event:schema=\"schemas/order.json#/$defs/Ordr\"/>",
@@ -886,7 +886,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "RFC 6901 JavaScript Object Notation (JSON) Pointer", url: "https://www.rfc-editor.org/rfc/rfc6901",
     ),
     doc!(
-        "SCXML090", "error", "semantic", "an `event:schema` is not a valid JSON Schema",
+        "EVENT006", "error", "semantic", "an `event:schema` is not a valid JSON Schema",
         why: "the compiler checks a schema against the metaschema of its dialect and compiles it once before embedding it, so every keyword has a valid value and every `pattern` is a valid regular expression; the message names the offending location",
         help: "correct the keyword at the named location",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" xmlns:event=\"https://github.com/stateforward/scxml.rs/namespaces/event\" version=\"1.0\" initial=\"s\"><state id=\"s\"><transition event=\"go\" target=\"f\" event:schema='{\"type\": \"strin\"}'/></state><final id=\"f\"/></scxml>",
@@ -895,7 +895,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "JSON Schema 2020-12 Validation", url: "https://json-schema.org/draft/2020-12/json-schema-validation",
     ),
     doc!(
-        "SCXML091", "error", "semantic", "an `event:schema` declares an unsupported JSON Schema dialect",
+        "EVENT007", "error", "semantic", "an `event:schema` declares an unsupported JSON Schema dialect",
         why: "the supported dialects are JSON Schema 2020-12 (`https://json-schema.org/draft/2020-12/schema`, the default when `$schema` is absent), 2019-09 (`https://json-schema.org/draft/2019-09/schema`), and draft-07 (`http://json-schema.org/draft-07/schema#`); a schema whose dialect the compiler cannot check is rejected rather than embedded unchecked",
         help: "declare a supported dialect in `$schema`, or remove `$schema` to use 2020-12",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" xmlns:event=\"https://github.com/stateforward/scxml.rs/namespaces/event\" version=\"1.0\" initial=\"s\"><state id=\"s\"><transition event=\"go\" target=\"f\" event:schema='{\"$schema\": \"http://json-schema.org/draft-04/schema#\"}'/></state><final id=\"f\"/></scxml>",
@@ -904,7 +904,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "JSON Schema 2020-12 Core §8.1.1 The $schema Keyword", url: "https://json-schema.org/draft/2020-12/json-schema-core#section-8.1.1",
     ),
     doc!(
-        "SCXML092", "error", "semantic", "an `event:schema` has a reference the compiler cannot keep",
+        "EVENT008", "error", "semantic", "an `event:schema` has a reference the compiler cannot keep",
         why: "no schema is fetched: a `$ref` may only name a fragment of the same file (`#/$defs/Item`), and one naming another resource is rejected rather than left dangling. When `event:schema` selects part of a file with a pointer, the references that part uses are bundled into the embedded schema; a part that relies on `$id`, `$anchor`, plain-name fragments, or dynamic references cannot be moved and is rejected",
         help: "copy the referenced schema into the same file and reference it by JSON Pointer, or reference the whole file without a fragment",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" xmlns:event=\"https://github.com/stateforward/scxml.rs/namespaces/event\" version=\"1.0\" initial=\"s\"><state id=\"s\"><transition event=\"go\" target=\"f\" event:schema='{\"$ref\": \"item.json\"}'/></state><final id=\"f\"/></scxml>",
@@ -913,7 +913,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "JSON Schema 2020-12 Core §8.2.3.1 Direct References with $ref", url: "https://json-schema.org/draft/2020-12/json-schema-core#section-8.2.3.1",
     ),
     doc!(
-        "SCXML093", "warning", "semantic", "an `<invoke type>` is a platform-specific value, not a URI",
+        "PKG003", "warning", "semantic", "an `<invoke type>` is a platform-specific value, not a URI",
         why: "an absent `type`, `scxml`, or `http://www.w3.org/TR/scxml/` (with or without the trailing slash) invokes an SCXML session; any other literal type names an invoked service. SCXML 6.4.1 allows platform-specific type values, but a service package binds an invoked service by an exact absolute URI (a scheme, `:`, no white space, at most 4096 bytes), so on a host built from this repository an `<invoke>` of a type that is not a URI raises `error.execution` when it runs. Invocation is a runtime action: the document still compiles and runs",
         help: "write the service's absolute type URI exactly as its service package declares it (`service-uri`), or `scxml` for an SCXML session",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"><invoke type=\"echo\"/><transition event=\"done\" target=\"f\"/></state><final id=\"f\"/></scxml>",
@@ -922,7 +922,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §6.4.1 Attribute Details", url: "https://www.w3.org/TR/scxml/#invoke",
     ),
     doc!(
-        "SCXML094", "warning", "package", "no service package binds a literal `<invoke type>`",
+        "PKG004", "warning", "package", "no service package binds a literal `<invoke type>`",
         why: "an invoked service runs only in the service component its host binds to the exact type URI; the validator was given the service packages the run binds, and none declares this URI. Invocation is a runtime action (SCXML 6.4): the document compiles and runs, and this `<invoke>` raises `error.execution` when it runs unless the running host binds the type. Reported only when the validator is given its service packages (`scx validate` always is: none by default)",
         help: "bind the service with its package manifest (`--service-package MANIFEST.json`), or correct the URI to one a bound package declares",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"><invoke type=\"https://stateforward.org/scxml/services/echo\"/></state></scxml>",
@@ -931,52 +931,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §6.4 <invoke>", url: "https://www.w3.org/TR/scxml/#invoke",
     ),
     doc!(
-        "SCXML097", "error", "semantic", "a draft declares or uses a namespace the draft profile does not admit",
-        why: "the draft profile (`<scx:validate profile=\"draft\">`, `Profile::Draft`) checks a document a machine writes and then runs as an invoked child; an extension namespace or the host's `env` vocabulary would reach packages and variables the writing machine binds, so a draft uses only the SCXML namespace and the `event` attribute vocabulary (and `xml:*`). Reported once per declaration, and once per element or attribute whose namespace is declared elsewhere; the namespace is not also reported as a missing schema (`XSD001`). Reported only under the draft profile",
-        help: "remove the namespace declaration and every element or attribute in that namespace; a draft uses core SCXML and `event:schema` only",
-        bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\" xmlns:x=\"urn:x\"><onentry><x:do/></onentry></state></scxml>",
-        fixed: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"><onentry><log expr=\"'do'\"/></onentry></state></scxml>",
-        checked: false,
-        spec: "SCXML 1.0 §3.2 <scxml>", url: "https://www.w3.org/TR/scxml/#scxml",
-    ),
-    doc!(
-        "SCXML098", "error", "semantic", "a draft holds an `<invoke>` or `<script>` element",
-        why: "under the draft profile a draft starts no session or service (SCXML 6.4) and runs no script (SCXML 5.8): the writing machine runs the draft as its own child, so either would let model-written text start or execute what the writer never reviewed. Reported only under the draft profile",
-        help: "express the behaviour with states, transitions, `<assign>`, and `<send>` to `#_parent`",
-        bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"><invoke type=\"scxml\"/></state></scxml>",
-        fixed: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"/></scxml>",
-        checked: false,
-        spec: "SCXML 1.0 §6.4 <invoke>", url: "https://www.w3.org/TR/scxml/#invoke",
-    ),
-    doc!(
-        "SCXML099", "error", "semantic", "a draft has a `src` or `srcexpr` attribute",
-        why: "under the draft profile a draft loads nothing: `<data src>` (SCXML 5.3), `<script src>` (5.8), and `<invoke src>`/`srcexpr` (6.4) would fetch documents or values the writing machine never saw. Reported only under the draft profile",
-        help: "give the value inline (`expr` or child content) instead of loading it",
-        bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><datamodel><data id=\"d\" src=\"d.json\"/></datamodel><state id=\"s\"/></scxml>",
-        fixed: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><datamodel><data id=\"d\" expr=\"0\"/></datamodel><state id=\"s\"/></scxml>",
-        checked: false,
-        spec: "SCXML 1.0 §5.3 <data>", url: "https://www.w3.org/TR/scxml/#data",
-    ),
-    doc!(
-        "SCXML100", "error", "semantic", "a draft names a type by expression or sends through another Event I/O Processor",
-        why: "under the draft profile a draft talks only through the SCXML Event I/O Processor (SCXML C.1): a `<send type>` other than `http://www.w3.org/TR/scxml/#SCXMLEventProcessor` (or absent) reaches another processor, and a `typeexpr` names one at run time. Reported only under the draft profile",
-        help: "remove `type` and `typeexpr`; a `<send>` without `type` uses the SCXML Event I/O Processor",
-        bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"><onentry><send event=\"e\" type=\"http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor\"/></onentry></state></scxml>",
-        fixed: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><state id=\"s\"><onentry><send event=\"e\" target=\"#_parent\"/></onentry></state></scxml>",
-        checked: false,
-        spec: "SCXML 1.0 §6.2 <send>", url: "https://www.w3.org/TR/scxml/#send",
-    ),
-    doc!(
-        "SCXML101", "error", "semantic", "a draft has a document type declaration",
-        why: "under the draft profile a draft declares no DTD (XML 1.0 §2.8): an internal subset can declare entities and attribute defaults that change what the document says without appearing in its elements. Reported only under the draft profile",
-        help: "remove the `<!DOCTYPE …>` declaration; write characters as numeric references such as `&#160;`",
-        bad: "<!DOCTYPE scxml><scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><final id=\"s\"/></scxml>",
-        fixed: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" initial=\"s\"><final id=\"s\"/></scxml>",
-        checked: false,
-        spec: "XML 1.0 (Fifth Edition) §2.8 Prolog and Document Type Declaration", url: "https://www.w3.org/TR/xml/#sec-prolog-dtd",
-    ),
-    doc!(
-        "SCXML102", "error", "semantic", "the literal data of a `<send>` or `<donedata>` does not satisfy its own `event:schema`",
+        "EVENT009", "error", "semantic", "the literal data of a `<send>` or `<donedata>` does not satisfy its own `event:schema`",
         why: "in an ECMAScript document, literal JSON `<content>` (no `expr`, text only) is the event data the element creates, known before the document runs, and the element's literal `event:schema` (inline, or a file whose bytes were supplied) describes that data; data the schema rejects breaks the element's own contract. `event:schemaexpr` and schemas that do not resolve are skipped",
         help: "change the `<content>` to data the schema admits, or correct the schema",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" xmlns:event=\"https://github.com/stateforward/scxml.rs/namespaces/event\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"s\"><final id=\"s\"><onentry><send event=\"x\" event:schema='{\"type\":\"object\",\"required\":[\"n\"]}'><content>{\"m\": 1}</content></send></onentry></final></scxml>",
@@ -985,7 +940,7 @@ pub const CODES: &[CodeDoc] = &[
         spec: "JSON Schema 2020-12 Validation", url: "https://json-schema.org/draft/2020-12/json-schema-validation",
     ),
     doc!(
-        "SCXML103", "warning", "semantic", "a `<send>` or `<donedata>` creates event data a transition handling it does not accept",
+        "EVENT010", "warning", "semantic", "a `<send>` or `<donedata>` creates event data a transition handling it does not accept",
         why: "in an ECMAScript document, a `<send event=\"x\">` delivered to its own session (no `target` or `#_internal`, the SCXML Event I/O Processor) or the `<donedata>` of a compound state (its `done.state.<id>`) creates data that a transition handling the event (SCXML 3.12.1 descriptor matching) describes with a literal `event:schema`; this is reported only when provable: the literal `<content>` data fails the transition's schema, or the producer's own literal schema admits an instance the transition's rejects (a witness drawn from its `const`, `enum`, `examples`, `default`, or a minimal instance of each `type`). Equal schemas and undecided cases are never reported; `event:schemaexpr` is skipped. The schemas are metadata, so the transition is still taken",
         help: "make the two schemas agree, or change the data",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" xmlns:event=\"https://github.com/stateforward/scxml.rs/namespaces/event\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"s\"><state id=\"s\"><onentry><send event=\"x\"><content>{\"n\": 1}</content></send></onentry><transition event=\"x\" event:schema='{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"string\"}}}' target=\"f\"/></state><final id=\"f\"/></scxml>",
@@ -1481,35 +1436,49 @@ pub fn explanation(entry: &CodeDoc) -> String {
     text
 }
 
-/// Renders the generated Markdown code table embedded in
-/// `docs/validator-rules.md` between the generated-section markers.
+/// Renders the generated Markdown code tables embedded in
+/// `docs/validator-rules.md` between the generated-section markers: one
+/// table per family of [`crate::CODE_FAMILIES`], in that order.
 #[must_use]
 pub fn markdown_table() -> String {
-    let mut text = String::from(
-        "| Code | Severity | Category | Summary | Specification |\n| --- | --- | --- | --- | --- |\n",
-    );
-    for entry in CODES {
-        let code = if entry.family {
-            format!("`{}.*`", entry.code)
-        } else {
-            format!("`{}`", entry.code)
-        };
-        let spec = if entry.url.is_empty() {
-            "—".to_owned()
-        } else {
-            format!("[{}]({})", entry.spec, entry.url)
-        };
-        push_line(
-            &mut text,
-            format_args!(
-                "| {code} | {} | {} | {} | {spec} |",
-                entry.severity,
-                entry.category,
-                entry.title.replace('|', "\\|")
-            ),
+    let mut text = String::new();
+    for (family, meaning) in crate::CODE_FAMILIES {
+        push_line(&mut text, format_args!("### `{family}`: {meaning}"));
+        text.push('\n');
+        text.push_str(
+            "| Code | Severity | Category | Summary | Specification |\n| --- | --- | --- | --- | --- |\n",
         );
+        for entry in CODES
+            .iter()
+            .filter(|entry| crate::code_family(entry.code) == Some(*family))
+        {
+            push_table_row(&mut text, entry);
+        }
+        text.push('\n');
     }
     text
+}
+
+fn push_table_row(text: &mut String, entry: &CodeDoc) {
+    let code = if entry.family {
+        format!("`{}.*`", entry.code)
+    } else {
+        format!("`{}`", entry.code)
+    };
+    let spec = if entry.url.is_empty() {
+        "—".to_owned()
+    } else {
+        format!("[{}]({})", entry.spec, entry.url)
+    };
+    push_line(
+        text,
+        format_args!(
+            "| {code} | {} | {} | {} | {spec} |",
+            entry.severity,
+            entry.category,
+            entry.title.replace('|', "\\|")
+        ),
+    );
 }
 
 /// Base URL of the SCXML 1.0 Recommendation used by the table's links.

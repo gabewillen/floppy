@@ -41,7 +41,7 @@ scope:
 - untrusted SCXML, XML, and XSD documents given to the validator, compiler, or
   CLI, including bypasses of documented size, depth, and work bounds (Unicode
   bidirectional controls that could hide what a document runs are linted by
-  `SCXML062` and escaped as `\u{XXXX}` in rendered diagnostics);
+  `LINT016` and escaped as `\u{XXXX}` in rendered diagnostics);
 - untrusted extension package manifests and canonical `scxml.report/v3` report
   bytes given to decoders and reporters;
 - untrusted lowered Machine IR and `scxml.session-snapshot/v2` documents given

@@ -5,10 +5,10 @@
 //! parse-only `check_syntax` directly and passes them to the validator as
 //! explicit [`ExpressionSyntaxChecker`]s. Nothing is evaluated. Fragments
 //! the checker declines (size, NUL, or nesting bounds, which the data model
-//! applies identically at evaluation) are the `SCXML040` error, so `compile`
+//! applies identically at evaluation) are the `LIMIT003` error, so `compile`
 //! refuses them rather than guessing. The ECMAScript data model's
 //! parse-only `check_effects` analyzes conditions and `<log expr>` for side
-//! effects (`SCXML074`/`SCXML075`); `XPath` expressions have none.
+//! effects (`SCXML074`/`LINT019`); `XPath` expressions have none.
 
 use scxml_data_model_ecmascript::{SyntaxKind, check_syntax};
 use scxml_validator_core::{

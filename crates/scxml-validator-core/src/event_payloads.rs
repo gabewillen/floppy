@@ -1,5 +1,5 @@
-//! Literal event data against literal `event:schema`s (`SCXML102`,
-//! `SCXML103`).
+//! Literal event data against literal `event:schema`s (`EVENT009`,
+//! `EVENT010`).
 //!
 //! In an ECMAScript document (`datamodel="ecmascript"`, or none), the data a
 //! `<send>` or `<donedata>` creates from literal JSON `<content>` (no `expr`,
@@ -7,9 +7,9 @@
 //! known before the document runs, and so is a literal `event:schema` (inline,
 //! or a file whose bytes were supplied):
 //!
-//! * `SCXML102` (error): the literal data does not satisfy the literal schema
+//! * `EVENT009` (error): the literal data does not satisfy the literal schema
 //!   of its own `<send>` or `<donedata>`.
-//! * `SCXML103` (warning): a `<send event="x">` delivered to its own session
+//! * `EVENT010` (warning): a `<send event="x">` delivered to its own session
 //!   (no `target` or `#_internal`, the SCXML Event I/O Processor) or a
 //!   `<donedata>` of a compound state (its `done.state.<id>`) creates data a
 //!   transition of the same document handling that event (SCXML 3.12.1
@@ -22,7 +22,7 @@
 //!   a guess.
 //!
 //! `event:schemaexpr` is skipped silently, as is every schema that does not
-//! resolve (`SCXML087`-`SCXML092` report it). Nested documents (an
+//! resolve (`EVENT003`-`EVENT008` report it). Nested documents (an
 //! `<invoke>`'s inline `<content>`) are not part of the document. Pure and
 //! bounded by the document and its schemas; no telemetry.
 
@@ -105,7 +105,7 @@ struct Producer<'a> {
     payload: Option<(Value, &'a Element)>,
 }
 
-/// Every `SCXML102` and `SCXML103` finding of `document`.
+/// Every `EVENT009` and `EVENT010` finding of `document`.
 pub(crate) fn event_payload_diagnostics(
     document: &Document,
     resources: &EventSchemaResources,
@@ -490,7 +490,7 @@ fn own_violation(
     payload: &Value,
 ) -> Diagnostic {
     Diagnostic::error(
-        "SCXML102",
+        "EVENT009",
         format!(
             "the literal data of `<{}>` does not satisfy its own `event:schema`",
             element.lexical_name
@@ -519,7 +519,7 @@ fn incompatible(
         "an instance of its `event:schema`"
     };
     Diagnostic::warning(
-        "SCXML103",
+        "EVENT010",
         format!(
             "`<{}>` creates `{event}` data that a transition handling it does not accept",
             producer.lexical_name

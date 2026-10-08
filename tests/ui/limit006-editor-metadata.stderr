@@ -1,0 +1,44 @@
+error[LIMIT006]: this compiler cannot lower attribute `xml:lang` from another namespace on `<scxml>`
+ --> tests/ui/limit006-editor-metadata.scx:2:104
+  |
+2 | <scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ed="urn:example:editor" version="1.0" initial="a" xml:lang="en">
+  |                                                                                                        ^^^^^^^^^^^^^ namespace `http://www.w3.org/XML/1998/namespace`
+  |
+  = note: this is a limit of this toolchain, not an SCXML rule: SCXML 1.0 allows attributes from other namespaces on its elements (the W3C schema's `##other` wildcards), but the compiler lowers only SCXML attributes on SCXML elements and rejects any other attribute rather than drop it silently; only custom actions (elements in another namespace) keep their attributes
+  = help: to compile the document with this toolchain, remove the attribute: `xml:*` and `xsi:*` attributes carry no SCXML behavior
+help: remove `xml:lang`
+  |
+2 - <scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ed="urn:example:editor" version="1.0" initial="a" xml:lang="en">
+2 + <scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ed="urn:example:editor" version="1.0" initial="a">
+
+error[LIMIT006]: this compiler cannot lower `<ed:layout>` from namespace `urn:example:editor` inside `<scxml>`
+ --> tests/ui/limit006-editor-metadata.scx:3:4
+  |
+2 | <scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ed="urn:example:editor" version="1.0" initial="a" xml:lang="en">
+  |  ----- this compiler lowers only SCXML children of `<scxml>`
+3 |   <ed:layout width="640" height="480"/>
+  |    ^^^^^^^^^ element from another namespace
+  |
+  = note: this is a limit of this toolchain, not an SCXML rule: SCXML 1.0 allows elements from other namespaces in its content models (the W3C schema's `##other` wildcards), but the compiler lowers them only as executable content (custom actions in `<onentry>`, `<onexit>`, `<transition>`, `<finalize>`, `<if>`, or `<foreach>`) and rejects them anywhere else rather than drop them silently
+  = help: to compile the document with this toolchain, move the element into executable content, or remove it
+help: remove `<ed:layout>`
+  |
+3 -   <ed:layout width="640" height="480"/>
+
+error[LIMIT006]: this compiler cannot lower 2 attributes from other namespaces on `<state>`
+ --> tests/ui/limit006-editor-metadata.scx:4:17
+  |
+4 |   <state id="a" ed:x="10" ed:y="20">
+  |                 ^^^^^^^^^ --------- namespace `urn:example:editor`
+  |                 |
+  |                 namespace `urn:example:editor`
+  |
+  = note: this is a limit of this toolchain, not an SCXML rule: SCXML 1.0 allows attributes from other namespaces on its elements (the W3C schema's `##other` wildcards), but the compiler lowers only SCXML attributes on SCXML elements and rejects any other attribute rather than drop it silently; only custom actions (elements in another namespace) keep their attributes
+  = help: to compile the document with this toolchain, remove the attributes, or move the extension data into a custom action
+help: remove the 2 attributes
+  |
+4 -   <state id="a" ed:x="10" ed:y="20">
+4 +   <state id="a">
+
+diagnostic summary: 3 error(s), 0 warning(s), 0 note(s), 3 total
+For more information about this error, try `scx --explain LIMIT006`.

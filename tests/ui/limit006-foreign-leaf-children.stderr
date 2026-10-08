@@ -1,0 +1,62 @@
+error[LIMIT006]: this compiler cannot lower `<x:note>` from namespace `urn:example:ext` inside `<log>`
+ --> tests/ui/limit006-foreign-leaf-children.scx:5:23
+  |
+5 |       <log label="l"><x:note>reviewed</x:note></log>
+  |        ---            ^^^^^^ element from another namespace
+  |        |
+  |        this compiler lowers no child elements of `<log>`
+  |
+  = note: this is a limit of this toolchain, not an SCXML rule: SCXML 1.0 allows elements from other namespaces in its content models (the W3C schema's `##other` wildcards), but the compiler lowers them only as executable content (custom actions in `<onentry>`, `<onexit>`, `<transition>`, `<finalize>`, `<if>`, or `<foreach>`) and rejects them anywhere else rather than drop them silently
+  = help: to compile the document with this toolchain, move the element into executable content, or remove it
+help: remove `<x:note>`
+  |
+5 -       <log label="l"><x:note>reviewed</x:note></log>
+5 +       <log label="l"></log>
+
+error[LIMIT006]: this compiler cannot lower `<x:note>` from namespace `urn:example:ext` inside `<cancel>`
+ --> tests/ui/limit006-foreign-leaf-children.scx:6:27
+  |
+6 |       <cancel sendid="s"><x:note>reviewed</x:note></cancel>
+  |        ------             ^^^^^^ element from another namespace
+  |        |
+  |        this compiler lowers no child elements of `<cancel>`
+  |
+  = note: this is a limit of this toolchain, not an SCXML rule: SCXML 1.0 allows elements from other namespaces in its content models (the W3C schema's `##other` wildcards), but the compiler lowers them only as executable content (custom actions in `<onentry>`, `<onexit>`, `<transition>`, `<finalize>`, `<if>`, or `<foreach>`) and rejects them anywhere else rather than drop them silently
+  = help: to compile the document with this toolchain, move the element into executable content, or remove it
+help: remove `<x:note>`
+  |
+6 -       <cancel sendid="s"><x:note>reviewed</x:note></cancel>
+6 +       <cancel sendid="s"></cancel>
+
+error[LIMIT006]: this compiler cannot lower `<x:note>` from namespace `urn:example:ext` inside `<param>`
+ --> tests/ui/limit006-foreign-leaf-children.scx:7:49
+  |
+7 |       <send event="e"><param name="p" expr="1"><x:note>reviewed</x:note></param></send>
+  |                        -----                    ^^^^^^ element from another namespace
+  |                        |
+  |                        this compiler lowers no child elements of `<param>`
+  |
+  = note: this is a limit of this toolchain, not an SCXML rule: SCXML 1.0 allows elements from other namespaces in its content models (the W3C schema's `##other` wildcards), but the compiler lowers them only as executable content (custom actions in `<onentry>`, `<onexit>`, `<transition>`, `<finalize>`, `<if>`, or `<foreach>`) and rejects them anywhere else rather than drop them silently
+  = help: to compile the document with this toolchain, move the element into executable content, or remove it
+help: remove `<x:note>`
+  |
+7 -       <send event="e"><param name="p" expr="1"><x:note>reviewed</x:note></param></send>
+7 +       <send event="e"><param name="p" expr="1"></param></send>
+
+error[LIMIT006]: this compiler cannot lower `<x:note>` from namespace `urn:example:ext` inside `<script>`
+ --> tests/ui/limit006-foreign-leaf-children.scx:8:16
+  |
+8 |       <script><x:note>reviewed</x:note></script>
+  |        ------  ^^^^^^ element from another namespace
+  |        |
+  |        this compiler lowers no child elements of `<script>`
+  |
+  = note: this is a limit of this toolchain, not an SCXML rule: SCXML 1.0 allows elements from other namespaces in its content models (the W3C schema's `##other` wildcards), but the compiler lowers them only as executable content (custom actions in `<onentry>`, `<onexit>`, `<transition>`, `<finalize>`, `<if>`, or `<foreach>`) and rejects them anywhere else rather than drop them silently
+  = help: to compile the document with this toolchain, move the element into executable content, or remove it
+help: remove `<x:note>`
+  |
+8 -       <script><x:note>reviewed</x:note></script>
+8 +       <script></script>
+
+diagnostic summary: 4 error(s), 0 warning(s), 0 note(s), 4 total
+For more information about this error, try `scx --explain LIMIT006`.

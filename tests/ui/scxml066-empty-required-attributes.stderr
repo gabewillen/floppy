@@ -6,7 +6,7 @@ warning[SCXML066]: `cond` on `<if>` is empty
   |
   = note: `cond` is required on `<if>`; an empty value is no expression at all, so every time it runs it raises `error.execution` (SCXML 1.0 §5.9.4: the processor "MAY wait and place 'error.execution' in the internal event queue at runtime when the expressions are evaluated")
   = help: write the condition this `<if>` tests; a last branch that always runs is written as `<else/>`
-  = spec: SCXML 1.0 §3.12 <if>
+  = spec: SCXML 1.0 §4.3 <if>
 help: fill in `cond`
   |
 5 |       <if cond="…">
@@ -20,7 +20,7 @@ warning[SCXML066]: `cond` on `<elseif>` is empty
   |
   = note: `cond` is required on `<elseif>`; an empty value is no expression at all, so every time it runs it raises `error.execution` (SCXML 1.0 §5.9.4: the processor "MAY wait and place 'error.execution' in the internal event queue at runtime when the expressions are evaluated")
   = help: write the condition this `<elseif>` tests; a last branch that always runs is written as `<else/>`
-  = spec: SCXML 1.0 §3.12 <if>
+  = spec: SCXML 1.0 §4.3 <if>
 help: fill in `cond`
   |
 7 |       <elseif cond="…"/>

@@ -10,8 +10,8 @@
 //!   [`ExpressionSyntaxChecker::data_model`] equals the machine root's
 //!   `datamodel` attribute exactly. The validator never guesses expression
 //!   syntax, and it never skips expressions silently: an unrecognized
-//!   `datamodel` value is an `SCXML044` error, and a machine using a
-//!   recognized non-null data model gets an `SCXML045` note when no checker
+//!   `datamodel` value is an `LIMIT005` error, and a machine using a
+//!   recognized non-null data model gets an `LINT010` note when no checker
 //!   for that data model is linked (another data model's checker, or none).
 //!   A machine without `datamodel` uses [`DEFAULT_DATA_MODEL`] (SCXML 1.0
 //!   §3.2.1: the attribute's default is "platform-specific"; §3.2.2:
@@ -26,7 +26,7 @@
 //!   [`MAX_CHECKED_EXPRESSION_BYTES`] decoded bytes are sent to the checker
 //!   per document, and at most [`MAX_ISSUES_PER_EXPRESSION`] issues are
 //!   reported per fragment. Exceeding a document bound emits one fail-closed
-//!   `SCXML041` error and stops further checks.
+//!   `LIMIT004` error and stops further checks.
 //! * Records no telemetry of its own; it runs inside the validator's boundary
 //!   span, and source text never enters telemetry.
 
@@ -111,7 +111,7 @@ pub enum ExpressionCheck {
     /// The checker declined the fragment. A checker declines only what its
     /// data model also rejects at evaluation (for example, a fragment over
     /// the data model's size or nesting bound) or when its own answer cannot
-    /// be trusted; either way the validator fails closed with the `SCXML040`
+    /// be trusted; either way the validator fails closed with the `LIMIT003`
     /// error, so `compile` never lowers such a fragment.
     NotChecked,
 }
@@ -204,7 +204,7 @@ fn collect_sites<'a>(document: &Document, machine: &'a Element) -> Vec<Site<'a>>
             let kind = match attribute.name.namespace_uri.as_deref() {
                 None => attribute_kind(element, name),
                 // `event:schemaexpr` is a value expression on the elements
-                // that may carry it (`SCXML085` reports it elsewhere).
+                // that may carry it (`EVENT001` reports it elsewhere).
                 Some(scxml_types::EVENT_NAMESPACE_URI)
                     if name == scxml_event_schema::SCHEMA_EXPR_ATTRIBUTE
                         && scxml_event_schema::is_owner_element(&element.name.local_name) =>
@@ -456,12 +456,12 @@ impl Site<'_> {
 // Data-model declaration (always on)
 // ---------------------------------------------------------------------------
 
-/// SCXML044 (unrecognized `datamodel`).
+/// LIMIT005 (unrecognized `datamodel`).
 pub(crate) struct DataModelDeclarationRule;
 
 impl Rule for DataModelDeclarationRule {
     fn code(&self) -> &'static str {
-        "SCXML044"
+        "LIMIT005"
     }
 
     fn check(&self, document: &Document, report: &mut Report) {
@@ -511,7 +511,7 @@ fn unchecked_data_model_note(
     first: &Site<'_>,
 ) -> Diagnostic {
     let mut diagnostic = Diagnostic::warning(
-        "SCXML045",
+        "LINT010",
         format!("expressions of this `{datamodel}` machine were not syntax-checked"),
         span,
     )
@@ -919,9 +919,9 @@ fn null_diagnostic(
 /// Checks every expression of each machine whose `datamodel` matches the
 /// supplied checker.
 ///
-/// Machines without `datamodel` are left to the always-on `SCXML045`
+/// Machines without `datamodel` are left to the always-on `LINT010`
 /// warning; a machine using another recognized non-null data model gets an
-/// `SCXML045` note that its expressions went unchecked.
+/// `LINT010` note that its expressions went unchecked.
 #[must_use]
 pub fn validate_expressions(document: &Document, checker: &dyn ExpressionSyntaxChecker) -> Report {
     validate_expressions_with(document, &[checker])
@@ -931,7 +931,7 @@ pub fn validate_expressions(document: &Document, checker: &dyn ExpressionSyntaxC
 /// [`ExpressionSyntaxChecker::data_model`] equals that machine's
 /// `datamodel` exactly (each machine, including inline invoked documents,
 /// selects its own); a machine whose recognized non-null data model has no
-/// linked checker gets an `SCXML045` note. The first checker listed for a
+/// linked checker gets an `LINT010` note. The first checker listed for a
 /// data model wins.
 #[must_use]
 pub fn validate_expressions_with(
@@ -1044,10 +1044,10 @@ pub fn validate_expressions_with(
     report
 }
 
-/// `SCXML041`: the document exceeds the expression-checking bound at `span`.
+/// `LIMIT004`: the document exceeds the expression-checking bound at `span`.
 fn too_many_expressions(span: &Span, datamodel: &str) -> Diagnostic {
     Diagnostic::error(
-                        "SCXML041",
+                        "LIMIT004",
                         "too many expressions for bounded syntax checking",
                         *span,
                     )
@@ -1063,7 +1063,7 @@ fn too_many_expressions(span: &Span, datamodel: &str) -> Diagnostic {
                     })
 }
 
-/// Lints of a fragment that parses: `SCXML063` (ECMAScript) and, with the
+/// Lints of a fragment that parses: `LINT017` (ECMAScript) and, with the
 /// `XPath` scope, the reference and habit lints; every fragment repair is
 /// kept only when the repaired fragment still parses. (An assignment in an
 /// ECMAScript condition is the side-effect error `SCXML074`.)
@@ -2269,10 +2269,10 @@ fn location_diagnostic(
     };
     let help = match &declaration {
         Some((_, Some(renamed))) => format!(
-            "`<data id=\"{name}\">` declares a variable no ECMAScript expression can name (`SCXML061`): rename it, for example to `{renamed}`, in its declaration and every reference"
+            "`<data id=\"{name}\">` declares a variable no ECMAScript expression can name (`LINT015`): rename it, for example to `{renamed}`, in its declaration and every reference"
         ),
         Some((_, None)) => format!(
-            "`<data id=\"{name}\">` declares a variable no ECMAScript expression can name (`SCXML061`): rename it in its declaration and every reference"
+            "`<data id=\"{name}\">` declares a variable no ECMAScript expression can name (`LINT015`): rename it in its declaration and every reference"
         ),
         None => help,
     };
@@ -2467,7 +2467,7 @@ fn arrow_in_condition(source: &str) -> Option<usize> {
     None
 }
 
-/// SCXML063: `cond="count => 3"` parses as an arrow function, which is
+/// LINT017: `cond="count => 3"` parses as an arrow function, which is
 /// always truthy, so the condition always holds; `>=` was meant.
 fn arrow_in_condition_diagnostic(
     document: &Document,
@@ -2490,7 +2490,7 @@ fn arrow_in_condition_diagnostic(
             .chars()
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '$'));
     let mut diagnostic = Diagnostic::warning(
-        "SCXML063",
+        "LINT017",
         format!(
             "`cond` on `<{}>` is an arrow function, so it is always true",
             site.element.name.local_name
@@ -2694,7 +2694,7 @@ fn empty_expression_diagnostic(document: &Document, site: &Site<'_>) -> Diagnost
             Applicability::MaybeIncorrect,
         ),
     };
-    let mut diagnostic = Diagnostic::warning("SCXML042", message, primary)
+    let mut diagnostic = Diagnostic::warning("LINT009", message, primary)
         .with_primary_message("empty expression")
         .with_note(note)
         .with_spec_reference("SCXML 1.0 §5.9 Expressions")
@@ -2736,7 +2736,7 @@ fn not_checked_diagnostic(data_model: &str, site: &Site<'_>) -> Diagnostic {
         "split the expression into smaller ones, assigning intermediate results to variables with `<assign>` or computing them in a `<script>` function, so each fragment stays within the bound"
     };
     Diagnostic::error(
-        "SCXML040",
+        "LIMIT003",
         format!("`{}` was declined by the data-model syntax checker", site.what),
         site.value_span,
     )

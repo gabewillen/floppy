@@ -67,7 +67,7 @@ help: a state with a similar name exists: `done`
  5 |     <transition event="finish, abort" target="done"/>
    |                                               ~~~~
 
-error[SCXML068]: this compiler cannot lower `<c:mark>` from namespace `urn:example:custom` inside `<state>`
+error[LIMIT006]: this compiler cannot lower `<c:mark>` from namespace `urn:example:custom` inside `<state>`
  --> tests/ui/multi-diagnostic-ordering.scx:6:6
   |
 4 |   <state id="ready">
@@ -114,5 +114,5 @@ error[SCXML002]: duplicate identifier `ready`
   = spec: SCXML 1.0 §3.14 IDs
 
 diagnostic summary: 8 error(s), 0 warning(s), 0 note(s), 8 total
-Some diagnostics have detailed explanations: SCXML002, SCXML005, SCXML006, SCXML013, SCXML068, XSD-cvc-complex-type.2.4, XSD-cvc-complex-type.4, XSD001.
-For more information about a diagnostic, try `scx --explain SCXML002`.
+Some diagnostics have detailed explanations: LIMIT006, SCXML002, SCXML005, SCXML006, SCXML013, XSD-cvc-complex-type.2.4, XSD-cvc-complex-type.4, XSD001.
+For more information about a diagnostic, try `scx --explain LIMIT006`.

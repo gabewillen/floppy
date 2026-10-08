@@ -5,41 +5,41 @@
      the invoked-service tests the README names. -->
 <assertions baseuri="https://github.com/stateforward/scxml.rs/tree/main/namespaces/env/irp/sources">
   <assert id="env-1" specnum="1" specid="#env-1">
-    <![CDATA[An invoke's slots are the ones its service package declares (env-slots): a slot bound twice (env:<slot> and env:<slot>expr), an env:<slot> value that is not a variable name, or an attribute that names no valid slot is rejected (SCXML083); a slot the package does not declare is rejected when the validator is given the package.]]>
+    <![CDATA[An invoke's slots are the ones its service package declares (env-slots): a slot bound twice (env:<slot> and env:<slot>expr), an env:<slot> value that is not a variable name, or an attribute that names no valid slot is rejected (ENV001); a slot the package does not declare is rejected when the validator is given the package.]]>
     <test id="320" conformance="mandatory" manual="false">
       <start uri="320/test320.txml"/>
-      <reject code="SCXML083"/>
+      <reject code="ENV001"/>
     </test>
     <test id="321" conformance="mandatory" manual="false">
       <start uri="321/test321.txml"/>
-      <reject code="SCXML083"/>
+      <reject code="ENV001"/>
     </test>
     <test id="322" conformance="mandatory" manual="false">
       <start uri="322/test322.txml"/>
-      <reject code="SCXML083"/>
+      <reject code="ENV001"/>
     </test>
   </assert>
   <assert id="env-2" specnum="2" specid="#env-2">
-    <![CDATA[Only an invoked service's invoke has slots: an element in the env namespace, or an env attribute on an element in no namespace, on an executable-content extension element, or on the invoke of an SCXML session, is rejected (SCXML084), and an env attribute on any other SCXML element is rejected (SCXML068).]]>
+    <![CDATA[Only an invoked service's invoke has slots: an element in the env namespace, or an env attribute on an element in no namespace, on an executable-content extension element, or on the invoke of an SCXML session, is rejected (ENV002), and an env attribute on any other SCXML element is rejected (LIMIT006).]]>
     <test id="330" conformance="mandatory" manual="false">
       <start uri="330/test330.txml"/>
-      <reject code="SCXML084"/>
+      <reject code="ENV002"/>
     </test>
     <test id="331" conformance="mandatory" manual="false">
       <start uri="331/test331.txml"/>
-      <reject code="SCXML084"/>
+      <reject code="ENV002"/>
     </test>
     <test id="332" conformance="mandatory" manual="false">
       <start uri="332/test332.txml"/>
-      <reject code="SCXML068"/>
+      <reject code="LIMIT006"/>
     </test>
     <test id="333" conformance="mandatory" manual="false">
       <start uri="333/test333.txml"/>
-      <reject code="SCXML084"/>
+      <reject code="ENV002"/>
     </test>
     <test id="334" conformance="mandatory" manual="false">
       <start uri="334/test334.txml"/>
-      <reject code="SCXML084"/>
+      <reject code="ENV002"/>
     </test>
   </assert>
 </assertions>

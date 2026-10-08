@@ -339,7 +339,12 @@ fn category_for_code(code: &str) -> DiagnosticCategory {
         DiagnosticCategory::Schema
     } else if code.starts_with("PKG") {
         DiagnosticCategory::Package
-    } else if code.starts_with("SCXML") {
+    } else if code.starts_with("LINT") {
+        DiagnosticCategory::Lint
+    } else if ["SCXML", "ENV", "EVENT", "LIMIT"]
+        .iter()
+        .any(|prefix| code.starts_with(prefix))
+    {
         DiagnosticCategory::Semantic
     } else {
         DiagnosticCategory::Internal

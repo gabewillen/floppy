@@ -5,13 +5,13 @@
 //! Any other literal type names an invoked service, which a host runs only
 //! through the service component it binds to that exact URI:
 //!
-//! * `SCXML093` (warning): the type is neither an SCXML invoke type nor an
+//! * `PKG003` (warning): the type is neither an SCXML invoke type nor an
 //!   absolute URI of at most [`scxml_types::MAX_SERVICE_TYPE_URI_BYTES`]
 //!   bytes ([`scxml_types::is_service_type_uri`]). SCXML 6.4.1 allows
 //!   platform-specific type values, but no service package binds one that is
 //!   not a URI, so on this host its `<invoke>` raises `error.execution` when
 //!   it runs.
-//! * `SCXML094` (warning): the type is a well-formed service URI that no
+//! * `PKG004` (warning): the type is a well-formed service URI that no
 //!   service package the validator was given binds
 //!   ([`crate::Validator::with_services`]). Invocation is a runtime action
 //!   (SCXML 6.4), so the document still compiles and runs, and its
@@ -30,9 +30,9 @@ use crate::{Diagnostic, DiagnosticCategory, SCXML_NAMESPACE};
 
 const SPEC_INVOKE: &str = "SCXML 1.0 §6.4 <invoke>";
 
-/// Every `SCXML093` and `SCXML094` finding of `document`, in document order;
+/// Every `PKG003` and `PKG004` finding of `document`, in document order;
 /// `bound` holds the services bound by the service packages the validator
-/// was given, by type URI (`None`: `SCXML094` is not judged).
+/// was given, by type URI (`None`: `PKG004` is not judged).
 #[must_use]
 pub fn invoke_type_diagnostics(
     document: &Document,
@@ -57,7 +57,7 @@ pub fn invoke_type_diagnostics(
         if !is_service_type_uri(value) {
             diagnostics.push(
                 Diagnostic::warning(
-                    "SCXML093",
+                    "PKG003",
                     "this `<invoke type>` is a platform-specific value, not a URI",
                     attribute.value_span,
                 )
@@ -76,7 +76,7 @@ pub fn invoke_type_diagnostics(
         {
             diagnostics.push(
                 Diagnostic::warning(
-                    "SCXML094",
+                    "PKG004",
                     "no service package binds this `<invoke type>`",
                     attribute.value_span,
                 )
@@ -133,19 +133,16 @@ mod tests {
     fn platform_specific_types_and_unbound_services_are_warnings() {
         assert_eq!(
             codes(&machine(r#"<invoke type="echo"/>"#), None),
-            ["SCXML093"]
+            ["PKG003"]
         );
         assert_eq!(
             codes(&machine(r#"<invoke type="urn:a b"/>"#), None),
-            ["SCXML093"]
+            ["PKG003"]
         );
         let uri = "https://stateforward.org/scxml/services/echo";
         let invoke = format!(r#"<invoke type="{uri}"/>"#);
         assert!(codes(&machine(&invoke), None).is_empty());
-        assert_eq!(
-            codes(&machine(&invoke), Some(&BTreeMap::new())),
-            ["SCXML094"]
-        );
+        assert_eq!(codes(&machine(&invoke), Some(&BTreeMap::new())), ["PKG004"]);
         let bound = BTreeMap::from([(uri.to_owned(), Vec::new())]);
         assert!(codes(&machine(&invoke), Some(&bound)).is_empty());
     }

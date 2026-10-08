@@ -132,18 +132,18 @@ fn reject_children_carry_exact_diagnostic_codes() {
     let parsed = parse_irp_manifest(
         "manifest.xml",
         None,
-        manifest(r#"<reject code="SCXML090"/><reject code="SCXML087"/><reject code="SCXML090"/>"#)
+        manifest(r#"<reject code="EVENT006"/><reject code="EVENT003"/><reject code="EVENT006"/>"#)
             .as_bytes(),
     )
     .expect("reject children parse");
     assert_eq!(
         parsed.assertions[0].tests[0].rejects,
-        ["SCXML087", "SCXML090"]
+        ["EVENT003", "EVENT006"]
     );
     for (label, rejects, code) in [
         (
             "lowercase code",
-            r#"<reject code="scxml087"/>"#,
+            r#"<reject code="event003"/>"#,
             "irp-test-reject",
         ),
         (
@@ -153,12 +153,12 @@ fn reject_children_carry_exact_diagnostic_codes() {
         ),
         (
             "unknown attribute",
-            r#"<reject code="SCXML087" note="x"/>"#,
+            r#"<reject code="EVENT003" note="x"/>"#,
             "irp-unknown-attribute",
         ),
         (
             "child",
-            r#"<reject code="SCXML087"><x/></reject>"#,
+            r#"<reject code="EVENT003"><x/></reject>"#,
             "irp-unknown-element",
         ),
     ] {

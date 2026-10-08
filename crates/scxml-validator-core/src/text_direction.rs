@@ -1,8 +1,8 @@
-//! `SCXML062`: Unicode bidirectional control characters in the source.
+//! `LINT016`: Unicode bidirectional control characters in the source.
 //!
 //! # Contract
 //!
-//! * `SCXML062` (warning, lint): the document contains an explicit
+//! * `LINT016` (warning, lint): the document contains an explicit
 //!   bidirectional embedding, override, or isolate control (U+202A-U+202E,
 //!   U+2066-U+2069), the set rustc's `text_direction_codepoint_in_literal`
 //!   lint rejects. These characters reorder how the surrounding text is
@@ -27,7 +27,7 @@ use scxml_syntax::{Document, Element, Node, Span};
 use crate::semantic::Rule;
 use crate::{Applicability, Diagnostic, DiagnosticCategory, Fix, FixEdit, Label, Report};
 
-/// Maximum `SCXML062` findings (source lines) per document.
+/// Maximum `LINT016` findings (source lines) per document.
 const MAX_FINDINGS: usize = 64;
 
 const SPEC_BIDI: &str = "Unicode Standard Annex #9 §2 Directional Formatting Characters";
@@ -49,12 +49,12 @@ const fn control_name(character: char) -> Option<&'static str> {
     })
 }
 
-/// `SCXML062`: bidirectional control characters in the source text.
+/// `LINT016`: bidirectional control characters in the source text.
 pub(crate) struct TextDirectionRule;
 
 impl Rule for TextDirectionRule {
     fn code(&self) -> &'static str {
-        "SCXML062"
+        "LINT016"
     }
 
     fn check(&self, document: &Document, report: &mut Report) {

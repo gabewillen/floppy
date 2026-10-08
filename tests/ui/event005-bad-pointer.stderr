@@ -1,0 +1,16 @@
+error[EVENT005]: the fragment of `event:schema` does not select a schema in schema file `event-schemas/order.json`: the JSON Pointer `/$defs/Ordr` names no value
+ --> tests/ui/event005-bad-pointer.scx:5:83
+  |
+5 |     <transition event="order" target="done" event:schema="event-schemas/order.json#/$defs/Ordr"/>
+  |                                                                                   ^^^^^^^^^^^^ names no value
+  |
+  = note: the fragment of a schema reference is a JSON Pointer (RFC 6901), percent-encoded as a URI fragment: `#/$defs/Order` selects member `Order` of member `$defs`; `~1` stands for `/` and `~0` for `~` in a member name
+  = help: did you mean `Order`?
+  = spec: RFC 6901 JavaScript Object Notation (JSON) Pointer
+help: select member `Order`
+  |
+5 |     <transition event="order" target="done" event:schema="event-schemas/order.json#/$defs/Order"/>
+  |                                                                                           ~~~~~
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scx --explain EVENT005`.

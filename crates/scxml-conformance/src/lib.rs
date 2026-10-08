@@ -42,7 +42,7 @@ pub mod wasm;
 /// (`namespaces/<name>/irp`, a [`CorpusKind::NamespaceIrp`] corpus) and the
 /// extension package manifests (workspace-relative paths) its runs bind, in
 /// name order. `env` binds the example extension, whose elements carry no
-/// `env` slot (an `SCXML084` rejection); `event` binds nothing.
+/// `env` slot (an `ENV002` rejection); `event` binds nothing.
 pub const NAMESPACE_SUITES: [(&str, &[&str]); 2] = [
     (
         "env",

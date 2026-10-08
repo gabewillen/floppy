@@ -197,30 +197,30 @@ fn every_failure_is_a_validator_error_without_an_artifact() {
         (
             r#"event:schema="schemas/missing.json""#,
             &[][..],
-            "SCXML088",
+            "EVENT004",
         ),
         (
             r#"event:schema="https://example.com/order.json""#,
             &[],
-            "SCXML088",
+            "EVENT004",
         ),
-        (r#"event:schema='{"type":'"#, &[], "SCXML087"),
+        (r#"event:schema='{"type":'"#, &[], "EVENT003"),
         (
             r#"event:schema="schemas/order.json#/$defs/Nope""#,
             &[("schemas/order.json", ORDER_FILE)],
-            "SCXML089",
+            "EVENT005",
         ),
-        (r#"event:schema='{"minimum":"1"}'"#, &[], "SCXML090"),
+        (r#"event:schema='{"minimum":"1"}'"#, &[], "EVENT006"),
         (
             r#"event:schema='{"$schema":"https://example.com/dialect"}'"#,
             &[],
-            "SCXML091",
+            "EVENT007",
         ),
-        (r#"event:schema='{"$ref":"item.json"}'"#, &[], "SCXML092"),
+        (r#"event:schema='{"$ref":"item.json"}'"#, &[], "EVENT008"),
         (
             r#"event:schema="true" event:schemaexpr="s""#,
             &[],
-            "SCXML086",
+            "EVENT002",
         ),
     ] {
         let output = compile_with(&document([attribute, "", "", ""]), files);
@@ -244,10 +244,10 @@ fn every_failure_is_a_validator_error_without_an_artifact() {
             .iter()
             .any(|diagnostic| diagnostic.code == "SCXML038")
     );
-    // Anywhere else the vocabulary is SCXML085, never SCXML068.
+    // Anywhere else the vocabulary is EVENT001, never LIMIT006.
     let misplaced = document(["", "", "", ""])
         .replace(r#"<state id="s">"#, r#"<state id="s" event:schema="true">"#);
-    assert_eq!(codes(&compile_with(&misplaced, &[])), ["SCXML085"]);
+    assert_eq!(codes(&compile_with(&misplaced, &[])), ["EVENT001"]);
 }
 
 #[test]

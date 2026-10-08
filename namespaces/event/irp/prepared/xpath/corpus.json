@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/event/irp/manifest.xml",
     "revision": "0.2.0",
-    "corpus_digest": "6714a32d12b248d1a809d7a6b26b2c8f5df1b00dc77aa07bfad9945bd389b3db",
+    "corpus_digest": "e26c980c98cb9ce9b95e1ad507f0da0e407b4d348c434b1f4db07fbc1f41d844",
     "source_digest": "6d5beb5e2f59976542c6e86f539619de9f45cc8bd5b5247968fd789c930d94a4",
-    "manifest_digest": "d6bda3346705552f8ba109d7166cd14b353a10974a5f4d49e9d11779d8ca1ee3",
+    "manifest_digest": "c4c95ebd322e8bb52350a4755a9281484be7f79521ee2d3d09b2f910ec2cd789",
     "template_digests": {
       "xpath": "765aed3e6c280c316b73d783b4619072506ddb1f897f1e8be61b3b727446bba7"
     },
@@ -42,9 +42,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "400/test400.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/a10dd014a933b1e5de8828569018f466bc9795bb5580eb15661be5a6595a8dc5/cases/400/test400.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/a10dd014a933b1e5de8828569018f466bc9795bb5580eb15661be5a6595a8dc5/cases/400/test400.scxml",
       "source_digest": "a10dd014a933b1e5de8828569018f466bc9795bb5580eb15661be5a6595a8dc5",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/a10dd014a933b1e5de8828569018f466bc9795bb5580eb15661be5a6595a8dc5/sources/400/test400.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/a10dd014a933b1e5de8828569018f466bc9795bb5580eb15661be5a6595a8dc5/sources/400/test400.txml",
       "output_digest": "3f6625a6eafdde88dbba983607080c93530e1fcd228537f6707697a9c2659408",
       "dependencies": [],
       "dependency_digests": {},
@@ -53,7 +53,7 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "event:schema and event:schemaexpr are allowed on <transition>, <send>, <raise>, and <donedata> only: an event attribute on any other element, an attribute other than schema and schemaexpr, or an element in the event namespace is rejected (SCXML085).",
+      "description": "event:schema and event:schemaexpr are allowed on <transition>, <send>, <raise>, and <donedata> only: an event attribute on any other element, an attribute other than schema and schemaexpr, or an element in the event namespace is rejected (EVENT001).",
       "features": [],
       "manual": false,
       "events": [],
@@ -70,9 +70,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "401/test401.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/aa076f75f5a1f3ec4a9b23b00b806ff8cfd879282bac8cfcb7f6bae43fe103ce/cases/401/test401.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/aa076f75f5a1f3ec4a9b23b00b806ff8cfd879282bac8cfcb7f6bae43fe103ce/cases/401/test401.scxml",
       "source_digest": "aa076f75f5a1f3ec4a9b23b00b806ff8cfd879282bac8cfcb7f6bae43fe103ce",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/aa076f75f5a1f3ec4a9b23b00b806ff8cfd879282bac8cfcb7f6bae43fe103ce/sources/401/test401.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/aa076f75f5a1f3ec4a9b23b00b806ff8cfd879282bac8cfcb7f6bae43fe103ce/sources/401/test401.txml",
       "output_digest": "d0ff61c87ba211a276b6cfc450c962945ca7075608608d4ef93d26417b7dacd7",
       "dependencies": [],
       "dependency_digests": {},
@@ -81,14 +81,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "event:schema and event:schemaexpr are allowed on <transition>, <send>, <raise>, and <donedata> only: an event attribute on any other element, an attribute other than schema and schemaexpr, or an element in the event namespace is rejected (SCXML085).",
+      "description": "event:schema and event:schemaexpr are allowed on <transition>, <send>, <raise>, and <donedata> only: an event attribute on any other element, an attribute other than schema and schemaexpr, or an element in the event namespace is rejected (EVENT001).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML085"
+          "EVENT001"
         ]
       }
     },
@@ -100,9 +100,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "402/test402.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/014a362f3da595255c16f9f84d4545338f46d92330f5e1af30f55db25cbb8035/cases/402/test402.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/014a362f3da595255c16f9f84d4545338f46d92330f5e1af30f55db25cbb8035/cases/402/test402.scxml",
       "source_digest": "014a362f3da595255c16f9f84d4545338f46d92330f5e1af30f55db25cbb8035",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/014a362f3da595255c16f9f84d4545338f46d92330f5e1af30f55db25cbb8035/sources/402/test402.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/014a362f3da595255c16f9f84d4545338f46d92330f5e1af30f55db25cbb8035/sources/402/test402.txml",
       "output_digest": "d1d6e855fa609c72e5d9ae0750a0d53c365e86e753fbe21b0c8c82b468cba34e",
       "dependencies": [],
       "dependency_digests": {},
@@ -111,14 +111,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "event:schema and event:schemaexpr are allowed on <transition>, <send>, <raise>, and <donedata> only: an event attribute on any other element, an attribute other than schema and schemaexpr, or an element in the event namespace is rejected (SCXML085).",
+      "description": "event:schema and event:schemaexpr are allowed on <transition>, <send>, <raise>, and <donedata> only: an event attribute on any other element, an attribute other than schema and schemaexpr, or an element in the event namespace is rejected (EVENT001).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML085"
+          "EVENT001"
         ]
       }
     },
@@ -130,9 +130,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "403/test403.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/3ed4fd72fc3da8eb41fdd81f3475504c942d0d14509d971bd00830947dd199d1/cases/403/test403.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/3ed4fd72fc3da8eb41fdd81f3475504c942d0d14509d971bd00830947dd199d1/cases/403/test403.scxml",
       "source_digest": "3ed4fd72fc3da8eb41fdd81f3475504c942d0d14509d971bd00830947dd199d1",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/3ed4fd72fc3da8eb41fdd81f3475504c942d0d14509d971bd00830947dd199d1/sources/403/test403.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/3ed4fd72fc3da8eb41fdd81f3475504c942d0d14509d971bd00830947dd199d1/sources/403/test403.txml",
       "output_digest": "9511344fd6acabbef615526ab41323d75d97ce325e55dc95764f9ff435f42acf",
       "dependencies": [],
       "dependency_digests": {},
@@ -141,14 +141,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "event:schema and event:schemaexpr are allowed on <transition>, <send>, <raise>, and <donedata> only: an event attribute on any other element, an attribute other than schema and schemaexpr, or an element in the event namespace is rejected (SCXML085).",
+      "description": "event:schema and event:schemaexpr are allowed on <transition>, <send>, <raise>, and <donedata> only: an event attribute on any other element, an attribute other than schema and schemaexpr, or an element in the event namespace is rejected (EVENT001).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML085"
+          "EVENT001"
         ]
       }
     },
@@ -160,9 +160,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "404/test404.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/9db9198cdbb628759d145a47224952cf4082abf65ca689a181c30837c9c77f3a/cases/404/test404.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/9db9198cdbb628759d145a47224952cf4082abf65ca689a181c30837c9c77f3a/cases/404/test404.scxml",
       "source_digest": "9db9198cdbb628759d145a47224952cf4082abf65ca689a181c30837c9c77f3a",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/9db9198cdbb628759d145a47224952cf4082abf65ca689a181c30837c9c77f3a/sources/404/test404.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/9db9198cdbb628759d145a47224952cf4082abf65ca689a181c30837c9c77f3a/sources/404/test404.txml",
       "output_digest": "23fa9882840c67fd78084d46d7aa32476bb876067ab14c4c6c66dda952c4dbd8",
       "dependencies": [],
       "dependency_digests": {},
@@ -171,14 +171,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "event:schema and event:schemaexpr are allowed on <transition>, <send>, <raise>, and <donedata> only: an event attribute on any other element, an attribute other than schema and schemaexpr, or an element in the event namespace is rejected (SCXML085).",
+      "description": "event:schema and event:schemaexpr are allowed on <transition>, <send>, <raise>, and <donedata> only: an event attribute on any other element, an attribute other than schema and schemaexpr, or an element in the event namespace is rejected (EVENT001).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML085"
+          "EVENT001"
         ]
       }
     },
@@ -190,9 +190,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "410/test410.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/44404df9c5bf95ff2d96248a94b0ffbf79de489b65622c03b0bde96a62d14b34/cases/410/test410.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/44404df9c5bf95ff2d96248a94b0ffbf79de489b65622c03b0bde96a62d14b34/cases/410/test410.scxml",
       "source_digest": "44404df9c5bf95ff2d96248a94b0ffbf79de489b65622c03b0bde96a62d14b34",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/44404df9c5bf95ff2d96248a94b0ffbf79de489b65622c03b0bde96a62d14b34/sources/410/test410.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/44404df9c5bf95ff2d96248a94b0ffbf79de489b65622c03b0bde96a62d14b34/sources/410/test410.txml",
       "output_digest": "4e7830724b18e9acdc8a5d9ae96010e2a7a8379d1bd69c3534139febb43b74ce",
       "dependencies": [],
       "dependency_digests": {},
@@ -201,14 +201,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "An element has at most one of event:schema and event:schemaexpr (SCXML086).",
+      "description": "An element has at most one of event:schema and event:schemaexpr (EVENT002).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML086"
+          "EVENT002"
         ]
       }
     },
@@ -220,9 +220,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "420/test420.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/200ae1ea758c1a233d2d8ece7dba1ae77ec592856bf747db4a6c6d1b6fc87de2/cases/420/test420.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/200ae1ea758c1a233d2d8ece7dba1ae77ec592856bf747db4a6c6d1b6fc87de2/cases/420/test420.scxml",
       "source_digest": "200ae1ea758c1a233d2d8ece7dba1ae77ec592856bf747db4a6c6d1b6fc87de2",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/200ae1ea758c1a233d2d8ece7dba1ae77ec592856bf747db4a6c6d1b6fc87de2/sources/420/test420.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/200ae1ea758c1a233d2d8ece7dba1ae77ec592856bf747db4a6c6d1b6fc87de2/sources/420/test420.txml",
       "output_digest": "a7c105daa7f7f8b917fc9e507de8156238bc4cec83cce62c1747329782064d76",
       "dependencies": [],
       "dependency_digests": {},
@@ -231,7 +231,7 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "A value whose first non-white-space character is {, or that is exactly true or false, is an inline JSON schema; one that is not UTF-8 JSON is rejected (SCXML087).",
+      "description": "A value whose first non-white-space character is {, or that is exactly true or false, is an inline JSON schema; one that is not UTF-8 JSON is rejected (EVENT003).",
       "features": [],
       "manual": false,
       "events": [],
@@ -248,9 +248,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "421/test421.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/c8d49ade89121935cd34b3d7d80c6a25eda32ef2f30f9e2d236e6bba50afe0b8/cases/421/test421.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/c8d49ade89121935cd34b3d7d80c6a25eda32ef2f30f9e2d236e6bba50afe0b8/cases/421/test421.scxml",
       "source_digest": "c8d49ade89121935cd34b3d7d80c6a25eda32ef2f30f9e2d236e6bba50afe0b8",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/c8d49ade89121935cd34b3d7d80c6a25eda32ef2f30f9e2d236e6bba50afe0b8/sources/421/test421.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/c8d49ade89121935cd34b3d7d80c6a25eda32ef2f30f9e2d236e6bba50afe0b8/sources/421/test421.txml",
       "output_digest": "5897b389bceef12e28d21548e1d0538cdfeda2ae825825952443b7a44a46db1c",
       "dependencies": [],
       "dependency_digests": {},
@@ -259,7 +259,7 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "A value whose first non-white-space character is {, or that is exactly true or false, is an inline JSON schema; one that is not UTF-8 JSON is rejected (SCXML087).",
+      "description": "A value whose first non-white-space character is {, or that is exactly true or false, is an inline JSON schema; one that is not UTF-8 JSON is rejected (EVENT003).",
       "features": [],
       "manual": false,
       "events": [],
@@ -276,9 +276,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "422/test422.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/ea0304f3766995a78b9ca81dde966b67d3304d215d3044b2ae47e9dde0eea521/cases/422/test422.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/ea0304f3766995a78b9ca81dde966b67d3304d215d3044b2ae47e9dde0eea521/cases/422/test422.scxml",
       "source_digest": "ea0304f3766995a78b9ca81dde966b67d3304d215d3044b2ae47e9dde0eea521",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/ea0304f3766995a78b9ca81dde966b67d3304d215d3044b2ae47e9dde0eea521/sources/422/test422.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/ea0304f3766995a78b9ca81dde966b67d3304d215d3044b2ae47e9dde0eea521/sources/422/test422.txml",
       "output_digest": "982aeec2ef33099b0f35e816c6fe048809ad566af60b7f8e98de52cb2480fcb5",
       "dependencies": [],
       "dependency_digests": {},
@@ -287,14 +287,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "A value whose first non-white-space character is {, or that is exactly true or false, is an inline JSON schema; one that is not UTF-8 JSON is rejected (SCXML087).",
+      "description": "A value whose first non-white-space character is {, or that is exactly true or false, is an inline JSON schema; one that is not UTF-8 JSON is rejected (EVENT003).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML087"
+          "EVENT003"
         ]
       }
     },
@@ -306,26 +306,26 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "430/test430.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/607e8c6a56a41628d8d6ad4868b2d9fa9e497e1d18d101db1b43de28339a639e/cases/430/test430.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/607e8c6a56a41628d8d6ad4868b2d9fa9e497e1d18d101db1b43de28339a639e/cases/430/test430.scxml",
       "source_digest": "607e8c6a56a41628d8d6ad4868b2d9fa9e497e1d18d101db1b43de28339a639e",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/607e8c6a56a41628d8d6ad4868b2d9fa9e497e1d18d101db1b43de28339a639e/sources/430/test430.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/607e8c6a56a41628d8d6ad4868b2d9fa9e497e1d18d101db1b43de28339a639e/sources/430/test430.txml",
       "output_digest": "94b91c0f9aa45bdc70332588ba10d5342572d08221ac1b103afd7ecd79eda649",
       "dependencies": [
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/430/schemas/order.json"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/430/schemas/order.json"
       ],
       "dependency_digests": {
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/430/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/430/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_digests": {
         "430/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_artifacts": {
-        "430/schemas/order.json": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/430/schemas/order.json"
+        "430/schemas/order.json": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/430/schemas/order.json"
       },
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (SCXML088); a file that is not UTF-8 JSON (SCXML087); a fragment that is not a JSON Pointer or names no value (SCXML089).",
+      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (EVENT004); a file that is not UTF-8 JSON (EVENT003); a fragment that is not a JSON Pointer or names no value (EVENT005).",
       "features": [],
       "manual": false,
       "events": [],
@@ -342,26 +342,26 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "431/test431.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/fe33788b1e286535d39ae5f4e14ae9df039b8381cfe86901a28641ababcbd4ba/cases/431/test431.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/fe33788b1e286535d39ae5f4e14ae9df039b8381cfe86901a28641ababcbd4ba/cases/431/test431.scxml",
       "source_digest": "fe33788b1e286535d39ae5f4e14ae9df039b8381cfe86901a28641ababcbd4ba",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/fe33788b1e286535d39ae5f4e14ae9df039b8381cfe86901a28641ababcbd4ba/sources/431/test431.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/fe33788b1e286535d39ae5f4e14ae9df039b8381cfe86901a28641ababcbd4ba/sources/431/test431.txml",
       "output_digest": "e4999c238843a230286bdde9dfb3143e202d5b0b8186508b5cf4032f8eee2031",
       "dependencies": [
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/431/schemas/order.json"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/431/schemas/order.json"
       ],
       "dependency_digests": {
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/431/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/431/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_digests": {
         "431/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_artifacts": {
-        "431/schemas/order.json": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/431/schemas/order.json"
+        "431/schemas/order.json": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/431/schemas/order.json"
       },
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (SCXML088); a file that is not UTF-8 JSON (SCXML087); a fragment that is not a JSON Pointer or names no value (SCXML089).",
+      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (EVENT004); a file that is not UTF-8 JSON (EVENT003); a fragment that is not a JSON Pointer or names no value (EVENT005).",
       "features": [],
       "manual": false,
       "events": [],
@@ -378,9 +378,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "432/test432.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/8072288038849702a22be6d156ede1bce92778b83dfaf28b5796f27d6722181a/cases/432/test432.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/8072288038849702a22be6d156ede1bce92778b83dfaf28b5796f27d6722181a/cases/432/test432.scxml",
       "source_digest": "8072288038849702a22be6d156ede1bce92778b83dfaf28b5796f27d6722181a",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/8072288038849702a22be6d156ede1bce92778b83dfaf28b5796f27d6722181a/sources/432/test432.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/8072288038849702a22be6d156ede1bce92778b83dfaf28b5796f27d6722181a/sources/432/test432.txml",
       "output_digest": "bef8a2c796b1874945a96f2943663bedfed83c7f17c056660e74827db9348116",
       "dependencies": [],
       "dependency_digests": {},
@@ -389,14 +389,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (SCXML088); a file that is not UTF-8 JSON (SCXML087); a fragment that is not a JSON Pointer or names no value (SCXML089).",
+      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (EVENT004); a file that is not UTF-8 JSON (EVENT003); a fragment that is not a JSON Pointer or names no value (EVENT005).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML088"
+          "EVENT004"
         ]
       }
     },
@@ -408,9 +408,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "433/test433.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/f55a746d183895c750d49bade28af79c8a72ddc5d10ab2a4c05845a27829f32c/cases/433/test433.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/f55a746d183895c750d49bade28af79c8a72ddc5d10ab2a4c05845a27829f32c/cases/433/test433.scxml",
       "source_digest": "f55a746d183895c750d49bade28af79c8a72ddc5d10ab2a4c05845a27829f32c",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/f55a746d183895c750d49bade28af79c8a72ddc5d10ab2a4c05845a27829f32c/sources/433/test433.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/f55a746d183895c750d49bade28af79c8a72ddc5d10ab2a4c05845a27829f32c/sources/433/test433.txml",
       "output_digest": "40998ec7facd8bd6d49387a6548464c47955fa6530470ab227f7990cc7e136d2",
       "dependencies": [],
       "dependency_digests": {},
@@ -419,14 +419,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (SCXML088); a file that is not UTF-8 JSON (SCXML087); a fragment that is not a JSON Pointer or names no value (SCXML089).",
+      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (EVENT004); a file that is not UTF-8 JSON (EVENT003); a fragment that is not a JSON Pointer or names no value (EVENT005).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML088"
+          "EVENT004"
         ]
       }
     },
@@ -438,33 +438,33 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "434/test434.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/da8d610d86a222d44ef40122f612bed741712044870d316d6dad49b0b5ebd537/cases/434/test434.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/da8d610d86a222d44ef40122f612bed741712044870d316d6dad49b0b5ebd537/cases/434/test434.scxml",
       "source_digest": "da8d610d86a222d44ef40122f612bed741712044870d316d6dad49b0b5ebd537",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/da8d610d86a222d44ef40122f612bed741712044870d316d6dad49b0b5ebd537/sources/434/test434.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/da8d610d86a222d44ef40122f612bed741712044870d316d6dad49b0b5ebd537/sources/434/test434.txml",
       "output_digest": "3e9e0fcb983833b262e84c7e85ba8ebab716671dc6cfcfb690dcc737c531ee17",
       "dependencies": [
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2/dependencies/434/schemas/not-json.json"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2/dependencies/434/schemas/not-json.json"
       ],
       "dependency_digests": {
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2/dependencies/434/schemas/not-json.json": "d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2/dependencies/434/schemas/not-json.json": "d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2"
       },
       "dependency_source_digests": {
         "434/schemas/not-json.json": "d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2"
       },
       "dependency_source_artifacts": {
-        "434/schemas/not-json.json": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2/sources/434/schemas/not-json.json"
+        "434/schemas/not-json.json": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2/sources/434/schemas/not-json.json"
       },
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (SCXML088); a file that is not UTF-8 JSON (SCXML087); a fragment that is not a JSON Pointer or names no value (SCXML089).",
+      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (EVENT004); a file that is not UTF-8 JSON (EVENT003); a fragment that is not a JSON Pointer or names no value (EVENT005).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML087"
+          "EVENT003"
         ]
       }
     },
@@ -476,33 +476,33 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "435/test435.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/aa8a00315710acabaff8ce8ad7c3f9eadc69cf1ffd5c9062ed11f7f0c9ebf769/cases/435/test435.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/aa8a00315710acabaff8ce8ad7c3f9eadc69cf1ffd5c9062ed11f7f0c9ebf769/cases/435/test435.scxml",
       "source_digest": "aa8a00315710acabaff8ce8ad7c3f9eadc69cf1ffd5c9062ed11f7f0c9ebf769",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/aa8a00315710acabaff8ce8ad7c3f9eadc69cf1ffd5c9062ed11f7f0c9ebf769/sources/435/test435.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/aa8a00315710acabaff8ce8ad7c3f9eadc69cf1ffd5c9062ed11f7f0c9ebf769/sources/435/test435.txml",
       "output_digest": "e915303524b59d97481d8e2106ec9583b7e1e1b17cb229f446d0548dfac3bb2b",
       "dependencies": [
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/435/schemas/order.json"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/435/schemas/order.json"
       ],
       "dependency_digests": {
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/435/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/435/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_digests": {
         "435/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_artifacts": {
-        "435/schemas/order.json": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/435/schemas/order.json"
+        "435/schemas/order.json": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/435/schemas/order.json"
       },
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (SCXML088); a file that is not UTF-8 JSON (SCXML087); a fragment that is not a JSON Pointer or names no value (SCXML089).",
+      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (EVENT004); a file that is not UTF-8 JSON (EVENT003); a fragment that is not a JSON Pointer or names no value (EVENT005).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML089"
+          "EVENT005"
         ]
       }
     },
@@ -514,33 +514,33 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "436/test436.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/4021a2fead04145df75f994cb73bb6718fe4e2d2abb449b45ab440b8c42daa7d/cases/436/test436.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/4021a2fead04145df75f994cb73bb6718fe4e2d2abb449b45ab440b8c42daa7d/cases/436/test436.scxml",
       "source_digest": "4021a2fead04145df75f994cb73bb6718fe4e2d2abb449b45ab440b8c42daa7d",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/4021a2fead04145df75f994cb73bb6718fe4e2d2abb449b45ab440b8c42daa7d/sources/436/test436.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/4021a2fead04145df75f994cb73bb6718fe4e2d2abb449b45ab440b8c42daa7d/sources/436/test436.txml",
       "output_digest": "cb43179ad72bfb1713c4baf629d130a81ca372e4da9300225b789221ec00b647",
       "dependencies": [
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/436/schemas/order.json"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/436/schemas/order.json"
       ],
       "dependency_digests": {
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/436/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/436/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_digests": {
         "436/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_artifacts": {
-        "436/schemas/order.json": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/436/schemas/order.json"
+        "436/schemas/order.json": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/436/schemas/order.json"
       },
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (SCXML088); a file that is not UTF-8 JSON (SCXML087); a fragment that is not a JSON Pointer or names no value (SCXML089).",
+      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (EVENT004); a file that is not UTF-8 JSON (EVENT003); a fragment that is not a JSON Pointer or names no value (EVENT005).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML089"
+          "EVENT005"
         ]
       }
     },
@@ -552,9 +552,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "437/test437.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/85f4f50975fb8f97d26bcf932f4e73b7c0f54772f437eca9ed01db070f497177/cases/437/test437.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/85f4f50975fb8f97d26bcf932f4e73b7c0f54772f437eca9ed01db070f497177/cases/437/test437.scxml",
       "source_digest": "85f4f50975fb8f97d26bcf932f4e73b7c0f54772f437eca9ed01db070f497177",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/85f4f50975fb8f97d26bcf932f4e73b7c0f54772f437eca9ed01db070f497177/sources/437/test437.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/85f4f50975fb8f97d26bcf932f4e73b7c0f54772f437eca9ed01db070f497177/sources/437/test437.txml",
       "output_digest": "976b771774fbf9421a722109ce4679926ed86c1e9ee34a2e005b4e4957c71679",
       "dependencies": [],
       "dependency_digests": {},
@@ -563,14 +563,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (SCXML088); a file that is not UTF-8 JSON (SCXML087); a fragment that is not a JSON Pointer or names no value (SCXML089).",
+      "description": "Any other value references a file relative to the document, at or below its directory, optionally with a JSON Pointer fragment selecting a value of the file: an unavailable file, or a path outside the document's directory, is rejected (EVENT004); a file that is not UTF-8 JSON (EVENT003); a fragment that is not a JSON Pointer or names no value (EVENT005).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML088"
+          "EVENT004"
         ]
       }
     },
@@ -582,9 +582,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "440/test440.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/d0a7724ffd8674a50d1295e4db187d0430932a33c429bcc714c0c2f5670a891a/cases/440/test440.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/d0a7724ffd8674a50d1295e4db187d0430932a33c429bcc714c0c2f5670a891a/cases/440/test440.scxml",
       "source_digest": "d0a7724ffd8674a50d1295e4db187d0430932a33c429bcc714c0c2f5670a891a",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/d0a7724ffd8674a50d1295e4db187d0430932a33c429bcc714c0c2f5670a891a/sources/440/test440.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/d0a7724ffd8674a50d1295e4db187d0430932a33c429bcc714c0c2f5670a891a/sources/440/test440.txml",
       "output_digest": "66a10216550bc905464bc5cce3704097507149893d475c2a082c173aff1bdcbd",
       "dependencies": [],
       "dependency_digests": {},
@@ -593,7 +593,7 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "The dialect is the selected schema's $schema, else the file's, else JSON Schema 2020-12; 2020-12, 2019-09, and draft-07 are supported, each with or without its trailing #, and any other $schema is rejected (SCXML091).",
+      "description": "The dialect is the selected schema's $schema, else the file's, else JSON Schema 2020-12; 2020-12, 2019-09, and draft-07 are supported, each with or without its trailing #, and any other $schema is rejected (EVENT007).",
       "features": [],
       "manual": false,
       "events": [],
@@ -610,9 +610,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "441/test441.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/905a96530b92336bfd6a924610d07018b17e5a7f3f439d6d209c702c044464a1/cases/441/test441.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/905a96530b92336bfd6a924610d07018b17e5a7f3f439d6d209c702c044464a1/cases/441/test441.scxml",
       "source_digest": "905a96530b92336bfd6a924610d07018b17e5a7f3f439d6d209c702c044464a1",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/905a96530b92336bfd6a924610d07018b17e5a7f3f439d6d209c702c044464a1/sources/441/test441.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/905a96530b92336bfd6a924610d07018b17e5a7f3f439d6d209c702c044464a1/sources/441/test441.txml",
       "output_digest": "a53dab36801c3c95bb435ea3140cea5279272a9736a9c08510fd7df1e900f3de",
       "dependencies": [],
       "dependency_digests": {},
@@ -621,14 +621,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "The dialect is the selected schema's $schema, else the file's, else JSON Schema 2020-12; 2020-12, 2019-09, and draft-07 are supported, each with or without its trailing #, and any other $schema is rejected (SCXML091).",
+      "description": "The dialect is the selected schema's $schema, else the file's, else JSON Schema 2020-12; 2020-12, 2019-09, and draft-07 are supported, each with or without its trailing #, and any other $schema is rejected (EVENT007).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML091"
+          "EVENT007"
         ]
       }
     },
@@ -640,9 +640,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "450/test450.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/01e79eec9a3ce2e7dbcc5c7bd20782c405732bc4e6ca0f8281913263ce362bd1/cases/450/test450.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/01e79eec9a3ce2e7dbcc5c7bd20782c405732bc4e6ca0f8281913263ce362bd1/cases/450/test450.scxml",
       "source_digest": "01e79eec9a3ce2e7dbcc5c7bd20782c405732bc4e6ca0f8281913263ce362bd1",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/01e79eec9a3ce2e7dbcc5c7bd20782c405732bc4e6ca0f8281913263ce362bd1/sources/450/test450.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/01e79eec9a3ce2e7dbcc5c7bd20782c405732bc4e6ca0f8281913263ce362bd1/sources/450/test450.txml",
       "output_digest": "ed9ad94548f5583ed29004231271e79f3ea4e1c2bfbb52b7d2b6c9a32f0c08ec",
       "dependencies": [],
       "dependency_digests": {},
@@ -651,14 +651,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "A schema must satisfy its dialect's metaschema and compile, so every keyword has a valid value and every pattern is a valid regular expression (SCXML090).",
+      "description": "A schema must satisfy its dialect's metaschema and compile, so every keyword has a valid value and every pattern is a valid regular expression (EVENT006).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML090"
+          "EVENT006"
         ]
       }
     },
@@ -670,9 +670,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "451/test451.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/2222abfad148ad610baf0732601a562273d87caabef8270e798bf666c6773433/cases/451/test451.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/2222abfad148ad610baf0732601a562273d87caabef8270e798bf666c6773433/cases/451/test451.scxml",
       "source_digest": "2222abfad148ad610baf0732601a562273d87caabef8270e798bf666c6773433",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/2222abfad148ad610baf0732601a562273d87caabef8270e798bf666c6773433/sources/451/test451.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/2222abfad148ad610baf0732601a562273d87caabef8270e798bf666c6773433/sources/451/test451.txml",
       "output_digest": "cd96bfa99eac84e64c864575575be7459abd837681012ad2b4bfd16610793776",
       "dependencies": [],
       "dependency_digests": {},
@@ -681,14 +681,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "A schema must satisfy its dialect's metaschema and compile, so every keyword has a valid value and every pattern is a valid regular expression (SCXML090).",
+      "description": "A schema must satisfy its dialect's metaschema and compile, so every keyword has a valid value and every pattern is a valid regular expression (EVENT006).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML090"
+          "EVENT006"
         ]
       }
     },
@@ -700,9 +700,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "460/test460.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/53b183863a0b90719de8d3071de656c7e3174b88cf9a831e280a29981b7781a9/cases/460/test460.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/53b183863a0b90719de8d3071de656c7e3174b88cf9a831e280a29981b7781a9/cases/460/test460.scxml",
       "source_digest": "53b183863a0b90719de8d3071de656c7e3174b88cf9a831e280a29981b7781a9",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/53b183863a0b90719de8d3071de656c7e3174b88cf9a831e280a29981b7781a9/sources/460/test460.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/53b183863a0b90719de8d3071de656c7e3174b88cf9a831e280a29981b7781a9/sources/460/test460.txml",
       "output_digest": "adce761ffe891423d88d220ca052ebe5ece5e57660b31235db28dee9884220c2",
       "dependencies": [],
       "dependency_digests": {},
@@ -711,14 +711,14 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "Nothing is fetched: a $ref, $dynamicRef, or $recursiveRef that is not a fragment names another resource and is rejected (SCXML092); fragment references are kept; with a pointer, references to elsewhere in the file are bundled so the selected schema stands alone, and a selected schema that relies on $id, $anchor, $dynamicAnchor, $recursiveAnchor, plain-name fragments, or dynamic references cannot be moved and is rejected (SCXML092).",
+      "description": "Nothing is fetched: a $ref, $dynamicRef, or $recursiveRef that is not a fragment names another resource and is rejected (EVENT008); fragment references are kept; with a pointer, references to elsewhere in the file are bundled so the selected schema stands alone, and a selected schema that relies on $id, $anchor, $dynamicAnchor, $recursiveAnchor, plain-name fragments, or dynamic references cannot be moved and is rejected (EVENT008).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML092"
+          "EVENT008"
         ]
       }
     },
@@ -730,26 +730,26 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "461/test461.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/67ebd958d97dc82b68b60e2ddbfee0206fe857454e07eff456df5a162c019f00/cases/461/test461.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/67ebd958d97dc82b68b60e2ddbfee0206fe857454e07eff456df5a162c019f00/cases/461/test461.scxml",
       "source_digest": "67ebd958d97dc82b68b60e2ddbfee0206fe857454e07eff456df5a162c019f00",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/67ebd958d97dc82b68b60e2ddbfee0206fe857454e07eff456df5a162c019f00/sources/461/test461.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/67ebd958d97dc82b68b60e2ddbfee0206fe857454e07eff456df5a162c019f00/sources/461/test461.txml",
       "output_digest": "51e45e5913c6d18c4b6c28c4de6da4af93afce6ef619929a4209af12b851fb00",
       "dependencies": [
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/461/schemas/order.json"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/461/schemas/order.json"
       ],
       "dependency_digests": {
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/461/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/461/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_digests": {
         "461/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_artifacts": {
-        "461/schemas/order.json": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/461/schemas/order.json"
+        "461/schemas/order.json": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/461/schemas/order.json"
       },
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "Nothing is fetched: a $ref, $dynamicRef, or $recursiveRef that is not a fragment names another resource and is rejected (SCXML092); fragment references are kept; with a pointer, references to elsewhere in the file are bundled so the selected schema stands alone, and a selected schema that relies on $id, $anchor, $dynamicAnchor, $recursiveAnchor, plain-name fragments, or dynamic references cannot be moved and is rejected (SCXML092).",
+      "description": "Nothing is fetched: a $ref, $dynamicRef, or $recursiveRef that is not a fragment names another resource and is rejected (EVENT008); fragment references are kept; with a pointer, references to elsewhere in the file are bundled so the selected schema stands alone, and a selected schema that relies on $id, $anchor, $dynamicAnchor, $recursiveAnchor, plain-name fragments, or dynamic references cannot be moved and is rejected (EVENT008).",
       "features": [],
       "manual": false,
       "events": [],
@@ -766,9 +766,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "462/test462.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/f81febb0a7c29255f693a41cbf0cd997e736f1db9eee9ca6c89b63721372df92/cases/462/test462.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/f81febb0a7c29255f693a41cbf0cd997e736f1db9eee9ca6c89b63721372df92/cases/462/test462.scxml",
       "source_digest": "f81febb0a7c29255f693a41cbf0cd997e736f1db9eee9ca6c89b63721372df92",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/f81febb0a7c29255f693a41cbf0cd997e736f1db9eee9ca6c89b63721372df92/sources/462/test462.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/f81febb0a7c29255f693a41cbf0cd997e736f1db9eee9ca6c89b63721372df92/sources/462/test462.txml",
       "output_digest": "64b52c52567d123b07fcc977056115231167f05d8ff2512a23bbfd42affc84eb",
       "dependencies": [],
       "dependency_digests": {},
@@ -777,7 +777,7 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "Nothing is fetched: a $ref, $dynamicRef, or $recursiveRef that is not a fragment names another resource and is rejected (SCXML092); fragment references are kept; with a pointer, references to elsewhere in the file are bundled so the selected schema stands alone, and a selected schema that relies on $id, $anchor, $dynamicAnchor, $recursiveAnchor, plain-name fragments, or dynamic references cannot be moved and is rejected (SCXML092).",
+      "description": "Nothing is fetched: a $ref, $dynamicRef, or $recursiveRef that is not a fragment names another resource and is rejected (EVENT008); fragment references are kept; with a pointer, references to elsewhere in the file are bundled so the selected schema stands alone, and a selected schema that relies on $id, $anchor, $dynamicAnchor, $recursiveAnchor, plain-name fragments, or dynamic references cannot be moved and is rejected (EVENT008).",
       "features": [],
       "manual": false,
       "events": [],
@@ -794,33 +794,33 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "463/test463.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/bc80b7a720204edb278edbe8292efe394c02676465398ebd70a6f903faac6608/cases/463/test463.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/bc80b7a720204edb278edbe8292efe394c02676465398ebd70a6f903faac6608/cases/463/test463.scxml",
       "source_digest": "bc80b7a720204edb278edbe8292efe394c02676465398ebd70a6f903faac6608",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/bc80b7a720204edb278edbe8292efe394c02676465398ebd70a6f903faac6608/sources/463/test463.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/bc80b7a720204edb278edbe8292efe394c02676465398ebd70a6f903faac6608/sources/463/test463.txml",
       "output_digest": "8775e610e72470851c3a61a00e1883e8aa44532a761d7b459ff6b7f2edfd8dec",
       "dependencies": [
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0/dependencies/463/schemas/anchored.json"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0/dependencies/463/schemas/anchored.json"
       ],
       "dependency_digests": {
-        "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0/dependencies/463/schemas/anchored.json": "83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0"
+        "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0/dependencies/463/schemas/anchored.json": "83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0"
       },
       "dependency_source_digests": {
         "463/schemas/anchored.json": "83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0"
       },
       "dependency_source_artifacts": {
-        "463/schemas/anchored.json": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0/sources/463/schemas/anchored.json"
+        "463/schemas/anchored.json": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0/sources/463/schemas/anchored.json"
       },
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "Nothing is fetched: a $ref, $dynamicRef, or $recursiveRef that is not a fragment names another resource and is rejected (SCXML092); fragment references are kept; with a pointer, references to elsewhere in the file are bundled so the selected schema stands alone, and a selected schema that relies on $id, $anchor, $dynamicAnchor, $recursiveAnchor, plain-name fragments, or dynamic references cannot be moved and is rejected (SCXML092).",
+      "description": "Nothing is fetched: a $ref, $dynamicRef, or $recursiveRef that is not a fragment names another resource and is rejected (EVENT008); fragment references are kept; with a pointer, references to elsewhere in the file are bundled so the selected schema stands alone, and a selected schema that relies on $id, $anchor, $dynamicAnchor, $recursiveAnchor, plain-name fragments, or dynamic references cannot be moved and is rejected (EVENT008).",
       "features": [],
       "manual": false,
       "events": [],
       "expected": {
         "kind": "document-rejection",
         "codes": [
-          "SCXML092"
+          "EVENT008"
         ]
       }
     },
@@ -832,9 +832,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "470/test470.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/87b3fb803016c4194c089056268cec3f54beccd92105298f236c53eda90d589b/cases/470/test470.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/87b3fb803016c4194c089056268cec3f54beccd92105298f236c53eda90d589b/cases/470/test470.scxml",
       "source_digest": "87b3fb803016c4194c089056268cec3f54beccd92105298f236c53eda90d589b",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/87b3fb803016c4194c089056268cec3f54beccd92105298f236c53eda90d589b/sources/470/test470.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/87b3fb803016c4194c089056268cec3f54beccd92105298f236c53eda90d589b/sources/470/test470.txml",
       "output_digest": "a9b9677a7540ec42561802ee5fed3e84c807cc62d9a1aa8b30e3b3f1de36ca48",
       "dependencies": [],
       "dependency_digests": {},
@@ -860,9 +860,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "480/test480.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/b70b3da853ec79eaa786dcd2955283fc7b4fa3bf740b9a1c13aaa7d8eb3e3b35/cases/480/test480.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/b70b3da853ec79eaa786dcd2955283fc7b4fa3bf740b9a1c13aaa7d8eb3e3b35/cases/480/test480.scxml",
       "source_digest": "b70b3da853ec79eaa786dcd2955283fc7b4fa3bf740b9a1c13aaa7d8eb3e3b35",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/b70b3da853ec79eaa786dcd2955283fc7b4fa3bf740b9a1c13aaa7d8eb3e3b35/sources/480/test480.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/b70b3da853ec79eaa786dcd2955283fc7b4fa3bf740b9a1c13aaa7d8eb3e3b35/sources/480/test480.txml",
       "output_digest": "2958758c69ec2c50b1ee2684e1654c06c4fca5ccd41b3a77492ef704013598ed",
       "dependencies": [],
       "dependency_digests": {},
@@ -888,9 +888,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "481/test481.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/b23fbf89633c8db0e379d82407fed9e4c1ce29685447f5f333735dc09a662f7a/cases/481/test481.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/b23fbf89633c8db0e379d82407fed9e4c1ce29685447f5f333735dc09a662f7a/cases/481/test481.scxml",
       "source_digest": "b23fbf89633c8db0e379d82407fed9e4c1ce29685447f5f333735dc09a662f7a",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/b23fbf89633c8db0e379d82407fed9e4c1ce29685447f5f333735dc09a662f7a/sources/481/test481.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/b23fbf89633c8db0e379d82407fed9e4c1ce29685447f5f333735dc09a662f7a/sources/481/test481.txml",
       "output_digest": "448549b11bb6b730151615b948db161161273085d6ab966103104c5f0c431e6b",
       "dependencies": [],
       "dependency_digests": {},
@@ -916,9 +916,9 @@
       "conformance": "mandatory",
       "datamodel": "xpath",
       "start_uri": "482/test482.txml",
-      "source": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abe1d300c5476a34cf06523ec50a95ed971fdf3f5cab9c52f182e706049834a4/cases/482/test482.scxml",
+      "source": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abe1d300c5476a34cf06523ec50a95ed971fdf3f5cab9c52f182e706049834a4/cases/482/test482.scxml",
       "source_digest": "abe1d300c5476a34cf06523ec50a95ed971fdf3f5cab9c52f182e706049834a4",
-      "source_artifact": "artifacts/416acd124d52668bfe6978e5a137558984070ba16ba83e6b9ca45d556943f8cf/abe1d300c5476a34cf06523ec50a95ed971fdf3f5cab9c52f182e706049834a4/sources/482/test482.txml",
+      "source_artifact": "artifacts/4f355bc17a1ca14a914309c367ba5775d7c1bc14fd4b12bbeff33440f04f56c6/abe1d300c5476a34cf06523ec50a95ed971fdf3f5cab9c52f182e706049834a4/sources/482/test482.txml",
       "output_digest": "b8da88e177e4489b695c0d871b6f768924933977b04d21afb2d6cd38c989fa91",
       "dependencies": [],
       "dependency_digests": {},

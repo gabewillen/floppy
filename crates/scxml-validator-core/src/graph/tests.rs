@@ -40,14 +40,14 @@ fn assert_complete(diagnostic: &Diagnostic) {
     assert!(!diagnostic.spec_references.is_empty(), "{diagnostic:?}");
 }
 
-// SCXML029 -------------------------------------------------------------------
+// LINT005 -------------------------------------------------------------------
 
 #[test]
 fn unreachable_state_is_reported_once_at_its_id() {
     let (xml, report) = validate(
         r#"<state id="a"><transition event="go" target="b"/></state><state id="b"/><state id="island"><state id="inner"/></state>"#,
     );
-    let found = with_code(&report, "SCXML029");
+    let found = with_code(&report, "LINT005");
     assert_eq!(found.len(), 1, "{report:?}");
     let diagnostic = found[0];
     assert_complete(diagnostic);
@@ -80,7 +80,7 @@ fn conditional_event_history_and_parallel_entries_count_as_reachable() {
            <parallel id="p"><state id="r1"/><state id="r2"><transition target="a"/></state></parallel>
            <state id="never"/>"#,
     );
-    let names: Vec<_> = with_code(&report, "SCXML029")
+    let names: Vec<_> = with_code(&report, "LINT005")
         .iter()
         .map(|diagnostic| diagnostic.message.clone())
         .collect();
@@ -94,7 +94,7 @@ fn state_targeted_only_from_unreachable_state_labels_that_reference() {
     let (xml, report) = validate(
         r#"<state id="a"/><state id="b"><transition event="e" target="c"/></state><state id="c"/>"#,
     );
-    let found = with_code(&report, "SCXML029");
+    let found = with_code(&report, "LINT005");
     assert_eq!(found.len(), 2, "{report:?}");
     let c = found
         .iter()
@@ -114,7 +114,7 @@ fn state_targeted_only_from_unreachable_state_labels_that_reference() {
 #[test]
 fn multi_target_whose_removal_would_strand_a_state_offers_no_fix() {
     // `a` and `b` are entered only by this transition: removing either token
-    // would trade the SCXML030 error for a new SCXML029, so no fix is offered
+    // would trade the SCXML030 error for a new LINT005, so no fix is offered
     // and the notes say why.
     let (xml, report) = validate(
         r#"<state id="s"><transition event="go" target="a b"/></state><state id="a"/><state id="b"/>"#,
@@ -249,7 +249,7 @@ fn orthogonal_parallel_targets_are_accepted_and_nested_or_repeated_ones_are_not(
     // descendant is rejected at compile time, so it is SCXML030. One state
     // listed twice is legal (SCXML 1.0 §3.11: a legal state specification
     // is "a set of states such that 1) no state is an ancestor of any other
-    // state on the list"), so it is only the SCXML072 warning.
+    // state on the list"), so it is only the LINT018 warning.
     let (xml, report) = validate(
         r#"<state id="s"><transition event="up" target="p x1"/><transition event="again" target="y1 y1"/></state>
            <parallel id="p"><state id="x"><state id="x1"/></state><state id="y"><state id="y1"/></state></parallel>"#,
@@ -258,7 +258,7 @@ fn orthogonal_parallel_targets_are_accepted_and_nested_or_repeated_ones_are_not(
     assert_eq!(found.len(), 1, "{report:?}");
     assert!(found[0].message.contains("are nested"), "{:?}", found[0]);
     assert_eq!(text(&xml, found[0].primary.span), "x1");
-    let repeated = with_code(&report, "SCXML072");
+    let repeated = with_code(&report, "LINT018");
     assert_eq!(repeated.len(), 1, "{report:?}");
     assert_eq!(repeated[0].severity, Severity::Warning);
     assert!(
@@ -276,7 +276,7 @@ fn orthogonal_parallel_targets_are_accepted_and_nested_or_repeated_ones_are_not(
     let (_, report) = validate(
         r#"<state id="s" initial="s1 s1"><state id="s1"><transition event="e" target="s1 s1"/></state></state>"#,
     );
-    assert_eq!(codes(&report), ["SCXML072", "SCXML072"], "{report:?}");
+    assert_eq!(codes(&report), ["LINT018", "LINT018"], "{report:?}");
 }
 
 #[test]
@@ -347,12 +347,12 @@ fn donedata_outside_final_and_duplicates_are_rejected() {
     assert!(with_code(&accepted, "SCXML032").is_empty());
 }
 
-// SCXML033 -------------------------------------------------------------------
+// LINT006 -------------------------------------------------------------------
 
 #[test]
 fn single_region_parallel_offers_a_rename_to_state() {
     let (xml, report) = validate(r#"<parallel id="p"><state id="only"/></parallel>"#);
-    let found = with_code(&report, "SCXML033");
+    let found = with_code(&report, "LINT006");
     assert_eq!(found.len(), 1, "{report:?}");
     let diagnostic = found[0];
     assert_complete(diagnostic);
@@ -366,16 +366,16 @@ fn single_region_parallel_offers_a_rename_to_state() {
         "{fixed}"
     );
     let (_, two) = validate(r#"<parallel id="p"><state id="a"/><state id="b"/></parallel>"#);
-    assert!(with_code(&two, "SCXML033").is_empty());
+    assert!(with_code(&two, "LINT006").is_empty());
 }
 
-// SCXML034 -------------------------------------------------------------------
+// LINT007 -------------------------------------------------------------------
 
 #[test]
 fn shadowed_transition_points_at_its_event_and_offers_reorder() {
     let xml_body = "<state id=\"s\">\n  <transition event=\"error\" target=\"f\"/>\n  <transition event=\"error.execution\" target=\"g\"/>\n</state><final id=\"f\"/><final id=\"g\"/>";
     let (xml, report) = validate(xml_body);
-    let found = with_code(&report, "SCXML034");
+    let found = with_code(&report, "LINT007");
     assert_eq!(found.len(), 1, "{report:?}");
     let diagnostic = found[0];
     assert_complete(diagnostic);
@@ -400,14 +400,14 @@ fn conditional_or_narrower_earlier_transitions_do_not_shadow() {
              <transition event="b" target="f"/>
            </state><final id="f"/>"#,
     );
-    assert!(with_code(&report, "SCXML034").is_empty(), "{report:?}");
+    assert!(with_code(&report, "LINT007").is_empty(), "{report:?}");
     let (_, wildcard) = validate(
         r#"<state id="s"><transition event="*" target="f"/><transition event="x.y" target="f"/></state><final id="f"/>"#,
     );
-    assert_eq!(with_code(&wildcard, "SCXML034").len(), 1);
+    assert_eq!(with_code(&wildcard, "LINT007").len(), 1);
 }
 
-// SCXML036 -------------------------------------------------------------------
+// LINT008 -------------------------------------------------------------------
 
 #[test]
 fn eventless_cycle_through_default_entry_is_reported() {
@@ -415,7 +415,7 @@ fn eventless_cycle_through_default_entry_is_reported() {
         r#"<state id="a"><transition target="b"/></state>
            <state id="b" initial="b1"><state id="b1"><transition target="a"/></state></state>"#,
     );
-    let found = with_code(&report, "SCXML036");
+    let found = with_code(&report, "LINT008");
     assert_eq!(found.len(), 1, "{report:?}");
     let diagnostic = found[0];
     assert_complete(diagnostic);
@@ -425,7 +425,7 @@ fn eventless_cycle_through_default_entry_is_reported() {
     );
     assert_eq!(text(&xml, diagnostic.primary.span), "b");
     assert!(
-        with_code(&report, "SCXML026").is_empty(),
+        with_code(&report, "LINT004").is_empty(),
         "the direct detector cannot see this cycle"
     );
 }
@@ -436,7 +436,7 @@ fn inherited_eventless_cycle_labels_the_ancestor_transition() {
         r#"<state id="a" initial="a1"><transition target="b"/><state id="a1"/></state>
            <state id="b" initial="b1"><state id="b1"><transition target="a"/></state></state>"#,
     );
-    let found = with_code(&report, "SCXML036");
+    let found = with_code(&report, "LINT008");
     assert_eq!(found.len(), 1, "{report:?}");
     assert!(
         found[0]
@@ -449,22 +449,22 @@ fn inherited_eventless_cycle_labels_the_ancestor_transition() {
 }
 
 #[test]
-fn direct_cycles_stay_with_scxml026_and_conditional_cycles_are_not_claimed() {
+fn direct_cycles_stay_with_lint004_and_conditional_cycles_are_not_claimed() {
     let (_, direct) = validate(
         r#"<state id="a"><transition target="b"/></state><state id="b"><transition target="a"/></state>"#,
     );
-    assert!(with_code(&direct, "SCXML036").is_empty(), "{direct:?}");
-    assert_eq!(with_code(&direct, "SCXML026").len(), 1);
+    assert!(with_code(&direct, "LINT008").is_empty(), "{direct:?}");
+    assert_eq!(with_code(&direct, "LINT004").len(), 1);
 
     let (_, conditional) = validate(
         r#"<state id="a"><transition cond="x" target="b"/></state>
            <state id="b" initial="b1"><state id="b1"><transition target="a"/></state></state>"#,
     );
-    assert!(with_code(&conditional, "SCXML036").is_empty());
+    assert!(with_code(&conditional, "LINT008").is_empty());
 
     let (_, halting) =
         validate(r#"<state id="a"><transition target="done"/></state><final id="done"/>"#);
-    assert!(with_code(&halting, "SCXML036").is_empty());
+    assert!(with_code(&halting, "LINT008").is_empty());
 }
 
 /// SCXML 1.0 Appendix D, "Termination": "A microstep always terminates. A
@@ -479,11 +479,11 @@ fn eventless_loops_are_warnings_because_a_non_terminating_macrostep_is_allowed()
     for (body, code) in [
         (
             r#"<state id="a"><transition target="b"/></state><state id="b"><transition target="a"/></state>"#,
-            "SCXML026",
+            "LINT004",
         ),
         (
             r#"<state id="a"><transition target="b"/></state><state id="b" initial="b1"><state id="b1"><transition target="a"/></state></state>"#,
-            "SCXML036",
+            "LINT008",
         ),
     ] {
         let (_, report) = validate(body);
@@ -495,7 +495,7 @@ fn eventless_loops_are_warnings_because_a_non_terminating_macrostep_is_allowed()
     }
 }
 
-// SCXML028 -------------------------------------------------------------------
+// LIMIT002 -------------------------------------------------------------------
 
 #[test]
 fn exhausted_budget_fails_closed_with_one_error_and_no_partial_findings() {
@@ -510,7 +510,7 @@ fn exhausted_budget_fails_closed_with_one_error_and_no_partial_findings() {
         Err(Exhausted)
     );
     assert_eq!(
-        budget_diagnostic("SCXML028", &document.root).severity,
+        budget_diagnostic("LIMIT002", &document.root).severity,
         Severity::Error
     );
     // With the full budget the same machine analyzes normally.
@@ -520,11 +520,11 @@ fn exhausted_budget_fails_closed_with_one_error_and_no_partial_findings() {
         analyze(&document, &document.root, &mut budget, &mut findings),
         Ok(())
     );
-    assert_eq!(with_code(&findings, "SCXML029").len(), 1);
+    assert_eq!(with_code(&findings, "LINT005").len(), 1);
 }
 
 /// Natively graph analysis is unbounded: a chain one state past the wasm
-/// node bound (65,536) is analyzed in full, with no `SCXML028`.
+/// node bound (65,536) is analyzed in full, with no `LIMIT002`.
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn native_graph_analysis_has_no_size_budget() {
@@ -538,13 +538,13 @@ fn native_graph_analysis_has_no_size_budget() {
         .chain(std::iter::once(r#"<final id="s65537"/>"#.to_owned()))
         .collect();
     let (_, report) = validate(&states);
-    assert!(with_code(&report, "SCXML028").is_empty(), "{report:?}");
-    assert!(with_code(&report, "SCXML029").is_empty(), "{report:?}");
+    assert!(with_code(&report, "LIMIT002").is_empty(), "{report:?}");
+    assert!(with_code(&report, "LINT005").is_empty(), "{report:?}");
 }
 
 /// The work budget grows with the machine, so linear analyses never exhaust
 /// it, but it applies to every build: pairwise checks over one state's
-/// transitions grow quadratically and are cut off with `SCXML028`.
+/// transitions grow quadratically and are cut off with `LIMIT002`.
 #[test]
 fn quadratic_graph_work_is_bounded_on_every_build() {
     use std::fmt::Write as _;
@@ -557,7 +557,7 @@ fn quadratic_graph_work_is_bounded_on_every_build() {
     let (_, report) = validate(&format!(
         r#"<state id="a">{transitions}</state><final id="b"/>"#
     ));
-    assert_eq!(with_code(&report, "SCXML028").len(), 1, "{report:?}");
+    assert_eq!(with_code(&report, "LIMIT002").len(), 1, "{report:?}");
     // A machine of the same size without the quadratic pairs is analyzed.
     let mut states = String::new();
     for index in 0..10_000 {
@@ -569,7 +569,7 @@ fn quadratic_graph_work_is_bounded_on_every_build() {
         .expect("writing to a String cannot fail");
     }
     let (_, report) = validate(&format!(r#"{states}<final id="s10000"/>"#));
-    assert!(with_code(&report, "SCXML028").is_empty(), "{report:?}");
+    assert!(with_code(&report, "LIMIT002").is_empty(), "{report:?}");
     // Deep nesting makes every ancestor walk long, and still fits the grant:
     // 40 chains of 200 nested states, each state targeting the deepest state
     // of the next chain.
@@ -586,7 +586,7 @@ fn quadratic_graph_work_is_bounded_on_every_build() {
         chains.push_str(&"</state>".repeat(200));
     }
     let (_, report) = validate(&chains);
-    assert!(with_code(&report, "SCXML028").is_empty(), "{report:?}");
+    assert!(with_code(&report, "LIMIT002").is_empty(), "{report:?}");
 }
 
 #[test]
@@ -595,7 +595,7 @@ fn graph_work_budget_scales_with_the_machine() {
     assert_eq!(graph_work_budget(1), MAX_GRAPH_WORK);
     // Natively the grant grows with the machine; a wasm build caps it at
     // `MAX_GRAPH_WORK`, which the host's validator component tests check
-    // (`the_wasm_validator_keeps_the_bounds_the_native_cli_lifts`, SCXML028).
+    // (`the_wasm_validator_keeps_the_bounds_the_native_cli_lifts`, LIMIT002).
     #[cfg(not(target_arch = "wasm32"))]
     {
         let large = MAX_GRAPH_WORK / GRAPH_WORK_PER_ITEM * 4;
@@ -617,7 +617,7 @@ fn nested_machines_are_analyzed_independently() {
     let (_, report) = validate(
         r#"<state id="s"><invoke type="scxml"><content><scxml xmlns="http://www.w3.org/2005/07/scxml"><state id="c"/><state id="orphan"/></scxml></content></invoke></state>"#,
     );
-    let found = with_code(&report, "SCXML029");
+    let found = with_code(&report, "LINT005");
     assert_eq!(found.len(), 1, "{report:?}");
     assert!(found[0].message.contains("`orphan`"));
 }
@@ -625,8 +625,8 @@ fn nested_machines_are_analyzed_independently() {
 #[test]
 fn explain_examples_for_graph_and_expression_codes_are_self_consistent() {
     for code in [
-        "SCXML029", "SCXML030", "SCXML031", "SCXML032", "SCXML033", "SCXML034", "SCXML036",
-        "SCXML037", "SCXML072",
+        "LINT005", "SCXML030", "SCXML031", "SCXML032", "LINT006", "LINT007", "LINT008", "SCXML037",
+        "LINT018",
     ] {
         let entry = crate::explain::lookup(code).expect("every new code is documented");
         assert!(entry.self_checking, "{code}");
@@ -645,7 +645,7 @@ fn explain_examples_for_graph_and_expression_codes_are_self_consistent() {
         );
     }
     for code in [
-        "SCXML028", "SCXML038", "SCXML039", "SCXML040", "SCXML041", "SCXML042",
+        "LIMIT002", "SCXML038", "SCXML039", "LIMIT003", "LIMIT004", "LINT009",
     ] {
         assert!(
             crate::explain::lookup(code).is_some(),
@@ -657,13 +657,13 @@ fn explain_examples_for_graph_and_expression_codes_are_self_consistent() {
 #[test]
 fn unresolved_references_suppress_the_unreachable_cascade() {
     // vdx/44: a typo in `target` leaves the intended state unreferenced; the
-    // SCXML005 error is the root cause, so SCXML029 must not also claim the
+    // SCXML005 error is the root cause, so LINT005 must not also claim the
     // intended state can never become active.
     let (_, report) =
         validate(r#"<state id="a"><transition event="go" target="bb"/></state><final id="b"/>"#);
     assert!(with_code(&report, "SCXML005").len() == 1, "{report:?}");
-    assert!(with_code(&report, "SCXML029").is_empty(), "{report:?}");
+    assert!(with_code(&report, "LINT005").is_empty(), "{report:?}");
     let (_, report) =
         validate(r#"<state id="p" initial="missing"><state id="c"/></state><state id="q"/>"#);
-    assert!(with_code(&report, "SCXML029").is_empty(), "{report:?}");
+    assert!(with_code(&report, "LINT005").is_empty(), "{report:?}");
 }

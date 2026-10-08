@@ -98,7 +98,7 @@ pub enum ExtensionHttpFailure {
 
 /// The outbound HTTP transport an embedder grants to invoked services
 /// (`stateforward:scxml/outbound-http`). The host admits every request
-/// ([`admit_request`]) before calling [`ExtensionHttp::fetch`]: the
+/// (`admit_request`) before calling [`ExtensionHttp::fetch`]: the
 /// implementation must bound its own time and the response body, follow no
 /// redirect, and add no ambient credentials. With the `http` feature, `ExtensionHttpClient`
 /// is the allowlisted implementation.

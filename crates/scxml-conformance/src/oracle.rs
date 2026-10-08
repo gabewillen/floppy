@@ -421,9 +421,9 @@ mod tests {
 
     #[test]
     fn a_rejection_passes_only_with_exactly_the_expected_codes() {
-        let expected = ["SCXML087".to_owned()];
+        let expected = ["EVENT003".to_owned()];
         assert_eq!(
-            evaluate_document_rejection(&expected, true, ["SCXML087", "SCXML087"]),
+            evaluate_document_rejection(&expected, true, ["EVENT003", "EVENT003"]),
             Ok(())
         );
         let failure = |rejected: bool, codes: &[&'static str]| {
@@ -432,9 +432,9 @@ mod tests {
                 .code
         };
         assert_eq!(failure(false, &[]), "document-accepted");
-        assert_eq!(failure(true, &["SCXML088"]), "rejection-codes-mismatch");
+        assert_eq!(failure(true, &["EVENT004"]), "rejection-codes-mismatch");
         assert_eq!(
-            failure(true, &["SCXML087", "SCXML088"]),
+            failure(true, &["EVENT003", "EVENT004"]),
             "rejection-codes-mismatch"
         );
     }

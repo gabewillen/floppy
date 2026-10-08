@@ -202,7 +202,7 @@ pub fn error_code(error: &ArtifactError) -> RenderErrorCode {
         ArtifactError::InvalidJson(_)
         | ArtifactError::InvalidConformanceIdentity(_)
         | ArtifactError::InvalidConformanceCase(_)
-        | ArtifactError::EmptyCode
+        | ArtifactError::UnknownCode
         | ArtifactError::InvalidSpan(_)
         | ArtifactError::OverlappingEdits
         | ArtifactError::NonCanonicalOrdering

@@ -127,31 +127,31 @@ const NOT_SELF_CHECKING: &[(&str, &str)] = &[
         "produced only by the validator component's package requests",
     ),
     (
-        "SCXML088",
-        "needs a schema file next to the document; covered by the UI case scxml088-missing-schema-file",
+        "EVENT004",
+        "needs a schema file next to the document; covered by the UI case event004-missing-schema-file",
     ),
     (
-        "SCXML089",
-        "needs a schema file to point into; covered by the UI case scxml089-bad-pointer",
+        "EVENT005",
+        "needs a schema file to point into; covered by the UI case event005-bad-pointer",
     ),
     (
-        "SCXML045",
+        "LINT010",
         "a note only when no checker for the machine's data model is linked, and this harness links both",
     ),
     (
-        "SCXML027",
+        "LIMIT001",
         "needs 64 nested inline machines; the example is prose",
     ),
-    ("SCXML028", "needs 65,536 states; the example is prose"),
+    ("LIMIT002", "needs 65,536 states; the example is prose"),
     (
-        "SCXML069",
+        "LIMIT007",
         "needs a 65-deep hierarchy or 1 MiB values; the example is prose",
     ),
     (
-        "SCXML062",
+        "LINT016",
         "the example would print a raw bidirectional control to the terminal; it is prose",
     ),
-    ("SCXML041", "needs 16,385 expressions; the example is prose"),
+    ("LIMIT004", "needs 16,385 expressions; the example is prose"),
     ("XML002", "needs 257 nested elements; the example is prose"),
     (
         "XML005",
@@ -162,44 +162,24 @@ const NOT_SELF_CHECKING: &[(&str, &str)] = &[
         "needs an extension namespace without a registered schema",
     ),
     (
-        "SCXML081",
+        "LIMIT008",
         "the example needs an ID of more than 1,013 bytes; tests/ui covers it",
     ),
     (
-        "SCXML082",
+        "LIMIT009",
         "the example needs a name of more than 1,012 bytes; tests/ui covers it",
     ),
     (
-        "SCXML083",
+        "ENV001",
         "the example needs an extension package's declared slots; the validator's env attribute tests cover it",
     ),
     (
-        "SCXML084",
+        "ENV002",
         "the example is a fragment; the validator's env attribute tests cover it",
     ),
     (
-        "SCXML094",
+        "PKG004",
         "the example needs the validator's bound service types; the validator's invoke type tests cover it",
-    ),
-    (
-        "SCXML097",
-        "the example needs the draft profile; the validator's draft profile tests cover it",
-    ),
-    (
-        "SCXML098",
-        "the example needs the draft profile; the validator's draft profile tests cover it",
-    ),
-    (
-        "SCXML099",
-        "the example needs the draft profile; the validator's draft profile tests cover it",
-    ),
-    (
-        "SCXML100",
-        "the example needs the draft profile; the validator's draft profile tests cover it",
-    ),
-    (
-        "SCXML101",
-        "the example needs the draft profile; the validator's draft profile tests cover it",
     ),
     (
         "PKG002",

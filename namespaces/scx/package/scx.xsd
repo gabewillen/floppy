@@ -6,8 +6,7 @@
 
   scx:validate     location (required), expr | one scx:content child (exactly
                   one at run time), name, applyfixes="machine-applicable"
-                  with fixedlocation (both or neither), profile="draft"
-                  (the validator's draft profile), and scx:eventschema
+                  with fixedlocation (both or neither), and scx:eventschema
                   children
   scx:content      the document as text (typically CDATA); no elements
   scx:eventschema  uri (required), and the schema as text or expr (exactly
@@ -36,13 +35,6 @@
         </xs:simpleType>
       </xs:attribute>
       <xs:attribute name="fixedlocation" type="xs:string"/>
-      <xs:attribute name="profile">
-        <xs:simpleType>
-          <xs:restriction base="xs:string">
-            <xs:enumeration value="draft"/>
-          </xs:restriction>
-        </xs:simpleType>
-      </xs:attribute>
     </xs:complexType>
   </xs:element>
   <xs:element name="content">

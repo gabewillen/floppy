@@ -133,9 +133,9 @@ fn deep_portable_values_are_declined_at_ingress() {
 
 #[test]
 fn expressions_the_validator_declines_are_rejected_at_runtime() {
-    // The validator's SCXML040 fragment (tests/ui/scxml040-*) is over the
+    // The validator's LIMIT003 fragment (tests/ui/limit003-*) is over the
     // shared nesting guard, so evaluation fails closed with a typed error;
-    // this is why SCXML040 is an error rather than a warning.
+    // this is why LIMIT003 is an error rather than a warning.
     let expression = format!("{}1{}", "(".repeat(20), ")".repeat(20));
     assert_eq!(evaluate(&expression), Err(DataModelError::InvalidInput));
     // The byte bound applies to wasm builds only; the host's component tests

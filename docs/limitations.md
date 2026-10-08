@@ -25,17 +25,17 @@ disagree are in [spec-errata.md](spec-errata.md).
   errata SHA-256
   `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f`,
   producer report digest
-  `7f1d659f3854805b4eea104103657b6ac70ef2edfa4bdc5fb63356a0515a2ef9`,
+  `21423463af3896b33650ad06a2d34bbfbced051b80f8ecb375aba1eb91d593b9`,
   and canonical artifact SHA-256
-  `4bc7822631ee36c7bfb270d25d94cb0af336542febf8d73c03f95f9d37bd2b1e`.
+  `8a3bddb7d9cb81526de2f2752495d79c0bdb614f335a1951fc91c24b83845409`.
   The XPath evidence binds corpus digest
   `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca`,
   errata SHA-256
   `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a`,
   producer report digest
-  `c98011ec1f2d7bf0093a7f2ed1658de4b072b43a2da03b2850dd3c8ed5b6cff8`,
+  `a68e123338dbc2281c9f965ffdcbf2d8e192a707665765bcfe17a78da1e64af1`,
   and canonical artifact SHA-256
-  `a315bfb269f48c9a79e52e5ac3bb9dbc2f285d0eada9fa1b249137db1c2fd264`.
+  `998bd148fc9338702b7a70db7f1b7871e47d0d326f54a494a70d599c85bbad71`.
   The report bytes are checked in under
   [`tests/conformance/w3c-irp/baselines`](../tests/conformance/w3c-irp/baselines).
   These are measured IRP results of the shipped components under the
@@ -141,7 +141,7 @@ disagree are in [spec-errata.md](spec-errata.md).
   (`unavailable`; `scxml.session-snapshot/v2` cannot represent one); the
   validator and compiler components' WIT requests carry no service packages,
   so the validator component reports every literal service type as unbound
-  (`SCXML094`, a warning); and the browser host binds no service
+  (`PKG004`, a warning); and the browser host binds no service
   (`start-invocation` of a service answers `unavailable`).
 - Invoked services' outbound HTTP: `outbound-http.fetch` is an `async func`
   that suspends only the calling task. A batch run performs the request
@@ -276,7 +276,7 @@ disagree are in [spec-errata.md](spec-errata.md).
   three data models, the SCXML and BasicHTTP Event I/O Processors, the
   clock, the session snapshot codec, the validator, and the extension
   components of the example namespace and `scx`, validates documents
-  (the `scx validate` report, byte for byte, plus the draft profile),
+  (the `scx validate` report, byte for byte),
   runs extension elements through bound extension components with the
   Wasmtime host's semantics (session capabilities during `execute`,
   per-session instances, per-call fuel, retirement after a trap, the
@@ -375,7 +375,7 @@ In detail:
   size (and, in the components, fuel), not by a pattern-specific bound.
 - By rule, not as a gap, extension components do no I/O: no WASI, no
   `outbound-http`, and no `env` values or references (an `env` attribute on
-  an extension element is `SCXML084`). Network calls and secrets belong in
+  an extension element is `ENV002`). Network calls and secrets belong in
   invoked services, whose `fetch` suspends only their own task.
 - The conformance runner binds no invoked services yet: a namespace suite
   cannot exercise one at run time, so the `env` suite

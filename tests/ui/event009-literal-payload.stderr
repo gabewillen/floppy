@@ -1,0 +1,14 @@
+error[EVENT009]: the literal data of `<send>` does not satisfy its own `event:schema`
+ --> tests/ui/event009-literal-payload.scx:8:9
+  |
+7 |             event:schema='{"type":"object","properties":{"quantity":{"type":"integer","minimum":1}},"required":["quantit...
+  |             ------------------------------------------------------------------------------------------------------------ the schema it must satisfy
+8 |         <content>{"quantity": 0}</content>
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `{"quantity":0}` is rejected
+  |
+  = note: the `<content>` is literal JSON, so the event data it creates is known before the document runs, and the element's literal `event:schema` describes that data
+  = help: change the `<content>` to data the schema admits, or correct the schema
+  = spec: JSON Schema 2020-12 Validation
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scx --explain EVENT009`.

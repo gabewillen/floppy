@@ -49,7 +49,7 @@ Invocation is a runtime action (SCXML 6.4), so a type the host does not
 bind is judged when its `<invoke>` runs, never earlier: an `<invoke>` of a
 type no service component is bound to, literal or given by `typeexpr`,
 raises `error.execution` when it runs, and the document still validates
-(`SCXML094` is a warning), compiles, and runs normally until then.
+(`PKG004` is a warning), compiles, and runs normally until then.
 
 ## Cancellation
 
@@ -295,9 +295,9 @@ the variable whose value the host binds, in the host's `env` vocabulary
   `<invoke>` raises `error.execution`.
 - Only an invoked service's `<invoke>` has slots: one on an SCXML session's
   `<invoke>`, or on any element other than an `<invoke>` (an
-  executable-content extension element included), is `SCXML084`, and a `typeexpr` that evaluates to the SCXML type
+  executable-content extension element included), is `ENV002`, and a `typeexpr` that evaluates to the SCXML type
   with slots bound raises `error.execution`. The validator judges a literal
-  type's slots against its bound package (`SCXML083`, with a "did you mean"
+  type's slots against its bound package (`ENV001`, with a "did you mean"
   fix); a `typeexpr`'s slots only for their syntax.
 - The CLI supplies the run's values with `--env NAME=VALUE`, else the last
   `--env-file PATH` entry (Docker's format: `NAME=VALUE` with the value taken
@@ -321,14 +321,14 @@ machine with them runs exactly as without them.
 
 ## What the validator checks
 
-- `SCXML093` (warning): the literal `<invoke type>` is a platform-specific
+- `PKG003` (warning): the literal `<invoke type>` is a platform-specific
   value, not a URI. SCXML 6.4.1 allows platform-specific types, but a
   service package binds by an exact absolute URI, so on a host built from
   this repository the `<invoke>` raises `error.execution` when it runs.
-- `SCXML094` (warning): no given service package binds the literal type
+- `PKG004` (warning): no given service package binds the literal type
   URI; without a bound package the `<invoke>` raises `error.execution` when
   it runs (invocation is a runtime action).
-- `SCXML083` and `SCXML084`: `env` slots (above).
+- `ENV001` and `ENV002`: `env` slots (above).
 
-`compile` never rejects an unbound type. `scx --explain SCXML093` and
-`--explain SCXML094` give each rule with an example.
+`compile` never rejects an unbound type. `scx --explain PKG003` and
+`--explain PKG004` give each rule with an example.

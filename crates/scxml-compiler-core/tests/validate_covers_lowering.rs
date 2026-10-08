@@ -44,7 +44,7 @@ const COUNT_IMPLIED: &str = "a Machine IR count of items that lowering already b
 const PINS_ONLY: &str = "only compile-time script packages pin a script, and the compiler pins every reference to one URI with the same package";
 const OVERFLOW: &str =
     "a u32 overflow; an 8 MiB source has far fewer elements, states, or transitions";
-const GRAPH_IMPLIED: &str = "the validator's semantic graph bound (65,536 nodes or transitions, `SCXML028`) is below the compiler's 100,000 (asserted below)";
+const GRAPH_IMPLIED: &str = "the validator's semantic graph bound (65,536 nodes or transitions, `LIMIT002`) is below the compiler's 100,000 (asserted below)";
 
 /// One lowering rejection key with its source sites and coverage.
 struct Entry {
@@ -238,7 +238,7 @@ fn table() -> Vec<Entry> {
             vec![
                 (
                     machine(r#"<state id="s" xml:lang="en"><transition event="go" target="f"/></state>"#),
-                    "SCXML068",
+                    "LIMIT006",
                 ),
                 (
                     machine(r#"<state id="s" final="true"><transition event="go" target="f"/></state>"#),
@@ -250,7 +250,7 @@ fn table() -> Vec<Entry> {
             "UnsupportedElement",
             13,
             vec![
-                (state(r#"<x:note xmlns:x="urn:x"/>"#), "SCXML068"),
+                (state(r#"<x:note xmlns:x="urn:x"/>"#), "LIMIT006"),
                 (state(r#"<raise event="e"/>"#), "XSD-cvc-complex-type.2.4"),
                 (
                     state(r#"<state id="i"><initial><final id="g"/></initial><state id="a"/></state>"#),
@@ -262,7 +262,7 @@ fn table() -> Vec<Entry> {
                 ),
                 (
                     state(r#"<invoke type="scxml" src="c.scxml"><x:note xmlns:x="urn:x"/></invoke>"#),
-                    "SCXML068",
+                    "LIMIT006",
                 ),
                 (
                     state(r#"<invoke type="scxml" src="c.scxml"><raise event="e"/></invoke>"#),
@@ -276,13 +276,13 @@ fn table() -> Vec<Entry> {
                 (action(r#"<final id="g"/>"#), "XSD-"),
                 (
                     action(r#"<send event="e"><x:note xmlns:x="urn:x"/></send>"#),
-                    "SCXML068",
+                    "LIMIT006",
                 ),
                 (
                     action(r#"<send event="e"><raise event="x"/></send>"#),
                     "XSD-",
                 ),
-                (machine(r#"<x:note xmlns:x="urn:x"/><state id="s"><transition event="go" target="f"/></state>"#), "SCXML068"),
+                (machine(r#"<x:note xmlns:x="urn:x"/><state id="s"><transition event="go" target="f"/></state>"#), "LIMIT006"),
                 (machine(r#"<onentry/><state id="s"><transition event="go" target="f"/></state>"#), "XSD-"),
             ],
             "the fallback arm of `lower_state` is called only for the four state elements",
@@ -376,19 +376,19 @@ fn table() -> Vec<Entry> {
                 // other namespaces (`##other`), which lowering rejects.
                 (
                     action(r#"<log label="l"><x:note xmlns:x="urn:x"/></log>"#),
-                    "SCXML068",
+                    "LIMIT006",
                 ),
                 (
                     action(r#"<cancel sendid="s"><x:note xmlns:x="urn:x"/></cancel>"#),
-                    "SCXML068",
+                    "LIMIT006",
                 ),
                 (
                     action(r#"<send event="e"><param name="p" expr="1"><x:note xmlns:x="urn:x"/></param></send>"#),
-                    "SCXML068",
+                    "LIMIT006",
                 ),
                 (
                     state(r#"<invoke type="scxml" src="c.scxml"><param name="p" expr="1"><x:note xmlns:x="urn:x"/></param></invoke>"#),
-                    "SCXML068",
+                    "LIMIT006",
                 ),
             ],
         ),
@@ -454,7 +454,7 @@ fn table() -> Vec<Entry> {
                 // (`##other`), which lowering rejects.
                 (
                     action(r#"<script><x:note xmlns:x="urn:x"/></script>"#),
-                    "SCXML068",
+                    "LIMIT006",
                 ),
             ],
         ),
@@ -510,19 +510,19 @@ fn table() -> Vec<Entry> {
                     state(&format!(
                         r#"<transition xmlns:event="{EVENT}" event="e" event:schema="../order.json"/>"#
                     )),
-                    "SCXML088",
+                    "EVENT004",
                 ),
                 (
                     state(&format!(
                         r#"<transition xmlns:event="{EVENT}" event="e" event:schema="order.json"/>"#
                     )),
-                    "SCXML088",
+                    "EVENT004",
                 ),
                 (
                     state(&format!(
                         r#"<transition xmlns:event="{EVENT}" event="e" event:schema='{{"type":}}'/>"#
                     )),
-                    "SCXML087",
+                    "EVENT003",
                 ),
             ],
         ),
@@ -533,7 +533,7 @@ fn table() -> Vec<Entry> {
                 state(&format!(
                     r#"<transition xmlns:event="{EVENT}" event="e" event:schema="true" event:schemaexpr="s"/>"#
                 )),
-                "SCXML086",
+                "EVENT002",
             )],
         ),
         never("event schema sha256 does not match its schema", 1, DECODE_ONLY),
@@ -853,7 +853,7 @@ fn table() -> Vec<Entry> {
                 state(&format!(
                     r#"<invoke xmlns:env="{ENV}" type="urn:svc" env:key="K" env:keyexpr="'K'"/>"#
                 )),
-                "SCXML083",
+                "ENV001",
             )],
         ),
         covered(
@@ -864,13 +864,13 @@ fn table() -> Vec<Entry> {
                     state(&format!(
                         r#"<invoke xmlns:env="{ENV}" type="urn:svc" env:Key="K"/>"#
                     )),
-                    "SCXML083",
+                    "ENV001",
                 ),
                 (
                     state(&format!(
                         r#"<invoke xmlns:env="{ENV}" typeexpr="'urn:svc'" env:key="1K"/>"#
                     )),
-                    "SCXML083",
+                    "ENV001",
                 ),
             ],
         ),
@@ -882,13 +882,13 @@ fn table() -> Vec<Entry> {
                     state(&format!(
                         r#"<invoke xmlns:env="{ENV}" src="c.scxml" env:key="K"/>"#
                     )),
-                    "SCXML084",
+                    "ENV002",
                 ),
                 (
                     state(&format!(
                         r#"<invoke xmlns:env="{ENV}" type="scxml" src="c.scxml" env:key="K"/>"#
                     )),
-                    "SCXML084",
+                    "ENV002",
                 ),
             ],
             DECODE_ONLY,
@@ -924,16 +924,16 @@ fn table() -> Vec<Entry> {
                 ),
                 (
                     machine(&format!(r#"<state id="s"/><state id="{}"/>"#, "x".repeat(1_025))),
-                    "SCXML081",
+                    "LIMIT008",
                 ),
                 (
                     machine(&format!(r#"<state id="s"/><state id=" {} "/>"#, "x".repeat(1_025))),
-                    "SCXML081",
+                    "LIMIT008",
                 ),
             ],
         ),
         // ---------------------------------------------------------------
-        // Names the engine converts (every build; SCXML081, SCXML082)
+        // Names the engine converts (every build; LIMIT008, LIMIT009)
         // ---------------------------------------------------------------
         covered(
             "state done event",
@@ -944,14 +944,14 @@ fn table() -> Vec<Entry> {
                         r#"<state id="s"/><state id="{}"><final id="g"/></state>"#,
                         "x".repeat(1_014)
                     )),
-                    "SCXML081",
+                    "LIMIT008",
                 ),
                 (
                     machine(&format!(
                         r#"<state id="s"/><state id="&#9;{}&#10;"><final id="g"/></state>"#,
                         "x".repeat(1_014)
                     )),
-                    "SCXML081",
+                    "LIMIT008",
                 ),
             ],
         ),
@@ -961,11 +961,11 @@ fn table() -> Vec<Entry> {
             vec![
                 (
                     action(&format!(r#"<raise event="{}"/>"#, "e".repeat(1_025))),
-                    "SCXML082",
+                    "LIMIT009",
                 ),
                 (
                     action(&format!(r#"<raise event=" {}  "/>"#, "e".repeat(1_025))),
-                    "SCXML082",
+                    "LIMIT009",
                 ),
             ],
         ),
@@ -975,11 +975,11 @@ fn table() -> Vec<Entry> {
             vec![
                 (
                     action(&format!(r#"<send event="{}"/>"#, "e".repeat(1_025))),
-                    "SCXML082",
+                    "LIMIT009",
                 ),
                 (
                     action(&format!(r#"<send event=" {}  "/>"#, "e".repeat(1_025))),
-                    "SCXML082",
+                    "LIMIT009",
                 ),
             ],
         ),
@@ -989,11 +989,11 @@ fn table() -> Vec<Entry> {
             vec![
                 (
                     action(&format!(r#"<send event="e" id="{}"/>"#, "i".repeat(1_025))),
-                    "SCXML082",
+                    "LIMIT009",
                 ),
                 (
                     action(&format!(r#"<send event="e" id=" {}  "/>"#, "i".repeat(1_025))),
-                    "SCXML082",
+                    "LIMIT009",
                 ),
             ],
         ),
@@ -1003,11 +1003,11 @@ fn table() -> Vec<Entry> {
             vec![
                 (
                     state(&format!(r#"<invoke id="{}" src="c.scxml"/>"#, "i".repeat(1_025))),
-                    "SCXML082",
+                    "LIMIT009",
                 ),
                 (
                     state(&format!(r#"<invoke id=" {}  " src="c.scxml"/>"#, "i".repeat(1_025))),
-                    "SCXML082",
+                    "LIMIT009",
                 ),
             ],
         ),
@@ -1017,16 +1017,16 @@ fn table() -> Vec<Entry> {
             vec![
                 (
                     state(&format!(r#"<invoke id="{}" src="c.scxml"/>"#, "i".repeat(1_013))),
-                    "SCXML082",
+                    "LIMIT009",
                 ),
                 (
                     state(&format!(r#"<invoke id=" {}  " src="c.scxml"/>"#, "i".repeat(1_013))),
-                    "SCXML082",
+                    "LIMIT009",
                 ),
             ],
         ),
         // ---------------------------------------------------------------
-        // Machine IR bounds (SCXML069)
+        // Machine IR bounds (LIMIT007)
         // ---------------------------------------------------------------
         partly(
             "state hierarchy depth",
@@ -1035,7 +1035,7 @@ fn table() -> Vec<Entry> {
                 machine(&nested(r#"<state id="d">"#, "</state>", 66, "")
                     .replacen(r#"<state id="d">"#, r#"<state id="s">"#, 1)
                     .replace(r#"<state id="d">"#, "<state>")),
-                "SCXML069",
+                "LIMIT007",
             )],
             "the two Machine IR hierarchy-index sites repeat the lowering bound, which rejects the depth first",
         ),
@@ -1044,13 +1044,13 @@ fn table() -> Vec<Entry> {
             1,
             vec![(
                 action(&nested(r#"<foreach array="[1]" item="i">"#, "</foreach>", 65, "")),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
             "executable content depth",
             1,
-            vec![(action(&nested(r#"<if cond="true">"#, "</if>", 65, "")), "SCXML069")],
+            vec![(action(&nested(r#"<if cond="true">"#, "</if>", 65, "")), "LIMIT007")],
         ),
         partly(
             "source XML depth",
@@ -1061,14 +1061,14 @@ fn table() -> Vec<Entry> {
                         r#"<send event="e"><content>{}</content></send>"#,
                         nested("<a>", "</a>", 33, "")
                     )),
-                    "SCXML069",
+                    "LIMIT007",
                 ),
                 (
                     action(&format!(
                         r#"<x:act xmlns:x="urn:x">{}</x:act>"#,
                         nested("<x:a>", "</x:a>", 32, "")
                     )),
-                    "SCXML069",
+                    "LIMIT007",
                 ),
             ],
             "",
@@ -1086,7 +1086,7 @@ fn table() -> Vec<Entry> {
                         nested("<a>", "</a>", 30, "")
                     ),
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
             "the site in `xml_markup` serializes inline XML at run time, after compilation",
         ),
@@ -1098,20 +1098,20 @@ fn table() -> Vec<Entry> {
         covered(
             "source attribute value",
             1,
-            vec![(action(&format!(r#"<log label="{long}"/>"#)), "SCXML069")],
+            vec![(action(&format!(r#"<log label="{long}"/>"#)), "LIMIT007")],
         ),
         covered(
             "inline XML text",
             1,
             vec![(
                 action(&format!(r#"<send event="e"><content>{long}</content></send>"#)),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         partly(
             "script body",
             3,
-            vec![(action(&format!("<script>//{long}</script>")), "SCXML069")],
+            vec![(action(&format!("<script>//{long}</script>")), "LIMIT007")],
             "the second lowering site guards the same sum against overflow, and the Machine IR site repeats the bound",
         ),
         covered(
@@ -1119,7 +1119,7 @@ fn table() -> Vec<Entry> {
             1,
             vec![(
                 action(&format!(r#"<send event="e"><content><a v="{long}"/></content></send>"#)),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1129,7 +1129,7 @@ fn table() -> Vec<Entry> {
                 action(&format!(
                     r#"<send event="e"><content><a b{long}="1"/></content></send>"#
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1137,7 +1137,7 @@ fn table() -> Vec<Entry> {
             1,
             vec![(
                 action(&format!(r#"<send event="e"><content><a{long}/></content></send>"#)),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         never(
@@ -1158,13 +1158,13 @@ fn table() -> Vec<Entry> {
                     action(&format!(
                         r#"<send event="e"><content><a xmlns:q="urn:{long}" q:v="1"/></content></send>"#
                     )),
-                    "SCXML069",
+                    "LIMIT007",
                 ),
                 (
                     action(&format!(
                         r#"<send event="e"><content><q:a xmlns:q="urn:{long}"/></content></send>"#
                     )),
-                    "SCXML069",
+                    "LIMIT007",
                 ),
                 (
                     action(&format!(
@@ -1176,7 +1176,7 @@ fn table() -> Vec<Entry> {
                             .map(|index| format!(r#"<n:a xmlns:n="urn:b{index}"/>"#))
                             .collect::<String>()
                     )),
-                    "SCXML069",
+                    "LIMIT007",
                 ),
             ],
         ),
@@ -1191,7 +1191,7 @@ fn table() -> Vec<Entry> {
                         .collect::<Vec<_>>()
                         .join(" ")
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         never(
@@ -1207,7 +1207,7 @@ fn table() -> Vec<Entry> {
                     r#"<send event="e"><content>{}</content></send>"#,
                     repeat("<a/>", 10_001)
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1218,7 +1218,7 @@ fn table() -> Vec<Entry> {
                     r#"<assign location="$x">{}</assign>"#,
                     repeat("<a/>", 10_001)
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1232,7 +1232,7 @@ fn table() -> Vec<Entry> {
                         .collect::<Vec<_>>()
                         .join(" ")
                 )),
-                "SCXML068",
+                "LIMIT006",
             )],
         ),
         covered(
@@ -1243,7 +1243,7 @@ fn table() -> Vec<Entry> {
                     r#"{HEAD}<state id="s"><transition event="go" target="f"/></state>{}<final id="f"/></scxml>"#,
                     repeat("<final/>", 10_001)
                 ),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1251,7 +1251,7 @@ fn table() -> Vec<Entry> {
             1,
             vec![(
                 state(&repeat(r#"<transition event="e"/>"#, 10_001)),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1262,7 +1262,7 @@ fn table() -> Vec<Entry> {
                     r#"<state id="p"><initial>{}</initial><state id="a"/></state>"#,
                     repeat(r#"<transition target="a"/>"#, 10_001)
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1275,7 +1275,7 @@ fn table() -> Vec<Entry> {
                         .map(|index| format!(r#"<data id="d{index}"/>"#))
                         .collect::<String>()
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1291,7 +1291,7 @@ fn table() -> Vec<Entry> {
                         .map(|index| format!(r#"<data id="b{index}"/>"#))
                         .collect::<String>()
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1307,7 +1307,7 @@ fn table() -> Vec<Entry> {
                         .map(|index| format!(r#"<data id="b{index}"/>"#))
                         .collect::<String>()
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1318,7 +1318,7 @@ fn table() -> Vec<Entry> {
                     r#"<invoke type="scxml" src="c.scxml">{}</invoke>"#,
                     repeat(r#"<param name="p" expr="1"/>"#, 10_001)
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1329,7 +1329,7 @@ fn table() -> Vec<Entry> {
                     r#"<state id="s"><transition event="go" target="f"/></state><final id="g"><donedata>{}</donedata></final>"#,
                     repeat(r#"<param name="p" expr="1"/>"#, 10_001)
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1340,13 +1340,13 @@ fn table() -> Vec<Entry> {
                     r#"<send event="e">{}</send>"#,
                     repeat(r#"<param name="p" expr="1"/>"#, 10_001)
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
             "executable child nodes",
             1,
-            vec![(action(&repeat(r#"<raise event="e"/>"#, 10_001)), "SCXML069")],
+            vec![(action(&repeat(r#"<raise event="e"/>"#, 10_001)), "LIMIT007")],
         ),
         covered(
             "executable actions",
@@ -1356,7 +1356,7 @@ fn table() -> Vec<Entry> {
                     r#"<if cond="true">{}</if>"#,
                     repeat(r#"<raise event="e"/>"#, 10_001)
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1367,7 +1367,7 @@ fn table() -> Vec<Entry> {
                     r#"<if cond="true">{}</if>"#,
                     repeat(r#"<elseif cond="true"/>"#, 10_001)
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1378,7 +1378,7 @@ fn table() -> Vec<Entry> {
                     r#"<state id="s"><transition event="{}" target="f"/></state>"#,
                     vec!["e"; 10_001].join(" ")
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1389,7 +1389,7 @@ fn table() -> Vec<Entry> {
                     r#"<send event="e" namelist="{}"/>"#,
                     vec!["n"; 10_001].join(" ")
                 )),
-                "SCXML069",
+                "LIMIT007",
             )],
         ),
         covered(
@@ -1401,14 +1401,14 @@ fn table() -> Vec<Entry> {
                         r#"<state id="s"><transition event="go" target="{}"/></state>"#,
                         targets(10_001)
                     )),
-                    "SCXML069",
+                    "LIMIT007",
                 ),
                 (
                     format!(
                         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="{}"><state id="s"><transition event="go" target="f"/></state><final id="f"/></scxml>"#,
                         targets(10_001)
                     ),
-                    "SCXML069",
+                    "LIMIT007",
                 ),
             ],
         ),
@@ -1425,7 +1425,7 @@ fn table() -> Vec<Entry> {
         covered(
             "multi-target validation items",
             1,
-            vec![(multi_target_budget_document(), "SCXML069")],
+            vec![(multi_target_budget_document(), "LIMIT007")],
         ),
         never("source states", 1, GRAPH_IMPLIED),
         never("source transitions", 1, GRAPH_IMPLIED),
@@ -1795,7 +1795,7 @@ fn is_bound_key(key: &str) -> bool {
 }
 
 /// Machine IR bounds apply to wasm builds only: natively lowering never
-/// rejects a document over one, `validate` reports no `SCXML069`, and
+/// rejects a document over one, `validate` reports no `LIMIT007`, and
 /// `compile` reaches no `COMP001`. A fixture that is also invalid for an
 /// SCXML rule still fails lowering on that rule, which `validate` reports.
 fn native_bound_document(
@@ -1818,9 +1818,9 @@ fn native_bound_document(
     if report
         .diagnostics()
         .iter()
-        .any(|diagnostic| diagnostic.code == "SCXML069")
+        .any(|diagnostic| diagnostic.code == "LIMIT007")
     {
-        failures.push(format!("{label}: native validate reported SCXML069"));
+        failures.push(format!("{label}: native validate reported LIMIT007"));
     }
     let output = common::compile(source);
     if output
@@ -2114,7 +2114,7 @@ fn only_xml_white_space_separates_or_pads_values() {
 /// A value blank only in Unicode, such as U+1680 OGHAM SPACE MARK, is not
 /// blank in XML (XML 1.0 §2.3 `S`): `<log expr="&#x1680;">` is an
 /// expression, which lowering keeps, Machine IR loads, and the validator
-/// checks instead of reporting it as an empty `expr` (`SCXML042`).
+/// checks instead of reporting it as an empty `expr` (`LINT009`).
 #[test]
 fn a_value_of_other_unicode_white_space_is_not_blank() {
     let source = xpath_action(r#"<log expr="&#x1680;"/>"#);
@@ -2135,7 +2135,7 @@ fn a_value_of_other_unicode_white_space_is_not_blank() {
         !report
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "SCXML042"),
+            .any(|diagnostic| diagnostic.code == "LINT009"),
         "validate reads an expression, not an empty `expr`: {:?}",
         report.diagnostics()
     );
@@ -2218,7 +2218,7 @@ enum Completion {
 /// final states ("if isParallelState(grandparent): if
 /// getChildStates(grandparent).every(isInFinalState)"). A `<parallel>` whose
 /// regions are all `<parallel>` is no `<final>`'s grandparent, so it never
-/// raises one, however its regions finish. The validator (`SCXML081`) and
+/// raises one, however its regions finish. The validator (`LIMIT008`) and
 /// Machine IR validation bound the `done.state.<ID>` event of exactly the
 /// states that can raise it: each document's `<parallel id>` is 1,014
 /// bytes, so its event would be 1,025.
@@ -2265,7 +2265,7 @@ fn done_state_bounds_cover_exactly_the_states_the_engine_completes() {
             .map(|diagnostic| diagnostic.code.as_str())
             .collect();
         let expected: &[&str] = match completion {
-            Completion::RaisesDoneState => &["SCXML081"],
+            Completion::RaisesDoneState => &["LIMIT008"],
             Completion::Never => &[],
         };
         if errors != expected {

@@ -78,7 +78,7 @@ pub mod document {
         pub event: Option<String>,
         /// The resolved canonical JSON of a literal `event:schema` that
         /// resolves; `None` without one, for `event:schemaexpr`, and for a
-        /// schema that does not resolve (reported by `SCXML087`-`SCXML092`).
+        /// schema that does not resolve (reported by `EVENT003`-`EVENT008`).
         pub event_schema: Option<String>,
     }
 

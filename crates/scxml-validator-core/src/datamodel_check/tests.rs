@@ -127,7 +127,7 @@ fn declined_fragments_are_errors_because_the_runtime_rejects_them() {
     );
     let report = validate_expressions(&parse(&xml), &MarkerChecker::default());
     assert_eq!(report.diagnostics().len(), 1);
-    assert_eq!(report.diagnostics()[0].code, "SCXML040");
+    assert_eq!(report.diagnostics()[0].code, "LIMIT003");
     assert_eq!(report.diagnostics()[0].severity, Severity::Error);
     assert!(report.has_errors(), "{report:?}");
 }
@@ -142,7 +142,7 @@ fn other_or_missing_data_models_are_never_skipped_silently() {
     let checker = MarkerChecker::default();
     let report = validate_expressions(&parse(&xpath), &checker);
     assert_eq!(report.diagnostics().len(), 1, "{report:?}");
-    assert_eq!(report.diagnostics()[0].code, "SCXML045");
+    assert_eq!(report.diagnostics()[0].code, "LINT010");
     assert_eq!(report.diagnostics()[0].severity, Severity::Note);
     assert!(checker.calls.lock().expect("calls").is_empty());
 
@@ -169,7 +169,7 @@ fn other_or_missing_data_models_are_never_skipped_silently() {
         !validate_semantics(&parse(&missing))
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "SCXML045")
+            .any(|diagnostic| diagnostic.code == "LINT010")
     );
 
     // No expressions: nothing to check, nothing to report.
@@ -179,7 +179,7 @@ fn other_or_missing_data_models_are_never_skipped_silently() {
         !validate_semantics(&parse(&quiet))
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "SCXML045")
+            .any(|diagnostic| diagnostic.code == "LINT010")
     );
 }
 
@@ -252,7 +252,7 @@ fn each_machine_is_checked_only_by_the_checker_for_its_exact_data_model() {
     let only_ecmascript: [&dyn ExpressionSyntaxChecker; 1] = [&ecmascript];
     let report = validate_expressions_with(&parse(&xpath_xml), &only_ecmascript);
     assert_eq!(report.diagnostics().len(), 1, "{report:?}");
-    assert_eq!(report.diagnostics()[0].code, "SCXML045");
+    assert_eq!(report.diagnostics()[0].code, "LINT010");
     assert_eq!(report.diagnostics()[0].severity, Severity::Note);
     assert_eq!(ecmascript.calls.lock().expect("calls").len(), 1);
 }
@@ -285,7 +285,7 @@ fn unknown_data_model_fails_closed_with_a_typo_fix() {
         let error = report
             .diagnostics()
             .iter()
-            .find(|diagnostic| diagnostic.code == "SCXML044")
+            .find(|diagnostic| diagnostic.code == "LIMIT005")
             .unwrap_or_else(|| panic!("`{value}` must be rejected"));
         assert_eq!(error.severity, Severity::Error);
         assert_eq!(text(&xml, error.primary.span), value);
@@ -304,7 +304,7 @@ fn unknown_data_model_fails_closed_with_a_typo_fix() {
             !validate_semantics(&parse(&xml))
                 .diagnostics()
                 .iter()
-                .any(|diagnostic| diagnostic.code == "SCXML044"),
+                .any(|diagnostic| diagnostic.code == "LIMIT005"),
             "{known}"
         );
     }
@@ -434,7 +434,7 @@ fn stray_equals_repair_yields_exactly_one_comparison_operator() {
 }
 
 /// Natively expression checking is unbounded: one fragment past the wasm
-/// bound (16,384) is checked, with no `SCXML041`.
+/// bound (16,384) is checked, with no `LIMIT004`.
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn native_checking_has_no_fragment_bound() {
@@ -449,7 +449,7 @@ fn native_checking_has_no_fragment_bound() {
         report
             .diagnostics()
             .iter()
-            .all(|diagnostic| diagnostic.code != "SCXML041"),
+            .all(|diagnostic| diagnostic.code != "LIMIT004"),
         "{report:?}"
     );
     assert_eq!(checker.calls.lock().expect("calls").len(), 16_385);
@@ -680,7 +680,7 @@ fn empty_expressions_are_a_warning_with_attribute_removal() {
     let report = validate_expressions(&parse(&xml), &checker);
     assert_eq!(report.diagnostics().len(), 1, "{report:?}");
     let diagnostic = &report.diagnostics()[0];
-    assert_eq!(diagnostic.code, "SCXML042");
+    assert_eq!(diagnostic.code, "LINT009");
     assert_eq!(diagnostic.severity, Severity::Warning);
     assert_eq!(text(&xml, diagnostic.primary.span), r#"expr="""#);
     let edit = &diagnostic.fixes[0].edits[0];
@@ -720,7 +720,7 @@ fn only_a_blank_log_expr_is_absent_so_only_its_removal_is_exact() {
         let diagnostic = report
             .diagnostics()
             .iter()
-            .find(|diagnostic| diagnostic.code == "SCXML042")
+            .find(|diagnostic| diagnostic.code == "LINT009")
             .unwrap_or_else(|| panic!("{body}: empty expression warning: {report:?}"));
         assert_eq!(
             diagnostic.message.ends_with("is treated as absent"),
@@ -736,7 +736,7 @@ fn only_a_blank_log_expr_is_absent_so_only_its_removal_is_exact() {
 #[test]
 fn unknown_elements_are_not_expression_sites() {
     // vdx/05: `<lgo expr>` is a schema error (did you mean `<log>`); its
-    // attribute must not also drive SCXML045 or a syntax check.
+    // attribute must not also drive LINT010 or a syntax check.
     let missing = format!(
         r#"<scxml xmlns="{SCXML_NAMESPACE}" version="1.0"><state id="s"><onentry><lgo expr="'hi'"/></onentry></state></scxml>"#
     );
@@ -744,7 +744,7 @@ fn unknown_elements_are_not_expression_sites() {
         !validate_semantics(&parse(&missing))
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code == "SCXML045"),
+            .any(|diagnostic| diagnostic.code == "LINT010"),
         "unknown element must not be an expression site"
     );
     let with_checker = machine(
@@ -944,7 +944,7 @@ fn empty_expression_fixes_never_remove_a_required_attribute() {
         let diagnostic = report
             .diagnostics()
             .iter()
-            .find(|diagnostic| diagnostic.code == "SCXML042")
+            .find(|diagnostic| diagnostic.code == "LINT009")
             .unwrap_or_else(|| panic!("{body}: empty expression warning: {report:?}"));
         assert!(
             diagnostic.fixes.is_empty(),
@@ -968,8 +968,8 @@ fn empty_expression_fixes_never_remove_a_required_attribute() {
             report
                 .diagnostics()
                 .iter()
-                .all(|diagnostic| diagnostic.code != "SCXML042"),
-            "{body}: an empty required attribute is SCXML066, not also SCXML042: {report:?}"
+                .all(|diagnostic| diagnostic.code != "LINT009"),
+            "{body}: an empty required attribute is SCXML066, not also LINT009: {report:?}"
         );
     }
     let xml = machine(
@@ -1197,7 +1197,7 @@ fn a_certain_condition_effect_is_a_warning_with_the_comparison_fix() {
     // official IRP test 444; docs/spec-errata.md).
     assert_eq!(
         (error.code.as_str(), error.severity),
-        ("SCXML076", Severity::Warning)
+        ("LINT020", Severity::Warning)
     );
     assert_eq!(error.message, "`cond` on `<transition>` has a side effect");
     assert_eq!(text(&xml, error.primary.span), "=");
@@ -1319,7 +1319,7 @@ fn an_undecidable_effect_is_a_warning() {
     };
     assert_eq!(
         (warning.code.as_str(), warning.severity),
-        ("SCXML075", Severity::Warning)
+        ("LINT019", Severity::Warning)
     );
     assert_eq!(
         warning.primary.message.as_deref(),
@@ -1357,7 +1357,7 @@ fn an_answer_outside_the_contract_is_declined() {
         let [warning] = report.diagnostics() else {
             panic!("one diagnostic expected: {report:?}");
         };
-        assert_eq!(warning.code, "SCXML075");
+        assert_eq!(warning.code, "LINT019");
         assert_eq!(
             warning.primary.message.as_deref(),
             Some("the linked checker declined the side-effect analysis")
@@ -1391,7 +1391,7 @@ impl crate::SchemaValidator for NoBackend {
 }
 
 /// A machine without `datamodel` is validated exactly as one that declares
-/// the default, `ecmascript`: the same findings, and no `SCXML045` warning
+/// the default, `ecmascript`: the same findings, and no `LINT010` warning
 /// or declaration fix.
 #[test]
 fn a_machine_without_datamodel_is_validated_as_the_default_data_model() {
@@ -1418,7 +1418,7 @@ fn a_machine_without_datamodel_is_validated_as_the_default_data_model() {
         "the ECMAScript checker ran: {missing:?}"
     );
     assert!(
-        !missing.iter().any(|(code, _)| code == "SCXML045"),
+        !missing.iter().any(|(code, _)| code == "LINT010"),
         "{missing:?}"
     );
     assert_eq!(missing, findings(source(r#" datamodel="ecmascript""#)));

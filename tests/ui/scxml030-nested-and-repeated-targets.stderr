@@ -1,4 +1,4 @@
-warning[SCXML072]: transition target `l1` is listed twice
+warning[LINT018]: transition target `l1` is listed twice
  --> tests/ui/scxml030-nested-and-repeated-targets.scx:5:46
   |
 5 |         <transition event="again" target="l1 l1"/>
@@ -37,5 +37,5 @@ help: remove the target `left`, keeping `l1`
 6 +         <transition event="nest" target="l1"/>
 
 diagnostic summary: 1 error(s), 1 warning(s), 0 note(s), 2 total
-Some diagnostics have detailed explanations: SCXML030, SCXML072.
-For more information about a diagnostic, try `scx --explain SCXML030`.
+Some diagnostics have detailed explanations: LINT018, SCXML030.
+For more information about a diagnostic, try `scx --explain LINT018`.

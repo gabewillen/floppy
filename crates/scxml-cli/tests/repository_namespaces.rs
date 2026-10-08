@@ -710,7 +710,7 @@ fn a_tampered_cache_fails_closed() {
 }
 
 /// An `env` attribute on a repository element is the validator's
-/// `SCXML084`: executable content has no slots.
+/// `ENV002`: executable content has no slots.
 #[test]
 fn an_env_attribute_on_a_repository_element_is_rejected() {
     let server = github();
@@ -726,7 +726,7 @@ fn an_env_attribute_on_a_repository_element_is_rejected() {
         text(&rejected.stderr)
     );
     let stderr = text(&rejected.stderr);
-    assert!(stderr.contains("error[SCXML084]"), "{stderr}");
+    assert!(stderr.contains("error[ENV002]"), "{stderr}");
 }
 
 /// An invoked child session that uses the repository namespace: the parent's

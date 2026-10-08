@@ -70,8 +70,8 @@ fn the_package_binds_the_exact_uri_schema_digest_and_world() {
 
 #[test]
 fn a_valid_draft_reports_no_error_in_the_canonical_report() {
-    let validation = validate("draft.scx", VALID, EventSchemaResources::new(), None)
-        .expect("a valid draft reports");
+    let validation =
+        validate("draft.scx", VALID, EventSchemaResources::new()).expect("a valid draft reports");
     let value = report(&validation.report);
     assert_eq!(errors(&value), 0, "{}", validation.report);
     assert_eq!(value["version"], "scxml.report/v3");
@@ -96,13 +96,8 @@ fn a_valid_draft_reports_no_error_in_the_canonical_report() {
 
 #[test]
 fn a_broken_draft_reports_its_code_span_and_help() {
-    let validation = validate(
-        "draft.scx",
-        MISSING_TARGET,
-        EventSchemaResources::new(),
-        None,
-    )
-    .expect("a broken draft reports");
+    let validation = validate("draft.scx", MISSING_TARGET, EventSchemaResources::new())
+        .expect("a broken draft reports");
     let value = report(&validation.report);
     assert_eq!(errors(&value), 1);
     assert_eq!(codes(&value), ["SCXML005"]);
@@ -133,8 +128,8 @@ fn a_broken_draft_reports_its_code_span_and_help() {
 
 #[test]
 fn machine_applicable_fixes_are_applied_and_the_fixed_text_validates() {
-    let validation = validate("draft.scx", COMMAS, EventSchemaResources::new(), None)
-        .expect("the draft reports");
+    let validation =
+        validate("draft.scx", COMMAS, EventSchemaResources::new()).expect("the draft reports");
     let value = report(&validation.report);
     assert_eq!(errors(&value), 1, "{}", validation.report);
     assert_eq!(
@@ -143,7 +138,7 @@ fn machine_applicable_fixes_are_applied_and_the_fixed_text_validates() {
     );
     let fixed = apply_machine_applicable(&validation.artifact).expect("the fixes apply");
     assert_eq!(fixed, COMMAS.replace("go,stop", "go stop"));
-    let again = validate("draft.scx", &fixed, EventSchemaResources::new(), None)
+    let again = validate("draft.scx", &fixed, EventSchemaResources::new())
         .expect("the fixed draft reports");
     assert_eq!(errors(&report(&again.report)), 0, "{}", again.report);
 }
@@ -154,13 +149,8 @@ const SENDID_ON_SEND: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" v
 
 #[test]
 fn a_send_with_sendid_is_renamed_to_id_by_the_fix_pass() {
-    let validation = validate(
-        "draft.scx",
-        SENDID_ON_SEND,
-        EventSchemaResources::new(),
-        None,
-    )
-    .expect("the draft reports");
+    let validation = validate("draft.scx", SENDID_ON_SEND, EventSchemaResources::new())
+        .expect("the draft reports");
     let value = report(&validation.report);
     assert_eq!(codes(&value), ["XSD-cvc-complex-type.3.2.2"]);
     assert_eq!(
@@ -169,20 +159,15 @@ fn a_send_with_sendid_is_renamed_to_id_by_the_fix_pass() {
     );
     let fixed = apply_machine_applicable(&validation.artifact).expect("the fixes apply");
     assert_eq!(fixed, SENDID_ON_SEND.replace(" sendid=", " id="));
-    let again = validate("draft.scx", &fixed, EventSchemaResources::new(), None)
+    let again = validate("draft.scx", &fixed, EventSchemaResources::new())
         .expect("the fixed draft reports");
     assert_eq!(errors(&report(&again.report)), 0, "{}", again.report);
 }
 
 #[test]
 fn a_draft_without_machine_applicable_fixes_is_unchanged() {
-    let validation = validate(
-        "draft.scx",
-        MISSING_TARGET,
-        EventSchemaResources::new(),
-        None,
-    )
-    .expect("the draft reports");
+    let validation = validate("draft.scx", MISSING_TARGET, EventSchemaResources::new())
+        .expect("the draft reports");
     assert_eq!(
         apply_machine_applicable(&validation.artifact).expect("nothing to apply"),
         MISSING_TARGET
@@ -191,21 +176,15 @@ fn a_draft_without_machine_applicable_fixes_is_unchanged() {
 
 #[test]
 fn an_unsupplied_event_schema_file_is_reported_not_read() {
-    let validation = validate(
-        "draft.scx",
-        SCHEMA_REFERENCE,
-        EventSchemaResources::new(),
-        None,
-    )
-    .expect("the draft reports");
-    assert_eq!(codes(&report(&validation.report)), ["SCXML088"]);
+    let validation = validate("draft.scx", SCHEMA_REFERENCE, EventSchemaResources::new())
+        .expect("the draft reports");
+    assert_eq!(codes(&report(&validation.report)), ["EVENT004"]);
 }
 
 #[test]
 fn a_supplied_event_schema_file_resolves() {
     let resources = BTreeMap::from([("events.json".to_owned(), EVENTS.as_bytes().to_vec())]);
-    let validation =
-        validate("draft.scx", SCHEMA_REFERENCE, resources, None).expect("the draft reports");
+    let validation = validate("draft.scx", SCHEMA_REFERENCE, resources).expect("the draft reports");
     assert_eq!(
         errors(&report(&validation.report)),
         0,
@@ -216,7 +195,7 @@ fn a_supplied_event_schema_file_resolves() {
 
 #[test]
 fn malformed_xml_is_a_report_not_a_failure() {
-    let validation = validate("draft.scx", "<scxml", EventSchemaResources::new(), None)
+    let validation = validate("draft.scx", "<scxml", EventSchemaResources::new())
         .expect("malformed XML reports");
     let value = report(&validation.report);
     assert!(errors(&value) >= 1);
@@ -300,63 +279,6 @@ fn failure(result: Result<Executed, Failure<&'static str>>) -> &'static str {
         Err(Failure::Execution(detail)) => detail,
         other => panic!("expected an execution failure, got {other:?}"),
     }
-}
-
-/// A draft that breaks the draft profile: an extension namespace, an
-/// `<invoke src>`, and a `BasicHTTP` `<send>`.
-const OUTSIDE_THE_DRAFT_PROFILE: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:x="urn:x" version="1.0" initial="a"><state id="a"><onentry><x:do/><send event="e" type="http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"/></onentry><invoke src="child.scx"/></state></scxml>"#;
-
-#[test]
-fn profile_draft_reports_the_draft_profile_codes_and_no_missing_schema() {
-    let mut host =
-        MockHost::default().with("draft", Value::Text(OUTSIDE_THE_DRAFT_PROFILE.to_owned()));
-    let result = run(
-        &[
-            attribute("location", "report"),
-            attribute("expr", "draft"),
-            attribute("profile", "draft"),
-        ],
-        &[],
-        &mut host,
-    );
-    assert_eq!(result, Ok(Executed::Handled));
-    let value = report(&host.assigned[0].1);
-    let mut found = codes(&value);
-    found.sort();
-    found.dedup();
-    assert_eq!(
-        found,
-        ["SCXML097", "SCXML098", "SCXML099", "SCXML100"],
-        "{value}"
-    );
-    // Without the profile the same draft is judged by SCXML alone: the
-    // foreign namespace is a missing schema and nothing else is a profile
-    // finding.
-    let plain = validate(
-        "draft.scx",
-        OUTSIDE_THE_DRAFT_PROFILE,
-        EventSchemaResources::new(),
-        None,
-    )
-    .expect("the draft reports");
-    let plain = report(&plain.report);
-    let plain_codes = codes(&plain);
-    assert!(plain_codes.iter().any(|code| code == "XSD001"), "{plain}");
-    assert!(
-        !plain_codes
-            .iter()
-            .any(|code| ["SCXML097", "SCXML098", "SCXML099", "SCXML100"].contains(&code.as_str())),
-        "{plain}"
-    );
-    // A clean draft stays clean under the profile.
-    let clean = validate(
-        "draft.scx",
-        VALID,
-        EventSchemaResources::new(),
-        Some(Profile::Draft),
-    )
-    .expect("a valid draft reports");
-    assert_eq!(errors(&report(&clean.report)), 0);
 }
 
 #[test]
@@ -484,10 +406,10 @@ fn malformed_elements_fail_with_static_details() {
             vec![
                 location.clone(),
                 expr.clone(),
-                attribute("profile", "strict"),
+                attribute("profile", "draft"),
             ],
             Vec::new(),
-            "scx:validate profile accepts only draft",
+            "scx:validate has an attribute this package version does not define",
         ),
         (
             vec![expr.clone()],

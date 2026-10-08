@@ -18,7 +18,7 @@
   at most one of the two per element. The attributes are metadata only: they
   never change how a document executes. The W3C SCXML schema admits them
   (its `##other` attribute wildcards, processed laxly), and the validator
-  checks them (SCXML085-SCXML092). This file documents the vocabulary for
+  checks them (EVENT001-EVENT008). This file documents the vocabulary for
   readers and tools that resolve a namespace to a schema; the validator does
   not load it.
 -->

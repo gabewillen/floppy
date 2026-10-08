@@ -58,7 +58,7 @@ help: remove the second `<finalize>`
    |
 15 -       <finalize><log expr="'two'"/></finalize>
 
-warning[SCXML029]: state `a2` can never become active
+warning[LINT005]: state `a2` can never become active
   --> tests/ui/scxml064-repeated-children.scx:18:16
    |
  3 |     <initial><transition target="a1"/></initial>
@@ -75,5 +75,5 @@ warning[SCXML029]: state `a2` can never become active
    = spec: SCXML 1.0 §3.13 Selecting and Executing Transitions
 
 diagnostic summary: 4 error(s), 1 warning(s), 0 note(s), 5 total
-Some diagnostics have detailed explanations: SCXML029, SCXML064.
-For more information about a diagnostic, try `scx --explain SCXML029`.
+Some diagnostics have detailed explanations: LINT005, SCXML064.
+For more information about a diagnostic, try `scx --explain LINT005`.

@@ -57,7 +57,6 @@
 
 mod datamodel_check;
 mod diagnostic;
-mod draft_profile;
 mod env_attributes;
 mod event_attributes;
 mod event_payloads;
@@ -143,30 +142,17 @@ pub enum SchemaMode {
     Strict,
 }
 
-/// A restriction profile one validation applies on top of SCXML 1.0
-/// (`Validator::with_profile`); without one, no profile rule runs.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Profile {
-    /// A document a machine writes and runs as an invoked child (a builder
-    /// bot's draft): only the SCXML and `event` namespaces, no `<invoke>`
-    /// or `<script>`, no `src`/`srcexpr`, no `typeexpr`, no `<send type>`
-    /// but the SCXML Event I/O Processor's, and no DTD (`SCXML097` to
-    /// `SCXML101`; docs/validator-rules.md, "Draft profile").
-    Draft,
-}
-
 /// First-class validation pipeline with independently testable phases.
 #[derive(Debug)]
 pub struct Validator<R, B> {
     resolver: R,
     backend: B,
     schema_mode: SchemaMode,
-    profile: Option<Profile>,
     xml_limits: XmlLimits,
     /// Linked parse-only checkers, at most one per data model.
     expression_checkers: Vec<std::sync::Arc<dyn ExpressionSyntaxChecker>>,
     /// The `env` slots of each invoked service the caller's service packages
-    /// bind, by exact type URI (`SCXML094`, `SCXML083` on `<invoke>`);
+    /// bind, by exact type URI (`PKG004`, `ENV001` on `<invoke>`);
     /// `None` judges no binding.
     services: Option<std::collections::BTreeMap<String, Vec<String>>>,
     /// The bytes of each schema file an `event:schema` references, keyed by
@@ -184,7 +170,6 @@ impl<R, B> Validator<R, B> {
             resolver,
             backend,
             schema_mode: SchemaMode::Strict,
-            profile: None,
             xml_limits: XmlLimits::DEFAULT,
             expression_checkers: Vec::new(),
             services: None,
@@ -211,7 +196,7 @@ impl<R, B> Validator<R, B> {
     /// attributes reference, keyed by the reference's resource part exactly
     /// as authored (the value before `#`, trimmed of XML white space). The
     /// caller reads them, relative to the document; a reference with no
-    /// entry is `SCXML088`. The validator itself performs no I/O.
+    /// entry is `EVENT004`. The validator itself performs no I/O.
     #[must_use]
     pub fn with_event_schema_resources(mut self, resources: EventSchemaResources) -> Self {
         self.event_schema_resources = resources;
@@ -227,9 +212,9 @@ impl<R, B> Validator<R, B> {
 
     /// The `env` slots of each invoked service the caller's service packages
     /// bind, by exact type URI: a literal `<invoke type>` naming a service
-    /// none of them binds is `SCXML094`, and an `env` attribute on an
+    /// none of them binds is `PKG004`, and an `env` attribute on an
     /// `<invoke>` of a bound service must name a slot its package declares
-    /// (`SCXML083`). Without this call no binding is judged (`SCXML093`, a
+    /// (`ENV001`). Without this call no binding is judged (`PKG003`, a
     /// type that is not a URI, is judged either way).
     #[must_use]
     pub fn with_services(
@@ -254,15 +239,6 @@ impl<R, B> Validator<R, B> {
         self.expression_checkers
             .retain(|linked| linked.data_model() != checker.data_model());
         self.expression_checkers.push(checker);
-        self
-    }
-
-    /// Applies `profile`'s rules on top of SCXML 1.0. A namespace the
-    /// profile does not admit is reported by the profile, not also as a
-    /// missing schema.
-    #[must_use]
-    pub const fn with_profile(mut self, profile: Profile) -> Self {
-        self.profile = Some(profile);
         self
     }
 
@@ -390,20 +366,13 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
                 // (`xsi:schemaLocation`, `xsi:type`, ...) are built into
                 // XML and XML Schema; neither has a schema to register.
                 // The `env` attribute vocabulary is the host's, checked by
-                // `SCXML083`/`SCXML084`; extension schemas admit it laxly.
+                // `ENV001`/`ENV002`; extension schemas admit it laxly.
                 // The `event` attribute vocabulary is checked by
-                // `SCXML085`-`SCXML092`; the W3C schema admits it laxly.
+                // `EVENT001`-`EVENT008`; the W3C schema admits it laxly.
                 if namespace_uri == "http://www.w3.org/XML/1998/namespace"
                     || namespace_uri == "http://www.w3.org/2001/XMLSchema-instance"
                     || namespace_uri == scxml_types::ENV_NAMESPACE_URI
                     || namespace_uri == scxml_types::EVENT_NAMESPACE_URI
-                {
-                    continue;
-                }
-                // The draft profile reports a namespace it does not admit
-                // (`SCXML097`); a missing-schema error would restate it.
-                if self.profile == Some(Profile::Draft)
-                    && !draft_profile::admits_namespace(&namespace_uri)
                 {
                     continue;
                 }
@@ -457,11 +426,6 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
         }
         for diagnostic in invoke_types::invoke_type_diagnostics(document, self.services.as_ref()) {
             report.push(diagnostic);
-        }
-        if self.profile == Some(Profile::Draft) {
-            for diagnostic in draft_profile::draft_profile_diagnostics(document) {
-                report.push(diagnostic);
-            }
         }
         if let Some(validator) = &self.packages {
             for diagnostic in package_validator::package_validator_diagnostics(
@@ -605,7 +569,7 @@ mod tests {
             .report
             .diagnostics()
             .iter()
-            .find(|diagnostic| diagnostic.code == "SCXML045")
+            .find(|diagnostic| diagnostic.code == "LINT010")
             .expect("unchecked expressions must be reported");
         assert_eq!(note.severity, Severity::Note);
         assert!(

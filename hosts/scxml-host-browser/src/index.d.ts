@@ -1432,13 +1432,12 @@ export function createValidator(options?: {
   /**
    * Validates one SCXML document: `report` is the canonical
    * `scxml.report/v3` validator report (`schemaPolicy` defaults to
-   * 'strict', as `scx validate`; `profile: 'draft'` adds the draft
-   * profile's rules). Throws ScxmlHostError 'invalid-argument' (the
+   * 'strict', as `scx validate`). Throws ScxmlHostError 'invalid-argument' (the
    * instance stays usable), 'fuel-exhausted', or 'instance-lost' (this and
    * every later validation); ScxmlCompileError ('invalid-request' or
    * 'canonical-report-failed') for a rejected request.
    */
-  validate(source: string, options?: CompileRequestOptions & { profile?: 'draft' }): Promise<{ report: Uint8Array }>;
+  validate(source: string, options?: CompileRequestOptions): Promise<{ report: Uint8Array }>;
 }>;
 
 /** Options of the bundled data-model factories. */
