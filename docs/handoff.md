@@ -13,7 +13,7 @@ Last updated: 2026-10-08.
 
 | Repository | Path | Branch | Notes |
 | --- | --- | --- | --- |
-| floppy (this repo, formerly nemobot) | `~/VSCode/stateforward/nemobot` (directory not yet renamed) | `main` | bots, floppy's namespaces and services, docs; no runtime of its own (D14) |
+| floppy (this repo, formerly nemobot) | `~/VSCode/stateforward/floppy` | `main` | bots, floppy's namespaces and services, docs; no runtime of its own (D14) |
 | scxml.rs | `~/VSCode/stateforward/scxml.rs` | `main` | engine, `scx` CLI, hosts, validator, resolver |
 | scxml.rs work branch | `~/VSCode/stateforward/scxml.rs-services` (git worktree) | `feat/invoke-services` | all scxml.rs changes are made here first |
 | mosfet (source of the port) | `~/VSCode/stateforward/mosfet/mosfet.py` | — | Python runtime being ported; reference only |
@@ -137,12 +137,10 @@ Stopped mid-pass (2026-10-08) — resume this first:
 2. Browser slice 2: bump pinned Node to 26 (JSPI for services in browsers),
    pre-built browser artifact per release, GitHub Pages for CORS on release
    assets.
-3. Rename the directory `nemobot/` → `floppy/` (and copy the Claude memory
-   folder to the new project path).
-4. Save the direct-vLLM traffic-light run as `bots/builder/examples/traffic_light_vllm/`;
+3. Save the direct-vLLM traffic-light run as `bots/builder/examples/traffic_light_vllm/`;
    builder drafts should reference schema files instead of inline JSON in
    attributes (the inline quoting caused an `XML001` failure).
-5. Send the gateway report (reasoning buffering, keep-alives, abort on disconnect).
+4. Send the gateway report (reasoning buffering, keep-alives, abort on disconnect).
 
 ## Backlog (agreed, not started)
 
