@@ -85,7 +85,7 @@ subtree matches, squash `9d1a67a7`, pull `dea16624`):
   (SCXML = spec only, XML, XSD, COMP, PKG, ENV, EVENT, DATAMODEL, LINT,
   LIMIT).
 - Browser parity slice 1 (validator and extension components in the browser).
-- floppy: `generate` and `decision` services, `decision:menu`, the builder
+- floppy: `generate` and `decision` services, `decision:choice`, the builder
   bot (unrestricted, D28; `no-progress` exit, D26; failure causes logged),
   generate's package validator.
 - scxml.rs datamodel pass landed (`66f102b0` to `92742d65`, D30): data
@@ -139,7 +139,8 @@ The remaining mosfet port runs as one ultracode run with these grants:
 - **Phase 4 answers:** bot `bots/floppy/`, abilities in top-level
   `abilities/`, no default model URL (`FLOPPY_BASE_URL` required), intuition
   on the decision service, `turn` field and media by reference in payloads,
-  `<decision:menu events>` filter, telemetry one-trace proof deferred,
+  `<decision:choice events>` filter (renamed from `<decision:menu>`, D32),
+  telemetry one-trace proof deferred,
   scxml.rs `EmbeddedDocument::event_schemas` and `EVENT011` approved. Full
   list in `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 - **scxml.rs names approved:** the datamodel pass's names, with the example

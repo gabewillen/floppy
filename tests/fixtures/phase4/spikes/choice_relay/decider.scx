@@ -1,16 +1,16 @@
 <!-- Spike (b), decider: a session that never saw the offerer's
-     transitions; it invokes the decision service with the menu it was
+     transitions; it invokes the decision service with the choices it was
      given and relays the chosen event to its parent. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        version="1.0" datamodel="ecmascript" initial="deciding">
   <datamodel>
-    <data id="menu" expr="null"/>
+    <data id="choices" expr="null"/>
   </datamodel>
   <state id="deciding">
     <invoke id="decide" type="https://github.com/stateforward/floppy/services/decision"
             env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
-      <param name="menu" expr="menu"/>
+      <param name="choices" expr="choices"/>
       <param name="state" expr="({sku: 'A-1'})"/>
     </invoke>
     <transition event="decision.abstain decision.failed" cond="_event.invokeid === 'decide'" target="done">

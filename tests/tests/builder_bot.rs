@@ -1204,7 +1204,7 @@ fn a_fast_design_failure_keeps_its_cause_in_the_log_and_the_failed_done_data() {
     );
 }
 
-/// Without a plan, `decision:menu` leaves out `triage.repair` (its guard is
+/// Without a plan, `decision:choice` leaves out `triage.repair` (its guard is
 /// false), so the decision service is never offered it and `builder.done`
 /// never reports a null plan.
 #[test]

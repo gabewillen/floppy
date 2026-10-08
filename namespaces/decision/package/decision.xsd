@@ -4,19 +4,19 @@
   It governs structure only; the extension component governs what the
   element does. Bind it with the prefix `decision` by convention.
 
-  decision:menu  location (required): receives the canonical menu of the
-                 enabled event:schema transitions.
-                 events (optional): a white-space separated list of SCXML
-                 event descriptors; the menu keeps only the events one of
-                 them matches. No other attribute, no content.
-                 Choosing among them is the decision service's
-                 work (services/decision): executable content stays
-                 synchronous and quick.
+  decision:choice  location (required): receives the canonical choices of the
+                   enabled event:schema transitions.
+                   events (optional): a white-space separated list of SCXML
+                   event descriptors; the choices keep only the events one of
+                   them matches. No other attribute, no content.
+                   Choosing among them is the decision service's
+                   work (services/decision): executable content stays
+                   synchronous and quick.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://github.com/stateforward/floppy/namespaces/decision"
            elementFormDefault="qualified">
-  <xs:element name="menu">
+  <xs:element name="choice">
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="events" type="xs:string" use="optional"/>

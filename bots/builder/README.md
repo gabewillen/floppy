@@ -126,14 +126,14 @@ intake -> design -> author -> validate -> simulate -> done
   builder writes. A primary label often says only what kind of thing is
   wrong (`SCXML005`'s is "unknown target identifier"), so a draft that
   replaces one unknown target with another counts as the same failure.
-* `triage`: `decision:menu` (synchronous executable content) writes the
-  state's enabled `event:schema` transitions as the canonical menu:
-  `triage.repair` (guarded by `plan !== null`, so it is on the menu only
+* `triage`: `decision:choice` (synchronous executable content) writes the
+  state's enabled `event:schema` transitions as the canonical choices:
+  `triage.repair` (guarded by `plan !== null`, so it is among the choices only
   when there is a plan to repair from), `triage.redesign`, and
   `triage.abandon`. The decision service
   (`https://github.com/stateforward/floppy/services/decision`),
-  invoked with that menu and the failure state, picks one, validates its
-  data against the menu's schema, and returns it.
+  invoked with those choices and the failure state, picks one, validates its
+  data against the choices' schema, and returns it.
 * `fallback`: the cond-based triage when the decision is unavailable (no
   `TYPESAFE_API_KEY` granted or a backend failure: `decision.failed`,
   `error.execution`, or `error.communication`), times out

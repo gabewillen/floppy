@@ -10,13 +10,13 @@ use super::*;
 #[derive(Default)]
 struct FakeHost {
     guards: BTreeMap<String, bool>,
-    menu_snapshot: Option<String>,
+    choices_snapshot: Option<String>,
     snapshot_requests: Vec<Vec<Section>>,
     assigned: Vec<(String, Data)>,
     fail_assign: bool,
 }
 
-impl MenuHost for FakeHost {
+impl ChoiceHost for FakeHost {
     type Error = &'static str;
 
     fn guard(&mut self, cond: &str) -> Result<GuardValue, &'static str> {
@@ -36,7 +36,7 @@ impl MenuHost for FakeHost {
 
     fn snapshot(&mut self, exclude: &[Section]) -> Result<Result<String, ()>, &'static str> {
         self.snapshot_requests.push(exclude.to_vec());
-        Ok(self.menu_snapshot.clone().ok_or(()))
+        Ok(self.choices_snapshot.clone().ok_or(()))
     }
 }
 
@@ -102,7 +102,7 @@ fn hold_schema() -> Json {
     json!({"type": "object"})
 }
 
-/// The order machine's menu: three schema transitions, an error handler
+/// The order machine's choices: three schema transitions, an error handler
 /// without a schema, and a wildcard listed after them.
 fn order_snapshot() -> String {
     snapshot(&[
@@ -164,16 +164,16 @@ fn location(value: &str) -> Attribute {
 }
 
 #[test]
-fn menu_writes_the_canonical_menu_of_the_enabled_schema_transitions() {
+fn choices_writes_the_canonical_choices_of_the_enabled_schema_transitions() {
     let mut host = FakeHost {
-        menu_snapshot: Some(order_snapshot()),
+        choices_snapshot: Some(order_snapshot()),
         ..FakeHost::default()
     };
     assert_eq!(
-        execute("menu", &[location("menu")], &[], &mut host),
+        execute("choice", &[location("choices")], &[], &mut host),
         Ok(Executed::Handled)
     );
-    assert_eq!(host.snapshot_requests, [MENU_SNAPSHOT_EXCLUDE.to_vec()]);
+    assert_eq!(host.snapshot_requests, [CHOICES_SNAPSHOT_EXCLUDE.to_vec()]);
     let expected = canonical_json(&json!([
         {"event": "order.ship", "schema": ship_schema(), "description": "Ship the order."},
         {"event": "order.cancel", "schema": cancel_schema(), "description": "Cancel the order"},
@@ -181,12 +181,12 @@ fn menu_writes_the_canonical_menu_of_the_enabled_schema_transitions() {
     ]));
     assert_eq!(
         host.assigned,
-        [("menu".to_owned(), Data::JsonArray(expected))]
+        [("choices".to_owned(), Data::JsonArray(expected))]
     );
 }
 
 #[test]
-fn menu_leaves_out_a_transition_whose_guard_is_false() {
+fn choices_leaves_out_a_transition_whose_guard_is_false() {
     let mut snapshot: Json =
         serde_json::from_str(&order_snapshot()).expect("the order snapshot is JSON");
     for transition in snapshot["snapshot"]["root"]["transitions"]
@@ -199,30 +199,30 @@ fn menu_leaves_out_a_transition_whose_guard_is_false() {
         }
     }
     let mut host = FakeHost {
-        menu_snapshot: Some(snapshot.to_string()),
+        choices_snapshot: Some(snapshot.to_string()),
         guards: BTreeMap::from([("closed".to_owned(), false)]),
         ..FakeHost::default()
     };
-    execute("menu", &[location("menu")], &[], &mut host).expect("handled");
-    let Data::JsonArray(menu) = &host.assigned[0].1 else {
-        panic!("the menu is an array");
+    execute("choice", &[location("choices")], &[], &mut host).expect("handled");
+    let Data::JsonArray(choices) = &host.assigned[0].1 else {
+        panic!("the choices are an array");
     };
-    let menu: Json = serde_json::from_str(menu).expect("JSON");
-    assert_eq!(menu.as_array().map(Vec::len), Some(1));
-    assert_eq!(menu[0]["event"], "order.ship");
+    let choices: Json = serde_json::from_str(choices).expect("JSON");
+    assert_eq!(choices.as_array().map(Vec::len), Some(1));
+    assert_eq!(choices[0]["event"], "order.ship");
 }
 
 #[test]
-fn malformed_menu_elements_or_snapshots_raise_error_execution() {
+fn malformed_choices_elements_or_snapshots_raise_error_execution() {
     let order = || FakeHost {
-        menu_snapshot: Some(order_snapshot()),
+        choices_snapshot: Some(order_snapshot()),
         ..FakeHost::default()
     };
     for (attributes, content) in [
         (vec![], vec![]),
         (vec![location(" ")], vec![]),
-        (vec![location("menu"), attr("model", "m")], vec![]),
-        (vec![location("menu"), location("other")], vec![]),
+        (vec![location("choices"), attr("model", "m")], vec![]),
+        (vec![location("choices"), location("other")], vec![]),
         (
             vec![Attribute {
                 namespace_uri: Some(scxml_types::ENV_NAMESPACE_URI.into()),
@@ -231,32 +231,35 @@ fn malformed_menu_elements_or_snapshots_raise_error_execution() {
             }],
             vec![],
         ),
-        (vec![location("menu")], vec![Content::Text("x".into())]),
-        (vec![location("menu")], vec![Content::Start, Content::End]),
+        (vec![location("choices")], vec![Content::Text("x".into())]),
+        (
+            vec![location("choices")],
+            vec![Content::Start, Content::End],
+        ),
     ] {
         let mut host = order();
-        execution(execute("menu", &attributes, &content, &mut host));
+        execution(execute("choice", &attributes, &content, &mut host));
         assert!(host.assigned.is_empty());
     }
     let mut host = FakeHost::default();
     assert_eq!(
-        execution(execute("menu", &[location("menu")], &[], &mut host)),
+        execution(execute("choice", &[location("choices")], &[], &mut host)),
         "the host offers no session snapshot"
     );
     let mut host = FakeHost {
         fail_assign: true,
         ..order()
     };
-    execution(execute("menu", &[location("menu")], &[], &mut host));
+    execution(execute("choice", &[location("choices")], &[], &mut host));
     let mut host = FakeHost {
-        menu_snapshot: Some(snapshot(&[guarded(
+        choices_snapshot: Some(snapshot(&[guarded(
             with_schema(&["x"], &json!({"type": "object"})),
             "fatal",
         )])),
         ..FakeHost::default()
     };
     assert_eq!(
-        execute("menu", &[location("menu")], &[], &mut host),
+        execute("choice", &[location("choices")], &[], &mut host),
         Err(Failure::Host("fatal"))
     );
     let mut host = FakeHost::default();
@@ -267,17 +270,22 @@ fn malformed_menu_elements_or_snapshots_raise_error_execution() {
     );
 }
 
-/// The menu of `transitions` with every guard answering by its text:
+/// The choices of `transitions` with every guard answering by its text:
 /// `"yes"` true, `"no"` false, anything else not a boolean.
-fn menu_events(transitions: &[Json]) -> Result<Vec<String>, Failure<()>> {
-    snapshot_menu(&snapshot(transitions), &mut |cond| {
+fn choices_events(transitions: &[Json]) -> Result<Vec<String>, Failure<()>> {
+    snapshot_choices(&snapshot(transitions), &mut |cond| {
         Ok(match cond {
             "yes" => Some(true),
             "no" => Some(false),
             _ => None,
         })
     })
-    .map(|menu| menu.into_iter().map(|candidate| candidate.event).collect())
+    .map(|choices| {
+        choices
+            .into_iter()
+            .map(|candidate| candidate.event)
+            .collect()
+    })
 }
 
 /// `transition` with the guard `cond`.
@@ -288,9 +296,9 @@ fn guarded(mut transition: Json, cond: &str) -> Json {
 }
 
 #[test]
-fn the_snapshot_menu_follows_selection_order_and_skips_what_cannot_be_offered() {
+fn the_snapshot_choices_follows_selection_order_and_skips_what_cannot_be_offered() {
     let schema = json!({"type": "object"});
-    let events = menu_events(&[
+    let events = choices_events(&[
         without_schema(&["order"]),
         // Preempted by the earlier `order` descriptor.
         with_schema(&["order.ship"], &schema),
@@ -310,26 +318,26 @@ fn the_snapshot_menu_follows_selection_order_and_skips_what_cannot_be_offered() 
         serde_json::from_str(&snapshot(&[with_schema(&["x"], &schema)])).expect("JSON");
     tampered["snapshot"]["root"]["transitions"][0]["event_schema"]["sha256"] = json!("00");
     assert_eq!(
-        snapshot_menu(&tampered.to_string(), &mut |_| Ok::<_, ()>(Some(true)))
-            .map(|menu| menu.len()),
+        snapshot_choices(&tampered.to_string(), &mut |_| Ok::<_, ()>(Some(true)))
+            .map(|choices| choices.len()),
         Err(Failure::Execution("the session snapshot is malformed"))
     );
     assert_eq!(
-        snapshot_menu(r#"{"snapshot":{"root":{}}}"#, &mut |_| Ok::<_, ()>(Some(
+        snapshot_choices(r#"{"snapshot":{"root":{}}}"#, &mut |_| Ok::<_, ()>(Some(
             true
         )))
-        .map(|menu| menu.len()),
+        .map(|choices| choices.len()),
         Ok(0)
     );
 }
 
-/// The menu offers only enabled transitions: a guard that is exactly
+/// The choices offer only enabled transitions: a guard that is exactly
 /// `true` offers, `false` neither offers nor preempts, and a failed or
 /// non-boolean guard does not offer but still preempts later transitions.
 #[test]
-fn the_snapshot_menu_offers_only_transitions_whose_guards_hold() {
+fn the_snapshot_choices_offers_only_transitions_whose_guards_hold() {
     let schema = json!({"type": "object"});
-    let events = menu_events(&[
+    let events = choices_events(&[
         guarded(with_schema(&["on"], &schema), "yes"),
         guarded(with_schema(&["off"], &schema), "no"),
         // The disabled `off` takes nothing: this one offers it.
@@ -345,7 +353,7 @@ fn the_snapshot_menu_offers_only_transitions_whose_guards_hold() {
     assert_eq!(events, ["on", "off", "later"]);
 
     let mut asked = Vec::new();
-    snapshot_menu(
+    snapshot_choices(
         &snapshot(&[guarded(with_schema(&["x"], &schema), "plan !== null")]),
         &mut |cond| {
             asked.push(cond.to_owned());
@@ -358,25 +366,25 @@ fn the_snapshot_menu_offers_only_transitions_whose_guards_hold() {
     let mut lying = with_schema(&["x"], &schema);
     lying["has_cond"] = json!(true);
     assert_eq!(
-        menu_events(&[lying]),
+        choices_events(&[lying]),
         Err(Failure::Execution("the session snapshot is malformed")),
         "has_cond without its cond"
     );
     assert_eq!(
-        snapshot_menu(
+        snapshot_choices(
             &snapshot(&[guarded(with_schema(&["x"], &schema), "fatal")]),
             &mut |_| Err("fatal")
         )
-        .map(|menu| menu.len()),
+        .map(|choices| choices.len()),
         Err(Failure::Host("fatal")),
         "a non-recoverable host failure passes through"
     );
 }
 
-/// The menu of `transitions` under the active atomic states `atomic`, every
+/// The choices of `transitions` under the active atomic states `atomic`, every
 /// guard enabled.
-fn menu_events_in(atomic: &[&str], transitions: &[Json]) -> Vec<String> {
-    snapshot_menu(&snapshot_in(atomic, transitions), &mut |_| {
+fn choices_events_in(atomic: &[&str], transitions: &[Json]) -> Vec<String> {
+    snapshot_choices(&snapshot_in(atomic, transitions), &mut |_| {
         Ok::<_, ()>(Some(true))
     })
     .expect("the snapshot is well formed")
@@ -389,11 +397,11 @@ fn menu_events_in(atomic: &[&str], transitions: &[Json]) -> Vec<String> {
 /// transition (SCXML 3.13): a transition in one region's chain does not
 /// preempt a sibling region's transition for the same event.
 #[test]
-fn the_snapshot_menu_preempts_only_within_one_atomic_states_chain() {
+fn the_snapshot_choices_preempts_only_within_one_atomic_states_chain() {
     let schema = json!({"type": "object"});
     // Leaf a1's chain (a1, A, P), then leaf b1's (b1, B): A's schema-less
     // `go` does not hide b1's schema'd `go`.
-    let events = menu_events_in(
+    let events = choices_events_in(
         &["a1", "b1"],
         &[
             from("a1", with_schema(&["a"], &schema)),
@@ -408,7 +416,7 @@ fn the_snapshot_menu_preempts_only_within_one_atomic_states_chain() {
     assert_eq!(events, ["a", "p", "go", "b"]);
 
     // The same event offered by two chains is offered once.
-    let events = menu_events_in(
+    let events = choices_events_in(
         &["a1", "b1"],
         &[
             from("a1", with_schema(&["go"], &schema)),
@@ -422,14 +430,14 @@ fn the_snapshot_menu_preempts_only_within_one_atomic_states_chain() {
     let mut sourceless = with_schema(&["x"], &schema);
     sourceless["source"] = json!(1);
     assert_eq!(
-        menu_events(&[sourceless]),
+        choices_events(&[sourceless]),
         Err(Failure::Execution("the session snapshot is malformed"))
     );
     let unconfigured =
         json!({"snapshot": {"root": {"transitions": [with_schema(&["x"], &schema)]}}});
     assert_eq!(
-        snapshot_menu(&unconfigured.to_string(), &mut |_| Ok::<_, ()>(Some(true)))
-            .map(|menu| menu.len()),
+        snapshot_choices(&unconfigured.to_string(), &mut |_| Ok::<_, ()>(Some(true)))
+            .map(|choices| choices.len()),
         Err(Failure::Execution("the session snapshot is malformed"))
     );
 }
@@ -440,7 +448,7 @@ fn the_snapshot_menu_preempts_only_within_one_atomic_states_chain() {
 fn the_event_name_bound_applies_to_wasm_builds_only() {
     let schema = json!({"type": "object"});
     let long = "e".repeat(257);
-    let offered = menu_events_in(&["s"], &[with_schema(&[long.as_str()], &schema)]);
+    let offered = choices_events_in(&["s"], &[with_schema(&[long.as_str()], &schema)]);
     if cfg!(target_arch = "wasm32") {
         assert_eq!(MAX_EVENT_NAME_BYTES, 256);
         assert!(offered.is_empty());
@@ -450,30 +458,31 @@ fn the_event_name_bound_applies_to_wasm_builds_only() {
     }
     let at_bound = "e".repeat(256);
     assert_eq!(
-        menu_events_in(&["s"], &[with_schema(&[at_bound.as_str()], &schema)]),
+        choices_events_in(&["s"], &[with_schema(&[at_bound.as_str()], &schema)]),
         [at_bound],
         "a name at the wasm bound is offered on every build"
     );
 }
 
-/// The events of the menu `execute` writes for the order snapshot with
+/// The events of the choices `execute` writes for the order snapshot with
 /// `attributes`.
-fn executed_menu(attributes: &[Attribute]) -> Vec<String> {
+fn executed_choices(attributes: &[Attribute]) -> Vec<String> {
     let mut host = FakeHost {
-        menu_snapshot: Some(order_snapshot()),
+        choices_snapshot: Some(order_snapshot()),
         ..FakeHost::default()
     };
     assert_eq!(
-        execute("menu", attributes, &[], &mut host),
+        execute("choice", attributes, &[], &mut host),
         Ok(Executed::Handled)
     );
-    let [(location, Data::JsonArray(menu))] = host.assigned.as_slice() else {
-        panic!("one menu array is assigned: {:?}", host.assigned);
+    let [(location, Data::JsonArray(choices))] = host.assigned.as_slice() else {
+        panic!("one choices array is assigned: {:?}", host.assigned);
     };
-    assert_eq!(location, "menu");
-    let menu: Json = serde_json::from_str(menu).expect("the menu is JSON");
-    menu.as_array()
-        .expect("the menu is an array")
+    assert_eq!(location, "choices");
+    let choices: Json = serde_json::from_str(choices).expect("the choices are JSON");
+    choices
+        .as_array()
+        .expect("the choices are an array")
         .iter()
         .map(|entry| entry["event"].as_str().expect("event").to_owned())
         .collect()
@@ -482,56 +491,59 @@ fn executed_menu(attributes: &[Attribute]) -> Vec<String> {
 #[test]
 fn the_events_filter_keeps_the_events_a_descriptor_names() {
     assert_eq!(
-        executed_menu(&[location("menu"), attr("events", "order.cancel")]),
+        executed_choices(&[location("choices"), attr("events", "order.cancel")]),
         ["order.cancel"]
     );
     assert_eq!(
-        executed_menu(&[
-            location("menu"),
+        executed_choices(&[
+            location("choices"),
             attr("events", " order.hold\n order.ship ")
         ]),
         ["order.ship", "order.hold"],
-        "menu order, not descriptor order"
+        "choices order, not descriptor order"
     );
 }
 
 #[test]
 fn the_events_filter_matches_descriptors_as_token_prefixes() {
     assert_eq!(
-        executed_menu(&[location("menu"), attr("events", "order")]),
+        executed_choices(&[location("choices"), attr("events", "order")]),
         ["order.ship", "order.cancel", "order.hold"]
     );
     assert_eq!(
-        executed_menu(&[location("menu"), attr("events", "order.*")]),
+        executed_choices(&[location("choices"), attr("events", "order.*")]),
         ["order.ship", "order.cancel", "order.hold"]
     );
     assert_eq!(
-        executed_menu(&[location("menu"), attr("events", "*")]),
+        executed_choices(&[location("choices"), attr("events", "*")]),
         ["order.ship", "order.cancel", "order.hold"]
     );
     assert_eq!(
-        executed_menu(&[location("menu"), attr("events", "order.sh ord")]),
+        executed_choices(&[location("choices"), attr("events", "order.sh ord")]),
         Vec::<String>::new(),
         "a descriptor matches whole tokens only"
     );
 }
 
 #[test]
-fn the_events_filter_with_no_match_writes_an_empty_menu() {
+fn the_events_filter_with_no_match_writes_an_empty_choices() {
     assert_eq!(
-        executed_menu(&[location("menu"), attr("events", "bot.input order.refund")]),
+        executed_choices(&[
+            location("choices"),
+            attr("events", "bot.input order.refund")
+        ]),
         Vec::<String>::new()
     );
 }
 
 #[test]
-fn without_the_events_attribute_the_menu_is_unfiltered() {
+fn without_the_events_attribute_the_choices_is_unfiltered() {
     assert_eq!(
-        executed_menu(&[location("menu")]),
+        executed_choices(&[location("choices")]),
         ["order.ship", "order.cancel", "order.hold"]
     );
     assert_eq!(
-        executed_menu(&[attr("events", "order.cancel"), location("menu")]),
+        executed_choices(&[attr("events", "order.cancel"), location("choices")]),
         ["order.cancel"],
         "attribute order does not matter"
     );
@@ -543,28 +555,29 @@ fn without_the_events_attribute_the_menu_is_unfiltered() {
 fn the_events_filter_keeps_selection_order_preemption() {
     let schema = json!({"type": "object"});
     let mut host = FakeHost {
-        menu_snapshot: Some(snapshot(&[
+        choices_snapshot: Some(snapshot(&[
             with_schema(&["bot.input"], &schema),
             with_schema(&["bot.input.text", "bot.focus_device"], &schema),
         ])),
         ..FakeHost::default()
     };
     execute(
-        "menu",
+        "choice",
         &[
-            location("menu"),
+            location("choices"),
             attr("events", "bot.input.text bot.focus_device"),
         ],
         &[],
         &mut host,
     )
     .expect("handled");
-    let Data::JsonArray(menu) = &host.assigned[0].1 else {
-        panic!("the menu is an array");
+    let Data::JsonArray(choices) = &host.assigned[0].1 else {
+        panic!("the choices are an array");
     };
-    let menu: Json = serde_json::from_str(menu).expect("JSON");
+    let choices: Json = serde_json::from_str(choices).expect("JSON");
     assert_eq!(
-        menu.as_array()
+        choices
+            .as_array()
             .expect("array")
             .iter()
             .map(|entry| entry["event"].clone())
@@ -577,29 +590,29 @@ fn the_events_filter_keeps_selection_order_preemption() {
 #[test]
 fn a_malformed_events_attribute_raises_error_execution() {
     for (value, detail) in [
-        ("", "decision:menu events names no event descriptor"),
-        (" \t\n", "decision:menu events names no event descriptor"),
+        ("", "decision:choice events names no event descriptor"),
+        (" \t\n", "decision:choice events names no event descriptor"),
         (
             "a..b",
-            "decision:menu events holds a malformed event descriptor",
+            "decision:choice events holds a malformed event descriptor",
         ),
         (
             "a.*.b",
-            "decision:menu events holds a malformed event descriptor",
+            "decision:choice events holds a malformed event descriptor",
         ),
         (
             "ok .x",
-            "decision:menu events holds a malformed event descriptor",
+            "decision:choice events holds a malformed event descriptor",
         ),
     ] {
         let mut host = FakeHost {
-            menu_snapshot: Some(order_snapshot()),
+            choices_snapshot: Some(order_snapshot()),
             ..FakeHost::default()
         };
         assert_eq!(
             execution(execute(
-                "menu",
-                &[location("menu"), attr("events", value)],
+                "choice",
+                &[location("choices"), attr("events", value)],
                 &[],
                 &mut host
             )),
@@ -610,27 +623,31 @@ fn a_malformed_events_attribute_raises_error_execution() {
         assert!(host.snapshot_requests.is_empty(), "refused before the read");
     }
     let mut host = FakeHost {
-        menu_snapshot: Some(order_snapshot()),
+        choices_snapshot: Some(order_snapshot()),
         ..FakeHost::default()
     };
     assert_eq!(
         execution(execute(
-            "menu",
-            &[location("menu"), attr("events", "a"), attr("events", "b")],
+            "choice",
+            &[
+                location("choices"),
+                attr("events", "a"),
+                attr("events", "b")
+            ],
             &[],
             &mut host
         )),
-        "decision:menu repeats an attribute"
+        "decision:choice repeats an attribute"
     );
     let mut host = FakeHost {
-        menu_snapshot: Some(order_snapshot()),
+        choices_snapshot: Some(order_snapshot()),
         ..FakeHost::default()
     };
     assert_eq!(
         execution(execute(
-            "menu",
+            "choice",
             &[
-                location("menu"),
+                location("choices"),
                 Attribute {
                     namespace_uri: Some(NAMESPACE_URI.into()),
                     local_name: "events".into(),
@@ -640,7 +657,7 @@ fn a_malformed_events_attribute_raises_error_execution() {
             &[],
             &mut host
         )),
-        "decision:menu takes only the location and events attributes",
+        "decision:choice takes only the location and events attributes",
         "only the unqualified events attribute"
     );
 }

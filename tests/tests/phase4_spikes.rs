@@ -11,9 +11,9 @@
 //!   grandchild names is resolved for the run, and leaving the root's
 //!   invoking state mid-request cancels the whole tree (exit handlers run
 //!   root first) and closes the request's connection.
-//! * (b) `menu_relay`: a child writes its menu with `<decision:menu>` and
+//! * (b) `choice_relay`: a child writes its choices with `<decision:choice>` and
 //!   sends it to its parent, which hands it to a third session whose
-//!   `decision` service invoke takes it as its `menu` param. Near the
+//!   `decision` service invoke takes it as its `choices` param. Near the
 //!   64 KiB value bound the relay breaks in three different ways, each
 //!   pinned here.
 //! * (c) `replay`: events deferred into the data model and replayed with
@@ -414,10 +414,10 @@ fn decision_env(test: &str, mock: &Mock) -> PathBuf {
 }
 
 #[test]
-fn a_childs_menu_relays_through_its_parent_to_a_third_sessions_decision() {
+fn a_childs_choice_relays_through_its_parent_to_a_third_sessions_decision() {
     let mock = Mock::start();
-    let env = decision_env("menu-relay", &mock);
-    let mut run = Run::start(&args(&[env], &fixture("menu_relay/root.scx")), &[]);
+    let env = decision_env("choices-relay", &mock);
+    let mut run = Run::start(&args(&[env], &fixture("choice_relay/root.scx")), &[]);
     run.end_input();
     let finished = run.finish(Duration::from_secs(120));
     let records = &finished.records;
@@ -425,8 +425,8 @@ fn a_childs_menu_relays_through_its_parent_to_a_third_sessions_decision() {
     assert_eq!(
         logs(records),
         labelled(&[
-            ("offerer.menu.bytes", "504"),
-            ("root.menu.bytes", "504"),
+            ("offerer.choices.bytes", "504"),
+            ("root.choices.bytes", "504"),
             ("chosen", r#"order.ship {"carrier":"fedex","sku":"A-1"}"#),
         ]),
         "{records:?}"
@@ -443,18 +443,18 @@ fn a_childs_menu_relays_through_its_parent_to_a_third_sessions_decision() {
             "order.cancel": "Cancel the order.",
             "none of these": "None of these: take no event.",
         }),
-        "the decider offers exactly the offerer's menu"
+        "the decider offers exactly the offerer's choices"
     );
 }
 
-/// The menu relay with an offerer of 30 extra schema transitions whose
-/// descriptions are `pad` bytes long: its menu is `16464 + 60 * (pad - 200)`
+/// The choices relay with an offerer of 30 extra schema transitions whose
+/// descriptions are `pad` bytes long: its choices are `16464 + 60 * (pad - 200)`
 /// bytes (each description appears twice). `decide` keeps the decider hop; without it the root finishes on
-/// receiving the menu.
-fn big_menu(test: &str, pad: usize, decide: bool, env: &[PathBuf]) -> Finished {
-    let dir = support::unique_scratch(&format!("menu-{test}"));
+/// receiving the choices.
+fn big_choices(test: &str, pad: usize, decide: bool, env: &[PathBuf]) -> Finished {
+    let dir = support::unique_scratch(&format!("choices-{test}"));
     let read = |name: &str| {
-        std::fs::read_to_string(fixture(&format!("menu_relay/{name}")))
+        std::fs::read_to_string(fixture(&format!("choice_relay/{name}")))
             .expect("the fixture is readable")
     };
     let mut root = read("root.scx");
@@ -486,17 +486,17 @@ fn big_menu(test: &str, pad: usize, decide: bool, env: &[PathBuf]) -> Finished {
 }
 
 #[test]
-fn a_menu_of_47364_bytes_relays_and_is_decided() {
+fn a_choices_of_47364_bytes_relays_and_is_decided() {
     let mock = Mock::start();
-    let env = decision_env("menu-47364", &mock);
-    let finished = big_menu("47364", 715, true, &[env]);
+    let env = decision_env("choices-47364", &mock);
+    let finished = big_choices("47364", 715, true, &[env]);
     let records = &finished.records;
     assert!(support::finished(records), "{records:?}");
     assert_eq!(
         logs(records),
         labelled(&[
-            ("offerer.menu.bytes", "47364"),
-            ("root.menu.bytes", "47364"),
+            ("offerer.choices.bytes", "47364"),
+            ("root.choices.bytes", "47364"),
             ("chosen", r#"order.ship {"carrier":"fedex","sku":"A-1"}"#),
         ]),
         "{records:?}"
@@ -504,12 +504,12 @@ fn a_menu_of_47364_bytes_relays_and_is_decided() {
 }
 
 /// A scxml.rs defect pinned: a child's `#_parent` send whose data the
-/// child's own bound admits (a menu of 48264 bytes, under 64 KiB) fails the
+/// child's own bound admits (a choice list of 48264 bytes, under 64 KiB) fails the
 /// parent's machine with a fatal `invalid-input`, ending the whole tree,
 /// instead of raising `error.execution` in the child.
 #[test]
-fn a_menu_of_48264_bytes_sent_to_the_parent_fails_the_whole_tree() {
-    let finished = big_menu("48264", 730, false, &[]);
+fn a_choices_of_48264_bytes_sent_to_the_parent_fails_the_whole_tree() {
+    let finished = big_choices("48264", 730, false, &[]);
     let records = &finished.records;
     assert_eq!(
         support::closed_status(records).as_deref(),
@@ -526,28 +526,28 @@ fn a_menu_of_48264_bytes_sent_to_the_parent_fails_the_whole_tree() {
 }
 
 #[test]
-fn a_menu_of_64464_bytes_is_written_but_its_send_raises_error_execution_in_the_child() {
-    let finished = big_menu("64464", 1000, false, &[]);
+fn a_choices_of_64464_bytes_is_written_but_its_send_raises_error_execution_in_the_child() {
+    let finished = big_choices("64464", 1000, false, &[]);
     let records = &finished.records;
     assert_eq!(
         logs(records),
         labelled(&[
-            ("offerer.menu.bytes", "64464"),
+            ("offerer.choices.bytes", "64464"),
             ("offerer.error", "error.execution"),
         ]),
-        "the parent never receives the menu: {records:?}"
+        "the parent never receives the choices: {records:?}"
     );
     assert_eq!(support::closed_status(records).as_deref(), Some("running"));
 }
 
 #[test]
-fn a_menu_over_the_value_bound_is_never_written() {
-    let finished = big_menu("70464", 1100, false, &[]);
+fn a_choices_over_the_value_bound_is_never_written() {
+    let finished = big_choices("70464", 1100, false, &[]);
     let records = &finished.records;
     assert_eq!(
         logs(records),
         labelled(&[("offerer.error", "error.execution")]),
-        "<decision:menu> raises error.execution and assigns nothing: {records:?}"
+        "<decision:choice> raises error.execution and assigns nothing: {records:?}"
     );
 }
 

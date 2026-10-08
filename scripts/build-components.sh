@@ -92,9 +92,9 @@ mkdir -p "$artifacts_dir"
 # outbound-http. Every model call is an invoked service.
 expected_imports() {
     case "$1" in
-        # <decision:menu>: reads the transitions through the session
+        # <decision:choice>: reads the transitions through the session
         # snapshot, evaluates their guards through the data model, and
-        # assigns the menu there; no execution-host or outbound-http.
+        # assigns the choices there; no execution-host or outbound-http.
         floppy_decision)
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
@@ -205,9 +205,9 @@ build_component() {
     virt_input=$raw
     case "$component" in
         floppy_decision|floppy_service_generate|floppy_service_decision|floppy_service_generate_validator)
-        # <decision:menu> compiles each offered schema, the generate service
+        # <decision:choice> compiles each offered schema, the generate service
         # checks structured output, and the decision service checks the
-        # menu's schemas and the filled event data with the same `event`
+        # choices' schemas and the filled event data with the same `event`
         # schema code (boon, std's RandomState). wasi-virt denies randomness
         # (the first schema check would trap), so compose the subtree's
         # pinned deterministic provider first, exactly as scxml.rs does for

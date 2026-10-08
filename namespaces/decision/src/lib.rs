@@ -1,24 +1,24 @@
-//! The `decision` extension namespace: `<decision:menu>` as a
+//! The `decision` extension namespace: `<decision:choice>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! Executable content is synchronous and quick, so this namespace holds only
-//! the half of a decision that is: reading the menu. Asking a backend to
+//! the half of a decision that is: reading the choices. Asking a backend to
 //! choose is slow I/O and belongs to the `decision` invoked service
-//! (`services/decision`), which takes the menu this element writes as its
-//! `menu` parameter. Documents bind [`NAMESPACE_URI`] (conventionally with
+//! (`services/decision`), which takes the choices this element writes as its
+//! `choices` parameter. Documents bind [`NAMESPACE_URI`] (conventionally with
 //! the prefix `decision`):
 //!
 //! ```xml
-//! <onentry><decision:menu location="menu"/></onentry>
+//! <onentry><decision:choice location="choices"/></onentry>
 //! <invoke type="https://github.com/stateforward/floppy/services/decision" ...>
-//!   <param name="menu" expr="menu"/>
+//!   <param name="choices" expr="choices"/>
 //!   <param name="state" expr="..."/>
 //! </invoke>
 //! ```
 //!
-//! # `<decision:menu location="L"/>`
+//! # `<decision:choice location="L"/>`
 //!
-//! `location` (required) receives the canonical menu: a JSON array of
+//! `location` (required) receives the canonical choices: a JSON array of
 //! objects with `event` (an event name), `schema` (the transition's resolved
 //! `event:schema`), and `description` (the schema's `description`, else its
 //! `title`, first line; omitted when it has neither), canonical JSON with
@@ -27,7 +27,7 @@
 //! (unqualified or namespaced), any child element, and any non-white-space
 //! text is refused.
 //!
-//! * **The menu.** The transitions the session snapshot lists for the
+//! * **The choices.** The transitions the session snapshot lists for the
 //!   current configuration (`session-snapshot-host`, `transitions` section,
 //!   in its walk order) that carry an `event:schema`: each of their event
 //!   descriptors that names an event (`*` is skipped; `e.*` names `e`),
@@ -36,7 +36,7 @@
 //!   selected for it); each event is offered once. The walk lists a shared
 //!   ancestor's transitions once, in the first chain that reaches it, and a
 //!   leaf without eventful transitions of its own opens no chain, so in
-//!   those two cases the menu can leave out an event SCXML would also
+//!   those two cases the choices can leave out an event SCXML would also
 //!   select, never offer one it would not. `event:schemaexpr` transitions
 //!   are not offered (a snapshot carries the expression, not the schema).
 //! * **Guards.** A transition with a `cond` is offered only when its
@@ -44,25 +44,25 @@
 //!   `_event`, not the event being offered), is exactly `true`; one whose
 //!   condition is exactly `false` is skipped and takes no event from a later
 //!   transition; one whose condition fails or is not a boolean is not offered
-//!   but still takes its events from later transitions. So an event on the
-//!   menu is never one only a disabled transition would take, but a guard
+//!   but still takes its events from later transitions. So an event among the
+//!   choices is never one only a disabled transition would take, but a guard
 //!   that reads `_event` of the offered event is judged against the current
 //!   event (author such guards without `event:schema`, or expect them not
 //!   to be offered). Conditions run once per element, so they must be free
 //!   of side effects, as SCXML conditions should be anyway.
 //! * **The filter.** `events="D1 D2 ..."` is a white-space separated list
 //!   of SCXML event descriptors (SCXML 3.12.1: `*`, or an event name with an
-//!   optional trailing `.*`). The menu keeps only the events one of them
+//!   optional trailing `.*`). The choices keep only the events one of them
 //!   matches (a token prefix match: `bot.ability` keeps
-//!   `bot.ability.cognition.ignore`), in menu order. The filter applies
+//!   `bot.ability.cognition.ignore`), in choices order. The filter applies
 //!   after selection order is worked out, so a transition it leaves out
 //!   still takes its events from later transitions, as SCXML would select
 //!   it. An `events` that lists no descriptor, or one that is not an event
-//!   descriptor, is refused. Without `events` the menu is unfiltered. A
+//!   descriptor, is refused. Without `events` the choices are unfiltered. A
 //!   document uses it to offer a model only the events meant for it (tool
 //!   events) and not, say, its own input or completion events.
 //!
-//! The menu's schemas are the contracts of the events the decision service
+//! The choices' schemas are the contracts of the events the decision service
 //! may return: it validates the chosen event's data against them before it
 //! returns it (the document declares its events, not the service package).
 //!
@@ -111,7 +111,7 @@ pub const NAMESPACE_NAME: &str = "decision";
 /// it too.
 pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespaces/decision";
 
-/// Upper bound on a menu event name's bytes (wasm builds only).
+/// Upper bound on a choice event name's bytes (wasm builds only).
 pub const MAX_EVENT_NAME_BYTES: usize = wasm_bound(256);
 
 /// One attribute of an element.
@@ -152,8 +152,8 @@ pub enum Section {
     Transitions,
 }
 
-/// The snapshot read for the menu: only its transitions are used.
-pub const MENU_SNAPSHOT_EXCLUDE: [Section; 4] = [
+/// The snapshot read for the choices: only its transitions are used.
+pub const CHOICES_SNAPSHOT_EXCLUDE: [Section; 4] = [
     Section::System,
     Section::DataModel,
     Section::Queues,
@@ -183,7 +183,7 @@ pub enum Failure<E> {
 pub type GuardValue = Option<bool>;
 
 /// The host capabilities one `execute` call uses.
-pub trait MenuHost {
+pub trait ChoiceHost {
     /// A non-recoverable host failure.
     type Error;
 
@@ -194,7 +194,7 @@ pub trait MenuHost {
     /// A non-recoverable host failure.
     fn guard(&mut self, cond: &str) -> Result<GuardValue, Self::Error>;
 
-    /// Assigns the menu (a JSON array) to one data-model location;
+    /// Assigns the choices (a JSON array) to one data-model location;
     /// `Ok(Err(()))` is a recoverable assignment failure.
     ///
     /// # Errors
@@ -211,9 +211,9 @@ pub trait MenuHost {
     fn snapshot(&mut self, exclude: &[Section]) -> Result<Result<String, ()>, Self::Error>;
 }
 
-/// One event on the menu.
+/// One event among the choices.
 #[derive(Clone, Debug, PartialEq)]
-pub struct MenuEntry {
+pub struct Choice {
     /// The event name.
     pub event: String,
     /// The transition's resolved schema.
@@ -222,10 +222,10 @@ pub struct MenuEntry {
     pub description: Option<String>,
 }
 
-/// The canonical menu document of `entries`: a JSON array of
+/// The canonical choices document of `entries`: a JSON array of
 /// `{"description"?, "event", "schema"}` objects in order, canonical JSON.
 #[must_use]
-pub fn menu_json(entries: &[MenuEntry]) -> String {
+pub fn choices_json(entries: &[Choice]) -> String {
     canonical_json(&Json::Array(
         entries
             .iter()
@@ -249,13 +249,13 @@ pub fn menu_json(entries: &[MenuEntry]) -> String {
 ///
 /// [`Failure::Execution`] for every malformed element, snapshot, or
 /// assignment; [`Failure::Host`] for a non-recoverable host failure.
-pub fn execute<H: MenuHost>(
+pub fn execute<H: ChoiceHost>(
     local_name: &str,
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
 ) -> Result<Executed, Failure<H::Error>> {
-    if local_name != "menu" {
+    if local_name != "choice" {
         return Ok(Executed::NotHandled);
     }
     let mut location = None;
@@ -269,42 +269,44 @@ pub fn execute<H: MenuHost>(
             (None, "events") => &mut events,
             _ => {
                 return Err(Failure::Execution(
-                    "decision:menu takes only the location and events attributes",
+                    "decision:choice takes only the location and events attributes",
                 ));
             }
         };
         if slot.replace(attribute.value.as_str()).is_some() {
-            return Err(Failure::Execution("decision:menu repeats an attribute"));
+            return Err(Failure::Execution("decision:choice repeats an attribute"));
         }
     }
     let location = location
         .map(str::trim)
         .filter(|location| !location.is_empty())
         .ok_or(Failure::Execution(
-            "decision:menu requires a non-empty location",
+            "decision:choice requires a non-empty location",
         ))?;
     let filter = events.map(event_filter).transpose()?;
     if content
         .iter()
         .any(|item| !matches!(item, Content::Text(text) if text.trim().is_empty()))
     {
-        return Err(Failure::Execution("decision:menu holds no content"));
+        return Err(Failure::Execution("decision:choice holds no content"));
     }
     let document = host
-        .snapshot(&MENU_SNAPSHOT_EXCLUDE)
+        .snapshot(&CHOICES_SNAPSHOT_EXCLUDE)
         .map_err(Failure::Host)?
         .map_err(|()| Failure::Execution("the host offers no session snapshot"))?;
-    let mut menu = snapshot_menu(&document, &mut |cond| host.guard(cond))?;
+    let mut choices = snapshot_choices(&document, &mut |cond| host.guard(cond))?;
     if let Some(filter) = filter {
-        menu.retain(|entry| {
+        choices.retain(|entry| {
             filter
                 .iter()
                 .any(|descriptor| matches(descriptor, &entry.event))
         });
     }
-    host.assign(location, &Data::JsonArray(menu_json(&menu)))
+    host.assign(location, &Data::JsonArray(choices_json(&choices)))
         .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution("decision:menu could not assign the menu to location"))?;
+        .map_err(|()| {
+            Failure::Execution("decision:choice could not assign the choices to location")
+        })?;
     Ok(Executed::Handled)
 }
 
@@ -323,14 +325,14 @@ pub fn event_filter<E>(value: &str) -> Result<Vec<&str>, Failure<E>> {
         .collect();
     if descriptors.is_empty() {
         return Err(Failure::Execution(
-            "decision:menu events names no event descriptor",
+            "decision:choice events names no event descriptor",
         ));
     }
     if descriptors.iter().any(|descriptor| {
         *descriptor != "*" && !valid_event_name(descriptor.strip_suffix(".*").unwrap_or(descriptor))
     }) {
         return Err(Failure::Execution(
-            "decision:menu events holds a malformed event descriptor",
+            "decision:choice events holds a malformed event descriptor",
         ));
     }
     Ok(descriptors)
@@ -370,7 +372,7 @@ fn valid_event_name(name: &str) -> bool {
         && name.split('.').all(|token| !token.is_empty())
 }
 
-/// What one transition's guard evaluated to (see [`snapshot_menu`]).
+/// What one transition's guard evaluated to (see [`snapshot_choices`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Guard {
     /// No `cond`, or a `cond` that evaluated to `true`.
@@ -381,8 +383,8 @@ pub enum Guard {
     Unknown,
 }
 
-/// The menu of a `scxml.session-snapshot/v2` document: see the crate
-/// documentation ("The menu"). `guard` evaluates one transition's `cond`
+/// The choices of a `scxml.session-snapshot/v2` document: see the crate
+/// documentation ("The choices"). `guard` evaluates one transition's `cond`
 /// text: `Ok(Some(b))` for a boolean, `Ok(None)` for a failed or
 /// non-boolean evaluation.
 ///
@@ -391,10 +393,10 @@ pub enum Guard {
 /// [`Failure::Execution`] with a static detail when the document is
 /// malformed or a schema does not compile or match its digest;
 /// [`Failure::Host`] when `guard` fails non-recoverably.
-pub fn snapshot_menu<E>(
+pub fn snapshot_choices<E>(
     document: &str,
     guard: &mut dyn FnMut(&str) -> Result<Option<bool>, E>,
-) -> Result<Vec<MenuEntry>, Failure<E>> {
+) -> Result<Vec<Choice>, Failure<E>> {
     let malformed = || Failure::Execution("the session snapshot is malformed");
     let document: Json = serde_json::from_str(document).map_err(|_| malformed())?;
     let Some(transitions) = document.pointer("/snapshot/root/transitions") else {
@@ -415,7 +417,7 @@ pub fn snapshot_menu<E>(
     // a listed transition's source is another active atomic state.
     let mut leaf: Option<&str> = None;
     let mut earlier: Vec<&str> = Vec::new();
-    let mut menu: Vec<MenuEntry> = Vec::new();
+    let mut choices: Vec<Choice> = Vec::new();
     for transition in transitions {
         let source = transition
             .get("source")
@@ -474,11 +476,11 @@ pub fn snapshot_menu<E>(
                 let event = descriptor.strip_suffix(".*").unwrap_or(descriptor);
                 if !valid_event_name(event)
                     || earlier.iter().any(|before| matches(before, event))
-                    || menu.iter().any(|entry| entry.event == event)
+                    || choices.iter().any(|entry| entry.event == event)
                 {
                     continue;
                 }
-                menu.push(MenuEntry {
+                choices.push(Choice {
                     event: event.to_owned(),
                     description: description_of(&schema),
                     schema: schema.clone(),
@@ -487,7 +489,7 @@ pub fn snapshot_menu<E>(
         }
         earlier.extend(descriptors);
     }
-    Ok(menu)
+    Ok(choices)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -511,7 +513,7 @@ mod guest {
     };
     use stateforward::scxml::{data_model_host, session_snapshot_host};
 
-    use super::{Attribute, Content, Data, Executed, Failure, GuardValue, MenuHost, Section};
+    use super::{Attribute, ChoiceHost, Content, Data, Executed, Failure, GuardValue, Section};
 
     /// The lifecycle of this instance.
     #[derive(Clone, Copy, Eq, PartialEq)]
@@ -542,7 +544,7 @@ mod guest {
         )
     }
 
-    impl MenuHost for Host {
+    impl ChoiceHost for Host {
         type Error = ComponentError;
 
         fn guard(&mut self, cond: &str) -> Result<GuardValue, ComponentError> {
@@ -583,7 +585,7 @@ mod guest {
             match session_snapshot_host::snapshot(&exclude) {
                 Ok(document) => Ok(Ok(document)),
                 // No image for this call, the call bound, or a document
-                // bound: the element cannot read the menu (`error.execution`).
+                // bound: the element cannot read the choices (`error.execution`).
                 Err(error)
                     if recoverable(error.code) || error.code == ErrorCode::CapacityExhausted =>
                 {

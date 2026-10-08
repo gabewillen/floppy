@@ -1,6 +1,6 @@
 [package]
 name = "floppy-decision"
-description = "The `decision` namespace: `<decision:menu>`, the canonical menu of the enabled transitions and their event schemas (the synchronous half of a decision), as a Wasm extension component"
+description = "The `decision` namespace: `<decision:choice>`, the canonical choices of the enabled transitions and their event schemas (the synchronous half of a decision), as a Wasm extension component"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,7 +13,7 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# Canonical JSON (the menu document), the digest check of the snapshot's
+# Canonical JSON (the choices document), the digest check of the snapshot's
 # event schemas, and the compile check of each offered schema
 # (`CompiledSchema`; boon, nothing ever loaded).
 scxml-event-schema.workspace = true

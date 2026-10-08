@@ -64,8 +64,8 @@ fn cancel_schema() -> Json {
     })
 }
 
-/// The order machine's menu, as `<decision:menu>` writes it.
-fn order_menu() -> Data {
+/// The order machine's choices, as `<decision:choice>` writes it.
+fn order_choices() -> Data {
     Data::JsonArray(canonical_json(&json!([
         {"event": "order.ship", "schema": ship_schema(), "description": "Ship the order."},
         {"event": "order.cancel", "schema": cancel_schema(), "description": "Cancel the order"},
@@ -89,7 +89,7 @@ fn prepared(parameters: &[(&str, Data)]) -> Prepared {
 }
 
 fn choose() -> Prepared {
-    prepared(&[("menu", order_menu()), ("state", order_state())])
+    prepared(&[("choices", order_choices()), ("state", order_state())])
 }
 
 #[test]
@@ -249,7 +249,7 @@ fn choose_abstains_when_declined_below_threshold_or_with_nothing_to_offer() {
     assert_eq!(declined.name, ABSTAIN_EVENT);
     assert_eq!(declined.data, r#"{"confidence":0.9,"reason":"declined"}"#);
     let strict = prepared(&[
-        ("menu", order_menu()),
+        ("choices", order_choices()),
         ("state", order_state()),
         (
             "threshold",
@@ -269,13 +269,13 @@ fn choose_abstains_when_declined_below_threshold_or_with_nothing_to_offer() {
         below.data,
         r#"{"confidence":0.6,"reason":"below-threshold"}"#
     );
-    // A menu whose every event lacks a grounded required member offers
+    // A choices whose every event lacks a grounded required member offers
     // nothing: it abstains without a request.
     let ungroundable = Data::JsonArray(canonical_json(&json!([
         {"event": "order.ship", "schema": ship_schema()},
     ])));
     let plan = parse_parameters([
-        ("menu", &ungroundable),
+        ("choices", &ungroundable),
         ("state", &Data::String("no evidence".into())),
     ])
     .expect("valid")
@@ -289,7 +289,7 @@ fn choose_abstains_when_declined_below_threshold_or_with_nothing_to_offer() {
                 data: r#"{"reason":"no-candidates"}"#.into()
             }
         ),
-        Plan::Ask(_) => panic!("an empty menu asks nothing"),
+        Plan::Ask(_) => panic!("an empty choice list asks nothing"),
     }
 }
 
@@ -298,7 +298,7 @@ fn filled_data_that_fails_the_schema_is_never_returned() {
     // The evidence offers a carrier the schema's enum does not admit, and
     // the backend picks it.
     let prepared = prepared(&[
-        ("menu", order_menu()),
+        ("choices", order_choices()),
         ("state", order_state()),
         (
             "data",
@@ -407,18 +407,18 @@ fn classify_takes_labels_in_every_form() {
 #[test]
 fn malformed_parameters_reject_the_start() {
     let state = ("state", order_state());
-    let menu = ("menu", order_menu());
+    let choices = ("choices", order_choices());
     for (parameters, why) in [
-        (vec![menu.clone()], "no state"),
-        (vec![state.clone()], "choose without a menu"),
+        (vec![choices.clone()], "no state"),
+        (vec![state.clone()], "choose without a choice list"),
         (
-            vec![state.clone(), menu.clone(), ("menu", order_menu())],
+            vec![state.clone(), choices.clone(), ("choices", order_choices())],
             "a repeated parameter",
         ),
         (
             vec![
                 state.clone(),
-                menu.clone(),
+                choices.clone(),
                 ("labels", Data::String("a".into())),
             ],
             "a parameter of another kind",
@@ -428,42 +428,42 @@ fn malformed_parameters_reject_the_start() {
             "an unknown kind",
         ),
         (
-            vec![("state", Data::Bool(true)), menu.clone()],
+            vec![("state", Data::Bool(true)), choices.clone()],
             "a boolean state",
         ),
         (
             vec![
                 state.clone(),
-                ("menu", Data::JsonArray(r#"[{"event":"a"}]"#.into())),
+                ("choices", Data::JsonArray(r#"[{"event":"a"}]"#.into())),
             ],
-            "a menu entry without a schema",
+            "a choice without a schema",
         ),
         (
             vec![
                 state.clone(),
                 (
-                    "menu",
+                    "choices",
                     Data::JsonArray(
                         r#"[{"event":"a","schema":{}},{"event":"a","schema":{}}]"#.into(),
                     ),
                 ),
             ],
-            "a menu naming an event twice",
+            "a choice list naming an event twice",
         ),
         (
             vec![
                 state.clone(),
                 (
-                    "menu",
+                    "choices",
                     Data::JsonArray(r#"[{"event":"a.*","schema":{}}]"#.into()),
                 ),
             ],
-            "a wildcard menu event",
+            "a wildcard choices event",
         ),
         (
             vec![
                 state.clone(),
-                menu.clone(),
+                choices.clone(),
                 (
                     "threshold",
                     Data::Number(scxml_types::FiniteNumber::new(1.5).expect("finite")),
@@ -474,7 +474,7 @@ fn malformed_parameters_reject_the_start() {
         (
             vec![
                 state.clone(),
-                menu.clone(),
+                choices.clone(),
                 ("data", Data::String("x".into())),
             ],
             "non-object evidence",
@@ -490,7 +490,7 @@ fn malformed_parameters_reject_the_start() {
 #[test]
 fn malformed_rank_classify_or_common_parameters_reject_the_start() {
     let state = ("state", order_state());
-    let menu = ("menu", order_menu());
+    let choices = ("choices", order_choices());
     for (parameters, why) in [
         (
             vec![
@@ -517,7 +517,7 @@ fn malformed_rank_classify_or_common_parameters_reject_the_start() {
             "a non-string label",
         ),
         (
-            vec![state, menu, ("model", Data::String(" ".into()))],
+            vec![state, choices, ("model", Data::String(" ".into()))],
             "an empty model",
         ),
     ] {

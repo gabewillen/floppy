@@ -1,19 +1,19 @@
-<!-- Spike (b), offerer: its two event:schema transitions are its menu;
-     <decision:menu> writes them on entry and the menu goes to the parent as
+<!-- Spike (b), offerer: its two event:schema transitions are its choices;
+     <decision:choice> writes them on entry and the choices goes to the parent as
      data. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" initial="offering">
   <datamodel>
-    <data id="menu" expr="[]"/>
+    <data id="choices" expr="[]"/>
   </datamodel>
   <state id="offering">
     <onentry>
-      <decision:menu location="menu"/>
-      <log label="offerer.menu.bytes" expr="String(JSON.stringify(menu).length)"/>
-      <send event="spike.menu" target="#_parent">
-        <param name="menu" expr="menu"/>
+      <decision:choice location="choices"/>
+      <log label="offerer.choices.bytes" expr="String(JSON.stringify(choices).length)"/>
+      <send event="spike.choices" target="#_parent">
+        <param name="choices" expr="choices"/>
       </send>
     </onentry>
     <transition event="error.*" target="done">

@@ -29,7 +29,7 @@
   -> done. Every failure goes through retry_gate, which takes its
   fingerprint and gives up (no-progress) when it equals the previous
   failure's, or at the request's optional max_attempts; triage then reads its enabled
-  event:schema transitions with decision:menu and invokes the decision
+  event:schema transitions with decision:choice and invokes the decision
   service to pick one (repair while there is a plan, redesign, abandon).
   When the decision is unavailable (no key granted, backend failure:
   decision.failed or error.*), times out, or abstains, fallback decides by
@@ -94,7 +94,7 @@
     <data id="gen_id" expr="null"/>
     <data id="gen_failure" expr="null"/>
     <data id="decision_id" expr="null"/>
-    <data id="menu" expr="[]"/>
+    <data id="choices" expr="[]"/>
     <data id="stage_run" expr="0"/>
     <data id="design_system" expr="'You are the design stage of the floppy builder bot. Plan the topology of one SCXML 1.0 state machine that implements the specification and honours every constraint. Use concise lowercase state ids (letters, digits, underscores). Name events with dotted lowercase names. Inputs are events the machine receives from its invoker; outputs are events it sends to its invoker. Model timing with delayed timer events, never with loops. When diagnostics or a previous plan are given, the previous attempt failed: plan again so that it cannot fail the same way. Answer with the plan only.'"/>
     <data id="author_system" expr="'You are the author stage of the floppy builder bot. Write one complete SCXML 1.0 document that implements the plan and the specification. Rules: the root element is scxml in the namespace http://www.w3.org/2005/07/scxml with version 1.0 and datamodel ecmascript; use the schema attribute of the namespace https://github.com/stateforward/scxml.rs/namespaces/event (bound to the prefix event) to give each input event an inline JSON Schema on the transitions that take it, written as single-quoted JSON; every transition target names an existing state id; event descriptors are separated by spaces, never commas; send every output to the invoker with a send element whose target is #_parent, exactly once per occurrence (announce a state from its own onentry, not also from the transitions into it); the machine starts on its own in its initial state unless the specification names a start event; every state is reachable; implement timing with delayed sends (for example delay 3s) and cancel pending timers on exit. Also return schemas: one entry per input event, its schema as the JSON text of a JSON Schema object (for example {&quot;type&quot;:&quot;object&quot;}) equal to the inline one; and tests: one to eight test scripts, each with input events (name, data as JSON object text or the empty string, delay_ms from the start of the test), settle_ms (the total observation time from the start of the test, larger than every delay_ms), expect_events (the output event names the machine must send to #_parent, in order; other outputs may appear between them), and expect_done (whether the machine reaches a top-level final state within settle_ms; a machine that cycles forever never does). When the task is repair, previous_scxml and previous_tests failed with the given diagnostics: a simulate diagnostic means either the machine or the test expectation is wrong, so fix whichever disagrees with the specification, fix every other diagnostic, and keep what already works.'"/>
@@ -432,13 +432,13 @@
   </state>
 
   <!-- Picks the next step among the enabled event:schema transitions:
-       decision:menu reads them (synchronously), and the decision service
+       decision:choice reads them (synchronously), and the decision service
        chooses one and emits it. -->
   <state id="triage">
     <onentry>
       <assign location="stage_run" expr="stage_run + 1"/>
-      <decision:menu location="menu"/>
-      <log label="triage" expr="'choosing among ' + menu.length + ' option(s)'"/>
+      <decision:choice location="choices"/>
+      <log label="triage" expr="'choosing among ' + choices.length + ' option(s)'"/>
       <send id="triage-timeout" event="builder.timeout" delayexpr="decision_timeout_ms + 'ms'">
         <param name="run" expr="stage_run"/>
       </send>
@@ -448,7 +448,7 @@
     </onexit>
     <invoke idlocation="decision_id" type="https://github.com/stateforward/floppy/services/decision"
             env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
-      <param name="menu" expr="menu"/>
+      <param name="choices" expr="choices"/>
       <param name="state" expr="({spec: spec, attempt: attempt, failures: failures, max_attempts: max_attempts, has_plan: plan !== null, diagnostics: diagnostics})"/>
       <param name="instructions" expr="triage_instructions"/>
     </invoke>

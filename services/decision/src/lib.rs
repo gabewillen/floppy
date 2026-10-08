@@ -1,15 +1,15 @@
 //! The `decision` invoked service: one decision per `<invoke>` (choose an
-//! event from a menu, rank candidates, or classify a state), as a
+//! event from a choice list, rank candidates, or classify a state), as a
 //! `stateforward:scxml/invoked-service` Wasm component.
 //!
 //! Asking a backend is slow I/O, so a decision is a service, never
 //! executable content: the invoking session keeps processing events and
 //! timers while the question is in flight, a `<send delay>` timeout in the
 //! invoking state preempts it, and leaving that state cancels it. The
-//! synchronous half stays executable content: `<decision:menu>`
+//! synchronous half stays executable content: `<decision:choice>`
 //! (`namespaces/decision`) reads the enabled `event:schema` transitions from
-//! the session snapshot and writes the canonical menu this service takes as
-//! its `menu` parameter.
+//! the session snapshot and writes the canonical choices this service takes as
+//! its `choices` parameter.
 //!
 //! Each invocation asks a [`Backend`] ([`TypeSafe`] `system_one` today; a CLM
 //! backend implements the same trait) one batch of labelled choice
@@ -21,10 +21,10 @@
 //! the same answer. Documents name [`SERVICE_URI`]:
 //!
 //! ```xml
-//! <onentry><decision:menu location="menu"/></onentry>
+//! <onentry><decision:choice location="choices"/></onentry>
 //! <invoke type="https://github.com/stateforward/floppy/services/decision"
 //!         env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
-//!   <param name="menu" expr="menu"/>
+//!   <param name="choices" expr="choices"/>
 //!   <param name="state" expr="({failures: failures})"/>
 //! </invoke>
 //! ```
@@ -38,9 +38,9 @@
 //!   kind has a default.
 //! * `model` (optional, a non-empty string): the backend's model; the
 //!   backend's default without one.
-//! * `choose`: `menu` (required: a JSON array of objects with `event`, an
+//! * `choose`: `choices` (required: a JSON array of objects with `event`, an
 //!   event name, `schema`, a self-contained JSON Schema, and an optional
-//!   `description` string, as `<decision:menu>` writes it; events distinct),
+//!   `description` string, as `<decision:choice>` writes it; events distinct),
 //!   `data` (optional: a JSON object of evidence), and `threshold`
 //!   (optional, a number in `[0, 1]`, `0` without it).
 //! * `rank`: `candidates` (required: a non-empty JSON array of distinct
@@ -77,7 +77,7 @@
 //!   `{"reason": "no-candidates" | "declined" | "below-threshold", "confidence": P}`
 //!   (`confidence` absent for `no-candidates`, which sends nothing).
 //! * **Validation before returning.** The filled data must satisfy the chosen
-//!   event's schema from the menu; otherwise the service returns
+//!   event's schema from the choices; otherwise the service returns
 //!   [`FAILED_EVENT`] `{"code": "schema-mismatch"}` and never the event.
 //!
 //! # `rank` and `classify`
@@ -93,12 +93,12 @@
 //! one event to the stream it returns, then resolves its result future with
 //! no data. A failure returns [`FAILED_EVENT`] `{"code": C}` with one closed
 //! [`FailureCode`]. The chosen event of `choose` is defined by the invoking
-//! document (its menu's `event:schema` transitions), and the document
+//! document (its choices' `event:schema` transitions), and the document
 //! describes this service's own events with `event:schema` too
 //! (`bots/builder/builder.scxml`); the service validates what it returns
-//! itself: the chosen event's data against the menu's schema for it, and
+//! itself: the chosen event's data against the choices' schema for it, and
 //! its own events by construction (their shapes are documented here). An
-//! event name the menu offers is a valid SCXML event name with no `*` and no
+//! event name the choices offer is a valid SCXML event name with no `*` and no
 //! empty token. The service reads no event: it drops the event stream
 //! `invoke` receives. `outbound-http.fetch` is an `async func`: awaiting it
 //! suspends only the invocation's own task, and leaving the invoking state
@@ -197,7 +197,7 @@ pub const MAX_STATE_BYTES: usize = wasm_bound(512 * 1024);
 pub const MAX_INSTRUCTIONS_BYTES: usize = wasm_bound(16 * 1024);
 /// Upper bound on the model name's bytes (wasm builds only).
 pub const MAX_MODEL_BYTES: usize = wasm_bound(256);
-/// Upper bound on a menu event name's bytes (wasm builds only).
+/// Upper bound on a choice event name's bytes (wasm builds only).
 pub const MAX_EVENT_NAME_BYTES: usize = wasm_bound(256);
 
 /// One part of a URL or header value: literal text, or an opaque reference
@@ -275,7 +275,7 @@ impl FailureCode {
 /// data as a canonical JSON object.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Returned {
-    /// The event name: a menu event, or one of this service's events.
+    /// The event name: a choice event, or one of this service's events.
     pub name: String,
     /// Canonical JSON object text.
     pub data: String,
@@ -339,20 +339,20 @@ fn valid_event_name(name: &str) -> bool {
         && name.split('.').all(|token| !token.is_empty())
 }
 
-/// The candidates of a `menu` value: an array of objects with `event`,
+/// The candidates of a `choices` value: an array of objects with `event`,
 /// `schema`, and an optional `description`.
 ///
 /// # Errors
 ///
 /// A static detail for a malformed candidate, a duplicate event, or a schema
 /// that is not a self-contained JSON Schema.
-pub fn menu_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
-    const INVALID: &str = "decision menu must be an array of objects with an event name, a schema, and an optional description";
+pub fn choices_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
+    const INVALID: &str = "decision choices must be an array of objects with an event name, a schema, and an optional description";
     let items = value.as_array().ok_or(INVALID)?;
     if exceeds_wasm_bound(items.len(), MAX_CRITERIA) {
-        return Err("decision menu exceeds the candidate bound");
+        return Err("decision choices exceed the candidate bound");
     }
-    let mut menu: Vec<Candidate> = Vec::new();
+    let mut choices: Vec<Candidate> = Vec::new();
     for item in items {
         let members = item.as_object().ok_or(INVALID)?;
         if members
@@ -366,28 +366,28 @@ pub fn menu_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
             .and_then(Json::as_str)
             .filter(|event| valid_event_name(event))
             .ok_or(INVALID)?;
-        if menu.iter().any(|candidate| candidate.event == event) {
-            return Err("decision menu names an event twice");
+        if choices.iter().any(|candidate| candidate.event == event) {
+            return Err("decision choices name an event twice");
         }
         let source = members.get("schema").ok_or(INVALID)?;
         let resolved = scxml_event_schema::resolve(canonical_json(source).as_bytes(), None)
-            .map_err(|_| "decision menu schema is not a self-contained JSON Schema")?;
+            .map_err(|_| "decision choices schema is not a self-contained JSON Schema")?;
         let schema: Json = serde_json::from_str(&resolved.schema).map_err(|_| INVALID)?;
         let compiled = CompiledSchema::new(&resolved.schema)
-            .map_err(|_| "decision menu schema is not a self-contained JSON Schema")?;
+            .map_err(|_| "decision choices schema is not a self-contained JSON Schema")?;
         let description = match members.get("description") {
             None => description_of(&schema),
             Some(Json::String(text)) => Some(text.clone()),
             Some(_) => return Err(INVALID),
         };
-        menu.push(Candidate {
+        choices.push(Candidate {
             event: event.to_owned(),
             schema,
             compiled,
             description,
         });
     }
-    Ok(menu)
+    Ok(choices)
 }
 
 /// The label of one value: a string is its own label, any other value its
@@ -403,7 +403,7 @@ fn valid_label(label: &str) -> bool {
     !label.is_empty() && !exceeds_wasm_bound(label.len(), MAX_LABEL_BYTES)
 }
 
-/// A candidate (by menu index) with grounded options for every required
+/// A candidate (by choices index) with grounded options for every required
 /// member.
 #[derive(Debug)]
 struct Grounded {
@@ -412,14 +412,14 @@ struct Grounded {
     members: Vec<(String, Vec<Criterion>, Vec<Json>)>,
 }
 
-/// The grounded options of every required member of `menu[index]`, or
+/// The grounded options of every required member of `choices[index]`, or
 /// `None` when one has no option (the event is then not offered).
 fn ground(
-    menu: &[Candidate],
+    choices: &[Candidate],
     index: usize,
     evidence: Option<&Map<String, Json>>,
 ) -> Option<Grounded> {
-    let candidate = menu.get(index)?;
+    let candidate = choices.get(index)?;
     let required: Vec<&str> = match candidate.schema.get("required") {
         None => Vec::new(),
         Some(Json::Array(names)) => names.iter().map(Json::as_str).collect::<Option<_>>()?,
@@ -486,7 +486,7 @@ pub struct DecisionRequest {
 #[derive(Debug)]
 enum Kind {
     Choose {
-        menu: Vec<Candidate>,
+        choices: Vec<Candidate>,
         evidence: Option<Map<String, Json>>,
         threshold: f64,
     },
@@ -602,12 +602,12 @@ fn find<'a>(given: &[(&str, &'a Data)], name: &str) -> Option<&'a Data> {
         .map(|(_, value)| *value)
 }
 
-/// The `choose` part of a request: its menu, its evidence (`data`, else an
+/// The `choose` part of a request: its choices, its evidence (`data`, else an
 /// object `state`), and its threshold.
 fn choose_kind(given: &[(&str, &Data)], state: &Json) -> Result<Kind, &'static str> {
-    let menu = menu_from_json(
-        &json_of(find(given, "menu").ok_or("decision choose requires a menu parameter")?)
-            .ok_or("decision menu must be a JSON array")?,
+    let choices = choices_from_json(
+        &json_of(find(given, "choices").ok_or("decision choose requires a choice list parameter")?)
+            .ok_or("decision choices must be a JSON array")?,
     )?;
     let evidence = match find(given, "data") {
         None => match state {
@@ -625,7 +625,7 @@ fn choose_kind(given: &[(&str, &Data)], state: &Json) -> Result<Kind, &'static s
         Some(_) => return Err("decision threshold must be a number in [0, 1]"),
     };
     Ok(Kind::Choose {
-        menu,
+        choices,
         evidence,
         threshold,
     })
@@ -657,7 +657,7 @@ pub fn parse_parameters<'a>(
         Some(_) => return Err("decision kind must be choose, rank, or classify"),
     };
     let allowed: &[&str] = match kind {
-        "choose" => &["menu", "data", "threshold"],
+        "choose" => &["choices", "data", "threshold"],
         "rank" => &["candidates"],
         _ => &["labels"],
     };
@@ -721,7 +721,7 @@ pub fn parse_parameters<'a>(
 /// What a request does next: return at once (nothing to ask), or ask.
 #[derive(Debug)]
 pub enum Plan {
-    /// Emit this event and complete without a request (an empty menu).
+    /// Emit this event and complete without a request (an empty choice list).
     Return(Returned),
     /// Ask the backend this batch.
     Ask(Prepared),
@@ -737,7 +737,7 @@ pub struct Prepared {
 #[derive(Debug)]
 enum Decide {
     Choose {
-        menu: Vec<Candidate>,
+        choices: Vec<Candidate>,
         offered: Vec<Grounded>,
         threshold: f64,
     },
@@ -751,15 +751,15 @@ const NO_ANSWER: FailureCode = FailureCode::Malformed;
 
 /// The questions of one `choose` batch: the selection (every offered event,
 /// then [`ABSTAIN_LABEL`]), then each offered event's member questions
-/// (`fill.<event>.<member>`), in menu and `required` order.
+/// (`fill.<event>.<member>`), in choices and `required` order.
 fn choose_questions(
-    menu: &[Candidate],
+    choices: &[Candidate],
     offered: &[Grounded],
     instructions: String,
 ) -> Vec<Question> {
     let mut selection: Vec<Criterion> = offered
         .iter()
-        .filter_map(|grounded| menu.get(grounded.candidate))
+        .filter_map(|grounded| choices.get(grounded.candidate))
         .map(|candidate| Criterion {
             label: candidate.event.clone(),
             description: candidate
@@ -778,7 +778,7 @@ fn choose_questions(
         criteria: selection,
     }];
     for (event_index, grounded) in offered.iter().enumerate() {
-        let event = menu
+        let event = choices
             .get(grounded.candidate)
             .map_or("", |candidate| candidate.event.as_str());
         for (member_index, (member, criteria, _)) in grounded.members.iter().enumerate() {
@@ -820,7 +820,7 @@ fn filled_data(
 }
 
 impl DecisionRequest {
-    /// What the request does next: an empty `choose` menu (nothing
+    /// What the request does next: an empty `choose` choices (nothing
     /// grounded) abstains at once; everything else asks one batch.
     ///
     /// # Errors
@@ -836,20 +836,20 @@ impl DecisionRequest {
         } = self;
         let (questions, decide) = match kind {
             Kind::Choose {
-                menu,
+                choices,
                 evidence,
                 threshold,
             } => {
-                let offered: Vec<Grounded> = (0..menu.len())
-                    .filter_map(|index| ground(&menu, index, evidence.as_ref()))
+                let offered: Vec<Grounded> = (0..choices.len())
+                    .filter_map(|index| ground(&choices, index, evidence.as_ref()))
                     .collect();
                 if offered.is_empty() {
                     return Ok(Plan::Return(Returned::abstain("no-candidates", None)));
                 }
                 (
-                    choose_questions(&menu, &offered, instructions),
+                    choose_questions(&choices, &offered, instructions),
                     Decide::Choose {
-                        menu,
+                        choices,
                         offered,
                         threshold,
                     },
@@ -931,7 +931,7 @@ impl Prepared {
         let distribution = distributions.first().ok_or(NO_ANSWER)?;
         match &self.decide {
             Decide::Choose {
-                menu,
+                choices,
                 offered,
                 threshold,
             } => {
@@ -948,7 +948,7 @@ impl Prepared {
                 if confidence < *threshold {
                     return Ok(Returned::abstain("below-threshold", Some(confidence)));
                 }
-                let candidate = menu.get(grounded.candidate).ok_or(NO_ANSWER)?;
+                let candidate = choices.get(grounded.candidate).ok_or(NO_ANSWER)?;
                 let data = filled_data(offered, chosen, distributions)?;
                 if !candidate
                     .compiled
