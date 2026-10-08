@@ -154,6 +154,9 @@ The remaining mosfet port runs as one ultracode run with these grants:
   `bots/builder/examples/traffic_light_vllm/`; drafts reference schema
   files instead of inline JSON.
 - **Browser slice 2:** after the port.
+- **Almost everything is `.scx`:** bots, abilities, behaviors, routines, and
+  policy are SCXML documents in `.scx` files; Rust/Wasm components only for
+  invoked services doing work SCXML cannot express (async I/O).
 - **Pacing:** run through all phases, report after each; stop only for a
   real blocker or scxml.rs names needing approval.
 
