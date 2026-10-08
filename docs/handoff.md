@@ -157,6 +157,15 @@ The remaining mosfet port runs as one ultracode run with these grants:
 - **Almost everything is `.scx`:** bots, abilities, behaviors, routines, and
   policy are SCXML documents in `.scx` files; Rust/Wasm components only for
   invoked services doing work SCXML cannot express (async I/O).
+- **Phase 4 answers:** bot `bots/floppy/`, abilities in top-level
+  `abilities/`, no default model URL (`FLOPPY_BASE_URL` required), intuition
+  on the decision service, `turn` field and media by reference in payloads,
+  `<decision:menu events>` filter, telemetry one-trace proof deferred,
+  scxml.rs `EmbeddedDocument::event_schemas` and `EVENT011` approved. Full
+  list in `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
+- **scxml.rs names approved:** the datamodel pass's names, with the example
+  package renamed to `datamodels/example`; `deny.toml` allows ISC and
+  CDLA-Permissive-2.0 (TLS stack).
 - **Pacing:** run through all phases, report after each; stop only for a
   real blocker or scxml.rs names needing approval.
 
