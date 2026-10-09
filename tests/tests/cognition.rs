@@ -528,6 +528,64 @@ fn intuition_handles_an_ignore_without_reasoning() {
     );
 }
 
+/// The builder seam: with its test-only `behavior` set, autonomy invokes
+/// the behavior double (`tests/fixtures/phase4/behavior_double.scx`, a
+/// stand-in for a builder-produced behavior) by `srcexpr`, and the
+/// double's donedata handles the turn before intuition runs.
+#[test]
+fn a_behavior_double_handles_a_turn_through_autonomy() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Fail, Generation::Fail, &[]);
+    let abilities = bot
+        .body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the scratch root")
+        .join("abilities");
+    let double = abilities.join("behavior_double.scx");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/behavior_double.scx"),
+        &double,
+    )
+    .expect("the double is copyable");
+    // An absolute URI: scxml.rs resolves a relative srcexpr in an invoked
+    // child against the root document (bots/floppy/), not autonomy's.
+    let uri = format!("'file://{}'", double.display());
+    rewrite(
+        &abilities.join("autonomy.scx"),
+        &[("behavior", uri.as_str())],
+    );
+    let mut run = start(&bot);
+    say(&mut run, "background noise");
+    let records = run.until(WAIT, label_is("cognition.ignore"));
+    assert_eq!(
+        texts(&records, "autonomy"),
+        strings(&["turn 1: one behavior"])
+    );
+    assert_eq!(texts(&records, "behavior.double"), strings(&["turn 1"]));
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&["autonomy handled"])
+    );
+    assert_eq!(
+        json_text(&records, "bot.output"),
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "behavior: nothing to do", "target": "cognition"}]})
+    );
+    assert_eq!(
+        texts(&records, "bot.route"),
+        strings(&["bot.ability.cognition.ignore -> cognition"])
+    );
+    // Neither intuition nor reasoning ran: no backend was asked.
+    assert!(texts(&records, "intuition").is_empty(), "{records:?}");
+    assert!(mock.received("").is_empty());
+    close(
+        run,
+        &mock,
+        "a_behavior_double_handles_a_turn_through_autonomy",
+    );
+}
+
 #[test]
 fn a_deliberative_handoff_escalates_to_reasoning() {
     let mock = Mock::start();
