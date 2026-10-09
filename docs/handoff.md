@@ -199,6 +199,16 @@ inlines the browser `validate` options type so no unapproved
   unchanged; rewrite them with `FLOPPY_TRACE_BLESS=1` only for an intended
   change, and say so in the commit.
 
+- `<decision:compact location bound overlocation>` (floppy `8f2b2616`,
+  `008cd04a`): the shared offer compaction (mosfet
+  `model_facing_event_json_schema` and the 32 KiB bound) in
+  `namespaces/decision`. The cognition and communication offers use it;
+  their `compactSchema`/`compactOffers` copies are gone, traces unchanged.
+  Still scripted: the body's `compactSchema`/`compactChoices` (its
+  over-bound turn failure keeps the list and logs its size, so it moves
+  with `<decision:assemble>`) and reasoning's `dataSchema` (part of the
+  strict selection schema, so it moves with `<decision:selection>`).
+
 Next: phase 4 (bot core and abilities), per
 `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 
