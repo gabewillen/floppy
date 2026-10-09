@@ -104,6 +104,17 @@ inlines the browser `validate` options type so no unapproved
   unchanged). floppy is green on it with `<decision:choice>` (D32,
   `e7c0a870`); the `builder_bot` live test passed on the subtree at
   `c28799aa` through the CPA gateway (`gabe-codex-1/gpt-6-luna`, 86 s).
+- scxml.rs runtime event contracts (`01b71ac5`, 2026-10-09; subtree pull
+  `43489ead`): a `<send>` whose data its own literal `event:schema`
+  rejects, or, for an event the session delivers to itself, a schema of a
+  transition handling it rejects, is not dispatched, and such a `<raise>` is
+  not raised; `error.execution` ends the block. Transitions still match by
+  name, `<donedata>` is unchecked, and events between sessions
+  (`#_parent`, `#_<invokeid>`) and host input are not checked yet (needs a
+  receiving-session machine interface, a new scxml.rs name). The SCXML
+  processor rejects a send whose stamped event is over the 96 KiB event
+  bound in the sender (`bb917ad5`). Canonical components recorded
+  (`d4db774c`, manifest `5902fddb`). floppy's phase 4 traces are unchanged.
 - floppy is green on the datamodel pass (2026-10-08): `scripts/build-components.sh`, fmt,
   clippy `-D warnings`, all workspace tests, and the `builder_bot` live
   test on direct vLLM; no floppy code or test named a moved code.
@@ -185,10 +196,12 @@ inlines the browser `validate` options type so no unapproved
   Tests: `tests/tests/communication.rs` (8), the fake-backend end-to-end
   `a_reasoned_response_is_said_through_the_communication` in
   `cognition.rs`; live `live_chat` passed on the CPA gateway
-  (`gabe-codex-1/gpt-6-luna`, 18 s, one turn). Open: with about 42 KiB of
-  choices in the body's data model a turn ends the session with a fatal
-  `machine-platform` error (no diagnostic) instead of failing the turn; the
-  huge-offers fixture was shrunk to stay under it (scxml.rs follow-up).
+  (`gabe-codex-1/gpt-6-luna`, 18 s, one turn). The 42 KiB `machine-platform`
+  failure no longer occurs since choice assembly moved into namespace
+  elements: it was ECMAScript data-model fuel exhaustion, which still ends a
+  session (scxml.rs `docs/limitations.md`); offers over the 96 KiB event
+  bound now raise `error.execution` in the sending ability (scxml.rs
+  `bb917ad5`).
 
 - Phase 4 event traces (floppy `b93dbfa3`): each of the 37 deterministic
   tests in `body.rs`, `cognition.rs` and `communication.rs` compares its
