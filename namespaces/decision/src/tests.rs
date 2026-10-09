@@ -1449,3 +1449,302 @@ fn the_new_elements_pass_host_failures_through() {
         "decision:names could not assign the names"
     );
 }
+
+#[test]
+fn selection_builds_the_strict_dispatch_schema_of_the_choices() {
+    let mut host = with_values(&[(
+        "choices",
+        json!([
+            {"event": "bot.clear_focus", "schema": {"$schema": "x", "title": "Clear", "examples": [{}], "type": "object", "properties": {"title": {"type": "string", "title": "kept"}}}},
+            {"event": "bot.ability.communication.respond", "description": "Say text.", "target": "communication",
+             "schema": {"type": "object", "additionalProperties": true, "properties": {"text": {"type": "string"}}, "required": ["text"]}},
+            {"event": "bot.ability.cognition.ignore", "target": "cognition", "schema": "not an object"},
+            {"event": "bot.ability.cognition.ignore", "target": "communication", "description": "later", "schema": {}},
+            {"event": "bot.ability.cognition.ignore", "target": "cognition", "schema": {}},
+        ]),
+    )]);
+    assert_eq!(
+        execute(
+            "selection",
+            &[location("schema"), attr("choices", "choices")],
+            &[],
+            &mut host
+        ),
+        Ok(Executed::Handled)
+    );
+    let Data::JsonObject(text) = assigned(&host, "schema") else {
+        panic!("expected a JSON object");
+    };
+    let reason =
+        json!({"type": "string", "description": "A short reason this event was selected."});
+    let expected = json!({
+        "type": "object",
+        "properties": {"events": {
+            "type": "array",
+            "description": "All events necessary for the input this turn; an empty array selects none.",
+            "items": {"anyOf": [
+                {
+                    "type": "object",
+                    "description": "bot.clear_focus",
+                    "properties": {
+                        "event": {"type": "string", "enum": ["bot.clear_focus"]},
+                        "data": {"type": "object", "properties": {"title": {"type": "string", "title": "kept"}}, "additionalProperties": false},
+                        "reason": reason,
+                    },
+                    "required": ["event", "data", "reason"],
+                    "additionalProperties": false,
+                },
+                {
+                    "type": "object",
+                    "description": "Say text.",
+                    "properties": {
+                        "event": {"type": "string", "enum": ["bot.ability.communication.respond"]},
+                        "data": {"type": "object", "additionalProperties": true, "properties": {"text": {"type": "string"}}, "required": ["text"]},
+                        "reason": reason,
+                        "target": {"type": "string", "enum": ["communication"], "description": "The ability that receives this event."},
+                    },
+                    "required": ["event", "data", "reason", "target"],
+                    "additionalProperties": false,
+                },
+                {
+                    "type": "object",
+                    "description": "bot.ability.cognition.ignore",
+                    "properties": {
+                        "event": {"type": "string", "enum": ["bot.ability.cognition.ignore"]},
+                        "data": {"type": "object", "additionalProperties": false},
+                        "reason": reason,
+                        "target": {"type": "string", "enum": ["cognition", "communication"], "description": "The ability that receives this event."},
+                    },
+                    "required": ["event", "data", "reason", "target"],
+                    "additionalProperties": false,
+                },
+            ]},
+        }},
+        "required": ["events"],
+        "additionalProperties": false,
+    });
+    assert_eq!(text, canonical_json(&expected));
+    let mut host = with_values(&[("choices", json!([]))]);
+    execute(
+        "selection",
+        &[location("schema"), attr("choices", "choices")],
+        &[],
+        &mut host,
+    )
+    .expect("built");
+    assert_eq!(
+        assigned_any(&host, "schema")["properties"]["events"]["items"]["anyOf"],
+        json!([])
+    );
+}
+
+#[test]
+fn malformed_selections_raise_error_execution_and_assign_nothing() {
+    let attributes = [location("schema"), attr("choices", "choices")];
+    let cases: Vec<(&[Attribute], Json, &str)> = vec![
+        (
+            &attributes[..1],
+            json!([]),
+            "decision:selection requires a non-empty choices",
+        ),
+        (
+            &attributes,
+            json!({}),
+            "decision:selection found a malformed choice",
+        ),
+        (
+            &attributes,
+            json!([1]),
+            "decision:selection found a choice that is not an object",
+        ),
+        (
+            &attributes,
+            json!([{"event": "x"}]),
+            "decision:selection found a malformed choice",
+        ),
+    ];
+    for (attributes, choices, detail) in cases {
+        let mut host = with_values(&[("choices", choices)]);
+        let got = execution(execute("selection", attributes, &[], &mut host));
+        assert!(
+            got == detail || got == "decision:selection choices does not hold choices",
+            "{detail}: {got}"
+        );
+        assert!(host.assigned.is_empty(), "{detail}");
+    }
+    assert_eq!(
+        execution(execute(
+            "selection",
+            &[
+                location("schema"),
+                attr("choices", "choices"),
+                attr("bound", "1")
+            ],
+            &[],
+            &mut FakeHost::default()
+        )),
+        "decision:selection takes only the location and choices attributes"
+    );
+    assert_eq!(
+        execution(execute(
+            "selection",
+            &attributes,
+            &[Content::Start, Content::End],
+            &mut FakeHost::default()
+        )),
+        "decision:selection holds no content"
+    );
+    assert_eq!(
+        execute(
+            "selection",
+            &[location("schema"), attr("choices", "fatal")],
+            &[],
+            &mut FakeHost::default()
+        ),
+        Err(Failure::Host("fatal"))
+    );
+}
+
+fn real(value: f64) -> Data {
+    Data::Number(scxml_types::FiniteNumber::new(value).expect("finite"))
+}
+
+fn tuner_host(state: Json, observe: Option<f64>) -> FakeHost {
+    let mut host = with_values(&[("tuner", state)]);
+    if let Some(value) = observe {
+        host.values.insert("confidence".into(), real(value));
+    }
+    host
+}
+
+fn run_tuner(host: &mut FakeHost, observe: bool) {
+    let mut attributes = vec![location("tuner"), attr("thresholdlocation", "threshold")];
+    if observe {
+        attributes.push(attr("observe", "confidence"));
+    }
+    assert_eq!(
+        execute("tuner", &attributes, &[], host),
+        Ok(Executed::Handled)
+    );
+}
+
+#[test]
+fn the_tuner_keeps_mosfets_confidence_baseline() {
+    // During the warmup the threshold is the floor; a malformed state is
+    // the initial one.
+    for state in [
+        json!({"mean": 70, "variance": 100, "n": 0}),
+        json!({"mean": "70", "variance": 100, "n": 0}),
+        json!({"mean": 70, "variance": 100, "n": -1}),
+        json!([]),
+    ] {
+        let mut host = tuner_host(state, None);
+        run_tuner(&mut host, false);
+        assert_eq!(assigned(&host, "threshold"), real(0.35));
+        assert_eq!(
+            assigned(&host, "tuner"),
+            Data::JsonObject(r#"{"mean":70,"n":0,"variance":100}"#.into())
+        );
+        assert_eq!(host.assigned[0].0, "threshold");
+    }
+    // The first observation sets the mean; an equal one keeps it.
+    let mut host = tuner_host(json!({"mean": 70, "variance": 100, "n": 0}), Some(34.0));
+    run_tuner(&mut host, true);
+    assert_eq!(
+        assigned_any(&host, "tuner"),
+        json!({"mean": 34, "variance": 100, "n": 1})
+    );
+    let mut host = tuner_host(json!({"mean": 34, "variance": 100, "n": 1}), Some(34.0));
+    run_tuner(&mut host, true);
+    assert_eq!(
+        assigned_any(&host, "tuner"),
+        json!({"mean": 34, "variance": 100, "n": 2})
+    );
+    // After the warmup: max(35 / 2, 70 - 1 * sqrt(100)) = 60.
+    let mut host = tuner_host(json!({"mean": 70, "variance": 100, "n": 8}), None);
+    run_tuner(&mut host, false);
+    assert_eq!(assigned(&host, "threshold"), real(0.6));
+    // The EMA, byte for byte as the document computed it.
+    let mut host = tuner_host(json!({"mean": 70, "variance": 100, "n": 8}), Some(34.0));
+    run_tuner(&mut host, true);
+    assert_eq!(
+        assigned(&host, "tuner"),
+        Data::JsonObject(r#"{"mean":67.12,"n":9,"variance":195.68}"#.into())
+    );
+    assert_eq!(
+        assigned(&host, "threshold"),
+        real((67.12 - 195.68_f64.sqrt()) / 100.0)
+    );
+    let mut host = tuner_host(
+        json!({"mean": 67.12, "variance": 195.68, "n": 9}),
+        Some(34.0),
+    );
+    run_tuner(&mut host, true);
+    assert_eq!(
+        assigned(&host, "tuner"),
+        Data::JsonObject(r#"{"mean":64.4704,"n":10,"variance":267.78035200000005}"#.into())
+    );
+    // The soft floor, and observations clamped to 0-100.
+    let mut host = tuner_host(json!({"mean": 10, "variance": 100, "n": 9}), Some(250.0));
+    run_tuner(&mut host, true);
+    assert_eq!(
+        assigned_any(&host, "tuner"),
+        json!({"mean": 17.2, "variance": 740, "n": 10})
+    );
+    let mut host = tuner_host(json!({"mean": 10, "variance": 100, "n": 9}), None);
+    run_tuner(&mut host, false);
+    assert_eq!(assigned(&host, "threshold"), real(0.175));
+    let mut host = tuner_host(json!({"mean": 70, "variance": 100, "n": 0}), Some(-5.0));
+    run_tuner(&mut host, true);
+    assert_eq!(
+        assigned_any(&host, "tuner"),
+        json!({"mean": 0, "variance": 100, "n": 1})
+    );
+}
+
+#[test]
+fn malformed_tuners_raise_error_execution() {
+    let mut host = with_values(&[
+        ("tuner", json!({"mean": 70, "variance": 100, "n": 0})),
+        ("confidence", json!([])),
+    ]);
+    assert_eq!(
+        execution(execute(
+            "tuner",
+            &[location("tuner"), attr("observe", "confidence")],
+            &[],
+            &mut host
+        )),
+        "decision:tuner observe is not a number"
+    );
+    assert!(host.assigned.is_empty());
+    for (attributes, detail) in [
+        (
+            vec![attr("observe", "x")],
+            "decision:tuner requires a non-empty location",
+        ),
+        (
+            vec![location("tuner"), attr("thresholdlocation", " ")],
+            "decision:tuner thresholdlocation is empty",
+        ),
+        (
+            vec![location("tuner"), attr("bound", "1")],
+            "decision:tuner takes only the location, thresholdlocation and observe attributes",
+        ),
+    ] {
+        assert_eq!(
+            execution(execute("tuner", &attributes, &[], &mut FakeHost::default())),
+            detail
+        );
+    }
+    let mut host = tuner_host(json!({"mean": 70, "variance": 100, "n": 0}), None);
+    host.fail_assign = true;
+    assert_eq!(
+        execution(execute("tuner", &[location("tuner")], &[], &mut host)),
+        "decision:tuner could not assign the tuner state"
+    );
+    assert_eq!(
+        execute("tuner", &[location("fatal")], &[], &mut FakeHost::default()),
+        Err(Failure::Host("fatal"))
+    );
+}

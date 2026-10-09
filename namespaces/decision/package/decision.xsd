@@ -40,6 +40,16 @@
   decision:names   location (required): receives the choices' names
                    (event or event@target, space separated).
                    choices (required): an expression.
+  decision:selection location (required): receives the strict selection
+                   schema ({events: [anyOf one branch per offered event]},
+                   each branch {event, data, reason, target?}) of the
+                   choices. choices (required): an expression.
+  decision:tuner   location (required): the confidence tuner state
+                   {mean, variance, n} it keeps (reset when malformed).
+                   observe (optional): an expression of a reported 0-100
+                   confidence the state observes.
+                   thresholdlocation (optional): receives the threshold as
+                   a probability.
                    None of them takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -100,6 +110,19 @@
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="choices" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="selection">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="choices" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="tuner">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="thresholdlocation" type="xs:string" use="optional"/>
+      <xs:attribute name="observe" type="xs:string" use="optional"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

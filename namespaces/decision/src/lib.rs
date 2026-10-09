@@ -1,11 +1,13 @@
 //! The `decision` extension namespace: `<decision:choice>`,
 //! `<decision:compact>`, `<decision:pin>`, `<decision:assemble>`,
-//! `<decision:route>` and `<decision:names>` as a
+//! `<decision:route>`, `<decision:names>`, `<decision:selection>` and
+//! `<decision:tuner>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! Executable content is synchronous and quick, so this namespace holds only
 //! the half of a decision that is: reading, compacting, assembling and
-//! naming the choices, and placing the selections. Asking a backend to
+//! naming the choices, placing the selections, building a model's strict
+//! selection schema, and tuning the confidence threshold. Asking a backend to
 //! choose is slow I/O and belongs to the `decision` invoked service
 //! (`services/decision`), which takes the choices this element writes as its
 //! `choices` parameter. Documents bind [`NAMESPACE_URI`] (conventionally with
@@ -143,6 +145,42 @@
 //! space separated: `event`, or `event@target` for a choice with a target
 //! (what documents log of their choices).
 //!
+//! # `<decision:selection location="L" choices="X"/>`
+//!
+//! `location` receives the strict structured-output schema a model fills
+//! to select among the choices `choices` evaluates to (mosfet
+//! `_selection_item_branch` and `dispatch_tool`): `{events: [anyOf one
+//! branch per offered event]}`, the events in choices order, each offered
+//! once. A branch is `{event (a one-value enum), data, reason, target}`:
+//! `data` is the first such choice's schema without its top-level
+//! `$schema`, `title` and `examples`, with `type` `object` and
+//! `additionalProperties` `false` when it names neither (an empty object
+//! for a schema that is not an object); `reason` is a short string; the
+//! branch's `description` is the choice's, else the event name; `target`,
+//! an enum of the distinct targets offering the event in choices order, is
+//! present (and required) only when some choice of the event has a target.
+//! Every field is required and no other property is admitted, at the
+//! branch and at the top. The result is canonical JSON.
+//!
+//! # `<decision:tuner location="L" thresholdlocation="T" observe="X"/>`
+//!
+//! mosfet's `ConfidenceTuner` on its 0–100 scale, with its defaults (floor
+//! [`TUNER_FLOOR`], EMA alpha [`TUNER_ALPHA`], `k_sigma` [`TUNER_K_SIGMA`],
+//! warmup [`TUNER_WARMUP`] observations, variance floor
+//! [`TUNER_VAR_FLOOR`]). `location` (required) holds the tuner state
+//! `{mean, variance, n}` (numbers, `n` a non-negative integer); anything
+//! else there is replaced by the initial state `{mean:`
+//! [`TUNER_MEAN`]`, variance:` [`TUNER_VAR_FLOOR`]`, n: 0}`. `observe`
+//! (optional) is an expression of a reported confidence, a number on the
+//! 0–100 scale (clamped to it), which the state observes: the first sets
+//! the mean, later ones move the mean and variance by the EMA (variance
+//! never under the floor). `thresholdlocation` (optional) then receives
+//! the threshold as a probability (the 0–100 threshold divided by 100):
+//! the floor during the warmup, else `max(floor / 2, mean - k_sigma *
+//! sqrt(max(variance, variance floor)))`. `location` always receives the
+//! resulting state, after `thresholdlocation`. An `observe` that is not a
+//! number is `error.execution`.
+//!
 //! # Failures
 //!
 //! A malformed element, a missing or malformed snapshot, a schema that does
@@ -194,6 +232,27 @@ pub const MAX_EVENT_NAME_BYTES: usize = wasm_bound(256);
 /// `<decision:compact>`'s bound when it names none: 32 KiB, the largest
 /// choice list phase 4 spike (b) relays through two sessions safely.
 pub const DEFAULT_COMPACT_BOUND: usize = 32_768;
+
+/// The tuner's absolute confidence floor (mosfet `_DEFAULT_CONFIDENCE_FLOOR`).
+pub const TUNER_FLOOR: f64 = 35.0;
+
+/// The tuner's EMA weight (mosfet `_DEFAULT_TUNER_ALPHA`).
+pub const TUNER_ALPHA: f64 = 0.08;
+
+/// The tuner's standard deviations under the mean (mosfet
+/// `_DEFAULT_TUNER_K_SIGMA`).
+pub const TUNER_K_SIGMA: f64 = 1.0;
+
+/// Observations before the tuner leaves its floor (mosfet
+/// `_DEFAULT_TUNER_WARMUP`).
+pub const TUNER_WARMUP: u64 = 8;
+
+/// The tuner's variance floor and initial variance (mosfet
+/// `_DEFAULT_TUNER_VAR_FLOOR`).
+pub const TUNER_VAR_FLOOR: f64 = 100.0;
+
+/// The tuner's initial mean (mosfet `_DEFAULT_TUNER_MEAN`).
+pub const TUNER_MEAN: f64 = 70.0;
 
 /// One attribute of an element.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -351,6 +410,8 @@ pub fn execute<H: ChoiceHost>(
         "assemble" => assemble(attributes, content, host),
         "route" => route(attributes, content, host),
         "names" => names(attributes, content, host),
+        "selection" => selection(attributes, content, host),
+        "tuner" => tuner(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
 }
@@ -844,6 +905,292 @@ pub fn choice_names(choices: &Json) -> Result<String, &'static str> {
         .collect::<Vec<_>>()
         .join(" "))
 }
+
+/// Executes `<decision:selection>`.
+fn selection<H: ChoiceHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, choices] = attribute_values(
+        attributes,
+        ["location", "choices"],
+        "decision:selection takes only the location and choices attributes",
+        "decision:selection repeats an attribute",
+    )?;
+    let location = required(location, "decision:selection requires a non-empty location")?;
+    let choices = required(choices, "decision:selection requires a non-empty choices")?;
+    no_content(content, "decision:selection holds no content")?;
+    let choices = read_json(
+        host,
+        choices,
+        "decision:selection choices does not hold choices",
+    )?;
+    let schema = selection_schema(&choices).map_err(Failure::Execution)?;
+    assign_to(
+        host,
+        location,
+        &Data::JsonObject(schema),
+        "decision:selection could not assign the schema",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// The strict selection schema of `choices`, canonical JSON: see the crate
+/// documentation (`<decision:selection>`).
+///
+/// # Errors
+///
+/// A static detail when `choices` is not an array of choice entries.
+pub fn selection_schema(choices: &Json) -> Result<String, &'static str> {
+    // Each offered event once, in choices order: its first choice and the
+    // distinct targets offering it.
+    let mut offered: Vec<(&Json, Vec<Json>)> = Vec::new();
+    for entry in checked_entries(choices, SELECTION_ENTRIES)? {
+        let event = entry.get("event");
+        let index = offered
+            .iter()
+            .position(|(first, _)| first.get("event") == event)
+            .unwrap_or_else(|| {
+                offered.push((entry, Vec::new()));
+                offered.len() - 1
+            });
+        if let Some(target) = entry.get("target").filter(|target| target.is_string()) {
+            let targets = &mut offered[index].1;
+            if !targets.contains(target) {
+                targets.push(target.clone());
+            }
+        }
+    }
+    let branches: Vec<Json> = offered
+        .into_iter()
+        .map(|(choice, targets)| {
+            let event = choice.get("event").cloned().unwrap_or(Json::Null);
+            let description = choice
+                .get("description")
+                .filter(|description| description.is_string())
+                .cloned()
+                .unwrap_or_else(|| event.clone());
+            let mut properties = Map::new();
+            properties.insert(
+                "event".into(),
+                serde_json::json!({"type": "string", "enum": [event]}),
+            );
+            properties.insert(
+                "data".into(),
+                selection_data(choice.get("schema").unwrap_or(&Json::Null)),
+            );
+            properties.insert(
+                "reason".into(),
+                serde_json::json!({"type": "string", "description": "A short reason this event was selected."}),
+            );
+            let mut required = vec![
+                Json::from("event"),
+                Json::from("data"),
+                Json::from("reason"),
+            ];
+            if !targets.is_empty() {
+                properties.insert(
+                    "target".into(),
+                    serde_json::json!({"type": "string", "enum": targets, "description": "The ability that receives this event."}),
+                );
+                required.push("target".into());
+            }
+            serde_json::json!({
+                "type": "object",
+                "description": description,
+                "properties": properties,
+                "required": required,
+                "additionalProperties": false,
+            })
+        })
+        .collect();
+    Ok(canonical_json(&serde_json::json!({
+        "type": "object",
+        "properties": {"events": {
+            "type": "array",
+            "description": "All events necessary for the input this turn; an empty array selects none.",
+            "items": {"anyOf": branches},
+        }},
+        "required": ["events"],
+        "additionalProperties": false,
+    })))
+}
+
+/// A choice's schema as a selection branch's `data`: the payload contract
+/// only (top-level `$schema`, `title` and `examples` dropped), an object
+/// admitting no undeclared property unless it says otherwise.
+fn selection_data(schema: &Json) -> Json {
+    let mut out: Map<String, Json> = schema
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(key, _)| !["$schema", "title", "examples"].contains(&key.as_str()))
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    out.entry("type").or_insert_with(|| "object".into());
+    out.entry("additionalProperties")
+        .or_insert(Json::Bool(false));
+    Json::Object(out)
+}
+
+/// Executes `<decision:tuner>`.
+fn tuner<H: ChoiceHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, threshold_location, observe] = attribute_values(
+        attributes,
+        ["location", "thresholdlocation", "observe"],
+        "decision:tuner takes only the location, thresholdlocation and observe attributes",
+        "decision:tuner repeats an attribute",
+    )?;
+    let location = required(location, "decision:tuner requires a non-empty location")?;
+    let threshold_location = optional(
+        threshold_location,
+        "decision:tuner thresholdlocation is empty",
+    )?;
+    let observe = optional(observe, "decision:tuner observe is empty")?;
+    no_content(content, "decision:tuner holds no content")?;
+    let state = match host.read(location).map_err(Failure::Host)? {
+        Ok(Data::JsonObject(text)) => serde_json::from_str(&text)
+            .ok()
+            .as_ref()
+            .and_then(Tuner::from_json),
+        _ => None,
+    }
+    .unwrap_or_default();
+    let confidence = observe
+        .map(|observe| match host.read(observe).map_err(Failure::Host)? {
+            Ok(Data::Number(value)) => Ok(value.get()),
+            _ => Err(Failure::Execution("decision:tuner observe is not a number")),
+        })
+        .transpose()?;
+    let state = confidence.map_or(state, |confidence| state.observed(confidence));
+    if let Some(threshold_location) = threshold_location {
+        let threshold = scxml_types::FiniteNumber::new(state.threshold() / 100.0)
+            .map_err(|_| Failure::Execution("decision:tuner threshold is not finite"))?;
+        assign_to(
+            host,
+            threshold_location,
+            &Data::Number(threshold),
+            "decision:tuner could not assign thresholdlocation",
+        )?;
+    }
+    assign_to(
+        host,
+        location,
+        &Data::JsonObject(canonical_json(&state.to_json())),
+        "decision:tuner could not assign the tuner state",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// mosfet's `ConfidenceTuner` state on the 0–100 scale: see the crate
+/// documentation (`<decision:tuner>`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tuner {
+    /// The running mean of the observed confidences.
+    pub mean: f64,
+    /// Their running variance.
+    pub variance: f64,
+    /// How many were observed.
+    pub n: u64,
+}
+
+impl Default for Tuner {
+    fn default() -> Self {
+        Self {
+            mean: TUNER_MEAN,
+            variance: TUNER_VAR_FLOOR,
+            n: 0,
+        }
+    }
+}
+
+impl Tuner {
+    /// The state `{mean, variance, n}` holds, when it is one: numbers, `n` a
+    /// non-negative integer.
+    #[must_use]
+    pub fn from_json(value: &Json) -> Option<Self> {
+        let n = value.get("n")?;
+        let n = n.as_u64().or_else(|| {
+            n.as_f64()
+                .filter(|n| n.fract() == 0.0 && *n >= 0.0 && *n <= 9_007_199_254_740_991.0)
+                .map(|n| {
+                    #[allow(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_sign_loss,
+                        reason = "a non-negative integer within the safe-integer range"
+                    )]
+                    let n = n as u64;
+                    n
+                })
+        })?;
+        Some(Self {
+            mean: value.get("mean")?.as_f64()?,
+            variance: value.get("variance")?.as_f64()?,
+            n,
+        })
+    }
+
+    /// The state after observing `confidence` (clamped to 0–100).
+    #[must_use]
+    pub fn observed(self, confidence: f64) -> Self {
+        let conf = confidence.clamp(0.0, 100.0);
+        if self.n == 0 {
+            return Self {
+                mean: conf,
+                variance: TUNER_VAR_FLOOR,
+                n: 1,
+            };
+        }
+        let delta = conf - self.mean;
+        Self {
+            mean: self.mean + TUNER_ALPHA * delta,
+            variance: TUNER_VAR_FLOOR
+                .max((1.0 - TUNER_ALPHA) * self.variance + TUNER_ALPHA * delta * delta),
+            n: self.n + 1,
+        }
+    }
+
+    /// The escalation threshold on the 0–100 scale.
+    #[must_use]
+    pub fn threshold(self) -> f64 {
+        if self.n < TUNER_WARMUP {
+            return TUNER_FLOOR;
+        }
+        let std = self.variance.max(TUNER_VAR_FLOOR).sqrt();
+        (0.5 * TUNER_FLOOR).max(self.mean - TUNER_K_SIGMA * std)
+    }
+
+    /// The state as `{mean, n, variance}`; an integral mean or variance is
+    /// written as an integer.
+    #[must_use]
+    pub fn to_json(self) -> Json {
+        let number = |value: f64| {
+            if value.fract() == 0.0 && value.abs() <= 9_007_199_254_740_991.0 {
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    reason = "an integral value within the safe-integer range"
+                )]
+                let value = value as i64;
+                Json::from(value)
+            } else {
+                serde_json::Number::from_f64(value).map_or(Json::Null, Json::Number)
+            }
+        };
+        serde_json::json!({"mean": number(self.mean), "variance": number(self.variance), "n": self.n})
+    }
+}
+
+/// `<decision:selection>`'s choice-entry failures (see `checked_entries`).
+const SELECTION_ENTRIES: [&str; 3] = [
+    "decision:selection choices does not hold choices",
+    "decision:selection found a choice that is not an object",
+    "decision:selection found a malformed choice",
+];
 
 /// `<decision:compact>`'s choice-entry failures (see `checked_entries`).
 const COMPACT_ENTRIES: [&str; 3] = [
@@ -1373,6 +1720,9 @@ mod guest {
             match data_model_host::evaluate(location) {
                 Ok(DataValue::JsonArray(text)) => Ok(Ok(Data::JsonArray(text))),
                 Ok(DataValue::JsonObject(text)) => Ok(Ok(Data::JsonObject(text))),
+                Ok(DataValue::Number(value)) => Ok(scxml_types::FiniteNumber::new(value)
+                    .map(Data::Number)
+                    .map_err(|_| ())),
                 Ok(_) => Ok(Err(())),
                 Err(error) if recoverable(error.code) => Ok(Err(())),
                 Err(error) => Err(error),
