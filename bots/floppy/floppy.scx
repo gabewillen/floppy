@@ -30,10 +30,10 @@
   bot.ability.communication.failed, which the body logs.
 
   Turns: bot.input or a conversation product in unfocused or focused
-  starts a processing turn. The
-  body counts the turn, computes the turn's attention bias (focus,
-  focus_candidates: an ECMAScript port of mosfet's attention_bias_for_turn),
-  assembles the turn's choices (below), sends bot.ability.cognition.input
+  starts a processing turn; <bot:stimulus> writes the event's stimulus
+  envelope {event, data, source}. The body counts the turn, computes the
+  turn's attention bias with <bot:attention> (focus, focus_candidates:
+  mosfet's attention_bias_for_turn from device identity only), assembles the turn's choices (below), sends bot.ability.cognition.input
   {turn, stimulus, focus, focus_candidates, choices} to the cognition, and
   arms bot.processing.timed_out
   (processing_timeout_ms) for the turn. Replies count only when they come
@@ -41,8 +41,8 @@
   bot.ability.cognition.cancel {turn} and waits in cancelling_processing,
   bounded by cancel_timeout_ms clamped to 100..5000 ms: the acknowledgement
   fails the turn (bot.processing.failed); no acknowledgement degrades the
-  bot. Stimuli that arrive during a turn wait in the data model queue (in
-  order) and start the next turns, one per return to unfocused or focused,
+  bot. Stimuli that arrive during a turn wait, as <bot:stimulus>
+  envelopes, in the data model queue (in order) and start the next turns, one per return to unfocused or focused,
   before any later event.
 
   Choices (mosfet's per-turn dispatch inventory, assembled by decision
@@ -96,6 +96,7 @@
   service, no default backend); without them a turn fails.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="floppy" initial="inactive">
@@ -121,6 +122,7 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="queue" expr="[]"/>
+    <data id="pending" expr="null"/>
     <!-- The turn's choices and routing table, and its selections. -->
     <data id="offering" expr="false"/>
     <data id="body_choices" expr="[]"/>
@@ -218,36 +220,9 @@
     function allReady() {
       return expected.every(function (id) { return offers[id] !== undefined; });
     }
-    // mosfet abilities/cognition/types.py attention_bias_for_turn: the
-    // turn's (focus, focus_candidates) from device identity only.
-    function attentionBias(item) {
-      var bias = {focus: null, focus_candidates: []};
-      if (focused_device !== null &amp;&amp; devices.indexOf(focused_device) &gt;= 0) {
-        bias.focus = focused_device;
-        bias.focus_candidates.push(focused_device);
-      }
-      var reference = null;
-      if (item.event === 'bot.input') {
-        reference = item.data.target_device === undefined ? null : item.data.target_device;
-        if (reference === null &amp;&amp; item.source) {
-          reference = device_source_refs[item.source] === undefined ? null : device_source_refs[item.source];
-        }
-      } else if (item.source) {
-        reference = device_source_refs[item.source] === undefined ? null : device_source_refs[item.source];
-      }
-      if (reference !== null &amp;&amp; devices.indexOf(reference) &gt;= 0 &amp;&amp; bias.focus_candidates.indexOf(reference) &lt; 0) {
-        bias.focus_candidates.push(reference);
-      }
-      return bias;
-    }
     // A routed body event: taken only while routing a turn's selections.
     function routed() {
       return routing_selections &amp;&amp; _event.type === 'internal';
-    }
-    // The stimulus envelope of the event in hand (abilities/schemas/
-    // bot.ability.cognition.input.json, stimulus).
-    function envelope() {
-      return {event: _event.name, data: _event.data, source: _event.invokeid ? _event.invokeid : null};
     }
   </script>
 
@@ -358,10 +333,10 @@
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json"
                     cond="!_event.invokeid &amp;&amp; validInput(_event.data)" target="processing">
-          <assign location="stimulus" expr="envelope()"/>
+          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
         <transition event="bot.ability.conversation.output" cond="conversationProduct()" target="processing">
-          <assign location="stimulus" expr="envelope()"/>
+          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
       </state>
 
@@ -371,10 +346,10 @@
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json"
                     cond="!_event.invokeid &amp;&amp; validInput(_event.data)" target="processing">
-          <assign location="stimulus" expr="envelope()"/>
+          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
         <transition event="bot.ability.conversation.output" cond="conversationProduct()" target="processing">
-          <assign location="stimulus" expr="envelope()"/>
+          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
       </state>
 
@@ -382,11 +357,8 @@
       <state id="processing">
         <onentry>
           <assign location="turn" expr="turn + 1"/>
-          <script>
-            var bias = attentionBias(stimulus);
-            focus = bias.focus;
-            focus_candidates = bias.focus_candidates;
-          </script>
+          <bot:attention location="focus_candidates" focuslocation="focus" stimulus="stimulus"
+                         devices="devices" focus="focused_device" sources="device_source_refs"/>
           <assign location="offering" expr="true"/>
           <decision:choice location="body_choices" events="bot.focus_device bot.clear_focus"/>
           <assign location="offering" expr="false"/>
@@ -429,11 +401,13 @@
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json"
                     cond="!_event.invokeid &amp;&amp; validInput(_event.data)">
-          <script>queue.push(envelope());</script>
+          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
         <transition event="bot.ability.conversation.output" cond="conversationProduct()">
-          <script>queue.push(envelope());</script>
+          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
       </state>
@@ -461,11 +435,13 @@
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json"
                     cond="!_event.invokeid &amp;&amp; validInput(_event.data)">
-          <script>queue.push(envelope());</script>
+          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
         <transition event="bot.ability.conversation.output" cond="conversationProduct()">
-          <script>queue.push(envelope());</script>
+          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
       </state>
