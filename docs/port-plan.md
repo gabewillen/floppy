@@ -20,13 +20,15 @@ invoked service). The decisions behind this plan are in
 | --- | --- |
 | `mosfet.Bot` (body + cognition) | One root SCXML document per bot under `bots/<name>/`, run as a live session by scxml.rs's `scx run` (floppy has no runtime of its own, decision D14) |
 | hsm state machines | SCXML documents (table below) |
-| Abilities (listening, speaking, cognition, memory, ...) | Invoked children: `<invoke type="scxml" src="abilities/<name>.scxml" id="<name>">`, talking to the parent through `#_parent` and to the child through `#_<invokeid>` |
-| Ability attachment protocol (`bot.ability.attachment.*`, yamux) | Not ported: `<invoke>` lifecycle is attach (start on state entry) and detach (cancel on state exit, `done.invoke.<id>` on completion) |
+| Abilities (listening, speaking, cognition, memory, ...) | Invoked children, one `.scx` per mosfet machine in the flat `abilities/` directory: `<invoke id="<name>" type="scxml" src="../../abilities/<name>.scx">` from the body (a stage or sub-ability from its ability: `src="<name>.scx"`), literal `id` and `src`, talking to the parent through `#_parent` and to the child through `#_<invokeid>` (decisions D33, D34) |
+| Ability attachment protocol (`attachment.*`, `attachment.group.*`, `bot.ability.attachment.terminal`, yamux) | Not ported, and none of these names has a schema: `<invoke>` lifecycle is attach (start on state entry) and detach (cancel on state exit, `done.invoke.<id>` on completion); a group's attach is the body's parallel `<invoke>`s joined on each member's first `bot.ability.offers` (decision D6) |
 | Devices (phone, audio, smart phone) | Invoked services: `<invoke type="https://github.com/stateforward/floppy/services/<device>@<tag>">` (later phases) |
 | Providers (SDK owners) | Invoked services (`services/`) for every effect: anything asynchronous, I/O-bound, or long-running (decision D13); extension namespaces (`namespaces/`) only for synchronous, quick executable content (table below) |
 | Starlark behaviors (compiled, stored, cached) | Validator-gated SCXML: the builder bot authors the behavior as an SCXML document, `scx:validate` gates it, and a simulation as an invoked child proves it before it is stored; a matched behavior runs as an invoked child |
 | Persistent routines (`hsm.every` / `hsm.at` across turns) | Long-lived invoked children whose schedules are self-rescheduling `<send delay>` loops; each tick is an event to the parent, which decides on it in a new turn |
-| pydantic event data models | JSON Schemas referenced by `event:schema` on the transitions that take the event (metadata-only in the engine) |
+| pydantic event data models | JSON Schema files referenced by `event:schema` on the transitions that take the event; scxml.rs checks them where the event is created (`<send>`, `<raise>`, a send between sessions) and on host input (decision D41) |
+| Hand-written payload validators (`model_validate`, field checks) | `event:schema` only; a `cond` correlates (which child, which turn, which timer) and never checks a payload's shape (decision D42) |
+| Helper functions (attention bias, envelopes, choice assembly and compaction, routing, confidence tuner, message commit) | floppy namespace elements that write to a `location` (`namespaces/bot`, `namespaces/conversation`, `namespaces/decision`; decision D40) |
 | Model-facing event choice lists and payload filling (Intuition, Processor) | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as a canonical choices; the `decision` service, invoked with it, asks a backend, fills the chosen event's data to its schema, validates it, and emits it |
 | Event names `bot.*`, `bot.ability.*`, `phone.*` | Unchanged, byte for byte |
 | Telemetry (`mosfet.telemetry`) | scxml.rs's OpenTelemetry facade (guests through the telemetry WIT; the native runtime, `scx`, through scxml.rs's own) |
@@ -44,10 +46,10 @@ has to cover.
 | `hsm.final` (15) | `<final id>`, with `<donedata>` for a result |
 | `hsm.transition(...)` (725) with `hsm.target` (649) | `<transition event="..." target="...">`; a targetless transition is internal (`type="internal"` where the source is compound) |
 | `hsm.guard` (574) | `cond` (ECMAScript data model) |
-| `hsm.effect` (567) | executable content (synchronous and quick): `<assign>`, `<raise>`, `<send>`, `<log>`, `<script>`, and extension elements (`decision:choice`, `scx:validate`); an effect that does I/O becomes an `<invoke>` of a service |
+| `hsm.effect` (567) | executable content (synchronous and quick): `<assign>`, `<raise>`, `<send>`, `<log>`, `<foreach>`, `<if>`, and extension elements (`decision:*`, `bot:*`, `conversation:*`, `scx:validate`); never `<script>` in a floppy document (decision D39); an effect that does I/O becomes an `<invoke>` of a service |
 | `hsm.entry` (20) / `hsm.exit` (13) | `<onentry>` / `<onexit>` |
 | `hsm.activity` (138) | `<invoke>`: started on entry, cancelled on exit, `done.invoke.<id>` and `error.*` on completion or failure; every model call (the `generate` and `decision` services) is one |
-| `hsm.defer` (104) | No SCXML equivalent; modelled with a data-model queue: in a deferring state, `<transition event="E" type="internal"><script>queue.push(_event)</script></transition>`; on exit (or entry of the state that handles them), `<foreach array="queue" item="e"><send eventexpr="e.name" target="#_internal" .../></foreach>` re-raises them in order, then clears the queue |
+| `hsm.defer` (104) | No SCXML equivalent; modelled with a data-model queue (see [Phase 4 conventions](#phase-4-conventions)): in a deferring state, a targetless transition on E appends `<assign location="queue" expr="queue.concat([...])"/>`; in the state that handles them, an eventless `<transition cond="queue.length &gt; 0">` takes `queue.shift()`, one per return, in order (no `#_internal` replay) |
 | `hsm.after(duration)` (48) | `<send event="<state>.after" delay="..." id="<state>-after"/>` on entry, `<cancel sendid="<state>-after"/>` on exit, and a transition on the event |
 | `hsm.every(period)` (28) | a self-rescheduling loop: the transition on the tick re-sends the tick with the same `delay` |
 | `hsm.at(time)` (22) | `<send delayexpr>` computed from the absolute time and the data model's clock (`Date.now()` in ECMAScript) |
@@ -65,30 +67,32 @@ component code.
 | mosfet provider | floppy | Phase |
 | --- | --- | --- |
 | `openai_compat` | `services/generate`, OpenAI backend (`env:apikey`, `env:baseurl`) | 1 |
-| `gemini` (text) | `services/generate` through an OpenAI-compatible base URL | 7 |
+| `gemini` (text) | `services/generate` through an OpenAI-compatible base URL | any (by `FLOPPY_BASE_URL`) |
 | `typesafe` (`system_one` Choice/Score) | `services/decision`, TypeSafe backend (`TYPESAFE_API_KEY`) | 1 |
-| `needle` (local tool-calling reflex model) | `services/decision` backend (the `Backend` trait) | 7 |
+| `needle` (local tool-calling reflex model) | `services/decision` backend (the `Backend` trait) | later |
 | `sqlite_memory` | `services/memory`, SQLite (a service declaring `wasi:filesystem`) | 3 |
 | `postgres_memory` | `services/memory`, PGlite | 7 |
 | `elevenlabs`, `moonshine`, `mlx_audio`, `pyannote` | `services/speech` (text-to-speech, speech-to-text, diarization backends) | 6 |
 | `livekit` | the `phone` device service | 6 |
 | `mlx_vlm` | a `vision` (reading) service | 6 |
 
-NVIDIA Nemotron (OpenAI-compatible) and CLM become the default backends in
-phase 7; until then every backend is selected by its `env:baseurl` slot.
+No backend is a default (decision D31): `generate` reaches only the
+endpoint a run names with `FLOPPY_BASE_URL` (direct vLLM on the DGX Sparks
+in the gitignored `.env`), and `decision` uses TypeSafe through its own
+`env` slots.
 
 ## Phases
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 0 | scxml.rs invoked services: slice 1 (`invoked-service` world, host and CLI binding, echo example) and slice 2 (WASI permissions and grants, event contracts, env slots on `<invoke>`, repository services), then deferred service requests (`outbound-http.begin`/`take`, outcomes through `wake`) and unbound invoke types failing at invocation start; floppy repository scaffold (subtree, workspace, an embedder and its smoke test, namespace skeletons, rules, this plan; decision D14 deleted the embedder, and the smoke test now drives `scx run`) | Done (scxml.rs `feat/invoke-services` at `9971c05a`, now `5eb077c4`; this repository's first commits). Extension components get no WASI, by rule (decision D13), not as a gap |
+| 0 | scxml.rs invoked services: slice 1 (`invoked-service` world, host and CLI binding, echo example) and slice 2 (WASI permissions and grants, event contracts, env slots on `<invoke>`, repository services), and unbound invoke types failing at invocation start; floppy repository scaffold (subtree, workspace, an embedder and its smoke test, namespace skeletons, rules, this plan; decision D14 deleted the embedder, and the smoke test now drives `scx run`) | Done. Services are now one async `invoke` export on WASI 0.3 that awaits `outbound-http.fetch` (decision D15, which deleted the `outbound-http.begin`/`take`/`wake` API), with no host time limit on their I/O: the invoking state's `<send delay>` bounds it, and leaving the state cancels the invocation and closes its connection (SCXML 6.4). Extension components get no WASI, by rule (decision D13), not as a gap |
 | 1 | Namespaces and services: `scxml` (now scxml.rs's embedded `scx` namespace, decision D17: `scx:validate` wrapping the validator component, returning canonical diagnostics and fixes), `generate` (OpenAI text and structured output), `decision` (enabled-transition candidates, TypeSafe ranking, schema fill and validation before emit) | `scxml` namespace implemented, then moved to scxml.rs as `scx` (`scx:validate`); `services/generate` implemented (one Chat Completions call per `<invoke>`, text or schema-validated structured output, `generate.result`/`generate.failed`, never blocking the session; `env:apikey`/`env:baseurl`); `decision` split per D13: the namespace's `decision:choice` (snapshot choices of `event:schema` transitions whose guards evaluate to true) and `services/decision` (request kinds `choose`, `rank`, `classify`; grounded per-member fill, validation against the choices' schema before emit, `decision.abstain`, `decision.failed`; TypeSafe `system_one` backend behind the `Backend` trait, `env:apikey`/`env:baseurl`) |
 | 2 | Builder bot: `bots/builder/` SCXML (intake, design, author, `scx:validate`, fix or regenerate with bounded retries as states, simulate the draft as an invoked child via `#_<invokeid>`, ending in the final states `done`/`failed` whose `<donedata>` carries the result), run with `scx run` | `bots/builder/builder.scx` implemented (contract schemas in `bots/builder/schemas`; design and author invoke the generate service and triage invokes the decision service on the `decision:choice` choices, each with `<finalize>`/`done.invoke` and a `builder.timeout` that preempts and cancels the call; cond-based fallback; simulation as an invoked child); runs with `scx run --env-file .env bots/builder/builder.scx` (decisions D14, D16; [bots/builder/README.md](../bots/builder/README.md#running)); deterministic harness in `tests/tests/builder_bot.rs`, which runs that command (including a timeout firing while a generation is in flight); live results in [live-proof.md](live-proof.md) |
 | 3 | Memory service on SQLite | Not started |
-| 4 | Bot core: body and cognition as SCXML, abilities as invoked children, mosfet's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | In progress: event contracts extracted ([Phase 4 event contracts](#phase-4-event-contracts)) |
+| 4 | Bot core: body and cognition as SCXML, abilities as invoked children, mosfet's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | Done through the script-validator cutover: the body `bots/floppy/floppy.scx`; `abilities/` cognition (autonomy seam, intuition, reasoning), communication (conversation, speaking in text mode); the `bot` and `conversation` namespaces and the decision elements; event contracts and runtime `event:schema` checks; no `<script>` (decisions D33 to D43, [Phase 4 conventions](#phase-4-conventions)). Identity, the phase 5 seams, and the saved live examples finish it ([plan](plans/phase4-bot-core.mdscript.md)) |
 | 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Not started |
 | 6 | Speech, vision, and devices as services (`speech`, `vision`, `phone`, audio) | Not started |
-| 7 | Defaults and release: NVIDIA Nemotron and CLM backends, PGlite memory, tagged releases with `SHA256SUMS` for repository namespaces and services | Not started |
+| 7 | Defaults and release: PGlite memory, tagged releases with `SHA256SUMS` for repository namespaces and services (releases wait for going public) | Not started. There is no default backend: every run names its endpoint with `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (decision D31) |
 
 ## Phase 4 event contracts
 
@@ -102,6 +106,12 @@ body events in `bots/floppy/schemas/`, ability events in
 schema reference is relative to its document and cannot leave the
 document's directory (no `..`), so an ability document lives directly in
 `abilities/` (`abilities/<ability>.scx`) and the body in `bots/floppy/`.
+The ability events the body receives (`bot.ability.offers`,
+`bot.ability.cognition.{output,cancelled}`, `bot.ability.failed`,
+`bot.ability.processing.cancelled`,
+`bot.ability.communication.{input,failed}`,
+`bot.ability.conversation.output`, `bot.ability.speaking.output`) are
+copied byte for byte into `bots/floppy/schemas/` as twins (decision D37).
 
 The extraction script runs with mosfet's interpreter; it is kept outside
 this repository, with the floppy plans, as
@@ -152,8 +162,96 @@ Mapping rules (the byte-for-byte rule covers event names, not data shapes):
 
 `generate.*` and `decision.*` are not copied beside the abilities: they are
 service results, never offered as choices, so an ability needs no schema on
-the transitions taking them. `tests/tests/contracts.rs` checks the set, the
-rules, and every `.scx` under `abilities/` and `bots/floppy/`.
+the transitions taking them (scxml.rs does not check an invoked service's
+events, so their transitions keep a short shape cond such as
+`Object(_event.data).reason`). `tests/tests/contracts.rs` checks the set,
+the rules, the twins, and every `.scx` under `abilities/` and
+`bots/floppy/` against the document structure rule (decision D39).
+
+## Phase 4 conventions
+
+How phase 4 writes a mosfet machine as SCXML. The decisions behind them are
+D33 to D43.
+
+- **Document structure.** One `.scx` per mosfet state machine, invoked by a
+  literal `id` and a literal relative `src`. The bot root only composes
+  (states, `<invoke>`s, `<send>`s). No `<script>` and no `function`; each
+  `cond` and each `expr` outside `<data>` is at most 160 characters.
+  Reusable synchronous logic is a namespace element that writes to a
+  `location`; I/O is an invoked service (decision D39).
+- **Readiness and offers.** An ability is ready when its first
+  `bot.ability.offers` [floppy name] reaches the body; the body activates
+  when no expected ability is left in its `waiting` list, and an expected
+  ability that ends while active degrades the bot. Each offer is the
+  ability's `<decision:choice>` filtered to its own events and compacted
+  with `<decision:compact>` (decision D35).
+- **Choices as data.** On each `processing` entry the body assembles the
+  turn's choices (its own `bot.focus_device`, pinned to the turn's focus
+  candidates, and `bot.clear_focus`, plus each ability's latest offers
+  tagged with its `target`), holds them to 32 KiB, and sends them as
+  `bot.ability.cognition.input.choices` [floppy field]. Reasoning selects
+  only from them; the body's `routing` state delivers each selection to
+  `#_internal` or `#_<target>` with a visible `<foreach>`/`<send>` and logs
+  `bot.route`/`bot.route.dropped`.
+- **Per-turn stage children.** The cognition invokes each stage (autonomy,
+  intuition, reasoning) per turn with `<param>`s named after the mosfet
+  input event's fields and takes its result as `done.invoke.<stage>`
+  `<donedata>`; leaving the stage cancels it, which replaces mosfet's
+  cancel-token protocol. State a stage keeps across turns (the intuition's
+  tuner) is passed in by `<param>` and returned in `<donedata>`.
+- **Defer queue.** A deferring state appends the event (the body uses a
+  `<bot:stimulus>` envelope) to the `queue` data with
+  `queue.concat([...])`; the state that handles it takes `queue.shift()`
+  with an eventless `cond="queue.length &gt; 0"` transition, one per
+  return, in order. Nothing is replayed through `#_internal`, so a replayed
+  event has no `from` field to check.
+- **Timers.** mosfet's operation machines (processing, attachment, hop and
+  reply operations) are a `<send delay id>` in the owning state, a
+  `<cancel>` on exit, and a sendid or turn cond. They have no document of
+  their own.
+- **Memory seam.** Until `services/memory` (phase 3), each memory step is a
+  state that answers itself at once through `#_internal` with mosfet's
+  event (reasoning's `recalling` sends `bot.ability.reasoning.recalled` with
+  nothing recalled, `retaining` sends `.retained` with `memory_written`
+  false), so phase 3 replaces each send with an `<invoke>` of the memory
+  service and the topology does not change.
+- **Speaking in text mode.** Speaking says a response as
+  `<log label="bot.say">` and answers `bot.ability.speaking.output` until
+  the phase 6 speech service (decision D38).
+- **Traces.** Each deterministic test in `body.rs`, `cognition.rs` and
+  `communication.rs` compares its whole run with
+  `tests/fixtures/phase4/traces/<test>.ndjson` byte for byte; rewrite them
+  with `FLOPPY_TRACE_BLESS=1` only for an intended change.
+
+### Document structure map
+
+| mosfet unit | floppy artifact | kind |
+| --- | --- | --- |
+| `bot.py` Bot body | `bots/floppy/floppy.scx` | bot root `.scx` |
+| `bot.py` attachment Group, `_AttachmentOperation`, `_ProcessingOperation` | the body's `<invoke>`s in `live`, its offers bookkeeping and its delayed `<send>`/`<cancel>` | composition inside the body |
+| `attention_bias_for_turn`, `_interrupt_reference`, `_target_device_reference` | `<bot:attention>` | `namespaces/bot` element |
+| stimulus envelope | `<bot:stimulus>` | `namespaces/bot` element |
+| `model_facing_event_json_schema` and the 32 KiB bound | `<decision:compact>` | `namespaces/decision` element |
+| `collect_offered_events`, `_dispatch_bot_processing` | `<decision:assemble>` | `namespaces/decision` element |
+| focus pinning | `<decision:pin>` | `namespaces/decision` element |
+| `_resolve_target`, `fill_unique_selection_targets` | `<decision:route>` (the body's `<foreach>`/`<send>` delivers) | `namespaces/decision` element |
+| choice-name logs | `<decision:names>` | `namespaces/decision` element |
+| `_selection_item_branch`, `dispatch_tool` | `<decision:selection>` | `namespaces/decision` element |
+| `ConfidenceTuner` | `<decision:tuner>` | `namespaces/decision` element |
+| `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`, `_stable_context_ref`, `MessageProvenance` | `<conversation:commit>` | `namespaces/conversation` element |
+| `cognition.py` Cognition | `abilities/cognition.scx` | ability `.scx` child |
+| `autonomy.py` Autonomy | `abilities/autonomy.scx` (phase 5 seam: candidate behaviors are builder-built `.scx` children) | stage `.scx` child |
+| `intuition.py` Intuition | `abilities/intuition.scx` invoking `services/decision` | stage `.scx` child and service |
+| `reasoning.py` Reasoning | `abilities/reasoning.scx` invoking `services/generate` | stage `.scx` child and service |
+| `communication.py` Communication | `abilities/communication.scx` | ability `.scx` child |
+| `conversation.py` Conversation | `abilities/conversation.scx` | ability `.scx` child |
+| `speaking.py` Speaking | `abilities/speaking.scx` (text mode) | ability `.scx` child |
+| `identity/identity.py` Identity | `abilities/identity.scx`; text name match `<bot:recognize>`; adoption and recall are memory seams (decision D43) | ability `.scx` child |
+| Reflection, Routines | `abilities/reflection.scx`, `abilities/routines.scx` seams; routines are builder-built `.scx` children (phase 5) | ability `.scx` child |
+| Behaviors (Starlark) | builder-built `.scx` documents | generated `.scx` |
+| Memory and its providers | `services/memory` (phase 3) | invoked service |
+| Listening, reading, turn detectors, devices | phase 6 `.scx` children and Wasm services | out of phase 4 |
+| payload validators | `event:schema` on the receiving transition plus a short correlation cond | `event:schema` |
 
 ## Known gaps carried from phase 0
 
