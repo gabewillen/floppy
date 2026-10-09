@@ -25,6 +25,10 @@
 //! One test runs the real cognition (`abilities/cognition.scx` and its
 //! stages) with no backend: the intuition's decision fails fast with
 //! `unconfigured`, and so does the turn.
+//!
+//! Every test ends by comparing its whole run with its pinned trace under
+//! `tests/fixtures/phase4/traces/` (`support::trace`; `FLOPPY_TRACE_BLESS=1`
+//! rewrites them).
 
 #![allow(
     missing_docs,
@@ -37,7 +41,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::{Value as Json, json};
-use support::{Finished, Run, logs, unique_scratch, workspace};
+use support::{Finished, Run, logs, trace, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup included).
 const WAIT: Duration = Duration::from_secs(60);
@@ -152,8 +156,11 @@ fn activated(run: &mut Run) -> Vec<Json> {
     run.until(WAIT, label_is("bot.activated"))
 }
 
-fn close(run: Run) -> Finished {
-    run.close(WAIT)
+/// Closes the run and asserts its pinned trace.
+fn close(run: Run, test: &str) -> Finished {
+    let finished = run.close(WAIT);
+    trace::assert_trace(test, &finished.all, &[]);
+    finished
 }
 
 #[test]
@@ -167,7 +174,7 @@ fn activation_waits_for_the_cognitions_offers() {
         only(&records, &["double.input", "bot.output"]).is_empty(),
         "an inactive bot takes no turn: {records:?}"
     );
-    let finished = close(run);
+    let finished = close(run, "activation_waits_for_the_cognitions_offers");
     assert!(
         only(&finished.records, &["bot.activating.failed"]).is_empty(),
         "{:?}",
@@ -191,7 +198,7 @@ fn a_missing_cognition_fails_the_activation() {
     // Back in inactive: a second bot.activate is taken again.
     run.event("bot.activate", &json!({}));
     run.until(WAIT, label_is("bot.activating.failed"));
-    close(run);
+    close(run, "a_missing_cognition_fails_the_activation");
 }
 
 #[test]
@@ -218,7 +225,7 @@ fn an_ability_that_never_offers_times_the_activation_out() {
             .any(|(label, _)| label == "double.exit"),
         "{records:?}"
     );
-    close(run);
+    close(run, "an_ability_that_never_offers_times_the_activation_out");
 }
 
 #[test]
@@ -245,7 +252,7 @@ fn deactivate_cancels_the_abilities() {
         only(&records, &["double.input"]),
         pairs(&[("double.input", r#"1 reply "taken""#)])
     );
-    close(run);
+    close(run, "deactivate_cancels_the_abilities");
 }
 
 #[test]
@@ -260,7 +267,7 @@ fn the_activation_passes_its_model_to_the_cognition() {
         only(&records, &["double.exit"]),
         pairs(&[("double.exit", "some/model")])
     );
-    close(run);
+    close(run, "the_activation_passes_its_model_to_the_cognition");
 }
 
 #[test]
@@ -301,7 +308,7 @@ fn a_reboot_is_taken_only_from_the_cognition() {
         only(&records, &["double.input"]),
         pairs(&[("double.input", r#"2 reply "again""#)])
     );
-    close(run);
+    close(run, "a_reboot_is_taken_only_from_the_cognition");
 }
 
 #[test]
@@ -336,7 +343,7 @@ fn a_turn_completes_with_the_cognitions_output() {
             r#"{"message":"double failed","turn":2}"#
         )])
     );
-    close(run);
+    close(run, "a_turn_completes_with_the_cognitions_output");
 }
 
 #[test]
@@ -359,7 +366,7 @@ fn a_reply_for_another_turn_is_ignored() {
             ),
         ])
     );
-    close(run);
+    close(run, "a_reply_for_another_turn_is_ignored");
 }
 
 #[test]
@@ -403,7 +410,7 @@ fn inputs_during_a_turn_wait_and_run_in_order() {
             ("double.input", r#"3 reply "third""#),
         ])
     );
-    close(run);
+    close(run, "inputs_during_a_turn_wait_and_run_in_order");
 }
 
 #[test]
@@ -432,7 +439,7 @@ fn a_turn_that_times_out_is_cancelled_and_fails() {
     // The bot is back in attention and takes the next turn.
     run.event("bot.input", &input("reply", "next"));
     run.until(WAIT, label_is("bot.output"));
-    close(run);
+    close(run, "a_turn_that_times_out_is_cancelled_and_fails");
 }
 
 #[test]
@@ -445,6 +452,11 @@ fn an_unacknowledged_cancel_degrades_the_bot() {
     activated(&mut run);
     run.event("bot.input", &input("deaf", "x"));
     let finished = run.finish(WAIT);
+    trace::assert_trace(
+        "an_unacknowledged_cancel_degrades_the_bot",
+        &finished.all,
+        &[],
+    );
     let records = &finished.records;
     assert_eq!(
         only(
@@ -492,7 +504,10 @@ fn without_a_decision_backend_the_real_cognitions_turn_fails_unconfigured() {
             r#"{"message":"the intuition failed: the decision failed (unconfigured)","turn":1}"#
         )])
     );
-    close(run);
+    close(
+        run,
+        "without_a_decision_backend_the_real_cognitions_turn_fails_unconfigured",
+    );
 }
 
 /// An offered schema as the body compacts it: `$schema`, `title` and
@@ -673,7 +688,10 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
         only(&records, &["bot.focus"]),
         pairs(&[("bot.focus", "fan")])
     );
-    close(run);
+    close(
+        run,
+        "the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded",
+    );
 }
 
 #[test]
@@ -710,7 +728,7 @@ fn a_selection_the_turn_did_not_offer_is_dropped() {
             "bot.ability.cognition.ignore is not offered by speaking"
         )])
     );
-    close(run);
+    close(run, "a_selection_the_turn_did_not_offer_is_dropped");
 }
 
 #[test]
@@ -746,7 +764,10 @@ fn an_ignore_selection_reaches_the_cognition_and_ends_the_turn() {
         only(&records, &["double.input"]),
         pairs(&[("double.input", r#"2 reply "next""#)])
     );
-    close(run);
+    close(
+        run,
+        "an_ignore_selection_reaches_the_cognition_and_ends_the_turn",
+    );
 }
 
 #[test]
@@ -764,5 +785,8 @@ fn choices_over_the_budget_fail_the_turn_before_the_cognition() {
         "{message}"
     );
     assert!(only(&records, &["double.input"]).is_empty(), "{records:?}");
-    close(run);
+    close(
+        run,
+        "choices_over_the_budget_fail_the_turn_before_the_cognition",
+    );
 }

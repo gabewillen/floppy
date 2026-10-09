@@ -24,6 +24,9 @@
     reason = "each test binary uses the part of the shared support it needs"
 )]
 
+pub mod trace;
+
+use std::cell::RefCell;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
@@ -218,14 +221,20 @@ pub struct Run {
     child: Child,
     stdin: Option<ChildStdin>,
     records: Receiver<Json>,
+    /// Every record read so far, in order (what [`Finished::all`] starts
+    /// with).
+    journal: RefCell<Vec<Json>>,
     reader: Option<std::thread::JoinHandle<()>>,
     stderr: Option<std::thread::JoinHandle<String>>,
 }
 
 /// One finished `scx run` process.
 pub struct Finished {
-    /// Every record it wrote, in order.
+    /// Every record it wrote that no [`Run::until`] returned, in order.
     pub records: Vec<Json>,
+    /// Every record it wrote, in order, including the ones
+    /// [`Run::until`] returned.
+    pub all: Vec<Json>,
     /// Its exit status.
     pub status: ExitStatus,
     /// Its standard error (diagnostics and the consent listing).
@@ -270,6 +279,7 @@ impl Run {
             stdin: child.stdin.take(),
             child,
             records,
+            journal: RefCell::new(Vec::new()),
             reader: Some(reader),
             stderr: Some(stderr),
         }
@@ -304,6 +314,7 @@ impl Run {
             {
                 Ok(record) => {
                     let finished = done(&record);
+                    self.journal.borrow_mut().push(record.clone());
                     records.push(record);
                     if finished {
                         return records;
@@ -344,9 +355,12 @@ impl Run {
         if let Some(reader) = self.reader.take() {
             reader.join().expect("the record reader ends");
         }
-        let records = self.records.try_iter().collect();
+        let records: Vec<Json> = self.records.try_iter().collect();
+        let mut all = self.journal.take();
+        all.extend(records.iter().cloned());
         Finished {
             records,
+            all,
             status,
             stderr,
         }

@@ -16,6 +16,10 @@
 //! `communication.deferred`, `communication.activate`), and the body each
 //! event it emits (`bot.ability.speaking.output`,
 //! `bot.ability.communication.failed`).
+//!
+//! Every test ends by comparing its whole run with its pinned trace under
+//! `tests/fixtures/phase4/traces/` (`support::trace`; `FLOPPY_TRACE_BLESS=1`
+//! rewrites them).
 
 #![allow(
     missing_docs,
@@ -28,7 +32,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::{Value as Json, json};
-use support::{Run, logs, unique_scratch, workspace};
+use support::{Finished, Run, logs, trace, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup included).
 const WAIT: Duration = Duration::from_secs(60);
@@ -165,6 +169,13 @@ fn started(body: &Path) -> Run {
     run
 }
 
+/// Closes the run and asserts its pinned trace.
+fn close(run: Run, test: &str) -> Finished {
+    let finished = run.close(WAIT);
+    trace::assert_trace(test, &finished.all, &[]);
+    finished
+}
+
 fn input(action: &str) -> Json {
     json!({"observation": {"event": action, "data": action}})
 }
@@ -197,7 +208,10 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
     assert!(texts(&records, "communication.product").is_empty());
     // Back in active, the communication offers again (its first offers
     // came before the activation).
-    let finished = run.close(WAIT);
+    let finished = close(
+        run,
+        "a_routed_response_is_said_and_recorded_in_the_conversation",
+    );
     let mut all = records;
     all.extend(finished.records);
     assert_eq!(
@@ -243,7 +257,10 @@ fn communication_input_is_a_turn_whose_stimulus_carries_the_history() {
     assert_eq!(texts(&all, "memory"), strings(&["absent", "absent"]));
     assert_eq!(texts(&all, "communication.product"), strings(&["0", "2"]));
     assert_eq!(texts(&all, "bot.say"), strings(&["reply 1", "reply 2"]));
-    run.close(WAIT);
+    close(
+        run,
+        "communication_input_is_a_turn_whose_stimulus_carries_the_history",
+    );
 }
 
 #[test]
@@ -262,7 +279,10 @@ fn the_history_reaching_a_turn_is_bounded_to_the_latest_messages() {
     // The third input is sequence 4; the double sees its last 2 messages.
     assert_eq!(texts(&records, "double.input"), strings(&["3 ignore 2"]));
     assert_eq!(texts(&records, "communication.product"), strings(&["4"]));
-    run.close(WAIT);
+    close(
+        run,
+        "the_history_reaching_a_turn_is_bounded_to_the_latest_messages",
+    );
 }
 
 #[test]
@@ -280,7 +300,7 @@ fn a_blank_response_fails_without_speaking() {
     run.event("bot.input", &input("reply"));
     let records = run.until(WAIT, label_is("bot.ability.speaking.output"));
     assert_eq!(texts(&records, "bot.say"), strings(&["reply 2"]));
-    run.close(WAIT);
+    close(run, "a_blank_response_fails_without_speaking");
 }
 
 #[test]
@@ -314,7 +334,10 @@ fn a_response_waits_for_the_one_in_flight_and_each_hop_times_out() {
             r#"{"message":"Speaking response timed out."}"#,
         ])
     );
-    run.close(WAIT);
+    close(
+        run,
+        "a_response_waits_for_the_one_in_flight_and_each_hop_times_out",
+    );
 }
 
 #[test]
@@ -333,7 +356,7 @@ fn malformed_communication_input_is_rejected_by_the_body() {
         ])
     );
     assert!(texts(&records, "conversation").is_empty(), "{records:?}");
-    run.close(WAIT);
+    close(run, "malformed_communication_input_is_rejected_by_the_body");
 }
 
 #[test]
@@ -352,5 +375,8 @@ fn a_communication_whose_speaking_cannot_start_fails_the_activation() {
         texts(&records, "bot.diagnostic"),
         strings(&["the ability communication ended while activating"])
     );
-    run.close(WAIT);
+    close(
+        run,
+        "a_communication_whose_speaking_cannot_start_fails_the_activation",
+    );
 }

@@ -16,6 +16,11 @@
 //! `memory`), the cognition its cascade (`cognition.stage`,
 //! `cognition.tuner`, `cognition.cancelled`, `cognition.offers`,
 //! `reflection`), and the body each event it emits.
+//!
+//! Every test ends by comparing its whole run, and every request the fake
+//! backend received, with its pinned trace under
+//! `tests/fixtures/phase4/traces/` (`support::trace`;
+//! `FLOPPY_TRACE_BLESS=1` rewrites them).
 
 #![allow(
     missing_docs,
@@ -31,7 +36,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::{Map, Value as Json, json};
-use support::{Run, logs, unique_scratch, workspace};
+use support::{Finished, Run, logs, trace, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup included).
 const WAIT: Duration = Duration::from_secs(90);
@@ -408,8 +413,17 @@ fn strings(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
 }
 
-fn close(run: Run) {
-    run.close(WAIT);
+/// Closes the run and asserts its pinned trace, with every request the
+/// mock received.
+fn close(run: Run, mock: &Mock, test: &str) -> Finished {
+    let finished = run.close(WAIT);
+    let requests: Vec<(String, Json)> = mock
+        .received("")
+        .into_iter()
+        .map(|request| (request.target, request.body))
+        .collect();
+    trace::assert_trace(test, &finished.all, &requests);
+    finished
 }
 
 #[test]
@@ -456,7 +470,7 @@ fn intuition_handles_an_ignore_without_reasoning() {
     labels.sort();
     assert_eq!(labels, strings(&[IGNORE, HANDOFF, "none of these"]));
     assert!(mock.received("/chat/completions").is_empty());
-    let finished = run.close(WAIT);
+    let finished = close(run, &mock, "intuition_handles_an_ignore_without_reasoning");
     // The cognition offers ignore from each idle entry (the activation's
     // and the turn's end).
     let mut all = records;
@@ -550,7 +564,7 @@ fn a_deliberative_handoff_escalates_to_reasoning() {
     );
     let keys: Vec<&String> = prompt.as_object().expect("an object").keys().collect();
     assert_eq!(keys, ["focus", "focus_candidates", "stimulus"]);
-    close(run);
+    close(run, &mock, "a_deliberative_handoff_escalates_to_reasoning");
 }
 
 /// The whole text path on fake backends: "say hi" escalates to reasoning,
@@ -596,7 +610,11 @@ fn a_reasoned_response_is_said_through_the_communication() {
         texts(&records, "bot.route.dropped").is_empty(),
         "{records:?}"
     );
-    close(run);
+    close(
+        run,
+        &mock,
+        "a_reasoned_response_is_said_through_the_communication",
+    );
 }
 
 #[test]
@@ -615,7 +633,7 @@ fn an_abstention_escalates_to_reasoning() {
         ])
     );
     assert_eq!(texts(&records, "bot.output").len(), 1);
-    close(run);
+    close(run, &mock, "an_abstention_escalates_to_reasoning");
 }
 
 #[test]
@@ -645,7 +663,11 @@ fn low_confidence_is_observed_by_the_tuner_and_escalates() {
         );
         assert_eq!(texts(records, "bot.output").len(), 1);
     }
-    close(run);
+    close(
+        run,
+        &mock,
+        "low_confidence_is_observed_by_the_tuner_and_escalates",
+    );
 }
 
 #[test]
@@ -680,7 +702,11 @@ fn after_the_warmup_the_threshold_follows_the_tuner() {
         .expect("a threshold");
     let expected = (67.12 - 195.68_f64.sqrt()) / 100.0;
     assert!((threshold - expected).abs() < 1e-9, "{threshold}");
-    close(run);
+    close(
+        run,
+        &mock,
+        "after_the_warmup_the_threshold_follows_the_tuner",
+    );
 }
 
 #[test]
@@ -695,7 +721,7 @@ fn a_reasoning_failure_fails_the_turn() {
         json!({"message": "the reasoning failed (status)", "turn": 1})
     );
     assert!(texts(&records, "bot.output").is_empty());
-    close(run);
+    close(run, &mock, "a_reasoning_failure_fails_the_turn");
 }
 
 #[test]
@@ -711,7 +737,11 @@ fn a_selection_outside_the_choices_never_becomes_output() {
         json!({"message": "the reasoning failed (schema-mismatch)", "turn": 1})
     );
     assert!(texts(&records, "bot.output").is_empty());
-    close(run);
+    close(
+        run,
+        &mock,
+        "a_selection_outside_the_choices_never_becomes_output",
+    );
 }
 
 #[test]
@@ -726,7 +756,7 @@ fn an_intuition_failure_fails_the_turn() {
         json!({"message": "the intuition failed: the decision failed (status)", "turn": 1})
     );
     assert!(mock.received("/chat/completions").is_empty());
-    close(run);
+    close(run, &mock, "an_intuition_failure_fails_the_turn");
 }
 
 #[test]
@@ -745,12 +775,17 @@ fn an_intuition_that_does_not_decide_in_time_fails_the_turn() {
         json_text(&records, "bot.processing.failed"),
         json!({"message": "the intuition failed: the decision timed out after 300 ms", "turn": 1})
     );
-    close(run);
+    close(
+        run,
+        &mock,
+        "an_intuition_that_does_not_decide_in_time_fails_the_turn",
+    );
 }
 
 /// `stage` never answers; `hop_ms` is long enough for the stages before
 /// it to answer.
 fn reboots_on_a_silent_stage(
+    test: &str,
     decision: Decision,
     generation: Generation,
     stage: &str,
@@ -775,22 +810,40 @@ fn reboots_on_a_silent_stage(
         strings(&[r#"{"reason":"cognition_child_teardown_failed"}"#])
     );
     assert!(texts(&records, "bot.output").is_empty());
-    close(run);
+    close(run, &mock, test);
 }
 
 #[test]
 fn a_silent_intuition_asks_the_body_for_a_reboot() {
-    reboots_on_a_silent_stage(Decision::Hang, Generation::Ignore, "intuition", "500");
+    reboots_on_a_silent_stage(
+        "a_silent_intuition_asks_the_body_for_a_reboot",
+        Decision::Hang,
+        Generation::Ignore,
+        "intuition",
+        "500",
+    );
 }
 
 #[test]
 fn a_silent_reasoning_asks_the_body_for_a_reboot() {
-    reboots_on_a_silent_stage(Decision::Escalate, Generation::Hang, "reasoning", "6000");
+    reboots_on_a_silent_stage(
+        "a_silent_reasoning_asks_the_body_for_a_reboot",
+        Decision::Escalate,
+        Generation::Hang,
+        "reasoning",
+        "6000",
+    );
 }
 
 /// The turn times out (`timeout_ms`, long enough for the stages before
 /// `stage` to answer) while `stage` waits on its backend.
-fn cancels_in(decision: Decision, generation: Generation, stage: &str, timeout_ms: &str) {
+fn cancels_in(
+    test: &str,
+    decision: Decision,
+    generation: Generation,
+    stage: &str,
+    timeout_ms: &str,
+) {
     let mock = Mock::start();
     let bot = layout(
         &mock,
@@ -818,15 +871,27 @@ fn cancels_in(decision: Decision, generation: Generation, stage: &str, timeout_m
             && record["text"] == "turn 2: bot.input"
     });
     assert!(texts(&records, "bot.reboot").is_empty());
-    close(run);
+    close(run, &mock, test);
 }
 
 #[test]
 fn a_cancel_during_intuition_is_acknowledged() {
-    cancels_in(Decision::Hang, Generation::Ignore, "intuition", "1500");
+    cancels_in(
+        "a_cancel_during_intuition_is_acknowledged",
+        Decision::Hang,
+        Generation::Ignore,
+        "intuition",
+        "1500",
+    );
 }
 
 #[test]
 fn a_cancel_during_reasoning_is_acknowledged() {
-    cancels_in(Decision::Escalate, Generation::Hang, "reasoning", "8000");
+    cancels_in(
+        "a_cancel_during_reasoning_is_acknowledged",
+        Decision::Escalate,
+        Generation::Hang,
+        "reasoning",
+        "8000",
+    );
 }
