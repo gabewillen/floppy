@@ -19,7 +19,9 @@ Last updated: 2026-10-09.
   structure rule (no `function`, cond/expr at most 160 characters, body
   twins byte-identical to their ability schemas, literal SCXML invoke ids
   and srcs). The first identity attempt is on branch `wip/identity-slice`
-  (reference only).
+  (reference only). Phase 4's docs are closed: decisions D33 to D43,
+  port-plan's [Phase 4 conventions](port-plan.md#phase-4-conventions), and
+  the AGENTS.md layout and no-`<script>` rules.
 - **scxml.rs:** `main` and `feat/invoke-services` at `febf633`
   (`session.accepts-event-data`: a send between sessions, and host input,
   is checked against the receiving document's `event:schema`s; refused
@@ -386,8 +388,5 @@ The remaining mosfet port runs as one ultracode run with these grants:
 
 ## Known stale docs
 
-- [port-plan.md](port-plan.md): phase 0 still describes the deleted
-  `outbound-http.begin`/`take`/`wake` API and a 10 s connect timeout
-  (services are now WASI 0.3 `invoke` with no host time limits); phase 7
-  still says NVIDIA Nemotron/CLM (defaults are now the user's DGX Sparks).
-  Refresh it after the datamodel pass lands.
+- The "Where things stand (2026-10-08)" section above is history; the
+  current state is at the top of this file.
