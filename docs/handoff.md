@@ -178,10 +178,11 @@ inlines the browser `validate` options type so no unapproved
   label="bot.say">`; the body logs `bot.ability.speaking.output`) within a
   6 s hop timer, records it as an outbound
   `bot.ability.conversation.append`, and defers input and responses while
-  one is in flight. External `bot.ability.communication.input` goes
+  one is in flight; a waiting one passes the same checks when replayed
+  (a blank waiting response fails and is not said). External `bot.ability.communication.input` goes
   through the body to the conversation, whose product (output with an
   inbound last message, at most `max_messages` 20) is a turn's stimulus.
-  Tests: `tests/tests/communication.rs` (7), the fake-backend end-to-end
+  Tests: `tests/tests/communication.rs` (8), the fake-backend end-to-end
   `a_reasoned_response_is_said_through_the_communication` in
   `cognition.rs`; live `live_chat` passed on the CPA gateway
   (`gabe-codex-1/gpt-6-luna`, 18 s, one turn). Open: with about 42 KiB of
