@@ -681,7 +681,7 @@ fn a_selection_the_turn_did_not_offer_is_dropped() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    // No ability offers bot.ability.identity.adopt, and no device is
+    // No ability offers bot.ability.speaking.input, and no device is
     // configured, so the body offers no focus.
     run.event("bot.input", &input("unoffered", "hello"));
     let records = run.until(WAIT, label_is("bot.route.dropped"));
@@ -694,7 +694,7 @@ fn a_selection_the_turn_did_not_offer_is_dropped() {
         only(&records, &["bot.route.dropped"]),
         pairs(&[(
             "bot.route.dropped",
-            "bot.ability.identity.adopt was not offered this turn"
+            "bot.ability.speaking.input was not offered this turn"
         )])
     );
     // An offered event for an ability that does not offer it.

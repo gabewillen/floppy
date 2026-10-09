@@ -14,15 +14,18 @@
   while it assembles the turn's choices, instead of failing the turn.
 
   Each turn's behavior is the name of the bot.input observation the turn
-  carries (stimulus.data.observation.event), or, for a conversation
-  product (stimulus.event bot.ability.conversation.output), the text of its
-  last message, whose observed data is then the number of messages:
+  carries (stimulus.data.observation.event); for a conversation product
+  (stimulus.event bot.ability.conversation.output), the first word of its
+  last message's text, whose observed data is then the number of messages;
+  for the identity's bot.ability.identity.addressed, ignore, observing the
+  name:
 
   * reply: answers the turn with one bot.ability.communication.respond
     selection naming no target (the communication offers it);
   * blank: selects bot.ability.communication.respond with blank text;
   * twice: selects bot.ability.communication.respond twice;
-  * unoffered: selects bot.ability.identity.adopt (offered by no ability);
+  * unoffered: selects bot.ability.speaking.input (offered by no ability);
+  * adopt: selects bot.ability.identity.adopt naming the observation's data;
   * ignore: selects bot.ability.cognition.ignore for target cognition;
   * focus: selects bot.focus_device for the observation's data;
   * elsewhere: selects bot.ability.cognition.ignore for target speaking;
@@ -56,6 +59,19 @@
       var messages = stimulus.data.messages;
       return messages[messages.length - 1].content;
     }
+    function addressed(stimulus) {
+      return stimulus.event === 'bot.ability.identity.addressed';
+    }
+    function actionOf(stimulus) {
+      if (product(stimulus)) { return lastText(stimulus).split(' ')[0]; }
+      if (addressed(stimulus)) { return 'ignore'; }
+      return stimulus.data.observation.event;
+    }
+    function observedOf(stimulus) {
+      if (product(stimulus)) { return stimulus.data.messages.length; }
+      if (addressed(stimulus)) { return stimulus.data.name; }
+      return stimulus.data.observation.data;
+    }
   </script>
   <state id="alive" initial="idle">
     <onexit>
@@ -79,8 +95,8 @@
       <transition event="bot.ability.cognition.input" target="working">
         <assign location="turn" expr="_event.data.turn"/>
         <assign location="stimulus" expr="_event.data.stimulus"/>
-        <assign location="action" expr="product(stimulus) ? lastText(stimulus) : stimulus.data.observation.event"/>
-        <assign location="observed" expr="product(stimulus) ? stimulus.data.messages.length : stimulus.data.observation.data"/>
+        <assign location="action" expr="actionOf(stimulus)"/>
+        <assign location="observed" expr="observedOf(stimulus)"/>
         <log label="double.input" expr="turn + ' ' + action + ' ' + JSON.stringify(observed)"/>
         <log label="double.choices" expr="JSON.stringify(_event.data.choices)"/>
       </transition>
@@ -114,7 +130,13 @@
         <if cond="action === 'unoffered'">
           <send event="bot.ability.cognition.output" target="#_parent">
             <param name="turn" expr="turn"/>
-            <param name="output" expr="[{event: 'bot.ability.identity.adopt', data: {name: 'floppy'}}]"/>
+            <param name="output" expr="[{event: 'bot.ability.speaking.input', data: {text: 'floppy'}}]"/>
+          </send>
+        </if>
+        <if cond="action === 'adopt'">
+          <send event="bot.ability.cognition.output" target="#_parent">
+            <param name="turn" expr="turn"/>
+            <param name="output" expr="[{event: 'bot.ability.identity.adopt', data: {name: observed}, target: 'identity'}]"/>
           </send>
         </if>
         <if cond="action === 'ignore'">
@@ -156,7 +178,7 @@
           <send event="bot.reboot" target="#_parent"><content>{"reason": "cognition_child_teardown_failed"}</content></send>
         </if>
       </onentry>
-      <transition cond="['reply', 'blank', 'twice', 'unoffered', 'ignore', 'elsewhere', 'focus', 'fail', 'stale'].indexOf(action) &gt;= 0" target="idle"/>
+      <transition cond="['reply', 'blank', 'twice', 'unoffered', 'adopt', 'ignore', 'elsewhere', 'focus', 'fail', 'stale'].indexOf(action) &gt;= 0" target="idle"/>
       <transition event="bot.ability.cognition.cancel" cond="action !== 'deaf'" target="idle">
         <send event="bot.ability.cognition.cancelled" target="#_parent"><param name="turn" expr="turn"/></send>
       </transition>

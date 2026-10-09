@@ -11,9 +11,10 @@
       cancelled and invoked again)
     cancelling_processing -cancel timeout-> degraded (a final sink)
 
-  Abilities: live holds <invoke id="cognition"> and <invoke
+  Abilities: live holds <invoke id="cognition">, <invoke
   id="communication"> (abilities/communication.scx, which holds the
-  conversation and speaking); leaving live cancels every ability (SCXML
+  conversation and speaking) and <invoke id="identity">
+  (abilities/identity.scx); leaving live cancels every ability (SCXML
   6.4), which replaces mosfet's cleanup states. An ability is ready when it
   sends its first bot.ability.offers; the body is active when every
   expected ability is ready. A run-tagged activation timer
@@ -29,8 +30,17 @@
   through speaking and answers bot.ability.speaking.output or
   bot.ability.communication.failed, which the body logs.
 
-  Turns: bot.input or a conversation product in unfocused or focused
-  starts a processing turn. The
+  Identity: the same outside bot.ability.communication.input is relayed to
+  the identity too (the text it hears; mosfet fans each heard stimulus to
+  every input ability). When the text carries the name the bot adopted
+  (a routed bot.ability.identity.adopt), the identity answers
+  bot.ability.identity.addressed {name}, which the body takes as a turn's
+  stimulus like bot.input (mosfet: the identity's cognition input whose
+  stimulus is that event; the body numbers the turn).
+
+  Turns: bot.input, a conversation product, or the identity's
+  bot.ability.identity.addressed in unfocused or focused starts a
+  processing turn. The
   body counts the turn, computes the turn's attention bias (focus,
   focus_candidates: an ECMAScript port of mosfet's attention_bias_for_turn),
   assembles the turn's choices (below), sends bot.ability.cognition.input
@@ -110,7 +120,7 @@
     <!-- Lifecycle: each entry into live is one run; the abilities expected
          and the offers each has sent this run. -->
     <data id="live_run" expr="0"/>
-    <data id="expected" expr="['cognition', 'communication']"/>
+    <data id="expected" expr="['cognition', 'communication', 'identity']"/>
     <data id="offers" expr="({})"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
@@ -196,6 +206,15 @@
     }
     function fromCommunication() {
       return _event.invokeid === 'communication';
+    }
+    // abilities/schemas/bot.ability.identity.addressed.json, from the
+    // identity: the bot heard the name it answers to.
+    function addressed() {
+      var data = _event.data;
+      return _event.invokeid === 'identity' &amp;&amp; isObject(data)
+        &amp;&amp; typeof data.name === 'string' &amp;&amp; data.name.length &gt; 0
+        &amp;&amp; (data.confidence === undefined || data.confidence === null
+          || (typeof data.confidence === 'number' &amp;&amp; data.confidence &gt;= 0 &amp;&amp; data.confidence &lt;= 1));
     }
     // abilities/schemas/bot.ability.communication.input.json (the
     // communication rechecks it in full).
@@ -365,6 +384,7 @@
       <param name="model" expr="model"/>
     </invoke>
     <invoke id="communication" type="scxml" src="../../abilities/communication.scx"/>
+    <invoke id="identity" type="scxml" src="../../abilities/identity.scx"/>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
     <transition event="bot.ability.offers" cond="expected.indexOf(_event.invokeid) &gt;= 0 &amp;&amp; validOffers(_event.data) &amp;&amp; _event.data.ability === _event.invokeid">
@@ -419,6 +439,9 @@
         <send event="bot.ability.communication.input" target="#_communication">
           <content expr="_event.data"/>
         </send>
+        <send event="bot.ability.communication.input" target="#_identity">
+          <content expr="_event.data"/>
+        </send>
       </transition>
       <transition event="bot.ability.communication.input" cond="!_event.invokeid">
         <log label="bot.rejected" expr="'bot.ability.communication.input does not satisfy abilities/schemas/bot.ability.communication.input.json'"/>
@@ -455,6 +478,9 @@
         <transition event="bot.ability.conversation.output" cond="conversationProduct()" target="processing">
           <assign location="stimulus" expr="envelope()"/>
         </transition>
+        <transition event="bot.ability.identity.addressed" cond="addressed()" target="processing">
+          <assign location="stimulus" expr="envelope()"/>
+        </transition>
       </state>
 
       <state id="focused">
@@ -466,6 +492,9 @@
           <assign location="stimulus" expr="envelope()"/>
         </transition>
         <transition event="bot.ability.conversation.output" cond="conversationProduct()" target="processing">
+          <assign location="stimulus" expr="envelope()"/>
+        </transition>
+        <transition event="bot.ability.identity.addressed" cond="addressed()" target="processing">
           <assign location="stimulus" expr="envelope()"/>
         </transition>
       </state>
@@ -524,6 +553,10 @@
           <script>queue.push(envelope());</script>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
+        <transition event="bot.ability.identity.addressed" cond="addressed()">
+          <script>queue.push(envelope());</script>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
       </state>
 
       <!-- The turn timed out: wait (bounded) for the cognition's
@@ -553,6 +586,10 @@
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
         <transition event="bot.ability.conversation.output" cond="conversationProduct()">
+          <script>queue.push(envelope());</script>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
+        <transition event="bot.ability.identity.addressed" cond="addressed()">
           <script>queue.push(envelope());</script>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
