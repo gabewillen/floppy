@@ -1,9 +1,11 @@
-//! The `decision` extension namespace: `<decision:choice>` and
-//! `<decision:compact>` as a `stateforward:scxml/executable-content-extension`
-//! Wasm component.
+//! The `decision` extension namespace: `<decision:choice>`,
+//! `<decision:compact>`, `<decision:pin>`, `<decision:assemble>`,
+//! `<decision:route>` and `<decision:names>` as a
+//! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! Executable content is synchronous and quick, so this namespace holds only
-//! the half of a decision that is: reading the choices and compacting them. Asking a backend to
+//! the half of a decision that is: reading, compacting, assembling and
+//! naming the choices, and placing the selections. Asking a backend to
 //! choose is slow I/O and belongs to the `decision` invoked service
 //! (`services/decision`), which takes the choices this element writes as its
 //! `choices` parameter. Documents bind [`NAMESPACE_URI`] (conventionally with
@@ -91,6 +93,55 @@
 //! content is `error.execution`. `overlocation` is assigned before
 //! `location`, so a failed `location` assignment can leave `overlocation`
 //! written.
+//!
+//! # `<decision:pin location="L" event="E" property="P" values="X"/>`
+//!
+//! Pins one property of one event's schema in the choice array at
+//! `location` (mosfet grounds `bot.focus_device`'s `device` in the turn's
+//! focus candidates): `values`, an expression that evaluates to a JSON
+//! array, becomes the `enum` of `schema.properties.<P>` of every entry whose
+//! event is `E`; when the array is empty those entries are removed instead
+//! (nothing could fill them). The result is canonical JSON. Every attribute
+//! is required. An entry for `E` whose schema has no object
+//! `properties.<P>` is `error.execution`.
+//!
+//! # `<decision:assemble location="L" routeslocation="R" choices="X" offers="Y" bound="N" overlocation="O" sizelocation="S"/>`
+//!
+//! A turn's choices (mosfet `collect_offered_events` and the body's
+//! dispatch inventory): the choices `choices` evaluates to (a document's
+//! own, kept untagged), then the choices of each member of the object
+//! `offers` evaluates to (offering invoke id → its latest offered choices),
+//! in member-name order, each tagged with the member's name as `target`.
+//! They are compacted as `<decision:compact>` does, with descriptions when
+//! that fits `bound` (default [`DEFAULT_COMPACT_BOUND`]) and without
+//! otherwise; unlike `<decision:compact>`, a list still over the bound is
+//! kept (the document logs it and fails the turn) and `overlocation`
+//! (optional) receives `true`. `sizelocation` (optional) receives the
+//! assigned list's size in bytes. `routeslocation` receives the routing
+//! table: an object mapping each offered event to its targets in choices
+//! order, `null` for a choice without a target (the document itself).
+//! `overlocation`, `sizelocation` and `routeslocation` are assigned before
+//! `location`.
+//!
+//! # `<decision:route location="L" selections="X" routes="Y"/>`
+//!
+//! Places each selection (`{event, data?, target?}`) of the array
+//! `selections` evaluates to by the routing table `routes` evaluates to
+//! (mosfet `_resolve_target` and `fill_unique_selection_targets`), in
+//! order: `location` receives one entry per selection, either `{event,
+//! data, target}` (`data` `{}` when the selection has none or `null`;
+//! `target` the named target when it offers the event, else the event's
+//! only target, `null` meaning the document itself) or `{dropped}` with why
+//! it cannot be placed: `<event> was not offered this turn`, `<event> is not
+//! offered by <target>`, `<event> names no target among <targets JSON>`, or
+//! `a malformed selection`. The document delivers each placed selection
+//! with a visible `<send>` (this element never sends).
+//!
+//! # `<decision:names location="L" choices="X"/>`
+//!
+//! `location` receives the names of the choices `choices` evaluates to,
+//! space separated: `event`, or `event@target` for a choice with a target
+//! (what documents log of their choices).
 //!
 //! # Failures
 //!
@@ -296,8 +347,563 @@ pub fn execute<H: ChoiceHost>(
     match local_name {
         "choice" => choice(attributes, content, host),
         "compact" => compact(attributes, content, host),
+        "pin" => pin(attributes, content, host),
+        "assemble" => assemble(attributes, content, host),
+        "route" => route(attributes, content, host),
+        "names" => names(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
+}
+
+/// The values of an element's unqualified attributes named in `names`, in
+/// that order; any other attribute is `refused`, a repeated one `repeated`.
+fn attribute_values<'a, E, const N: usize>(
+    attributes: &'a [Attribute],
+    names: [&str; N],
+    refused: &'static str,
+    repeated: &'static str,
+) -> Result<[Option<&'a str>; N], Failure<E>> {
+    let mut values = [None; N];
+    for attribute in attributes {
+        let index = match attribute.namespace_uri {
+            None => names.iter().position(|name| *name == attribute.local_name),
+            Some(_) => None,
+        }
+        .ok_or(Failure::Execution(refused))?;
+        if values[index].replace(attribute.value.as_str()).is_some() {
+            return Err(Failure::Execution(repeated));
+        }
+    }
+    Ok(values)
+}
+
+/// A required, non-empty (trimmed) attribute value, else `missing`.
+fn required<'a, E>(value: Option<&'a str>, missing: &'static str) -> Result<&'a str, Failure<E>> {
+    optional(value, missing)?.ok_or(Failure::Execution(missing))
+}
+
+/// An optional attribute value that must not be empty (trimmed) when
+/// present, else `empty`.
+fn optional<'a, E>(
+    value: Option<&'a str>,
+    empty: &'static str,
+) -> Result<Option<&'a str>, Failure<E>> {
+    value
+        .map(|value| {
+            Some(value.trim())
+                .filter(|value| !value.is_empty())
+                .ok_or(Failure::Execution(empty))
+        })
+        .transpose()
+}
+
+/// Refuses any content but white space with `detail`.
+fn no_content<E>(content: &[Content], detail: &'static str) -> Result<(), Failure<E>> {
+    if content
+        .iter()
+        .any(|item| !matches!(item, Content::Text(text) if text.trim().is_empty()))
+    {
+        return Err(Failure::Execution(detail));
+    }
+    Ok(())
+}
+
+/// A decimal `bound` attribute, [`DEFAULT_COMPACT_BOUND`] when absent.
+fn bound_value<E>(value: Option<&str>, malformed: &'static str) -> Result<usize, Failure<E>> {
+    value.map_or(Ok(DEFAULT_COMPACT_BOUND), |value| {
+        let value = value.trim();
+        if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(Failure::Execution(malformed));
+        }
+        value
+            .parse::<usize>()
+            .map_err(|_| Failure::Execution(malformed))
+    })
+}
+
+/// Evaluates `expression` as JSON (an array or an object), else `malformed`.
+fn read_json<H: ChoiceHost>(
+    host: &mut H,
+    expression: &str,
+    malformed: &'static str,
+) -> Result<Json, Failure<H::Error>> {
+    match host
+        .read(expression)
+        .map_err(Failure::Host)?
+        .map_err(|()| Failure::Execution(malformed))?
+    {
+        Data::JsonArray(text) | Data::JsonObject(text) => {
+            serde_json::from_str(&text).map_err(|_| Failure::Execution(malformed))
+        }
+        _ => Err(Failure::Execution(malformed)),
+    }
+}
+
+/// Assigns `value` to `location`, else `failed`.
+fn assign_to<H: ChoiceHost>(
+    host: &mut H,
+    location: &str,
+    value: &Data,
+    failed: &'static str,
+) -> Result<(), Failure<H::Error>> {
+    host.assign(location, value)
+        .map_err(Failure::Host)?
+        .map_err(|()| Failure::Execution(failed))
+}
+
+/// Executes `<decision:pin>`.
+fn pin<H: ChoiceHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, event, property, values] = attribute_values(
+        attributes,
+        ["location", "event", "property", "values"],
+        "decision:pin takes only the location, event, property and values attributes",
+        "decision:pin repeats an attribute",
+    )?;
+    let location = required(location, "decision:pin requires a non-empty location")?;
+    let event = required(event, "decision:pin requires a non-empty event")?;
+    let property = required(property, "decision:pin requires a non-empty property")?;
+    let values = required(values, "decision:pin requires a non-empty values")?;
+    no_content(content, "decision:pin holds no content")?;
+    let choices = read_json(
+        host,
+        location,
+        "decision:pin location does not hold choices",
+    )?;
+    let Json::Array(values) = read_json(host, values, "decision:pin values is not an array")?
+    else {
+        return Err(Failure::Execution("decision:pin values is not an array"));
+    };
+    let pinned = pin_choices(&choices, event, property, &values).map_err(Failure::Execution)?;
+    assign_to(
+        host,
+        location,
+        &Data::JsonArray(pinned),
+        "decision:pin could not assign the choices",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// `choices` with every `event` entry's `schema.properties.<property>.enum`
+/// set to `values`, or without the `event` entries when `values` is empty,
+/// as canonical JSON: see the crate documentation (`<decision:pin>`).
+///
+/// # Errors
+///
+/// A static detail when `choices` is not an array of choice entries or an
+/// `event` entry's schema has no object `properties.<property>`.
+pub fn pin_choices(
+    choices: &Json,
+    event: &str,
+    property: &str,
+    values: &[Json],
+) -> Result<String, &'static str> {
+    let entries = checked_entries(choices, PIN_ENTRIES)?;
+    let mut pinned = Vec::with_capacity(entries.len());
+    for entry in entries {
+        if entry.get("event").and_then(Json::as_str) != Some(event) {
+            pinned.push(entry.clone());
+            continue;
+        }
+        if values.is_empty() {
+            continue;
+        }
+        let mut entry = entry.clone();
+        let slot = entry
+            .pointer_mut("/schema/properties")
+            .and_then(Json::as_object_mut)
+            .and_then(|properties| properties.get_mut(property))
+            .and_then(Json::as_object_mut)
+            .ok_or("decision:pin found no such property in the event's schema")?;
+        slot.insert("enum".into(), Json::Array(values.to_vec()));
+        pinned.push(entry);
+    }
+    Ok(canonical_json(&Json::Array(pinned)))
+}
+
+/// Executes `<decision:assemble>`.
+fn assemble<H: ChoiceHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [
+        location,
+        routes_location,
+        own,
+        offers,
+        bound,
+        over_location,
+        size_location,
+    ] = attribute_values(
+        attributes,
+        [
+            "location",
+            "routeslocation",
+            "choices",
+            "offers",
+            "bound",
+            "overlocation",
+            "sizelocation",
+        ],
+        "decision:assemble takes only the location, routeslocation, choices, offers, bound, overlocation and sizelocation attributes",
+        "decision:assemble repeats an attribute",
+    )?;
+    let location = required(location, "decision:assemble requires a non-empty location")?;
+    let routes_location = required(
+        routes_location,
+        "decision:assemble requires a non-empty routeslocation",
+    )?;
+    let own = required(own, "decision:assemble requires a non-empty choices")?;
+    let offers = required(offers, "decision:assemble requires a non-empty offers")?;
+    let bound = bound_value(bound, "decision:assemble bound is not a decimal integer")?;
+    let over_location = optional(over_location, "decision:assemble overlocation is empty")?;
+    let size_location = optional(size_location, "decision:assemble sizelocation is empty")?;
+    no_content(content, "decision:assemble holds no content")?;
+    let own = read_json(host, own, "decision:assemble choices does not hold choices")?;
+    let offers = read_json(
+        host,
+        offers,
+        "decision:assemble offers does not hold offers",
+    )?;
+    let assembled = assemble_choices(&own, &offers, bound).map_err(Failure::Execution)?;
+    if let Some(over_location) = over_location {
+        assign_to(
+            host,
+            over_location,
+            &Data::Bool(assembled.over),
+            "decision:assemble could not assign overlocation",
+        )?;
+    }
+    if let Some(size_location) = size_location {
+        let size = u32::try_from(assembled.choices.len())
+            .ok()
+            .and_then(|size| scxml_types::FiniteNumber::new(f64::from(size)).ok())
+            .ok_or(Failure::Execution(
+                "decision:assemble choices are too large",
+            ))?;
+        assign_to(
+            host,
+            size_location,
+            &Data::Number(size),
+            "decision:assemble could not assign sizelocation",
+        )?;
+    }
+    assign_to(
+        host,
+        routes_location,
+        &Data::JsonObject(assembled.routes),
+        "decision:assemble could not assign routeslocation",
+    )?;
+    assign_to(
+        host,
+        location,
+        &Data::JsonArray(assembled.choices),
+        "decision:assemble could not assign the choices",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// A turn's assembled choices (see [`assemble_choices`]).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Assembled {
+    /// The compacted choices, canonical JSON.
+    pub choices: String,
+    /// The routing table, canonical JSON: each offered event's targets in
+    /// choices order, `null` for a choice without a target.
+    pub routes: String,
+    /// Whether the choices are over the bound even without descriptions.
+    pub over: bool,
+}
+
+/// The choices `own` (kept as they are, untagged unless they carry a
+/// target) followed by each `offers` member's choices tagged with its
+/// name as `target`, in name order; compacted like `<decision:compact>`,
+/// except that over the bound without descriptions the description-less
+/// list is kept and `over` is set; and the routing table of the result.
+///
+/// # Errors
+///
+/// A static detail when `own` is not an array of choice entries or `offers`
+/// is not an object of such arrays.
+pub fn assemble_choices(
+    own: &Json,
+    offers: &Json,
+    bound: usize,
+) -> Result<Assembled, &'static str> {
+    let mut all: Vec<Json> = checked_entries(own, ASSEMBLE_ENTRIES)?.to_vec();
+    let offers = offers
+        .as_object()
+        .ok_or("decision:assemble offers does not hold offers")?;
+    let mut names: Vec<&String> = offers.keys().collect();
+    names.sort_unstable();
+    for name in names {
+        if name.is_empty() {
+            return Err("decision:assemble offers names an empty target");
+        }
+        let offered = &offers[name.as_str()];
+        if !offered.is_array() {
+            return Err("decision:assemble offers does not hold offers");
+        }
+        for entry in checked_entries(offered, ASSEMBLE_ENTRIES)? {
+            let mut entry = entry.clone();
+            if let Some(entry) = entry.as_object_mut() {
+                entry.insert("target".into(), Json::String(name.clone()));
+            }
+            all.push(entry);
+        }
+    }
+    let mut compacted = String::new();
+    let mut over = false;
+    for descriptions in [true, false] {
+        compacted = canonical_json(&Json::Array(
+            all.iter()
+                .map(|entry| compact_entry(entry, descriptions))
+                .collect(),
+        ));
+        over = compacted.len() > bound;
+        if !over {
+            break;
+        }
+    }
+    let mut routes = Map::new();
+    for entry in &all {
+        let event = entry
+            .get("event")
+            .and_then(Json::as_str)
+            .unwrap_or_default();
+        let target = entry.get("target").cloned().unwrap_or(Json::Null);
+        let Json::Array(targets) = routes
+            .entry(event.to_owned())
+            .or_insert_with(|| Json::Array(Vec::new()))
+        else {
+            continue;
+        };
+        if !targets.contains(&target) {
+            targets.push(target);
+        }
+    }
+    Ok(Assembled {
+        choices: compacted,
+        routes: canonical_json(&Json::Object(routes)),
+        over,
+    })
+}
+
+/// Executes `<decision:route>`.
+fn route<H: ChoiceHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, selections, routes] = attribute_values(
+        attributes,
+        ["location", "selections", "routes"],
+        "decision:route takes only the location, selections and routes attributes",
+        "decision:route repeats an attribute",
+    )?;
+    let location = required(location, "decision:route requires a non-empty location")?;
+    let selections = required(selections, "decision:route requires a non-empty selections")?;
+    let routes = required(routes, "decision:route requires a non-empty routes")?;
+    no_content(content, "decision:route holds no content")?;
+    let selections = read_json(
+        host,
+        selections,
+        "decision:route selections is not an array",
+    )?;
+    let routes = read_json(host, routes, "decision:route routes is not a routing table")?;
+    let placed = route_selections(&selections, &routes).map_err(Failure::Execution)?;
+    assign_to(
+        host,
+        location,
+        &Data::JsonArray(placed),
+        "decision:route could not assign the routed selections",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// Each selection of `selections`, in order, placed by the routing table
+/// `routes` (see [`assemble_choices`]): `{event, data, target}` (`target`
+/// `null` is the table's own document; `data` `{}` when the selection has
+/// none) or `{dropped}` with why it cannot be placed; canonical JSON. See
+/// the crate documentation (`<decision:route>`).
+///
+/// # Errors
+///
+/// A static detail when `selections` is not an array or `routes` is not an
+/// object of target arrays.
+pub fn route_selections(selections: &Json, routes: &Json) -> Result<String, &'static str> {
+    let selections = selections
+        .as_array()
+        .ok_or("decision:route selections is not an array")?;
+    let routes = routes
+        .as_object()
+        .ok_or("decision:route routes is not a routing table")?;
+    if routes.values().any(|targets| {
+        !targets.as_array().is_some_and(|targets| {
+            targets
+                .iter()
+                .all(|target| target.is_null() || target.is_string())
+        })
+    }) {
+        return Err("decision:route routes is not a routing table");
+    }
+    let dropped = |why: String| {
+        let mut out = Map::new();
+        out.insert("dropped".into(), Json::String(why));
+        Json::Object(out)
+    };
+    let placed: Vec<Json> = selections
+        .iter()
+        .map(|selection| {
+            let Some(event) = selection.get("event").and_then(Json::as_str) else {
+                return dropped("a malformed selection".to_owned());
+            };
+            let Some(targets) = routes.get(event).and_then(Json::as_array) else {
+                return dropped(format!("{event} was not offered this turn"));
+            };
+            let target = match selection.get("target").and_then(Json::as_str) {
+                Some(named) if targets.iter().any(|target| target.as_str() == Some(named)) => {
+                    Json::String(named.to_owned())
+                }
+                Some(named) => return dropped(format!("{event} is not offered by {named}")),
+                None if targets.len() == 1 => targets[0].clone(),
+                None => {
+                    return dropped(format!(
+                        "{event} names no target among {}",
+                        Json::Array(targets.clone())
+                    ));
+                }
+            };
+            let data = match selection.get("data") {
+                None | Some(Json::Null) => Json::Object(Map::new()),
+                Some(data) => data.clone(),
+            };
+            let mut out = Map::new();
+            out.insert("event".into(), Json::String(event.to_owned()));
+            out.insert("data".into(), data);
+            out.insert("target".into(), target);
+            Json::Object(out)
+        })
+        .collect();
+    Ok(canonical_json(&Json::Array(placed)))
+}
+
+/// Executes `<decision:names>`.
+fn names<H: ChoiceHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, choices] = attribute_values(
+        attributes,
+        ["location", "choices"],
+        "decision:names takes only the location and choices attributes",
+        "decision:names repeats an attribute",
+    )?;
+    let location = required(location, "decision:names requires a non-empty location")?;
+    let choices = required(choices, "decision:names requires a non-empty choices")?;
+    no_content(content, "decision:names holds no content")?;
+    let choices = read_json(
+        host,
+        choices,
+        "decision:names choices does not hold choices",
+    )?;
+    let names = choice_names(&choices).map_err(Failure::Execution)?;
+    assign_to(
+        host,
+        location,
+        &Data::String(names),
+        "decision:names could not assign the names",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// The choices' names, space separated: `event`, or `event@target` for a
+/// choice with a target.
+///
+/// # Errors
+///
+/// A static detail when `choices` is not an array of choice entries.
+pub fn choice_names(choices: &Json) -> Result<String, &'static str> {
+    Ok(checked_entries(choices, NAMES_ENTRIES)?
+        .iter()
+        .map(|entry| {
+            let event = entry
+                .get("event")
+                .and_then(Json::as_str)
+                .unwrap_or_default();
+            entry
+                .get("target")
+                .and_then(Json::as_str)
+                .map_or_else(|| event.to_owned(), |target| format!("{event}@{target}"))
+        })
+        .collect::<Vec<_>>()
+        .join(" "))
+}
+
+/// `<decision:compact>`'s choice-entry failures (see `checked_entries`).
+const COMPACT_ENTRIES: [&str; 3] = [
+    "decision:compact location does not hold choices",
+    "decision:compact found a choice that is not an object",
+    "decision:compact found a malformed choice",
+];
+
+/// `<decision:pin>`'s choice-entry failures (see `checked_entries`).
+const PIN_ENTRIES: [&str; 3] = [
+    "decision:pin location does not hold choices",
+    "decision:pin found a choice that is not an object",
+    "decision:pin found a malformed choice",
+];
+
+/// `<decision:assemble>`'s choice-entry failures (see `checked_entries`).
+const ASSEMBLE_ENTRIES: [&str; 3] = [
+    "decision:assemble choices does not hold choices",
+    "decision:assemble found a choice that is not an object",
+    "decision:assemble found a malformed choice",
+];
+
+/// `<decision:names>`'s choice-entry failures (see `checked_entries`).
+const NAMES_ENTRIES: [&str; 3] = [
+    "decision:names choices does not hold choices",
+    "decision:names found a choice that is not an object",
+    "decision:names found a malformed choice",
+];
+
+/// The entries of `choices`, each checked to be a choice entry: an object
+/// with a non-empty string `event`, a `schema`, optionally a string
+/// `description` and a non-empty string `target`, and nothing else;
+/// `details` are the failures: not an array, an entry not an object, a
+/// malformed entry.
+fn checked_entries<'a>(
+    choices: &'a Json,
+    [not_choices, not_object, malformed]: [&'static str; 3],
+) -> Result<&'a [Json], &'static str> {
+    let entries = choices.as_array().ok_or(not_choices)?;
+    for entry in entries {
+        let entry = entry.as_object().ok_or(not_object)?;
+        let text = |key: &str| {
+            entry.get(key).map(|value| {
+                value
+                    .as_str()
+                    .filter(|text| key == "description" || !text.is_empty())
+            })
+        };
+        if entry
+            .keys()
+            .any(|key| !["event", "schema", "description", "target"].contains(&key.as_str()))
+            || text("event").flatten().is_none()
+            || !entry.contains_key("schema")
+            || matches!(text("description"), Some(None))
+            || matches!(text("target"), Some(None))
+        {
+            return Err(malformed);
+        }
+    }
+    Ok(entries)
 }
 
 /// Executes `<decision:choice>`.
@@ -444,31 +1050,7 @@ fn compact<H: ChoiceHost>(
 ///
 /// A static detail when `choices` is not an array of choice entries.
 pub fn compact_choices(choices: &Json, bound: usize) -> Result<(String, bool), &'static str> {
-    let entries = choices
-        .as_array()
-        .ok_or("decision:compact location does not hold choices")?;
-    for entry in entries {
-        let entry = entry
-            .as_object()
-            .ok_or("decision:compact found a choice that is not an object")?;
-        let text = |key: &str| {
-            entry.get(key).map(|value| {
-                value
-                    .as_str()
-                    .filter(|text| key == "description" || !text.is_empty())
-            })
-        };
-        if entry
-            .keys()
-            .any(|key| !["event", "schema", "description", "target"].contains(&key.as_str()))
-            || text("event").flatten().is_none()
-            || !entry.contains_key("schema")
-            || matches!(text("description"), Some(None))
-            || matches!(text("target"), Some(None))
-        {
-            return Err("decision:compact found a malformed choice");
-        }
-    }
+    let entries = checked_entries(choices, COMPACT_ENTRIES)?;
     for descriptions in [true, false] {
         let compacted = canonical_json(&Json::Array(
             entries
@@ -790,6 +1372,7 @@ mod guest {
         fn read(&mut self, location: &str) -> Result<Result<Data, ()>, ComponentError> {
             match data_model_host::evaluate(location) {
                 Ok(DataValue::JsonArray(text)) => Ok(Ok(Data::JsonArray(text))),
+                Ok(DataValue::JsonObject(text)) => Ok(Ok(Data::JsonObject(text))),
                 Ok(_) => Ok(Err(())),
                 Err(error) if recoverable(error.code) => Ok(Err(())),
                 Err(error) => Err(error),
@@ -803,6 +1386,9 @@ mod guest {
         ) -> Result<Result<(), ()>, ComponentError> {
             let value = match value {
                 Data::JsonArray(text) => DataValue::JsonArray(text.clone()),
+                Data::JsonObject(text) => DataValue::JsonObject(text.clone()),
+                Data::String(text) => DataValue::Text(text.clone()),
+                Data::Number(value) => DataValue::Number(value.get()),
                 Data::Bool(value) => DataValue::Boolean(*value),
                 _ => return Ok(Err(())),
             };

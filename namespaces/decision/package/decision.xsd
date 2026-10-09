@@ -20,6 +20,27 @@
                    overlocation (optional): receives whether the choices
                    were still over the bound. No other attribute, no
                    content.
+  decision:pin     location (required): the choice array whose event's
+                   schema property it pins. event, property (required):
+                   which. values (required): an expression of a JSON array,
+                   the property's enum; empty, the event is removed.
+  decision:assemble location (required): receives the turn's choices: the
+                   choices expression's, then each offers member's tagged
+                   with its name as target, compacted as decision:compact
+                   does but kept when still over bound.
+                   routeslocation (required): receives the routing table
+                   (event -> targets, null for the document itself).
+                   choices, offers (required): expressions.
+                   bound (optional): a decimal integer, default 32768.
+                   overlocation, sizelocation (optional): receive whether
+                   the choices are over the bound, and their size in bytes.
+  decision:route   location (required): receives each selection placed by
+                   the routing table ({event, data, target}) or why not
+                   ({dropped}). selections, routes (required): expressions.
+  decision:names   location (required): receives the choices' names
+                   (event or event@target, space separated).
+                   choices (required): an expression.
+                   None of them takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://github.com/stateforward/floppy/namespaces/decision"
@@ -41,6 +62,44 @@
         </xs:simpleType>
       </xs:attribute>
       <xs:attribute name="overlocation" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="pin">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="event" type="xs:string" use="required"/>
+      <xs:attribute name="property" type="xs:string" use="required"/>
+      <xs:attribute name="values" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="assemble">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="routeslocation" type="xs:string" use="required"/>
+      <xs:attribute name="choices" type="xs:string" use="required"/>
+      <xs:attribute name="offers" type="xs:string" use="required"/>
+      <xs:attribute name="bound" use="optional">
+        <xs:simpleType>
+          <xs:restriction base="xs:nonNegativeInteger">
+            <xs:pattern value="[0-9]+"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name="overlocation" type="xs:string" use="optional"/>
+      <xs:attribute name="sizelocation" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="route">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="selections" type="xs:string" use="required"/>
+      <xs:attribute name="routes" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="names">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="choices" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

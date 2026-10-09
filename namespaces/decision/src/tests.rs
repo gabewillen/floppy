@@ -975,3 +975,477 @@ fn compact_reads_only_arrays_takes_no_content_and_fails_on_assignment() {
         Err(Failure::Host("fatal"))
     );
 }
+
+/// `size` as the data-model number the elements assign.
+fn number(size: usize) -> Data {
+    let size = u32::try_from(size).expect("a small size");
+    Data::Number(scxml_types::FiniteNumber::new(f64::from(size)).expect("finite"))
+}
+
+/// A host whose locations hold `values` (each canonical JSON).
+fn with_values(values: &[(&str, Json)]) -> FakeHost {
+    let mut host = FakeHost::default();
+    for (location, value) in values {
+        let text = canonical_json(value);
+        let data = if value.is_object() {
+            Data::JsonObject(text)
+        } else {
+            Data::JsonArray(text)
+        };
+        host.values.insert((*location).into(), data);
+    }
+    host
+}
+
+/// The canonical JSON (array or object) last assigned to `location`.
+fn assigned_any(host: &FakeHost, location: &str) -> Json {
+    match assigned(host, location) {
+        Data::JsonArray(text) | Data::JsonObject(text) => {
+            serde_json::from_str(&text).expect("canonical JSON")
+        }
+        other => panic!("expected JSON, got {other:?}"),
+    }
+}
+
+fn focus_choice() -> Json {
+    json!({
+        "event": "bot.focus_device",
+        "description": "Focus a device.",
+        "schema": {"type": "object", "properties": {"device": {"type": "string"}}, "required": ["device"]},
+    })
+}
+
+fn clear_choice() -> Json {
+    json!({"event": "bot.clear_focus", "schema": {"type": "object"}})
+}
+
+fn pin_attributes(values: &str) -> Vec<Attribute> {
+    vec![
+        location("own"),
+        attr("event", "bot.focus_device"),
+        attr("property", "device"),
+        attr("values", values),
+    ]
+}
+
+#[test]
+fn pin_sets_the_property_enum_of_the_named_event_only() {
+    let mut host = with_values(&[
+        ("own", json!([focus_choice(), clear_choice()])),
+        ("candidates", json!(["lamp", "fan"])),
+    ]);
+    assert_eq!(
+        execute("pin", &pin_attributes("candidates"), &[], &mut host),
+        Ok(Executed::Handled)
+    );
+    let mut pinned = focus_choice();
+    pinned["schema"]["properties"]["device"]["enum"] = json!(["lamp", "fan"]);
+    assert_eq!(assigned_any(&host, "own"), json!([pinned, clear_choice()]));
+    assert!(
+        matches!(assigned(&host, "own"), Data::JsonArray(text) if scxml_event_schema::is_canonical_json(&text))
+    );
+}
+
+#[test]
+fn pin_with_no_values_removes_the_event() {
+    let mut host = with_values(&[
+        ("own", json!([focus_choice(), clear_choice()])),
+        ("candidates", json!([])),
+    ]);
+    assert_eq!(
+        execute("pin", &pin_attributes("candidates"), &[], &mut host),
+        Ok(Executed::Handled)
+    );
+    assert_eq!(assigned_any(&host, "own"), json!([clear_choice()]));
+}
+
+#[test]
+fn malformed_pins_raise_error_execution_and_assign_nothing() {
+    let cases: Vec<(Vec<Attribute>, Json, Json, &str)> = vec![
+        (
+            pin_attributes("candidates")[..3].to_vec(),
+            json!([focus_choice()]),
+            json!(["lamp"]),
+            "decision:pin requires a non-empty values",
+        ),
+        (
+            [pin_attributes("candidates"), vec![attr("bound", "1")]].concat(),
+            json!([focus_choice()]),
+            json!(["lamp"]),
+            "decision:pin takes only the location, event, property and values attributes",
+        ),
+        (
+            pin_attributes("candidates"),
+            json!([focus_choice()]),
+            json!({"lamp": true}),
+            "decision:pin values is not an array",
+        ),
+        (
+            pin_attributes("candidates"),
+            json!([{"event": "bot.focus_device", "schema": {"type": "object"}}]),
+            json!(["lamp"]),
+            "decision:pin found no such property in the event's schema",
+        ),
+        (
+            pin_attributes("candidates"),
+            json!([{"event": "bot.focus_device"}]),
+            json!(["lamp"]),
+            "decision:pin found a malformed choice",
+        ),
+    ];
+    for (attributes, own, candidates, detail) in cases {
+        let mut host = with_values(&[("own", own), ("candidates", candidates)]);
+        assert_eq!(
+            execution(execute("pin", &attributes, &[], &mut host)),
+            detail
+        );
+        assert!(host.assigned.is_empty(), "{detail}");
+    }
+}
+
+fn respond_offer() -> Json {
+    json!({
+        "event": "bot.ability.communication.respond",
+        "description": "Say text.",
+        "schema": {"title": "respond", "type": "object", "description": "Say text.",
+                   "properties": {"text": {"type": "string", "examples": ["hi"]}}},
+    })
+}
+
+fn ignore_offer() -> Json {
+    json!({"event": "bot.ability.cognition.ignore", "schema": {"type": "object"}})
+}
+
+fn assemble_attributes(bound: &str) -> Vec<Attribute> {
+    vec![
+        location("choices"),
+        attr("routeslocation", "routes"),
+        attr("choices", "own"),
+        attr("offers", "offers"),
+        attr("bound", bound),
+        attr("overlocation", "over"),
+        attr("sizelocation", "size"),
+    ]
+}
+
+fn assembling() -> FakeHost {
+    with_values(&[
+        ("own", json!([clear_choice()])),
+        (
+            "offers",
+            json!({
+                "communication": [respond_offer(), ignore_offer()],
+                "cognition": [ignore_offer()],
+            }),
+        ),
+    ])
+}
+
+#[test]
+fn assemble_tags_offers_by_target_in_name_order_compacts_and_builds_the_routes() {
+    let mut host = assembling();
+    assert_eq!(
+        execute("assemble", &assemble_attributes("32768"), &[], &mut host),
+        Ok(Executed::Handled)
+    );
+    let choices = json!([
+        clear_choice(),
+        {"event": "bot.ability.cognition.ignore", "schema": {"type": "object"}, "target": "cognition"},
+        {"event": "bot.ability.communication.respond", "description": "Say text.", "target": "communication",
+         "schema": {"type": "object", "description": "Say text.", "properties": {"text": {"type": "string"}}}},
+        {"event": "bot.ability.cognition.ignore", "schema": {"type": "object"}, "target": "communication"},
+    ]);
+    assert_eq!(assigned_any(&host, "choices"), choices);
+    assert_eq!(
+        assigned_any(&host, "routes"),
+        json!({
+            "bot.clear_focus": [null],
+            "bot.ability.cognition.ignore": ["cognition", "communication"],
+            "bot.ability.communication.respond": ["communication"],
+        })
+    );
+    assert_eq!(assigned(&host, "over"), Data::Bool(false));
+    let size = canonical_json(&choices).len();
+    assert_eq!(assigned(&host, "size"), number(size));
+    // The flags and the routes are assigned before the choices.
+    let order: Vec<&str> = host.assigned.iter().map(|(at, _)| at.as_str()).collect();
+    assert_eq!(order, ["over", "size", "routes", "choices"]);
+}
+
+#[test]
+fn assemble_over_the_bound_drops_descriptions_then_keeps_the_list_and_sets_over() {
+    let full = {
+        let mut host = assembling();
+        execute("assemble", &assemble_attributes("32768"), &[], &mut host).expect("assembled");
+        canonical_json(&assigned_any(&host, "choices")).len()
+    };
+    // One byte short of the full list: descriptions go, and that fits.
+    let mut host = assembling();
+    execute(
+        "assemble",
+        &assemble_attributes(&(full - 1).to_string()),
+        &[],
+        &mut host,
+    )
+    .expect("assembled");
+    let choices = assigned_any(&host, "choices");
+    assert!(!canonical_json(&choices).contains("description"));
+    assert_eq!(assigned(&host, "over"), Data::Bool(false));
+    // Under even that: the description-less list is kept, over is set, and
+    // size is that list's size.
+    let mut host = assembling();
+    execute("assemble", &assemble_attributes("10"), &[], &mut host).expect("assembled");
+    assert_eq!(assigned_any(&host, "choices"), choices);
+    assert_eq!(assigned(&host, "over"), Data::Bool(true));
+    assert_eq!(
+        assigned(&host, "size"),
+        number(canonical_json(&choices).len())
+    );
+}
+
+#[test]
+fn malformed_assembles_raise_error_execution_and_assign_nothing() {
+    let cases: Vec<(Vec<Attribute>, Json, Json, &str)> = vec![
+        (
+            assemble_attributes("1")[..3].to_vec(),
+            json!([]),
+            json!({}),
+            "decision:assemble requires a non-empty offers",
+        ),
+        (
+            [assemble_attributes("1"), vec![attr("events", "x")]].concat(),
+            json!([]),
+            json!({}),
+            "decision:assemble takes only the location, routeslocation, choices, offers, bound, overlocation and sizelocation attributes",
+        ),
+        (
+            assemble_attributes("-1"),
+            json!([]),
+            json!({}),
+            "decision:assemble bound is not a decimal integer",
+        ),
+        (
+            assemble_attributes("1"),
+            json!({}),
+            json!({}),
+            "decision:assemble choices does not hold choices",
+        ),
+        (
+            assemble_attributes("1"),
+            json!([]),
+            json!([]),
+            "decision:assemble offers does not hold offers",
+        ),
+        (
+            assemble_attributes("1"),
+            json!([]),
+            json!({"cognition": {}}),
+            "decision:assemble offers does not hold offers",
+        ),
+        (
+            assemble_attributes("1"),
+            json!([]),
+            json!({"cognition": [{"event": "x", "schema": {}, "extra": 1}]}),
+            "decision:assemble found a malformed choice",
+        ),
+        (
+            assemble_attributes("1"),
+            json!([]),
+            json!({"": []}),
+            "decision:assemble offers names an empty target",
+        ),
+    ];
+    for (attributes, own, offers, detail) in cases {
+        let mut host = with_values(&[("own", own), ("offers", offers)]);
+        assert_eq!(
+            execution(execute("assemble", &attributes, &[], &mut host)),
+            detail
+        );
+        assert!(host.assigned.is_empty(), "{detail}");
+    }
+}
+
+fn routing(selections: &Json) -> Json {
+    let mut host = with_values(&[
+        ("selections", selections.clone()),
+        (
+            "routes",
+            json!({
+                "bot.clear_focus": [null],
+                "bot.ability.cognition.ignore": ["cognition", "communication"],
+                "bot.ability.communication.respond": ["communication"],
+            }),
+        ),
+    ]);
+    assert_eq!(
+        execute(
+            "route",
+            &[
+                location("routed"),
+                attr("selections", "selections"),
+                attr("routes", "routes")
+            ],
+            &[],
+            &mut host
+        ),
+        Ok(Executed::Handled)
+    );
+    assigned_any(&host, "routed")
+}
+
+#[test]
+fn route_places_each_selection_in_order_or_says_why_not() {
+    let routed = routing(&json!([
+        {"event": "bot.clear_focus"},
+        {"event": "bot.ability.communication.respond", "data": {"text": "hi"}, "reason": "greet"},
+        {"event": "bot.ability.cognition.ignore", "data": null, "target": "cognition"},
+        {"event": "bot.ability.cognition.ignore"},
+        {"event": "bot.ability.communication.respond", "target": "cognition"},
+        {"event": "bot.focus_device", "data": {"device": "lamp"}},
+        {"data": {}},
+        "respond",
+    ]));
+    assert_eq!(
+        routed,
+        json!([
+            {"event": "bot.clear_focus", "data": {}, "target": null},
+            {"event": "bot.ability.communication.respond", "data": {"text": "hi"}, "target": "communication"},
+            {"event": "bot.ability.cognition.ignore", "data": {}, "target": "cognition"},
+            {"dropped": "bot.ability.cognition.ignore names no target among [\"cognition\",\"communication\"]"},
+            {"dropped": "bot.ability.communication.respond is not offered by cognition"},
+            {"dropped": "bot.focus_device was not offered this turn"},
+            {"dropped": "a malformed selection"},
+            {"dropped": "a malformed selection"},
+        ])
+    );
+}
+
+#[test]
+fn malformed_routes_raise_error_execution_and_assign_nothing() {
+    let route_attributes = [
+        location("routed"),
+        attr("selections", "selections"),
+        attr("routes", "routes"),
+    ];
+    let cases: Vec<(&[Attribute], Json, Json, &str)> = vec![
+        (
+            &route_attributes[..2],
+            json!([]),
+            json!({}),
+            "decision:route requires a non-empty routes",
+        ),
+        (
+            &route_attributes,
+            json!({}),
+            json!({}),
+            "decision:route selections is not an array",
+        ),
+        (
+            &route_attributes,
+            json!([]),
+            json!({"x": "cognition"}),
+            "decision:route routes is not a routing table",
+        ),
+        (
+            &route_attributes,
+            json!([]),
+            json!({"x": [1]}),
+            "decision:route routes is not a routing table",
+        ),
+    ];
+    for (attributes, selections, routes, detail) in cases {
+        let mut host = with_values(&[("selections", selections), ("routes", routes)]);
+        assert_eq!(
+            execution(execute("route", attributes, &[], &mut host)),
+            detail
+        );
+        assert!(host.assigned.is_empty(), "{detail}");
+    }
+    let mut host = FakeHost::default();
+    assert_eq!(
+        execution(execute(
+            "route",
+            &route_attributes,
+            &[Content::Text("x".into())],
+            &mut host
+        )),
+        "decision:route holds no content"
+    );
+}
+
+#[test]
+fn names_lists_each_choice_with_its_target() {
+    let mut host = with_values(&[(
+        "choices",
+        json!([
+            clear_choice(),
+            {"event": "bot.ability.cognition.ignore", "schema": {}, "target": "cognition"},
+        ]),
+    )]);
+    assert_eq!(
+        execute(
+            "names",
+            &[location("names"), attr("choices", "choices")],
+            &[],
+            &mut host
+        ),
+        Ok(Executed::Handled)
+    );
+    assert_eq!(
+        assigned(&host, "names"),
+        Data::String("bot.clear_focus bot.ability.cognition.ignore@cognition".into())
+    );
+    let mut host = with_values(&[("choices", json!([]))]);
+    execute(
+        "names",
+        &[location("names"), attr("choices", "choices")],
+        &[],
+        &mut host,
+    )
+    .expect("named");
+    assert_eq!(assigned(&host, "names"), Data::String(String::new()));
+    let mut host = with_values(&[("choices", json!([{"schema": {}}]))]);
+    assert_eq!(
+        execution(execute(
+            "names",
+            &[location("names"), attr("choices", "choices")],
+            &[],
+            &mut host
+        )),
+        "decision:names found a malformed choice"
+    );
+    assert_eq!(
+        execution(execute(
+            "names",
+            &[location("names")],
+            &[],
+            &mut FakeHost::default()
+        )),
+        "decision:names requires a non-empty choices"
+    );
+}
+
+#[test]
+fn the_new_elements_pass_host_failures_through() {
+    let mut host = FakeHost::default();
+    assert_eq!(
+        execute(
+            "names",
+            &[location("names"), attr("choices", "fatal")],
+            &[],
+            &mut host
+        ),
+        Err(Failure::Host("fatal"))
+    );
+    let mut host = with_values(&[("choices", json!([]))]);
+    host.fail_assign = true;
+    assert_eq!(
+        execution(execute(
+            "names",
+            &[location("names"), attr("choices", "choices")],
+            &[],
+            &mut host
+        )),
+        "decision:names could not assign the names"
+    );
+}
