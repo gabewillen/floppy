@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Intuition stage (mosfet abilities/cognition/intuition): the fast
+  System 1 pick, made by the decision service (never by a free-text model),
+  with mosfet's self-tuning confidence gate. The cognition
+  (abilities/cognition.scx) invokes it once per turn after autonomy left the
+  turn unhandled.
+
+    deciding (decision:choice + an invoked decision service) -> done
+
+  Choices: deciding's own event:schema transitions, read by
+  <decision:choice events="..."> on entry: bot.ability.cognition.ignore
+  (handle the turn by doing nothing) and bot.ability.reasoning.input (hand
+  the turn to deliberate reasoning, mosfet's deliberative handoff). The
+  decision service cannot author free text, so a turn that needs a reply
+  goes on to reasoning (user answer, 2026-10-08). The choices' guards read
+  offering, which is true only while the choices are read, so they are
+  offered, and afterwards accept only the decision service's event.
+
+  Confidence (mosfet ConfidenceTuner, 0-100 scale): the tuner state
+  {mean, variance, n} comes in as a <param> and goes back in <donedata>, so
+  it lives in the cognition across turns. Its threshold (the floor 35 during
+  the warmup of 8 observations, then max(floor / 2, mean - k_sigma * std))
+  is passed to the decision service as threshold (divided by 100): a chosen
+  event less probable than that comes back as decision.abstain
+  below-threshold with its probability, which the tuner observes (EMA,
+  alpha 0.08, variance floor 100) and the turn escalates (mosfet's
+  low_confidence). The decision service reports no probability with a
+  chosen event, so such a turn adds no observation (mosfet observes only a
+  reported score).
+
+  Output: <donedata>, received by the cognition as done.invoke.intuition:
+
+    {turn, handled: true, selected: [{event, data, reason}], reason, tuner}
+    {turn, handled: false, reason, tuner}          (escalate to reasoning)
+    {turn, handled: false, failed: true, reason, tuner}
+
+  decision.failed, error.*, or no answer within decision_timeout_ms fails
+  the stage (the cognition answers the turn with bot.ability.failed); the
+  cognition's hop timeout bounds the whole stage too.
+
+  Bindings: the decision namespace and service packages, resolved from their
+  repository URIs; env scopes TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
+  service's <invoke> (without a key it answers decision.failed
+  unconfigured). The decision service's own events are rechecked by cond
+  (their schemas are not copied here: they are never offered).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="intuition" initial="deciding">
+  <datamodel>
+    <!-- The turn, from the cognition's <param>s. -->
+    <data id="turn" expr="0"/>
+    <data id="stimulus" expr="null"/>
+    <data id="focus" expr="null"/>
+    <data id="focus_candidates" expr="[]"/>
+    <data id="tuner" expr="({mean: 70, variance: 100, n: 0})"/>
+    <!-- mosfet's tuner defaults. -->
+    <data id="floor" expr="35"/>
+    <data id="alpha" expr="0.08"/>
+    <data id="k_sigma" expr="1"/>
+    <data id="warmup" expr="8"/>
+    <data id="var_floor" expr="100"/>
+    <data id="decision_timeout_ms" expr="20000"/>
+    <data id="instructions" expr="'You decide what a small companion robot does with one stimulus it observed. Choose bot.ability.cognition.ignore when the robot should do nothing at all. Choose bot.ability.reasoning.input when the stimulus needs a reply, an answer, or any action, so slower reasoning handles it.'"/>
+    <!-- The decision in flight. -->
+    <data id="offering" expr="false"/>
+    <data id="choices" expr="[]"/>
+    <data id="threshold" expr="0"/>
+    <data id="decision_id" expr="null"/>
+    <data id="decision_timer" expr="null"/>
+    <data id="result" expr="null"/>
+  </datamodel>
+  <script>
+    function isObject(value) {
+      return value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value);
+    }
+    function isTuner(value) {
+      return isObject(value) &amp;&amp; typeof value.mean === 'number' &amp;&amp; typeof value.variance === 'number'
+        &amp;&amp; Number.isInteger(value.n) &amp;&amp; value.n &gt;= 0;
+    }
+    // mosfet ConfidenceTuner.threshold, on the 0-100 scale.
+    function tunerThreshold(t) {
+      if (t.n &lt; warmup) {
+        return floor;
+      }
+      var std = Math.sqrt(Math.max(t.variance, var_floor));
+      return Math.max(0.5 * floor, t.mean - k_sigma * std);
+    }
+    // mosfet ConfidenceTuner.observe: a new state, the old one unchanged.
+    function observed(t, confidence) {
+      var conf = Math.max(0, Math.min(100, confidence));
+      if (t.n === 0) {
+        return {mean: conf, variance: var_floor, n: 1};
+      }
+      var delta = conf - t.mean;
+      return {
+        mean: t.mean + alpha * delta,
+        variance: Math.max(var_floor, (1 - alpha) * t.variance + alpha * delta * delta),
+        n: t.n + 1
+      };
+    }
+    function fromDecision() {
+      return decision_id !== null &amp;&amp; _event.invokeid === decision_id;
+    }
+    function settle(fields) {
+      fields.turn = turn;
+      fields.tuner = tuner;
+      result = fields;
+    }
+  </script>
+
+  <state id="deciding">
+    <onentry>
+      <if cond="!isTuner(tuner)">
+        <assign location="tuner" expr="({mean: 70, variance: 100, n: 0})"/>
+      </if>
+      <assign location="offering" expr="true"/>
+      <decision:choice location="choices" events="bot.ability.cognition.ignore bot.ability.reasoning.input"/>
+      <assign location="offering" expr="false"/>
+      <assign location="threshold" expr="tunerThreshold(tuner) / 100"/>
+      <log label="intuition" expr="'turn ' + turn + ': threshold ' + threshold"/>
+      <send idlocation="decision_timer" event="floppy.intuition.timed_out" delayexpr="decision_timeout_ms + 'ms'"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="decision_timer"/>
+    </onexit>
+    <invoke idlocation="decision_id" type="https://github.com/stateforward/floppy/services/decision"
+            env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
+      <param name="choices" expr="choices"/>
+      <param name="state" expr="({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates})"/>
+      <param name="instructions" expr="instructions"/>
+      <param name="threshold" expr="threshold"/>
+    </invoke>
+
+    <!-- The decision's choices. -->
+    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json"
+                cond="offering || (fromDecision() &amp;&amp; isObject(_event.data))" target="done">
+      <log label="intuition" expr="'turn ' + turn + ': ignore'"/>
+      <script>settle({handled: true, selected: [{event: 'bot.ability.cognition.ignore', data: {}, reason: 'intuition: nothing to do'}], reason: 'ignore'});</script>
+    </transition>
+    <transition event="bot.ability.reasoning.input" event:schema="schemas/bot.ability.reasoning.input.json"
+                cond="offering || (fromDecision() &amp;&amp; isObject(_event.data))" target="done">
+      <log label="intuition" expr="'turn ' + turn + ': deliberative input'"/>
+      <script>settle({handled: false, reason: 'deliberative_input'});</script>
+    </transition>
+
+    <!-- The decision service's own events. -->
+    <transition event="decision.abstain"
+                cond="fromDecision() &amp;&amp; isObject(_event.data) &amp;&amp; ['no-candidates', 'declined', 'below-threshold'].indexOf(_event.data.reason) &gt;= 0"
+                target="done">
+      <if cond="_event.data.reason === 'below-threshold' &amp;&amp; typeof _event.data.confidence === 'number'">
+        <assign location="tuner" expr="observed(tuner, Math.round(_event.data.confidence * 100))"/>
+        <log label="intuition" expr="'turn ' + turn + ': low confidence ' + Math.round(_event.data.confidence * 100)"/>
+        <script>settle({handled: false, reason: 'low_confidence'});</script>
+      <else/>
+        <log label="intuition" expr="'turn ' + turn + ': abstained (' + _event.data.reason + ')'"/>
+        <script>settle({handled: false, reason: _event.data.reason});</script>
+      </if>
+    </transition>
+    <transition event="decision.failed" cond="fromDecision()" target="done">
+      <script>settle({handled: false, failed: true, reason: 'the decision failed (' + (isObject(_event.data) &amp;&amp; typeof _event.data.code === 'string' ? _event.data.code : 'unknown') + ')'});</script>
+    </transition>
+    <transition event="floppy.intuition.timed_out" cond="_event.sendid === decision_timer" target="done">
+      <script>settle({handled: false, failed: true, reason: 'the decision timed out after ' + decision_timeout_ms + ' ms'});</script>
+    </transition>
+    <transition event="error.*" target="done">
+      <script>settle({handled: false, failed: true, reason: 'the decision could not run (' + _event.name + ')'});</script>
+    </transition>
+  </state>
+
+  <final id="done">
+    <donedata>
+      <content expr="result"/>
+    </donedata>
+  </final>
+</scxml>

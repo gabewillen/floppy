@@ -5,7 +5,8 @@
 //! floppy_live -- --ignored`
 //!
 //! The env files must hold `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
-//! generate service has no default backend); the model is
+//! generate service has no default backend) and `TYPESAFE_API_KEY` (the
+//! intuition's decision service); the model is
 //! `FLOPPY_LIVE_MODEL`, else `Qwen/Qwen3.8-Flash-Next`, given to the bot
 //! by `bot.activate`. Each test writes the run's records under
 //! `target/floppy-live/` and prints pass or fail only; no value is ever
@@ -53,18 +54,19 @@ fn model() -> String {
     std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "Qwen/Qwen3.8-Flash-Next".into())
 }
 
-/// One text turn end to end: `bot.activate`, then `bot.input` "hello"; the
-/// thin cognition's model call answers it, and the body writes the turn's
-/// `bot.output` (one `bot.ability.communication.respond` with non-blank
-/// text) and `bot.processing.completed`.
+/// One question turn through the full cascade: autonomy's seam leaves it
+/// unhandled, intuition (the decision service on `TypeSafe`) hands it to
+/// reasoning or abstains, and reasoning (the model) answers it with a
+/// `bot.ability.communication.respond` selection. The env files must also
+/// hold `TYPESAFE_API_KEY`.
 #[test]
-#[ignore = "makes a real model call; needs FLOPPY_LIVE_ENV_FILE"]
-fn live_text_turn() {
+#[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
+fn live_cascade() {
     let mut run = start();
     run.event("bot.activate", &json!({"model": model()}));
     run.event(
         "bot.input",
-        &json!({"observation": {"event": "text", "data": "hello"}}),
+        &json!({"observation": {"event": "text", "data": "What is the capital of France? Please tell me."}}),
     );
     let records = run.until(Duration::from_mins(6), |record| {
         record["type"] == "log"
@@ -76,23 +78,36 @@ fn live_text_turn() {
     let finished = run.close(Duration::from_mins(1));
     let mut all = records;
     all.extend(finished.records);
-    keep("live_text_turn", &all);
+    keep("live_cascade", &all);
+    let stages: Vec<String> = logs(&all)
+        .into_iter()
+        .filter(|(label, _)| label == "cognition.stage")
+        .map(|(_, text)| text)
+        .collect();
     let output = logs(&all)
         .into_iter()
         .find(|(label, _)| label == "bot.output")
         .and_then(|(_, text)| serde_json::from_str::<Json>(&text).ok());
-    let pass = output.as_ref().is_some_and(|output| {
+    let responded = output.as_ref().is_some_and(|output| {
         output["turn"] == 1
-            && output["output"][0]["event"] == "bot.ability.communication.respond"
-            && output["output"][0]["data"]["text"]
-                .as_str()
-                .is_some_and(|text| !text.trim().is_empty())
-    }) && logs(&all)
-        .iter()
-        .any(|(label, _)| label == "bot.processing.completed");
-    println!("live text turn: {}", if pass { "pass" } else { "fail" });
+            && output["output"].as_array().is_some_and(|items| {
+                items.iter().any(|item| {
+                    item["event"] == "bot.ability.communication.respond"
+                        && item["data"]["text"]
+                            .as_str()
+                            .is_some_and(|text| !text.trim().is_empty())
+                })
+            })
+    });
+    let pass = stages.first().map(String::as_str) == Some("autonomy unhandled (no-behaviors)")
+        && stages
+            .get(1)
+            .is_some_and(|stage| stage.starts_with("intuition unhandled"))
+        && stages.get(2).map(String::as_str) == Some("reasoning handled")
+        && responded;
+    println!("live cascade: {}", if pass { "pass" } else { "fail" });
     assert!(
         pass,
-        "the live text turn did not complete (target/floppy-live/live_text_turn.json)"
+        "the question did not escalate to a reasoned reply (target/floppy-live/live_cascade.json)"
     );
 }

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Autonomy stage (mosfet abilities/cognition/autonomy), as an
+  honest seam until phase 5: the cognition (abilities/cognition.scx)
+  invokes it first in each turn, and it answers at once that no learned
+  behavior handles the turn, so the cascade goes on to intuition.
+
+  Input: the <param>s turn and input, the fields of mosfet's
+  bot.ability.autonomy.input (schemas/bot.ability.autonomy.input.json).
+  Output: its top-level final state's <donedata>, which the cognition
+  receives as done.invoke.autonomy (SCXML 6.4):
+
+    {turn, handled: false, candidates: [], reason: "no-behaviors"}
+
+  Phase 5 replaces this with mosfet's behavior inventory (Autonomy
+  behaviors, Routines and Learning); nothing is recalled or fabricated here.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="autonomy" initial="matching">
+  <datamodel>
+    <data id="turn" expr="0"/>
+    <data id="input" expr="null"/>
+  </datamodel>
+
+  <!-- No behaviors exist yet: nothing matches. -->
+  <state id="matching">
+    <onentry>
+      <log label="autonomy" expr="'turn ' + turn + ': no behaviors (phase 5)'"/>
+    </onentry>
+    <transition target="done"/>
+  </state>
+
+  <final id="done">
+    <donedata>
+      <content expr="({turn: turn, handled: false, candidates: [], reason: 'no-behaviors'})"/>
+    </donedata>
+  </final>
+</scxml>

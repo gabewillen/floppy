@@ -45,8 +45,9 @@
 
   Running: scx run with an env file and this document, as for the builder
   (bots/builder/README.md), then bot.activate and bot.input on standard
-  input. The cognition's generate service needs FLOPPY_BASE_URL and
-  FLOPPY_API_KEY (no default backend); without them each turn fails.
+  input. The cognition's stages need TYPESAFE_API_KEY (intuition's decision
+  service) and FLOPPY_BASE_URL and FLOPPY_API_KEY (reasoning's generate
+  service, no default backend); without them a turn fails.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"

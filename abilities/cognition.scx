@@ -1,52 +1,91 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Cognition ability (mosfet abilities/cognition), thin first cut:
-  one model call per turn, no cascade yet. The body (bots/floppy/floppy.scx)
-  invokes it as its child "cognition" and sends it one
-  bot.ability.cognition.input per processing turn; it answers that turn with
-  exactly one of bot.ability.cognition.output {turn, output} or
-  bot.ability.failed {message, turn, input}, and acknowledges
-  bot.ability.cognition.cancel {turn} with bot.ability.cognition.cancelled
-  {turn}. Leaving processing cancels the model call in flight (SCXML 6.4),
-  which replaces mosfet's stage cancel tokens.
+  floppy's Cognition ability (mosfet abilities/cognition/cognition.py): the
+  autonomy -> intuition -> reasoning cascade, with cancellation, hop
+  timeouts and reboot requests. The body (bots/floppy/floppy.scx) invokes it
+  as its child "cognition" and sends it one bot.ability.cognition.input per
+  processing turn; it answers that turn with exactly one of
+  bot.ability.cognition.output {turn, output} or bot.ability.failed
+  {message, turn, input}, acknowledges bot.ability.cognition.cancel {turn}
+  with bot.ability.cognition.cancelled {turn}, and asks the body for
+  bot.reboot {reason} when a stage does not answer in time.
 
-    idle -> processing (an invoked generate service: one text reply) -> idle
+    idle -input-> processing { running_autonomy -> running_intuition ->
+                               running_reasoning,
+                               completing, failing,
+                               cancelling { autonomy, intuition, reasoning,
+                                            acknowledging } } -> idle
+    processing -hop timeout-> rebooting (bot.reboot to the body, which
+      re-enters live and so restarts this ability)
 
-  The reply becomes one selection, bot.ability.communication.respond {text}
-  (mosfet's answer path); routing selections is the body's job and a later
-  slice's. The autonomy, intuition, and reasoning cascade replaces the one
-  call in the next slice.
+  Stages: each stage is an SCXML child invoked per turn inside its substate
+  (abilities/autonomy.scx, intuition.scx, reasoning.scx, beside this
+  document) with the turn as <param>s; it answers through its top-level
+  final state's <donedata>, received here as done.invoke.<stage> (the
+  invoke ids are the stage names; the substates are running_<stage>):
+  {turn, handled, selected?, reason?, tuner?, failed?}. Leaving a stage's
+  substate cancels it (SCXML 6.4), which replaces mosfet's stage cancel
+  tokens. Handled ends the turn with the stage's selections as the output;
+  unhandled goes on to the next stage (autonomy's honest seam always does);
+  failed (or an error.* from the stage) answers bot.ability.failed. The
+  intuition tuner state is passed in by <param> and kept from the donedata.
 
-  Readiness: every entry into idle (its stable state) sends
-  bot.ability.offers {ability, choices} to the parent; the thin cut offers
-  no choices yet.
+  Hop timeouts: each stage substate arms
+  bot.ability.cognition.child.hop.timed_out (hop_timeout_ms, mosfet's 30 s)
+  and cancels it on exit; the transition takes only the timer of the stage
+  in hand (_event.sendid, SCXML 5.10.1). A timeout goes to rebooting, which
+  sends bot.reboot {reason: "cognition_child_teardown_failed"} to the body.
+
+  Cancel: bot.ability.cognition.cancel for the turn in hand moves to
+  cancelling/<stage>; leaving the stage's substate already cancelled it, so
+  acknowledging sends bot.ability.cognition.cancelled {turn} at once and
+  returns to idle. mosfet's 5 s cancel teardown bound has nothing to wait
+  for here (an SCXML invoke cancel is synchronous); the body's cancel timer
+  still bounds the acknowledgement.
+
+  Ignore: bot.ability.cognition.ignore is taken here (in idle and
+  processing) and does nothing but log; it is this ability's offer.
+
+  Reflection: absent until phase 5; each output is followed by
+  <log label="reflection" expr="'absent (phase 5)'">.
+
+  Readiness: every entry into idle sends bot.ability.offers {ability,
+  choices} to the parent: the choices <decision:choice events=...> reads,
+  bot.ability.cognition.ignore.
 
   Contracts: the events it takes reference abilities/schemas/ by
-  event:schema (never inline) and are rechecked by cond; the events of the
-  generate service are recorded by <finalize>.
+  event:schema (never inline) and are rechecked by cond; the stages'
+  donedata is rechecked by cond.
 
-  Bindings: the generate service package, resolved from its repository URI;
-  env scopes FLOPPY_API_KEY and FLOPPY_BASE_URL to its <invoke>. Without
-  either the service answers generate.failed unconfigured and the turn
-  fails with that message. The model is the body's (a <param> of the body's
-  invoke), else the default below.
+  Bindings: the decision namespace package; the stages bind their own
+  services (intuition: decision with TYPESAFE_API_KEY and
+  TYPESAFE_BASE_URL; reasoning: generate with FLOPPY_API_KEY and
+  FLOPPY_BASE_URL). The model is the body's (a <param> of the body's
+  invoke), else the default below, and goes to reasoning.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="cognition" initial="idle">
   <datamodel>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
-    <data id="system" expr="'You are floppy, a small companion robot. You receive one stimulus: an event the robot observed, as JSON. Answer with the short text the robot should say in reply, and nothing else.'"/>
+    <data id="hop_timeout_ms" expr="30000"/>
     <!-- The turn in hand. -->
     <data id="turn" expr="0"/>
     <data id="stimulus" expr="null"/>
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
-    <!-- The model call: its invocation, its reply, its failure code. -->
-    <data id="gen_id" expr="null"/>
-    <data id="reply" expr="null"/>
-    <data id="gen_failure" expr="null"/>
+    <!-- The intuition's confidence tuner (mosfet ConfidenceTuner). -->
+    <data id="tuner" expr="({mean: 70, variance: 100, n: 0})"/>
+    <!-- The stage in hand: its name, hop timer, and answer. -->
+    <data id="stage" expr="null"/>
+    <data id="hop_timer" expr="null"/>
+    <data id="selected" expr="[]"/>
+    <data id="failure" expr="null"/>
+    <data id="reboot_reason" expr="null"/>
+    <!-- The offers. -->
+    <data id="offering" expr="false"/>
+    <data id="offered" expr="[]"/>
   </datamodel>
   <script>
     function isObject(value) {
@@ -76,12 +115,47 @@
     function validCancel(data) {
       return isObject(data) &amp;&amp; isTurn(data.turn);
     }
+    function cancelsTurn(data) {
+      return validCancel(data) &amp;&amp; data.turn === turn;
+    }
+    // A stage's donedata for the turn in hand.
+    function answer(data) {
+      return isObject(data) &amp;&amp; data.turn === turn &amp;&amp; typeof data.handled === 'boolean';
+    }
+    function handled(data) {
+      return answer(data) &amp;&amp; data.handled === true &amp;&amp; data.failed !== true &amp;&amp; Array.isArray(data.selected);
+    }
+    function failed(data) {
+      return answer(data) &amp;&amp; data.failed === true;
+    }
+    function reasonOf(data) {
+      return typeof data.reason === 'string' &amp;&amp; data.reason.length &gt; 0 ? data.reason : 'the stage failed';
+    }
+    function bodyInput() {
+      return {focus: focus, focus_candidates: focus_candidates};
+    }
+    // The intuition's tuner state from its donedata.
+    function keepTuner(data) {
+      if (isObject(data.tuner)) {
+        tuner = data.tuner;
+      }
+    }
+    function hopTimedOut() {
+      return _event.sendid === hop_timer &amp;&amp; isObject(_event.data) &amp;&amp; _event.data.turn === turn;
+    }
   </script>
 
   <!-- Waits for the body's turn. -->
   <state id="idle">
     <onentry>
-      <send event="bot.ability.offers" target="#_parent"><content>{"ability": "cognition", "choices": []}</content></send>
+      <assign location="offering" expr="true"/>
+      <decision:choice location="offered" events="bot.ability.cognition.ignore"/>
+      <assign location="offering" expr="false"/>
+      <log label="cognition.offers" expr="offered.map(function (choice) { return choice.event; }).join(' ')"/>
+      <send event="bot.ability.offers" target="#_parent">
+        <param name="ability" expr="'cognition'"/>
+        <param name="choices" expr="offered"/>
+      </send>
     </onentry>
     <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json"
                 cond="validInput(_event.data)" target="processing">
@@ -100,50 +174,192 @@
         <param name="turn" expr="_event.data.turn"/>
       </send>
     </transition>
+    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json"
+                cond="offering || isObject(_event.data)">
+      <log label="cognition.ignore" expr="'idle'"/>
+    </transition>
   </state>
 
-  <!-- One model call for the turn; leaving this state cancels it. -->
-  <state id="processing">
+  <!-- One turn of the cascade. -->
+  <state id="processing" initial="running_autonomy">
     <onentry>
-      <assign location="reply" expr="null"/>
-      <assign location="gen_failure" expr="null"/>
+      <assign location="selected" expr="[]"/>
+      <assign location="failure" expr="null"/>
       <log label="cognition" expr="'turn ' + turn + ': ' + stimulus.event"/>
     </onentry>
-    <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
-            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
-      <param name="model" expr="model"/>
-      <param name="system" expr="system"/>
-      <param name="prompt" expr="JSON.stringify({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates})"/>
-      <finalize>
-        <assign location="reply" expr="_event.name === 'generate.result' &amp;&amp; typeof _event.data.text === 'string' &amp;&amp; _event.data.text.trim().length &gt; 0 ? _event.data.text.trim() : reply"/>
-        <assign location="gen_failure" expr="_event.name === 'generate.failed' ? _event.data.code : gen_failure"/>
-      </finalize>
-    </invoke>
-    <transition event="done.invoke" cond="_event.invokeid === gen_id &amp;&amp; reply !== null" target="idle">
-      <send event="bot.ability.cognition.output" target="#_parent">
-        <param name="turn" expr="turn"/>
-        <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {text: reply}, reason: 'the reply to the stimulus'}]"/>
-      </send>
+    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json"
+                cond="isObject(_event.data)">
+      <log label="cognition.ignore" expr="'turn ' + turn"/>
     </transition>
-    <transition event="done.invoke" cond="_event.invokeid === gen_id" target="idle">
-      <send event="bot.ability.failed" target="#_parent">
-        <param name="message" expr="'the generation failed (' + (gen_failure === null ? 'no text reply' : gen_failure) + ')'"/>
-        <param name="turn" expr="turn"/>
-        <param name="input" expr="({focus: focus, focus_candidates: focus_candidates})"/>
-      </send>
+    <!-- A stage that does not answer in time: ask the body for a reboot. -->
+    <transition event="bot.ability.cognition.child.hop.timed_out" event:schema="schemas/bot.ability.cognition.child.hop.timed_out.json"
+                cond="hopTimedOut()" target="rebooting">
+      <log label="cognition.hop.timed_out" expr="'turn ' + turn + ': ' + stage + ' after ' + hop_timeout_ms + ' ms'"/>
+      <assign location="reboot_reason" expr="'cognition_child_teardown_failed'"/>
     </transition>
-    <transition event="error.execution error.communication" target="idle">
-      <send event="bot.ability.failed" target="#_parent">
-        <param name="message" expr="'the generation could not run (' + _event.name + ')'"/>
+
+    <state id="running_autonomy">
+      <onentry>
+        <assign location="stage" expr="'autonomy'"/>
+        <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hop_timeout_ms + 'ms'">
+          <param name="turn" expr="turn"/>
+        </send>
+      </onentry>
+      <onexit>
+        <cancel sendidexpr="hop_timer"/>
+      </onexit>
+      <invoke id="autonomy" type="scxml" src="autonomy.scx">
         <param name="turn" expr="turn"/>
-        <param name="input" expr="({focus: focus, focus_candidates: focus_candidates})"/>
+        <param name="input" expr="bodyInput()"/>
+      </invoke>
+      <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
+                  cond="cancelsTurn(_event.data)" target="cancelling_autonomy"/>
+      <transition event="done.invoke.autonomy" cond="handled(_event.data)" target="completing">
+        <log label="cognition.stage" expr="'autonomy handled'"/>
+        <assign location="selected" expr="_event.data.selected"/>
+      </transition>
+      <transition event="done.invoke.autonomy" cond="answer(_event.data) &amp;&amp; !failed(_event.data)" target="running_intuition">
+        <log label="cognition.stage" expr="'autonomy unhandled (' + _event.data.reason + ')'"/>
+      </transition>
+      <transition event="done.invoke.autonomy" cond="answer(_event.data)" target="failing">
+        <assign location="failure" expr="reasonOf(_event.data)"/>
+      </transition>
+      <transition event="error.*" cond="_event.invokeid === 'autonomy'" target="failing">
+        <assign location="failure" expr="'the autonomy could not run (' + _event.name + ')'"/>
+      </transition>
+    </state>
+
+    <state id="running_intuition">
+      <onentry>
+        <assign location="stage" expr="'intuition'"/>
+        <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hop_timeout_ms + 'ms'">
+          <param name="turn" expr="turn"/>
+        </send>
+      </onentry>
+      <onexit>
+        <cancel sendidexpr="hop_timer"/>
+      </onexit>
+      <invoke id="intuition" type="scxml" src="intuition.scx">
+        <param name="turn" expr="turn"/>
+        <param name="stimulus" expr="stimulus"/>
+        <param name="focus" expr="focus"/>
+        <param name="focus_candidates" expr="focus_candidates"/>
+        <param name="tuner" expr="tuner"/>
+      </invoke>
+      <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
+                  cond="cancelsTurn(_event.data)" target="cancelling_intuition"/>
+      <transition event="done.invoke.intuition" cond="handled(_event.data)" target="completing">
+        <script>keepTuner(_event.data);</script>
+        <log label="cognition.tuner" expr="JSON.stringify(tuner)"/>
+        <log label="cognition.stage" expr="'intuition handled (' + _event.data.reason + ')'"/>
+        <assign location="selected" expr="_event.data.selected"/>
+      </transition>
+      <transition event="done.invoke.intuition" cond="answer(_event.data) &amp;&amp; !failed(_event.data)" target="running_reasoning">
+        <script>keepTuner(_event.data);</script>
+        <log label="cognition.tuner" expr="JSON.stringify(tuner)"/>
+        <log label="cognition.stage" expr="'intuition unhandled (' + _event.data.reason + ')'"/>
+      </transition>
+      <transition event="done.invoke.intuition" cond="answer(_event.data)" target="failing">
+        <script>keepTuner(_event.data);</script>
+        <log label="cognition.tuner" expr="JSON.stringify(tuner)"/>
+        <assign location="failure" expr="'the intuition failed: ' + reasonOf(_event.data)"/>
+      </transition>
+      <transition event="error.*" cond="_event.invokeid === 'intuition'" target="failing">
+        <assign location="failure" expr="'the intuition could not run (' + _event.name + ')'"/>
+      </transition>
+    </state>
+
+    <state id="running_reasoning">
+      <onentry>
+        <assign location="stage" expr="'reasoning'"/>
+        <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hop_timeout_ms + 'ms'">
+          <param name="turn" expr="turn"/>
+        </send>
+      </onentry>
+      <onexit>
+        <cancel sendidexpr="hop_timer"/>
+      </onexit>
+      <invoke id="reasoning" type="scxml" src="reasoning.scx">
+        <param name="turn" expr="turn"/>
+        <param name="stimulus" expr="stimulus"/>
+        <param name="focus" expr="focus"/>
+        <param name="focus_candidates" expr="focus_candidates"/>
+        <param name="model" expr="model"/>
+      </invoke>
+      <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
+                  cond="cancelsTurn(_event.data)" target="cancelling_reasoning"/>
+      <transition event="done.invoke.reasoning" cond="handled(_event.data)" target="completing">
+        <log label="cognition.stage" expr="'reasoning handled'"/>
+        <assign location="selected" expr="_event.data.selected"/>
+      </transition>
+      <transition event="done.invoke.reasoning" cond="answer(_event.data)" target="failing">
+        <assign location="failure" expr="reasonOf(_event.data)"/>
+      </transition>
+      <transition event="error.*" cond="_event.invokeid === 'reasoning'" target="failing">
+        <assign location="failure" expr="'the reasoning could not run (' + _event.name + ')'"/>
+      </transition>
+    </state>
+
+    <!-- The turn's answer. -->
+    <state id="completing">
+      <onentry>
+        <send event="bot.ability.cognition.output" target="#_parent">
+          <param name="turn" expr="turn"/>
+          <param name="output" expr="selected"/>
+        </send>
+        <log label="reflection" expr="'absent (phase 5)'"/>
+      </onentry>
+      <transition target="idle"/>
+    </state>
+    <state id="failing">
+      <onentry>
+        <log label="cognition.failed" expr="failure"/>
+        <send event="bot.ability.failed" target="#_parent">
+          <param name="message" expr="failure"/>
+          <param name="turn" expr="turn"/>
+          <param name="input" expr="bodyInput()"/>
+        </send>
+      </onentry>
+      <transition target="idle"/>
+    </state>
+
+    <!-- Cancelled: leaving the stage's substate cancelled the stage. -->
+    <state id="cancelling" initial="cancelling_intuition">
+      <state id="cancelling_autonomy">
+        <onentry><log label="cognition.cancelled" expr="'autonomy'"/></onentry>
+        <transition target="acknowledging"/>
+      </state>
+      <state id="cancelling_intuition">
+        <onentry><log label="cognition.cancelled" expr="'intuition'"/></onentry>
+        <transition target="acknowledging"/>
+      </state>
+      <state id="cancelling_reasoning">
+        <onentry><log label="cognition.cancelled" expr="'reasoning'"/></onentry>
+        <transition target="acknowledging"/>
+      </state>
+      <state id="acknowledging">
+        <onentry>
+          <send event="bot.ability.cognition.cancelled" target="#_parent">
+            <param name="turn" expr="turn"/>
+          </send>
+        </onentry>
+        <transition target="idle"/>
+      </state>
+    </state>
+  </state>
+
+  <!-- Waits for the body to restart this ability (it re-enters live). -->
+  <state id="rebooting">
+    <onentry>
+      <send event="bot.reboot" target="#_parent">
+        <param name="reason" expr="reboot_reason"/>
       </send>
-    </transition>
+    </onentry>
+    <!-- The turn is lost: acknowledge a cancel for it at once. -->
     <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
-                cond="validCancel(_event.data) &amp;&amp; _event.data.turn === turn" target="idle">
-      <log label="cognition" expr="'turn ' + turn + ' cancelled'"/>
+                cond="validCancel(_event.data)">
       <send event="bot.ability.cognition.cancelled" target="#_parent">
-        <param name="turn" expr="turn"/>
+        <param name="turn" expr="_event.data.turn"/>
       </send>
     </transition>
   </state>

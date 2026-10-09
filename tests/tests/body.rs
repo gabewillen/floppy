@@ -13,8 +13,9 @@
 //! The body writes each event it emits as a `log` record labelled with the
 //! event's name; the double logs `double.input` and `double.exit`.
 //!
-//! One test runs the real cognition (`abilities/cognition.scx`) with no
-//! model backend: the turn fails fast with `unconfigured`.
+//! One test runs the real cognition (`abilities/cognition.scx` and its
+//! stages) with no backend: the intuition's decision fails fast with
+//! `unconfigured`, and so does the turn.
 
 #![allow(
     missing_docs,
@@ -90,8 +91,15 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
             std::fs::write(ability, double).expect("the double copy is writable");
         }
         Cognition::Real => {
-            std::fs::copy(workspace().join("abilities/cognition.scx"), ability)
-                .expect("the cognition is copyable");
+            // The cognition and its stages.
+            for stage in ["cognition", "autonomy", "intuition", "reasoning"] {
+                let name = format!("{stage}.scx");
+                std::fs::copy(
+                    workspace().join("abilities").join(&name),
+                    dir.join("abilities").join(&name),
+                )
+                .expect("the ability is copyable");
+            }
         }
         Cognition::Missing => {}
     }
@@ -454,7 +462,7 @@ fn an_unacknowledged_cancel_degrades_the_bot() {
 }
 
 #[test]
-fn without_a_model_backend_the_real_cognitions_turn_fails_unconfigured() {
+fn without_a_decision_backend_the_real_cognitions_turn_fails_unconfigured() {
     let body = layout(&Cognition::Real, &[]);
     let mut run = start(&body);
     activated(&mut run);
@@ -464,7 +472,7 @@ fn without_a_model_backend_the_real_cognitions_turn_fails_unconfigured() {
         only(&records, &["bot.processing.failed"]),
         pairs(&[(
             "bot.processing.failed",
-            r#"{"message":"the generation failed (unconfigured)","turn":1}"#
+            r#"{"message":"the intuition failed: the decision failed (unconfigured)","turn":1}"#
         )])
     );
     close(run);

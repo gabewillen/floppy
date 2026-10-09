@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Reasoning stage (mosfet abilities/cognition/reasoning): the slow
+  System 2 pass. The cognition (abilities/cognition.scx) invokes it once
+  per turn that intuition left unhandled.
+
+    recalling (memory seam) -> applying (an invoked generate service)
+      -> retaining (memory seam) -> done
+
+  Memory is an honest seam until phase 3: recalling and retaining each log
+  <log label="memory" expr="'absent'"> and send their mosfet result event to itself (#_internal)
+  (bot.ability.reasoning.recalled, bot.ability.reasoning.retained) with
+  memory_consulted (and memory_written) false and nothing recalled; the
+  model request carries no recalled episode. Phase 3 replaces each such send
+  with an <invoke> of services/memory.
+
+  Choices: applying's own event:schema transitions, read by
+  <decision:choice events="..."> on entry: bot.ability.communication.respond
+  (say something) and bot.ability.cognition.ignore. Their guards read
+  offering, which is true only while the choices are read, so they are
+  offered and never taken here: a selection is returned, not taken (the
+  body routes it, a later slice, which also brings the body's assembled
+  choices). The structured-output schema is built from the choices as
+  mosfet's dispatch tool: {events: [anyOf one branch per choice]}, each
+  branch {event (a one-value enum), data (the event's schema without
+  $schema, title and examples), reason}, every field required and no extra
+  property, sent strict. The generate service returns only a reply that
+  satisfies it; a selection of an event outside the choices is rejected by
+  cond as well.
+
+  Input: the <param>s turn, stimulus, focus, focus_candidates and model.
+  Output: <donedata>, received by the cognition as done.invoke.reasoning:
+
+    {turn, handled: true, selected: [{event, data, reason}]}
+    {turn, handled: false, failed: true, reason}
+
+  The cognition's hop timeout bounds the stage (leaving it cancels the model
+  call, SCXML 6.4).
+
+  Bindings: the decision namespace and the generate service package,
+  resolved from their repository URIs; env scopes FLOPPY_API_KEY and
+  FLOPPY_BASE_URL to the service's <invoke> (no default backend: without
+  either it answers generate.failed unconfigured). The generate service's
+  events are recorded by <finalize>.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="reasoning" initial="recalling">
+  <datamodel>
+    <!-- The turn, from the cognition's <param>s. -->
+    <data id="turn" expr="0"/>
+    <data id="stimulus" expr="null"/>
+    <data id="focus" expr="null"/>
+    <data id="focus_candidates" expr="[]"/>
+    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="system" expr="'You are the deliberate reasoning of floppy, a small companion robot. You receive one stimulus the robot observed, as JSON, with what the robot is looking at. Select every event the robot should take for it from the offered events (an empty list selects none), with its data and a short reason. To say something, select bot.ability.communication.respond with the complete text to say.'"/>
+    <!-- The model call: its choices, schema, invocation, and reply. -->
+    <data id="offering" expr="false"/>
+    <data id="choices" expr="[]"/>
+    <data id="schema" expr="null"/>
+    <data id="gen_id" expr="null"/>
+    <data id="selected" expr="null"/>
+    <data id="gen_failure" expr="null"/>
+    <data id="result" expr="null"/>
+  </datamodel>
+  <script>
+    function isObject(value) {
+      return value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value);
+    }
+    function bodyInput() {
+      return {focus: focus, focus_candidates: focus_candidates};
+    }
+    // A choice's schema as a branch's data: the payload contract only.
+    function dataSchema(schema) {
+      var copy = {};
+      Object.keys(isObject(schema) ? schema : {}).forEach(function (key) {
+        if (['$schema', 'title', 'examples'].indexOf(key) &lt; 0) {
+          copy[key] = schema[key];
+        }
+      });
+      if (copy.type === undefined) {
+        copy.type = 'object';
+      }
+      if (copy.additionalProperties === undefined) {
+        copy.additionalProperties = false;
+      }
+      return copy;
+    }
+    // mosfet processing._selection_item_branch / dispatch_tool.
+    function selectionSchema(offered) {
+      return {
+        type: 'object',
+        properties: {
+          events: {
+            type: 'array',
+            description: 'All events necessary for the input this turn; an empty array selects none.',
+            items: {
+              anyOf: offered.map(function (choice) {
+                return {
+                  type: 'object',
+                  description: typeof choice.description === 'string' ? choice.description : choice.event,
+                  properties: {
+                    event: {type: 'string', 'enum': [choice.event]},
+                    data: dataSchema(choice.schema),
+                    reason: {type: 'string', description: 'A short reason this event was selected.'}
+                  },
+                  required: ['event', 'data', 'reason'],
+                  additionalProperties: false
+                };
+              })
+            }
+          }
+        },
+        required: ['events'],
+        additionalProperties: false
+      };
+    }
+    function onChoices(events) {
+      var names = choices.map(function (choice) { return choice.event; });
+      return Array.isArray(events) &amp;&amp; events.every(function (item) {
+        return isObject(item) &amp;&amp; names.indexOf(item.event) &gt;= 0;
+      });
+    }
+    function fail(reason) {
+      result = {turn: turn, handled: false, failed: true, reason: reason};
+    }
+  </script>
+
+  <!-- Memory seam (phase 3): nothing is recalled. -->
+  <state id="recalling">
+    <onentry>
+      <log label="memory" expr="'absent'"/>
+      <send event="bot.ability.reasoning.recalled" target="#_internal">
+        <param name="turn" expr="turn"/>
+        <param name="host_input" expr="({input: stimulus})"/>
+        <param name="prior_episodes" expr="[]"/>
+        <param name="memory_consulted" expr="false"/>
+        <param name="input" expr="bodyInput()"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
+                cond="isObject(_event.data) &amp;&amp; _event.data.turn === turn &amp;&amp; _event.data.memory_consulted === false"
+                target="applying"/>
+  </state>
+
+  <!-- One structured model call; leaving this state cancels it. -->
+  <state id="applying">
+    <onentry>
+      <assign location="offering" expr="true"/>
+      <decision:choice location="choices" events="bot.ability.communication.respond bot.ability.cognition.ignore"/>
+      <assign location="offering" expr="false"/>
+      <assign location="schema" expr="selectionSchema(choices)"/>
+      <assign location="selected" expr="null"/>
+      <assign location="gen_failure" expr="null"/>
+      <log label="reasoning" expr="'turn ' + turn + ': ' + choices.map(function (c) { return c.event; }).join(' ')"/>
+    </onentry>
+    <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
+            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
+      <param name="model" expr="model"/>
+      <param name="system" expr="system"/>
+      <param name="prompt" expr="JSON.stringify({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates})"/>
+      <param name="schema" expr="schema"/>
+      <param name="schemaname" expr="'dispatch'"/>
+      <param name="strict" expr="true"/>
+      <finalize>
+        <assign location="selected" expr="_event.name === 'generate.result' &amp;&amp; isObject(_event.data) &amp;&amp; isObject(_event.data.json) ? _event.data.json.events : selected"/>
+        <assign location="gen_failure" expr="_event.name === 'generate.failed' &amp;&amp; isObject(_event.data) ? _event.data.code : gen_failure"/>
+      </finalize>
+    </invoke>
+
+    <!-- The events the model may select (offered, never taken here). -->
+    <transition event="bot.ability.communication.respond" event:schema="schemas/bot.ability.communication.respond.json"
+                cond="offering"/>
+    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json"
+                cond="offering"/>
+
+    <transition event="done.invoke" cond="_event.invokeid === gen_id &amp;&amp; selected !== null &amp;&amp; onChoices(selected)" target="retaining"/>
+    <transition event="done.invoke" cond="_event.invokeid === gen_id &amp;&amp; selected !== null" target="done">
+      <log label="reasoning.rejected" expr="'a selection outside the offered choices'"/>
+      <script>fail('the reasoning selected an event outside its choices');</script>
+    </transition>
+    <transition event="done.invoke" cond="_event.invokeid === gen_id" target="done">
+      <script>fail('the reasoning failed (' + (gen_failure === null ? 'no selection' : gen_failure) + ')');</script>
+    </transition>
+    <transition event="error.*" target="done">
+      <script>fail('the reasoning could not run (' + _event.name + ')');</script>
+    </transition>
+  </state>
+
+  <!-- Memory seam (phase 3): nothing is written. -->
+  <state id="retaining">
+    <onentry>
+      <log label="memory" expr="'absent'"/>
+      <send event="bot.ability.reasoning.retained" target="#_internal">
+        <param name="turn" expr="turn"/>
+        <param name="result" expr="selected"/>
+        <param name="memory_consulted" expr="false"/>
+        <param name="memory_written" expr="false"/>
+        <param name="input" expr="bodyInput()"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.reasoning.retained" event:schema="schemas/bot.ability.reasoning.retained.json"
+                cond="isObject(_event.data) &amp;&amp; _event.data.turn === turn &amp;&amp; _event.data.memory_written === false"
+                target="done">
+      <assign location="result" expr="({turn: turn, handled: true, selected: selected})"/>
+    </transition>
+  </state>
+
+  <final id="done">
+    <donedata>
+      <content expr="result"/>
+    </donedata>
+  </final>
+</scxml>
