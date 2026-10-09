@@ -504,26 +504,25 @@ fn a_choices_of_47364_bytes_relays_and_is_decided() {
     );
 }
 
-/// A scxml.rs defect pinned: a child's `#_parent` send whose data the
-/// child's own bound admits (a choice list of 48264 bytes, under 64 KiB) fails the
-/// parent's machine with a fatal `invalid-input`, ending the whole tree,
-/// instead of raising `error.execution` in the child.
+/// A child's `#_parent` send whose data the child's own bound admits (a
+/// choice list of 48264 bytes, under 64 KiB) but whose event, with the raw
+/// message the SCXML processor renders, is over the 96 KiB event bound
+/// raises `error.execution` in the child; the parent never receives it and
+/// the tree keeps running (scxml.rs `bb917ad5` fixed the fatal
+/// `invalid-input` in the parent this used to pin).
 #[test]
-fn a_choices_of_48264_bytes_sent_to_the_parent_fails_the_whole_tree() {
+fn a_choices_of_48264_bytes_sent_to_the_parent_raises_error_execution_in_the_child() {
     let finished = big_choices("48264", 730, false, &[]);
     let records = &finished.records;
     assert_eq!(
-        support::closed_status(records).as_deref(),
-        Some("failed"),
-        "{records:?}"
+        logs(records),
+        labelled(&[
+            ("offerer.choices.bytes", "48264"),
+            ("offerer.error", "error.execution"),
+        ]),
+        "the parent never receives the choices: {records:?}"
     );
-    assert!(
-        support::of_type(records, "error")
-            .iter()
-            .any(|error| error["code"] == "machine-invalid-input" && error["fatal"] == true),
-        "{records:?}"
-    );
-    assert!(logs(records).is_empty(), "{records:?}");
+    assert_eq!(support::closed_status(records).as_deref(), Some("running"));
 }
 
 #[test]

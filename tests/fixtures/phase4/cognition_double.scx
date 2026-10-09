@@ -8,10 +8,11 @@
   'silent' (the test rewrites mode's expr): bot.ability.cognition.ignore
   with a schema carrying $schema, title, examples and a description (which
   the body compacts), or, when mode is 'huge', also a choice whose schema
-  is over 32 KiB (the body fails such a turn). It stays near 36 KiB: with
-  the communication's offers beside it, a 3000-value enum (about 42 KiB of
-  choices) ends the body's session with a fatal machine-platform error
-  while it assembles the turn's choices, instead of failing the turn.
+  is over 32 KiB (the body fails such a turn). It stays near 36 KiB: from
+  about 3050 values the offers event, with the raw message the SCXML
+  processor renders, is over the 96 KiB event bound, so the double's offers
+  send raises error.execution in the double and the body never becomes
+  ready.
 
   Each turn's behavior is the name of the bot.input observation the turn
   carries (stimulus.data.observation.event), or, for a conversation

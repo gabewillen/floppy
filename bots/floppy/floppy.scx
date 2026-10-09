@@ -56,7 +56,8 @@
   choices tagged with the ability's invoke id as target (the body's own
   carry no target). Every schema is compacted ($schema, title and examples
   dropped); when the choices are still over 32 KiB (phase 4 spike (b): a
-  relayed list of 48264 B fails the whole invoke tree) every description is
+  relayed list of 48264 B, with its raw message, is over the 96 KiB event
+  bound, so its send raises error.execution in the sender) every description is
   dropped too, and if they are still over the turn fails without reaching
   the cognition. The routing table routes maps each offered event to the
   targets offering it.
