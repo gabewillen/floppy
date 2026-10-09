@@ -112,6 +112,15 @@ inlines the browser `validate` options type so no unapproved
   `builder_bot` live test passed on direct vLLM, and the README run is saved
   as `bots/builder/examples/traffic_light_vllm/` (docs/live-proof.md).
 
+- Phase 4 event contracts (floppy `cb4e47e0`): one JSON Schema file per
+  event, body events in `bots/floppy/schemas/`, ability events in
+  `abilities/schemas/`, mosfet's domain names in
+  `abilities/schemas/mosfet-event-names.json`; documents reference them by
+  `event:schema="schemas/<event>.json"`, never inline. A schema reference
+  cannot contain `..`, so ability documents live flat as
+  `abilities/<ability>.scx`. `tests/tests/contracts.rs` checks the schema
+  set and every `.scx` under `abilities/` and `bots/floppy/`.
+
 Next: phase 4 (bot core and abilities), per
 `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 
