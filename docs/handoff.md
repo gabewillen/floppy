@@ -189,6 +189,15 @@ inlines the browser `validate` options type so no unapproved
   `machine-platform` error (no diagnostic) instead of failing the turn; the
   huge-offers fixture was shrunk to stay under it (scxml.rs follow-up).
 
+- Phase 4 event traces (floppy `b93dbfa3`): each of the 37 deterministic
+  tests in `body.rs`, `cognition.rs` and `communication.rs` compares its
+  whole run (every session's `log`, `done` and `error` records in order,
+  then the fake backend's requests) with
+  `tests/fixtures/phase4/traces/<test>.ndjson` byte for byte
+  (`tests/tests/support/trace.rs`). The restructure slices must leave them
+  unchanged; rewrite them with `FLOPPY_TRACE_BLESS=1` only for an intended
+  change, and say so in the commit.
+
 Next: phase 4 (bot core and abilities), per
 `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 
