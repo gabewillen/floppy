@@ -122,6 +122,21 @@ inlines the browser `validate` options type so no unapproved
   `abilities/<ability>.scx`. `tests/tests/contracts.rs` checks the schema
   set and every `.scx` under `abilities/` and `bots/floppy/`.
 
+- Phase 4 body and thin cognition: `bots/floppy/floppy.scx` (mosfet's Bot
+  lifecycle and turns as the root session: `inactive`, `live{activating,
+  active{unfocused, focused, processing, cancelling_processing,
+  returning}}`, `deactivating`, final sink `degraded`) invokes
+  `abilities/cognition.scx` (one `generate` call per turn, answering
+  `bot.ability.communication.respond`). Readiness is each ability's first
+  `bot.ability.offers`; the body emits its events as `log` records labelled
+  with the event name (it has no parent). Deferred stimuli wait in a data
+  model queue and are taken by eventless transitions on return (no
+  `#_internal` replay, so no `from` field). `bot.ability.cognition.input`
+  carries a required `stimulus` envelope and `bot.activate` an optional
+  `model` (`[floppy field]`s). Tests: `tests/tests/body.rs` (against
+  `tests/fixtures/phase4/cognition_double.scx`) and the ignored
+  `tests/tests/floppy_live.rs` `live_text_turn`.
+
 Next: phase 4 (bot core and abilities), per
 `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 
