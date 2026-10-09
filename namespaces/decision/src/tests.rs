@@ -14,6 +14,7 @@ struct FakeHost {
     snapshot_requests: Vec<Vec<Section>>,
     assigned: Vec<(String, Data)>,
     fail_assign: bool,
+    values: BTreeMap<String, Data>,
 }
 
 impl ChoiceHost for FakeHost {
@@ -24,6 +25,13 @@ impl ChoiceHost for FakeHost {
             return Err("fatal");
         }
         Ok(self.guards.get(cond).copied())
+    }
+
+    fn read(&mut self, location: &str) -> Result<Result<Data, ()>, &'static str> {
+        if location == "fatal" {
+            return Err("fatal");
+        }
+        Ok(self.values.get(location).cloned().ok_or(()))
     }
 
     fn assign(&mut self, location: &str, value: &Data) -> Result<Result<(), ()>, &'static str> {
@@ -659,5 +667,311 @@ fn a_malformed_events_attribute_raises_error_execution() {
         )),
         "decision:choice takes only the location and events attributes",
         "only the unqualified events attribute"
+    );
+}
+
+/// A host whose `offers` location holds `choices`.
+fn holding(choices: &Json) -> FakeHost {
+    let mut host = FakeHost::default();
+    host.values
+        .insert("offers".into(), Data::JsonArray(canonical_json(choices)));
+    host
+}
+
+/// Executes `<decision:compact>` with `attributes` on `host`.
+fn compact_with(
+    attributes: &[Attribute],
+    host: &mut FakeHost,
+) -> Result<Executed, Failure<&'static str>> {
+    execute("compact", attributes, &[], host)
+}
+
+/// The value last assigned to `location`.
+fn assigned(host: &FakeHost, location: &str) -> Data {
+    host.assigned
+        .iter()
+        .rev()
+        .find(|(at, _)| at == location)
+        .map_or_else(
+            || panic!("nothing was assigned to {location}"),
+            |(_, value)| value.clone(),
+        )
+}
+
+fn assigned_json(host: &FakeHost, location: &str) -> Json {
+    match assigned(host, location) {
+        Data::JsonArray(text) => serde_json::from_str(&text).expect("canonical JSON"),
+        other => panic!("expected a JSON array, got {other:?}"),
+    }
+}
+
+/// An offer as `<decision:choice>` writes it, with every keyword the
+/// compaction drops at the top and nested, and a property named `title`.
+fn verbose_offers() -> Json {
+    json!([{
+        "event": "bot.ability.communication.respond",
+        "description": "Say text.",
+        "target": "communication",
+        "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "bot.ability.communication.respond",
+            "description": "Say text.",
+            "examples": [{"text": "hi"}],
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "title": "Text", "description": "What to say.", "examples": ["hi"]},
+                "title": {"type": "string", "default": {"title": "kept"}},
+            },
+            "$defs": {"examples": {"enum": [{"title": "kept"}], "title": "dropped"}},
+            "anyOf": [{"title": "dropped", "required": ["title"]}],
+            "required": ["text"],
+            "additionalProperties": false,
+        },
+    }])
+}
+
+#[test]
+fn compact_drops_schema_title_and_examples_and_keeps_property_names() {
+    let mut host = holding(&verbose_offers());
+    let over = attr("overlocation", "over");
+    assert_eq!(
+        compact_with(&[location("offers"), over], &mut host),
+        Ok(Executed::Handled)
+    );
+    assert_eq!(
+        assigned_json(&host, "offers"),
+        json!([{
+            "event": "bot.ability.communication.respond",
+            "description": "Say text.",
+            "target": "communication",
+            "schema": {
+                "description": "Say text.",
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "What to say."},
+                    "title": {"type": "string", "default": {"title": "kept"}},
+                },
+                "$defs": {"examples": {"enum": [{"title": "kept"}]}},
+                "anyOf": [{"required": ["title"]}],
+                "required": ["text"],
+                "additionalProperties": false,
+            },
+        }])
+    );
+    assert_eq!(assigned(&host, "over"), Data::Bool(false));
+    // Overlocation is written before location.
+    assert_eq!(host.assigned[0].0, "over");
+}
+
+#[test]
+fn compact_writes_canonical_json_whose_length_is_what_the_bound_measures() {
+    let mut host = holding(&verbose_offers());
+    compact_with(&[location("offers")], &mut host).expect("compacts");
+    let Data::JsonArray(text) = assigned(&host, "offers") else {
+        panic!("a JSON array");
+    };
+    let (expected, over) = compact_choices(&verbose_offers(), DEFAULT_COMPACT_BOUND).unwrap();
+    assert_eq!((text.as_str(), over), (expected.as_str(), false));
+    assert_eq!(text, canonical_json(&serde_json::from_str(&text).unwrap()));
+    // The bound is inclusive: exactly the compacted length keeps descriptions.
+    let (exact, over) = compact_choices(&verbose_offers(), text.len()).unwrap();
+    assert_eq!((exact, over), (text, false));
+}
+
+#[test]
+fn compact_over_the_bound_drops_descriptions_before_it_drops_the_choices() {
+    let (full, _) = compact_choices(&verbose_offers(), usize::MAX).unwrap();
+    let (bare, over) = compact_choices(&verbose_offers(), full.len() - 1).unwrap();
+    assert!(!over);
+    assert!(!bare.contains("description"), "{bare}");
+    let bare: Json = serde_json::from_str(&bare).unwrap();
+    assert_eq!(bare[0]["target"], json!("communication"));
+    assert_eq!(
+        bare[0]["schema"]["properties"]["text"],
+        json!({"type": "string"})
+    );
+    // A property named description is a name, not a keyword: it stays.
+    let named = json!([{"event": "e", "schema": {"properties": {"description": {"type": "string", "description": "x"}}}}]);
+    let (named_full, _) = compact_choices(&named, usize::MAX).unwrap();
+    let (bare, over) = compact_choices(&named, named_full.len() - 1).unwrap();
+    assert!(!over);
+    assert_eq!(
+        serde_json::from_str::<Json>(&bare).unwrap(),
+        json!([{"event": "e", "schema": {"properties": {"description": {"type": "string"}}}}])
+    );
+}
+
+#[test]
+fn compact_still_over_the_bound_assigns_no_choices_and_sets_overlocation() {
+    let mut host = holding(&verbose_offers());
+    compact_with(
+        &[
+            location("offers"),
+            attr("bound", "40"),
+            attr("overlocation", "over"),
+        ],
+        &mut host,
+    )
+    .expect("compacts");
+    assert_eq!(assigned(&host, "offers"), Data::JsonArray("[]".into()));
+    assert_eq!(assigned(&host, "over"), Data::Bool(true));
+    // Without overlocation only the choices are assigned.
+    let mut host = holding(&verbose_offers());
+    compact_with(&[location("offers"), attr("bound", "40")], &mut host).expect("compacts");
+    assert_eq!(
+        host.assigned,
+        vec![("offers".into(), Data::JsonArray("[]".into()))]
+    );
+    // An empty list is never over.
+    assert_eq!(compact_choices(&json!([]), 2), Ok(("[]".into(), false)));
+}
+
+#[test]
+fn compact_is_idempotent() {
+    for bound in [usize::MAX, 400, 10] {
+        let (once, over) = compact_choices(&verbose_offers(), bound).unwrap();
+        let (twice, again) = compact_choices(&serde_json::from_str(&once).unwrap(), bound).unwrap();
+        assert_eq!(twice, once, "bound {bound}");
+        assert_eq!(again, over && once != "[]", "bound {bound}");
+    }
+}
+
+#[test]
+fn malformed_compact_elements_or_choices_raise_error_execution() {
+    let offers = verbose_offers();
+    let cases: Vec<(Vec<Attribute>, Option<Json>, &str)> = vec![
+        (
+            vec![],
+            Some(offers.clone()),
+            "decision:compact requires a non-empty location",
+        ),
+        (
+            vec![location(" ")],
+            Some(offers.clone()),
+            "decision:compact requires a non-empty location",
+        ),
+        (
+            vec![location("offers"), location("offers")],
+            Some(offers.clone()),
+            "decision:compact repeats an attribute",
+        ),
+        (
+            vec![location("offers"), attr("events", "e")],
+            Some(offers.clone()),
+            "decision:compact takes only the location, bound and overlocation attributes",
+        ),
+        (
+            vec![location("offers"), attr("overlocation", "")],
+            Some(offers.clone()),
+            "decision:compact overlocation is empty",
+        ),
+        (
+            vec![location("offers"), attr("bound", "-1")],
+            Some(offers.clone()),
+            "decision:compact bound is not a decimal integer",
+        ),
+        (
+            vec![location("offers"), attr("bound", "1e3")],
+            Some(offers.clone()),
+            "decision:compact bound is not a decimal integer",
+        ),
+        (
+            vec![location("offers"), attr("bound", "99999999999999999999999")],
+            Some(offers.clone()),
+            "decision:compact bound is not a decimal integer",
+        ),
+        (
+            vec![location("offers")],
+            None,
+            "decision:compact location does not hold choices",
+        ),
+        (
+            vec![location("offers")],
+            Some(json!([1])),
+            "decision:compact found a choice that is not an object",
+        ),
+        (
+            vec![location("offers")],
+            Some(json!([{"schema": {}}])),
+            "decision:compact found a malformed choice",
+        ),
+        (
+            vec![location("offers")],
+            Some(json!([{"event": "", "schema": {}}])),
+            "decision:compact found a malformed choice",
+        ),
+        (
+            vec![location("offers")],
+            Some(json!([{"event": "e"}])),
+            "decision:compact found a malformed choice",
+        ),
+        (
+            vec![location("offers")],
+            Some(json!([{"event": "e", "schema": {}, "target": ""}])),
+            "decision:compact found a malformed choice",
+        ),
+        (
+            vec![location("offers")],
+            Some(json!([{"event": "e", "schema": {}, "description": 1}])),
+            "decision:compact found a malformed choice",
+        ),
+        (
+            vec![location("offers")],
+            Some(json!([{"event": "e", "schema": {}, "extra": 1}])),
+            "decision:compact found a malformed choice",
+        ),
+    ];
+    for (attributes, value, detail) in cases {
+        let mut host = value.map_or_else(FakeHost::default, |value| holding(&value));
+        assert_eq!(
+            execution(compact_with(&attributes, &mut host)),
+            detail,
+            "{attributes:?}"
+        );
+        assert!(host.assigned.is_empty(), "{attributes:?}");
+    }
+}
+
+#[test]
+fn compact_reads_only_arrays_takes_no_content_and_fails_on_assignment() {
+    let offers = verbose_offers();
+    // A location holding an object, not an array.
+    let mut host = FakeHost::default();
+    host.values
+        .insert("offers".into(), Data::JsonObject("{}".into()));
+    assert_eq!(
+        execution(compact_with(&[location("offers")], &mut host)),
+        "decision:compact location does not hold choices"
+    );
+    // Content is refused.
+    let mut host = holding(&offers);
+    assert_eq!(
+        execution(execute(
+            "compact",
+            &[location("offers")],
+            &[Content::Start, Content::End],
+            &mut host
+        )),
+        "decision:compact holds no content"
+    );
+    // A failed assignment is error.execution; a host failure passes through.
+    let mut host = holding(&offers);
+    host.fail_assign = true;
+    assert_eq!(
+        execution(compact_with(&[location("offers")], &mut host)),
+        "decision:compact could not assign the choices"
+    );
+    let mut host = holding(&offers);
+    host.fail_assign = true;
+    assert_eq!(
+        execution(compact_with(
+            &[location("offers"), attr("overlocation", "over")],
+            &mut host
+        )),
+        "decision:compact could not assign overlocation"
+    );
+    assert_eq!(
+        compact_with(&[location("fatal")], &mut FakeHost::default()),
+        Err(Failure::Host("fatal"))
     );
 }

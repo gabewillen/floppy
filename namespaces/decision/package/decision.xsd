@@ -12,6 +12,14 @@
                    Choosing among them is the decision service's
                    work (services/decision): executable content stays
                    synchronous and quick.
+  decision:compact location (required): the choice array it rewrites in
+                   place for a model: $schema, title and examples dropped
+                   from every schema (property names kept); over bound
+                   bytes, descriptions dropped too; still over, [].
+                   bound (optional): a decimal integer, default 32768.
+                   overlocation (optional): receives whether the choices
+                   were still over the bound. No other attribute, no
+                   content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://github.com/stateforward/floppy/namespaces/decision"
@@ -20,6 +28,19 @@
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="events" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="compact">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="bound" use="optional">
+        <xs:simpleType>
+          <xs:restriction base="xs:nonNegativeInteger">
+            <xs:pattern value="[0-9]+"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name="overlocation" type="xs:string" use="optional"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

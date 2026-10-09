@@ -1,8 +1,9 @@
-//! The `decision` extension namespace: `<decision:choice>` as a
-//! `stateforward:scxml/executable-content-extension` Wasm component.
+//! The `decision` extension namespace: `<decision:choice>` and
+//! `<decision:compact>` as a `stateforward:scxml/executable-content-extension`
+//! Wasm component.
 //!
 //! Executable content is synchronous and quick, so this namespace holds only
-//! the half of a decision that is: reading the choices. Asking a backend to
+//! the half of a decision that is: reading the choices and compacting them. Asking a backend to
 //! choose is slow I/O and belongs to the `decision` invoked service
 //! (`services/decision`), which takes the choices this element writes as its
 //! `choices` parameter. Documents bind [`NAMESPACE_URI`] (conventionally with
@@ -66,6 +67,31 @@
 //! may return: it validates the chosen event's data against them before it
 //! returns it (the document declares its events, not the service package).
 //!
+//! # `<decision:compact location="L" bound="N" overlocation="O"/>`
+//!
+//! Rewrites the choice array at `location` (required) in place to what a
+//! model needs to fill each event (mosfet `model_facing_event_json_schema`
+//! and the offer bound): every entry becomes `{event, schema, description?,
+//! target?}`, canonical JSON, in order, and every schema loses `$schema`,
+//! `title` and `examples` at every level, keeping property names (the
+//! members of `properties`, `patternProperties`, `$defs` and `definitions`
+//! are names, not keywords) and copying `enum`, `const`, `required` and
+//! `default` verbatim. If the result is over `bound` bytes (optional, a
+//! decimal integer, default [`DEFAULT_COMPACT_BOUND`]: the canonical JSON's
+//! UTF-8 length, which is at least `JSON.stringify`'s length), every
+//! `description` is dropped too, the entries' and the schemas'. If it is
+//! still over, `location` receives `[]`. `overlocation` (optional) receives
+//! `true` when that happened and `false` otherwise, so the document can log
+//! it. Compacting is idempotent.
+//!
+//! An entry is an object with a non-empty string `event`, a `schema`, and
+//! optionally a string `description` and a non-empty string `target` (the
+//! offering ability), and nothing else; a `location` that does not hold an
+//! array of such entries, a malformed `bound`, any other attribute, or any
+//! content is `error.execution`. `overlocation` is assigned before
+//! `location`, so a failed `location` assignment can leave `overlocation`
+//! written.
+//!
 //! # Failures
 //!
 //! A malformed element, a missing or malformed snapshot, a schema that does
@@ -113,6 +139,10 @@ pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespac
 
 /// Upper bound on a choice event name's bytes (wasm builds only).
 pub const MAX_EVENT_NAME_BYTES: usize = wasm_bound(256);
+
+/// `<decision:compact>`'s bound when it names none: 32 KiB, the largest
+/// choice list phase 4 spike (b) relays through two sessions safely.
+pub const DEFAULT_COMPACT_BOUND: usize = 32_768;
 
 /// One attribute of an element.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -194,8 +224,16 @@ pub trait ChoiceHost {
     /// A non-recoverable host failure.
     fn guard(&mut self, cond: &str) -> Result<GuardValue, Self::Error>;
 
-    /// Assigns the choices (a JSON array) to one data-model location;
-    /// `Ok(Err(()))` is a recoverable assignment failure.
+    /// Evaluates one data-model location; `Ok(Err(()))` is a recoverable
+    /// evaluation failure.
+    ///
+    /// # Errors
+    ///
+    /// A non-recoverable host failure.
+    fn read(&mut self, location: &str) -> Result<Result<Data, ()>, Self::Error>;
+
+    /// Assigns one value to one data-model location; `Ok(Err(()))` is a
+    /// recoverable assignment failure.
     ///
     /// # Errors
     ///
@@ -255,9 +293,19 @@ pub fn execute<H: ChoiceHost>(
     content: &[Content],
     host: &mut H,
 ) -> Result<Executed, Failure<H::Error>> {
-    if local_name != "choice" {
-        return Ok(Executed::NotHandled);
+    match local_name {
+        "choice" => choice(attributes, content, host),
+        "compact" => compact(attributes, content, host),
+        _ => Ok(Executed::NotHandled),
     }
+}
+
+/// Executes `<decision:choice>`.
+fn choice<H: ChoiceHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
     let mut location = None;
     let mut events = None;
     for attribute in attributes {
@@ -308,6 +356,189 @@ pub fn execute<H: ChoiceHost>(
             Failure::Execution("decision:choice could not assign the choices to location")
         })?;
     Ok(Executed::Handled)
+}
+
+/// Executes `<decision:compact>`.
+fn compact<H: ChoiceHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let mut location = None;
+    let mut bound = None;
+    let mut over_location = None;
+    for attribute in attributes {
+        let slot = match (
+            attribute.namespace_uri.as_deref(),
+            attribute.local_name.as_str(),
+        ) {
+            (None, "location") => &mut location,
+            (None, "bound") => &mut bound,
+            (None, "overlocation") => &mut over_location,
+            _ => {
+                return Err(Failure::Execution(
+                    "decision:compact takes only the location, bound and overlocation attributes",
+                ));
+            }
+        };
+        if slot.replace(attribute.value.as_str()).is_some() {
+            return Err(Failure::Execution("decision:compact repeats an attribute"));
+        }
+    }
+    let location = location
+        .map(str::trim)
+        .filter(|location| !location.is_empty())
+        .ok_or(Failure::Execution(
+            "decision:compact requires a non-empty location",
+        ))?;
+    let over_location = over_location
+        .map(|value| {
+            Some(value.trim())
+                .filter(|value| !value.is_empty())
+                .ok_or(Failure::Execution("decision:compact overlocation is empty"))
+        })
+        .transpose()?;
+    let bound = bound.map_or(Ok(DEFAULT_COMPACT_BOUND), |value| {
+        let value = value.trim();
+        if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(Failure::Execution(
+                "decision:compact bound is not a decimal integer",
+            ));
+        }
+        value
+            .parse::<usize>()
+            .map_err(|_| Failure::Execution("decision:compact bound is not a decimal integer"))
+    })?;
+    if content
+        .iter()
+        .any(|item| !matches!(item, Content::Text(text) if text.trim().is_empty()))
+    {
+        return Err(Failure::Execution("decision:compact holds no content"));
+    }
+    let not_choices = || Failure::Execution("decision:compact location does not hold choices");
+    let Data::JsonArray(text) = host
+        .read(location)
+        .map_err(Failure::Host)?
+        .map_err(|()| not_choices())?
+    else {
+        return Err(not_choices());
+    };
+    let choices: Json = serde_json::from_str(&text).map_err(|_| not_choices())?;
+    let (compacted, over) = compact_choices(&choices, bound).map_err(Failure::Execution)?;
+    if let Some(over_location) = over_location {
+        host.assign(over_location, &Data::Bool(over))
+            .map_err(Failure::Host)?
+            .map_err(|()| Failure::Execution("decision:compact could not assign overlocation"))?;
+    }
+    host.assign(location, &Data::JsonArray(compacted))
+        .map_err(Failure::Host)?
+        .map_err(|()| Failure::Execution("decision:compact could not assign the choices"))?;
+    Ok(Executed::Handled)
+}
+
+/// The compacted choices of `choices` as canonical JSON, and whether they
+/// were over `bound` even without descriptions (then they are `[]`): see
+/// the crate documentation (`<decision:compact>`).
+///
+/// # Errors
+///
+/// A static detail when `choices` is not an array of choice entries.
+pub fn compact_choices(choices: &Json, bound: usize) -> Result<(String, bool), &'static str> {
+    let entries = choices
+        .as_array()
+        .ok_or("decision:compact location does not hold choices")?;
+    for entry in entries {
+        let entry = entry
+            .as_object()
+            .ok_or("decision:compact found a choice that is not an object")?;
+        let text = |key: &str| {
+            entry.get(key).map(|value| {
+                value
+                    .as_str()
+                    .filter(|text| key == "description" || !text.is_empty())
+            })
+        };
+        if entry
+            .keys()
+            .any(|key| !["event", "schema", "description", "target"].contains(&key.as_str()))
+            || text("event").flatten().is_none()
+            || !entry.contains_key("schema")
+            || matches!(text("description"), Some(None))
+            || matches!(text("target"), Some(None))
+        {
+            return Err("decision:compact found a malformed choice");
+        }
+    }
+    for descriptions in [true, false] {
+        let compacted = canonical_json(&Json::Array(
+            entries
+                .iter()
+                .map(|entry| compact_entry(entry, descriptions))
+                .collect(),
+        ));
+        if compacted.len() <= bound {
+            return Ok((compacted, false));
+        }
+    }
+    Ok(("[]".to_owned(), true))
+}
+
+/// One checked choice entry, compacted.
+fn compact_entry(entry: &Json, descriptions: bool) -> Json {
+    let mut out = Map::new();
+    for (key, value) in entry.as_object().into_iter().flatten() {
+        match key.as_str() {
+            "schema" => {
+                out.insert(key.clone(), compact_schema(value, descriptions));
+            }
+            "description" if !descriptions => {}
+            _ => {
+                out.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    Json::Object(out)
+}
+
+/// A schema without `$schema`, `title`, `examples` (and `description` unless
+/// `descriptions`), at every level; property names are kept.
+fn compact_schema(schema: &Json, descriptions: bool) -> Json {
+    match schema {
+        Json::Array(items) => Json::Array(
+            items
+                .iter()
+                .map(|item| compact_schema(item, descriptions))
+                .collect(),
+        ),
+        Json::Object(members) => {
+            let mut out = Map::new();
+            for (key, value) in members {
+                match key.as_str() {
+                    "$schema" | "title" | "examples" => {}
+                    "description" if !descriptions => {}
+                    "properties" | "patternProperties" | "$defs" | "definitions"
+                        if value.is_object() =>
+                    {
+                        let named = value
+                            .as_object()
+                            .into_iter()
+                            .flatten()
+                            .map(|(name, item)| (name.clone(), compact_schema(item, descriptions)))
+                            .collect();
+                        out.insert(key.clone(), Json::Object(named));
+                    }
+                    "enum" | "const" | "required" | "default" => {
+                        out.insert(key.clone(), value.clone());
+                    }
+                    _ => {
+                        out.insert(key.clone(), compact_schema(value, descriptions));
+                    }
+                }
+            }
+            Json::Object(out)
+        }
+        _ => schema.clone(),
+    }
 }
 
 /// The event descriptors of an `events` attribute: its white-space
@@ -556,15 +787,26 @@ mod guest {
             }
         }
 
+        fn read(&mut self, location: &str) -> Result<Result<Data, ()>, ComponentError> {
+            match data_model_host::evaluate(location) {
+                Ok(DataValue::JsonArray(text)) => Ok(Ok(Data::JsonArray(text))),
+                Ok(_) => Ok(Err(())),
+                Err(error) if recoverable(error.code) => Ok(Err(())),
+                Err(error) => Err(error),
+            }
+        }
+
         fn assign(
             &mut self,
             location: &str,
             value: &Data,
         ) -> Result<Result<(), ()>, ComponentError> {
-            let Data::JsonArray(text) = value else {
-                return Ok(Err(()));
+            let value = match value {
+                Data::JsonArray(text) => DataValue::JsonArray(text.clone()),
+                Data::Bool(value) => DataValue::Boolean(*value),
+                _ => return Ok(Err(())),
             };
-            match data_model_host::assign(location, &DataValue::JsonArray(text.clone())) {
+            match data_model_host::assign(location, &value) {
                 Ok(()) => Ok(Ok(())),
                 Err(error) if recoverable(error.code) => Ok(Err(())),
                 Err(error) => Err(error),
