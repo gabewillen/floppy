@@ -16,8 +16,9 @@
 //! * the mapping rules hold: correlated events require an integer `turn`,
 //!   mosfet's runtime-only fields are gone, and media is a reference.
 //!
-//! And over every `.scx` under `abilities/` and `bots/floppy/` (none yet;
-//! the checks are proven on `tests/fixtures/phase4/contracts/`):
+//! And over every `.scx` under `abilities/` and `bots/floppy/` (the body
+//! `bots/floppy/floppy.scx` and its abilities; the checks themselves are
+//! proven on `tests/fixtures/phase4/contracts/`):
 //!
 //! * `scx validate` reports nothing (which includes `EVENT011`: a literal
 //!   payload sent to a literal child is judged against the child's schema);

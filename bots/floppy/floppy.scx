@@ -1,0 +1,373 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The floppy bot: mosfet's Bot body as the root SCXML session. It owns the
+  bot lifecycle and processing turns; its abilities are invoked children
+  (decision D6: invoke lifecycle replaces mosfet's attachment protocol).
+
+    inactive -bot.activate-> live { activating -> active { unfocused,
+      focused, processing, cancelling_processing } }
+    live -bot.deactivate-> deactivating -> inactive
+    live -bot.reboot (from cognition)-> live (re-entered: every ability is
+      cancelled and invoked again)
+    cancelling_processing -cancel timeout-> degraded (a final sink)
+
+  Abilities: live holds <invoke id="cognition">; leaving live cancels every
+  ability (SCXML 6.4), which replaces mosfet's cleanup states. An ability is
+  ready when it sends its first bot.ability.offers; the body is active when
+  every expected ability is ready. A run-tagged activation timer
+  (activation_timeout_ms), an error event, or an ability ending while
+  activating fails the activation (bot.activating.failed) back to inactive.
+
+  Turns: bot.input in unfocused or focused starts a processing turn. The
+  body counts the turn, computes the turn's attention bias (focus,
+  focus_candidates: an ECMAScript port of mosfet's attention_bias_for_turn),
+  sends bot.ability.cognition.input {turn, stimulus, focus,
+  focus_candidates} to the cognition, and arms bot.processing.timed_out
+  (processing_timeout_ms) for the turn. Replies count only when they come
+  from the cognition for the current turn. A timeout sends
+  bot.ability.cognition.cancel {turn} and waits in cancelling_processing,
+  bounded by cancel_timeout_ms clamped to 100..5000 ms: the acknowledgement
+  fails the turn (bot.processing.failed); no acknowledgement degrades the
+  bot. Stimuli that arrive during a turn wait in the data model queue (in
+  order) and start the next turns, one per return to unfocused or focused,
+  before any later event.
+
+  Outputs: the root has no parent, so each event the body emits is written
+  as <log label="EVENT" expr="JSON data">: bot.activated,
+  bot.activating.failed, bot.deactivated, bot.processing.completed,
+  bot.processing.failed, and bot.output (the turn's selected events, one
+  record per completed turn). Routing selections is a later slice.
+
+  Contracts: the body's own events reference schemas/ by event:schema and
+  are rechecked by cond; the abilities' events are described in
+  abilities/schemas/ (a schema reference cannot leave this directory) and
+  rechecked by cond here.
+
+  Running: scx run with an env file and this document, as for the builder
+  (bots/builder/README.md), then bot.activate and bot.input on standard
+  input. The cognition's generate service needs FLOPPY_BASE_URL and
+  FLOPPY_API_KEY (no default backend); without them each turn fails.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="floppy" initial="inactive">
+  <datamodel>
+    <!-- Configuration. -->
+    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="activation_timeout_ms" expr="30000"/>
+    <data id="processing_timeout_ms" expr="300000"/>
+    <data id="cancel_timeout_ms" expr="5000"/>
+    <!-- The configured devices (none until phase 6) and the live source id
+         each one reports from. -->
+    <data id="devices" expr="[]"/>
+    <data id="device_source_refs" expr="({})"/>
+    <!-- Lifecycle: each entry into live is one run; the abilities expected
+         and the offers each has sent this run. -->
+    <data id="live_run" expr="0"/>
+    <data id="expected" expr="['cognition']"/>
+    <data id="offers" expr="({})"/>
+    <!-- Turns. -->
+    <data id="turn" expr="0"/>
+    <data id="focused_device" expr="null"/>
+    <data id="stimulus" expr="null"/>
+    <data id="focus" expr="null"/>
+    <data id="focus_candidates" expr="[]"/>
+    <data id="queue" expr="[]"/>
+    <data id="degraded_reason" expr="null"/>
+  </datamodel>
+  <script>
+    function isObject(value) {
+      return value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value);
+    }
+    function isTurn(value) {
+      return Number.isInteger(value) &amp;&amp; value &gt;= 1;
+    }
+    function isOptionalString(value) {
+      return value === undefined || value === null || typeof value === 'string';
+    }
+    function isEmptyObject(data) {
+      return isObject(data) &amp;&amp; Object.keys(data).length === 0;
+    }
+    // schemas/bot.activate.json
+    function validActivate(data) {
+      return isObject(data)
+        &amp;&amp; Object.keys(data).every(function (k) { return k === 'model'; })
+        &amp;&amp; (data.model === undefined || (typeof data.model === 'string' &amp;&amp; data.model.length &gt; 0));
+    }
+    // schemas/bot.input.json
+    function validInput(data) {
+      if (!isObject(data)) { return false; }
+      if (data.target_device !== undefined &amp;&amp; data.target_device !== null
+          &amp;&amp; !(typeof data.target_device === 'string' &amp;&amp; data.target_device.length &gt; 0)) { return false; }
+      if (data.priority !== undefined
+          &amp;&amp; !(Number.isInteger(data.priority) &amp;&amp; data.priority &gt;= 0 &amp;&amp; data.priority &lt;= 10)) { return false; }
+      var o = data.observation;
+      if (o === undefined || o === null) { return true; }
+      return isObject(o)
+        &amp;&amp; Object.keys(o).every(function (k) { return ['event', 'data', 'id', 'source', 'target'].indexOf(k) &gt;= 0; })
+        &amp;&amp; typeof o.event === 'string' &amp;&amp; o.event.length &gt; 0 &amp;&amp; o.data !== undefined
+        &amp;&amp; isOptionalString(o.id) &amp;&amp; isOptionalString(o.source) &amp;&amp; isOptionalString(o.target);
+    }
+    // schemas/bot.focus_device.json
+    function validFocus(data) {
+      return isObject(data) &amp;&amp; typeof data.device === 'string' &amp;&amp; data.device.length &gt; 0;
+    }
+    // schemas/bot.reboot.json
+    function validReboot(data) {
+      return isObject(data) &amp;&amp; ['cognition_child_teardown_failed', 'cognition_cancel_teardown_failed',
+        'cognition_detach_rollback_failed', 'learning_child_teardown_failed',
+        'learning_detach_rollback_failed'].indexOf(data.reason) &gt;= 0;
+    }
+    // schemas/bot.processing.timed_out.json, bot.processing.cancel.timed_out.json,
+    // and the turn-correlated ability events.
+    function forTurn(data) {
+      return isObject(data) &amp;&amp; data.turn === turn;
+    }
+    // abilities/schemas/bot.ability.offers.json
+    function validOffers(data) {
+      return isObject(data) &amp;&amp; typeof data.ability === 'string' &amp;&amp; data.ability.length &gt; 0
+        &amp;&amp; Array.isArray(data.choices)
+        &amp;&amp; data.choices.every(function (c) { return isObject(c) &amp;&amp; typeof c.event === 'string' &amp;&amp; c.event.length &gt; 0 &amp;&amp; c.schema !== undefined; });
+    }
+    // abilities/schemas/bot.ability.cognition.output.json
+    function validOutput(data) {
+      return forTurn(data) &amp;&amp; Array.isArray(data.output)
+        &amp;&amp; data.output.every(function (s) { return isObject(s) &amp;&amp; typeof s.event === 'string' &amp;&amp; s.event.length &gt; 0; });
+    }
+    function fromCognition() {
+      return _event.invokeid === 'cognition';
+    }
+    function allReady() {
+      return expected.every(function (id) { return offers[id] !== undefined; });
+    }
+    // mosfet abilities/cognition/types.py attention_bias_for_turn: the
+    // turn's (focus, focus_candidates) from device identity only.
+    function attentionBias(item) {
+      var bias = {focus: null, focus_candidates: []};
+      if (focused_device !== null &amp;&amp; devices.indexOf(focused_device) &gt;= 0) {
+        bias.focus = focused_device;
+        bias.focus_candidates.push(focused_device);
+      }
+      var reference = null;
+      if (item.event === 'bot.input') {
+        reference = item.data.target_device === undefined ? null : item.data.target_device;
+        if (reference === null &amp;&amp; item.source) {
+          reference = device_source_refs[item.source] === undefined ? null : device_source_refs[item.source];
+        }
+      } else if (item.source) {
+        reference = device_source_refs[item.source] === undefined ? null : device_source_refs[item.source];
+      }
+      if (reference !== null &amp;&amp; devices.indexOf(reference) &gt;= 0 &amp;&amp; bias.focus_candidates.indexOf(reference) &lt; 0) {
+        bias.focus_candidates.push(reference);
+      }
+      return bias;
+    }
+    // The stimulus envelope of the event in hand (abilities/schemas/
+    // bot.ability.cognition.input.json, stimulus).
+    function envelope() {
+      return {event: _event.name, data: _event.data, source: _event.invokeid ? _event.invokeid : null};
+    }
+  </script>
+
+  <state id="inactive">
+    <transition event="bot.activate" event:schema="schemas/bot.activate.json"
+                cond="validActivate(_event.data)" target="live">
+      <assign location="model" expr="_event.data.model === undefined ? model : _event.data.model"/>
+    </transition>
+    <transition event="bot.activate">
+      <log label="bot.rejected" expr="'bot.activate does not satisfy schemas/bot.activate.json'"/>
+    </transition>
+  </state>
+
+  <state id="live" initial="activating">
+    <onentry>
+      <assign location="live_run" expr="live_run + 1"/>
+      <assign location="offers" expr="({})"/>
+    </onentry>
+    <onexit>
+      <assign location="queue" expr="[]"/>
+    </onexit>
+    <invoke id="cognition" type="scxml" src="../../abilities/cognition.scx">
+      <param name="model" expr="model"/>
+    </invoke>
+
+    <!-- Each ability's latest offers; the first of a run is its readiness. -->
+    <transition event="bot.ability.offers" cond="expected.indexOf(_event.invokeid) &gt;= 0 &amp;&amp; validOffers(_event.data) &amp;&amp; _event.data.ability === _event.invokeid">
+      <assign location="offers[_event.invokeid]" expr="_event.data.choices"/>
+    </transition>
+    <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json"
+                cond="isObject(_event.data)" target="deactivating"/>
+    <!-- Only the cognition may ask for a reboot: re-enter live. -->
+    <transition event="bot.reboot" event:schema="schemas/bot.reboot.json"
+                cond="fromCognition() &amp;&amp; validReboot(_event.data)" target="live">
+      <log label="bot.reboot" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="bot.reboot">
+      <log label="bot.rejected" expr="'bot.reboot is taken only from the cognition with a schemas/bot.reboot.json reason'"/>
+    </transition>
+
+    <state id="activating">
+      <onentry>
+        <send id="activation-timer" event="floppy.activating.timed_out" delayexpr="activation_timeout_ms + 'ms'">
+          <param name="run" expr="live_run"/>
+        </send>
+      </onentry>
+      <onexit>
+        <cancel sendid="activation-timer"/>
+      </onexit>
+      <transition cond="allReady()" target="active">
+        <log label="bot.activated" expr="JSON.stringify({})"/>
+      </transition>
+      <transition event="floppy.activating.timed_out" cond="!_event.invokeid &amp;&amp; isObject(_event.data) &amp;&amp; _event.data.run === live_run" target="inactive">
+        <log label="bot.diagnostic" expr="'the abilities ' + JSON.stringify(expected.filter(function (id) { return offers[id] === undefined; })) + ' were not ready within ' + activation_timeout_ms + ' ms'"/>
+        <log label="bot.activating.failed" expr="JSON.stringify({})"/>
+      </transition>
+      <transition event="error.*" target="inactive">
+        <log label="bot.diagnostic" expr="_event.name + ' while activating' + (_event.invokeid ? ' (from ' + _event.invokeid + ')' : '')"/>
+        <log label="bot.activating.failed" expr="JSON.stringify({})"/>
+      </transition>
+      <transition event="done.invoke" target="inactive">
+        <log label="bot.diagnostic" expr="'the ability ' + _event.invokeid + ' ended while activating'"/>
+        <log label="bot.activating.failed" expr="JSON.stringify({})"/>
+      </transition>
+    </state>
+
+    <state id="active" initial="unfocused">
+      <!-- An ability that ends while the bot is active leaves it degraded. -->
+      <transition event="done.invoke.cognition" target="degraded">
+        <assign location="degraded_reason" expr="'the ability cognition ended while active'"/>
+      </transition>
+
+      <state id="unfocused">
+        <transition cond="queue.length &gt; 0" target="processing">
+          <assign location="stimulus" expr="queue.shift()"/>
+        </transition>
+        <transition event="bot.input" event:schema="schemas/bot.input.json"
+                    cond="!_event.invokeid &amp;&amp; validInput(_event.data)" target="processing">
+          <assign location="stimulus" expr="envelope()"/>
+        </transition>
+        <transition event="bot.focus_device" event:schema="schemas/bot.focus_device.json"
+                    cond="validFocus(_event.data) &amp;&amp; devices.indexOf(_event.data.device) &gt;= 0" target="focused">
+          <assign location="focused_device" expr="_event.data.device"/>
+        </transition>
+      </state>
+
+      <state id="focused">
+        <transition cond="queue.length &gt; 0" target="processing">
+          <assign location="stimulus" expr="queue.shift()"/>
+        </transition>
+        <transition event="bot.input" event:schema="schemas/bot.input.json"
+                    cond="!_event.invokeid &amp;&amp; validInput(_event.data)" target="processing">
+          <assign location="stimulus" expr="envelope()"/>
+        </transition>
+        <transition event="bot.focus_device" event:schema="schemas/bot.focus_device.json"
+                    cond="validFocus(_event.data) &amp;&amp; devices.indexOf(_event.data.device) &gt;= 0">
+          <assign location="focused_device" expr="_event.data.device"/>
+        </transition>
+        <transition event="bot.clear_focus" event:schema="schemas/bot.clear_focus.json"
+                    cond="isObject(_event.data)" target="unfocused">
+          <assign location="focused_device" expr="null"/>
+        </transition>
+      </state>
+
+      <!-- One turn of the cognition. -->
+      <state id="processing">
+        <onentry>
+          <assign location="turn" expr="turn + 1"/>
+          <script>
+            var bias = attentionBias(stimulus);
+            focus = bias.focus;
+            focus_candidates = bias.focus_candidates;
+          </script>
+          <send event="bot.ability.cognition.input" target="#_cognition">
+            <content expr="({turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates})"/>
+          </send>
+          <send id="processing-timer" event="bot.processing.timed_out" delayexpr="processing_timeout_ms + 'ms'">
+            <param name="turn" expr="turn"/>
+          </send>
+        </onentry>
+        <onexit>
+          <cancel sendid="processing-timer"/>
+        </onexit>
+        <transition event="bot.ability.cognition.output" cond="fromCognition() &amp;&amp; validOutput(_event.data)" target="returning">
+          <log label="bot.output" expr="JSON.stringify({turn: turn, output: _event.data.output})"/>
+          <log label="bot.processing.completed" expr="JSON.stringify({output: _event.data.output, focus_candidates: focus_candidates, turn: turn})"/>
+        </transition>
+        <transition event="bot.ability.failed" cond="fromCognition() &amp;&amp; forTurn(_event.data)" target="returning">
+          <log label="bot.processing.failed" expr="JSON.stringify({message: typeof _event.data.message === 'string' &amp;&amp; _event.data.message.length &gt; 0 ? _event.data.message : 'the cognition failed', turn: turn})"/>
+        </transition>
+        <transition event="bot.processing.timed_out" event:schema="schemas/bot.processing.timed_out.json"
+                    cond="!_event.invokeid &amp;&amp; forTurn(_event.data)" target="cancelling_processing">
+          <log label="bot.processing.timed_out" expr="JSON.stringify({turn: turn})"/>
+          <send event="bot.ability.cognition.cancel" target="#_cognition">
+            <param name="turn" expr="turn"/>
+          </send>
+        </transition>
+        <transition event="bot.input" event:schema="schemas/bot.input.json"
+                    cond="!_event.invokeid &amp;&amp; validInput(_event.data)">
+          <script>queue.push(envelope());</script>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
+      </state>
+
+      <!-- The turn timed out: wait (bounded) for the cognition's
+           acknowledgement of the cancel. -->
+      <state id="cancelling_processing">
+        <onentry>
+          <send id="cancel-timer" event="bot.processing.cancel.timed_out"
+                delayexpr="Math.min(5000, Math.max(100, cancel_timeout_ms)) + 'ms'">
+            <param name="turn" expr="turn"/>
+          </send>
+        </onentry>
+        <onexit>
+          <cancel sendid="cancel-timer"/>
+        </onexit>
+        <transition event="bot.ability.cognition.cancelled bot.ability.processing.cancelled"
+                    cond="fromCognition() &amp;&amp; forTurn(_event.data)" target="returning">
+          <log label="bot.processing.failed" expr="JSON.stringify({message: 'the turn timed out after ' + processing_timeout_ms + ' ms and was cancelled', turn: turn})"/>
+        </transition>
+        <transition event="bot.processing.cancel.timed_out" event:schema="schemas/bot.processing.cancel.timed_out.json"
+                    cond="!_event.invokeid &amp;&amp; forTurn(_event.data)" target="degraded">
+          <log label="bot.processing.cancel.timed_out" expr="JSON.stringify({turn: turn})"/>
+          <assign location="degraded_reason" expr="'turn ' + turn + ': the cognition did not acknowledge its cancel'"/>
+        </transition>
+        <transition event="bot.input" event:schema="schemas/bot.input.json"
+                    cond="!_event.invokeid &amp;&amp; validInput(_event.data)">
+          <script>queue.push(envelope());</script>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
+      </state>
+
+      <!-- Back to attention: focused when a device is focused. -->
+      <state id="returning">
+        <transition cond="focused_device !== null" target="focused"/>
+        <transition target="unfocused"/>
+      </state>
+
+      <!-- A reply that belongs to no current turn is dropped. -->
+      <transition event="bot.ability.cognition.output bot.ability.failed bot.ability.cognition.cancelled bot.ability.processing.cancelled"
+                  cond="fromCognition()">
+        <log label="bot.stale" expr="_event.name + ' for turn ' + (isObject(_event.data) ? _event.data.turn : 'none') + ' (current ' + turn + ')'"/>
+      </transition>
+    </state>
+  </state>
+
+  <!-- Leaving live cancelled every ability. -->
+  <state id="deactivating">
+    <transition target="inactive">
+      <log label="bot.deactivated" expr="JSON.stringify({})"/>
+    </transition>
+  </state>
+
+  <!-- A sink: the cognition did not acknowledge a cancel, or ended while
+       active. The bot takes no more turns: degraded is a top-level final
+       state, so the session ends with the reason as its result. -->
+  <final id="degraded">
+    <onentry>
+      <log label="bot.degraded" expr="degraded_reason"/>
+    </onentry>
+    <donedata>
+      <param name="reason" expr="degraded_reason"/>
+    </donedata>
+  </final>
+</scxml>

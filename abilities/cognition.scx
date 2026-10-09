@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Cognition ability (mosfet abilities/cognition), thin first cut:
+  one model call per turn, no cascade yet. The body (bots/floppy/floppy.scx)
+  invokes it as its child "cognition" and sends it one
+  bot.ability.cognition.input per processing turn; it answers that turn with
+  exactly one of bot.ability.cognition.output {turn, output} or
+  bot.ability.failed {message, turn, input}, and acknowledges
+  bot.ability.cognition.cancel {turn} with bot.ability.cognition.cancelled
+  {turn}. Leaving processing cancels the model call in flight (SCXML 6.4),
+  which replaces mosfet's stage cancel tokens.
+
+    idle -> processing (an invoked generate service: one text reply) -> idle
+
+  The reply becomes one selection, bot.ability.communication.respond {text}
+  (mosfet's answer path); routing selections is the body's job and a later
+  slice's. The autonomy, intuition, and reasoning cascade replaces the one
+  call in the next slice.
+
+  Readiness: every entry into idle (its stable state) sends
+  bot.ability.offers {ability, choices} to the parent; the thin cut offers
+  no choices yet.
+
+  Contracts: the events it takes reference abilities/schemas/ by
+  event:schema (never inline) and are rechecked by cond; the events of the
+  generate service are recorded by <finalize>.
+
+  Bindings: the generate service package, resolved from its repository URI;
+  env scopes FLOPPY_API_KEY and FLOPPY_BASE_URL to its <invoke>. Without
+  either the service answers generate.failed unconfigured and the turn
+  fails with that message. The model is the body's (a <param> of the body's
+  invoke), else the default below.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="cognition" initial="idle">
+  <datamodel>
+    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="system" expr="'You are floppy, a small companion robot. You receive one stimulus: an event the robot observed, as JSON. Answer with the short text the robot should say in reply, and nothing else.'"/>
+    <!-- The turn in hand. -->
+    <data id="turn" expr="0"/>
+    <data id="stimulus" expr="null"/>
+    <data id="focus" expr="null"/>
+    <data id="focus_candidates" expr="[]"/>
+    <!-- The model call: its invocation, its reply, its failure code. -->
+    <data id="gen_id" expr="null"/>
+    <data id="reply" expr="null"/>
+    <data id="gen_failure" expr="null"/>
+  </datamodel>
+  <script>
+    function isObject(value) {
+      return value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value);
+    }
+    function isTurn(value) {
+      return Number.isInteger(value) &amp;&amp; value &gt;= 1;
+    }
+    function isOptionalString(value) {
+      return value === undefined || value === null || typeof value === 'string';
+    }
+    // schemas/bot.ability.cognition.input.json
+    function validInput(data) {
+      return isObject(data)
+        &amp;&amp; Object.keys(data).every(function (k) { return ['turn', 'stimulus', 'focus', 'focus_candidates'].indexOf(k) &gt;= 0; })
+        &amp;&amp; isTurn(data.turn)
+        &amp;&amp; isObject(data.stimulus)
+        &amp;&amp; Object.keys(data.stimulus).every(function (k) { return ['event', 'data', 'id', 'source', 'target'].indexOf(k) &gt;= 0; })
+        &amp;&amp; typeof data.stimulus.event === 'string' &amp;&amp; data.stimulus.event.length &gt; 0
+        &amp;&amp; data.stimulus.data !== undefined
+        &amp;&amp; isOptionalString(data.stimulus.id) &amp;&amp; isOptionalString(data.stimulus.source) &amp;&amp; isOptionalString(data.stimulus.target)
+        &amp;&amp; isOptionalString(data.focus)
+        &amp;&amp; (data.focus_candidates === undefined
+            || (Array.isArray(data.focus_candidates) &amp;&amp; data.focus_candidates.every(function (c) { return typeof c === 'string'; })));
+    }
+    // schemas/bot.ability.cognition.cancel.json
+    function validCancel(data) {
+      return isObject(data) &amp;&amp; isTurn(data.turn);
+    }
+  </script>
+
+  <!-- Waits for the body's turn. -->
+  <state id="idle">
+    <onentry>
+      <send event="bot.ability.offers" target="#_parent"><content>{"ability": "cognition", "choices": []}</content></send>
+    </onentry>
+    <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json"
+                cond="validInput(_event.data)" target="processing">
+      <assign location="turn" expr="_event.data.turn"/>
+      <assign location="stimulus" expr="_event.data.stimulus"/>
+      <assign location="focus" expr="_event.data.focus === undefined ? null : _event.data.focus"/>
+      <assign location="focus_candidates" expr="_event.data.focus_candidates === undefined ? [] : _event.data.focus_candidates"/>
+    </transition>
+    <transition event="bot.ability.cognition.input">
+      <log label="cognition.rejected" expr="'bot.ability.cognition.input does not satisfy schemas/bot.ability.cognition.input.json'"/>
+    </transition>
+    <!-- Nothing in flight: acknowledge at once. -->
+    <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
+                cond="validCancel(_event.data)">
+      <send event="bot.ability.cognition.cancelled" target="#_parent">
+        <param name="turn" expr="_event.data.turn"/>
+      </send>
+    </transition>
+  </state>
+
+  <!-- One model call for the turn; leaving this state cancels it. -->
+  <state id="processing">
+    <onentry>
+      <assign location="reply" expr="null"/>
+      <assign location="gen_failure" expr="null"/>
+      <log label="cognition" expr="'turn ' + turn + ': ' + stimulus.event"/>
+    </onentry>
+    <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
+            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
+      <param name="model" expr="model"/>
+      <param name="system" expr="system"/>
+      <param name="prompt" expr="JSON.stringify({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates})"/>
+      <finalize>
+        <assign location="reply" expr="_event.name === 'generate.result' &amp;&amp; typeof _event.data.text === 'string' &amp;&amp; _event.data.text.trim().length &gt; 0 ? _event.data.text.trim() : reply"/>
+        <assign location="gen_failure" expr="_event.name === 'generate.failed' ? _event.data.code : gen_failure"/>
+      </finalize>
+    </invoke>
+    <transition event="done.invoke" cond="_event.invokeid === gen_id &amp;&amp; reply !== null" target="idle">
+      <send event="bot.ability.cognition.output" target="#_parent">
+        <param name="turn" expr="turn"/>
+        <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {text: reply}, reason: 'the reply to the stimulus'}]"/>
+      </send>
+    </transition>
+    <transition event="done.invoke" cond="_event.invokeid === gen_id" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="'the generation failed (' + (gen_failure === null ? 'no text reply' : gen_failure) + ')'"/>
+        <param name="turn" expr="turn"/>
+        <param name="input" expr="({focus: focus, focus_candidates: focus_candidates})"/>
+      </send>
+    </transition>
+    <transition event="error.execution error.communication" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="'the generation could not run (' + _event.name + ')'"/>
+        <param name="turn" expr="turn"/>
+        <param name="input" expr="({focus: focus, focus_candidates: focus_candidates})"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
+                cond="validCancel(_event.data) &amp;&amp; _event.data.turn === turn" target="idle">
+      <log label="cognition" expr="'turn ' + turn + ' cancelled'"/>
+      <send event="bot.ability.cognition.cancelled" target="#_parent">
+        <param name="turn" expr="turn"/>
+      </send>
+    </transition>
+  </state>
+</scxml>
