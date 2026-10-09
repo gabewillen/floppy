@@ -22,6 +22,8 @@
     selection naming no target (the communication offers it);
   * blank: selects bot.ability.communication.respond with blank text;
   * twice: selects bot.ability.communication.respond twice;
+  * then_blank: selects bot.ability.communication.respond, then again with
+    blank text (the second waits for the first);
   * unoffered: selects bot.ability.identity.adopt (offered by no ability);
   * ignore: selects bot.ability.cognition.ignore for target cognition;
   * focus: selects bot.focus_device for the observation's data;
@@ -111,6 +113,12 @@
             <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {text: 'first ' + turn}}, {event: 'bot.ability.communication.respond', data: {text: 'second ' + turn}}]"/>
           </send>
         </if>
+        <if cond="action === 'then_blank'">
+          <send event="bot.ability.cognition.output" target="#_parent">
+            <param name="turn" expr="turn"/>
+            <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {text: 'first ' + turn}}, {event: 'bot.ability.communication.respond', data: {text: '   '}}]"/>
+          </send>
+        </if>
         <if cond="action === 'unoffered'">
           <send event="bot.ability.cognition.output" target="#_parent">
             <param name="turn" expr="turn"/>
@@ -156,7 +164,7 @@
           <send event="bot.reboot" target="#_parent"><content>{"reason": "cognition_child_teardown_failed"}</content></send>
         </if>
       </onentry>
-      <transition cond="['reply', 'blank', 'twice', 'unoffered', 'ignore', 'elsewhere', 'focus', 'fail', 'stale'].indexOf(action) &gt;= 0" target="idle"/>
+      <transition cond="['reply', 'blank', 'twice', 'then_blank', 'unoffered', 'ignore', 'elsewhere', 'focus', 'fail', 'stale'].indexOf(action) &gt;= 0" target="idle"/>
       <transition event="bot.ability.cognition.cancel" cond="action !== 'deaf'" target="idle">
         <send event="bot.ability.cognition.cancelled" target="#_parent"><param name="turn" expr="turn"/></send>
       </transition>

@@ -240,14 +240,25 @@
           <param name="choices" expr="offered"/>
         </send>
       </onentry>
-      <!-- What waited, in order. -->
-      <transition cond="queued('bot.ability.communication.input')">
+      <!-- What waited, in order, and checked as on arrival (mosfet
+           re-dispatches a deferred event through the same guards). -->
+      <transition cond="queued('bot.ability.communication.input') &amp;&amp; validInput(queue[0].data)">
         <send event="bot.ability.conversation.input" target="#_conversation">
           <content expr="queue.shift().data"/>
         </send>
       </transition>
-      <transition cond="queued('bot.ability.communication.respond')" target="preparing_response">
+      <transition cond="queued('bot.ability.communication.input')">
+        <assign location="queue" expr="queue.slice(1)"/>
+      </transition>
+      <transition cond="queued('bot.ability.communication.respond') &amp;&amp; validRespond(queue[0].data)" target="preparing_response">
         <assign location="response" expr="queue.shift().data.text"/>
+      </transition>
+      <transition cond="queued('bot.ability.communication.respond')">
+        <assign location="queue" expr="queue.slice(1)"/>
+        <log label="communication.rejected" expr="'bot.ability.communication.respond needs one non-blank text'"/>
+        <send event="bot.ability.communication.failed" target="#_parent">
+          <param name="message" expr="'Communication response text must be non-blank.'"/>
+        </send>
       </transition>
       <transition event="bot.ability.communication.respond" event:schema="schemas/bot.ability.communication.respond.json"
                   cond="offering || (!fromChild() &amp;&amp; validRespond(_event.data))" target="preparing_response">

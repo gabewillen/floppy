@@ -304,6 +304,28 @@ fn a_blank_response_fails_without_speaking() {
 }
 
 #[test]
+fn a_blank_response_that_waited_fails_without_speaking() {
+    let body = layout(&Speaking::Real, &[]);
+    let mut run = started(&body);
+    run.event("bot.input", &input("then_blank"));
+    let records = run.until(WAIT, label_is("bot.ability.communication.failed"));
+    assert_eq!(
+        texts(&records, "communication.deferred"),
+        strings(&["bot.ability.communication.respond"])
+    );
+    assert_eq!(
+        texts(&records, "bot.ability.communication.failed"),
+        strings(&[r#"{"message":"Communication response text must be non-blank."}"#])
+    );
+    assert_eq!(texts(&records, "bot.say"), strings(&["first 1"]));
+    // Still active: the next response is said.
+    run.event("bot.input", &input("reply"));
+    let records = run.until(WAIT, label_is("bot.ability.speaking.output"));
+    assert_eq!(texts(&records, "bot.say"), strings(&["reply 2"]));
+    close(run, "a_blank_response_that_waited_fails_without_speaking");
+}
+
+#[test]
 fn a_response_waits_for_the_one_in_flight_and_each_hop_times_out() {
     let body = layout(
         &Speaking::Deaf,
