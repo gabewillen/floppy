@@ -17,6 +17,10 @@
 //! event it emits (`bot.ability.speaking.output`,
 //! `bot.ability.communication.failed`).
 //!
+//! `the_conversation_commits_each_message_into_its_history` runs the
+//! conversation alone under `tests/fixtures/phase4/conversation_harness.scx`,
+//! which logs each `bot.ability.conversation.output` whole.
+//!
 //! Every test ends by comparing its whole run with its pinned trace under
 //! `tests/fixtures/phase4/traces/` (`support::trace`; `FLOPPY_TRACE_BLESS=1`
 //! rewrites them).
@@ -400,5 +404,110 @@ fn a_communication_whose_speaking_cannot_start_fails_the_activation() {
     close(
         run,
         "a_communication_whose_speaking_cannot_start_fails_the_activation",
+    );
+}
+
+/// One external event for the conversation harness.
+fn conversation_event(name: &str, data: &Json) -> (String, Json) {
+    (name.to_owned(), data.clone())
+}
+
+#[test]
+fn the_conversation_commits_each_message_into_its_history() {
+    let dir = unique_scratch("conversation");
+    copy_dir(
+        &workspace().join("abilities/schemas"),
+        &dir.join("abilities/schemas"),
+    );
+    std::fs::copy(
+        workspace().join("abilities/conversation.scx"),
+        dir.join("abilities/conversation.scx"),
+    )
+    .expect("the conversation is copyable");
+    let harness = dir.join("abilities/harness.scx");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/conversation_harness.scx"),
+        &harness,
+    )
+    .expect("the harness is copyable");
+    let input = "bot.ability.conversation.input";
+    let append = "bot.ability.conversation.append";
+    // Unsorted string and embedding identities, an escaped quote, audio in
+    // mixed case (dropped), structured content (kept), outbound references,
+    // a repeated provenance id (not committed again), a record without
+    // content or id, and the first participants again.
+    let events = [
+        conversation_event(
+            input,
+            &json!({"source_ids": ["zed", "alice", [0.5, 1]], "target_ids": ["bot", "a\"b"], "content": "hello", "content_type": "text/plain"}),
+        ),
+        conversation_event(
+            input,
+            &json!({"source_ids": ["alice"], "target_ids": [], "content": "AAAA", "content_type": "Audio/PCM", "sample_rate_hz": 16000, "channels": 1}),
+        ),
+        conversation_event(
+            input,
+            &json!({"source_ids": [[2, 1.25], "bob"], "target_ids": ["bot"], "content": {"b": 1, "a": [true, null]}, "content_type": "application/json"}),
+        ),
+        conversation_event(
+            append,
+            &json!({"message": {"sequence": 0, "direction": "outbound", "source_ids": ["bot"], "target_ids": ["zed", "alice"], "content": "hi", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1", "session_ref": "s1", "turn_ref": "t1", "source": "q"}}}),
+        ),
+        conversation_event(
+            append,
+            &json!({"message": {"sequence": 0, "direction": "outbound", "source_ids": ["bot"], "target_ids": [], "content": "again", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1"}}}),
+        ),
+        conversation_event(
+            append,
+            &json!({"message": {"sequence": 0, "direction": "outbound", "source_ids": [], "target_ids": [], "content_type": "text/plain", "provenance": {"event": append, "id": null}}}),
+        ),
+        conversation_event(
+            input,
+            &json!({"source_ids": ["alice", "zed", [0.5, 1]], "target_ids": ["a\"b", "bot"], "content": "again", "content_type": "text/plain"}),
+        ),
+    ];
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    let mut all = Vec::new();
+    for (name, data) in &events {
+        run.event(name, data);
+        // Each event ends in one conversation log (a commit, or the
+        // repeated id).
+        all.extend(run.until(WAIT, label_is("conversation")));
+    }
+    // Six commits, six outputs.
+    let seen = std::cell::Cell::new(texts(&all, "harness.output").len());
+    if seen.get() < 6 {
+        all.extend(run.until(WAIT, |record| {
+            if label_is("harness.output")(record) {
+                seen.set(seen.get() + 1);
+            }
+            seen.get() == 6
+        }));
+    }
+    assert_eq!(
+        texts(&all, "conversation"),
+        strings(&[
+            r#"inbound 0 from ["alice","zed",[0.5,1]] (1 in its transcript)"#,
+            r#"inbound 1 from ["alice"] (1 in its transcript)"#,
+            r#"inbound 2 from ["bob",[2,1.25]] (1 in its transcript)"#,
+            "outbound 3",
+            "outbound r-1 already committed",
+            "outbound 4",
+            r#"inbound 5 from ["alice","zed",[0.5,1]] (2 in its transcript)"#,
+        ])
+    );
+    let finished = run.close(WAIT);
+    let outputs = texts(&finished.all, "harness.output");
+    assert_eq!(outputs.len(), 6, "{outputs:?}");
+    let last: Json = serde_json::from_str(&outputs[5]).expect("the output is JSON");
+    assert_eq!(
+        last["messages"][0]["provenance"]["session_ref"],
+        json!(r#"relationship-["alice","zed",[0.5,1]]["a\"b","bot"]"#)
+    );
+    assert_eq!(last["messages"][1]["content"], Json::Null);
+    trace::assert_trace(
+        "the_conversation_commits_each_message_into_its_history",
+        &finished.all,
+        &[],
     );
 }
