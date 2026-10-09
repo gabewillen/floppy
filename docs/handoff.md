@@ -102,7 +102,8 @@ inlines the browser `validate` options type so no unapproved
   (`674e2f6e`): event data judged across the invoke boundary; canonical
   components recorded (`20fe0722`, manifest `03bc0069`, IRP baselines
   unchanged). floppy is green on it with `<decision:choice>` (D32,
-  `e7c0a870`).
+  `e7c0a870`); the `builder_bot` live test passed on the subtree at
+  `c28799aa` through the CPA gateway (`gabe-codex-1/gpt-6-luna`, 86 s).
 - floppy is green on the datamodel pass (2026-10-08): `scripts/build-components.sh`, fmt,
   clippy `-D warnings`, all workspace tests, and the `builder_bot` live
   test on direct vLLM; no floppy code or test named a moved code.
