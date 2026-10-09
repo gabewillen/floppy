@@ -243,6 +243,25 @@ inlines the browser `validate` options type so no unapproved
   body: validators only (`isObject`, `validX`, `forTurn`, `allReady`,
   `routed`, ...).
 
+- `namespaces/conversation` (floppy `d8a0b49b`, `0f2db251`, `b81a5ab5`),
+  a new floppy namespace
+  (`https://github.com/stateforward/floppy/namespaces/conversation`,
+  component `floppy_conversation`, imports `types`, `telemetry`,
+  `data-model-host`): `<conversation:commit location keylocation?
+  direction event message sequence provenance?>` (mosfet
+  `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`,
+  `_stable_context_ref`, `MessageProvenance`) builds one committed message
+  and its transcript key; it never holds the history (the extension
+  boundary's values are bounded at 64 KiB on wasm), so the conversation
+  appends with `history.concat([message])` and
+  `transcripts[participants]`. The communication builds its outbound record
+  with it (the append's provenance now carries explicit `null` source,
+  target, session_ref and turn_ref; the committed history is unchanged).
+  `the_conversation_commits_each_message_into_its_history` pins the
+  committed messages field by field (blessed on the old document). Both
+  documents now script validators only (`isObject`, `identities`,
+  `validX`, `isProduct`, ...).
+
 Next: phase 4 (bot core and abilities), per
 `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 
