@@ -1571,8 +1571,9 @@ interface io-processor-api {
   /// malformed input, a missing or over-bound delayed send id, a bad trace
   /// carrier, or an `internal` or `invalid` target (classified before the
   /// delay is applied);
-  /// `payload-too-large` (including the raw message bound and the clock's
-  /// 4194304-byte aggregate retained-payload bound); `duplicate-id` for a
+  /// `payload-too-large` (including the raw message bound, a stamped event
+  /// over the `event` bounds, and the clock's 4194304-byte aggregate
+  /// retained-payload bound); `duplicate-id` for a
   /// live send id; `capacity-exhausted` when the clock holds 1024 timers;
   /// `unavailable` for an `unreachable` target (the host answers the
   /// machine `undeliverable`). Nothing is scheduled on failure.

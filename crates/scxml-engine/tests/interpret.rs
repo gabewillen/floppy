@@ -3245,3 +3245,259 @@ fn a_service_invocation_names_its_env_slot_variables_never_values() {
     );
     assert_eq!(session.active(), ["exec"]);
 }
+
+// ------------------------------------------------------- event contracts
+
+/// The `event` vocabulary's namespace declaration.
+const EVENT_NS: &str = r#"xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event""#;
+
+/// An outcome machine (`exec`, `comm`, `ok`) declaring the `event`
+/// namespace, whose `ok` transition carries `handler` (an `event:schema`
+/// attribute, or empty) and logs `after` once its `onentry` finishes.
+fn contract_machine(onentry: &str, handler: &str, extra: &str) -> MachineIr {
+    machine(
+        &format!(r#"initial="s" {EVENT_NS}"#),
+        &format!(
+            r#"<state id="s">
+                 <onentry>{onentry}<log label="after"/></onentry>
+                 <transition event="error.execution" target="exec"/>
+                 <transition event="error.communication" target="comm"/>
+                 <transition event="ok" target="ok" {handler}/>
+                 {extra}
+               </state>
+               <final id="exec"/><final id="comm"/><final id="ok"/>"#
+        ),
+    )
+}
+
+fn object(json: &str) -> DataValue {
+    DataValue::canonical_json_object(json).expect("a JSON object")
+}
+
+fn number(value: f64) -> DataValue {
+    DataValue::Number(scxml_types::FiniteNumber::new(value).expect("finite"))
+}
+
+/// Scripted values `good` (`{"n":1}`) and `bad` (`2`).
+fn contract_caps() -> Mock {
+    let mut caps = Mock::default();
+    caps.values.insert("good".into(), Ok(object(r#"{"n":1}"#)));
+    caps.values.insert("bad".into(), Ok(number(2.0)));
+    caps.targets.insert("#_parent".into(), SendTarget::Parent);
+    caps
+}
+
+const OBJECT_SCHEMA: &str = r#"event:schema='{"type":"object","required":["n"]}'"#;
+
+#[test]
+fn a_send_whose_data_its_own_schema_rejects_is_not_dispatched_and_raises_error_execution() {
+    // Whatever the target: the session's own queue, `#_internal`, or a
+    // routed one.
+    for target in ["", r##"target="#_internal""##, r##"target="#_parent""##] {
+        let session = Session::started(
+            contract_machine(
+                &format!(
+                    r#"<send event="ok" {target} {OBJECT_SCHEMA}><content expr="bad"/></send>"#
+                ),
+                "",
+                "",
+            ),
+            contract_caps(),
+        );
+        assert_eq!(session.active(), ["exec"], "{target}");
+        assert!(
+            session.caps.sends.is_empty(),
+            "{target}: nothing is dispatched"
+        );
+        assert!(
+            session.caps.logs.is_empty(),
+            "{target}: error.execution ends the block: {:?}",
+            session.caps.logs
+        );
+        let session = Session::started(
+            contract_machine(
+                &format!(
+                    r#"<send event="ok" {target} {OBJECT_SCHEMA}><content expr="good"/></send>"#
+                ),
+                "",
+                "",
+            ),
+            contract_caps(),
+        );
+        assert_eq!(session.caps.logs.len(), 1, "{target}: the block goes on");
+        if target.contains("_parent") {
+            assert_eq!(session.active(), ["s"], "routed away");
+            assert_eq!(session.caps.sends.len(), 1);
+        } else {
+            assert_eq!(session.active(), ["ok"], "{target}");
+        }
+    }
+}
+
+#[test]
+fn the_error_of_a_rejected_send_carries_its_send_id() {
+    let ir = machine(
+        &format!(r#"initial="s" {EVENT_NS}"#),
+        &format!(
+            r#"<state id="s">
+                 <onentry><send id="mine" event="x" {OBJECT_SCHEMA}><content expr="bad"/></send></onentry>
+                 <transition event="error.execution" cond="sendid==mine" target="pass"/>
+                 <transition event="error" target="wrong"/>
+               </state>
+               <final id="pass"/><final id="wrong"/>"#
+        ),
+    );
+    let session = Session::started(ir, contract_caps());
+    assert_eq!(session.active(), ["pass"]);
+}
+
+#[test]
+fn an_event_the_session_sends_itself_must_satisfy_every_transition_handling_it() {
+    for target in ["", r##"target="#_internal""##, r##"target="#_scxml_self""##] {
+        for (value, expected) in [("bad", "exec"), ("good", "ok")] {
+            let session = Session::started(
+                contract_machine(
+                    &format!(r#"<send event="ok" {target}><content expr="{value}"/></send>"#),
+                    OBJECT_SCHEMA,
+                    "",
+                ),
+                contract_caps(),
+            );
+            assert_eq!(session.active(), [expected], "{target} {value}");
+        }
+    }
+    // No data at all is `null`, which an object schema rejects.
+    let session = Session::started(
+        contract_machine(r#"<send event="ok"/>"#, OBJECT_SCHEMA, ""),
+        contract_caps(),
+    );
+    assert_eq!(session.active(), ["exec"]);
+}
+
+#[test]
+fn every_matching_descriptor_counts_in_any_state_and_other_events_do_not() {
+    // A transition of a state that is not active, matching by prefix,
+    // rejects the data; a transition handling another event does not.
+    let elsewhere = format!(
+        r#"<state id="other"><transition event="ok.*" target="ok" {OBJECT_SCHEMA}/></state>"#
+    );
+    let ir = machine(
+        &format!(r#"initial="s" {EVENT_NS}"#),
+        &format!(
+            r#"<state id="s">
+                 <onentry><send event="ok.sub"><content expr="bad"/></send></onentry>
+                 <transition event="error.execution" target="exec"/>
+                 <transition event="ok.sub" target="ok"/>
+               </state>
+               {elsewhere}
+               <final id="exec"/><final id="ok"/>"#
+        ),
+    );
+    assert_eq!(Session::started(ir, contract_caps()).active(), ["exec"]);
+    let session = Session::started(
+        contract_machine(
+            r#"<send event="ok"><content expr="bad"/></send>"#,
+            "",
+            &format!(r#"<transition event="other" target="exec" {OBJECT_SCHEMA}/>"#),
+        ),
+        contract_caps(),
+    );
+    assert_eq!(session.active(), ["ok"]);
+}
+
+#[test]
+fn a_routed_send_is_not_judged_by_this_documents_transitions() {
+    let session = Session::started(
+        contract_machine(
+            r##"<send event="ok" target="#_parent"><content expr="bad"/></send>"##,
+            OBJECT_SCHEMA,
+            "",
+        ),
+        contract_caps(),
+    );
+    assert_eq!(session.active(), ["s"]);
+    assert_eq!(session.caps.sends.len(), 1);
+}
+
+#[test]
+fn a_raise_its_contracts_reject_is_not_raised_and_raises_error_execution() {
+    // A `<raise>` has no data (`null`).
+    for (raise, handler, expected) in [
+        (r#"<raise event="ok"/>"#, OBJECT_SCHEMA, "exec"),
+        (
+            r#"<raise event="ok" event:schema='{"type":"object"}'/>"#,
+            "",
+            "exec",
+        ),
+        (
+            r#"<raise event="ok" event:schema='{"type":"null"}'/>"#,
+            r#"event:schema='{"type":["null","object"]}'"#,
+            "ok",
+        ),
+        (r#"<raise event="ok"/>"#, "", "ok"),
+    ] {
+        let session = Session::started(contract_machine(raise, handler, ""), contract_caps());
+        assert_eq!(session.active(), [expected], "{raise} {handler}");
+        assert_eq!(
+            session.caps.logs.len(),
+            usize::from(expected == "ok"),
+            "{raise}: a rejected raise ends its block"
+        );
+    }
+}
+
+#[test]
+fn schemaexpr_constrains_nothing_and_is_never_evaluated() {
+    let session = Session::started(
+        contract_machine(
+            r#"<send event="ok" event:schemaexpr="s1"><content expr="bad"/></send><raise event="x" event:schemaexpr="s2"/>"#,
+            r#"event:schemaexpr="s3""#,
+            "",
+        ),
+        contract_caps(),
+    );
+    assert_eq!(session.active(), ["ok"]);
+    assert!(
+        !session
+            .caps
+            .calls
+            .iter()
+            .any(|call| call.contains(":s1") || call.contains(":s2") || call.contains(":s3")),
+        "{:?}",
+        session.caps.calls
+    );
+}
+
+#[test]
+fn a_bare_done_event_is_never_checked() {
+    let ir = machine(
+        &format!(r#"initial="c" {EVENT_NS}"#),
+        &format!(
+            r#"<state id="c" initial="f">
+                 <final id="f"/>
+                 <transition event="done.state.c" target="ok" {OBJECT_SCHEMA}/>
+                 <transition event="error.execution" target="exec"/>
+               </state>
+               <final id="exec"/><final id="ok"/>"#
+        ),
+    );
+    assert_eq!(Session::started(ir, contract_caps()).active(), ["ok"]);
+}
+
+#[test]
+fn transitions_still_match_external_events_by_name_alone() {
+    // The receiving transition's schema is its declared contract; an event
+    // that arrives with other data is still delivered and selects it.
+    let ir = machine(
+        &format!(r#"initial="s" {EVENT_NS}"#),
+        &format!(
+            r#"<state id="s"><transition event="go" target="done" {OBJECT_SCHEMA}/></state>
+               <final id="done"/>"#
+        ),
+    );
+    let mut session = Session::started(ir, contract_caps());
+    let mut event = external("go");
+    event.data = number(2.0);
+    session.send(&event).expect("the event is processed");
+    assert_eq!(session.active(), ["done"]);
+}

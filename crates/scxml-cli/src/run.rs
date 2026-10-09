@@ -1329,12 +1329,18 @@ mod live {
     }
 
     fn read_log(path: &Path, identity: &Identity) -> Result<Log, Box<dyn std::error::Error>> {
-        let bytes = std::fs::read(path).map_err(|error| {
+        let unreadable = |error: &dyn std::fmt::Display| {
             format!(
                 "[replay-unreadable] cannot read the replay log `{}`: {error}",
                 path.display()
             )
-        })?;
+        };
+        let (mut file, metadata) = crate::open_regular_file(path)
+            .map_err(|error| unreadable(&error))?
+            .ok_or_else(|| unreadable(&"not a regular file"))?;
+        // The native CLI reads a log of any size, as it reads a source.
+        let mut bytes = Vec::with_capacity(usize::try_from(metadata.len())?);
+        std::io::Read::read_to_end(&mut file, &mut bytes).map_err(|error| unreadable(&error))?;
         let text = String::from_utf8(bytes)
             .map_err(|_| format!("[replay-invalid] `{}` is not UTF-8", path.display()))?;
         let invalid = |line: usize, message: &str| {

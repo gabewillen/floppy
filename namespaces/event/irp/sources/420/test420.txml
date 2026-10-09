@@ -5,7 +5,8 @@
   <onentry>
     <raise event="a" event:schema="true"/>
   </onentry>
-  <transition event="a" conf:targetpass="" event:schema="false"/>
+  <transition event="a" conf:targetpass="" event:schema="true"/>
+  <transition event="unused" conf:targetfail="" event:schema="false"/>
   <transition event="*" conf:targetfail=""/>
 </state>
 <conf:pass/>

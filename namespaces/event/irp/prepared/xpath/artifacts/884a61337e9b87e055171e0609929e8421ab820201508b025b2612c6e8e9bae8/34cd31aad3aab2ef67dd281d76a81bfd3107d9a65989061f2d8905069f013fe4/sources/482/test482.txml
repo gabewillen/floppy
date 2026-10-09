@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!-- event-9: donedata is never checked: its data reaches done.state unchanged although its own schema and the transition handling it reject it. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event">
+<state id="s0" initial="s01">
+  <state id="s01">
+    <transition target="s0final"/>
+  </state>
+  <final id="s0final">
+    <donedata event:schema='{"type": "object", "required": ["count"], "additionalProperties": false}'>
+      <param conf:name="1" expr="1"/>
+    </donedata>
+  </final>
+  <transition event="done.state.s0" conf:eventvarVal="1=1" target="s1" event:schema="false"/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<state id="s1">
+  <onentry>
+    <raise event="checked"/>
+  </onentry>
+  <transition event="checked" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

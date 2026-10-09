@@ -6,8 +6,9 @@
 //! handles or creates. Its value is either inline JSON (first non-white-space
 //! character `{`, or exactly `true` or `false`) or a URI reference to a JSON
 //! file relative to the document, optionally with a JSON Pointer fragment
-//! (RFC 6901, `schemas/order.json#/$defs/Order`). The schemas are metadata
-//! only: nothing here runs while a document executes.
+//! (RFC 6901, `schemas/order.json#/$defs/Order`). [`CompiledSchema`] checks
+//! event data against a resolved schema; the engine uses it for the data of
+//! the events an executed `<send>` or `<raise>` creates.
 //!
 //! [`resolve`] turns the bytes of one schema source into the canonical JSON
 //! text the compiler embeds in Machine IR:
@@ -1165,10 +1166,9 @@ fn check_schema(schema: &Value, dialect: Dialect) -> Result<(), SchemaError> {
 // Checking event data at a boundary
 // ---------------------------------------------------------------------------
 
-/// One resolved schema compiled for checking event data at a trust boundary
-/// (a package-declared event schema a host enforces on an invoked service's
-/// emitted or accepted events). A document's own `event:schema` attributes
-/// are never compiled into one: they stay metadata only.
+/// One resolved schema compiled for checking event data: the engine checks
+/// the data of the events an executed `<send>` or `<raise>` creates against
+/// the literal `event:schema`s that apply (`scxml-engine`'s `contracts`).
 pub struct CompiledSchema {
     schemas: boon::Schemas,
     index: boon::SchemaIndex,

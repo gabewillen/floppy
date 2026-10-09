@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- event-7: an inline schema keeps its fragment references, plain-name ones included. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" initial="s0" version="1.0" datamodel="ecmascript">
+<state id="s0">
+  <onentry>
+    <raise event="a" event:schema="{&#34;$defs&#34;: {&#34;A&#34;: {&#34;$anchor&#34;: &#34;a&#34;, &#34;type&#34;: &#34;null&#34;}}, &#34;$ref&#34;: &#34;#a&#34;}"/>
+  </onentry>
+  <transition event="a" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

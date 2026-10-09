@@ -142,7 +142,7 @@ const NAMESPACE_SUITES = {
 };
 const NAMESPACE_TALLIES = {
   env: { rejections: 8, runs: 0 },
-  event: { rejections: 17, runs: 12 },
+  event: { rejections: 17, runs: 13 },
 };
 
 for (const [name, manifests] of Object.entries(NAMESPACE_SUITES)) {

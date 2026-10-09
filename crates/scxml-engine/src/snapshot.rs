@@ -98,7 +98,8 @@ pub struct TransitionSnapshot {
     /// previews were requested or when targetless.
     pub entry: Vec<StateId>,
     /// The transition's `event` vocabulary, copied from the Machine IR
-    /// (metadata only: the engine never reads it while it executes).
+    /// (selection never reads it; the session checks the events it creates
+    /// against it).
     pub event_schema: Option<scxml_compiler_core::EventSchemaIr>,
 }
 

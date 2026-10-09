@@ -49,6 +49,7 @@
 #![forbid(unsafe_code)]
 
 mod configuration;
+mod contracts;
 pub mod interpret;
 mod run;
 mod snapshot;
@@ -184,8 +185,13 @@ pub enum Effect {
         /// Optional data-model expression.
         expression: Option<String>,
     },
-    /// Raise one internal event.
-    Raise(String),
+    /// Raise one internal event: its name; whether a `<raise>` element
+    /// creates it (`true`), so the session first checks its event contracts
+    /// (the element's own literal `event:schema` and those of the
+    /// document's transitions handling it, `namespaces/event`), or the
+    /// engine generates it (`false`: a bare `done.state.<id>`, never
+    /// checked); and the element's `event:schema`, if any.
+    Raise(String, bool, Option<scxml_compiler_core::EventSchemaIr>),
     /// Generate the done event `done.state.<id>` of a compound state whose
     /// `<final>` child declares `<donedata>`, with that `<donedata>`
     /// evaluated as its data (SCXML 3.7.1, 5.5; W3C Appendix D
@@ -530,6 +536,9 @@ pub struct Engine {
     /// The effect transaction a [`Engine::run`] call suspended at a
     /// deferred effect; [`Command::Continue`] resumes it.
     suspension: Option<Box<run::Suspension>>,
+    /// The literal `event:schema` contracts `<send>` and `<raise>` check
+    /// (`contracts`), with the schemas compiled so far.
+    contracts: contracts::EventContracts,
 }
 
 /// One started invocation owned by an active invoking state (SCXML 6.4).
@@ -815,6 +824,7 @@ impl Engine {
                     }
                 }
             }
+            let contracts = contracts::EventContracts::new(&machine);
             Ok(Self {
                 machine,
                 state_indices,
@@ -842,10 +852,27 @@ impl Engine {
                 bound_states: std::collections::BTreeSet::new(),
                 issued_blocks: std::collections::BTreeSet::new(),
                 suspension: None,
+                contracts,
             })
         })();
         complete(&span, &result);
         result
+    }
+
+    /// Whether an event `event` this session creates with `data` keeps its
+    /// literal `event:schema` contracts: `own`, the creating `<send>`'s or
+    /// `<raise>`'s schema, and, when the session delivers the event to
+    /// itself (`delivered_here`), the schema of every transition of this
+    /// document handling `event` (the `contracts` module). Pure apart
+    /// from compiling each schema once.
+    pub(crate) fn admits_event_data(
+        &mut self,
+        event: &str,
+        data: &DataValue,
+        own: Option<&scxml_compiler_core::EventSchemaIr>,
+        delivered_here: bool,
+    ) -> bool {
+        self.contracts.admits(event, data, own, delivered_here)
     }
 
     /// Enters the root initial targets' W3C entry set and emits ordered
@@ -1436,7 +1463,7 @@ impl Engine {
             .planned_effects
             .iter()
             .filter_map(|planned| match &planned.effect {
-                Effect::Raise(name) => Some((name.clone(), planned.context.block)),
+                Effect::Raise(name, ..) => Some((name.clone(), planned.context.block)),
                 Effect::DoneEvent { event, .. } => Some((event.clone(), planned.context.block)),
                 _ => None,
             })
@@ -1860,7 +1887,7 @@ impl Engine {
                 return Err(EngineError::EffectLimit);
             }
             self.issued_blocks.insert(planned.context.block);
-            if let Effect::Raise(name) = &planned.effect {
+            if let Effect::Raise(name, ..) = &planned.effect {
                 if scxml_types::exceeds_wasm_bound(
                     pending_raises.len().saturating_add(1),
                     MAX_NESTED_ITEMS,
@@ -3085,26 +3112,18 @@ impl Engine {
                         // through the `DoneEvent` effect; absent
                         // `<donedata>` the raise stays bare (SCXML
                         // 5.5.2/6.5).
-                        match state.donedata.clone() {
-                            Some(donedata) => {
-                                ensure_effect_room(items.len())?;
-                                items.push_back(PlanItem::Emit {
-                                    effect: Effect::DoneEvent {
-                                        event: done_event,
-                                        donedata: Box::new(donedata),
-                                    },
-                                    context: entry_context(next_block()),
-                                });
-                            }
-                            None => push_effect_item(
-                                items,
-                                ExecutableContentIr::Raise {
-                                    event: done_event,
-                                    event_schema: None,
-                                },
-                                &entry_context(next_block()),
-                            )?,
-                        }
+                        let effect = match state.donedata.clone() {
+                            Some(donedata) => Effect::DoneEvent {
+                                event: done_event,
+                                donedata: Box::new(donedata),
+                            },
+                            None => Effect::Raise(done_event, false, None),
+                        };
+                        ensure_effect_room(items.len())?;
+                        items.push_back(PlanItem::Emit {
+                            effect,
+                            context: entry_context(next_block()),
+                        });
                         // When the grandparent is a parallel state and every
                         // one of its regions is now in a final state, the
                         // parallel itself raises `done.state.<grandparent-id>`
@@ -3124,14 +3143,15 @@ impl Engine {
                                 )?
                             {
                                 let grandparent_id = self.state_id_by_index(grandparent_index)?;
-                                push_effect_item(
-                                    items,
-                                    ExecutableContentIr::Raise {
-                                        event: format!("done.state.{}", grandparent_id.as_str()),
-                                        event_schema: None,
-                                    },
-                                    &entry_context(next_block()),
-                                )?;
+                                ensure_effect_room(items.len())?;
+                                items.push_back(PlanItem::Emit {
+                                    effect: Effect::Raise(
+                                        format!("done.state.{}", grandparent_id.as_str()),
+                                        false,
+                                        None,
+                                    ),
+                                    context: entry_context(next_block()),
+                                });
                             }
                         }
                     }
@@ -4211,7 +4231,10 @@ pub fn assign_source(expression: Option<&str>, content: Option<&DataValue>) -> A
 /// Maps one executable-content action to its observable effect.
 fn action_effect(action: ExecutableContentIr) -> Result<Option<Effect>, EngineError> {
     match action {
-        ExecutableContentIr::Raise { event, .. } => Ok(Some(Effect::Raise(event))),
+        ExecutableContentIr::Raise {
+            event,
+            event_schema,
+        } => Ok(Some(Effect::Raise(event, true, event_schema))),
         ExecutableContentIr::Log { label, expr } => Ok(Some(Effect::Log {
             label,
             expression: expr,
@@ -4992,7 +5015,7 @@ mod tests {
         assert_eq!(
             step.effects,
             vec![
-                Effect::Raise("raised".into()),
+                Effect::Raise("raised".into(), true, None),
                 Effect::Log {
                     label: Some("Outcome".into()),
                     expression: Some("'pass'".into()),
@@ -5005,7 +5028,7 @@ mod tests {
         let mut ordering = Vec::new();
         for effect in &step.effects {
             match effect {
-                Effect::Raise(name) => {
+                Effect::Raise(name, ..) => {
                     ordering.push(format!("raise:{name}"));
                     engine
                         .raise(Event::internal(
@@ -5279,7 +5302,10 @@ mod tests {
             .expect("targetless transition must execute");
         assert_eq!(step.leaves.first().map(StateId::as_str), Some("ready"));
         assert_eq!(step.status, EngineStatus::Running);
-        assert_eq!(step.effects, vec![Effect::Raise("raised".into())]);
+        assert_eq!(
+            step.effects,
+            vec![Effect::Raise("raised".into(), true, None)]
+        );
         let context = &step.planned_effects[0].context;
         assert_eq!(context.phase, EffectExecutionPhase::Transition);
         assert!(observes(
@@ -5327,7 +5353,7 @@ mod tests {
             .begin_effects(&step)
             .expect("finish step must begin its effect phase");
         for planned in &step.planned_effects {
-            if let Effect::Raise(name) = &planned.effect {
+            if let Effect::Raise(name, ..) = &planned.effect {
                 engine
                     .raise(Event::internal(
                         EventName::new(name.clone()).expect("test raise name must be valid"),
@@ -5554,7 +5580,7 @@ mod tests {
             .planned_effects
             .iter()
             .filter_map(|planned| match &planned.effect {
-                Effect::Raise(name) => Some(name.clone()),
+                Effect::Raise(name, ..) => Some(name.clone()),
                 _ => None,
             })
             .collect::<Vec<_>>();
@@ -5563,7 +5589,7 @@ mod tests {
             .planned_effects
             .iter()
             .find_map(|planned| match &planned.effect {
-                Effect::Raise(name) if name == "done.state.s0" => Some(planned.context.clone()),
+                Effect::Raise(name, ..) if name == "done.state.s0" => Some(planned.context.clone()),
                 _ => None,
             })
             .expect("done.state raise must carry an entry context");
@@ -5769,7 +5795,7 @@ mod tests {
         assert!(!observes(&engine, &entry_effects[0].context, &s02));
         assert!(matches!(
             &entry_effects[1].effect,
-            Effect::Raise(name) if name == "default-history-content"
+            Effect::Raise(name, ..) if name == "default-history-content"
         ));
         assert!(observes(&engine, &entry_effects[1].context, &s0));
         assert!(!observes(&engine, &entry_effects[1].context, &s02));
@@ -5800,7 +5826,7 @@ mod tests {
         // Stored history entry executes no default history content.
         assert!(!back.planned_effects.iter().any(|planned| matches!(
             &planned.effect,
-            Effect::Raise(name) if name == "default-history-content"
+            Effect::Raise(name, ..) if name == "default-history-content"
         )));
         complete_empty_effect_step(&mut engine, &back);
     }
@@ -5940,7 +5966,7 @@ mod tests {
     fn apply_effects(engine: &mut Engine, step: &CommandResult, applied: &mut Vec<String>) {
         for planned in &step.planned_effects {
             match &planned.effect {
-                Effect::Raise(event) => engine
+                Effect::Raise(event, ..) => engine
                     .raise(Event::internal(
                         EventName::new(event.clone()).expect("test event name must be valid"),
                     ))
@@ -6077,7 +6103,7 @@ mod tests {
                         .push(format!("log:{}", label.clone().unwrap_or_default()));
                     Ok(())
                 }
-                Effect::Raise(name) => {
+                Effect::Raise(name, ..) => {
                     self.applied.push(format!("raise:{name}"));
                     engine
                         .raise(Event::internal(
@@ -6395,7 +6421,7 @@ mod tests {
             planned: &PlannedEffect,
             _trigger: Option<&Event>,
         ) -> Result<(), EffectFailure<EngineError>> {
-            if let Effect::Raise(name) = &planned.effect {
+            if let Effect::Raise(name, ..) = &planned.effect {
                 engine
                     .raise(Event::internal(
                         EventName::new(name.clone()).expect("test event name must be valid"),

@@ -29,15 +29,31 @@ export SCXML_COMPONENTS_DIR="${CARGO_TARGET_DIR:-$PWD/target}/wasm-artifacts/rel
 export SCXML_COMPONENTS_MANIFEST_SHA256=$(shasum -a 256 "$SCXML_COMPONENTS_DIR/manifest.tsv" | cut -d ' ' -f 1)
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test --workspace --all-targets --locked
+python3 scripts/test-parallel.py
 ```
+
+`scripts/test-parallel.py` runs the same test binaries as
+`cargo test --workspace --all-targets --locked`, but whole binaries side by
+side instead of one after another: it builds them with `cargo test --no-run`,
+runs `--jobs N` of them at a time (default: half the CPUs), each in its
+package root as `cargo test` would, and inside each binary the tests still run
+on the harness's own threads. It prints each binary's wall time, writes each
+binary's output to `target/test-parallel/<binary>.log` (printed in full when
+the binary fails), starts the binaries the previous run found slowest first,
+and exits nonzero when any binary fails. Cargo arguments go before `--`
+(`python3 scripts/test-parallel.py -p scxml-cli --tests`) and test-binary
+arguments after it (`-- --nocapture`). Tests therefore must not share a fixed
+path, port, or build directory with a test in another binary: every suite
+that builds components uses its own artifacts directory, and every scratch
+directory is named for its suite or its process.
 
 The workspace test run already includes the Wasmtime host's tests with the
 `wasmtime` and `http` features (the CLI's default features enable them), the
 conformance tests through the components, and the UI goldens. On a host other
 than the canonical Linux x86_64 build, `irp_components.rs`'s byte-for-byte
 baseline identity checks fail by design (see the `irp-components` job below);
-every case result still reproduces.
+every case result still reproduces. Skip just those two there with
+`python3 scripts/test-parallel.py -- --skip _reproduce_their_baselines_through_components`.
 
 The **full proof** is every step of the `rust`, `wasm32-tests`,
 `wasm-components`, `irp-components`, and `browser-host` jobs below, exactly as
@@ -81,10 +97,10 @@ CI also pins its supply-chain inputs by immutable identity:
 
 The commands below are exactly the steps in
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Keep the two in sync.
-The `rust` job first frees disk space on the runner (the host tests build
-every release component into a second target directory, and the stock
-runner image does not leave room for both; there is no local equivalent to
-run):
+The `rust` job first frees disk space on the runner (`component_execution.rs`
+builds its own release into a second target directory, and the stock runner
+image leaves little room beside the workspace build; there is no local
+equivalent to run):
 
 ```console
 sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
@@ -98,8 +114,12 @@ fails with a message saying so):
 ```console
 cargo fmt --all --check
 sh scripts/verify-wasm-capabilities.sh
+set -a  # export the next two variables, as CI's $GITHUB_ENV does
+SCXML_COMPONENTS_DIR=$PWD/target/wasm-artifacts/release
+SCXML_COMPONENTS_MANIFEST_SHA256=$(sha256sum target/wasm-artifacts/release/manifest.tsv | cut -d ' ' -f 1)
+set +a
 cargo check --workspace --all-targets --locked
-cargo test --workspace --all-targets --locked
+python3 scripts/test-parallel.py
 cargo test --workspace --doc --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
@@ -217,6 +237,16 @@ from that one directory instead of running the script into its own; a suite
 fails when the manifest does not have the trusted digest. The one exception is
 `component_execution.rs`, which proves the script's single-component manifest
 and always builds its own.
+
+The `rust` job sets both variables after its `verify-wasm-capabilities.sh`
+step, so every later test step there (the workspace tests, the Wasmtime host's
+`wasmtime,http` tests, and the two gates) reads that one release. CI therefore
+no longer runs each suite's own build of its components (the branch a suite
+takes with neither variable set); it still proves the script itself (that
+step, the `wasm-components` job, and the `irp-components` job's build), and
+`component_execution.rs` still builds its own release through the script in
+both of the `rust` job's host test runs. Run a suite without the two
+variables to prove its own build path.
 
 The required `irp-components` job is the conformance gate. It builds and
 verifies the eight release components the conformance executor links and
@@ -460,7 +490,9 @@ script composes the fixed `wasi:random` provider
 [`components/scxml-validator/wasi-random.wat`](components/scxml-validator/wasi-random.wat)
 into it before virtualization, because the XML Schema backend's `ahash`
 tables read `wasi:random/random` (and std's `RandomState` reads
-`insecure-seed`); `hosts/scxml-host-wasmtime/tests/validator_component.rs`
+`insecure-seed`), and so does the machine component, whose `event:schema`
+checks key boon's tables through std's `RandomState`;
+`hosts/scxml-host-wasmtime/tests/validator_component.rs`
 runs the exact virtualized validator linked to each data-model component
 through `ComponentValidator`. Boa itself receives an injected fixed-epoch clock, so no
 ambient clock is read. `hosts/scxml-host-wasmtime/tests/data_model_component.rs`

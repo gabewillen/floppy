@@ -93,8 +93,9 @@ pub const ENV_NAMESPACE_URI: &str = "https://github.com/stateforward/scxml.rs/na
 /// `<donedata>` may carry `event:schema` (a JSON Schema, inline or by
 /// reference) or `event:schemaexpr` (an expression whose value is the
 /// schema) in this exact namespace, describing the event data the element
-/// handles or creates. It is metadata only: it never changes how a document
-/// executes. The compiler resolves it into the Machine IR; no package,
+/// handles or creates. The engine checks the data of the events an executed
+/// `<send>` or `<raise>` creates against it (namespaces/event, "At run
+/// time"). The compiler resolves it into the Machine IR; no package,
 /// schema, or component is bound to it, and it is never fetched (it is not a
 /// repository namespace URI: it names no release tag).
 pub const EVENT_NAMESPACE_URI: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";

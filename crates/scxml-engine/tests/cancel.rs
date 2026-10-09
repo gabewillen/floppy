@@ -62,7 +62,7 @@ impl EffectExecutor for Recorder {
         _trigger: Option<&Event>,
     ) -> Result<(), EffectFailure<EngineError>> {
         match &planned.effect {
-            Effect::Raise(name) => {
+            Effect::Raise(name, ..) => {
                 self.applied.push(format!("raise:{name}"));
                 let name = EventName::new(name.clone()).expect("fixture event names are valid");
                 Ok(engine.raise(Event::internal(name))?)

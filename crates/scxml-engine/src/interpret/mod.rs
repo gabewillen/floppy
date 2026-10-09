@@ -365,7 +365,20 @@ impl<'a, C: SessionCapabilities> Interpreter<'a, C> {
                     .log(label.as_deref(), &text, context)
                     .map_err(recover::<C>)?;
             }
-            Effect::Raise(name) => {
+            Effect::Raise(name, authored, own_schema) => {
+                // A `<raise>` creates its event with no data; one its
+                // contracts reject is not raised, and error.execution ends
+                // the block instead (SCXML 3.12.2, 4.2; namespaces/event).
+                if *authored
+                    && !engine.admits_event_data(
+                        name,
+                        &DataValue::Absent,
+                        own_schema.as_ref(),
+                        true,
+                    )
+                {
+                    return Err(EffectFailure::Block(PlatformError::Execution));
+                }
                 self.raise(engine, name, DataValue::Absent)?;
                 self.caps.observe(Observation::Raised(name));
             }

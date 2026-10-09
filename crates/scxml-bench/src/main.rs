@@ -117,7 +117,7 @@ impl EffectExecutor for BenchHost {
     ) -> Result<(), EffectFailure<EngineError>> {
         match &planned.effect {
             Effect::Log { .. } => Ok(()),
-            Effect::Raise(name) => {
+            Effect::Raise(name, ..) => {
                 let name = EventName::new(name.clone())
                     .map_err(|_| EffectFailure::Fatal(EngineError::InvalidModel))?;
                 Ok(engine.raise(Event::internal(name))?)

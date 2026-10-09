@@ -2,8 +2,8 @@
 //! resolved (inline, or from a supplied file with an optional JSON Pointer)
 //! into canonical JSON with its SHA-256 on the owning element's Machine IR,
 //! `event:schemaexpr` is carried unevaluated, and every failure is a
-//! validator error with no artifact. The schemas are metadata: removing them
-//! leaves the rest of the Machine IR unchanged.
+//! validator error with no artifact. Removing them leaves the rest of the
+//! Machine IR unchanged.
 
 #[allow(dead_code, reason = "this test uses only the shared validator")]
 mod common;

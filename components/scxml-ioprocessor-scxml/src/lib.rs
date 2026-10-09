@@ -691,7 +691,7 @@ mod guest {
                 "a scheduled basichttp send requires a delay",
             ),
             super::ProcessorError::InvalidSend => {
-                (ErrorCode::InvalidInput, "the delayed send is not canonical")
+                (ErrorCode::InvalidInput, "the send is not canonical")
             }
             super::ProcessorError::UnreachableTarget => {
                 (ErrorCode::Unavailable, "send target session is unreachable")
@@ -938,7 +938,10 @@ impl ScxmlIoProcessor {
     /// As [`Self::plan`], plus [`ProcessorError::InvalidTarget`] for an
     /// `#_internal` or malformed target, [`ProcessorError::UnreachableTarget`]
     /// for a session address nobody answers, and
-    /// [`ProcessorError::PayloadTooLarge`] for a raw message over its bound.
+    /// [`ProcessorError::PayloadTooLarge`] for a raw message over its bound
+    /// or a stamped event over the `types.event` bounds, and
+    /// [`ProcessorError::InvalidSend`] for a stamped event that is otherwise
+    /// not a valid `types.event`.
     pub fn dispatch(
         &self,
         mut request: SendRequest,
@@ -976,6 +979,17 @@ impl ScxmlIoProcessor {
             };
             let raw = raw_message(&request.event.name, raw_payload)?;
             request.event.raw = Some(raw);
+            // The stamped event must fit the `types.event` bounds every
+            // receiving session's boundary enforces (its data and raw
+            // message are each bounded, but not their sum): one that does
+            // not is the sender's error.execution, not the receiver's
+            // failure (SCXML 6.2: the message is discarded).
+            request.event.validate().map_err(|error| match error {
+                scxml_types::EventError::ValueTooLarge
+                | scxml_types::EventError::AggregateTooLarge => ProcessorError::PayloadTooLarge,
+                scxml_types::EventError::InvalidValue
+                | scxml_types::EventError::InvalidTraceContext => ProcessorError::InvalidSend,
+            })?;
             if let Some(scheduled) = self.plan(&request)? {
                 return Ok(Dispatch::Scheduled(scheduled));
             }
@@ -1204,8 +1218,9 @@ pub enum ProcessorError {
     InvalidTarget,
     /// A `BasicHTTP` send handed to the clock carries no delay.
     NotDelayed,
-    /// A `BasicHTTP` send handed to the clock holds a value its canonical
-    /// encoding rejects.
+    /// A send holds a value its canonical form rejects: a `BasicHTTP` send
+    /// handed to the clock, or an SCXML send whose stamped event is not a
+    /// valid `types.event`.
     InvalidSend,
     /// The target is a well-formed session address no live session answers
     /// (SCXML 6.2: `error.communication`).
@@ -1222,7 +1237,7 @@ impl std::fmt::Display for ProcessorError {
             Self::InvalidTarget => "send target is invalid for this processor",
             Self::UnreachableTarget => "send target session is unreachable",
             Self::NotDelayed => "a scheduled basichttp send requires a delay",
-            Self::InvalidSend => "the delayed send is not canonical",
+            Self::InvalidSend => "the send is not canonical",
         })
     }
 }
@@ -1545,6 +1560,59 @@ mod tests {
         assert_eq!(decoded.event.origin.as_deref(), Some("#_scxml_child"));
         assert_eq!(decoded.event.origin_type.as_deref(), Some("scxml"));
         assert_eq!(decoded.event.raw.as_deref(), Some("_scxmleventname=due"));
+    }
+
+    #[test]
+    fn an_event_its_raw_message_takes_over_the_event_bound_is_not_dispatched() {
+        // The data and the raw message it renders are each under the
+        // event-data bound (64 KiB), but together over the event bound
+        // (96 KiB), which every receiving session's boundary enforces: the
+        // sender's processor rejects it, so the sender raises
+        // error.execution, instead of the receiver failing on it.
+        let none = |_: &str| false;
+        let child = SessionAddress {
+            session_id: "child",
+            parent_session_id: Some("root"),
+            is_live_invocation: &none,
+            invocation_of_session: &|_| None,
+        };
+        let request = |bytes: usize| {
+            let value = scxml_types::DataValue::String("x".repeat(bytes));
+            let mut request = immediate(
+                Some("#_parent"),
+                scxml_types::SendMessage::Params(vec![scxml_types::NamedValue {
+                    name: "choices".into(),
+                    value: value.clone(),
+                }]),
+            );
+            request.event.data = scxml_types::DataValue::canonical_json_object(&format!(
+                r#"{{"choices":"{}"}}"#,
+                "x".repeat(bytes)
+            ))
+            .expect("a JSON object");
+            request
+        };
+        assert!(matches!(
+            ScxmlIoProcessor.dispatch(request(40_000), &child),
+            Ok(Dispatch::Parent(_))
+        ));
+        assert_eq!(
+            ScxmlIoProcessor.dispatch(request(50_000), &child),
+            Err(ProcessorError::PayloadTooLarge)
+        );
+        let root = SessionAddress {
+            session_id: "root",
+            parent_session_id: None,
+            is_live_invocation: &none,
+            invocation_of_session: &|_| None,
+        };
+        let mut local = request(50_000);
+        local.target = None;
+        assert_eq!(
+            ScxmlIoProcessor.dispatch(local, &root),
+            Err(ProcessorError::PayloadTooLarge),
+            "the sender's own queue has the same bound"
+        );
     }
 
     #[test]

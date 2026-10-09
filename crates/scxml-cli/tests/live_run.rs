@@ -1278,6 +1278,7 @@ fn leaving_the_invoking_state_closes_the_request_connection() {
         .spawn()
         .expect("scx must start");
     let mut stdin = child.stdin.take().expect("stdin is piped");
+    let mut stdout = BufReader::new(child.stdout.take().expect("stdout is piped"));
     stdin
         .write_all(b"{\"name\":\"fetch\"}\n")
         .expect("input is writable");
@@ -1297,11 +1298,31 @@ fn leaving_the_invoking_state_closes_the_request_connection() {
         child.try_wait().expect("the child is waitable").is_none(),
         "the run is still open: the cancel, not the exit, closed the connection"
     );
+    // The cancelled request settles in its own `http-response` call, in
+    // which the logical clock fires the timer in `away`. The server seeing
+    // the connection close does not order that call before a `close` input,
+    // so the close goes in only once the timer's log is out.
+    let mut text = String::new();
+    loop {
+        let mut line = String::new();
+        assert!(
+            stdout.read_line(&mut line).expect("stdout is readable") > 0,
+            "the timer fires before the run ends: {text}"
+        );
+        let record: serde_json::Value =
+            serde_json::from_str(&line).unwrap_or_else(|error| panic!("{line}: {error}"));
+        text.push_str(&line);
+        if record["type"] == "log" && record["label"] == "timer" {
+            break;
+        }
+    }
     stdin
         .write_all(b"{\"type\":\"close\"}\n")
         .expect("input is writable");
     drop(stdin);
-    let output = child.wait_with_output().expect("scx must finish");
+    std::io::Read::read_to_string(&mut stdout, &mut text).expect("stdout is readable");
+    let mut output = child.wait_with_output().expect("scx must finish");
+    output.stdout = text.into_bytes();
     server.join().expect("the server ends");
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     let records = parse_records(&output);

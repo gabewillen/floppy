@@ -360,12 +360,12 @@ for component in $components; do
         wasm-tools compose "$raw" -d "$seed" -o "$seeded" 2>/dev/null
         virt_input=$seeded
     fi
-    if [ "$component" = scxml_validator ] || [ "$component" = scxml_compiler ] || [ "$component" = scx ]; then
+    if [ "$component" = scxml_validator ] || [ "$component" = scxml_compiler ] || [ "$component" = scx ] || [ "$component" = scxml_machine ]; then
         # The bundled XML Schema backend keys its tables with ahash, which
         # reads wasi:random/random once for its seeds, and std's RandomState
         # (the `event` vocabulary's boon schema checks, for one) reads
         # insecure-seed; the compiler and the scx namespace link the same
-        # validator. wasi-virt
+        # validator, and the machine checks event data with boon. wasi-virt
         # denies randomness, so compose the pinned deterministic provider
         # first (see the .wat header).
         random="$proof_dir/wasi-random-validator.wasm"

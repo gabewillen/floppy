@@ -1,6 +1,7 @@
 ;; Deterministic `wasi:random/random` and `wasi:random/insecure-seed`
 ;; provider composed into the validator and compiler components (the
-;; compiler links the same validator) before wasi-virt (see
+;; compiler links the same validator), and into the machine component, whose
+;; `event:schema` checks use boon, before wasi-virt (see
 ;; scripts/verify-wasm-capabilities.sh).
 ;;
 ;; The bundled XML Schema backend (`xsd-schema`) keys its name tables with
@@ -13,7 +14,8 @@
 ;; or the canonical report, and fixed values keep every validation
 ;; byte-deterministic. The
 ;; validator bounds every request (16 MiB of source, 64 schemas of 4 MiB),
-;; so hash flooding is bounded too. This is declarative data: it exports
+;; and the machine checks bounded event data against Machine IR schemas, so
+;; hash flooding is bounded too. This is declarative data: it exports
 ;; constants and executes no SCXML behavior.
 ;;
 ;; The value is "SCXMLvld" read as a little-endian u64; the seed pair is
