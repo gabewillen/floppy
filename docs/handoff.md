@@ -135,7 +135,23 @@ inlines the browser `validate` options type so no unapproved
   carries a required `stimulus` envelope and `bot.activate` an optional
   `model` (`[floppy field]`s). Tests: `tests/tests/body.rs` (against
   `tests/fixtures/phase4/cognition_double.scx`) and the ignored
-  `tests/tests/floppy_live.rs` `live_text_turn`.
+  `tests/tests/floppy_live.rs` `live_text_turn` (since replaced by
+  `live_cascade`).
+
+- Phase 4 cognition cascade (floppy `b8964ae9`): `abilities/cognition.scx`
+  invokes per turn `abilities/autonomy.scx` (phase 5 seam, always
+  unhandled), `abilities/intuition.scx` (`<decision:choice>` of ignore or
+  the reasoning handoff, decided by the decision service on TypeSafe, with
+  mosfet's ConfidenceTuner passed by `<param>` and returned in
+  `<donedata>`), and `abilities/reasoning.scx` (memory seams around one
+  strict structured `generate` call whose schema is built from
+  `<decision:choice>`: respond and ignore until the body assembles
+  choices). Stages answer by `done.invoke.<stage>`; hop timers (30 s) ask
+  the body for `bot.reboot`; a cancel acknowledges at once. A run needs
+  `TYPESAFE_API_KEY` as well as `FLOPPY_BASE_URL`/`FLOPPY_API_KEY`.
+  Tests: `tests/tests/cognition.rs` (fake decision + model backend) and
+  the ignored `floppy_live.rs` `live_cascade` (passed on the CPA gateway,
+  `gabe-codex-1/gpt-6-luna`, 17 s).
 
 Next: phase 4 (bot core and abilities), per
 `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
