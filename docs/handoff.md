@@ -209,6 +209,17 @@ inlines the browser `validate` options type so no unapproved
   with `<decision:assemble>`) and reasoning's `dataSchema` (part of the
   strict selection schema, so it moves with `<decision:selection>`).
 
+- `<decision:pin>`, `<decision:assemble>`, `<decision:route>`,
+  `<decision:names>` (floppy `6093fef1`, `851a6399`): the body's choice
+  assembly, focus grounding and selection routing are namespace elements;
+  the body keeps only the visible `<foreach>`/`<send>` that delivers each
+  placed selection. `<decision:route>` writes one ordered list of
+  `{event, data, target}` or `{dropped}` entries (not separate routed and
+  dropped lists) so the `bot.route`/`bot.route.dropped` log order stays
+  byte-identical. The body's choice/route script functions are gone,
+  traces unchanged. Still scripted in the body: validators,
+  `attentionBias`, `envelope` (later slices).
+
 Next: phase 4 (bot core and abilities), per
 `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 
