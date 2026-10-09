@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML Schema of floppy's `conversation` extension namespace
+  (namespaces/conversation). It governs structure only; the extension
+  component governs what the element does. Bind it with the prefix
+  `conversation` by convention.
+
+  conversation:commit  location (required): receives the committed message
+                       {sequence, direction, source_ids, target_ids,
+                       content, content_type, provenance}.
+                       keylocation (optional): receives its transcript key,
+                       the sorted source ids.
+                       direction (required): the literal inbound or
+                       outbound.
+                       event, message, sequence (required), provenance
+                       (optional): expressions of the committing event's
+                       name, the message, its position in the history, and
+                       the provenance whose id, session_ref and turn_ref
+                       it takes.
+                       It takes no other attribute and no content.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://github.com/stateforward/floppy/namespaces/conversation"
+           elementFormDefault="qualified">
+  <xs:element name="commit">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="keylocation" type="xs:string" use="optional"/>
+      <xs:attribute name="direction" use="required">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:enumeration value="inbound"/>
+            <xs:enumeration value="outbound"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name="event" type="xs:string" use="required"/>
+      <xs:attribute name="message" type="xs:string" use="required"/>
+      <xs:attribute name="sequence" type="xs:string" use="required"/>
+      <xs:attribute name="provenance" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

@@ -1,0 +1,10 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://github.com/stateforward/floppy/namespaces/conversation",
+  "package-version": "0.1.0",
+  "extension-artifact": "floppy_conversation.virtualized.wasm",
+  "schema-artifact": "conversation.xsd",
+  "schema-sha256": "735e31830e47b2e6726c49fa8e9086cf63786baf95939792751149c90907bc96",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0"
+}
