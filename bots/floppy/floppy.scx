@@ -45,23 +45,25 @@
   order) and start the next turns, one per return to unfocused or focused,
   before any later event.
 
-  Choices (mosfet's per-turn dispatch inventory, assembled in SCXML): on
-  processing entry the body reads its own choices with <decision:choice
-  location="body_choices" events="bot.focus_device bot.clear_focus"> (the
-  transitions on active, offered only while offering is true:
-  bot.focus_device when the turn has focus candidates, bot.clear_focus when
-  a device is focused), pins bot.focus_device's device to an enum of the
-  turn's focus_candidates, and appends each ability's latest
-  bot.ability.offers choices tagged with the ability's invoke id as target
-  (the body's own carry no target). Every schema is compacted ($schema,
-  title and examples dropped); when the choices are still over
-  max_choices_bytes (32 KiB, phase 4 spike (b): a relayed list of 48264 B
-  fails the whole invoke tree) every description is dropped too, and if
-  they are still over the turn fails without reaching the cognition. The
-  routing table routes maps each offered event to the targets offering it.
+  Choices (mosfet's per-turn dispatch inventory, assembled by decision
+  namespace elements): on processing entry the body reads its own choices
+  with <decision:choice location="body_choices" events="bot.focus_device
+  bot.clear_focus"> (the transitions on active, offered only while offering
+  is true: bot.focus_device when the turn has focus candidates,
+  bot.clear_focus when a device is focused), <decision:pin> pins
+  bot.focus_device's device to an enum of the turn's focus_candidates, and
+  <decision:assemble> appends each ability's latest bot.ability.offers
+  choices tagged with the ability's invoke id as target (the body's own
+  carry no target). Every schema is compacted ($schema, title and examples
+  dropped); when the choices are still over 32 KiB (phase 4 spike (b): a
+  relayed list of 48264 B fails the whole invoke tree) every description is
+  dropped too, and if they are still over the turn fails without reaching
+  the cognition. The routing table routes maps each offered event to the
+  targets offering it.
 
-  Routing: a completed turn goes through routing, which sends each selected
-  event of the output, in order, to its receiver: an event the body offered
+  Routing: a completed turn goes through routing, where <decision:route>
+  places each selected event of the output, in order, and the body sends it
+  to its receiver: an event the body offered
   to itself (#_internal), else the ability whose invoke id is the
   selection's target, or the only ability offering it when the selection
   names none (#_<id>). A selection the routing table cannot place (not
@@ -120,15 +122,16 @@
     <data id="focus_candidates" expr="[]"/>
     <data id="queue" expr="[]"/>
     <!-- The turn's choices and routing table, and its selections. -->
-    <data id="max_choices_bytes" expr="32768"/>
     <data id="offering" expr="false"/>
     <data id="body_choices" expr="[]"/>
     <data id="choices" expr="[]"/>
+    <data id="choice_names" expr="''"/>
     <data id="routes" expr="({})"/>
-    <data id="choices_failure" expr="null"/>
+    <data id="choices_over" expr="false"/>
+    <data id="choices_size" expr="0"/>
     <data id="selections" expr="[]"/>
     <data id="routing_selections" expr="false"/>
-    <data id="selection" expr="null"/>
+    <data id="routed_selections" expr="[]"/>
     <data id="route" expr="null"/>
     <data id="degraded_reason" expr="null"/>
   </datamodel>
@@ -236,101 +239,6 @@
         bias.focus_candidates.push(reference);
       }
       return bias;
-    }
-    // An offered schema without what a model does not need to fill it:
-    // $schema, title and examples everywhere (property names are kept), and
-    // every description unless descriptions is true.
-    function compactSchema(schema, descriptions) {
-      if (Array.isArray(schema)) {
-        return schema.map(function (item) { return compactSchema(item, descriptions); });
-      }
-      if (!isObject(schema)) { return schema; }
-      var out = {};
-      Object.keys(schema).forEach(function (key) {
-        var value = schema[key];
-        if (['$schema', 'title', 'examples'].indexOf(key) &gt;= 0) { return; }
-        if (key === 'description' &amp;&amp; !descriptions) { return; }
-        if (['properties', 'patternProperties', '$defs', 'definitions'].indexOf(key) &gt;= 0 &amp;&amp; isObject(value)) {
-          var named = {};
-          Object.keys(value).forEach(function (name) { named[name] = compactSchema(value[name], descriptions); });
-          out[key] = named;
-        } else if (['enum', 'const', 'required', 'default'].indexOf(key) &gt;= 0) {
-          out[key] = value;
-        } else {
-          out[key] = compactSchema(value, descriptions);
-        }
-      });
-      return out;
-    }
-    function compactChoices(list, descriptions) {
-      return list.map(function (choice) {
-        var entry = {event: choice.event, schema: compactSchema(choice.schema, descriptions)};
-        if (descriptions &amp;&amp; typeof choice.description === 'string') { entry.description = choice.description; }
-        if (typeof choice.target === 'string') { entry.target = choice.target; }
-        return entry;
-      });
-    }
-    // The turn's choices: the body's own (focus pinned to the turn's
-    // candidates), then each ability's latest offers tagged with its id;
-    // and the routing table. Sets choices_failure when they do not fit.
-    function assembleChoices() {
-      var all = [];
-      body_choices.forEach(function (choice) {
-        var entry = JSON.parse(JSON.stringify(choice));
-        if (entry.event === 'bot.focus_device' &amp;&amp; isObject(entry.schema)
-            &amp;&amp; isObject(entry.schema.properties) &amp;&amp; isObject(entry.schema.properties.device)) {
-          entry.schema.properties.device['enum'] = focus_candidates.slice();
-        }
-        all.push(entry);
-      });
-      expected.forEach(function (id) {
-        (offers[id] === undefined ? [] : offers[id]).forEach(function (choice) {
-          var entry = JSON.parse(JSON.stringify(choice));
-          entry.target = id;
-          all.push(entry);
-        });
-      });
-      choices = compactChoices(all, true);
-      if (JSON.stringify(choices).length &gt; max_choices_bytes) {
-        choices = compactChoices(all, false);
-      }
-      routes = {};
-      choices.forEach(function (choice) {
-        var target = choice.target === undefined ? null : choice.target;
-        if (routes[choice.event] === undefined) { routes[choice.event] = []; }
-        if (routes[choice.event].indexOf(target) &lt; 0) { routes[choice.event].push(target); }
-      });
-      var size = JSON.stringify(choices).length;
-      choices_failure = size &gt; max_choices_bytes
-        ? 'the turn\'s choices are ' + size + ' bytes, over ' + max_choices_bytes
-        : null;
-    }
-    function choiceNames() {
-      return choices.map(function (choice) {
-        return choice.target === undefined ? choice.event : choice.event + '@' + choice.target;
-      }).join(' ');
-    }
-    // Where one selection goes: {ok, target (null: the body itself), why}.
-    function routeOf(selection) {
-      if (!isObject(selection) || typeof selection.event !== 'string') {
-        return {ok: false, why: 'a malformed selection'};
-      }
-      var targets = routes[selection.event];
-      if (targets === undefined) {
-        return {ok: false, why: selection.event + ' was not offered this turn'};
-      }
-      var named = typeof selection.target === 'string' ? selection.target : null;
-      if (named !== null) {
-        return targets.indexOf(named) &gt;= 0
-          ? {ok: true, target: named}
-          : {ok: false, why: selection.event + ' is not offered by ' + named};
-      }
-      return targets.length === 1
-        ? {ok: true, target: targets[0]}
-        : {ok: false, why: selection.event + ' names no target among ' + JSON.stringify(targets)};
-    }
-    function selectionData(selection) {
-      return selection.data === undefined || selection.data === null ? {} : selection.data;
     }
     // A routed body event: taken only while routing a turn's selections.
     function routed() {
@@ -482,9 +390,13 @@
           <assign location="offering" expr="true"/>
           <decision:choice location="body_choices" events="bot.focus_device bot.clear_focus"/>
           <assign location="offering" expr="false"/>
-          <script>assembleChoices();</script>
-          <log label="bot.choices" expr="choiceNames()"/>
-          <if cond="choices_failure === null">
+          <decision:pin location="body_choices" event="bot.focus_device" property="device" values="focus_candidates"/>
+          <!-- bound: 32 KiB, the failure message below names it. -->
+          <decision:assemble location="choices" routeslocation="routes" choices="body_choices" offers="offers"
+                             bound="32768" overlocation="choices_over" sizelocation="choices_size"/>
+          <decision:names location="choice_names" choices="choices"/>
+          <log label="bot.choices" expr="choice_names"/>
+          <if cond="!choices_over">
             <send event="bot.ability.cognition.input" target="#_cognition">
               <content expr="({turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, choices: choices})"/>
             </send>
@@ -497,8 +409,8 @@
           <cancel sendid="processing-timer"/>
         </onexit>
         <!-- The choices do not fit: the turn fails before the cognition. -->
-        <transition cond="choices_failure !== null" target="returning">
-          <log label="bot.processing.failed" expr="JSON.stringify({message: choices_failure, turn: turn})"/>
+        <transition cond="choices_over" target="returning">
+          <log label="bot.processing.failed" expr="JSON.stringify({message: 'the turn\'s choices are ' + choices_size + ' bytes, over 32768', turn: turn})"/>
         </transition>
         <transition event="bot.ability.cognition.output" cond="fromCognition() &amp;&amp; validOutput(_event.data)" target="routing">
           <log label="bot.output" expr="JSON.stringify({turn: turn, output: _event.data.output})"/>
@@ -564,19 +476,19 @@
       <state id="routing">
         <onentry>
           <assign location="routing_selections" expr="true"/>
-          <foreach array="selections" item="selection">
-            <assign location="route" expr="routeOf(selection)"/>
-            <if cond="!route.ok">
-              <log label="bot.route.dropped" expr="route.why"/>
+          <decision:route location="routed_selections" selections="selections" routes="routes"/>
+          <foreach array="routed_selections" item="route">
+            <if cond="route.dropped !== undefined">
+              <log label="bot.route.dropped" expr="route.dropped"/>
             <elseif cond="route.target === null"/>
-              <log label="bot.route" expr="selection.event + ' -&gt; bot'"/>
-              <send eventexpr="selection.event" target="#_internal">
-                <content expr="selectionData(selection)"/>
+              <log label="bot.route" expr="route.event + ' -&gt; bot'"/>
+              <send eventexpr="route.event" target="#_internal">
+                <content expr="route.data"/>
               </send>
             <else/>
-              <log label="bot.route" expr="selection.event + ' -&gt; ' + route.target"/>
-              <send eventexpr="selection.event" targetexpr="'#_' + route.target">
-                <content expr="selectionData(selection)"/>
+              <log label="bot.route" expr="route.event + ' -&gt; ' + route.target"/>
+              <send eventexpr="route.event" targetexpr="'#_' + route.target">
+                <content expr="route.data"/>
               </send>
             </if>
           </foreach>
@@ -585,6 +497,7 @@
         <onexit>
           <assign location="routing_selections" expr="false"/>
           <assign location="selections" expr="[]"/>
+          <assign location="routed_selections" expr="[]"/>
         </onexit>
         <transition event="floppy.routed" target="returning"/>
       </state>

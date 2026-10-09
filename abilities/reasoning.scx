@@ -37,13 +37,15 @@
   The cognition's hop timeout bounds the stage (leaving it cancels the model
   call, SCXML 6.4).
 
-  Bindings: the generate service package,
-  resolved from their repository URIs; env scopes FLOPPY_API_KEY and
+  Bindings: the generate service package and the decision namespace
+  (<decision:names> writes the logged choice names), resolved from their
+  repository URIs; env scopes FLOPPY_API_KEY and
   FLOPPY_BASE_URL to the service's <invoke> (no default backend: without
   either it answers generate.failed unconfigured). The generate service's
   events are recorded by <finalize>.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="reasoning" initial="recalling">
@@ -55,6 +57,7 @@
     <data id="focus_candidates" expr="[]"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <data id="choices" expr="[]"/>
+    <data id="choice_names" expr="''"/>
     <data id="system" expr="'You are the deliberate reasoning of floppy, a small companion robot. You receive one stimulus the robot observed, as JSON, with what the robot is looking at. Select every event the robot should take for it from the offered events (an empty list selects none), with its data, its target when the event names one, and a short reason. When an offered event says something, give it the complete text to say.'"/>
     <!-- The model call: its schema, invocation, and reply. -->
     <data id="schema" expr="null"/>
@@ -178,7 +181,8 @@
       <assign location="schema" expr="selectionSchema(offeredEvents())"/>
       <assign location="selected" expr="null"/>
       <assign location="gen_failure" expr="null"/>
-      <log label="reasoning" expr="'turn ' + turn + ': ' + choices.map(function (c) { return c.target === undefined ? c.event : c.event + '@' + c.target; }).join(' ')"/>
+      <decision:names location="choice_names" choices="choices"/>
+      <log label="reasoning" expr="'turn ' + turn + ': ' + choice_names"/>
     </onentry>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
