@@ -103,6 +103,7 @@ fn the_dev_build_publishes_under_target_and_leaves_the_release_cache_untouched()
     assert!(components.cache.starts_with(&components.dir));
     for uri in [
         "https://github.com/stateforward/floppy/namespaces/decision",
+        "https://github.com/stateforward/floppy/namespaces/bot",
         "https://github.com/stateforward/floppy/services/generate",
         "https://github.com/stateforward/floppy/services/decision",
     ] {

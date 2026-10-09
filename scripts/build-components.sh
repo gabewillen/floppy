@@ -49,7 +49,7 @@ expected_wasi_virt='wasi-virt 0.2.0'
 expected_wasi_virt_source='https://github.com/bytecodealliance/WASI-Virt'
 expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
-namespace_components='floppy_decision'
+namespace_components='floppy_decision floppy_bot'
 service_components='floppy_service_generate floppy_service_decision'
 # Package validator components (stateforward:scxml-validator/package-validator),
 # each named by its package's manifest (`validator-artifact`).
@@ -101,6 +101,15 @@ expected_imports() {
                 'stateforward:scxml/telemetry@0.2.0' \
                 'stateforward:scxml/data-model-host@0.2.0' \
                 'stateforward:scxml/session-snapshot-host@0.2.0'
+            ;;
+        # <bot:attention> and <bot:stimulus>: evaluate their expressions and
+        # assign their results through the data model; no session snapshot,
+        # execution-host, or outbound-http.
+        floppy_bot)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'stateforward:scxml/data-model-host@0.2.0'
             ;;
         # The generate and decision services: one async `invoke` export
         # (their events go to the stream it returns) and one request through
