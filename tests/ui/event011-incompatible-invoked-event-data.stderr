@@ -7,7 +7,7 @@ warning[EVENT011]: `invoked/event011-child.scx` sends `order.ready` to `#_parent
 7 |                 event:schema='{"type":"object","properties":{"count":{"type":"integer"}},"required":["count"]}'>
   |                 ----------------------------------------------------------------------------------------------- ... which fails the schema of this transition
   |
-  = note: a transition's `event:schema` describes the `_event.data` it handles; the invoked document's `<send target="#_parent">` creates data this transition's event descriptor matches but its schema rejects (events between sessions are not checked at run time yet: the transition is still taken)
+  = note: a transition's `event:schema` describes the `_event.data` it handles; the invoked document's `<send target="#_parent">` creates data this transition's event descriptor matches but its schema rejects (at run time the receiving session refuses it: the `<send>` is not routed and raises `error.execution`)
   = help: make the two documents' schemas agree, or change the data the invoked document sends
   = spec: SCXML 1.0 §6.4 <invoke>
 
@@ -20,7 +20,7 @@ warning[EVENT011]: `<send>` sends `order.place` to the session of `invoked/event
 8 |       <send event="order.place" target="#_order"><content>{"quantity": "two"}</content></send>
   |                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ its literal data, `{"quantity":"two"}`, fails the schema of a transition of `invoked/event011-child.scx` handling `order.place`
   |
-  = note: a transition's `event:schema` describes the `_event.data` it handles; a transition of the invoked document matches this event but its schema rejects this data (events between sessions are not checked at run time yet: the transition is still taken)
+  = note: a transition's `event:schema` describes the `_event.data` it handles; a transition of the invoked document matches this event but its schema rejects this data (at run time the receiving session refuses it: the `<send>` is not routed and raises `error.execution`)
   = help: make the two documents' schemas agree, or change the data
   = spec: SCXML 1.0 §6.4 <invoke>
 

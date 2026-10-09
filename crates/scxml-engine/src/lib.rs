@@ -875,6 +875,16 @@ impl Engine {
         self.contracts.admits(event, data, own, delivered_here)
     }
 
+    /// Whether an event `event` with `data` that another session or the
+    /// host delivers keeps this document's contracts: the literal
+    /// `event:schema` of every transition whose descriptor matches `event`
+    /// admits `data` (the `contracts` module). The host asks before it
+    /// routes or delivers such an event (WIT `session.accepts-event-data`).
+    /// Pure apart from compiling each schema once.
+    pub fn accepts_event_data(&mut self, event: &str, data: &DataValue) -> bool {
+        self.contracts.admits(event, data, None, true)
+    }
+
     /// Enters the root initial targets' W3C entry set and emits ordered
     /// script/initial/entry effects.
     ///

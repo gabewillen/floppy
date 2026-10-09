@@ -939,6 +939,21 @@ mod guest {
             )
         }
 
+        fn accepts_event_data(&self, event: WitEvent) -> bool {
+            let Ok(event) = to_event(event) else {
+                return false;
+            };
+            // A pure read of the document's contracts; the engine is never
+            // borrowed across a host call, and a session without one (its
+            // document never loaded) judges nothing.
+            match self.engine.try_borrow_mut() {
+                Ok(mut engine) => engine.as_mut().is_none_or(|engine| {
+                    engine.accepts_event_data(event.name.as_str(), &event.data)
+                }),
+                Err(_) => true,
+            }
+        }
+
         fn start_invoked(&self, context: InvocationContext) -> Result<CallResult, SessionFailure> {
             let (invoked, parameters, parent) = to_invocation(context).map_err(|error| {
                 telemetry::observe(Operation::StartInvoked, Outcome::Rejected, None, None);

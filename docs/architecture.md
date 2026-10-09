@@ -127,7 +127,10 @@ Executable product semantics are Wasm components:
   event the session delivers to itself, those of the transitions handling
   it (`crates/scxml-engine/src/contracts.rs`, compiling each with the same
   crate); a rejected event is not dispatched and raises `error.execution`.
-  Transition selection never reads it. Not a package (see
+  For an event bound for another session, or the host's own input, the
+  host asks the receiving session (`session.accepts-event-data`, answered
+  by the same engine code) before it routes or delivers it, so no host
+  judges an event itself. Transition selection never reads it. Not a package (see
   [namespaces/event/README.md](../namespaces/event/README.md));
 - data models, I/O processors, invoked services, and extension components.
 

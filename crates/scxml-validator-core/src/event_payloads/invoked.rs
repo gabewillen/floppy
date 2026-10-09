@@ -237,7 +237,7 @@ fn to_child(
         Label::new(invoke.src.value_span)
             .with_message(format!("the invoked document, invoked as `#_{}`", invoke.id)),
     )
-    .with_note("a transition's `event:schema` describes the `_event.data` it handles; a transition of the invoked document matches this event but its schema rejects this data (events between sessions are not checked at run time yet: the transition is still taken)")
+    .with_note("a transition's `event:schema` describes the `_event.data` it handles; a transition of the invoked document matches this event but its schema rejects this data (at run time the receiving session refuses it: the `<send>` is not routed and raises `error.execution`)")
     .with_help("make the two documents' schemas agree, or change the data")
     .with_spec_reference(SPEC_INVOKE)
 }
@@ -267,7 +267,7 @@ fn to_parent(
         Label::new(handler.schema.attribute.span)
             .with_message("... which fails the schema of this transition"),
     )
-    .with_note("a transition's `event:schema` describes the `_event.data` it handles; the invoked document's `<send target=\"#_parent\">` creates data this transition's event descriptor matches but its schema rejects (events between sessions are not checked at run time yet: the transition is still taken)")
+    .with_note("a transition's `event:schema` describes the `_event.data` it handles; the invoked document's `<send target=\"#_parent\">` creates data this transition's event descriptor matches but its schema rejects (at run time the receiving session refuses it: the `<send>` is not routed and raises `error.execution`)")
     .with_help("make the two documents' schemas agree, or change the data the invoked document sends")
     .with_spec_reference(SPEC_INVOKE)
 }

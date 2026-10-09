@@ -170,6 +170,11 @@ function invalidResult() {
 }
 
 /** The failure the machine receives when the run faulted. */
+/** The `invalid-input` a `<send>` gets when its receiving session refuses its event. */
+function notAccepted() {
+  return componentFailure('invalid-input', "the receiving session's document does not accept the event's data");
+}
+
 function hostFailure() {
   return componentFailure('platform', 'session host failure');
 }
@@ -279,6 +284,8 @@ class Run {
     this.invokedSessions = new InvokedSessions(invokeLimits);
     /** The root session's links (set once the root is built). */
     this.rootLinks = undefined;
+    /** The root's machine instance, for `accepts-event-data`. */
+    this.rootInstance = undefined;
     /** Every started invoked session by its key (src/invoked-sessions.js). */
     this.children = new Map();
     /** Invoked sessions the run named so far (see nextInvokedSessionId). */
@@ -697,6 +704,41 @@ function childOutcome(run, child, { value: callResult, thrown }) {
   return { callResult };
 }
 
+/**
+ * Whether the machine session `key` of `run` admits `event` from another
+ * session or the host (`session.accepts-event-data`, namespaces/event "At
+ * run time"): true for a key that names no started machine session. A
+ * pure call on the receiver's own fuel cap, charged to the run's budget
+ * (nested inside a sender's call when a capability asks); a trap is
+ * thrown raw.
+ */
+function acceptsEventData(run, key, event) {
+  const instance = key === ROOT ? run.rootInstance : run.session(key)?.instance;
+  if (instance === undefined) return true;
+  const { meter } = instance;
+  const suspendedLeft = meter.suspendedLeft;
+  meter.suspendedLeft = undefined;
+  try {
+    return run.budget.run(meter, () => instance.session.acceptsEventData(event));
+  } finally {
+    meter.suspendedLeft = suspendedLeft;
+  }
+}
+
+/**
+ * acceptsEventData from inside a capability call: a receiver's trap is
+ * latched as the run's fault (the sender's call then fails with it).
+ */
+function capabilityAccepts(run, key, event) {
+  try {
+    return acceptsEventData(run, key, event);
+  } catch (thrown) {
+    const instance = key === ROOT ? run.rootInstance : run.session(key)?.instance;
+    run.latch(trapError(instance?.meter, thrown));
+    throw hostFailure();
+  }
+}
+
 /** A child call that returns no call result (`failure`): `{value}` or `{error}`. */
 function queryChild(run, child, body) {
   try {
@@ -876,13 +918,19 @@ function capabilityResource(links) {
           case 'parent':
             // Only an invoked session has a parent to route to; its event
             // goes onto the parent's external queue (ignored once its
-            // cancellation began, official case 252).
+            // cancellation began, official case 252), when the parent's
+            // document accepts it (a refusal is the sender's
+            // error.execution: `invalid-input`).
             if (root) throw links.invariant();
+            if (!capabilityAccepts(run, links.parentLinks.key, action.val)) throw notAccepted();
             run.invokedSessions.pushToParent(links.key, { tag: 'event', val: action.val });
             return { tag: 'routed' };
-          case 'invocation':
-            run.invokedSessions.pushExternal(run.invokedSessions.child(links.key, action.val.invokeId), action.val.event);
+          case 'invocation': {
+            const child = run.invokedSessions.child(links.key, action.val.invokeId);
+            if (child !== undefined && !capabilityAccepts(run, child, action.val.event)) throw notAccepted();
+            run.invokedSessions.pushExternal(child, action.val.event);
             return { tag: 'routed' };
+          }
           default:
             throw links.invariant();
         }
@@ -1608,6 +1656,16 @@ export class MachineSession {
     return callResult;
   }
 
+  /** acceptsEventData at executor level; a receiver's trap fails the run. */
+  #accepts(key, event) {
+    try {
+      return acceptsEventData(this.#run, key, event);
+    } catch (thrown) {
+      const instance = key === ROOT ? this.#run.rootInstance : this.#run.session(key)?.instance;
+      throw this.#fail(trapError(instance?.meter, thrown));
+    }
+  }
+
   /** Runs one invoked session's command at executor level; a failure fails the run. */
   #childAt(key, body) {
     const child = this.#run.session(key);
@@ -1935,7 +1993,25 @@ export class MachineSession {
    * later reports through the late-failure path with the same id.
    */
   #routeDue(links, due) {
-    if (due.tag === 'scxml') return this.#io(links.io, (io) => io.routeDue(due.val, links.sender()));
+    if (due.tag === 'scxml') {
+      const route = this.#io(links.io, (io) => io.routeDue(due.val, links.sender()));
+      // A delayed send to another session that its document does not
+      // accept when it falls due is undeliverable: the sender's
+      // error.communication (SCXML 6.2), as under the Wasmtime host.
+      let receiver;
+      let event;
+      if (route.tag === 'parent') {
+        receiver = links.parentLinks?.key;
+        event = route.val;
+      } else if (route.tag === 'invocation') {
+        receiver = this.#run.invokedSessions.child(links.key, route.val.invokeId);
+        event = route.val.event;
+      }
+      if (receiver !== undefined && !this.#accepts(receiver, event)) {
+        return { tag: 'undeliverable', val: due.val.sendId };
+      }
+      return route;
+    }
     if (due.tag !== 'basichttp') throw this.#fail(new ScxmlHostError('host-invariant'));
     const send = due.val;
     let sent;
@@ -2057,6 +2133,16 @@ export class MachineSession {
     if (witEvent === undefined) {
       this.#telemetry.observe('command', 'rejected');
       throw new ScxmlHostError('invalid-argument');
+    }
+    // The page's own input meets the root document's contracts
+    // (`accepts-event-data`) or is rejected as the machine rejects an
+    // invalid event: the session is left as it was.
+    if (this.#status === 'running' && !this.#accepts(ROOT, witEvent)) {
+      this.#telemetry.observe('command', 'rejected');
+      throw new ScxmlSessionError({
+        code: 'invalid-input',
+        detail: "the root document does not accept the event's data",
+      });
     }
     return this.#command((session) => session.send(witEvent));
   }
@@ -2794,8 +2880,10 @@ export async function createSession(options) {
     telemetry.end(span, 'failed');
     throw trapError(meter, cause);
   }
+  const rootInstance = new Instance(session, links, meter);
+  run.rootInstance = rootInstance;
   const machine = new MachineSession(
-    new Instance(session, links, meter),
+    rootInstance,
     run,
     { mode: timers, wallClock: now, onTimer },
     { mode: snapshot, loader: pageLoader },

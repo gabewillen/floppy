@@ -2155,6 +2155,19 @@ interface machine-api {
     /// `invalid-input` or `payload-too-large` for an event outside the
     /// `types.event` bounds (each a rejection).
     send: func(event: event) -> result<call-result, session-failure>;
+    /// Whether this session's document admits `event` from another
+    /// session or the host: its data satisfies the literal `event:schema`
+    /// of every transition of the document whose event descriptor matches
+    /// the event's name (SCXML 3.12.1; namespaces/event, "At run time"). A
+    /// host asks the receiving session before it routes a `<send>` to
+    /// `#_parent` or `#_<invokeid>` (a refusal is the sender's
+    /// `error.execution`) and before it delivers its own input (a refusal
+    /// rejects the input). False for an event outside the `types.event`
+    /// bounds. Pure: evaluates no expression, calls no capability, charges
+    /// no command, emits no telemetry, and changes nothing; it answers in
+    /// every status, and a session whose document never loaded admits
+    /// every valid event.
+    accepts-event-data: func(event: event) -> bool;
     /// Raises the `error.communication` of this session's `<send>` whose id
     /// is `send-id` (its `_event.sendid`; none only for a send that has no
     /// id), for a failure the platform learns of after that `<send>`

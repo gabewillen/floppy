@@ -713,3 +713,44 @@ fn a_finished_root_returns_its_donedata_to_the_environment() {
     assert_eq!(live.take_outputs(), [SessionOutput::Done { data: None }]);
     live.close().expect("close");
 }
+
+/// The host's own input meets the root document's contracts: an event
+/// whose data a transition handling it rejects (`event:schema`,
+/// `accepts-event-data`) is rejected and leaves the session as it was; the
+/// same event with accepted data is delivered.
+#[test]
+fn input_the_root_document_does_not_accept_is_rejected() {
+    let host = host();
+    let source = scxml(
+        "ecmascript",
+        r#"<state id="s0"><transition xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" event="go" event:schema='{"type": "object", "required": ["n"]}' target="done"><log label="data" expr="JSON.stringify(_event.data)"/></transition></state><final id="done"/>"#,
+    );
+    let mut live = Opened::new(&source).open(&host, LiveClock::Logical, Recording::Off);
+    let rejected = live
+        .send(&ScriptedEvent {
+            data: scxml_types::DataValue::canonical_json_object(r#"{"m":1}"#).expect("json"),
+            ..ScriptedEvent::named("go")
+        })
+        .expect_err("the root's transition does not accept the data");
+    assert!(
+        matches!(
+            rejected.failure,
+            RunFailure::Machine {
+                code: "invalid-input",
+                ..
+            }
+        ),
+        "{:?}",
+        rejected.failure
+    );
+    assert_eq!(live.status(), LiveStatus::Running);
+    assert!(log_labels(&live.take_outputs()).is_empty());
+    let step = live
+        .send(&ScriptedEvent {
+            data: scxml_types::DataValue::canonical_json_object(r#"{"n":1}"#).expect("json"),
+            ..ScriptedEvent::named("go")
+        })
+        .expect("go");
+    assert_eq!(step.status, LiveStatus::Finished);
+    assert_eq!(log_labels(&live.take_outputs()), ["data"]);
+}

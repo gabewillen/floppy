@@ -1,8 +1,8 @@
 //! Run-wide state, machine session handles, and the scheduler binding.
 
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::collections::BTreeMap;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
 use opentelemetry::Context;
@@ -82,6 +82,10 @@ pub(crate) struct RunShared {
     /// The `start-invocation` or `cancel-invocation` request the session
     /// whose call just suspended deferred to the host.
     pub(crate) deferred: RefCell<Option<DeferredRequest>>,
+    /// Every machine session of the run by key, weakly (the executor owns
+    /// them), so a session's links can ask another session whether it
+    /// accepts an event (`accepts-event-data`) while its own call runs.
+    machines: RefCell<BTreeMap<SessionKey, Weak<RefCell<MachineHandle>>>>,
 }
 
 /// One session's (or invoked service's) identity and completion.
@@ -265,6 +269,7 @@ impl RunShared {
             start_epoch_ms,
             sessions: RefCell::new(SessionTable::default()),
             deferred: RefCell::new(None),
+            machines: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -349,6 +354,27 @@ impl RunShared {
     /// Appends one root `<log>` record.
     pub(crate) fn push_root_log(&self, entry: LogEntry) {
         self.ledger.borrow_mut().root_logs.push(entry);
+    }
+
+    /// Whether the machine session `key` accepts `event` from another
+    /// session or the host (its `session.accepts-event-data`): `Ok(true)`
+    /// as well for a key that is no machine session (an invoked service
+    /// declares no events) or whose session is gone, and for a session
+    /// whose own call is running (only the sender's, which never receives
+    /// its own routed event).
+    pub(crate) fn accepts_event_data(
+        &self,
+        key: SessionKey,
+        event: &WitEvent,
+    ) -> Result<bool, HostError> {
+        let machine = self.machines.borrow().get(&key).and_then(Weak::upgrade);
+        let Some(machine) = machine else {
+            return Ok(true);
+        };
+        let Ok(mut machine) = machine.try_borrow_mut() else {
+            return Ok(true);
+        };
+        machine.accepts_event_data(event)
     }
 
     /// Records the run's first fault; later ones are consequences.
@@ -603,6 +629,13 @@ impl MachineHandle {
         self.step_call(|api, store, session| api.call_send(store, session, event))
     }
 
+    /// The machine's `session.accepts-event-data`: whether this session's
+    /// document admits `event` from another session or the host. Pure; it
+    /// runs on a fresh call's fuel.
+    pub(crate) fn accepts_event_data(&mut self, event: &WitEvent) -> Result<bool, HostError> {
+        self.call(|api, store, session| api.call_accepts_event_data(store, session, event))
+    }
+
     pub(crate) fn deliver(
         &mut self,
         invoke_id: &str,
@@ -714,8 +747,10 @@ pub(crate) fn settle(
 /// One session of the run as the host holds it: an SCXML machine session,
 /// or an invoked service (SCXML 6.4).
 pub(crate) enum SessionHandle {
-    /// A machine session (the root, or an invoked SCXML session).
-    Machine(Box<MachineHandle>),
+    /// A machine session (the root, or an invoked SCXML session), shared
+    /// weakly with [`RunShared`] so other sessions' links can ask it
+    /// `accepts-event-data`.
+    Machine(Rc<RefCell<MachineHandle>>),
     /// An invoked service.
     Service(Box<crate::service::ServiceHandle>),
 }
@@ -763,6 +798,15 @@ fn session_missing() -> RunFailure {
     RunFailure::Harness {
         code: "session-missing",
         message: "the executor addressed a session the host does not hold".into(),
+    }
+}
+
+/// The executor addressed a session whose own call is running: a host
+/// defect (no session is entered twice).
+fn session_busy() -> RunFailure {
+    RunFailure::Harness {
+        code: "session-busy",
+        message: "the executor addressed a session whose call is running".into(),
     }
 }
 
@@ -820,15 +864,33 @@ impl RunSessions {
 
     /// The machine session `key`, its own clock moved to the shared clock
     /// first.
-    fn session(&mut self, key: SessionKey) -> Result<&mut MachineHandle, RunFailure> {
+    fn session(&mut self, key: SessionKey) -> Result<RefMut<'_, MachineHandle>, RunFailure> {
         let now = self.now;
-        let handle = match self.handles.get_mut(&key) {
+        let handle = match self.handles.get(&key) {
             Some(SessionHandle::Machine(handle)) => handle,
             Some(SessionHandle::Service(_)) => return Err(service_addressed()),
             None => return Err(session_missing()),
         };
+        let mut handle = handle.try_borrow_mut().map_err(|_| session_busy())?;
         handle.links_mut()?.clock_sync(now)?;
         Ok(handle)
+    }
+
+    /// Adds the machine session `key` to the run and to the shared
+    /// registry [`RunShared::accepts_event_data`] reads.
+    fn insert_machine(&mut self, key: SessionKey, handle: Box<MachineHandle>) {
+        let handle = Rc::new(RefCell::new(*handle));
+        self.shared
+            .machines
+            .borrow_mut()
+            .insert(key, Rc::downgrade(&handle));
+        self.handles.insert(key, SessionHandle::Machine(handle));
+    }
+
+    /// Removes the session `key` from the run (and from the registry).
+    fn remove_handle(&mut self, key: SessionKey) -> Option<SessionHandle> {
+        self.shared.machines.borrow_mut().remove(&key);
+        self.handles.remove(&key)
     }
 
     /// The live invoked service whose run-unique invocation id is
@@ -978,8 +1040,9 @@ impl RunSessions {
     }
 
     /// The links of the session `key`, its clock moved to the shared clock.
-    fn session_links(&mut self, key: SessionKey) -> Result<&mut SessionLinks, RunFailure> {
-        self.session(key)?.links_mut()
+    fn session_links(&mut self, key: SessionKey) -> Result<RefMut<'_, SessionLinks>, RunFailure> {
+        RefMut::filter_map(self.session(key)?, |handle| handle.links_mut().ok())
+            .map_err(|_| missing_links())
     }
 
     /// Whether the session `key` finished.
@@ -1007,7 +1070,7 @@ impl RunSessions {
     ) -> Result<(), RunFailure> {
         let core = Rc::clone(&self.core);
         let result = core.call_budget.hold(|| {
-            let result = call(self.session(key)?);
+            let result = call(&mut *self.session(key)?);
             self.carry_out_deferred(key, result)
         })?;
         if key.is_root() {
@@ -1080,7 +1143,7 @@ impl RunSessions {
                                 scxml_telemetry::Operation::HostWasmtimeInvokedSessionStart,
                             ),
                         });
-                        self.handles.insert(child, SessionHandle::Machine(handle));
+                        self.insert_machine(child, handle);
                         self.shared.touch(child);
                         current = child;
                         result = self.session(child)?.start_invoked(&context);
@@ -1207,15 +1270,16 @@ impl RunSessions {
         let removed = self.shared.invoked_sessions.borrow_mut().remove(key);
         for gone in removed {
             self.shared.sessions.borrow_mut().remove(gone);
-            drop(self.handles.remove(&gone));
+            drop(self.remove_handle(gone));
         }
     }
 
     /// Drops every session's store, each after every session below it.
     fn teardown(&mut self, order: Vec<SessionKey>) {
         for key in order.into_iter().rev() {
-            drop(self.handles.remove(&key));
+            drop(self.remove_handle(key));
         }
+        self.shared.machines.borrow_mut().clear();
         self.handles.clear();
     }
 
@@ -1322,6 +1386,19 @@ impl Sessions for RunSessions {
         let mut event = external_event(&input.name);
         event.data = crate::session::wit_value(input.data.clone());
         event.trace_context = input.trace_context.as_ref().map(wit_trace_context);
+        // The host's own input meets the root document's contracts
+        // (`accepts-event-data`) or is rejected, as the machine rejects an
+        // invalid event: the session is left as it was.
+        if !self
+            .shared
+            .accepts_event_data(SessionKey::ROOT, &event)
+            .map_err(RunFailure::Host)?
+        {
+            return Err(RunFailure::Machine {
+                code: crate::component::error_code_label(ErrorCode::InvalidInput),
+                detail: Some("the root document does not accept the event's data".into()),
+            });
+        }
         self.deliver(
             invoked_sessions,
             SessionKey::ROOT,
@@ -1464,9 +1541,31 @@ impl Sessions for RunSessions {
                 });
             }
         };
+        let send_id = due.send_id.clone();
         let route = self.with_invoked_sessions(invoked_sessions, |sessions| {
             sessions.session_links(session)?.route_due(&due)
         })?;
+        // A delayed send to another session that the receiving session's
+        // document does not accept (`accepts-event-data`) is undeliverable
+        // when it falls due: the sender's error.communication (SCXML 6.2,
+        // as for a target gone by then).
+        let receiver = match &route {
+            DueRoute::Parent(event) => invoked_sessions
+                .parent(session)
+                .map(|(parent, _)| (parent, event)),
+            DueRoute::Invocation(routed) => invoked_sessions
+                .child(session, &routed.invoke_id)
+                .map(|child| (child, &routed.event)),
+            DueRoute::Local(_) | DueRoute::Undeliverable(_) => None,
+        };
+        if let Some((receiver, event)) = receiver
+            && !self
+                .shared
+                .accepts_event_data(receiver, event)
+                .map_err(RunFailure::Host)?
+        {
+            return Ok(InvocationDueRoute::Undeliverable(send_id));
+        }
         Ok(match route {
             DueRoute::Local(event) => InvocationDueRoute::Local(event),
             DueRoute::Parent(event) => InvocationDueRoute::Parent(event),
@@ -1571,14 +1670,15 @@ impl RunSessions {
     /// invoked service: the session snapshot document cannot represent one.
     pub(crate) fn synced_handles(
         &mut self,
-    ) -> Result<BTreeMap<SessionKey, &mut MachineHandle>, RunFailure> {
+    ) -> Result<BTreeMap<SessionKey, RefMut<'_, MachineHandle>>, RunFailure> {
         let now = self.now;
         let mut handles = BTreeMap::new();
-        for (key, handle) in &mut self.handles {
+        for (key, handle) in &self.handles {
             match handle {
                 SessionHandle::Machine(handle) => {
+                    let mut handle = handle.try_borrow_mut().map_err(|_| session_busy())?;
                     handle.links_mut()?.clock_sync(now)?;
-                    handles.insert(*key, &mut **handle);
+                    handles.insert(*key, handle);
                 }
                 SessionHandle::Service(_) => {
                     return Err(super::SnapshotFailure::ServiceInvocation.into());
@@ -1650,6 +1750,11 @@ impl RunEngine {
             root.session_id.clone_into(&mut sessions.root_session_id);
             sessions.insert(SessionKey::ROOT, Some(root.session_id.to_owned()));
         }
+        let handle = Rc::new(RefCell::new(*handle));
+        shared
+            .machines
+            .borrow_mut()
+            .insert(SessionKey::ROOT, Rc::downgrade(&handle));
         Ok(Opened::Ready(Box::new(Self {
             core: Rc::clone(core),
             shared: Rc::clone(shared),
@@ -1792,8 +1897,8 @@ impl RunEngine {
             if self.sessions.is_service(key) || (!key.is_root() && self.sessions.is_finished(key)) {
                 continue;
             }
-            let links = self.sessions.session_links(key)?;
-            pending = pending.saturating_add(count_pending(links)?);
+            let mut links = self.sessions.session_links(key)?;
+            pending = pending.saturating_add(count_pending(&mut links)?);
         }
         Ok(pending)
     }

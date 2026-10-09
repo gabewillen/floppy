@@ -815,7 +815,10 @@ export class MachineSession {
   /**
    * Processes one external event and runs to a stable configuration (status `running`,
    * previous call ended stable). A malformed `event` throws
-   * ScxmlHostError('invalid-argument') without entering the machine.
+   * ScxmlHostError('invalid-argument') without entering the machine; one
+   * whose data a literal `event:schema` of a transition of the document
+   * handling it rejects (`accepts-event-data`) throws
+   * ScxmlSessionError('invalid-input') and leaves the session as it was.
    */
   send(event: EventInput): CallResult;
   /**
