@@ -69,8 +69,10 @@ Last updated: 2026-10-08.
 
 ## Where things stand (2026-10-08)
 
-Done (scxml.rs `main` and `feat/invoke-services` at `20fe0722`; floppy's
-subtree matches, squash `3bb60dbd`, pull `83852f6e`):
+Done (scxml.rs `main` and `feat/invoke-services` at `c28799aa`, which
+inlines the browser `validate` options type so no unapproved
+`ValidateOptions` name is exported; floppy's subtree matches, squash
+`c7d5ba5b`, pull `0b45e45b`):
 
 - Invoked services on WASI 0.3 / Component Model async (one `invoke`
   export); SCXML §6.4 cancel closes connections; no host time limits on
