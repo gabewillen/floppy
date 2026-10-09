@@ -239,6 +239,11 @@ The remaining mosfet port runs as one ultracode run with these grants:
   `bots/builder`: a behavior or routine is an SCXML document the builder
   authors, validates, and hands back, and the bot then invokes it. No
   Starlark port.
+- **Delegated decisions (2026-10-09):** the user delegated all remaining
+  decisions overnight. Agents choose by SCXML 1.0 and existing patterns and
+  record each choice (and any new scxml.rs name) under "Decisions Made Under
+  Delegation" in `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`
+  for review. Still no push, publish, or release.
 - **Pacing:** run through all phases, report after each; stop only for a
   real blocker or scxml.rs names needing approval.
 
