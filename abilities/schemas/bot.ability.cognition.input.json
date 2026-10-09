@@ -91,6 +91,36 @@
         "data"
       ],
       "type": "object"
+    },
+    "choices": {
+      "default": [],
+      "description": "The turn's choices the body assembled: its own (bot.focus_device pinned to the turn's focus candidates) and each ability's latest bot.ability.offers choices tagged with the ability's invoke id as target; the body routes a selection to its target, or to itself when the choice has none [floppy field].",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "event": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "schema": {
+            "description": "The event's offered schema, compacted."
+          },
+          "description": {
+            "type": "string"
+          },
+          "target": {
+            "description": "The invoke id of the ability offering the event; absent for the body's own.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "schema"
+        ],
+        "type": "object"
+      },
+      "type": "array"
     }
   },
   "type": "object",

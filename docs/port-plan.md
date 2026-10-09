@@ -131,9 +131,12 @@ Mapping rules (the byte-for-byte rule covers event names, not data shapes):
   configuration are added as data, marked `[floppy field]`:
   `bot.ability.cognition.input` requires `stimulus`, the envelope
   `{event, data, id?, source?, target?}` of the event the body took for the
-  turn (mosfet passed the live object, `SkipJsonSchema`), and
-  `bot.activate` takes an optional `model` the body hands to its
-  model-backed abilities.
+  turn (mosfet passed the live object, `SkipJsonSchema`), and may carry
+  `choices`, the turn's choices the body assembled (its own and each
+  ability's `bot.ability.offers`, tagged with the offering ability's
+  `target`; mosfet built its dispatch inventory from live actor
+  snapshots); `bot.activate` takes an optional `model` the body hands to
+  its model-backed abilities.
 - Media is a reference: `environment.sound`'s `audio` and
   `environment.visual`'s `image` are `uri-reference` strings, not base64
   bytes. `timedelta` would map to integer milliseconds and other `bytes` to
