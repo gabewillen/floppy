@@ -1425,16 +1425,6 @@ export interface InvokedDocument {
   eventSchemas?: EventSchemaResource[];
 }
 
-/** The options of `validate`. */
-export interface ValidateOptions extends CompileRequestOptions {
-  /**
-   * The documents the document's literal `<invoke src>` elements load: a
-   * `<send>` between them whose literal data the receiving document's
-   * transition schema rejects is `EVENT011`.
-   */
-  invokedDocuments?: InvokedDocument[];
-}
-
 /**
  * Instantiates one validator (the bundled validator component). Its
  * expression checks use `dataModel` (a bundled ECMAScript or XPath data
@@ -1460,7 +1450,17 @@ export function createValidator(options?: {
    * every later validation); ScxmlCompileError ('invalid-request' or
    * 'canonical-report-failed') for a rejected request.
    */
-  validate(source: string, options?: ValidateOptions): Promise<{ report: Uint8Array }>;
+  validate(
+    source: string,
+    options?: CompileRequestOptions & {
+      /**
+       * The documents the document's literal `<invoke src>` elements load: a
+       * `<send>` between them whose literal data the receiving document's
+       * transition schema rejects is `EVENT011`.
+       */
+      invokedDocuments?: InvokedDocument[];
+    },
+  ): Promise<{ report: Uint8Array }>;
 }>;
 
 /** Options of the bundled data-model factories. */
