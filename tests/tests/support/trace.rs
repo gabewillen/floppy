@@ -71,6 +71,24 @@ pub fn render(records: &[Json], requests: &[(String, Json)]) -> String {
     text
 }
 
+/// The number of backend requests in the pinned trace of `test`, or
+/// `None` when [`BLESS`] is `1` (the run is about to rewrite it) or no
+/// trace is pinned.
+pub fn pinned_requests(test: &str) -> Option<usize> {
+    if std::env::var(BLESS).is_ok_and(|value| value == "1") {
+        return None;
+    }
+    let pinned = std::fs::read_to_string(dir().join(format!("{test}.ndjson"))).ok()?;
+    Some(
+        pinned
+            .lines()
+            .filter(|line| {
+                serde_json::from_str::<Json>(line).is_ok_and(|item| item["type"] == "request")
+            })
+            .count(),
+    )
+}
+
 /// Asserts that `records` and `requests` render to the pinned trace of
 /// `test`, or rewrites it when [`BLESS`] is `1`.
 pub fn assert_trace(test: &str, records: &[Json], requests: &[(String, Json)]) {

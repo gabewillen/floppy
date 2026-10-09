@@ -33,13 +33,16 @@ use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value as Json, json};
 use support::{Finished, Run, logs, trace, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup included).
 const WAIT: Duration = Duration::from_secs(90);
+/// How long the mock must receive nothing before a blessing run takes its
+/// requests as complete.
+const SETTLE: Duration = Duration::from_secs(1);
 /// The fake keys (not secrets).
 const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-fake\n";
 const IGNORE: &str = "bot.ability.cognition.ignore";
@@ -264,6 +267,32 @@ impl Mock {
         Self { origin, received }
     }
 
+    /// Waits until every request the run sent has reached the mock: a
+    /// stage that timed out still sends its hanging backend's request
+    /// (the service call is not withdrawn), and under load that request
+    /// can arrive after the run has closed. With `expected` (the pinned
+    /// trace's count), waits until that many arrived, at most [`WAIT`];
+    /// without it (blessing), until none arrived for [`SETTLE`].
+    fn settle(&self, expected: Option<usize>) {
+        let count = || self.received.lock().expect("the log lock").len();
+        let start = Instant::now();
+        let mut seen = count();
+        let mut quiet = Instant::now();
+        while start.elapsed() < WAIT {
+            match expected {
+                Some(expected) if seen >= expected => return,
+                None if quiet.elapsed() >= SETTLE => return,
+                _ => {}
+            }
+            std::thread::sleep(Duration::from_millis(20));
+            let now = count();
+            if now != seen {
+                seen = now;
+                quiet = Instant::now();
+            }
+        }
+    }
+
     fn received(&self, suffix: &str) -> Vec<Received> {
         self.received
             .lock()
@@ -417,6 +446,7 @@ fn strings(values: &[&str]) -> Vec<String> {
 /// mock received.
 fn close(run: Run, mock: &Mock, test: &str) -> Finished {
     let finished = run.close(WAIT);
+    mock.settle(trace::pinned_requests(test));
     let requests: Vec<(String, Json)> = mock
         .received("")
         .into_iter()
