@@ -233,6 +233,12 @@ The remaining mosfet port runs as one ultracode run with these grants:
 - **Live model while the Sparks are saturated:** CPA gateway via the
   gitignored `.env.cpa`, model `gabe-codex-1/gpt-6-luna` (fallback
   `gabe-xai/grok-4.6`).
+- **Behaviors and routines (phase 5) use the builder:** mosfet has the model
+  author behaviors and routines as Starlark HSM programs and compiles them at
+  runtime (`mosfet/behavior/compiler.py`). floppy mirrors that with
+  `bots/builder`: a behavior or routine is an SCXML document the builder
+  authors, validates, and hands back, and the bot then invokes it. No
+  Starlark port.
 - **Pacing:** run through all phases, report after each; stop only for a
   real blocker or scxml.rs names needing approval.
 
