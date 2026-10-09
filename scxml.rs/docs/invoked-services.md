@@ -314,10 +314,11 @@ the variable whose value the host binds, in the host's `env` vocabulary
 
 A package declares no events. The schemas of the events a service sends
 live in the document itself: an `event:schema` on each transition that
-handles them ([namespaces/event](../namespaces/event/README.md)). They stay
-metadata only, and `event_schemas_never_change_execution`
-(`hosts/scxml-host-wasmtime/tests/session_snapshot.rs`) proves that a
-machine with them runs exactly as without them.
+handles them ([namespaces/event](../namespaces/event/README.md)). A
+service's events are not checked against them (a service is not an SCXML
+session; the engine checks only the events a session creates with `<send>`
+and `<raise>`), and transitions match a service's events by name exactly
+as without them.
 
 ## What the validator checks
 

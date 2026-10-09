@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- event-9: a raise whose event a transition's schema rejects is not raised, and error.execution ends its block. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event">
+<state id="s0">
+  <onentry>
+    <raise event="b" event:schema='{"type": "null"}'/>
+    <raise event="c"/>
+  </onentry>
+  <transition event="b" conf:targetfail="" event:schema='{"type": "object"}'/>
+  <transition event="error.execution" target="s1"/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<state id="s1">
+  <onentry>
+    <raise event="d"/>
+  </onentry>
+  <transition event="c" conf:targetfail=""/>
+  <transition event="d" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

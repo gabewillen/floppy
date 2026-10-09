@@ -9,7 +9,8 @@
 //! small one configured here and the cache starts cold.
 //!
 //! `scripts/verify-wasm-capabilities.sh` builds and verifies the release
-//! components into `target/session-host-proof`.
+//! components into `target/session-host-proof` (this suite's own artifacts
+//! directory inside it).
 
 #![allow(
     missing_docs,
@@ -57,15 +58,20 @@ fn release_components() -> ReleaseComponents {
         .expect("host crate has a workspace parent");
     let release = prebuilt::release_dir().unwrap_or_else(|| {
         let target = workspace.join("target/session-host-proof");
+        // This suite's own artifact directory: suites sharing the Cargo
+        // target never rewrite a manifest another suite is reading.
+        let release = target.join("wasm-artifacts/session-host-rayon");
         let status = Command::new("sh")
             .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+            .arg("--artifacts-dir")
+            .arg(&release)
             .args(COMPONENTS)
             .current_dir(workspace)
             .env("CARGO_TARGET_DIR", &target)
             .status()
             .expect("the capability script runs");
         assert!(status.success(), "the release capability proof must pass");
-        target.join("wasm-artifacts/release")
+        release
     });
     let manifest = std::fs::read(release.join("manifest.tsv")).expect("manifest is readable");
     let trusted = TrustedManifestDigest::from_hex(&format!("{:x}", Sha256::digest(&manifest)))

@@ -25,17 +25,17 @@ disagree are in [spec-errata.md](spec-errata.md).
   errata SHA-256
   `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f`,
   producer report digest
-  `cb20e4887fd0fc1ce2f9c1f494ef6403ecc2c3968945cf69e6efe233babbc13f`,
+  `db6ef5859982f41f68af1df07c2e0a766179b34f5ccddea1a0d49032b0ffc1b1`,
   and canonical artifact SHA-256
-  `85781edf96997b33c51da97e413dfec54a9d5b086a3fdc2aba24d188d1a0bba6`.
+  `9298381cc9d350677545bb335cd3046ca6474f951fc778501a9921324ed724a9`.
   The XPath evidence binds corpus digest
   `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca`,
   errata SHA-256
   `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a`,
   producer report digest
-  `6c5ee18542b5f49c16f36b43d17f356a744722380ce44411c7e40ab41a2254d0`,
+  `71c37788acb475072daf070608d9d40abcfa9e96dded66862662cf0714310e21`,
   and canonical artifact SHA-256
-  `c943f27d655c5995ef6ab453c1f532c20e688afd5f9164f89d0a57342fde09df`.
+  `abe92b0ab19ae05ddc7f741055530c9724bcbb3572fb1368bcd5f7106c88f4a8`.
   The report bytes are checked in under
   [`tests/conformance/w3c-irp/baselines`](../tests/conformance/w3c-irp/baselines).
   These are measured IRP results of the shipped components under the
@@ -390,6 +390,24 @@ In detail:
   schema compiles every `pattern` it holds as a regular expression; the
   work of compiling a pathological pattern is bounded only by the schema's
   size (and, in the components, fuel), not by a pattern-specific bound.
+- At run time a session checks only the events it creates for itself
+  against its own document's transition schemas
+  ([namespaces/event](../namespaces/event/README.md#at-run-time)): an event
+  sent to another session (`#_parent`, `#_<invokeid>`) is not checked
+  against the receiving document's transitions, and neither is an event a
+  host delivers (`scx run` standard input, an embedder's `send`). The
+  sending engine does not have the receiving document, and a host must not
+  judge events itself; closing this gap needs a machine interface the
+  receiving session answers. XML data (the XPath data model's) satisfies
+  only the schema `true`.
+- A data-model call that exhausts its per-call fuel
+  (`DEFAULT_DATA_MODEL_CALL_FUEL`) or otherwise traps ends the session
+  (`machine-platform`), not `error.execution`: Wasmtime leaves a trapped
+  instance unusable, so the session's data model is gone. The ECMAScript
+  data model bounds loops (`MAX_LOOP_ITERATIONS`) and built-in results, but
+  not the callbacks a native built-in makes (for example `Array.from` with
+  a map function over tens of thousands of items), which can reach the fuel
+  cap first.
 - By rule, not as a gap, extension components do no I/O: no WASI, no
   `outbound-http`, and no `env` values or references (an `env` attribute on
   an extension element is `ENV002`). Network calls and secrets belong in

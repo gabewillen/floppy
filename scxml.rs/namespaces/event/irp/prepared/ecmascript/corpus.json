@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/event/irp/manifest.xml",
     "revision": "0.2.0",
-    "corpus_digest": "5220c0f84c1444e3eaa61e02d7065212757be27e4ea4ca4ae028298709851bab",
-    "source_digest": "6d5beb5e2f59976542c6e86f539619de9f45cc8bd5b5247968fd789c930d94a4",
-    "manifest_digest": "c4c95ebd322e8bb52350a4755a9281484be7f79521ee2d3d09b2f910ec2cd789",
+    "corpus_digest": "deed5d764a3e7991a750336b098442c00f7bc688c37f28c340fc0e73bd279e04",
+    "source_digest": "24cb52cfac24d6202a81ef6c7afc9b356c811825613b37366d4d6bf9b1c93ec3",
+    "manifest_digest": "752489322a87da78a2a026b58f6f663e507b2822ac5d092d911088fe3960a50d",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -42,10 +42,10 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "400/test400.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/a10dd014a933b1e5de8828569018f466bc9795bb5580eb15661be5a6595a8dc5/cases/400/test400.scxml",
-      "source_digest": "a10dd014a933b1e5de8828569018f466bc9795bb5580eb15661be5a6595a8dc5",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/a10dd014a933b1e5de8828569018f466bc9795bb5580eb15661be5a6595a8dc5/sources/400/test400.txml",
-      "output_digest": "c1cb39d15832ee96cb80f6e01b9e335f69afe37bbfd2fa51784183c1e0bb965f",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/58ffb8d1a5b0d7fb829dcd7f51493869165a21fcaf5c9ca58b5458dd29e516d6/cases/400/test400.scxml",
+      "source_digest": "58ffb8d1a5b0d7fb829dcd7f51493869165a21fcaf5c9ca58b5458dd29e516d6",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/58ffb8d1a5b0d7fb829dcd7f51493869165a21fcaf5c9ca58b5458dd29e516d6/sources/400/test400.txml",
+      "output_digest": "b08c3ea82abe77abd5d6bfa04d99ff49b1ce5e7d7acdf44f48dc0d45e4a1e455",
       "dependencies": [],
       "dependency_digests": {},
       "dependency_source_digests": {},
@@ -70,9 +70,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "401/test401.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/aa076f75f5a1f3ec4a9b23b00b806ff8cfd879282bac8cfcb7f6bae43fe103ce/cases/401/test401.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/aa076f75f5a1f3ec4a9b23b00b806ff8cfd879282bac8cfcb7f6bae43fe103ce/cases/401/test401.scxml",
       "source_digest": "aa076f75f5a1f3ec4a9b23b00b806ff8cfd879282bac8cfcb7f6bae43fe103ce",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/aa076f75f5a1f3ec4a9b23b00b806ff8cfd879282bac8cfcb7f6bae43fe103ce/sources/401/test401.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/aa076f75f5a1f3ec4a9b23b00b806ff8cfd879282bac8cfcb7f6bae43fe103ce/sources/401/test401.txml",
       "output_digest": "78847eaed18b4d8026e84a2831a96a03250f996ce4e5972ccfa9d8b44e5c950e",
       "dependencies": [],
       "dependency_digests": {},
@@ -100,9 +100,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "402/test402.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/014a362f3da595255c16f9f84d4545338f46d92330f5e1af30f55db25cbb8035/cases/402/test402.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/014a362f3da595255c16f9f84d4545338f46d92330f5e1af30f55db25cbb8035/cases/402/test402.scxml",
       "source_digest": "014a362f3da595255c16f9f84d4545338f46d92330f5e1af30f55db25cbb8035",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/014a362f3da595255c16f9f84d4545338f46d92330f5e1af30f55db25cbb8035/sources/402/test402.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/014a362f3da595255c16f9f84d4545338f46d92330f5e1af30f55db25cbb8035/sources/402/test402.txml",
       "output_digest": "fd7fa75d2d0a1ad8c67bc8f02020caed63b999945b9a02bca738c6beb7a86ae8",
       "dependencies": [],
       "dependency_digests": {},
@@ -130,9 +130,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "403/test403.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/3ed4fd72fc3da8eb41fdd81f3475504c942d0d14509d971bd00830947dd199d1/cases/403/test403.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/3ed4fd72fc3da8eb41fdd81f3475504c942d0d14509d971bd00830947dd199d1/cases/403/test403.scxml",
       "source_digest": "3ed4fd72fc3da8eb41fdd81f3475504c942d0d14509d971bd00830947dd199d1",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/3ed4fd72fc3da8eb41fdd81f3475504c942d0d14509d971bd00830947dd199d1/sources/403/test403.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/3ed4fd72fc3da8eb41fdd81f3475504c942d0d14509d971bd00830947dd199d1/sources/403/test403.txml",
       "output_digest": "95492760f94b6023b08a4a955795c57673c41efcfbd1d1bb05d620247cbbbcb8",
       "dependencies": [],
       "dependency_digests": {},
@@ -160,9 +160,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "404/test404.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/9db9198cdbb628759d145a47224952cf4082abf65ca689a181c30837c9c77f3a/cases/404/test404.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/9db9198cdbb628759d145a47224952cf4082abf65ca689a181c30837c9c77f3a/cases/404/test404.scxml",
       "source_digest": "9db9198cdbb628759d145a47224952cf4082abf65ca689a181c30837c9c77f3a",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/9db9198cdbb628759d145a47224952cf4082abf65ca689a181c30837c9c77f3a/sources/404/test404.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/9db9198cdbb628759d145a47224952cf4082abf65ca689a181c30837c9c77f3a/sources/404/test404.txml",
       "output_digest": "27ce7b33d56d9984267079dd5f53d271908f20a8a5c7e359a551bd9df3ff13f9",
       "dependencies": [],
       "dependency_digests": {},
@@ -190,9 +190,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "410/test410.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/44404df9c5bf95ff2d96248a94b0ffbf79de489b65622c03b0bde96a62d14b34/cases/410/test410.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/44404df9c5bf95ff2d96248a94b0ffbf79de489b65622c03b0bde96a62d14b34/cases/410/test410.scxml",
       "source_digest": "44404df9c5bf95ff2d96248a94b0ffbf79de489b65622c03b0bde96a62d14b34",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/44404df9c5bf95ff2d96248a94b0ffbf79de489b65622c03b0bde96a62d14b34/sources/410/test410.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/44404df9c5bf95ff2d96248a94b0ffbf79de489b65622c03b0bde96a62d14b34/sources/410/test410.txml",
       "output_digest": "f09241d655e08edf5b68547e4b1085a163de16d7bdd222645ebedd71fd71df91",
       "dependencies": [],
       "dependency_digests": {},
@@ -220,10 +220,10 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "420/test420.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/200ae1ea758c1a233d2d8ece7dba1ae77ec592856bf747db4a6c6d1b6fc87de2/cases/420/test420.scxml",
-      "source_digest": "200ae1ea758c1a233d2d8ece7dba1ae77ec592856bf747db4a6c6d1b6fc87de2",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/200ae1ea758c1a233d2d8ece7dba1ae77ec592856bf747db4a6c6d1b6fc87de2/sources/420/test420.txml",
-      "output_digest": "03e0294924bb6318d77c4d7e81f8601459694a12bdf90b70febfa235a5244e25",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/1a657557a4490d59a829a8393daab7f007c3579f91c4e123601addbd66746125/cases/420/test420.scxml",
+      "source_digest": "1a657557a4490d59a829a8393daab7f007c3579f91c4e123601addbd66746125",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/1a657557a4490d59a829a8393daab7f007c3579f91c4e123601addbd66746125/sources/420/test420.txml",
+      "output_digest": "306f34acabdbd97288e0236ab2b85d73b778076775440b2b8c03ed8552e70ea0",
       "dependencies": [],
       "dependency_digests": {},
       "dependency_source_digests": {},
@@ -248,10 +248,10 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "421/test421.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/c8d49ade89121935cd34b3d7d80c6a25eda32ef2f30f9e2d236e6bba50afe0b8/cases/421/test421.scxml",
-      "source_digest": "c8d49ade89121935cd34b3d7d80c6a25eda32ef2f30f9e2d236e6bba50afe0b8",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/c8d49ade89121935cd34b3d7d80c6a25eda32ef2f30f9e2d236e6bba50afe0b8/sources/421/test421.txml",
-      "output_digest": "711fc73d636d580688bb1a7224643f3671fd04f5ba45088ce1794ae4d7e2cdee",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/c939199ef0f99133e3801bb4b21d1733efa21553e603c7ccbbf84e314bfc504d/cases/421/test421.scxml",
+      "source_digest": "c939199ef0f99133e3801bb4b21d1733efa21553e603c7ccbbf84e314bfc504d",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/c939199ef0f99133e3801bb4b21d1733efa21553e603c7ccbbf84e314bfc504d/sources/421/test421.txml",
+      "output_digest": "aabacafd8308a2da9c05f6b0f22f1896c75427f9541562b245111c6b626ac58b",
       "dependencies": [],
       "dependency_digests": {},
       "dependency_source_digests": {},
@@ -276,9 +276,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "422/test422.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/ea0304f3766995a78b9ca81dde966b67d3304d215d3044b2ae47e9dde0eea521/cases/422/test422.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/ea0304f3766995a78b9ca81dde966b67d3304d215d3044b2ae47e9dde0eea521/cases/422/test422.scxml",
       "source_digest": "ea0304f3766995a78b9ca81dde966b67d3304d215d3044b2ae47e9dde0eea521",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/ea0304f3766995a78b9ca81dde966b67d3304d215d3044b2ae47e9dde0eea521/sources/422/test422.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/ea0304f3766995a78b9ca81dde966b67d3304d215d3044b2ae47e9dde0eea521/sources/422/test422.txml",
       "output_digest": "36977bb91281d467bdf6af43dc797acb98dd2793ee30ef525e681a760de957e6",
       "dependencies": [],
       "dependency_digests": {},
@@ -306,21 +306,21 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "430/test430.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/607e8c6a56a41628d8d6ad4868b2d9fa9e497e1d18d101db1b43de28339a639e/cases/430/test430.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/607e8c6a56a41628d8d6ad4868b2d9fa9e497e1d18d101db1b43de28339a639e/cases/430/test430.scxml",
       "source_digest": "607e8c6a56a41628d8d6ad4868b2d9fa9e497e1d18d101db1b43de28339a639e",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/607e8c6a56a41628d8d6ad4868b2d9fa9e497e1d18d101db1b43de28339a639e/sources/430/test430.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/607e8c6a56a41628d8d6ad4868b2d9fa9e497e1d18d101db1b43de28339a639e/sources/430/test430.txml",
       "output_digest": "ffc1ae5f8318f3bf55cebe4bbb6ef4d0bf02ed0ed3e9084df5b13055183ba376",
       "dependencies": [
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/430/schemas/order.json"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/430/schemas/order.json"
       ],
       "dependency_digests": {
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/430/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/430/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_digests": {
         "430/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_artifacts": {
-        "430/schemas/order.json": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/430/schemas/order.json"
+        "430/schemas/order.json": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/430/schemas/order.json"
       },
       "resources": [],
       "resource_digests": {},
@@ -342,21 +342,21 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "431/test431.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/fe33788b1e286535d39ae5f4e14ae9df039b8381cfe86901a28641ababcbd4ba/cases/431/test431.scxml",
-      "source_digest": "fe33788b1e286535d39ae5f4e14ae9df039b8381cfe86901a28641ababcbd4ba",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/fe33788b1e286535d39ae5f4e14ae9df039b8381cfe86901a28641ababcbd4ba/sources/431/test431.txml",
-      "output_digest": "ecf4af64aa4205f39dcdd8d49ab21384777d896bf47c49ebe49b3a4deee80234",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/d6aa1236370f77a44569d31997b031b177c8edbf61d77b339c23e50d23640197/cases/431/test431.scxml",
+      "source_digest": "d6aa1236370f77a44569d31997b031b177c8edbf61d77b339c23e50d23640197",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/d6aa1236370f77a44569d31997b031b177c8edbf61d77b339c23e50d23640197/sources/431/test431.txml",
+      "output_digest": "892167022d382898cf5e0d95720b1cad212dce2b69db1e2212474e7ffcee24ee",
       "dependencies": [
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/431/schemas/order.json"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/431/schemas/order.json"
       ],
       "dependency_digests": {
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/431/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/431/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_digests": {
         "431/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_artifacts": {
-        "431/schemas/order.json": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/431/schemas/order.json"
+        "431/schemas/order.json": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/431/schemas/order.json"
       },
       "resources": [],
       "resource_digests": {},
@@ -378,9 +378,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "432/test432.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/8072288038849702a22be6d156ede1bce92778b83dfaf28b5796f27d6722181a/cases/432/test432.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/8072288038849702a22be6d156ede1bce92778b83dfaf28b5796f27d6722181a/cases/432/test432.scxml",
       "source_digest": "8072288038849702a22be6d156ede1bce92778b83dfaf28b5796f27d6722181a",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/8072288038849702a22be6d156ede1bce92778b83dfaf28b5796f27d6722181a/sources/432/test432.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/8072288038849702a22be6d156ede1bce92778b83dfaf28b5796f27d6722181a/sources/432/test432.txml",
       "output_digest": "ff942a7700d97b0f1b54e784b75f07122fdc17d801c764e661e49f23f2ff7fda",
       "dependencies": [],
       "dependency_digests": {},
@@ -408,9 +408,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "433/test433.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/f55a746d183895c750d49bade28af79c8a72ddc5d10ab2a4c05845a27829f32c/cases/433/test433.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/f55a746d183895c750d49bade28af79c8a72ddc5d10ab2a4c05845a27829f32c/cases/433/test433.scxml",
       "source_digest": "f55a746d183895c750d49bade28af79c8a72ddc5d10ab2a4c05845a27829f32c",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/f55a746d183895c750d49bade28af79c8a72ddc5d10ab2a4c05845a27829f32c/sources/433/test433.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/f55a746d183895c750d49bade28af79c8a72ddc5d10ab2a4c05845a27829f32c/sources/433/test433.txml",
       "output_digest": "d293b03f1dfb8eb61b27dad44541b253bae5f5aeb2fb314d6a41047283e9ed72",
       "dependencies": [],
       "dependency_digests": {},
@@ -438,21 +438,21 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "434/test434.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/da8d610d86a222d44ef40122f612bed741712044870d316d6dad49b0b5ebd537/cases/434/test434.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/da8d610d86a222d44ef40122f612bed741712044870d316d6dad49b0b5ebd537/cases/434/test434.scxml",
       "source_digest": "da8d610d86a222d44ef40122f612bed741712044870d316d6dad49b0b5ebd537",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/da8d610d86a222d44ef40122f612bed741712044870d316d6dad49b0b5ebd537/sources/434/test434.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/da8d610d86a222d44ef40122f612bed741712044870d316d6dad49b0b5ebd537/sources/434/test434.txml",
       "output_digest": "2c16969363366d3a8a1a73498796ac777eaca61dbf5bbeb5617a57eca7c9e738",
       "dependencies": [
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2/dependencies/434/schemas/not-json.json"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2/dependencies/434/schemas/not-json.json"
       ],
       "dependency_digests": {
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2/dependencies/434/schemas/not-json.json": "d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2/dependencies/434/schemas/not-json.json": "d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2"
       },
       "dependency_source_digests": {
         "434/schemas/not-json.json": "d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2"
       },
       "dependency_source_artifacts": {
-        "434/schemas/not-json.json": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2/sources/434/schemas/not-json.json"
+        "434/schemas/not-json.json": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/d63a291482d363c7749692befd440ddc6b1ea39b78bdfac92029c05d2f8e7ab2/sources/434/schemas/not-json.json"
       },
       "resources": [],
       "resource_digests": {},
@@ -476,21 +476,21 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "435/test435.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/aa8a00315710acabaff8ce8ad7c3f9eadc69cf1ffd5c9062ed11f7f0c9ebf769/cases/435/test435.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/aa8a00315710acabaff8ce8ad7c3f9eadc69cf1ffd5c9062ed11f7f0c9ebf769/cases/435/test435.scxml",
       "source_digest": "aa8a00315710acabaff8ce8ad7c3f9eadc69cf1ffd5c9062ed11f7f0c9ebf769",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/aa8a00315710acabaff8ce8ad7c3f9eadc69cf1ffd5c9062ed11f7f0c9ebf769/sources/435/test435.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/aa8a00315710acabaff8ce8ad7c3f9eadc69cf1ffd5c9062ed11f7f0c9ebf769/sources/435/test435.txml",
       "output_digest": "e455c0dcbb6f2d0189854b2e829f96508c8e198bd08585aec564ed8ce934bb51",
       "dependencies": [
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/435/schemas/order.json"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/435/schemas/order.json"
       ],
       "dependency_digests": {
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/435/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/435/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_digests": {
         "435/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_artifacts": {
-        "435/schemas/order.json": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/435/schemas/order.json"
+        "435/schemas/order.json": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/435/schemas/order.json"
       },
       "resources": [],
       "resource_digests": {},
@@ -514,21 +514,21 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "436/test436.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/4021a2fead04145df75f994cb73bb6718fe4e2d2abb449b45ab440b8c42daa7d/cases/436/test436.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/4021a2fead04145df75f994cb73bb6718fe4e2d2abb449b45ab440b8c42daa7d/cases/436/test436.scxml",
       "source_digest": "4021a2fead04145df75f994cb73bb6718fe4e2d2abb449b45ab440b8c42daa7d",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/4021a2fead04145df75f994cb73bb6718fe4e2d2abb449b45ab440b8c42daa7d/sources/436/test436.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/4021a2fead04145df75f994cb73bb6718fe4e2d2abb449b45ab440b8c42daa7d/sources/436/test436.txml",
       "output_digest": "903d512871958c10e84a03ddd5722d2b5d6fd415dd18bec384d2d283309bff7a",
       "dependencies": [
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/436/schemas/order.json"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/436/schemas/order.json"
       ],
       "dependency_digests": {
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/436/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/436/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_digests": {
         "436/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_artifacts": {
-        "436/schemas/order.json": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/436/schemas/order.json"
+        "436/schemas/order.json": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/436/schemas/order.json"
       },
       "resources": [],
       "resource_digests": {},
@@ -552,9 +552,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "437/test437.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/85f4f50975fb8f97d26bcf932f4e73b7c0f54772f437eca9ed01db070f497177/cases/437/test437.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/85f4f50975fb8f97d26bcf932f4e73b7c0f54772f437eca9ed01db070f497177/cases/437/test437.scxml",
       "source_digest": "85f4f50975fb8f97d26bcf932f4e73b7c0f54772f437eca9ed01db070f497177",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/85f4f50975fb8f97d26bcf932f4e73b7c0f54772f437eca9ed01db070f497177/sources/437/test437.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/85f4f50975fb8f97d26bcf932f4e73b7c0f54772f437eca9ed01db070f497177/sources/437/test437.txml",
       "output_digest": "0504ee5950711719dfb2b5ef0d0c91651ade4cefce8555d2ab7e09abe00fb49b",
       "dependencies": [],
       "dependency_digests": {},
@@ -582,10 +582,10 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "440/test440.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/d0a7724ffd8674a50d1295e4db187d0430932a33c429bcc714c0c2f5670a891a/cases/440/test440.scxml",
-      "source_digest": "d0a7724ffd8674a50d1295e4db187d0430932a33c429bcc714c0c2f5670a891a",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/d0a7724ffd8674a50d1295e4db187d0430932a33c429bcc714c0c2f5670a891a/sources/440/test440.txml",
-      "output_digest": "ece3dfb70355dc8419de2748168b2f5fb147ebdb4fecfb38a1c654017b33c30f",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/4fd57a933473c698db05326269bf1617026af3053a302076e78edade3d01a5ac/cases/440/test440.scxml",
+      "source_digest": "4fd57a933473c698db05326269bf1617026af3053a302076e78edade3d01a5ac",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/4fd57a933473c698db05326269bf1617026af3053a302076e78edade3d01a5ac/sources/440/test440.txml",
+      "output_digest": "54564829d3e285b8ad487ab6471680af2b36dd563d2255e2da0d4bed6da95e07",
       "dependencies": [],
       "dependency_digests": {},
       "dependency_source_digests": {},
@@ -610,9 +610,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "441/test441.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/905a96530b92336bfd6a924610d07018b17e5a7f3f439d6d209c702c044464a1/cases/441/test441.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/905a96530b92336bfd6a924610d07018b17e5a7f3f439d6d209c702c044464a1/cases/441/test441.scxml",
       "source_digest": "905a96530b92336bfd6a924610d07018b17e5a7f3f439d6d209c702c044464a1",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/905a96530b92336bfd6a924610d07018b17e5a7f3f439d6d209c702c044464a1/sources/441/test441.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/905a96530b92336bfd6a924610d07018b17e5a7f3f439d6d209c702c044464a1/sources/441/test441.txml",
       "output_digest": "80bdfb2cc4f4c77e91e412c03b59212fa563d524b45ca9bcc0f267a84b49f54b",
       "dependencies": [],
       "dependency_digests": {},
@@ -640,9 +640,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "450/test450.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/01e79eec9a3ce2e7dbcc5c7bd20782c405732bc4e6ca0f8281913263ce362bd1/cases/450/test450.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/01e79eec9a3ce2e7dbcc5c7bd20782c405732bc4e6ca0f8281913263ce362bd1/cases/450/test450.scxml",
       "source_digest": "01e79eec9a3ce2e7dbcc5c7bd20782c405732bc4e6ca0f8281913263ce362bd1",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/01e79eec9a3ce2e7dbcc5c7bd20782c405732bc4e6ca0f8281913263ce362bd1/sources/450/test450.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/01e79eec9a3ce2e7dbcc5c7bd20782c405732bc4e6ca0f8281913263ce362bd1/sources/450/test450.txml",
       "output_digest": "09567556dd186be9653898da82fb4f854a2663a5a7d307a92c2d64eb57fd7f93",
       "dependencies": [],
       "dependency_digests": {},
@@ -670,9 +670,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "451/test451.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/2222abfad148ad610baf0732601a562273d87caabef8270e798bf666c6773433/cases/451/test451.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/2222abfad148ad610baf0732601a562273d87caabef8270e798bf666c6773433/cases/451/test451.scxml",
       "source_digest": "2222abfad148ad610baf0732601a562273d87caabef8270e798bf666c6773433",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/2222abfad148ad610baf0732601a562273d87caabef8270e798bf666c6773433/sources/451/test451.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/2222abfad148ad610baf0732601a562273d87caabef8270e798bf666c6773433/sources/451/test451.txml",
       "output_digest": "92bf0a18e533466af773f97e8c3e7f6de5bda90d600dea8071ac8ef1b6da1177",
       "dependencies": [],
       "dependency_digests": {},
@@ -700,9 +700,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "460/test460.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/53b183863a0b90719de8d3071de656c7e3174b88cf9a831e280a29981b7781a9/cases/460/test460.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/53b183863a0b90719de8d3071de656c7e3174b88cf9a831e280a29981b7781a9/cases/460/test460.scxml",
       "source_digest": "53b183863a0b90719de8d3071de656c7e3174b88cf9a831e280a29981b7781a9",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/53b183863a0b90719de8d3071de656c7e3174b88cf9a831e280a29981b7781a9/sources/460/test460.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/53b183863a0b90719de8d3071de656c7e3174b88cf9a831e280a29981b7781a9/sources/460/test460.txml",
       "output_digest": "377f120091e5cec85e7a540d71b0f61d216aafaf11ea3f5cda2d4d50df2c3213",
       "dependencies": [],
       "dependency_digests": {},
@@ -730,21 +730,21 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "461/test461.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/67ebd958d97dc82b68b60e2ddbfee0206fe857454e07eff456df5a162c019f00/cases/461/test461.scxml",
-      "source_digest": "67ebd958d97dc82b68b60e2ddbfee0206fe857454e07eff456df5a162c019f00",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/67ebd958d97dc82b68b60e2ddbfee0206fe857454e07eff456df5a162c019f00/sources/461/test461.txml",
-      "output_digest": "c212b07147545443e787b35eb3c3f0fe4f26d77fc9fc2ede3805061f1f0dd8b3",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/dc82102be35286b9c582304f1b52f93c1ad911ccfbe29fee44d5ae7893dc1573/cases/461/test461.scxml",
+      "source_digest": "dc82102be35286b9c582304f1b52f93c1ad911ccfbe29fee44d5ae7893dc1573",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/dc82102be35286b9c582304f1b52f93c1ad911ccfbe29fee44d5ae7893dc1573/sources/461/test461.txml",
+      "output_digest": "a0984deed1562573ff7a24776719465bc45aa52c4c94369d906ebb91d8e2ea39",
       "dependencies": [
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/461/schemas/order.json"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/461/schemas/order.json"
       ],
       "dependency_digests": {
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/461/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/dependencies/461/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_digests": {
         "461/schemas/order.json": "abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d"
       },
       "dependency_source_artifacts": {
-        "461/schemas/order.json": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/461/schemas/order.json"
+        "461/schemas/order.json": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/abf466a7bdf88ab7223b73816d96e5a6d254b6151b4e24f46c70e0918967a85d/sources/461/schemas/order.json"
       },
       "resources": [],
       "resource_digests": {},
@@ -766,10 +766,10 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "462/test462.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/f81febb0a7c29255f693a41cbf0cd997e736f1db9eee9ca6c89b63721372df92/cases/462/test462.scxml",
-      "source_digest": "f81febb0a7c29255f693a41cbf0cd997e736f1db9eee9ca6c89b63721372df92",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/f81febb0a7c29255f693a41cbf0cd997e736f1db9eee9ca6c89b63721372df92/sources/462/test462.txml",
-      "output_digest": "0dcc478adc99851dce5e084c9a580a856ece7817a090429f8bfff608c062c37b",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/da8c9d0f0a7b8fd67fee825a6b74ef445748ff80211c5b59621a2b1f8d43d45e/cases/462/test462.scxml",
+      "source_digest": "da8c9d0f0a7b8fd67fee825a6b74ef445748ff80211c5b59621a2b1f8d43d45e",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/da8c9d0f0a7b8fd67fee825a6b74ef445748ff80211c5b59621a2b1f8d43d45e/sources/462/test462.txml",
+      "output_digest": "877a6927f9227b467a598cec10c9bf53f6fe70ee5fadef5554212d51d810993d",
       "dependencies": [],
       "dependency_digests": {},
       "dependency_source_digests": {},
@@ -794,21 +794,21 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "463/test463.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/bc80b7a720204edb278edbe8292efe394c02676465398ebd70a6f903faac6608/cases/463/test463.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/bc80b7a720204edb278edbe8292efe394c02676465398ebd70a6f903faac6608/cases/463/test463.scxml",
       "source_digest": "bc80b7a720204edb278edbe8292efe394c02676465398ebd70a6f903faac6608",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/bc80b7a720204edb278edbe8292efe394c02676465398ebd70a6f903faac6608/sources/463/test463.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/bc80b7a720204edb278edbe8292efe394c02676465398ebd70a6f903faac6608/sources/463/test463.txml",
       "output_digest": "b9b82fd8049476146777b2fafecd03503bff767564d9eb02577b459b6ce5e82f",
       "dependencies": [
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0/dependencies/463/schemas/anchored.json"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0/dependencies/463/schemas/anchored.json"
       ],
       "dependency_digests": {
-        "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0/dependencies/463/schemas/anchored.json": "83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0"
+        "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0/dependencies/463/schemas/anchored.json": "83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0"
       },
       "dependency_source_digests": {
         "463/schemas/anchored.json": "83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0"
       },
       "dependency_source_artifacts": {
-        "463/schemas/anchored.json": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0/sources/463/schemas/anchored.json"
+        "463/schemas/anchored.json": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/83d3cf39c0433c6756f43f5d78b0f84761a312996afe6d3692e98fc0a96e05b0/sources/463/schemas/anchored.json"
       },
       "resources": [],
       "resource_digests": {},
@@ -832,9 +832,9 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "470/test470.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/87b3fb803016c4194c089056268cec3f54beccd92105298f236c53eda90d589b/cases/470/test470.scxml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/87b3fb803016c4194c089056268cec3f54beccd92105298f236c53eda90d589b/cases/470/test470.scxml",
       "source_digest": "87b3fb803016c4194c089056268cec3f54beccd92105298f236c53eda90d589b",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/87b3fb803016c4194c089056268cec3f54beccd92105298f236c53eda90d589b/sources/470/test470.txml",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/87b3fb803016c4194c089056268cec3f54beccd92105298f236c53eda90d589b/sources/470/test470.txml",
       "output_digest": "d69396841a55bc4d89e6c4da7b854cf0d7e980f27c562c2c93222de8ddce3141",
       "dependencies": [],
       "dependency_digests": {},
@@ -860,10 +860,10 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "480/test480.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/b70b3da853ec79eaa786dcd2955283fc7b4fa3bf740b9a1c13aaa7d8eb3e3b35/cases/480/test480.scxml",
-      "source_digest": "b70b3da853ec79eaa786dcd2955283fc7b4fa3bf740b9a1c13aaa7d8eb3e3b35",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/b70b3da853ec79eaa786dcd2955283fc7b4fa3bf740b9a1c13aaa7d8eb3e3b35/sources/480/test480.txml",
-      "output_digest": "25b9645fc3abc446850aa84cc75f5e081551fa42c80eff173f94c604202289ba",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/dc19291fd39be87caacede2a0646e0cb07e0486de92b60c1261212b341acd4f8/cases/480/test480.scxml",
+      "source_digest": "dc19291fd39be87caacede2a0646e0cb07e0486de92b60c1261212b341acd4f8",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/dc19291fd39be87caacede2a0646e0cb07e0486de92b60c1261212b341acd4f8/sources/480/test480.txml",
+      "output_digest": "33b16831e552a46e84e1f25061b3e2e430225c68476940356b074ab67d930fc4",
       "dependencies": [],
       "dependency_digests": {},
       "dependency_source_digests": {},
@@ -871,7 +871,7 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "The attributes never change how a document executes: transition selection, <send>, <raise>, and <donedata> behave exactly as without them; no event data is checked against a schema, no event is added, and a schema never raises error.execution.",
+      "description": "A <send> through the SCXML Event I/O Processor whose data its own literal event:schema rejects, or, for an event the session delivers to itself (no target, #_internal, or its own session address), a literal event:schema of a transition of the document whose descriptor matches the event, is not dispatched, and error.execution ends its block; a <raise> such a schema rejects (its event has no data) is not raised, and error.execution ends its block. Transition selection and <donedata> are unchanged: no schema is checked when an event is selected or a done event is generated.",
       "features": [],
       "manual": false,
       "events": [],
@@ -888,10 +888,10 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "481/test481.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/b23fbf89633c8db0e379d82407fed9e4c1ce29685447f5f333735dc09a662f7a/cases/481/test481.scxml",
-      "source_digest": "b23fbf89633c8db0e379d82407fed9e4c1ce29685447f5f333735dc09a662f7a",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/b23fbf89633c8db0e379d82407fed9e4c1ce29685447f5f333735dc09a662f7a/sources/481/test481.txml",
-      "output_digest": "001e2bd72ae99ba4a831e824f1841ae30233f34e58f9489b61310e63a4b6bb8e",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/ef90265b186912609b90a4066c27d6300cd023cccc7a7cfbbf423c9cc726b3ff/cases/481/test481.scxml",
+      "source_digest": "ef90265b186912609b90a4066c27d6300cd023cccc7a7cfbbf423c9cc726b3ff",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/ef90265b186912609b90a4066c27d6300cd023cccc7a7cfbbf423c9cc726b3ff/sources/481/test481.txml",
+      "output_digest": "75a5d5c17672e3b0370736328bf7913a2b1f50e067ca34531cd6247c1ae8cb0e",
       "dependencies": [],
       "dependency_digests": {},
       "dependency_source_digests": {},
@@ -899,7 +899,7 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "The attributes never change how a document executes: transition selection, <send>, <raise>, and <donedata> behave exactly as without them; no event data is checked against a schema, no event is added, and a schema never raises error.execution.",
+      "description": "A <send> through the SCXML Event I/O Processor whose data its own literal event:schema rejects, or, for an event the session delivers to itself (no target, #_internal, or its own session address), a literal event:schema of a transition of the document whose descriptor matches the event, is not dispatched, and error.execution ends its block; a <raise> such a schema rejects (its event has no data) is not raised, and error.execution ends its block. Transition selection and <donedata> are unchanged: no schema is checked when an event is selected or a done event is generated.",
       "features": [],
       "manual": false,
       "events": [],
@@ -916,10 +916,10 @@
       "conformance": "mandatory",
       "datamodel": "ecmascript",
       "start_uri": "482/test482.txml",
-      "source": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abe1d300c5476a34cf06523ec50a95ed971fdf3f5cab9c52f182e706049834a4/cases/482/test482.scxml",
-      "source_digest": "abe1d300c5476a34cf06523ec50a95ed971fdf3f5cab9c52f182e706049834a4",
-      "source_artifact": "artifacts/1343883f0ae8be54519a185c8b77bcb453c2f4b30c061802dddfddcf1e64e55c/abe1d300c5476a34cf06523ec50a95ed971fdf3f5cab9c52f182e706049834a4/sources/482/test482.txml",
-      "output_digest": "41681dcc6b9f85016337402e4a5f1b7bae27b55caf848310dc7279e3d083013d",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/34cd31aad3aab2ef67dd281d76a81bfd3107d9a65989061f2d8905069f013fe4/cases/482/test482.scxml",
+      "source_digest": "34cd31aad3aab2ef67dd281d76a81bfd3107d9a65989061f2d8905069f013fe4",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/34cd31aad3aab2ef67dd281d76a81bfd3107d9a65989061f2d8905069f013fe4/sources/482/test482.txml",
+      "output_digest": "1e1aa9e695a2d009260242b11f6020f6b14f6ba3778b99d1295beb1dd0f6f613",
       "dependencies": [],
       "dependency_digests": {},
       "dependency_source_digests": {},
@@ -927,7 +927,35 @@
       "resources": [],
       "resource_digests": {},
       "tags": [],
-      "description": "The attributes never change how a document executes: transition selection, <send>, <raise>, and <donedata> behave exactly as without them; no event data is checked against a schema, no event is added, and a schema never raises error.execution.",
+      "description": "A <send> through the SCXML Event I/O Processor whose data its own literal event:schema rejects, or, for an event the session delivers to itself (no target, #_internal, or its own session address), a literal event:schema of a transition of the document whose descriptor matches the event, is not dispatched, and error.execution ends its block; a <raise> such a schema rejects (its event has no data) is not raised, and error.execution ends its block. Transition selection and <donedata> are unchanged: no schema is checked when an event is selected or a done event is generated.",
+      "features": [],
+      "manual": false,
+      "events": [],
+      "expected": {
+        "kind": "w3c-log-outcome",
+        "outcome": "pass"
+      }
+    },
+    {
+      "id": "483",
+      "assertion_id": "event-9",
+      "spec_num": "9",
+      "spec_id": "#event-9",
+      "conformance": "mandatory",
+      "datamodel": "ecmascript",
+      "start_uri": "483/test483.txml",
+      "source": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/12dc9a1d18446eec4b42f74ff8cce5b2e6db43ff3fe2756b91ab94ac77cf92b0/cases/483/test483.scxml",
+      "source_digest": "12dc9a1d18446eec4b42f74ff8cce5b2e6db43ff3fe2756b91ab94ac77cf92b0",
+      "source_artifact": "artifacts/8d374874f9d30601659b4791e93c252207b8849cbcde010a2413fd34062c246a/12dc9a1d18446eec4b42f74ff8cce5b2e6db43ff3fe2756b91ab94ac77cf92b0/sources/483/test483.txml",
+      "output_digest": "32b66eb955f908cb5de78ce2a8676ec99ddb57accbad002d291c5cb3612cb8a7",
+      "dependencies": [],
+      "dependency_digests": {},
+      "dependency_source_digests": {},
+      "dependency_source_artifacts": {},
+      "resources": [],
+      "resource_digests": {},
+      "tags": [],
+      "description": "A <send> through the SCXML Event I/O Processor whose data its own literal event:schema rejects, or, for an event the session delivers to itself (no target, #_internal, or its own session address), a literal event:schema of a transition of the document whose descriptor matches the event, is not dispatched, and error.execution ends its block; a <raise> such a schema rejects (its event has no data) is not raised, and error.execution ends its block. Transition selection and <donedata> are unchanged: no schema is checked when an event is selected or a done event is generated.",
       "features": [],
       "manual": false,
       "events": [],

@@ -2,8 +2,8 @@
 <!-- The `event` attribute vocabulary (namespaces/event): an inline
      `event:schema` and an `event:schemaexpr` on the transitions the snapshot
      lists, and schemas on a `<raise>`, a `<send>`, and a `<donedata>`, which
-     the snapshot has no entries for. They are metadata only: the run is
-     identical without them (session_snapshot.rs
+     the snapshot has no entries for. Every event it creates satisfies them,
+     so the run is identical without them (session_snapshot.rs
      event_schemas_never_change_execution). Checkpoints: 0 after start, 1
      after `order`. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
@@ -23,7 +23,7 @@
   <state id="busy">
     <onentry>
       <log label="orders" expr="orders"/>
-      <send event="shipped" delay="1s" event:schema='{"type": "string"}'/>
+      <send event="shipped" delay="1s" event:schema='{"type": "null"}'/>
     </onentry>
     <transition event="accepted"/>
     <transition event="shipped" target="done" event:schema="true"/>

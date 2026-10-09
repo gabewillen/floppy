@@ -559,13 +559,9 @@ fn stdout_color(explicit: Option<Color>) -> Color {
 /// is reported as `too-large` rather than read whole.
 fn read_document(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let shown = path.display();
-    let file = fs::File::open(path).map_err(|error| format!("cannot read `{shown}`: {error}"))?;
-    let metadata = file
-        .metadata()
-        .map_err(|error| format!("cannot read `{shown}`: {error}"))?;
-    if !metadata.is_file() {
-        return Err(format!("cannot read `{shown}`: not a regular file").into());
-    }
+    let (file, _) = crate::open_regular_file(path)
+        .map_err(|error| format!("cannot read `{shown}`: {error}"))?
+        .ok_or_else(|| format!("cannot read `{shown}`: not a regular file"))?;
     let limit = u64::try_from(MAX_DOCUMENT_BYTES).unwrap_or(u64::MAX) + 1;
     let mut bytes = Vec::new();
     file.take(limit)

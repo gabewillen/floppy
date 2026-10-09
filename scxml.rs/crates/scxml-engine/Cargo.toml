@@ -14,6 +14,7 @@ publish.workspace = true
 
 [dependencies]
 scxml-compiler-core.workspace = true
+scxml-event-schema.workspace = true
 scxml-telemetry.workspace = true
 scxml-types.workspace = true
 serde_json.workspace = true

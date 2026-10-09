@@ -50,7 +50,8 @@
 //! `SCXML_BLESS=1` (`sh scripts/bless-fixtures.sh --session-snapshot`).
 //!
 //! `scripts/verify-wasm-capabilities.sh` builds and verifies the release
-//! components into `target/session-host-proof`.
+//! components into `target/session-host-proof` (this suite's own artifacts
+//! directory inside it).
 
 #![allow(
     missing_docs,
@@ -105,26 +106,40 @@ fn fixtures() -> PathBuf {
     workspace().join("tests/fixtures/session-snapshot")
 }
 
-fn components() -> &'static ReleaseComponents {
-    static COMPONENTS_CELL: OnceLock<ReleaseComponents> = OnceLock::new();
-    COMPONENTS_CELL.get_or_init(|| {
+/// The release directory the suite's components come from: the shared one
+/// when the environment names it, otherwise this suite's own build.
+fn release_dir() -> &'static Path {
+    static RELEASE_CELL: OnceLock<PathBuf> = OnceLock::new();
+    RELEASE_CELL.get_or_init(|| {
         let workspace = workspace();
-        let release = prebuilt::release_dir().unwrap_or_else(|| {
+        prebuilt::release_dir().unwrap_or_else(|| {
             let target = workspace.join("target/session-host-proof");
+            // This suite's own artifact directory: suites sharing the Cargo
+            // target never rewrite a manifest another suite is reading.
+            let release = target.join("wasm-artifacts/session-snapshot");
             let status = Command::new("sh")
                 .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+                .arg("--artifacts-dir")
+                .arg(&release)
                 .args(COMPONENTS)
                 .current_dir(workspace)
                 .env("CARGO_TARGET_DIR", &target)
                 .status()
                 .expect("the capability script runs");
             assert!(status.success(), "the release capability proof must pass");
-            target.join("wasm-artifacts/release")
-        });
+            release
+        })
+    })
+}
+
+fn components() -> &'static ReleaseComponents {
+    static COMPONENTS_CELL: OnceLock<ReleaseComponents> = OnceLock::new();
+    COMPONENTS_CELL.get_or_init(|| {
+        let release = release_dir();
         let manifest = std::fs::read(release.join("manifest.tsv")).expect("manifest is readable");
         let trusted = TrustedManifestDigest::from_hex(&format!("{:x}", Sha256::digest(&manifest)))
             .expect("manifest digest is canonical");
-        ReleaseComponents::load(&release, trusted)
+        ReleaseComponents::load(release, trusted)
             .unwrap_or_else(|error| panic!("the release components load: {error}"))
     })
 }
@@ -137,7 +152,7 @@ fn release_digests() -> &'static BTreeMap<ComponentRole, String> {
     static DIGESTS_CELL: OnceLock<BTreeMap<ComponentRole, String>> = OnceLock::new();
     DIGESTS_CELL.get_or_init(|| {
         components();
-        let release = workspace().join("target/session-host-proof/wasm-artifacts/release");
+        let release = release_dir();
         [
             (ComponentRole::Clock, "scxml_clock"),
             (
@@ -773,9 +788,10 @@ fn a_run_without_snapshots_reports_none() {
     }
 }
 
-/// The `event` attribute vocabulary is metadata only: the fixture that
-/// carries it on transitions, a `<raise>`, a `<send>`, and a `<donedata>`
-/// runs exactly as the same document without it (configuration, logs,
+/// The `event` attribute vocabulary changes nothing when every event
+/// satisfies its schemas: the fixture that carries it on transitions, a
+/// `<raise>`, a `<send>`, and a `<donedata>` (all satisfied) runs exactly as
+/// the same document without it (configuration, logs,
 /// trace, terminal state, and engine commands), and only its snapshots'
 /// transitions show the schemas.
 #[test]

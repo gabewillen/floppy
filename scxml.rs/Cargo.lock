@@ -2798,6 +2798,7 @@ version = "0.2.0"
 dependencies = [
  "proptest",
  "scxml-compiler-core",
+ "scxml-event-schema",
  "scxml-syntax",
  "scxml-telemetry",
  "scxml-types",

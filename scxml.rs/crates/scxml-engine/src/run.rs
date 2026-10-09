@@ -387,7 +387,7 @@ impl Engine {
     ///         _trigger: Option<&Event>,
     ///     ) -> Result<(), EffectFailure<EngineError>> {
     ///         match &planned.effect {
-    ///             Effect::Raise(name) => {
+    ///             Effect::Raise(name, ..) => {
     ///                 let name = EventName::new(name.clone())
     ///                     .map_err(|_| EffectFailure::Fatal(EngineError::InvalidModel))?;
     ///                 Ok(engine.raise(Event::internal(name))?)

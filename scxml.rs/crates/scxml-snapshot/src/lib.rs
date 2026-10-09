@@ -673,7 +673,7 @@ pub struct Transition {
 
 /// The `event` attribute vocabulary of one element
 /// (`https://github.com/stateforward/scxml.rs/namespaces/event`), as the
-/// Machine IR carries it. Metadata only: it never changes execution.
+/// Machine IR carries it. A snapshot only shows it.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum EventSchema {

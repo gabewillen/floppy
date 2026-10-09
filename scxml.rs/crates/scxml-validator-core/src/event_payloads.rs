@@ -546,7 +546,7 @@ fn incompatible(
         Label::new(handler.schema.attribute.span)
             .with_message("... fails the schema of this transition"),
     )
-    .with_note("a transition's `event:schema` describes the `_event.data` it handles; this data matches its event descriptor but not its schema (the schemas are metadata: the transition is still taken)")
+    .with_note("a transition's `event:schema` describes the `_event.data` it handles; this data matches its event descriptor but not its schema (at run time a `<send>` creating it is not dispatched and raises `error.execution`; a `<donedata>` is never checked)")
     .with_help("make the two schemas agree, or change the data")
     .with_spec_reference("SCXML 1.0 §3.12.1 Event Descriptors")
 }

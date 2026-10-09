@@ -122,8 +122,12 @@ Executable product semantics are Wasm components:
   refuses every URL) resolves each
   schema; the compiler embeds it, as canonical JSON with its SHA-256, in the
   Machine IR on the owning element, and the engine copies a transition's
-  schema into session snapshots. It is metadata only: no execution path
-  reads it. Not a package (see
+  schema into session snapshots. The engine checks the data an executed
+  `<send>` or `<raise>` creates against its own literal schema and, for an
+  event the session delivers to itself, those of the transitions handling
+  it (`crates/scxml-engine/src/contracts.rs`, compiling each with the same
+  crate); a rejected event is not dispatched and raises `error.execution`.
+  Transition selection never reads it. Not a package (see
   [namespaces/event/README.md](../namespaces/event/README.md));
 - data models, I/O processors, invoked services, and extension components.
 

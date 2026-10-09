@@ -1,21 +1,21 @@
 <?xml version="1.0"?>
-<!-- event-9: data a schema does not describe is delivered unchanged. -->
+<!-- event-9: a send whose data its own schema rejects is not dispatched, and error.execution ends its block. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event">
 <state id="s0">
   <onentry>
-    <send event="a" event:schema='{"type": "object", "required": ["count"], "additionalProperties": false}'>
-      <param conf:name="1" expr="1"/>
-    </send>
+    <send event="a" event:schema='{"type": "object", "required": ["count"]}'/>
+    <raise event="skipped"/>
   </onentry>
-  <transition event="a" conf:eventvarVal="1=1" target="s1" event:schema='{"type": "object", "required": ["count"], "additionalProperties": false}'/>
+  <transition event="error.execution" target="s1"/>
   <transition event="*" conf:targetfail=""/>
 </state>
 <state id="s1">
   <onentry>
-    <raise event="b" event:schema="false"/>
+    <send event="b" delay="1s"/>
   </onentry>
-  <transition event="error.execution" conf:targetfail=""/>
-  <transition event="b" conf:targetpass="" event:schema="false"/>
+  <transition event="a" conf:targetfail=""/>
+  <transition event="skipped" conf:targetfail=""/>
+  <transition event="b" conf:targetpass=""/>
   <transition event="*" conf:targetfail=""/>
 </state>
 <conf:pass/>

@@ -3,8 +3,8 @@
 //! `<transition>`, `<send>`, `<raise>`, and `<donedata>` may carry
 //! `event:schema` (a JSON Schema, inline or by reference to a file relative
 //! to the document) or `event:schemaexpr` (an expression whose value is the
-//! schema) describing the event data the element handles or creates. The
-//! attributes are metadata: they never change how a document executes. The
+//! schema) describing the event data the element handles or creates (the
+//! engine checks the data a `<send>` or `<raise>` creates against them). The
 //! W3C schema admits attributes in other namespaces laxly, so these rules
 //! check them:
 //!

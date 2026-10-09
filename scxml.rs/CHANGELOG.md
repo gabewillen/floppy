@@ -545,8 +545,14 @@ hard cutover.
   (`event_schema` on transitions, `raise` and `send` actions, and
   `donedata`; absent otherwise, so existing IR bytes are unchanged); session
   snapshot transitions carry it (`event_schema`), and `event:schemaexpr` is
-  carried unevaluated. Metadata only: execution and the IRP results are
-  unchanged. New validator codes `EVENT001`-`EVENT008` with explanations;
+  carried unevaluated. At run time the session keeps the literal schemas as
+  contracts: an executed `<send>` (SCXML Event I/O Processor) whose data its
+  own schema, or, for an event the session delivers to itself, a schema of
+  a transition handling the event rejects is not dispatched, and a
+  `<raise>` such a schema rejects is not raised; `error.execution` ends the
+  block instead. Transition selection, `<donedata>`, and events between
+  sessions are not checked, and the W3C IRP results are unchanged
+  (`scxml-engine` now depends on `scxml-event-schema`). New validator codes `EVENT001`-`EVENT008` with explanations;
   the CLI reads the referenced files relative to the document
   (`scxml.cli.read-event-schema`), the validator and compiler WIT requests
   take them as `event-schemas` (`event-schema-resource`), and the machine
@@ -1074,6 +1080,13 @@ hard cutover.
   `<foreach>` collection is `illegal`.
 
 ### Fixed
+
+- An SCXML `<send>` whose data and raw message each fit their bounds but
+  together exceed the `types.event` bound (96 KiB) is rejected by the
+  sending session's SCXML Event I/O Processor (`payload-too-large`, so the
+  sender raises `error.execution`); it was routed and then failed the
+  receiving machine, ending the whole session tree with a fatal
+  `invalid-input`.
 
 - A repository namespace download whose body is exactly its byte bound
   resolves: the network client rejected it as over the bound when it read

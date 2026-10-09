@@ -7,7 +7,7 @@ warning[EVENT010]: `<send>` creates `order.placed` data that a transition handli
 16 |                 event:schema='{"type":"object","properties":{"quantity":{"type":"string"}},"required":["quantity"]}'
    |                 ---------------------------------------------------------------------------------------------------- ... fails the schema of this transition
    |
-   = note: a transition's `event:schema` describes the `_event.data` it handles; this data matches its event descriptor but not its schema (the schemas are metadata: the transition is still taken)
+   = note: a transition's `event:schema` describes the `_event.data` it handles; this data matches its event descriptor but not its schema (at run time a `<send>` creating it is not dispatched and raises `error.execution`; a `<donedata>` is never checked)
    = help: make the two schemas agree, or change the data
    = spec: SCXML 1.0 §3.12.1 Event Descriptors
 
@@ -20,7 +20,7 @@ warning[EVENT010]: `<send>` creates `order.note` data that a transition handling
 19 |                 event:schema='{"type":"object","properties":{"note":{"type":"string"}}}'/>
    |                 ------------------------------------------------------------------------ ... fails the schema of this transition
    |
-   = note: a transition's `event:schema` describes the `_event.data` it handles; this data matches its event descriptor but not its schema (the schemas are metadata: the transition is still taken)
+   = note: a transition's `event:schema` describes the `_event.data` it handles; this data matches its event descriptor but not its schema (at run time a `<send>` creating it is not dispatched and raises `error.execution`; a `<donedata>` is never checked)
    = help: make the two schemas agree, or change the data
    = spec: SCXML 1.0 §3.12.1 Event Descriptors
 

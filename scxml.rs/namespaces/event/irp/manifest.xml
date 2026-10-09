@@ -129,7 +129,7 @@
     </test>
   </assert>
   <assert id="event-9" specnum="9" specid="#event-9">
-    <![CDATA[The attributes never change how a document executes: transition selection, <send>, <raise>, and <donedata> behave exactly as without them; no event data is checked against a schema, no event is added, and a schema never raises error.execution.]]>
+    <![CDATA[A <send> through the SCXML Event I/O Processor whose data its own literal event:schema rejects, or, for an event the session delivers to itself (no target, #_internal, or its own session address), a literal event:schema of a transition of the document whose descriptor matches the event, is not dispatched, and error.execution ends its block; a <raise> such a schema rejects (its event has no data) is not raised, and error.execution ends its block. Transition selection and <donedata> are unchanged: no schema is checked when an event is selected or a done event is generated.]]>
     <test id="480" conformance="mandatory" manual="false">
       <start uri="480/test480.txml"/>
     </test>
@@ -138,6 +138,9 @@
     </test>
     <test id="482" conformance="mandatory" manual="false">
       <start uri="482/test482.txml"/>
+    </test>
+    <test id="483" conformance="mandatory" manual="false">
+      <start uri="483/test483.txml"/>
     </test>
   </assert>
 </assertions>

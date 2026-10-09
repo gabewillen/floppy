@@ -111,16 +111,7 @@ fn read_below(root: &Path, reference: &str) -> Option<Vec<u8>> {
     if !resolved.starts_with(root) {
         return None;
     }
-    // Opening a FIFO or a device can block, so only a regular file is
-    // opened; the handle is checked again in case the path changed between.
-    if !fs::metadata(&resolved).ok()?.is_file() {
-        return None;
-    }
-    let mut file = fs::File::open(&resolved).ok()?;
-    let metadata = file.metadata().ok()?;
-    if !metadata.is_file() {
-        return None;
-    }
+    let (mut file, metadata) = crate::open_regular_file(&resolved).ok()??;
     // The native CLI reads a file of any size: resource bounds apply to wasm
     // builds only.
     let mut bytes = Vec::with_capacity(usize::try_from(metadata.len()).ok()?);

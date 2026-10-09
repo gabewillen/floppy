@@ -67,8 +67,8 @@ and bind these digests:
 | --- | --- | --- |
 | corpus digest | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` |
 | errata SHA-256 | `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f` | `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a` |
-| producer report digest | `cb20e4887fd0fc1ce2f9c1f494ef6403ecc2c3968945cf69e6efe233babbc13f` | `6c5ee18542b5f49c16f36b43d17f356a744722380ce44411c7e40ab41a2254d0` |
-| canonical artifact SHA-256 | `85781edf96997b33c51da97e413dfec54a9d5b086a3fdc2aba24d188d1a0bba6` | `c943f27d655c5995ef6ab453c1f532c20e688afd5f9164f89d0a57342fde09df` |
+| producer report digest | `db6ef5859982f41f68af1df07c2e0a766179b34f5ccddea1a0d49032b0ffc1b1` | `71c37788acb475072daf070608d9d40abcfa9e96dded66862662cf0714310e21` |
+| canonical artifact SHA-256 | `9298381cc9d350677545bb335cd3046ca6474f951fc778501a9921324ed724a9` | `abe92b0ab19ae05ddc7f741055530c9724bcbb3572fb1368bcd5f7106c88f4a8` |
 
 Each repository namespace also has its own implementation report plan in
 the same format, run through the same pipeline and reported separately
@@ -271,8 +271,10 @@ with a JSON Schema, inline or from a file next to the document (with a JSON
 Pointer); `event:schemaexpr` gives it as a data-model expression. The
 compiler checks each schema against its dialect's metaschema (2020-12,
 2019-09, or draft-07) and embeds it with its SHA-256 in the Machine IR, and
-session snapshots show it on each transition. The schemas are metadata only:
-they never change how a document runs. See the
+session snapshots show it on each transition. At run time a `<send>` or
+`<raise>` whose data its own schema, or for an event the session delivers to
+itself the schema of a transition handling it, rejects is not dispatched and
+raises `error.execution`; transitions still match by name. See the
 [`event` vocabulary](namespaces/event/README.md).
 
 **Observability.** Spans and measurements go through OpenTelemetry at
@@ -363,7 +365,12 @@ The full list, with evidence, is in
   Wasmtime host, the only conformance execution path.
 - Boa 0.22 has no allocation hook or interrupt, so ECMAScript evaluation is
   bounded structurally, with Wasm memory and fuel as the outer bound (only
-  process limits in native builds).
+  process limits in native builds); a data-model call that reaches its
+  fuel cap ends the session.
+- `event:schema` contracts are checked where a session creates an event for
+  itself (`<send>` to its own queues, `<raise>`) and on a `<send>`'s own
+  schema; an event sent to another session or delivered by the host is not
+  checked against the receiving document's transitions.
 - There is no save or restore of session state, in process or durable;
   SCXML defines no persistence.
 - The compiler component's packaging path is not exercised under Wasmtime.

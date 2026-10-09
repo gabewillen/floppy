@@ -123,11 +123,18 @@ fn a_missing_file_names_its_path() {
 /// fails the test instead of hanging it; `None` when it did not finish.
 #[cfg(unix)]
 fn validate_within(root: &Path, relative: &str, bound: std::time::Duration) -> Option<Output> {
+    scx_within(root, &["validate", relative, "--format", "json"], bound)
+}
+
+/// Runs `scx` with `args` and kills it after a bound, so a read that never
+/// ends fails the test instead of hanging it; `None` when it did not finish.
+#[cfg(unix)]
+fn scx_within(root: &Path, args: &[&str], bound: std::time::Duration) -> Option<Output> {
     use std::process::Stdio;
     use std::time::Instant;
     let mut child = Command::new(env!("CARGO_BIN_EXE_scx"))
         .current_dir(root)
-        .args(["validate", relative, "--format", "json"])
+        .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -212,4 +219,167 @@ fn an_invoked_document_that_is_not_a_regular_file_is_skipped() {
         );
         decode_canonical(&output.stdout).expect("json is a canonical report");
     }
+}
+
+/// Every input file `scx` reads besides the source is refused as not a
+/// regular file when it is a FIFO, instead of blocking on the open: the
+/// machine template, a script, an extension package manifest, a snapshot
+/// document, and a replay log.
+#[cfg(unix)]
+#[test]
+fn a_fifo_input_file_is_refused_without_blocking() {
+    let root = workspace_root();
+    let base = "target/cli-input-errors/fifo-inputs";
+    let directory = root.join(base);
+    fs::create_dir_all(&directory).expect("fixture directory must be creatable");
+    fs::write(
+        directory.join("doc.scxml"),
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s"><final id="s"/></scxml>"#,
+    )
+    .expect("fixture must be writable");
+    for name in [
+        "template.wasm",
+        "script.wasm",
+        "package.json",
+        "snap.json",
+        "replay.jsonl",
+    ] {
+        fifo(&directory.join(name));
+    }
+    let cases = fifo_cases(base);
+    // The cases run at once, so every input that blocks is named in one run.
+    let failures = std::thread::scope(|scope| {
+        let runs = cases
+            .iter()
+            .map(|(input, args, expected)| {
+                let root = &root;
+                scope.spawn(move || {
+                    let args = args.iter().map(String::as_str).collect::<Vec<_>>();
+                    let Some(output) = scx_within(root, &args, std::time::Duration::from_secs(120))
+                    else {
+                        return Some(format!("{input}: scx blocked on the FIFO"));
+                    };
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    (output.status.success()
+                        || !stderr.contains(expected)
+                        || !stderr.contains("regular file"))
+                    .then(|| format!("{input}: {stderr}"))
+                })
+            })
+            .collect::<Vec<_>>();
+        runs.into_iter()
+            .filter_map(|run| run.join().expect("a case thread must not panic"))
+            .collect::<Vec<_>>()
+    });
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Each FIFO input of [`a_fifo_input_file_is_refused_without_blocking`] under
+/// `base`: what it is, the `scx` arguments that read it, and the text its
+/// refusal names.
+#[cfg(unix)]
+fn fifo_cases(base: &str) -> [(&'static str, Vec<String>, &'static str); 5] {
+    let digest = "0".repeat(64);
+    let path = |name: &str| format!("{base}/{name}");
+    [
+        (
+            "machine template",
+            vec![
+                "compile".into(),
+                path("doc.scxml"),
+                "--artifact".into(),
+                "component-wasm".into(),
+                "--machine-template".into(),
+                path("template.wasm"),
+                "--machine-template-sha256".into(),
+                digest.clone(),
+                "--output".into(),
+                path("out.wasm"),
+            ],
+            "machine template must be a regular file",
+        ),
+        (
+            "script",
+            vec![
+                "compile".into(),
+                path("doc.scxml"),
+                "--script".into(),
+                format!("s.wasm={}", path("script.wasm")),
+                "--script-sha256".into(),
+                format!("s.wasm={digest}"),
+                "--output".into(),
+                path("out.json"),
+            ],
+            "script must be a regular file",
+        ),
+        (
+            "extension package",
+            vec![
+                "validate".into(),
+                path("doc.scxml"),
+                "--extension-package".into(),
+                path("package.json"),
+            ],
+            "not a regular file",
+        ),
+        (
+            "snapshot document",
+            vec!["snapshot".into(), "check".into(), path("snap.json")],
+            "not a regular file",
+        ),
+        (
+            "replay log",
+            vec![
+                "run".into(),
+                path("doc.scxml"),
+                "--components".into(),
+                base.into(),
+                "--components-manifest-sha256".into(),
+                digest.clone(),
+                "--replay".into(),
+                path("replay.jsonl"),
+            ],
+            "[replay-unreadable]",
+        ),
+    ]
+}
+
+/// A replay log that is a device is refused before it is read: reading
+/// `/dev/zero` never ends and grows memory by gigabytes a second, so the bound
+/// is short.
+#[cfg(unix)]
+#[test]
+fn a_device_replay_log_is_refused_before_it_is_read() {
+    let root = workspace_root();
+    let base = "target/cli-input-errors/device-replay";
+    let directory = root.join(base);
+    fs::create_dir_all(&directory).expect("fixture directory must be creatable");
+    let document = format!("{base}/doc.scxml");
+    fs::write(
+        root.join(&document),
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s"><final id="s"/></scxml>"#,
+    )
+    .expect("fixture must be writable");
+    let digest = "0".repeat(64);
+    let output = scx_within(
+        &root,
+        &[
+            "run",
+            &document,
+            "--components",
+            base,
+            "--components-manifest-sha256",
+            &digest,
+            "--replay",
+            "/dev/zero",
+        ],
+        std::time::Duration::from_secs(20),
+    )
+    .expect("scx must not read `/dev/zero` as a replay log");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("[replay-unreadable]") && stderr.contains("not a regular file"),
+        "{stderr}"
+    );
 }

@@ -29,17 +29,17 @@ const SUITES: [(&str, usize, usize, [&str; 2]); 2] = [
         8,
         8,
         [
-            "a89e1d8ae8ef0ac558cf18a81ac767b311837d49deabb6ba2f420514fe15885c",
-            "ff1bf042a3efeb5d9dc3222c2f434e849031e4f901863f9fe61516203131bcf2",
+            "0e6ab64b9131278d1eade2e067a91038f2ce90dd745c26ff3388f83e58d9ce34",
+            "e0bb28aafc89e75edc18d8cc7b91f478bdbdd4c8de4b274187683b140eacf92f",
         ],
     ),
     (
         "event",
-        29,
+        30,
         17,
         [
-            "b0a4eb95fad5db6e1b0e8eee5d0dc82155f1ca38e5c2cf2490f0fd3912d38d8f",
-            "f60f77838b81965033b63024cfc72cbcedbc839d56c692a365466fef3be48e4d",
+            "a04d3824ad73ec01c8da2ee71b2b350b26e009868d3e4bbe98790fd49bdb0956",
+            "c935e9f949186fae34611ac884593c74aa2d4f63b7abfbd16b82e9d04830d6e1",
         ],
     ),
 ];

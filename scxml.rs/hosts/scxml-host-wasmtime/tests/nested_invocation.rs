@@ -1045,3 +1045,120 @@ fn an_invoke_src_document_compiles_with_the_schema_files_its_embedder_supplies()
     assert_eq!(content.terminal, Terminal::Finished);
     assert_eq!(labels(&content), ["child-got-go", "pass"]);
 }
+
+/// An `<invoke src>` document keeps its own schema files' contracts at run
+/// time: an event it sends itself with data a transition's file schema
+/// rejects is not dispatched and raises `error.execution` in the child, and
+/// accepted data is delivered. An event between sessions is not checked
+/// against the receiving document (namespaces/event: not supported yet).
+#[test]
+fn an_invoke_src_document_checks_the_events_it_sends_itself_against_its_schema_files() {
+    const EVENT: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
+    let child = |data: &str| {
+        format!(
+            r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="{EVENT}" version="1.0" initial="c0">
+              <state id="c0">
+                <onentry><send event="self"><content>{data}</content></send></onentry>
+                <transition event="self" event:schema="schemas/go.json#/$defs/Go" target="c1"><log label="child-accepted"/></transition>
+                <transition event="error.execution" target="c1"><log label="child-rejected"/></transition>
+              </state>
+              <state id="c1">
+                <onentry><send target="#_parent" event="ready"/></onentry>
+                <transition event="go" event:schema="schemas/go.json#/$defs/Go" target="cdone"><log label="child-got-go"/></transition>
+              </state>
+              <final id="cdone"/>
+            </scxml>"##
+        )
+    };
+    let root = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="r0">
+          <state id="r0">
+            <invoke id="child" type="scxml" src="child.scx"/>
+            <transition event="ready"><send target="#_child" event="go"><content>"not an object"</content></send></transition>
+            <transition event="done.invoke.child" target="pass"/>
+            <transition event="error.execution" target="fail"/>
+          </state>
+          <final id="pass"><onentry><log label="pass"/></onentry></final>
+          <final id="fail"><onentry><log label="fail"/></onentry></final>
+        </scxml>"##;
+    let schema = r#"{"$defs": {"Go": {"type": "object", "required": ["n"]}}}"#;
+    let (ir, data_model) = lower(root);
+    for (data, expected) in [
+        (r#"{"n": 1}"#, ["child-accepted", "child-got-go", "pass"]),
+        (r#"{"m": 1}"#, ["child-rejected", "child-got-go", "pass"]),
+    ] {
+        let outcome = host()
+            .run(&SessionRun {
+                machine_ir: &ir,
+                data_model: data_model.as_deref(),
+                session_id: "root",
+                events: &[],
+                external_client: None,
+                embedder: Rc::new(DocumentsWithSchemas(vec![(
+                    "child.scx",
+                    child(data),
+                    vec![("schemas/go.json", schema)],
+                )])),
+                max_commands: 1_024,
+                snapshots: SnapshotRequest::none(),
+            })
+            .unwrap_or_else(|error| panic!("the run completes: {error}"));
+        assert_eq!(outcome.terminal, Terminal::Finished, "{data}");
+        let labels = logs(&outcome)
+            .into_iter()
+            .map(|log| log.split_once(':').map(|(_, label)| label.to_owned()))
+            .collect::<Option<Vec<_>>>()
+            .expect("every log is session:label");
+        assert_eq!(labels, expected, "{data}");
+    }
+}
+
+/// A `#_parent` send whose data and raw message each fit their bounds but
+/// together exceed the event bound is the child's `error.execution`; the
+/// parent never receives it and keeps running (it used to fail the parent's
+/// machine with a fatal `invalid-input`).
+#[test]
+fn a_send_over_the_event_bound_is_the_senders_error_execution() {
+    let child = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="c0">
+          <state id="c0">
+            <onentry>
+              <send target="#_parent" event="small"><param name="choices" expr="'x'.repeat(40000)"/></send>
+              <send target="#_parent" event="large"><param name="choices" expr="'x'.repeat(50000)"/></send>
+            </onentry>
+            <transition event="error.execution" target="cdone"><log label="child-error"/></transition>
+          </state>
+          <final id="cdone"/>
+        </scxml>"##;
+    let root = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="r0">
+          <state id="r0">
+            <invoke id="child" type="scxml" src="child.scx"/>
+            <transition event="small"><log label="small"/></transition>
+            <transition event="large"><log label="large"/></transition>
+            <transition event="done.invoke.child" target="pass"/>
+          </state>
+          <final id="pass"><onentry><log label="pass"/></onentry></final>
+        </scxml>"#;
+    let (ir, data_model) = lower(root);
+    let outcome = host()
+        .run(&SessionRun {
+            machine_ir: &ir,
+            data_model: data_model.as_deref(),
+            session_id: "root",
+            events: &[],
+            external_client: None,
+            embedder: Rc::new(DocumentsWithSchemas(vec![(
+                "child.scx",
+                child.to_owned(),
+                Vec::new(),
+            )])),
+            max_commands: 1_024,
+            snapshots: SnapshotRequest::none(),
+        })
+        .unwrap_or_else(|error| panic!("the run completes: {error}"));
+    assert_eq!(outcome.terminal, Terminal::Finished);
+    let labels = logs(&outcome)
+        .into_iter()
+        .map(|log| log.split_once(':').map(|(_, label)| label.to_owned()))
+        .collect::<Option<Vec<_>>>()
+        .expect("every log is session:label");
+    assert_eq!(labels, ["child-error", "small", "pass"]);
+}

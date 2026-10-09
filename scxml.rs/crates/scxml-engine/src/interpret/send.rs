@@ -218,6 +218,21 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
             | SendTarget::Parent
             | SendTarget::Invocation(_) => {}
         }
+        // The event's contracts (namespaces/event): data its own literal
+        // `event:schema` rejects, or for an event this session delivers to
+        // itself the schema of a transition handling it, is not dispatched;
+        // SCXML 6.2: "If the evaluation of <send>'s arguments produces an
+        // error, the Processor MUST discard the message without attempting
+        // to deliver it", and the error is error.execution (5.10, 3.12.2).
+        let delivered_here = matches!(delivery, SendTarget::Internal | SendTarget::Local);
+        if !engine.admits_event_data(
+            event_name.as_str(),
+            &data,
+            send.event_schema.as_ref(),
+            delivered_here,
+        ) {
+            return Err(EffectFailure::Block(PlatformError::Execution));
+        }
         // SCXML C.1: the delivered `_event.sendid` is the send's id when the
         // author gave `id` or `idlocation`, and is left empty otherwise
         // (official case 333), whether or not the send is delayed.

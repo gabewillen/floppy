@@ -46,7 +46,6 @@
 //! Files are read with a regular-file check and a byte bound.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 use std::io::Read as _;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
@@ -592,11 +591,9 @@ fn relative_to_manifest(manifest: &Path, artifact: &str, field: &str) -> Result<
 /// Reads `path` only when it is a regular file of at most `limit` bytes,
 /// reading at most `limit + 1` bytes.
 pub(crate) fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
-    let file = fs::File::open(path).map_err(|error| error.to_string())?;
-    let metadata = file.metadata().map_err(|error| error.to_string())?;
-    if !metadata.is_file() {
-        return Err("not a regular file".into());
-    }
+    let (file, metadata) = crate::open_regular_file(path)
+        .map_err(|error| error.to_string())?
+        .ok_or("not a regular file")?;
     if metadata.len() > limit {
         return Err(format!("larger than its {limit}-byte bound"));
     }
@@ -1005,6 +1002,7 @@ fn split_uri(value: &str, message: &str) -> Result<(String, String), String> {
 mod tests {
     use super::*;
     use scxml_validator_core::EXTENSION_PACKAGE_FORMAT;
+    use std::fs;
 
     const SCHEMA: &str =
         r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:x"/>"#;

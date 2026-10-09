@@ -328,10 +328,11 @@ pub struct ElseIfIr {
 /// `<raise>`, or `<donedata>` ([`scxml_types::EVENT_NAMESPACE_URI`]): a JSON
 /// Schema describing the event data the element handles or creates.
 ///
-/// Metadata only: the engine never reads it while it executes a document,
-/// so transition selection, `<send>`, `<raise>`, and `<donedata>` behave
-/// exactly as without it. Hosts expose it to readers (the session
-/// snapshot's transitions).
+/// The engine checks the data of the events an executed `<send>` or
+/// `<raise>` creates against a literal one (its own and, for an event the
+/// session delivers to itself, those of the transitions handling it);
+/// transition selection and `<donedata>` never read it. Hosts expose it to
+/// readers (the session snapshot's transitions).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum EventSchemaIr {

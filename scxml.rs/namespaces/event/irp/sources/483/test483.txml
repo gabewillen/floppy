@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!-- event-9: an event the session sends itself must satisfy every transition handling it, by descriptor, in any state; a transition of another event does not count. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event">
+<state id="s0">
+  <onentry>
+    <send event="a.b"/>
+    <send event="c" target="#_internal"/>
+  </onentry>
+  <transition event="error.execution" target="s1"/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<state id="s1">
+  <onentry>
+    <send event="d"/>
+  </onentry>
+  <transition event="d" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<state id="elsewhere">
+  <transition event="a" conf:targetfail="" event:schema='{"type": "object"}'/>
+  <transition event="other" conf:targetfail="" event:schema="false"/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

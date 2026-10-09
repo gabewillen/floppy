@@ -53,23 +53,55 @@ scx compile namespaces/event/examples/order.scx --output order.scxml-ir.json
 - An element has at most one of the two (SCXML's attribute/`expr`
   convention).
 - They are allowed on `<transition>`, `<send>`, `<raise>`, and `<donedata>`
-  only. (`<raise>` creates its event with no data, so its schema describes
-  that absence or what a reader should expect; nothing checks it.)
+  only. (`<raise>` creates its event with no data, which a schema sees as
+  `null`; see [At run time](#at-run-time).)
 
-## Metadata only
+## At run time
 
-The attributes never change how a document executes. (The schemas of the
-events an invoked service sends live here too, on the transitions that
-handle them; a service package declares no events; see
-[docs/invoked-services.md](../../docs/invoked-services.md#event-schemas).)
-Transition selection,
-`<send>`, `<raise>`, and `<donedata>` behave exactly as without them: no
-event data is checked against a schema, no event is added, and a schema
-never raises `error.execution`. The engine copies them only into session
-snapshots. The W3C IRP results are unchanged, and
+A literal `event:schema` is a contract on event data, which the session
+creating an event keeps (`crates/scxml-engine/src/contracts.rs`):
+
+- An executed `<send>` through the SCXML Event I/O Processor checks the
+  data it created (`_event.data` as the receiver would read it) against its
+  own literal schema, whatever its target, and, when the session delivers
+  the event to itself (no `target`, `#_internal`, or its own
+  `#_scxml_<sessionid>`), against the literal schema of every transition of
+  the document whose event descriptor matches the event's name (SCXML
+  3.12.1), in any state. Data one of them rejects is not dispatched:
+  `error.execution` (with the send's `_event.sendid`) ends the block, as
+  for any other `<send>` argument error (SCXML 6.2: "If the evaluation of
+  `<send>`'s arguments produces an error, the Processor MUST discard the
+  message without attempting to deliver it").
+- An executed `<raise>` checks its event's data, which is none (`null`),
+  against its own literal schema and those of the transitions handling its
+  event the same way; a rejected event is not raised, and
+  `error.execution` ends the block.
+- The data a schema sees is the event's data as JSON: no data, `undefined`,
+  and `null` are `null`; booleans, numbers (an integral one is an
+  integer), strings, arrays, and objects are themselves. XML data (the
+  XPath data model's) has no JSON instance, so only the schema `true`
+  admits it.
+
+Nothing else changes: transitions match events by name exactly as SCXML
+specifies (a transition's schema is the contract the document declares for
+the events it handles, checked where they are created, never during
+selection); `<donedata>`, the `done.state.<id>` and `done.invoke.<id>`
+events, a `BasicHTTP` `<send>`, and `event:schemaexpr` are never checked;
+and no event is added. A schema the engine cannot compile (only Machine IR
+no canonical compiler produced) admits nothing. Each schema is compiled
+once per session, on first use. The W3C IRP results are unchanged, and
 `hosts/scxml-host-wasmtime/tests/session_snapshot.rs`
-(`event_schemas_never_change_execution`) proves that a machine with them
-runs exactly as the same machine without them.
+(`event_schemas_never_change_execution`) proves that a machine whose
+events satisfy their schemas runs exactly as the same machine without
+them. The schemas of the events an invoked service sends live here too,
+on the transitions that handle them; a service package declares no
+events; see
+[docs/invoked-services.md](../../docs/invoked-services.md#event-schemas).
+
+Not yet checked (see [What is not supported yet](#what-is-not-supported-yet)):
+an event a session sends another session (`#_parent`, `#_<invokeid>`)
+against the receiving document's transitions, and an event the host
+delivers (`scx run` standard input) against the root document's.
 
 ## Compile time
 
@@ -217,34 +249,50 @@ own implementation report plan ([`irp/`](irp/README.md), below).
 - <a id="event-8"></a>**event-8** (unevaluated expressions).
   `event:schemaexpr` is carried unevaluated: the expression is never
   evaluated, so it never raises `error.execution`.
-- <a id="event-9"></a>**event-9** (metadata only). The attributes never
-  change how a document executes: transition selection, `<send>`,
-  `<raise>`, and `<donedata>` behave exactly as without them; no event data
-  is checked against a schema, no event is added, and a schema never raises
-  `error.execution`.
+- <a id="event-9"></a>**event-9** (send and raise contracts). A `<send>`
+  through the SCXML Event I/O Processor whose data its own literal
+  `event:schema` rejects, or, for an event the session delivers to itself
+  (no target, `#_internal`, or its own session address), a literal
+  `event:schema` of a transition of the document whose descriptor matches
+  the event, is not dispatched, and `error.execution` ends its block; a
+  `<raise>` such a schema rejects (its event has no data) is not raised,
+  and `error.execution` ends its block. Transition selection and
+  `<donedata>` are unchanged: no schema is checked when an event is
+  selected or a done event is generated.
 
 Not covered by the suite: the Machine IR and session snapshot forms
 ([Where it shows](#where-it-shows)), which no document observes
 (`scxml-compiler-core` and `scxml-host-wasmtime` tests cover them);
 `SCXML038` for an `event:schemaexpr` that does not parse, which needs the
 CLI's expression syntax checkers (the conformance compiler links none);
-and the wasm-only bounds.
+the wasm-only bounds; the `_event.sendid` of a rejected `<send>`'s error
+and data other than `null` (both data models must run every document,
+and the XPath data model's data is XML, which only `true` admits), which
+`crates/scxml-engine/tests/interpret.rs` covers.
 
 ## Conformance suite
 
 [`irp/`](irp/README.md) is this vocabulary's implementation report plan in
-the W3C IRP format: one assertion per statement above, 29 mandatory test
+the W3C IRP format: one assertion per statement above, 30 mandatory test
 documents written with the W3C `conf:` vocabulary (17 that must be rejected
-at compile time, decided by the suite's document-rejection oracle, and 12
+at compile time, decided by the suite's document-rejection oracle, and 13
 that must run to `conf:pass`), prepared for the ECMAScript and XPath data
 models by the W3C templates, and run through the shipped components
 exactly as the W3C IRP is
 ([docs/conformance.md](../../docs/conformance.md#namespace-suites)). The
 vocabulary does not depend on the data model; the suite runs both to show
-that execution is unchanged under each. Both data models pass 29 of 29
+that it behaves the same under each. Both data models pass 30 of 30
 (`irp/baselines/`).
 
 ## What is not supported yet
+
+- Checking an event one session sends another (`#_parent`,
+  `#_<invokeid>`) against the receiving document's transitions, and an
+  event the host delivers (`scx run` standard input, an embedder's `send`)
+  against the root document's: the sending engine does not have the
+  receiving document, and a host must not judge events itself. Such
+  events are delivered whatever their data; `EVENT011` reports the ones
+  whose literal data provably fails, for literal `<invoke src>` documents.
 
 - A reference to a repository-namespace resource or any absolute URI: only
   files relative to the document.

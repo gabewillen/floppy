@@ -15,7 +15,6 @@
 //! bound before compilation.
 
 use std::collections::BTreeMap;
-use std::fs;
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
@@ -118,11 +117,11 @@ fn read_script(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let span = observe(Module::Cli, Operation::CliReadScript);
     let result = (|| {
         let limit = u64::try_from(scxml_script::MAX_SCRIPT_COMPONENT_BYTES)?;
-        let file = fs::File::open(path)?;
-        let metadata = file.metadata()?;
-        if !metadata.is_file() || metadata.len() > limit {
+        let Some((file, metadata)) =
+            crate::open_regular_file(path)?.filter(|(_, metadata)| metadata.len() <= limit)
+        else {
             return Err("script must be a regular file within the 4 MiB byte bound".into());
-        }
+        };
         let mut bytes = Vec::with_capacity(usize::try_from(metadata.len())?);
         file.take(limit + 1).read_to_end(&mut bytes)?;
         if u64::try_from(bytes.len())? > limit {

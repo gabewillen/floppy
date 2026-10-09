@@ -25,8 +25,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Free runner disk space
-        # The host tests build every release component into a second target
-        # directory; the stock runner image does not leave room for both.
+        # component_execution.rs builds its own release into a second target
+        # directory; the stock runner image leaves little room beside the
+        # workspace build.
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # Rust toolchain installer
         with:
@@ -44,8 +45,16 @@ jobs:
       # `scx` embeds the release session components (crates/scxml-cli/build.rs
       # reads target/wasm-artifacts/release), so they are built first.
       - run: sh scripts/verify-wasm-capabilities.sh
+      # Every later test step reads its components from that one verified
+      # release instead of building its own (CONTRIBUTING.md,
+      # "SCXML_COMPONENTS_DIR"); component_execution.rs still builds its own.
+      - name: Share the verified release with every test step
+        run: |
+          echo "SCXML_COMPONENTS_DIR=$PWD/target/wasm-artifacts/release" >> "$GITHUB_ENV"
+          echo "SCXML_COMPONENTS_MANIFEST_SHA256=$(sha256sum target/wasm-artifacts/release/manifest.tsv | cut -d ' ' -f 1)" >> "$GITHUB_ENV"
       - run: cargo check --workspace --all-targets --locked
-      - run: cargo test --workspace --all-targets --locked
+      # The workspace's test binaries, whole binaries side by side.
+      - run: python3 scripts/test-parallel.py
       - run: cargo test --workspace --doc --locked
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked

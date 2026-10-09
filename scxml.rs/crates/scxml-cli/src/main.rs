@@ -1130,13 +1130,13 @@ fn read_template(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let span = observe(Module::Cli, Operation::CliReadTemplate);
     let result = (|| {
         let limit = u64::try_from(scxml_packager::MAX_TEMPLATE_BYTES)?;
-        let file = fs::File::open(path)?;
-        let metadata = file.metadata()?;
-        if !metadata.is_file() || metadata.len() > limit {
+        let Some((file, metadata)) =
+            open_regular_file(path)?.filter(|(_, metadata)| metadata.len() <= limit)
+        else {
             return Err(
                 "machine template must be a regular file within the 8 MiB byte bound".into(),
             );
-        }
+        };
         let mut bytes = Vec::with_capacity(usize::try_from(metadata.len())?);
         file.take(limit + 1).read_to_end(&mut bytes)?;
         if u64::try_from(bytes.len())? > limit {
@@ -1153,28 +1153,28 @@ fn read_template(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     result
 }
 
+/// Opens `path` with its metadata only when it is a regular file: the path is
+/// checked before the open, since opening a FIFO blocks and a device reads
+/// without end, and the handle after it, in case the path changed between.
+/// `None` when either is not a regular file.
+pub(crate) fn open_regular_file(path: &Path) -> io::Result<Option<(fs::File, fs::Metadata)>> {
+    if !fs::metadata(path)?.is_file() {
+        return Ok(None);
+    }
+    let file = fs::File::open(path)?;
+    let metadata = file.metadata()?;
+    Ok(metadata.is_file().then_some((file, metadata)))
+}
+
 /// Reads the bytes of one SCXML source; every failure names the path. Decoding is the caller's: `validate` reports invalid UTF-8 as a
 /// located diagnostic in every output format.
 fn read_source(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let span = observe(Module::Cli, Operation::CliReadSource);
     let shown = path.display();
     let result = (|| -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        // Opening a FIFO or a device can block, so only a regular file is
-        // opened; the handle is checked again in case the path changed between.
-        if !fs::metadata(path)
+        let (mut file, metadata) = open_regular_file(path)
             .map_err(|error| format!("cannot read `{shown}`: {error}"))?
-            .is_file()
-        {
-            return Err(format!("cannot read `{shown}`: not a regular file").into());
-        }
-        let mut file =
-            fs::File::open(path).map_err(|error| format!("cannot read `{shown}`: {error}"))?;
-        let metadata = file
-            .metadata()
-            .map_err(|error| format!("cannot read `{shown}`: {error}"))?;
-        if !metadata.is_file() {
-            return Err(format!("cannot read `{shown}`: not a regular file").into());
-        }
+            .ok_or_else(|| format!("cannot read `{shown}`: not a regular file"))?;
         // The native CLI reads a source of any size: resource bounds apply
         // to wasm builds only.
         let mut bytes = Vec::with_capacity(usize::try_from(metadata.len())?);
@@ -1378,14 +1378,14 @@ fn check_canonical_baseline(
     report: &RunReport,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let limit = u64::try_from(scxml_reporting::MAX_CANONICAL_BYTES)?;
-    let file = fs::File::open(path)?;
-    let metadata = file.metadata()?;
-    if !metadata.is_file() || metadata.len() > limit {
+    let Some((file, metadata)) =
+        open_regular_file(path)?.filter(|(_, metadata)| metadata.len() <= limit)
+    else {
         return Err(
             "canonical baseline must be a regular file within the 32 MiB canonical report bound"
                 .into(),
         );
-    }
+    };
     let mut baseline = Vec::with_capacity(usize::try_from(metadata.len())?);
     file.take(limit + 1).read_to_end(&mut baseline)?;
     if u64::try_from(baseline.len())? > limit {
@@ -2088,6 +2088,40 @@ mod tests {
         assert!(
             check_canonical_baseline(&malformed, &empty_report()).is_err(),
             "a bounded baseline still has to decode"
+        );
+    }
+
+    /// A FIFO baseline is refused before it is opened: opening a FIFO blocks
+    /// until a writer appears.
+    #[cfg(unix)]
+    #[test]
+    fn a_fifo_canonical_baseline_is_refused_without_blocking() {
+        let directory = TestDirectory::new();
+        let fifo = directory.0.join("fifo.scxml-report.json");
+        let status = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .expect("mkfifo must run");
+        assert!(status.success(), "mkfifo must create the FIFO fixture");
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let path = fifo.clone();
+        let reader = std::thread::spawn(move || {
+            let result =
+                check_canonical_baseline(&path, &empty_report()).map_err(|e| e.to_string());
+            sender.send(result).expect("the test waits for the result");
+        });
+        let result = receiver.recv_timeout(std::time::Duration::from_secs(30));
+        if result.is_err() {
+            // Release the blocked open with a writer so the thread ends.
+            drop(fs::OpenOptions::new().write(true).open(&fifo));
+        }
+        reader.join().expect("the baseline reader must not panic");
+        let error = result
+            .expect("a FIFO baseline must not block")
+            .expect_err("a FIFO is not a baseline");
+        assert!(
+            error.contains("canonical baseline must be a regular file"),
+            "{error}"
         );
     }
 }
