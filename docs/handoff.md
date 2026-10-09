@@ -151,6 +151,9 @@ The remaining mosfet port runs as one ultracode run with these grants:
 - **scxml.rs names approved:** the datamodel pass's names, with the example
   package renamed to `datamodels/example`; `deny.toml` allows ISC and
   CDLA-Permissive-2.0 (TLS stack).
+- **Live model while the Sparks are saturated:** CPA gateway via the
+  gitignored `.env.cpa`, model `gabe-codex-1/gpt-6-luna` (fallback
+  `gabe-xai/grok-4.6`).
 - **Pacing:** run through all phases, report after each; stop only for a
   real blocker or scxml.rs names needing approval.
 
