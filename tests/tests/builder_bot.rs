@@ -193,11 +193,13 @@ fn green_separate() -> String {
 }
 
 /// The same transitions merged with a comma-separated descriptor list
-/// (`SCXML013`, whose fix is machine-applicable).
+/// (`SCXML013`, whose fix is machine-applicable). It carries no
+/// `event:schema`: on a transition handling `light.timer` the button's
+/// object schema would reject the timer's own data (none), so the draft's
+/// `light.timer` send would raise `error.execution` (scxml.rs runtime event
+/// contracts).
 fn green_comma() -> String {
-    format!(
-        r#"<transition event="pedestrian.button,light.timer" event:schema='{BUTTON_SCHEMA}' target="yellow"/>"#
-    )
+    r#"<transition event="pedestrian.button,light.timer" target="yellow"/>"#.to_owned()
 }
 
 /// The test scripts every draft carries.
