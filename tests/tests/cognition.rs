@@ -49,9 +49,10 @@ const IGNORE: &str = "bot.ability.cognition.ignore";
 const HANDOFF: &str = "bot.ability.reasoning.input";
 const RESPOND: &str = "bot.ability.communication.respond";
 const ACTIVATE: &str = "bot.ability.communication.activate";
-/// The turn's choices as the body logs them: the cognition's offer and the
-/// communication's.
-const CHOICES: &str = "bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication";
+const ADOPT: &str = "bot.ability.identity.adopt";
+/// The turn's choices as the body logs them: the cognition's offer, the
+/// communication's and the identity's.
+const CHOICES: &str = "bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication bot.ability.identity.adopt@identity";
 
 /// The decision backend's scripted answer.
 #[derive(Clone, Copy)]
@@ -574,6 +575,8 @@ fn a_deliberative_handoff_escalates_to_reasoning() {
                 .to_owned();
             let target = if event == IGNORE {
                 "cognition"
+            } else if event == ADOPT {
+                "identity"
             } else {
                 "communication"
             };
@@ -581,7 +584,7 @@ fn a_deliberative_handoff_escalates_to_reasoning() {
             event
         })
         .collect();
-    assert_eq!(pinned, strings(&[IGNORE, RESPOND, ACTIVATE]));
+    assert_eq!(pinned, strings(&[IGNORE, RESPOND, ACTIVATE, ADOPT]));
     let prompt = body["messages"]
         .as_array()
         .and_then(|messages| messages.last())

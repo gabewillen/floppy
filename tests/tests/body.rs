@@ -90,7 +90,7 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
     }
     let body_path = body_dir.join("floppy.scx");
     std::fs::write(&body_path, body).expect("the body copy is writable");
-    for name in ["communication", "conversation", "speaking"] {
+    for name in ["communication", "conversation", "speaking", "identity"] {
         let name = format!("{name}.scx");
         std::fs::copy(
             workspace().join("abilities").join(&name),
@@ -570,9 +570,9 @@ fn clear_choice() -> Json {
     json!({"event": "bot.clear_focus", "schema": compacted(&schema), "description": description})
 }
 
-/// The communication's offer of `event` (its schema file), compacted and
-/// tagged with its target.
-fn communication_choice(event: &str) -> Json {
+/// The offer of `event` (its schema file) by the ability `target`,
+/// compacted and tagged with its target.
+fn offered_choice(target: &str, event: &str) -> Json {
     let schema: Json = serde_json::from_str(
         &std::fs::read_to_string(
             workspace()
@@ -587,13 +587,15 @@ fn communication_choice(event: &str) -> Json {
         .and_then(|text| text.lines().next())
         .expect("a description")
         .to_owned();
-    json!({"event": event, "schema": compacted(&schema), "description": description, "target": "communication"})
+    json!({"event": event, "schema": compacted(&schema), "description": description, "target": target})
 }
 
-fn communication_choices() -> [Json; 2] {
+/// The communication's offers, then the identity's.
+fn ability_choices() -> [Json; 3] {
     [
-        communication_choice("bot.ability.communication.respond"),
-        communication_choice("bot.ability.communication.activate"),
+        offered_choice("communication", "bot.ability.communication.respond"),
+        offered_choice("communication", "bot.ability.communication.activate"),
+        offered_choice("identity", "bot.ability.identity.adopt"),
     ]
 }
 
@@ -639,17 +641,23 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     // focused), then the double's offer, compacted and tagged.
     run.event("bot.input", &device_input("focus", "lamp", "lamp"));
     let records = run.until(WAIT, label_is("bot.focus"));
-    let [respond, activate] = communication_choices();
+    let [respond, activate, adopt] = ability_choices();
     assert_eq!(
         last_json(&records, "double.choices"),
-        json!([focus_choice(&["lamp"]), ignore_choice(), respond, activate])
+        json!([
+            focus_choice(&["lamp"]),
+            ignore_choice(),
+            respond,
+            activate,
+            adopt
+        ])
     );
     assert_eq!(
         only(&records, &["bot.choices", "bot.route", "bot.focus"]),
         pairs(&[
             (
                 "bot.choices",
-                "bot.focus_device bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication"
+                "bot.focus_device bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication bot.ability.identity.adopt@identity"
             ),
             ("bot.route", "bot.focus_device -> bot"),
             ("bot.focus", "lamp"),
@@ -667,7 +675,8 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
             clear_choice(),
             ignore_choice(),
             respond,
-            activate
+            activate,
+            adopt
         ])
     );
     assert_eq!(
@@ -699,20 +708,20 @@ fn a_selection_the_turn_did_not_offer_is_dropped() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    // No ability offers bot.ability.identity.adopt, and no device is
+    // No ability offers bot.ability.reasoning.input, and no device is
     // configured, so the body offers no focus.
     run.event("bot.input", &input("unoffered", "hello"));
     let records = run.until(WAIT, label_is("bot.route.dropped"));
-    let [respond, activate] = communication_choices();
+    let [respond, activate, adopt] = ability_choices();
     assert_eq!(
         last_json(&records, "double.choices"),
-        json!([ignore_choice(), respond, activate])
+        json!([ignore_choice(), respond, activate, adopt])
     );
     assert_eq!(
         only(&records, &["bot.route.dropped"]),
         pairs(&[(
             "bot.route.dropped",
-            "bot.ability.identity.adopt was not offered this turn"
+            "bot.ability.reasoning.input was not offered this turn"
         )])
     );
     // An offered event for an ability that does not offer it.

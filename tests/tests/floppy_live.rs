@@ -260,3 +260,72 @@ fn live_chat() {
         "the input was not answered through communication.respond (target/floppy-live/live_chat.json)"
     );
 }
+
+/// A scratch copy of the bot whose identity starts with the name `name`
+/// (standing in for the invoker's `<param>`); returns the body's path.
+fn with_name(name: &str) -> PathBuf {
+    let dir = unique_scratch("floppy-live");
+    for sub in [
+        "bots/floppy",
+        "bots/floppy/schemas",
+        "abilities",
+        "abilities/schemas",
+    ] {
+        copy_dir(&workspace().join(sub), &dir.join(sub));
+    }
+    let identity = dir.join("abilities/identity.scx");
+    let text = std::fs::read_to_string(&identity).expect("the identity is readable");
+    let declared = r#"<data id="name" expr="null"/>"#;
+    assert!(text.contains(declared), "the identity declares its name");
+    std::fs::write(
+        &identity,
+        text.replace(declared, &format!(r#"<data id="name" expr="'{name}'"/>"#)),
+    )
+    .expect("the identity copy is writable");
+    dir.join("bots/floppy/floppy.scx")
+}
+
+/// A bot named Floppy is addressed by "Floppy, what's your name?": the
+/// identity hears its name (`identity.heard`), the addressed is a turn's
+/// stimulus, and the bot answers through `communication.respond`.
+#[test]
+#[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
+fn live_identity() {
+    let mut run = start_body(&with_name("Floppy"));
+    run.event("bot.activate", &json!({"model": model()}));
+    run.event(
+        "bot.ability.communication.input",
+        &json!({
+            "source_ids": ["gabe"],
+            "target_ids": ["floppy"],
+            "content": "Floppy, what's your name?",
+            "content_type": "text/plain"
+        }),
+    );
+    let addressed = std::cell::Cell::new(false);
+    let records = run.until(Duration::from_mins(6), |record| {
+        if record["type"] == "log" && record["label"] == "identity.heard" {
+            addressed.set(true);
+        }
+        addressed.get()
+            && record["type"] == "log"
+            && matches!(
+                record["label"].as_str(),
+                Some("bot.ability.speaking.output" | "bot.processing.failed")
+            )
+    });
+    let finished = run.close(Duration::from_mins(1));
+    let mut all = records;
+    all.extend(finished.records);
+    keep("live_identity", &all);
+    let said = texts(&all, "bot.say");
+    let pass = texts(&all, "identity.heard") == ["addressed as Floppy"]
+        && !said.is_empty()
+        && said.iter().all(|text| !text.trim().is_empty())
+        && texts(&all, "bot.processing.failed").is_empty();
+    println!("live identity: {}", if pass { "pass" } else { "fail" });
+    assert!(
+        pass,
+        "the addressed bot did not answer (target/floppy-live/live_identity.json)"
+    );
+}

@@ -158,7 +158,7 @@ const RUNTIME_ONLY: [&str; 8] = [
 const NAMES_FILE: &str = "mosfet-event-names.json";
 
 /// The ability events the body takes, twinned into `bots/floppy/schemas/`.
-const BODY_TWINS: [&str; 9] = [
+const BODY_TWINS: [&str; 10] = [
     "bot.ability.offers",
     "bot.ability.communication.input",
     "bot.ability.communication.failed",
@@ -168,6 +168,7 @@ const BODY_TWINS: [&str; 9] = [
     "bot.ability.processing.cancelled",
     "bot.ability.failed",
     "bot.ability.conversation.output",
+    "bot.ability.identity.addressed",
 ];
 
 /// The longest `cond` or (outside `<data>`) `expr` a phase 4 document may

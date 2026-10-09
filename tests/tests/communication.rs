@@ -105,7 +105,7 @@ fn layout(speaking: &Speaking, edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
         &workspace().join("abilities/schemas"),
         &dir.join("abilities/schemas"),
     );
-    for name in ["communication", "conversation", "speaking"] {
+    for name in ["communication", "conversation", "speaking", "identity"] {
         let name = format!("{name}.scx");
         std::fs::copy(
             workspace().join("abilities").join(&name),

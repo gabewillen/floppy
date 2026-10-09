@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Identity ability over text (mosfet abilities/identity): the
+  bot's sense of its own name. The body (bots/floppy/floppy.scx) invokes it
+  as its child "identity".
+
+    recalling -bot.ability.identity.recalled-> knowing { offering ->
+      listening -heard text-> recognizing -> listening }
+    knowing -bot.ability.identity.adopt-> adopting
+      -bot.ability.identity.adopted-> knowing
+
+  A bot is born nameless: nothing in the body supplies a name. name is the
+  invoker's <param name="name"> when it passes one (tests do; the body does
+  not), else null.
+
+  recalling is the memory seam (phase 3): it logs
+  <log label="memory" expr="'absent'">, recalls nothing, and sends
+  bot.ability.identity.recalled {name} to #_internal with the name the
+  session started with ({text, kind: "fact"}, or null); phase 3 replaces
+  the send with a memory read of the self_name fact.
+
+  Recognition (mosfet recognition.hears_name, the text recognizer): the
+  body relays each outside bot.ability.communication.input to this
+  ability. <bot:recognize> decides whether its text (a string content with
+  a text/* content_type) names the bot: the name's case-folded
+  letter-and-digit tokens appear as a whole run in the text's (so a bot
+  named "Al" is not addressed by "always"). Addressed:
+  bot.ability.identity.addressed {name} goes to the body, which takes it
+  as a turn's stimulus. Not addressed, or no name yet, produces nothing: a
+  nameless bot only hears words. Other content is not heard (audio is
+  phase 6).
+
+  Adoption: bot.ability.identity.adopt {name, reason?} is offered (as the
+  model-callable act of taking a name) on every entry into knowing,
+  through <decision:choice events="bot.ability.identity.adopt">, compacted
+  by <decision:compact> ($schema, title and examples dropped), in
+  bot.ability.offers {ability: "identity", choices}, from knowing's
+  initial leaf offering (<decision:choice> reads the active leaf's
+  transitions); the first offers are the ability's readiness. adopting is the memory seam for writing the
+  name down: it logs <log label="memory" expr="'absent'"> and sends
+  bot.ability.identity.adopted {name: {text, kind: "fact"}, persisted:
+  false} (persisted [floppy field]: nothing was written) to #_internal;
+  the bot then answers to that name. Without memory nothing can fail to be
+  written, so bot.ability.identity.adopt.failed is not raised in phase 4.
+
+  Logs: identity.name (each name taken, recalled or adopted),
+  identity.heard (whether a relayed text addressed the bot), and
+  identity.offers.
+
+  Contracts: every event it takes names its abilities/schemas/ file by
+  event:schema. A send or raise whose data does not satisfy it is
+  error.execution in its sender, and input from outside the session that
+  does not is refused, so no cond rechecks a payload.
+
+  Bindings: the bot and decision namespace packages (no service, no I/O).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
+       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="identity" initial="recalling">
+  <datamodel>
+    <data id="name" expr="null"/>
+    <data id="addressed" expr="false"/>
+    <data id="adopting_name" expr="null"/>
+    <!-- The offers. -->
+    <data id="offered" expr="[]"/>
+    <data id="offers_over" expr="false"/>
+    <data id="offer_names" expr="''"/>
+  </datamodel>
+
+  <!-- The memory seam: no memory, so the name is the one the session
+       started with. -->
+  <state id="recalling">
+    <onentry>
+      <log label="memory" expr="'absent'"/>
+      <send event="bot.ability.identity.recalled" target="#_internal">
+        <param name="name" expr="typeof name === 'string' &amp;&amp; name.length &gt; 0 ? {text: name, kind: 'fact'} : null"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.identity.recalled" event:schema="schemas/bot.ability.identity.recalled.json" target="knowing">
+      <assign location="name" expr="_event.data.name ? _event.data.name.text : null"/>
+      <log label="identity.name" expr="'recalled ' + JSON.stringify(name)"/>
+    </transition>
+  </state>
+
+  <state id="knowing" initial="offering">
+    <!-- Offered for the whole time the ability is knowing: a bot can be
+         given a name mid-sentence. -->
+    <transition event="bot.ability.identity.adopt" event:schema="schemas/bot.ability.identity.adopt.json" target="adopting">
+      <assign location="adopting_name" expr="_event.data.name"/>
+    </transition>
+
+    <!-- The offers, read where a leaf is active (the choices are the
+         active configuration's transitions). -->
+    <state id="offering">
+      <onentry>
+        <decision:choice location="offered" events="bot.ability.identity.adopt"/>
+        <decision:compact location="offered" bound="32768" overlocation="offers_over"/>
+        <if cond="offers_over">
+          <log label="identity.offers.dropped" expr="'the offers are over 32768 bytes'"/>
+        </if>
+        <decision:names location="offer_names" choices="offered"/>
+        <log label="identity.offers" expr="offer_names"/>
+        <send event="bot.ability.offers" target="#_parent">
+          <param name="ability" expr="'identity'"/>
+          <param name="choices" expr="offered"/>
+        </send>
+      </onentry>
+      <transition target="listening"/>
+    </state>
+
+    <state id="listening">
+      <!-- A nameless bot hears words and nothing follows from them. -->
+      <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json"
+                  cond="name !== null" target="recognizing">
+        <bot:recognize location="addressed" name="name" text="_event.data.content_type.indexOf('text/') === 0 ? _event.data.content : null"/>
+      </transition>
+    </state>
+
+    <!-- One recognition decision about one heard text. -->
+    <state id="recognizing">
+      <transition cond="addressed" target="listening">
+        <log label="identity.heard" expr="'addressed as ' + name"/>
+        <send event="bot.ability.identity.addressed" target="#_parent">
+          <param name="name" expr="name"/>
+        </send>
+      </transition>
+      <transition target="listening">
+        <log label="identity.heard" expr="'not addressed'"/>
+      </transition>
+    </state>
+  </state>
+
+  <!-- The memory seam for writing the name down: nothing is written. -->
+  <state id="adopting">
+    <onentry>
+      <log label="memory" expr="'absent'"/>
+      <send event="bot.ability.identity.adopted" target="#_internal">
+        <param name="name" expr="({text: adopting_name, kind: 'fact'})"/>
+        <param name="persisted" expr="false"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.identity.adopted" event:schema="schemas/bot.ability.identity.adopted.json" target="knowing">
+      <assign location="name" expr="_event.data.name.text"/>
+      <log label="identity.name" expr="'adopted ' + JSON.stringify(name) + ' (persisted: false)'"/>
+    </transition>
+  </state>
+</scxml>

@@ -11,9 +11,10 @@
       cancelled and invoked again)
     cancelling_processing -cancel timeout-> degraded (a final sink)
 
-  Abilities: live holds <invoke id="cognition"> and <invoke
+  Abilities: live holds <invoke id="cognition">, <invoke
   id="communication"> (abilities/communication.scx, which holds the
-  conversation and speaking); leaving live cancels every ability (SCXML
+  conversation and speaking) and <invoke id="identity">
+  (abilities/identity.scx, the bot's name); leaving live cancels every ability (SCXML
   6.4), which replaces mosfet's cleanup states. An ability is ready when it
   sends its first bot.ability.offers; the body is active when every
   expected ability is ready. A run-tagged activation timer
@@ -27,9 +28,12 @@
   whose last message is inbound) comes back as a stimulus like bot.input.
   The communication says a routed bot.ability.communication.respond
   through speaking and answers bot.ability.speaking.output or
-  bot.ability.communication.failed, which the body logs.
+  bot.ability.communication.failed, which the body logs. The same input
+  goes to the identity, which answers bot.ability.identity.addressed
+  {name} when the text names the bot; that too is a stimulus.
 
-  Turns: bot.input or a conversation product in unfocused or focused
+  Turns: bot.input, a conversation product or an addressed in unfocused
+  or focused
   starts a processing turn; <bot:stimulus> writes the event's stimulus
   envelope {event, data, source}. The body counts the turn, computes the
   turn's attention bias with <bot:attention> (focus, focus_candidates:
@@ -118,7 +122,7 @@
     <!-- Lifecycle: each entry into live is one run; the abilities expected
          and the offers each has sent this run. -->
     <data id="live_run" expr="0"/>
-    <data id="expected" expr="['cognition', 'communication']"/>
+    <data id="expected" expr="['cognition', 'communication', 'identity']"/>
     <data id="offers" expr="({})"/>
     <data id="waiting" expr="[]"/>
     <!-- Turns. -->
@@ -163,6 +167,7 @@
       <param name="model" expr="model"/>
     </invoke>
     <invoke id="communication" type="scxml" src="../../abilities/communication.scx"/>
+    <invoke id="identity" type="scxml" src="../../abilities/identity.scx"/>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
     <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json"
@@ -214,10 +219,14 @@
         <assign location="degraded_reason" expr="'the ability ' + _event.invokeid + ' ended while active'"/>
       </transition>
       <!-- Communication input from outside goes to the communication, whose
-           conversation answers with a product (a turn's stimulus, below). -->
+           conversation answers with a product (a turn's stimulus, below),
+           and to the identity, which answers when it names the bot. -->
       <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json"
                   cond="!_event.invokeid">
         <send event="bot.ability.communication.input" target="#_communication">
+          <content expr="_event.data"/>
+        </send>
+        <send event="bot.ability.communication.input" target="#_identity">
           <content expr="_event.data"/>
         </send>
       </transition>
@@ -254,6 +263,10 @@
                     cond="_event.invokeid === 'communication' &amp;&amp; _event.data.messages.length &gt; 0 &amp;&amp; _event.data.messages.slice(-1)[0].direction === 'inbound'" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
+        <transition event="bot.ability.identity.addressed" event:schema="schemas/bot.ability.identity.addressed.json"
+                    cond="_event.invokeid === 'identity'" target="processing">
+          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+        </transition>
       </state>
 
       <state id="focused">
@@ -266,6 +279,10 @@
         </transition>
         <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
                     cond="_event.invokeid === 'communication' &amp;&amp; _event.data.messages.length &gt; 0 &amp;&amp; _event.data.messages.slice(-1)[0].direction === 'inbound'" target="processing">
+          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+        </transition>
+        <transition event="bot.ability.identity.addressed" event:schema="schemas/bot.ability.identity.addressed.json"
+                    cond="_event.invokeid === 'identity'" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
       </state>
@@ -330,6 +347,12 @@
           <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
+        <transition event="bot.ability.identity.addressed" event:schema="schemas/bot.ability.identity.addressed.json"
+                    cond="_event.invokeid === 'identity'">
+          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="queue" expr="queue.concat([pending])"/>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
       </state>
 
       <!-- The turn timed out: wait (bounded) for the cognition's
@@ -365,6 +388,12 @@
         </transition>
         <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
                     cond="_event.invokeid === 'communication' &amp;&amp; _event.data.messages.length &gt; 0 &amp;&amp; _event.data.messages.slice(-1)[0].direction === 'inbound'">
+          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="queue" expr="queue.concat([pending])"/>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
+        <transition event="bot.ability.identity.addressed" event:schema="schemas/bot.ability.identity.addressed.json"
+                    cond="_event.invokeid === 'identity'">
           <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
           <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>

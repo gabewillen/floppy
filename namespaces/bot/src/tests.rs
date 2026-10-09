@@ -472,3 +472,105 @@ fn malformed_stimulus_elements_or_values_raise_error_execution() {
         &mut failing,
     ));
 }
+
+/// What `<bot:recognize>` assigns for `name` and `text`.
+fn recognized(name: &Data, text: &Data) -> Result<Vec<(String, Data)>, &'static str> {
+    let mut host = FakeHost {
+        values: BTreeMap::from([
+            ("name".to_owned(), name.clone()),
+            ("heard".to_owned(), text.clone()),
+        ]),
+        ..FakeHost::default()
+    };
+    match execute(
+        "recognize",
+        &[
+            attr("location", "addressed"),
+            attr("name", "name"),
+            attr("text", "heard"),
+        ],
+        &[],
+        &mut host,
+    ) {
+        Ok(Executed::Handled) => Ok(host.assigned),
+        Err(Failure::Execution(detail)) => Err(detail),
+        other => panic!("unexpected {other:?}"),
+    }
+}
+
+fn heard(name: &str, text: &str) -> bool {
+    match recognized(&Data::String(name.into()), &Data::String(text.into()))
+        .expect("recognize runs")
+        .as_slice()
+    {
+        [(location, Data::Bool(addressed))] if location == "addressed" => *addressed,
+        other => panic!("unexpected assignment {other:?}"),
+    }
+}
+
+#[test]
+fn recognize_hears_the_name_as_a_whole_run_of_tokens() {
+    assert!(heard("Floppy", "Floppy, what's your name?"));
+    assert!(heard("floppy", "hey FLOPPY!"));
+    assert!(heard("Mister Floppy", "hello, mister   floppy."));
+    assert!(heard("R2-D2", "r2d2 come here"));
+    assert!(!heard("Al", "always"));
+    assert!(!heard("Mister Floppy", "mister big floppy"));
+    assert!(!heard("Floppy", "what is your name?"));
+    assert!(!heard("!!", "!! anyone"));
+    assert!(!heard("Floppy", ""));
+}
+
+#[test]
+fn recognize_hears_nothing_without_a_name_or_a_text() {
+    for (name, text) in [
+        (Data::Null, Data::String("Floppy".into())),
+        (Data::String("Floppy".into()), Data::Null),
+        (Data::Undefined, Data::Undefined),
+    ] {
+        assert_eq!(
+            recognized(&name, &text),
+            Ok(vec![("addressed".to_owned(), Data::Bool(false))])
+        );
+    }
+}
+
+#[test]
+fn recognize_refuses_a_name_or_text_that_is_not_a_string() {
+    assert_eq!(
+        recognized(&data(&json!(1)), &Data::String("x".into())),
+        Err("bot:recognize name is not a string or null")
+    );
+    assert_eq!(
+        recognized(&Data::String("x".into()), &data(&json!(["x"]))),
+        Err("bot:recognize text is not a string or null")
+    );
+}
+
+#[test]
+fn recognize_refuses_a_malformed_element() {
+    let mut host = FakeHost::default();
+    assert_eq!(
+        execution(execute(
+            "recognize",
+            &[attr("name", "name"), attr("text", "heard")],
+            &[],
+            &mut host
+        )),
+        "bot:recognize requires a location"
+    );
+    assert_eq!(
+        execution(execute(
+            "recognize",
+            &[
+                attr("location", "addressed"),
+                attr("name", "name"),
+                attr("text", "heard"),
+                attr("confidence", "1"),
+            ],
+            &[],
+            &mut host
+        )),
+        "bot:recognize takes only the location, name and text attributes"
+    );
+}

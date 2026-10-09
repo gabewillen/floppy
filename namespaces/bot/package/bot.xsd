@@ -17,7 +17,12 @@
                  {event, data, source, target?, id?}.
                  event, data, source (required), target, id (optional):
                  expressions; a null, undefined or empty source is null.
-                 Neither takes another attribute or content.
+  bot:recognize  location (required): receives whether the text names the
+                 bot (mosfet recognition.hears_name): the name's
+                 case-folded letter-and-digit tokens as a whole run in the
+                 text's.
+                 name, text (required): expressions; each a string or null.
+                 None takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://github.com/stateforward/floppy/namespaces/bot"
@@ -40,6 +45,13 @@
       <xs:attribute name="source" type="xs:string" use="required"/>
       <xs:attribute name="target" type="xs:string" use="optional"/>
       <xs:attribute name="id" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="recognize">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="name" type="xs:string" use="required"/>
+      <xs:attribute name="text" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>
