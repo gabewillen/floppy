@@ -64,8 +64,11 @@ session-only. Start fresh from the plan.
   Then pull into floppy:
   `git subtree pull --prefix scxml.rs ~/VSCode/stateforward/scxml.rs feat/invoke-services --squash`.
   Never edit `scxml.rs/` inside floppy directly.
-- **Local commits only.** Nothing has been pushed; no PRs, releases, or
-  remotes until the user decides to go public.
+- **Private remotes only.** floppy pushes to the private
+  `github.com/gabewillen/floppy` and scxml.rs to the private
+  `github.com/stateforward/scxml.rs` (over HTTPS via `gh`; SSH signing is
+  unavailable here). No public repos, PRs, or releases until the user
+  decides to go public.
 - **No invented names.** Every public name comes from the W3C SCXML 1.0
   spec, a standard (WASI 0.3, Component Model, wasmtime CLI, OpenAI API,
   rustc/clippy, OpenTelemetry), or an existing scxml.rs name. Ask the user
