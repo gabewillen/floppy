@@ -36,9 +36,15 @@
   {ability: "conversation", choices: []} to the parent; it offers nothing
   (mosfet's conversation input is not a tool event).
 
-  Bindings: none (no service, no I/O).
+  Commits: <conversation:commit> (the conversation namespace) builds each
+  committed message and its transcript key (its sorted source ids); the
+  document appends it to history and transcripts and remembers each
+  committed outbound provenance id in appended.
+
+  Bindings: the conversation namespace package (no service, no I/O).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="conversation" initial="conversation">
   <datamodel>
@@ -48,6 +54,9 @@
     <data id="parent" expr="null"/>
     <data id="input" expr="null"/>
     <data id="participants" expr="null"/>
+    <!-- The message in hand, and the provenance ids committed so far. -->
+    <data id="message" expr="null"/>
+    <data id="appended" expr="[]"/>
   </datamodel>
   <script>
     function isObject(value) {
@@ -86,73 +95,6 @@
         &amp;&amp; typeof m.content_type === 'string' &amp;&amp; m.content_type.length &gt; 0
         &amp;&amp; isObject(m.provenance);
     }
-    // The identities in a stable order (by their JSON), as JSON.
-    function sortedKey(ids) {
-      return JSON.stringify(ids.slice().sort(function (a, b) {
-        var x = JSON.stringify(a);
-        var y = JSON.stringify(b);
-        return x &lt; y ? -1 : (x &gt; y ? 1 : 0);
-      }));
-    }
-    function index(message) {
-      var key = sortedKey(message.source_ids);
-      if (transcripts[key] === undefined) { transcripts[key] = []; }
-      transcripts[key].push(message.sequence);
-      return key;
-    }
-    function nullable(value) {
-      return value === undefined ? null : value;
-    }
-    // The inbound message for the input in hand.
-    function commitInbound() {
-      var type = input.content_type.toLowerCase();
-      var content = type.indexOf('audio/') === 0 ? null : input.content;
-      var message = {
-        sequence: history.length,
-        direction: 'inbound',
-        source_ids: input.source_ids,
-        target_ids: input.target_ids,
-        content: content,
-        content_type: input.content_type,
-        provenance: {
-          event: parent.event,
-          id: null,
-          source: null,
-          target: null,
-          session_ref: 'relationship-' + sortedKey(input.source_ids) + sortedKey(input.target_ids),
-          turn_ref: null
-        }
-      };
-      history.push(message);
-      return index(message);
-    }
-    function committedId(id) {
-      return typeof id === 'string' &amp;&amp; history.some(function (m) { return m.provenance.id === id; });
-    }
-    function commitOutbound(message) {
-      var provenance = message.provenance;
-      var committed = {
-        sequence: history.length,
-        direction: 'outbound',
-        source_ids: message.source_ids,
-        target_ids: message.target_ids,
-        content: nullable(message.content),
-        content_type: message.content_type,
-        provenance: {
-          event: 'bot.ability.conversation.append',
-          id: typeof provenance.id === 'string' ? provenance.id : null,
-          source: null,
-          target: null,
-          session_ref: nullable(provenance.session_ref),
-          turn_ref: nullable(provenance.turn_ref)
-        }
-      };
-      history.push(committed);
-      index(committed);
-    }
-    function recent() {
-      return history.slice(Math.max(0, history.length - max_messages));
-    }
   </script>
 
   <state id="conversation" initial="inactive">
@@ -185,11 +127,14 @@
           <assign location="parent" expr="({event: 'bot.ability.conversation.input', data: input})"/>
         </onentry>
         <transition target="waiting">
-          <assign location="participants" expr="commitInbound()"/>
+          <conversation:commit location="message" keylocation="participants" direction="inbound"
+                               event="parent.event" message="input" sequence="history.length"/>
+          <assign location="history" expr="history.concat([message])"/>
+          <assign location="transcripts[participants]" expr="(transcripts[participants] || []).concat([message.sequence])"/>
           <log label="conversation" expr="'inbound ' + (history.length - 1) + ' from ' + participants + ' (' + transcripts[participants].length + ' in its transcript)'"/>
           <send event="bot.ability.conversation.output" target="#_parent">
             <param name="parent" expr="parent"/>
-            <param name="messages" expr="recent()"/>
+            <param name="messages" expr="history.slice(Math.max(0, history.length - max_messages))"/>
           </send>
         </transition>
       </state>
@@ -197,12 +142,19 @@
 
     <!-- An outbound record, in either state, committed once. -->
     <transition event="bot.ability.conversation.append" event:schema="schemas/bot.ability.conversation.append.json"
-                cond="validAppend(_event.data) &amp;&amp; !committedId(_event.data.message.provenance.id)">
-      <script>commitOutbound(_event.data.message);</script>
+                cond="validAppend(_event.data) &amp;&amp; appended.indexOf(_event.data.message.provenance.id) &lt; 0">
+      <conversation:commit location="message" keylocation="participants" direction="outbound"
+                           event="_event.name" message="_event.data.message"
+                           provenance="_event.data.message.provenance" sequence="history.length"/>
+      <assign location="history" expr="history.concat([message])"/>
+      <assign location="transcripts[participants]" expr="(transcripts[participants] || []).concat([message.sequence])"/>
+      <if cond="typeof message.provenance.id === 'string'">
+        <assign location="appended" expr="appended.concat([message.provenance.id])"/>
+      </if>
       <log label="conversation" expr="'outbound ' + (history.length - 1)"/>
       <send event="bot.ability.conversation.output" target="#_parent">
         <param name="parent" expr="parent"/>
-        <param name="messages" expr="recent()"/>
+        <param name="messages" expr="history.slice(Math.max(0, history.length - max_messages))"/>
       </send>
     </transition>
     <transition event="bot.ability.conversation.append" event:schema="schemas/bot.ability.conversation.append.json"
