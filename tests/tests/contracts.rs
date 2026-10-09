@@ -78,7 +78,7 @@ const BODY_EVENTS: [&str; 15] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 38] = [
+const ABILITY_EVENTS: [&str; 41] = [
     "bot.ability.failed",
     "bot.ability.cognition.input",
     "bot.ability.cognition.output",
@@ -116,13 +116,16 @@ const ABILITY_EVENTS: [&str; 38] = [
     "bot.behavior.change",
     "bot.behavior.break",
     "bot.behavior.tick",
+    "bot.ability.reflection.input",
+    "bot.ability.reflection.output",
+    "bot.ability.routines.reconcile",
     "bot.ability.offers",
 ];
 
 /// The correlated events of one processing turn: each requires `turn`.
 /// Tool events (the ones a model chooses, such as
 /// `bot.ability.cognition.ignore`) never do: their data is the model's.
-const CORRELATED: [&str; 17] = [
+const CORRELATED: [&str; 18] = [
     "bot.processing.completed",
     "bot.processing.failed",
     "bot.processing.timed_out",
@@ -137,6 +140,7 @@ const CORRELATED: [&str; 17] = [
     "bot.ability.autonomy.output",
     "bot.ability.intuition.input",
     "bot.ability.intuition.output",
+    "bot.ability.reflection.input",
     "bot.ability.reasoning.output",
     "bot.ability.reasoning.recalled",
     "bot.ability.reasoning.retained",
@@ -158,7 +162,7 @@ const RUNTIME_ONLY: [&str; 8] = [
 const NAMES_FILE: &str = "mosfet-event-names.json";
 
 /// The ability events the body takes, twinned into `bots/floppy/schemas/`.
-const BODY_TWINS: [&str; 10] = [
+const BODY_TWINS: [&str; 11] = [
     "bot.ability.offers",
     "bot.ability.communication.input",
     "bot.ability.communication.failed",
@@ -169,6 +173,7 @@ const BODY_TWINS: [&str; 10] = [
     "bot.ability.failed",
     "bot.ability.conversation.output",
     "bot.ability.identity.addressed",
+    "bot.behavior.tick",
 ];
 
 /// The longest `cond` or (outside `<data>`) `expr` a phase 4 document may

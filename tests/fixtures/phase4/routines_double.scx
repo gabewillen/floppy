@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A routines double for the cognition tests (tests/tests/cognition.rs):
+  the cognition's child "routines" with one running routine that ticks
+  once. tests/tests/cognition.rs copies it over abilities/routines.scx.
+
+  The first bot.ability.routines.reconcile (the cognition sends it after
+  reflection settles a turn) fires the routine: it sends one
+  bot.behavior.tick to the cognition and logs routines.double "tick";
+  every later reconcile only logs routines.double "reconciled".
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="routines" initial="running">
+  <datamodel>
+    <data id="ticked" expr="false"/>
+  </datamodel>
+  <state id="running">
+    <transition event="bot.ability.routines.reconcile" cond="!ticked">
+      <assign location="ticked" expr="true"/>
+      <log label="routines.double" expr="'tick'"/>
+      <send event="bot.behavior.tick" target="#_parent">
+        <content expr="({name: 'MorningBriefing', trigger: 'at', scheduled_at: '2026-10-05T08:00:00-04:00', fired_at: '2026-10-05T08:00:00.012000-04:00'})"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.routines.reconcile">
+      <log label="routines.double" expr="'reconciled'"/>
+    </transition>
+  </state>
+</scxml>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Reflection stage (mosfet abilities/cognition/reflection), as an
+  honest seam until phase 5: the cognition (abilities/cognition.scx)
+  invokes it after it has sent a turn's output to the body (mosfet's
+  order), when its reflection gate is on (it is off in phase 4).
+
+    idle -> recalling -> done
+
+  Input: the <param>s turn and cognition_output, the fields of
+  bot.ability.reflection.input (schemas/bot.ability.reflection.input.json).
+  recalling is the memory seam (phase 3): it logs
+  <log label="reflection" expr="'absent'"> and recalls no episodes, so
+  nothing is selected, revised or stored. Output: its top-level final
+  state's <donedata>, which the cognition receives as
+  done.invoke.reflection (SCXML 6.4); like bot.ability.reflection.output
+  it carries no payload.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="reflection" initial="idle">
+  <datamodel>
+    <data id="turn" expr="0"/>
+    <data id="cognition_output" expr="[]"/>
+  </datamodel>
+
+  <state id="idle">
+    <transition target="recalling"/>
+  </state>
+
+  <!-- The memory seam: no episodes to recall. -->
+  <state id="recalling">
+    <onentry>
+      <log label="reflection" expr="'absent'"/>
+    </onentry>
+    <transition target="done"/>
+  </state>
+
+  <final id="done"/>
+</scxml>

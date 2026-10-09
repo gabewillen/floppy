@@ -30,7 +30,9 @@
   through speaking and answers bot.ability.speaking.output or
   bot.ability.communication.failed, which the body logs. The same input
   goes to the identity, which answers bot.ability.identity.addressed
-  {name} when the text names the bot; that too is a stimulus.
+  {name} when the text names the bot; that too is a stimulus, as is a
+  routine's bot.behavior.tick the cognition forwards (phase 5 routines,
+  gated off in phase 4).
 
   Turns: bot.input, a conversation product or an addressed in unfocused
   or focused
@@ -267,6 +269,10 @@
                     cond="_event.invokeid === 'identity'" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
+        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
+                    cond="_event.invokeid === 'cognition'" target="processing">
+          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+        </transition>
       </state>
 
       <state id="focused">
@@ -283,6 +289,10 @@
         </transition>
         <transition event="bot.ability.identity.addressed" event:schema="schemas/bot.ability.identity.addressed.json"
                     cond="_event.invokeid === 'identity'" target="processing">
+          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+        </transition>
+        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
+                    cond="_event.invokeid === 'cognition'" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
       </state>
@@ -353,6 +363,12 @@
           <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
+        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
+                    cond="_event.invokeid === 'cognition'">
+          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="queue" expr="queue.concat([pending])"/>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
       </state>
 
       <!-- The turn timed out: wait (bounded) for the cognition's
@@ -394,6 +410,12 @@
         </transition>
         <transition event="bot.ability.identity.addressed" event:schema="schemas/bot.ability.identity.addressed.json"
                     cond="_event.invokeid === 'identity'">
+          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="queue" expr="queue.concat([pending])"/>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
+        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
+                    cond="_event.invokeid === 'cognition'">
           <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
           <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>

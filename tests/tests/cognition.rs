@@ -928,3 +928,94 @@ fn a_cancel_during_reasoning_is_acknowledged() {
         "8000",
     );
 }
+
+/// The phase 5 seams' gates, on.
+const GATES_ON: &[(&str, &str)] = &[("reflection_enabled", "true"), ("routines_enabled", "true")];
+
+/// With both gates on, the routines start (finding no routines), each
+/// output is followed by the reflection seam, and a settled reflection
+/// asks the routines to reconcile.
+#[test]
+fn with_its_gates_on_the_cognition_reflects_and_reconciles_the_routines() {
+    let mock = Mock::start();
+    let bot = layout(
+        &mock,
+        Decision::Abstain,
+        Generation::Ignore,
+        &[("abilities/cognition.scx", GATES_ON)],
+    );
+    let mut run = start(&bot);
+    say(&mut run, "hmm");
+    let mut records = until_all(&run, &["bot.output", "cognition.reflected"]);
+    if texts(&records, "routines").is_empty() {
+        records.extend(run.until(WAIT, label_is("routines")));
+    }
+    assert_eq!(texts(&records, "reflection"), strings(&["absent"]));
+    assert_eq!(texts(&records, "cognition.reflected"), strings(&["turn 1"]));
+    let finished = close(
+        run,
+        &mock,
+        "with_its_gates_on_the_cognition_reflects_and_reconciles_the_routines",
+    );
+    // Once when the routines start, once for the reconcile.
+    assert_eq!(
+        texts(&finished.all, "routines"),
+        strings(&["absent", "absent"])
+    );
+}
+
+/// A routine's tick goes from the routines through the cognition to the
+/// body, which grants it a turn whose stimulus is the tick.
+#[test]
+fn a_routine_tick_becomes_a_turn() {
+    let mock = Mock::start();
+    let bot = layout(
+        &mock,
+        Decision::Abstain,
+        Generation::Ignore,
+        &[("abilities/cognition.scx", GATES_ON)],
+    );
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/routines_double.scx"),
+        bot.body
+            .parent()
+            .and_then(Path::parent)
+            .and_then(Path::parent)
+            .expect("the scratch root")
+            .join("abilities/routines.scx"),
+    )
+    .expect("the double is copyable");
+    let mut run = start(&bot);
+    say(&mut run, "hmm");
+    let first = run.until(WAIT, |record| {
+        record["type"] == "log"
+            && record["label"] == "cognition"
+            && record["text"] == "turn 2: bot.behavior.tick"
+    });
+    let second = run.until(WAIT, turn_ended);
+    assert_eq!(texts(&first, "routines.double"), strings(&["tick"]));
+    assert_eq!(texts(&second, "bot.output").len(), 1, "{second:?}");
+    close(run, &mock, "a_routine_tick_becomes_a_turn");
+}
+
+/// With both gates off (phase 4), nothing is invoked for them: the output
+/// is followed only by the reflection's absence.
+#[test]
+fn with_its_gates_off_the_cognition_invokes_no_seam() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
+    let mut run = start(&bot);
+    say(&mut run, "hmm");
+    run.until(WAIT, turn_ended);
+    let finished = close(
+        run,
+        &mock,
+        "with_its_gates_off_the_cognition_invokes_no_seam",
+    );
+    assert_eq!(
+        texts(&finished.all, "reflection"),
+        strings(&["absent (phase 5)"])
+    );
+    assert!(texts(&finished.all, "routines").is_empty());
+    assert!(texts(&finished.all, "cognition.reflected").is_empty());
+}

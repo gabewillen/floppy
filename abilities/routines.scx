@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Routines ability (mosfet abilities/cognition/routines.py), as an
+  honest seam until phase 5: the cognition (abilities/cognition.scx)
+  invokes it as its long-lived child "routines" when its routines gate is
+  on (it is off in phase 4).
+
+    active { reconciling -> running -bot.ability.routines.reconcile->
+             reconciling }
+
+  reconciling is the inventory seam (phase 3 memory, phase 5 behaviors):
+  it logs <log label="routines" expr="'absent'"> and finds no ACTIVE
+  persistent routine, so nothing is started and nothing runs. The
+  cognition sends bot.ability.routines.reconcile after reflection settles
+  a turn.
+
+  Ticks: each bot.behavior.tick a running routine raises goes to the
+  cognition (#_parent), which hands it to the body as a stimulus: a new
+  turn the bot decides on (mosfet _forward_tick). With no routines there
+  are no ticks; a routine is a builder-produced SCXML child (phase 5), and
+  one invoked by srcexpr gets no schema files, so its document carries no
+  event:schema references.
+
+  Contracts: the events it takes reference abilities/schemas/ by
+  event:schema (never inline).
+
+  Bindings: none (no service, no I/O).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="routines" initial="active">
+  <state id="active" initial="reconciling">
+    <transition event="bot.ability.routines.reconcile" event:schema="schemas/bot.ability.routines.reconcile.json"
+                target="reconciling"/>
+    <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json">
+      <send event="bot.behavior.tick" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+
+    <!-- The inventory seam: no ACTIVE persistent routines. -->
+    <state id="reconciling">
+      <onentry>
+        <log label="routines" expr="'absent'"/>
+      </onentry>
+      <transition target="running"/>
+    </state>
+
+    <state id="running"/>
+  </state>
+</scxml>
