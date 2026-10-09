@@ -42,8 +42,11 @@
   Bindings: the decision namespace and service packages, resolved from their
   repository URIs; env scopes TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
   service's <invoke> (without a key it answers decision.failed
-  unconfigured). The decision service's own events are rechecked by cond
-  (their schemas are not copied here: they are never offered).
+  unconfigured). An invoked service's events are not checked against
+  event:schema (scxml.rs checks only events between SCXML sessions), so the
+  decision service's own events are shape-checked by cond (Object(...)
+  reads a non-object as {}); their schemas are not copied here: they are
+  never offered.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
@@ -66,12 +69,8 @@
     <data id="decision_id" expr="null"/>
     <data id="decision_timer" expr="null"/>
     <data id="result" expr="null"/>
+    <data id="failed_code" expr="null"/>
   </datamodel>
-  <script>
-    function isObject(value) {
-      return value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value);
-    }
-  </script>
 
   <state id="deciding">
     <onentry>
@@ -95,19 +94,19 @@
 
     <!-- The decision's choices. -->
     <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json"
-                cond="offering || (decision_id !== null &amp;&amp; _event.invokeid === decision_id &amp;&amp; isObject(_event.data))" target="done">
+                cond="offering || (decision_id !== null &amp;&amp; _event.invokeid === decision_id)" target="done">
       <log label="intuition" expr="'turn ' + turn + ': ignore'"/>
       <assign location="result" expr="({handled: true, selected: [{event: 'bot.ability.cognition.ignore', data: {}, reason: 'intuition: nothing to do'}], reason: 'ignore', turn: turn, tuner: tuner})"/>
     </transition>
     <transition event="bot.ability.reasoning.input" event:schema="schemas/bot.ability.reasoning.input.json"
-                cond="offering || (decision_id !== null &amp;&amp; _event.invokeid === decision_id &amp;&amp; isObject(_event.data))" target="done">
+                cond="offering || (decision_id !== null &amp;&amp; _event.invokeid === decision_id)" target="done">
       <log label="intuition" expr="'turn ' + turn + ': deliberative input'"/>
       <assign location="result" expr="({handled: false, reason: 'deliberative_input', turn: turn, tuner: tuner})"/>
     </transition>
 
     <!-- The decision service's own events. -->
     <transition event="decision.abstain"
-                cond="decision_id !== null &amp;&amp; _event.invokeid === decision_id &amp;&amp; isObject(_event.data) &amp;&amp; ['no-candidates', 'declined', 'below-threshold'].indexOf(_event.data.reason) &gt;= 0"
+                cond="decision_id !== null &amp;&amp; _event.invokeid === decision_id &amp;&amp; ['no-candidates', 'declined', 'below-threshold'].indexOf(Object(_event.data).reason) &gt;= 0"
                 target="done">
       <if cond="_event.data.reason === 'below-threshold' &amp;&amp; typeof _event.data.confidence === 'number'">
         <decision:tuner location="tuner" observe="Math.round(_event.data.confidence * 100)"/>
@@ -119,7 +118,8 @@
       </if>
     </transition>
     <transition event="decision.failed" cond="decision_id !== null &amp;&amp; _event.invokeid === decision_id" target="done">
-      <assign location="result" expr="({handled: false, failed: true, reason: 'the decision failed (' + (isObject(_event.data) &amp;&amp; typeof _event.data.code === 'string' ? _event.data.code : 'unknown') + ')', turn: turn, tuner: tuner})"/>
+      <assign location="failed_code" expr="typeof Object(_event.data).code === 'string' ? _event.data.code : 'unknown'"/>
+      <assign location="result" expr="({handled: false, failed: true, reason: 'the decision failed (' + failed_code + ')', turn: turn, tuner: tuner})"/>
     </transition>
     <transition event="floppy.intuition.timed_out" cond="_event.sendid === decision_timer" target="done">
       <assign location="result" expr="({handled: false, failed: true, reason: 'the decision timed out after ' + decision_timeout_ms + ' ms', turn: turn, tuner: tuner})"/>

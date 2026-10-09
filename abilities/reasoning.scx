@@ -67,11 +67,6 @@
     <data id="gen_failure" expr="null"/>
     <data id="result" expr="null"/>
   </datamodel>
-  <script>
-    function isObject(value) {
-      return value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value);
-    }
-  </script>
 
   <!-- Memory seam (phase 3): nothing is recalled. -->
   <state id="recalling">
@@ -86,12 +81,12 @@
       </send>
     </onentry>
     <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
-                cond="isObject(_event.data) &amp;&amp; _event.data.turn === turn &amp;&amp; _event.data.memory_consulted === false &amp;&amp; choices.length === 0"
+                cond="_event.data.turn === turn &amp;&amp; _event.data.memory_consulted === false &amp;&amp; choices.length === 0"
                 target="done">
       <assign location="result" expr="({turn: turn, handled: false, failed: true, reason: 'the reasoning has no choices to select from'})"/>
     </transition>
     <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
-                cond="isObject(_event.data) &amp;&amp; _event.data.turn === turn &amp;&amp; _event.data.memory_consulted === false"
+                cond="_event.data.turn === turn &amp;&amp; _event.data.memory_consulted === false"
                 target="applying"/>
   </state>
 
@@ -113,8 +108,8 @@
       <param name="schemaname" expr="'dispatch'"/>
       <param name="strict" expr="true"/>
       <finalize>
-        <assign location="selected" expr="_event.name === 'generate.result' &amp;&amp; isObject(_event.data) &amp;&amp; isObject(_event.data.json) ? _event.data.json.events : selected"/>
-        <assign location="gen_failure" expr="_event.name === 'generate.failed' &amp;&amp; isObject(_event.data) ? _event.data.code : gen_failure"/>
+        <assign location="selected" expr="_event.name === 'generate.result' &amp;&amp; Object(_event.data).json instanceof Object &amp;&amp; !Array.isArray(_event.data.json) ? _event.data.json.events : selected"/>
+        <assign location="gen_failure" expr="_event.name === 'generate.failed' &amp;&amp; typeof Object(_event.data).code === 'string' ? _event.data.code : gen_failure"/>
       </finalize>
     </invoke>
 
@@ -140,7 +135,7 @@
       </send>
     </onentry>
     <transition event="bot.ability.reasoning.retained" event:schema="schemas/bot.ability.reasoning.retained.json"
-                cond="isObject(_event.data) &amp;&amp; _event.data.turn === turn &amp;&amp; _event.data.memory_written === false"
+                cond="_event.data.turn === turn &amp;&amp; _event.data.memory_written === false"
                 target="done">
       <assign location="result" expr="({turn: turn, handled: true, selected: selected})"/>
     </transition>

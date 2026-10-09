@@ -1381,15 +1381,31 @@ fn a_failed_invocations_sim_drive_does_not_drive_the_next_test() {
 }
 
 #[test]
-fn an_invalid_request_is_answered_with_builder_failed() {
+fn a_request_its_schema_rejects_is_refused_before_the_builder() {
     let mock = Mock::start();
     let records = run(
         &mock,
-        "invalid",
+        "refused",
         "repair",
         &ALL,
         &json!({"spec": "", "max_attempts": 99}),
     );
+    // The intake transition's event:schema rejects it, so scx run refuses
+    // the input and the builder stays in intake.
+    assert!(
+        records
+            .iter()
+            .any(|record| record["type"] == "error" && record["code"] == "machine-invalid-input"),
+        "{records:?}"
+    );
+    assert!(!finished(&records), "{records:?}");
+    assert!(mock.received().is_empty(), "nothing is generated");
+}
+
+#[test]
+fn a_blank_spec_is_answered_with_builder_failed() {
+    let mock = Mock::start();
+    let records = run(&mock, "invalid", "repair", &ALL, &json!({"spec": "   "}));
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed");

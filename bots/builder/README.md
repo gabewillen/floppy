@@ -51,9 +51,13 @@ stop it).
 `<donedata>`): an invoked child is compiled at run time and receives no
 schema files (a schema reference would reject it), so `schemas/*.json` are
 the canonical files and the `builder_bot` test
-(`tests/tests/builder_bot.rs`) keeps the inline copies equal to them. The
-engine treats them as metadata only; `intake` checks the request with its
-`cond` and ends in `failed` (`invalid-request`) otherwise.
+(`tests/tests/builder_bot.rs`) keeps the inline copies equal to them.
+scxml.rs checks them where a request is created: `scx run` refuses a
+`builder.request` on standard input that the schema rejects (an `error`
+record, `machine-invalid-input`; the builder stays in `intake`), and an
+invoker's send of one raises `error.execution` in the invoker. A request
+that satisfies the schema but whose `cond` fails (a blank `spec`) ends in
+`failed` (`invalid-request`).
 
 ## Topology
 

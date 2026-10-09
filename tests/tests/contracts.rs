@@ -26,7 +26,18 @@
 //! * every `#_parent` or `#_<invokeid>` send has a transition taking it in
 //!   the receiving document;
 //! * every `bot.*` or `environment.*` name used is mosfet's or a marked
-//!   floppy name.
+//!   floppy name;
+//! * no `<script>` element and no `function` token: payload checks are
+//!   `event:schema` (scxml.rs checks them where an event is created), and
+//!   a transition taking one contract event carries its `event:schema`;
+//! * every `cond`, and every `expr` outside `<data>`, is at most 160
+//!   characters [floppy rule];
+//! * every `<invoke type="scxml">` has a literal `id` and a literal
+//!   relative `src`.
+//!
+//! The body's twins (`bots/floppy/schemas/` copies of the ability events
+//! the body takes, which it cannot reference across directories) are
+//! byte-identical to their `abilities/schemas/` sources.
 
 #![allow(
     missing_docs,
@@ -146,6 +157,23 @@ const RUNTIME_ONLY: [&str; 8] = [
 
 const NAMES_FILE: &str = "mosfet-event-names.json";
 
+/// The ability events the body takes, twinned into `bots/floppy/schemas/`.
+const BODY_TWINS: [&str; 9] = [
+    "bot.ability.offers",
+    "bot.ability.communication.input",
+    "bot.ability.communication.failed",
+    "bot.ability.speaking.output",
+    "bot.ability.cognition.output",
+    "bot.ability.cognition.cancelled",
+    "bot.ability.processing.cancelled",
+    "bot.ability.failed",
+    "bot.ability.conversation.output",
+];
+
+/// The longest `cond` or (outside `<data>`) `expr` a phase 4 document may
+/// carry, in characters [floppy rule].
+const MAX_EXPRESSION_CHARS: usize = 160;
+
 fn body_schemas() -> PathBuf {
     workspace().join("bots/floppy/schemas")
 }
@@ -191,6 +219,9 @@ fn all_schemas() -> BTreeMap<String, Json> {
     let mut all = BTreeMap::new();
     for dir in [body_schemas(), ability_schemas()] {
         for (event, path) in schema_files(&dir) {
+            if dir == body_schemas() && BODY_TWINS.contains(&event.as_str()) {
+                continue;
+            }
             assert!(
                 all.insert(event.clone(), read_json(&path)).is_none(),
                 "{event} has one schema file"
@@ -286,12 +317,29 @@ fn the_schema_set_is_exactly_the_phase4_events_split_body_and_abilities() {
     let abilities: BTreeSet<String> = schema_files(&ability_schemas()).into_keys().collect();
     assert_eq!(
         body,
-        BODY_EVENTS.iter().map(|&name| name.to_owned()).collect()
+        BODY_EVENTS
+            .iter()
+            .chain(BODY_TWINS.iter())
+            .map(|&name| name.to_owned())
+            .collect()
     );
     assert_eq!(
         abilities,
         ABILITY_EVENTS.iter().map(|&name| name.to_owned()).collect()
     );
+}
+
+#[test]
+fn the_bodys_twins_are_byte_identical_to_their_ability_schemas() {
+    for event in BODY_TWINS {
+        let file = format!("{event}.json");
+        let twin = std::fs::read(body_schemas().join(&file)).expect("the twin is readable");
+        let source = std::fs::read(ability_schemas().join(&file)).expect("the source is readable");
+        assert!(
+            twin == source,
+            "bots/floppy/schemas/{file} differs from abilities/schemas/{file}"
+        );
+    }
 }
 
 #[test]
@@ -609,6 +657,71 @@ fn unknown_domain_names(document: &Parsed, known: &BTreeSet<String>) -> Vec<Stri
     })
 }
 
+/// The structure rule's problems in one document: a `<script>` element, a
+/// `function` token, a `cond` or (outside `<data>`) `expr` over
+/// [`MAX_EXPRESSION_CHARS`], a transition taking one contract event without
+/// an `event:schema`, or an SCXML `<invoke>` without a literal `id` and a
+/// literal relative `src`.
+fn structure_problems(document: &Parsed, contract: &BTreeSet<String>) -> Vec<String> {
+    let mut problems = Vec::new();
+    if document.source.contains("function") {
+        problems.push("a `function` token".to_owned());
+    }
+    document.with(|root| {
+        root.visit(&mut |element| {
+            let name = element.name.local_name.as_str();
+            if name == "script" {
+                problems.push("a <script> element".to_owned());
+            }
+            for attribute in ["cond", "expr"] {
+                if attribute == "expr" && name == "data" {
+                    continue;
+                }
+                if let Some(value) = element.attribute(attribute)
+                    && value.value.chars().count() > MAX_EXPRESSION_CHARS
+                {
+                    problems.push(format!(
+                        "<{name} {attribute}> has {} characters",
+                        value.value.chars().count()
+                    ));
+                }
+            }
+            if name == "transition"
+                && let Some(event) = element.attribute("event")
+                && contract.contains(event.value.trim())
+                && !element.attributes.iter().any(is_schema_attribute)
+            {
+                problems.push(format!(
+                    "the {} transition has no event:schema",
+                    event.value
+                ));
+            }
+            if name == "invoke"
+                && element
+                    .attribute("type")
+                    .is_some_and(|kind| kind.value == "scxml")
+            {
+                let literal_src = element
+                    .attribute("src")
+                    .is_some_and(|src| !src.value.contains(':') && !src.value.starts_with('/'));
+                if element.attribute("id").is_none() || !literal_src {
+                    problems
+                        .push("an SCXML <invoke> without a literal id and relative src".to_owned());
+                }
+            }
+        });
+    });
+    problems
+}
+
+fn contract_events() -> BTreeSet<String> {
+    BODY_EVENTS
+        .iter()
+        .chain(ABILITY_EVENTS.iter())
+        .map(|&name| name.to_owned())
+        .collect()
+}
+
 fn known_names() -> BTreeSet<String> {
     let mut known = mosfet_names();
     known.extend(floppy_names(&all_schemas()));
@@ -634,6 +747,7 @@ fn document_problems(path: &Path, known: &BTreeSet<String>) -> Vec<String> {
     let mut problems = schema_reference_problems(&document);
     problems.extend(unreceived_sends(&document));
     problems.extend(unknown_domain_names(&document, known));
+    problems.extend(structure_problems(&document, &contract_events()));
     if let Err(stderr) = validates_clean(path) {
         problems.push(format!("scx validate: {stderr}"));
     }

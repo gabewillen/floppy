@@ -13,9 +13,10 @@
   playout (mosfet's encoding and playing states) are phase 6; recording the
   outbound message into the conversation is the communication's (its
   sibling conversation is out of this session's reach: SCXML sends go only
-  to #_parent and to a session's own children). An input that does not
-  satisfy schemas/bot.ability.speaking.input.json answers
-  bot.ability.speaking.apply.failed {message}.
+  to #_parent and to a session's own children). The input's contract is
+  schemas/bot.ability.speaking.input.json: a send whose data it rejects is
+  never routed here and raises error.execution in the sender (scxml.rs
+  session.accepts-event-data).
 
   Readiness: every entry into idle sends bot.ability.offers {ability:
   "speaking", choices: []} to the parent; it offers nothing.
@@ -28,17 +29,6 @@
   <datamodel>
     <data id="text" expr="null"/>
   </datamodel>
-  <script>
-    function isObject(value) {
-      return value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value);
-    }
-    // schemas/bot.ability.speaking.input.json
-    function validInput(data) {
-      return isObject(data)
-        &amp;&amp; Object.keys(data).every(function (k) { return k === 'text'; })
-        &amp;&amp; typeof data.text === 'string' &amp;&amp; data.text.length &gt; 0;
-    }
-  </script>
 
   <state id="idle">
     <onentry>
@@ -48,13 +38,8 @@
       </send>
     </onentry>
     <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json"
-                cond="validInput(_event.data)" target="emitting">
+                target="emitting">
       <assign location="text" expr="_event.data.text"/>
-    </transition>
-    <transition event="bot.ability.speaking.input">
-      <send event="bot.ability.speaking.apply.failed" target="#_parent">
-        <param name="message" expr="'bot.ability.speaking.input does not satisfy schemas/bot.ability.speaking.input.json'"/>
-      </send>
     </transition>
   </state>
 

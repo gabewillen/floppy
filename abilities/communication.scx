@@ -55,7 +55,10 @@
   nothing, so nothing is relayed.
 
   Contracts: the events it takes reference abilities/schemas/ by
-  event:schema (never inline) and are rechecked by cond.
+  event:schema (never inline). scxml.rs checks them where each event is
+  created: a send whose data a schema rejects is not routed and raises
+  error.execution in its sender, so conds only correlate (which child,
+  which timer) and keep mosfet's non-blank response check.
 
   Outbound record: <conversation:commit direction="outbound"> builds the
   spoken response's message (sequence 0: the conversation numbers it when
@@ -87,82 +90,25 @@
     <data id="children" expr="['conversation', 'speaking']"/>
     <data id="spoken" expr="null"/>
   </datamodel>
-  <script>
-    function isObject(value) {
-      return value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value);
-    }
-    function isIdentity(value) {
-      return typeof value === 'string'
-        || (Array.isArray(value) &amp;&amp; value.every(function (n) { return typeof n === 'number'; }));
-    }
-    function identities(list, least) {
-      return Array.isArray(list) &amp;&amp; list.length &gt;= least &amp;&amp; list.every(isIdentity)
-        &amp;&amp; list.every(function (id, i) {
-          return list.findIndex(function (other) { return JSON.stringify(other) === JSON.stringify(id); }) === i;
-        });
-    }
-    function optionalCount(value) {
-      return value === undefined || value === null || (Number.isInteger(value) &amp;&amp; value &gt;= 1);
-    }
-    // schemas/bot.ability.communication.input.json
-    function validInput(data) {
-      return isObject(data)
-        &amp;&amp; Object.keys(data).every(function (k) {
-          return ['source_ids', 'target_ids', 'content', 'content_type', 'sample_rate_hz', 'channels'].indexOf(k) &gt;= 0;
-        })
-        &amp;&amp; identities(data.source_ids, 1) &amp;&amp; identities(data.target_ids, 0)
-        &amp;&amp; data.content !== undefined
-        &amp;&amp; typeof data.content_type === 'string' &amp;&amp; data.content_type.length &gt; 0
-        &amp;&amp; optionalCount(data.sample_rate_hz) &amp;&amp; optionalCount(data.channels);
-    }
-    // schemas/bot.ability.communication.respond.json, and mosfet's
-    // non-blank check.
-    function validRespond(data) {
-      return isObject(data)
-        &amp;&amp; Object.keys(data).every(function (k) { return k === 'text'; })
-        &amp;&amp; typeof data.text === 'string' &amp;&amp; data.text.trim().length &gt; 0;
-    }
-    // schemas/bot.ability.communication.activate.json
-    function validActivate(data) {
-      return isObject(data) &amp;&amp; Object.keys(data).length === 0;
-    }
-    // schemas/bot.ability.speaking.output.json
-    function validSpoken(data) {
-      return isObject(data) &amp;&amp; typeof data.text === 'string' &amp;&amp; data.text.length &gt; 0;
-    }
-    // schemas/bot.ability.speaking.apply.failed.json
-    function validFailure(data) {
-      return isObject(data) &amp;&amp; typeof data.message === 'string';
-    }
-    // schemas/bot.ability.conversation.output.json: a conversation product
-    // (mosfet _has_conversation_product) when the last message is inbound.
-    function validHistory(data) {
-      return isObject(data) &amp;&amp; Array.isArray(data.messages)
-        &amp;&amp; data.messages.every(function (m) { return isObject(m) &amp;&amp; (m.direction === 'inbound' || m.direction === 'outbound'); });
-    }
-    function isProduct(data) {
-      return validHistory(data) &amp;&amp; data.messages.length &gt; 0
-        &amp;&amp; data.messages[data.messages.length - 1].direction === 'inbound';
-    }
-  </script>
 
   <state id="attached" initial="inactive">
     <invoke id="conversation" type="scxml" src="conversation.scx"/>
     <invoke id="speaking" type="scxml" src="speaking.scx"/>
 
-    <transition event="bot.ability.offers" cond="children.indexOf(_event.invokeid) &gt;= 0 &amp;&amp; isObject(_event.data) &amp;&amp; _event.data.ability === _event.invokeid">
+    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json"
+                cond="children.indexOf(_event.invokeid) &gt;= 0 &amp;&amp; _event.data.ability === _event.invokeid">
       <assign location="ready[_event.invokeid]" expr="true"/>
     </transition>
     <!-- Conversation products go on to the body; the rest is history. -->
     <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
-                cond="_event.invokeid === 'conversation' &amp;&amp; isProduct(_event.data)">
+                cond="_event.invokeid === 'conversation' &amp;&amp; _event.data.messages.length &gt; 0 &amp;&amp; _event.data.messages.slice(-1)[0].direction === 'inbound'">
       <log label="communication.product" expr="String(_event.data.messages[_event.data.messages.length - 1].sequence)"/>
       <send event="bot.ability.conversation.output" target="#_parent">
         <content expr="_event.data"/>
       </send>
     </transition>
     <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
-                cond="_event.invokeid === 'conversation' &amp;&amp; validHistory(_event.data)">
+                cond="_event.invokeid === 'conversation'">
       <log label="communication.history" expr="String(_event.data.messages.length)"/>
     </transition>
     <!-- A child that cannot run, or ends, degrades the ability. -->
@@ -188,8 +134,7 @@
         <assign location="queue" expr="queue.concat([{event: _event.name, data: _event.data}])"/>
         <log label="communication.deferred" expr="_event.name"/>
       </transition>
-      <transition event="bot.ability.communication.activate" event:schema="schemas/bot.ability.communication.activate.json"
-                  cond="validActivate(_event.data)">
+      <transition event="bot.ability.communication.activate" event:schema="schemas/bot.ability.communication.activate.json">
         <log label="communication.activate" expr="'conversation'"/>
       </transition>
     </state>
@@ -212,15 +157,12 @@
       </onentry>
       <!-- What waited, in order, and checked as on arrival (mosfet
            re-dispatches a deferred event through the same guards). -->
-      <transition cond="queue.length &gt; 0 &amp;&amp; queue[0].event === 'bot.ability.communication.input' &amp;&amp; validInput(queue[0].data)">
+      <transition cond="queue.length &gt; 0 &amp;&amp; queue[0].event === 'bot.ability.communication.input'">
         <send event="bot.ability.conversation.input" target="#_conversation">
           <content expr="queue.shift().data"/>
         </send>
       </transition>
-      <transition cond="queue.length &gt; 0 &amp;&amp; queue[0].event === 'bot.ability.communication.input'">
-        <assign location="queue" expr="queue.slice(1)"/>
-      </transition>
-      <transition cond="queue.length &gt; 0 &amp;&amp; queue[0].event === 'bot.ability.communication.respond' &amp;&amp; validRespond(queue[0].data)" target="preparing_response">
+      <transition cond="queue.length &gt; 0 &amp;&amp; queue[0].event === 'bot.ability.communication.respond' &amp;&amp; /\S/.test(queue[0].data.text)" target="preparing_response">
         <assign location="response" expr="queue.shift().data.text"/>
       </transition>
       <transition cond="queue.length &gt; 0 &amp;&amp; queue[0].event === 'bot.ability.communication.respond'">
@@ -231,21 +173,22 @@
         </send>
       </transition>
       <transition event="bot.ability.communication.respond" event:schema="schemas/bot.ability.communication.respond.json"
-                  cond="offering || (children.indexOf(_event.invokeid) &lt; 0 &amp;&amp; validRespond(_event.data))" target="preparing_response">
+                  cond="offering || (children.indexOf(_event.invokeid) &lt; 0 &amp;&amp; /\S/.test(_event.data.text))" target="preparing_response">
         <assign location="response" expr="_event.data.text"/>
       </transition>
-      <transition event="bot.ability.communication.respond" cond="children.indexOf(_event.invokeid) &lt; 0">
+      <transition event="bot.ability.communication.respond" event:schema="schemas/bot.ability.communication.respond.json"
+                  cond="children.indexOf(_event.invokeid) &lt; 0">
         <log label="communication.rejected" expr="'bot.ability.communication.respond needs one non-blank text'"/>
         <send event="bot.ability.communication.failed" target="#_parent">
           <param name="message" expr="'Communication response text must be non-blank.'"/>
         </send>
       </transition>
       <transition event="bot.ability.communication.activate" event:schema="schemas/bot.ability.communication.activate.json"
-                  cond="offering || (children.indexOf(_event.invokeid) &lt; 0 &amp;&amp; validActivate(_event.data))">
+                  cond="offering || children.indexOf(_event.invokeid) &lt; 0">
         <log label="communication.activate" expr="'conversation'"/>
       </transition>
       <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json"
-                  cond="children.indexOf(_event.invokeid) &lt; 0 &amp;&amp; validInput(_event.data)">
+                  cond="children.indexOf(_event.invokeid) &lt; 0">
         <send event="bot.ability.conversation.input" target="#_conversation">
           <content expr="_event.data"/>
         </send>
@@ -281,7 +224,7 @@
         <cancel sendidexpr="hop_timer"/>
       </onexit>
       <transition event="bot.ability.speaking.output" event:schema="schemas/bot.ability.speaking.output.json"
-                  cond="_event.invokeid === 'speaking' &amp;&amp; validSpoken(_event.data)" target="active">
+                  cond="_event.invokeid === 'speaking'" target="active">
         <send event="bot.ability.speaking.output" target="#_parent">
           <content expr="_event.data"/>
         </send>
@@ -293,13 +236,13 @@
         </send>
       </transition>
       <transition event="bot.ability.speaking.apply.failed" event:schema="schemas/bot.ability.speaking.apply.failed.json"
-                  cond="_event.invokeid === 'speaking' &amp;&amp; validFailure(_event.data)" target="active">
+                  cond="_event.invokeid === 'speaking'" target="active">
         <send event="bot.ability.communication.failed" target="#_parent">
           <param name="message" expr="_event.data.message"/>
         </send>
       </transition>
       <transition event="bot.ability.communication.response.hop.timed_out" event:schema="schemas/bot.ability.communication.response.hop.timed_out.json"
-                  cond="_event.sendid === hop_timer &amp;&amp; isObject(_event.data) &amp;&amp; _event.data.operation === operation" target="active">
+                  cond="_event.sendid === hop_timer &amp;&amp; _event.data.operation === operation" target="active">
         <log label="communication.hop.timed_out" expr="'response ' + operation + ' after ' + response_timeout_ms + ' ms'"/>
         <send event="bot.ability.communication.failed" target="#_parent">
           <param name="message" expr="'Speaking response timed out.'"/>

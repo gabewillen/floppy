@@ -85,10 +85,14 @@
   choices as event@target, bot.route each routed selection, and bot.focus
   each focus change.
 
-  Contracts: the body's own events reference schemas/ by event:schema and
-  are rechecked by cond; the abilities' events are described in
-  abilities/schemas/ (a schema reference cannot leave this directory) and
-  rechecked by cond here.
+  Contracts: every event the body takes references schemas/ by
+  event:schema: its own events, and byte-identical twins of the abilities'
+  events it receives (abilities/schemas/; a schema reference cannot leave
+  this directory). scxml.rs checks them where each event is created: an
+  ability's send whose data a schema rejects is not routed and raises
+  error.execution in the ability, and standard input the schemas reject is
+  refused by scx run before it reaches the body. Conds only correlate (the
+  sending ability, the turn, the run) and read routing state.
 
   Running: scx run with an env file and this document, as for the builder
   (bots/builder/README.md), then bot.activate and bot.input on standard
@@ -116,6 +120,7 @@
     <data id="live_run" expr="0"/>
     <data id="expected" expr="['cognition', 'communication']"/>
     <data id="offers" expr="({})"/>
+    <data id="waiting" expr="[]"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
     <data id="focused_device" expr="null"/>
@@ -138,102 +143,10 @@
     <data id="route" expr="null"/>
     <data id="degraded_reason" expr="null"/>
   </datamodel>
-  <script>
-    function isObject(value) {
-      return value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value);
-    }
-    function isTurn(value) {
-      return Number.isInteger(value) &amp;&amp; value &gt;= 1;
-    }
-    function isOptionalString(value) {
-      return value === undefined || value === null || typeof value === 'string';
-    }
-    function isEmptyObject(data) {
-      return isObject(data) &amp;&amp; Object.keys(data).length === 0;
-    }
-    // schemas/bot.activate.json
-    function validActivate(data) {
-      return isObject(data)
-        &amp;&amp; Object.keys(data).every(function (k) { return k === 'model'; })
-        &amp;&amp; (data.model === undefined || (typeof data.model === 'string' &amp;&amp; data.model.length &gt; 0));
-    }
-    // schemas/bot.input.json
-    function validInput(data) {
-      if (!isObject(data)) { return false; }
-      if (data.target_device !== undefined &amp;&amp; data.target_device !== null
-          &amp;&amp; !(typeof data.target_device === 'string' &amp;&amp; data.target_device.length &gt; 0)) { return false; }
-      if (data.priority !== undefined
-          &amp;&amp; !(Number.isInteger(data.priority) &amp;&amp; data.priority &gt;= 0 &amp;&amp; data.priority &lt;= 10)) { return false; }
-      var o = data.observation;
-      if (o === undefined || o === null) { return true; }
-      return isObject(o)
-        &amp;&amp; Object.keys(o).every(function (k) { return ['event', 'data', 'id', 'source', 'target'].indexOf(k) &gt;= 0; })
-        &amp;&amp; typeof o.event === 'string' &amp;&amp; o.event.length &gt; 0 &amp;&amp; o.data !== undefined
-        &amp;&amp; isOptionalString(o.id) &amp;&amp; isOptionalString(o.source) &amp;&amp; isOptionalString(o.target);
-    }
-    // schemas/bot.focus_device.json
-    function validFocus(data) {
-      return isObject(data) &amp;&amp; typeof data.device === 'string' &amp;&amp; data.device.length &gt; 0;
-    }
-    // schemas/bot.reboot.json
-    function validReboot(data) {
-      return isObject(data) &amp;&amp; ['cognition_child_teardown_failed', 'cognition_cancel_teardown_failed',
-        'cognition_detach_rollback_failed', 'learning_child_teardown_failed',
-        'learning_detach_rollback_failed'].indexOf(data.reason) &gt;= 0;
-    }
-    // schemas/bot.processing.timed_out.json, bot.processing.cancel.timed_out.json,
-    // and the turn-correlated ability events.
-    function forTurn(data) {
-      return isObject(data) &amp;&amp; data.turn === turn;
-    }
-    // abilities/schemas/bot.ability.offers.json
-    function validOffers(data) {
-      return isObject(data) &amp;&amp; typeof data.ability === 'string' &amp;&amp; data.ability.length &gt; 0
-        &amp;&amp; Array.isArray(data.choices)
-        &amp;&amp; data.choices.every(function (c) { return isObject(c) &amp;&amp; typeof c.event === 'string' &amp;&amp; c.event.length &gt; 0 &amp;&amp; c.schema !== undefined; });
-    }
-    // abilities/schemas/bot.ability.cognition.output.json
-    function validOutput(data) {
-      return forTurn(data) &amp;&amp; Array.isArray(data.output)
-        &amp;&amp; data.output.every(function (s) { return isObject(s) &amp;&amp; typeof s.event === 'string' &amp;&amp; s.event.length &gt; 0; });
-    }
-    function fromCognition() {
-      return _event.invokeid === 'cognition';
-    }
-    function fromCommunication() {
-      return _event.invokeid === 'communication';
-    }
-    // abilities/schemas/bot.ability.communication.input.json (the
-    // communication rechecks it in full).
-    function validCommunicationInput(data) {
-      return isObject(data) &amp;&amp; Array.isArray(data.source_ids) &amp;&amp; data.source_ids.length &gt; 0
-        &amp;&amp; Array.isArray(data.target_ids) &amp;&amp; data.content !== undefined
-        &amp;&amp; typeof data.content_type === 'string' &amp;&amp; data.content_type.length &gt; 0;
-    }
-    // abilities/schemas/bot.ability.conversation.output.json, from the
-    // communication: a conversation product (its last message inbound).
-    function conversationProduct() {
-      var data = _event.data;
-      return fromCommunication() &amp;&amp; isObject(data) &amp;&amp; Array.isArray(data.messages)
-        &amp;&amp; data.messages.length &gt; 0 &amp;&amp; isObject(data.messages[data.messages.length - 1])
-        &amp;&amp; data.messages[data.messages.length - 1].direction === 'inbound';
-    }
-    function allReady() {
-      return expected.every(function (id) { return offers[id] !== undefined; });
-    }
-    // A routed body event: taken only while routing a turn's selections.
-    function routed() {
-      return routing_selections &amp;&amp; _event.type === 'internal';
-    }
-  </script>
 
   <state id="inactive">
-    <transition event="bot.activate" event:schema="schemas/bot.activate.json"
-                cond="validActivate(_event.data)" target="live">
+    <transition event="bot.activate" event:schema="schemas/bot.activate.json" target="live">
       <assign location="model" expr="_event.data.model === undefined ? model : _event.data.model"/>
-    </transition>
-    <transition event="bot.activate">
-      <log label="bot.rejected" expr="'bot.activate does not satisfy schemas/bot.activate.json'"/>
     </transition>
   </state>
 
@@ -241,6 +154,7 @@
     <onentry>
       <assign location="live_run" expr="live_run + 1"/>
       <assign location="offers" expr="({})"/>
+      <assign location="waiting" expr="expected.slice()"/>
     </onentry>
     <onexit>
       <assign location="queue" expr="[]"/>
@@ -251,17 +165,20 @@
     <invoke id="communication" type="scxml" src="../../abilities/communication.scx"/>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
-    <transition event="bot.ability.offers" cond="expected.indexOf(_event.invokeid) &gt;= 0 &amp;&amp; validOffers(_event.data) &amp;&amp; _event.data.ability === _event.invokeid">
+    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json"
+                cond="expected.indexOf(_event.invokeid) &gt;= 0 &amp;&amp; _event.data.ability === _event.invokeid">
       <assign location="offers[_event.invokeid]" expr="_event.data.choices"/>
+      <if cond="waiting.indexOf(_event.invokeid) &gt;= 0">
+        <assign location="waiting" expr="waiting.slice(0, waiting.indexOf(_event.invokeid)).concat(waiting.slice(waiting.indexOf(_event.invokeid) + 1))"/>
+      </if>
     </transition>
-    <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json"
-                cond="isObject(_event.data)" target="deactivating"/>
+    <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating"/>
     <!-- Only the cognition may ask for a reboot: re-enter live. -->
     <transition event="bot.reboot" event:schema="schemas/bot.reboot.json"
-                cond="fromCognition() &amp;&amp; validReboot(_event.data)" target="live">
+                cond="_event.invokeid === 'cognition'" target="live">
       <log label="bot.reboot" expr="JSON.stringify(_event.data)"/>
     </transition>
-    <transition event="bot.reboot">
+    <transition event="bot.reboot" event:schema="schemas/bot.reboot.json">
       <log label="bot.rejected" expr="'bot.reboot is taken only from the cognition with a schemas/bot.reboot.json reason'"/>
     </transition>
 
@@ -274,11 +191,11 @@
       <onexit>
         <cancel sendid="activation-timer"/>
       </onexit>
-      <transition cond="allReady()" target="active">
+      <transition cond="waiting.length === 0" target="active">
         <log label="bot.activated" expr="JSON.stringify({})"/>
       </transition>
-      <transition event="floppy.activating.timed_out" cond="!_event.invokeid &amp;&amp; isObject(_event.data) &amp;&amp; _event.data.run === live_run" target="inactive">
-        <log label="bot.diagnostic" expr="'the abilities ' + JSON.stringify(expected.filter(function (id) { return offers[id] === undefined; })) + ' were not ready within ' + activation_timeout_ms + ' ms'"/>
+      <transition event="floppy.activating.timed_out" cond="!_event.invokeid &amp;&amp; Object(_event.data).run === live_run" target="inactive">
+        <log label="bot.diagnostic" expr="'the abilities ' + JSON.stringify(waiting) + ' were not ready within ' + activation_timeout_ms + ' ms'"/>
         <log label="bot.activating.failed" expr="JSON.stringify({})"/>
       </transition>
       <transition event="error.*" target="inactive">
@@ -298,32 +215,29 @@
       </transition>
       <!-- Communication input from outside goes to the communication, whose
            conversation answers with a product (a turn's stimulus, below). -->
-      <transition event="bot.ability.communication.input"
-                  cond="!_event.invokeid &amp;&amp; validCommunicationInput(_event.data)">
+      <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json"
+                  cond="!_event.invokeid">
         <send event="bot.ability.communication.input" target="#_communication">
           <content expr="_event.data"/>
         </send>
       </transition>
-      <transition event="bot.ability.communication.input" cond="!_event.invokeid">
-        <log label="bot.rejected" expr="'bot.ability.communication.input does not satisfy abilities/schemas/bot.ability.communication.input.json'"/>
-      </transition>
       <!-- What the communication said, and its failures. -->
-      <transition event="bot.ability.speaking.output" cond="fromCommunication() &amp;&amp; isObject(_event.data) &amp;&amp; typeof _event.data.text === 'string'">
+      <transition event="bot.ability.speaking.output" event:schema="schemas/bot.ability.speaking.output.json" cond="_event.invokeid === 'communication'">
         <log label="bot.ability.speaking.output" expr="JSON.stringify(_event.data)"/>
       </transition>
-      <transition event="bot.ability.communication.failed" cond="fromCommunication() &amp;&amp; isObject(_event.data) &amp;&amp; typeof _event.data.message === 'string'">
+      <transition event="bot.ability.communication.failed" event:schema="schemas/bot.ability.communication.failed.json" cond="_event.invokeid === 'communication'">
         <log label="bot.ability.communication.failed" expr="JSON.stringify(_event.data)"/>
       </transition>
       <!-- The body's own choices (mosfet: focus on active, clear only while
            a device is focused), offered on processing entry and taken only
            as routed selections of the turn. -->
       <transition event="bot.focus_device" event:schema="schemas/bot.focus_device.json"
-                  cond="offering ? focus_candidates.length &gt; 0 : (routed() &amp;&amp; validFocus(_event.data) &amp;&amp; focus_candidates.indexOf(_event.data.device) &gt;= 0 &amp;&amp; devices.indexOf(_event.data.device) &gt;= 0)">
+                  cond="offering ? focus_candidates.length &gt; 0 : routing_selections &amp;&amp; focus_candidates.indexOf(_event.data.device) &gt;= 0 &amp;&amp; devices.indexOf(_event.data.device) &gt;= 0">
         <assign location="focused_device" expr="_event.data.device"/>
         <log label="bot.focus" expr="focused_device"/>
       </transition>
       <transition event="bot.clear_focus" event:schema="schemas/bot.clear_focus.json"
-                  cond="offering ? focused_device !== null : (routed() &amp;&amp; isObject(_event.data) &amp;&amp; focused_device !== null)">
+                  cond="offering ? focused_device !== null : routing_selections &amp;&amp; focused_device !== null">
         <assign location="focused_device" expr="null"/>
         <log label="bot.focus" expr="'none'"/>
       </transition>
@@ -333,10 +247,11 @@
           <assign location="stimulus" expr="queue.shift()"/>
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json"
-                    cond="!_event.invokeid &amp;&amp; validInput(_event.data)" target="processing">
+                    cond="!_event.invokeid" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
-        <transition event="bot.ability.conversation.output" cond="conversationProduct()" target="processing">
+        <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
+                    cond="_event.invokeid === 'communication' &amp;&amp; _event.data.messages.length &gt; 0 &amp;&amp; _event.data.messages.slice(-1)[0].direction === 'inbound'" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
       </state>
@@ -346,10 +261,11 @@
           <assign location="stimulus" expr="queue.shift()"/>
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json"
-                    cond="!_event.invokeid &amp;&amp; validInput(_event.data)" target="processing">
+                    cond="!_event.invokeid" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
-        <transition event="bot.ability.conversation.output" cond="conversationProduct()" target="processing">
+        <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
+                    cond="_event.invokeid === 'communication' &amp;&amp; _event.data.messages.length &gt; 0 &amp;&amp; _event.data.messages.slice(-1)[0].direction === 'inbound'" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
       </state>
@@ -385,28 +301,31 @@
         <transition cond="choices_over" target="returning">
           <log label="bot.processing.failed" expr="JSON.stringify({message: 'the turn\'s choices are ' + choices_size + ' bytes, over 32768', turn: turn})"/>
         </transition>
-        <transition event="bot.ability.cognition.output" cond="fromCognition() &amp;&amp; validOutput(_event.data)" target="routing">
+        <transition event="bot.ability.cognition.output" event:schema="schemas/bot.ability.cognition.output.json"
+                    cond="_event.invokeid === 'cognition' &amp;&amp; _event.data.turn === turn" target="routing">
           <log label="bot.output" expr="JSON.stringify({turn: turn, output: _event.data.output})"/>
           <log label="bot.processing.completed" expr="JSON.stringify({output: _event.data.output, focus_candidates: focus_candidates, turn: turn})"/>
           <assign location="selections" expr="_event.data.output"/>
         </transition>
-        <transition event="bot.ability.failed" cond="fromCognition() &amp;&amp; forTurn(_event.data)" target="returning">
+        <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                    cond="_event.invokeid === 'cognition' &amp;&amp; _event.data.turn === turn" target="returning">
           <log label="bot.processing.failed" expr="JSON.stringify({message: typeof _event.data.message === 'string' &amp;&amp; _event.data.message.length &gt; 0 ? _event.data.message : 'the cognition failed', turn: turn})"/>
         </transition>
         <transition event="bot.processing.timed_out" event:schema="schemas/bot.processing.timed_out.json"
-                    cond="!_event.invokeid &amp;&amp; forTurn(_event.data)" target="cancelling_processing">
+                    cond="!_event.invokeid &amp;&amp; _event.data.turn === turn" target="cancelling_processing">
           <log label="bot.processing.timed_out" expr="JSON.stringify({turn: turn})"/>
           <send event="bot.ability.cognition.cancel" target="#_cognition">
             <param name="turn" expr="turn"/>
           </send>
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json"
-                    cond="!_event.invokeid &amp;&amp; validInput(_event.data)">
+                    cond="!_event.invokeid">
           <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
           <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
-        <transition event="bot.ability.conversation.output" cond="conversationProduct()">
+        <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
+                    cond="_event.invokeid === 'communication' &amp;&amp; _event.data.messages.length &gt; 0 &amp;&amp; _event.data.messages.slice(-1)[0].direction === 'inbound'">
           <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
           <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>
@@ -425,22 +344,27 @@
         <onexit>
           <cancel sendid="cancel-timer"/>
         </onexit>
-        <transition event="bot.ability.cognition.cancelled bot.ability.processing.cancelled"
-                    cond="fromCognition() &amp;&amp; forTurn(_event.data)" target="returning">
+        <transition event="bot.ability.cognition.cancelled" event:schema="schemas/bot.ability.cognition.cancelled.json"
+                    cond="_event.invokeid === 'cognition' &amp;&amp; _event.data.turn === turn" target="returning">
+          <log label="bot.processing.failed" expr="JSON.stringify({message: 'the turn timed out after ' + processing_timeout_ms + ' ms and was cancelled', turn: turn})"/>
+        </transition>
+        <transition event="bot.ability.processing.cancelled" event:schema="schemas/bot.ability.processing.cancelled.json"
+                    cond="_event.invokeid === 'cognition' &amp;&amp; _event.data.turn === turn" target="returning">
           <log label="bot.processing.failed" expr="JSON.stringify({message: 'the turn timed out after ' + processing_timeout_ms + ' ms and was cancelled', turn: turn})"/>
         </transition>
         <transition event="bot.processing.cancel.timed_out" event:schema="schemas/bot.processing.cancel.timed_out.json"
-                    cond="!_event.invokeid &amp;&amp; forTurn(_event.data)" target="degraded">
+                    cond="!_event.invokeid &amp;&amp; _event.data.turn === turn" target="degraded">
           <log label="bot.processing.cancel.timed_out" expr="JSON.stringify({turn: turn})"/>
           <assign location="degraded_reason" expr="'turn ' + turn + ': the cognition did not acknowledge its cancel'"/>
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json"
-                    cond="!_event.invokeid &amp;&amp; validInput(_event.data)">
+                    cond="!_event.invokeid">
           <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
           <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
-        <transition event="bot.ability.conversation.output" cond="conversationProduct()">
+        <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
+                    cond="_event.invokeid === 'communication' &amp;&amp; _event.data.messages.length &gt; 0 &amp;&amp; _event.data.messages.slice(-1)[0].direction === 'inbound'">
           <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
           <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>
@@ -487,11 +411,11 @@
 
       <!-- A reply that belongs to no current turn is dropped. -->
       <transition event="bot.ability.cognition.output bot.ability.failed bot.ability.cognition.cancelled bot.ability.processing.cancelled"
-                  cond="fromCognition()">
-        <log label="bot.stale" expr="_event.name + ' for turn ' + (isObject(_event.data) ? _event.data.turn : 'none') + ' (current ' + turn + ')'"/>
+                  cond="_event.invokeid === 'cognition'">
+        <log label="bot.stale" expr="_event.name + ' for turn ' + _event.data.turn + ' (current ' + turn + ')'"/>
       </transition>
       <!-- A routed body event no transition above took. -->
-      <transition event="*" cond="routed() &amp;&amp; _event.name !== 'floppy.routed'">
+      <transition event="*" cond="routing_selections &amp;&amp; _event.type === 'internal' &amp;&amp; _event.name !== 'floppy.routed'">
         <log label="bot.route.dropped" expr="_event.name + ' was not taken'"/>
       </transition>
     </state>

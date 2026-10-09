@@ -7,41 +7,29 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-08.
+Last updated: 2026-10-09.
 
-## Paused (2026-10-09) — resume here
+## Current state (2026-10-09) — resume here
 
-The port paused mid phase 4 so the work could move to a new session.
-Nothing running survives the pause: workflows and the 15-minute driver were
-session-only. Start fresh from the plan.
-
-- **floppy:** `main` pushed to the private repo `gabewillen/floppy`.
-  Phase 4 is done through the restructure's namespace slices (decision,
-  bot and conversation namespace elements). The stashed first identity
-  attempt is on branch `wip/identity-slice` (reference only; identity is
-  redone under the structure rule).
-- **scxml.rs:** `main` at `d4db774c` (in-document runtime `event:schema`
-  checks on `<send>`/`<raise>`, the event-bound fix, parallel test runner,
-  hardened `scx` readers). The unfinished cross-session part
-  (`session.accepts-event-data`, user-approved) is the WIP commit on branch
-  `wip/accepts-event-data` (unproven; finish it, prove it, then squash into
-  real commits on `feat/invoke-services`). floppy's subtree is at `d4db774c`.
-- **Plan:** [plans/phase4-bot-core.mdscript.md](plans/phase4-bot-core.mdscript.md)
-  is a snapshot of the live plan (its "User Answers" and "Decisions Made
-  Under Delegation" sections hold every rule and choice). Next slice:
-  "Enforce Event Schemas At Runtime In scxml.rs" (finish from the WIP
-  branch), then "Replace Script Validators With Event Schemas" (also moves
-  every inline `<script>` into `.js` files), Identity, Phase 5 seams, live
+- **floppy:** work continues on branch `claude/project-thread-brkerr`
+  (pushed to the private `gabewillen/floppy`; `main` is behind it).
+  Phase 4 is done through "Replace Script Validators With Event Schemas":
+  no phase 4 document has a `<script>`, payload checks are `event:schema`
+  only, conds only correlate, and `tests/tests/contracts.rs` enforces the
+  structure rule (no `function`, cond/expr at most 160 characters, body
+  twins byte-identical to their ability schemas, literal SCXML invoke ids
+  and srcs). The first identity attempt is on branch `wip/identity-slice`
+  (reference only).
+- **scxml.rs:** `main` and `feat/invoke-services` at `febf633`
+  (`session.accepts-event-data`: a send between sessions, and host input,
+  is checked against the receiving document's `event:schema`s; refused
+  host input is the `scx run` error record `machine-invalid-input`).
+  floppy's subtree is at `febf633`.
+- **Plan:** [plans/phase4-bot-core.mdscript.md](plans/phase4-bot-core.mdscript.md).
+  Next slice: "Add Identity Text Ability", then Phase 5 seams, live
   examples, docs, and the phase-end catch-up (doc tests once, deferred live
-  runs via CPA).
-- **How the run was driven:** [plans/phase4-build.workflow.js](plans/phase4-build.workflow.js)
-  is the workflow script: one implementer per slice, three blind review
-  lanes pipelined with the next slice, repairs as follow-up commits, live
-  proof through CPA (`.env.cpa`, `gabe-codex-1/gpt-6-luna`, fallback
-  `gabe-xai/grok-4.6`), fast proof locally, doc tests only at phase end and
-  in CI. After phase 4: floppy test-speed proposals, then phases 3, 5, 6, 7.
-- **Open for the user:** the Developer Tools exemption only partly helps
-  (doc tests still ~2 min each on macOS); harden
+  runs via CPA; `.env.cpa` is not present in cloud sessions).
+- **Open for the user:** harden
   `scxml_conformance::RunReport::read_json` (`--baseline`) like the scx
   readers; the gateway report.
 

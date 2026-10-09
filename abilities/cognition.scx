@@ -61,8 +61,11 @@
   reasoning, whose selections the body routes.
 
   Contracts: the events it takes reference abilities/schemas/ by
-  event:schema (never inline) and are rechecked by cond; the stages'
-  donedata is rechecked by cond.
+  event:schema (never inline). scxml.rs checks them where each event is
+  created: a send whose data a schema rejects is not routed and raises
+  error.execution in its sender, so conds only correlate (the turn, the
+  hop timer). The stages' donedata is not checked by scxml.rs, so the
+  done.invoke conds also check its turn and shape.
 
   Bindings: the decision namespace package; the stages bind their own
   services (intuition: decision with TYPESAFE_API_KEY and
@@ -95,72 +98,8 @@
     <data id="offering" expr="false"/>
     <data id="offered" expr="[]"/>
     <data id="offers_over" expr="false"/>
+    <data id="offer_names" expr="''"/>
   </datamodel>
-  <script>
-    function isObject(value) {
-      return value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value);
-    }
-    function isTurn(value) {
-      return Number.isInteger(value) &amp;&amp; value &gt;= 1;
-    }
-    function isOptionalString(value) {
-      return value === undefined || value === null || typeof value === 'string';
-    }
-    // schemas/bot.ability.cognition.input.json
-    function validInput(data) {
-      return isObject(data)
-        &amp;&amp; Object.keys(data).every(function (k) { return ['turn', 'stimulus', 'focus', 'focus_candidates', 'choices'].indexOf(k) &gt;= 0; })
-        &amp;&amp; isTurn(data.turn)
-        &amp;&amp; isObject(data.stimulus)
-        &amp;&amp; Object.keys(data.stimulus).every(function (k) { return ['event', 'data', 'id', 'source', 'target'].indexOf(k) &gt;= 0; })
-        &amp;&amp; typeof data.stimulus.event === 'string' &amp;&amp; data.stimulus.event.length &gt; 0
-        &amp;&amp; data.stimulus.data !== undefined
-        &amp;&amp; isOptionalString(data.stimulus.id) &amp;&amp; isOptionalString(data.stimulus.source) &amp;&amp; isOptionalString(data.stimulus.target)
-        &amp;&amp; isOptionalString(data.focus)
-        &amp;&amp; (data.focus_candidates === undefined
-            || (Array.isArray(data.focus_candidates) &amp;&amp; data.focus_candidates.every(function (c) { return typeof c === 'string'; })))
-        &amp;&amp; (data.choices === undefined || (Array.isArray(data.choices) &amp;&amp; data.choices.every(validChoice)));
-    }
-    function validChoice(c) {
-      return isObject(c)
-        &amp;&amp; Object.keys(c).every(function (k) { return ['event', 'schema', 'description', 'target'].indexOf(k) &gt;= 0; })
-        &amp;&amp; typeof c.event === 'string' &amp;&amp; c.event.length &gt; 0 &amp;&amp; c.schema !== undefined
-        &amp;&amp; (c.description === undefined || typeof c.description === 'string')
-        &amp;&amp; (c.target === undefined || (typeof c.target === 'string' &amp;&amp; c.target.length &gt; 0));
-    }
-    // schemas/bot.ability.cognition.cancel.json
-    function validCancel(data) {
-      return isObject(data) &amp;&amp; isTurn(data.turn);
-    }
-    function cancelsTurn(data) {
-      return validCancel(data) &amp;&amp; data.turn === turn;
-    }
-    // A stage's donedata for the turn in hand.
-    function answer(data) {
-      return isObject(data) &amp;&amp; data.turn === turn &amp;&amp; typeof data.handled === 'boolean';
-    }
-    function handled(data) {
-      return answer(data) &amp;&amp; data.handled === true &amp;&amp; data.failed !== true &amp;&amp; Array.isArray(data.selected);
-    }
-    function failed(data) {
-      return answer(data) &amp;&amp; data.failed === true;
-    }
-    function reasonOf(data) {
-      return typeof data.reason === 'string' &amp;&amp; data.reason.length &gt; 0 ? data.reason : 'the stage failed';
-    }
-    function bodyInput() {
-      return {focus: focus, focus_candidates: focus_candidates};
-    }
-    // The intuition's tuner state from its donedata.
-    function keepTuner(data) {
-      if (isObject(data.tuner)) {
-        tuner = data.tuner;
-      }
-    }
-    function hopTimedOut() {
-      return _event.sendid === hop_timer &amp;&amp; isObject(_event.data) &amp;&amp; _event.data.turn === turn;
-    }
-  </script>
 
   <!-- Waits for the body's turn. -->
   <state id="idle">
@@ -172,32 +111,28 @@
       <if cond="offers_over">
         <log label="cognition.offers.dropped" expr="'the offers are over 32768 bytes'"/>
       </if>
-      <log label="cognition.offers" expr="offered.map(function (choice) { return choice.event; }).join(' ')"/>
+      <decision:names location="offer_names" choices="offered"/>
+      <log label="cognition.offers" expr="offer_names"/>
       <send event="bot.ability.offers" target="#_parent">
         <param name="ability" expr="'cognition'"/>
         <param name="choices" expr="offered"/>
       </send>
     </onentry>
     <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json"
-                cond="validInput(_event.data)" target="processing">
+                target="processing">
       <assign location="turn" expr="_event.data.turn"/>
       <assign location="stimulus" expr="_event.data.stimulus"/>
       <assign location="focus" expr="_event.data.focus === undefined ? null : _event.data.focus"/>
       <assign location="focus_candidates" expr="_event.data.focus_candidates === undefined ? [] : _event.data.focus_candidates"/>
       <assign location="choices" expr="_event.data.choices === undefined ? [] : _event.data.choices"/>
     </transition>
-    <transition event="bot.ability.cognition.input">
-      <log label="cognition.rejected" expr="'bot.ability.cognition.input does not satisfy schemas/bot.ability.cognition.input.json'"/>
-    </transition>
     <!-- Nothing in flight: acknowledge at once. -->
-    <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
-                cond="validCancel(_event.data)">
+    <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json">
       <send event="bot.ability.cognition.cancelled" target="#_parent">
         <param name="turn" expr="_event.data.turn"/>
       </send>
     </transition>
-    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json"
-                cond="offering || isObject(_event.data)">
+    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json">
       <log label="cognition.ignore" expr="'idle'"/>
     </transition>
   </state>
@@ -209,13 +144,12 @@
       <assign location="failure" expr="null"/>
       <log label="cognition" expr="'turn ' + turn + ': ' + stimulus.event"/>
     </onentry>
-    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json"
-                cond="isObject(_event.data)">
+    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json">
       <log label="cognition.ignore" expr="'turn ' + turn"/>
     </transition>
     <!-- A stage that does not answer in time: ask the body for a reboot. -->
     <transition event="bot.ability.cognition.child.hop.timed_out" event:schema="schemas/bot.ability.cognition.child.hop.timed_out.json"
-                cond="hopTimedOut()" target="rebooting">
+                cond="_event.sendid === hop_timer &amp;&amp; _event.data.turn === turn" target="rebooting">
       <log label="cognition.hop.timed_out" expr="'turn ' + turn + ': ' + stage + ' after ' + hop_timeout_ms + ' ms'"/>
       <assign location="reboot_reason" expr="'cognition_child_teardown_failed'"/>
     </transition>
@@ -232,19 +166,19 @@
       </onexit>
       <invoke id="autonomy" type="scxml" src="autonomy.scx">
         <param name="turn" expr="turn"/>
-        <param name="input" expr="bodyInput()"/>
+        <param name="input" expr="({focus: focus, focus_candidates: focus_candidates})"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
-                  cond="cancelsTurn(_event.data)" target="cancelling_autonomy"/>
-      <transition event="done.invoke.autonomy" cond="handled(_event.data)" target="completing">
+                  cond="_event.data.turn === turn" target="cancelling_autonomy"/>
+      <transition event="done.invoke.autonomy" cond="_event.data.turn === turn &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.failed !== true &amp;&amp; Array.isArray(_event.data.selected)" target="completing">
         <log label="cognition.stage" expr="'autonomy handled'"/>
         <assign location="selected" expr="_event.data.selected"/>
       </transition>
-      <transition event="done.invoke.autonomy" cond="answer(_event.data) &amp;&amp; !failed(_event.data)" target="running_intuition">
+      <transition event="done.invoke.autonomy" cond="_event.data.turn === turn &amp;&amp; typeof _event.data.handled === 'boolean' &amp;&amp; _event.data.failed !== true" target="running_intuition">
         <log label="cognition.stage" expr="'autonomy unhandled (' + _event.data.reason + ')'"/>
       </transition>
-      <transition event="done.invoke.autonomy" cond="answer(_event.data)" target="failing">
-        <assign location="failure" expr="reasonOf(_event.data)"/>
+      <transition event="done.invoke.autonomy" cond="_event.data.turn === turn &amp;&amp; typeof _event.data.handled === 'boolean'" target="failing">
+        <assign location="failure" expr="(typeof _event.data.reason === 'string' &amp;&amp; _event.data.reason.length &gt; 0 ? _event.data.reason : 'the stage failed')"/>
       </transition>
       <transition event="error.*" cond="_event.invokeid === 'autonomy'" target="failing">
         <assign location="failure" expr="'the autonomy could not run (' + _event.name + ')'"/>
@@ -269,22 +203,22 @@
         <param name="tuner" expr="tuner"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
-                  cond="cancelsTurn(_event.data)" target="cancelling_intuition"/>
-      <transition event="done.invoke.intuition" cond="handled(_event.data)" target="completing">
-        <script>keepTuner(_event.data);</script>
+                  cond="_event.data.turn === turn" target="cancelling_intuition"/>
+      <transition event="done.invoke.intuition" cond="_event.data.turn === turn &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.failed !== true &amp;&amp; Array.isArray(_event.data.selected)" target="completing">
+        <assign location="tuner" expr="_event.data.tuner instanceof Object &amp;&amp; !Array.isArray(_event.data.tuner) ? _event.data.tuner : tuner"/>
         <log label="cognition.tuner" expr="JSON.stringify(tuner)"/>
         <log label="cognition.stage" expr="'intuition handled (' + _event.data.reason + ')'"/>
         <assign location="selected" expr="_event.data.selected"/>
       </transition>
-      <transition event="done.invoke.intuition" cond="answer(_event.data) &amp;&amp; !failed(_event.data)" target="running_reasoning">
-        <script>keepTuner(_event.data);</script>
+      <transition event="done.invoke.intuition" cond="_event.data.turn === turn &amp;&amp; typeof _event.data.handled === 'boolean' &amp;&amp; _event.data.failed !== true" target="running_reasoning">
+        <assign location="tuner" expr="_event.data.tuner instanceof Object &amp;&amp; !Array.isArray(_event.data.tuner) ? _event.data.tuner : tuner"/>
         <log label="cognition.tuner" expr="JSON.stringify(tuner)"/>
         <log label="cognition.stage" expr="'intuition unhandled (' + _event.data.reason + ')'"/>
       </transition>
-      <transition event="done.invoke.intuition" cond="answer(_event.data)" target="failing">
-        <script>keepTuner(_event.data);</script>
+      <transition event="done.invoke.intuition" cond="_event.data.turn === turn &amp;&amp; typeof _event.data.handled === 'boolean'" target="failing">
+        <assign location="tuner" expr="_event.data.tuner instanceof Object &amp;&amp; !Array.isArray(_event.data.tuner) ? _event.data.tuner : tuner"/>
         <log label="cognition.tuner" expr="JSON.stringify(tuner)"/>
-        <assign location="failure" expr="'the intuition failed: ' + reasonOf(_event.data)"/>
+        <assign location="failure" expr="'the intuition failed: ' + (typeof _event.data.reason === 'string' &amp;&amp; _event.data.reason.length &gt; 0 ? _event.data.reason : 'the stage failed')"/>
       </transition>
       <transition event="error.*" cond="_event.invokeid === 'intuition'" target="failing">
         <assign location="failure" expr="'the intuition could not run (' + _event.name + ')'"/>
@@ -310,13 +244,13 @@
         <param name="model" expr="model"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
-                  cond="cancelsTurn(_event.data)" target="cancelling_reasoning"/>
-      <transition event="done.invoke.reasoning" cond="handled(_event.data)" target="completing">
+                  cond="_event.data.turn === turn" target="cancelling_reasoning"/>
+      <transition event="done.invoke.reasoning" cond="_event.data.turn === turn &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.failed !== true &amp;&amp; Array.isArray(_event.data.selected)" target="completing">
         <log label="cognition.stage" expr="'reasoning handled'"/>
         <assign location="selected" expr="_event.data.selected"/>
       </transition>
-      <transition event="done.invoke.reasoning" cond="answer(_event.data)" target="failing">
-        <assign location="failure" expr="reasonOf(_event.data)"/>
+      <transition event="done.invoke.reasoning" cond="_event.data.turn === turn &amp;&amp; typeof _event.data.handled === 'boolean'" target="failing">
+        <assign location="failure" expr="(typeof _event.data.reason === 'string' &amp;&amp; _event.data.reason.length &gt; 0 ? _event.data.reason : 'the stage failed')"/>
       </transition>
       <transition event="error.*" cond="_event.invokeid === 'reasoning'" target="failing">
         <assign location="failure" expr="'the reasoning could not run (' + _event.name + ')'"/>
@@ -340,7 +274,7 @@
         <send event="bot.ability.failed" target="#_parent">
           <param name="message" expr="failure"/>
           <param name="turn" expr="turn"/>
-          <param name="input" expr="bodyInput()"/>
+          <param name="input" expr="({focus: focus, focus_candidates: focus_candidates})"/>
         </send>
       </onentry>
       <transition target="idle"/>
@@ -379,8 +313,7 @@
       </send>
     </onentry>
     <!-- The turn is lost: acknowledge a cancel for it at once. -->
-    <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
-                cond="validCancel(_event.data)">
+    <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json">
       <send event="bot.ability.cognition.cancelled" target="#_parent">
         <param name="turn" expr="_event.data.turn"/>
       </send>

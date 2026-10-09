@@ -367,22 +367,24 @@ fn a_response_waits_for_the_one_in_flight_and_each_hop_times_out() {
 }
 
 #[test]
-fn malformed_communication_input_is_rejected_by_the_body() {
+fn malformed_communication_input_is_refused_before_the_body() {
     let body = layout(&Speaking::Real, &[]);
     let mut run = started(&body);
     run.event(
         "bot.ability.communication.input",
         &json!({"source_ids": [], "target_ids": [], "content": "x", "content_type": "text/plain"}),
     );
-    let records = run.until(WAIT, label_is("bot.rejected"));
-    assert_eq!(
-        texts(&records, "bot.rejected"),
-        strings(&[
-            "bot.ability.communication.input does not satisfy abilities/schemas/bot.ability.communication.input.json"
-        ])
-    );
+    // The body's transition carries the input's schema (its twin), so scx
+    // run refuses the event before the session sees it.
+    let records = run.until(WAIT, |record| {
+        record["type"] == "error" && record["code"] == "machine-invalid-input"
+    });
+    assert!(texts(&records, "bot.rejected").is_empty(), "{records:?}");
     assert!(texts(&records, "conversation").is_empty(), "{records:?}");
-    close(run, "malformed_communication_input_is_rejected_by_the_body");
+    close(
+        run,
+        "malformed_communication_input_is_refused_before_the_body",
+    );
 }
 
 #[test]

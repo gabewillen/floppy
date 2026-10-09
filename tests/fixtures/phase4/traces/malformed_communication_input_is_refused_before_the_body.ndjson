@@ -1,4 +1,4 @@
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
-{"label":"bot.rejected","session":"session","text":"bot.ability.communication.input does not satisfy abilities/schemas/bot.ability.communication.input.json","type":"log"}
+{"code":"machine-invalid-input","fatal":false,"line":2,"message":"machine session failed: invalid-input","type":"error"}
 {"label":"double.exit","parent":"session","session":"session.1","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
