@@ -58,8 +58,8 @@ the canonical release of docs/conformance.md, empty filter identity) measure:
 
 | Data model | Passed / Applicable | Rejections | Not Passing | Corpus digest | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | --- | --- | --- |
-| ECMAScript | 8 / 8 | 8 | 0 | `915e73792e350c4840d1757bca1f29121f91053f606d96834cfef4791cfa90a9` | `ee5038476cbdfd6acdc2ebc689832ef7654979187f672521effbd84f90538cb7` | `0e6ab64b9131278d1eade2e067a91038f2ce90dd745c26ff3388f83e58d9ce34` |
-| XPath | 8 / 8 | 8 | 0 | `536c72c62e8d7932706eb974c7134bb5082443807c283103f8381f04b906d267` | `faacd3a4b00270f567dbc95dc3f95953090b1ce685b0176ca1ca5e82248adca6` | `e0bb28aafc89e75edc18d8cc7b91f478bdbdd4c8de4b274187683b140eacf92f` |
+| ECMAScript | 8 / 8 | 8 | 0 | `915e73792e350c4840d1757bca1f29121f91053f606d96834cfef4791cfa90a9` | `fe6ffff9593bb5f3d59b5d4b1d69f33405163b4ad58f02c1d7d346664565a01a` | `88725e6b244568ba1c5edb7cbb4e9d3202eb7f80503a2faecc38884eae72f750` |
+| XPath | 8 / 8 | 8 | 0 | `536c72c62e8d7932706eb974c7134bb5082443807c283103f8381f04b906d267` | `42d061b5dbe7622133b1237f07000bd51a522e4a23c670228f89813d17bd9e27` | `b83ab1e9d7b7d2d5100cb98b47c633de56f4c89583d4c2ee58a1b9d65358efe1` |
 
 The report identity lists the bound package: `https://stateforward.org/scxml/example` version `0.2.0`, manifest SHA-256 `9e7a178076fc07942946095c44acde1433c9878b4f2a23c3569aa9c6205d03b9`, schema SHA-256 `45074422d68df4d82aa82e7b0dec09183871c58e59566033fdeaaeb4576b28b3`, component SHA-256 `d0d50e16339a5aed0309323b2233bd7f8b9ecf784f79e1736cc842bf53b845dc`. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
 the suite and its baselines statically, and `irp_components.rs` reproduces

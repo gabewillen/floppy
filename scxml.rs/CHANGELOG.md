@@ -550,8 +550,15 @@ hard cutover.
   own schema, or, for an event the session delivers to itself, a schema of
   a transition handling the event rejects is not dispatched, and a
   `<raise>` such a schema rejects is not raised; `error.execution` ends the
-  block instead. Transition selection, `<donedata>`, and events between
-  sessions are not checked, and the W3C IRP results are unchanged
+  block instead. A `<send>` to another session (`#_parent`,
+  `#_<invokeid>`) is checked against the receiving document's transitions
+  through the new machine WIT function `session.accepts-event-data` (and
+  `Engine::accepts_event_data`), which the hosts call before routing it (a
+  refusal is the sender's `error.execution`; a refused delayed one, when it
+  falls due, is undeliverable: `error.communication`) and before delivering
+  their own input (a refusal rejects it with `invalid-input`). Transition
+  selection, `<donedata>`, autoforwarded copies, and invoked services'
+  events are not checked, and the W3C IRP results are unchanged
   (`scxml-engine` now depends on `scxml-event-schema`). New validator codes `EVENT001`-`EVENT008` with explanations;
   the CLI reads the referenced files relative to the document
   (`scxml.cli.read-event-schema`), the validator and compiler WIT requests

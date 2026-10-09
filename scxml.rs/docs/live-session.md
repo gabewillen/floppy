@@ -339,6 +339,10 @@ Each input is one JSON object on one line:
 
 An input that does not parse, has an unknown field, or is not UTF-8 gets a
 non-fatal `error` record carrying its line number, and the session goes on.
+So does an event whose data a literal `event:schema` of a transition of the
+root document handling it rejects (`machine-invalid-input`,
+[namespaces/event](../namespaces/event/README.md#at-run-time)): it is not
+delivered.
 
 ### Records (standard output)
 

@@ -1049,8 +1049,8 @@ fn an_invoke_src_document_compiles_with_the_schema_files_its_embedder_supplies()
 /// An `<invoke src>` document keeps its own schema files' contracts at run
 /// time: an event it sends itself with data a transition's file schema
 /// rejects is not dispatched and raises `error.execution` in the child, and
-/// accepted data is delivered. An event between sessions is not checked
-/// against the receiving document (namespaces/event: not supported yet).
+/// accepted data is delivered; the invoking session's `#_child` send is
+/// judged by the same file schema.
 #[test]
 fn an_invoke_src_document_checks_the_events_it_sends_itself_against_its_schema_files() {
     const EVENT: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
@@ -1073,7 +1073,7 @@ fn an_invoke_src_document_checks_the_events_it_sends_itself_against_its_schema_f
     let root = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="r0">
           <state id="r0">
             <invoke id="child" type="scxml" src="child.scx"/>
-            <transition event="ready"><send target="#_child" event="go"><content>"not an object"</content></send></transition>
+            <transition event="ready"><send target="#_child" event="go"><content>{"n": 2}</content></send></transition>
             <transition event="done.invoke.child" target="pass"/>
             <transition event="error.execution" target="fail"/>
           </state>
@@ -1161,4 +1161,90 @@ fn a_send_over_the_event_bound_is_the_senders_error_execution() {
         .collect::<Option<Vec<_>>>()
         .expect("every log is session:label");
     assert_eq!(labels, ["child-error", "small", "pass"]);
+}
+
+/// Events between sessions keep the receiving document's contracts: a
+/// `#_parent` or `#_child` send whose data a transition of the receiving
+/// document handling it rejects (`accepts-event-data`) is not routed and
+/// raises `error.execution` in the sender; accepted data is routed; a
+/// delayed one refused when it falls due is the sender's
+/// `error.communication`.
+#[test]
+fn a_send_between_sessions_keeps_the_receiving_documents_contracts() {
+    const EVENT: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
+    let child = format!(
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="{EVENT}" version="1.0" datamodel="ecmascript" initial="c0">
+          <state id="c0">
+            <onentry>
+              <send target="#_parent" event="up"><content>"bad"</content></send>
+              <log label="child-unreached"/>
+            </onentry>
+            <transition event="error.execution" target="c1"><log label="child-up-rejected"/></transition>
+          </state>
+          <state id="c1">
+            <onentry>
+              <send target="#_parent" event="up"><content>{{"n": 1}}</content></send>
+              <send target="#_parent" event="later" delay="10ms"><content>"bad"</content></send>
+            </onentry>
+            <transition event="error.communication"><log label="child-later-undeliverable"/></transition>
+            <transition event="down" event:schema='{{"type": "object", "required": ["n"]}}' target="cdone"><log label="child-got-down"/></transition>
+          </state>
+          <final id="cdone"/>
+        </scxml>"##
+    );
+    let root = format!(
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="{EVENT}" version="1.0" datamodel="ecmascript" initial="r">
+          <state id="r" initial="r0">
+            <invoke id="child" type="scxml" src="child.scx"/>
+            <state id="r0">
+              <transition event="up" event:schema='{{"type": "object", "required": ["n"]}}'>
+                <log label="root-got-up"/>
+                <send target="#_child" event="down"><content>"bad"</content></send>
+                <log label="root-unreached"/>
+              </transition>
+              <transition event="later" event:schema='{{"type": "object"}}'><log label="root-got-later"/></transition>
+              <transition event="error.execution" target="r1"><log label="root-down-rejected"/></transition>
+            </state>
+            <state id="r1">
+              <onentry><send target="#_child" event="down" delay="20ms"><content>{{"n": 3}}</content></send></onentry>
+            </state>
+            <transition event="done.invoke.child" target="pass"/>
+          </state>
+          <final id="pass"><onentry><log label="pass"/></onentry></final>
+        </scxml>"##
+    );
+    let (ir, data_model) = lower(&root);
+    let outcome = host()
+        .run(&SessionRun {
+            machine_ir: &ir,
+            data_model: data_model.as_deref(),
+            session_id: "root",
+            events: &[],
+            external_client: None,
+            embedder: Rc::new(DocumentsWithSchemas(vec![(
+                "child.scx",
+                child.clone(),
+                Vec::new(),
+            )])),
+            max_commands: 1_024,
+            snapshots: SnapshotRequest::none(),
+        })
+        .unwrap_or_else(|error| panic!("the run completes: {error}"));
+    assert_eq!(outcome.terminal, Terminal::Finished, "{:?}", logs(&outcome));
+    let labels = logs(&outcome)
+        .into_iter()
+        .map(|log| log.split_once(':').map(|(_, label)| label.to_owned()))
+        .collect::<Option<Vec<_>>>()
+        .expect("every log is session:label");
+    assert_eq!(
+        labels,
+        [
+            "child-up-rejected",
+            "root-got-up",
+            "root-down-rejected",
+            "child-later-undeliverable",
+            "child-got-down",
+            "pass"
+        ]
+    );
 }

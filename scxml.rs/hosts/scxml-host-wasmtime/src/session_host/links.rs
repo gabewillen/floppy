@@ -431,6 +431,15 @@ impl SessionLinks {
                         },
                     ));
                 }
+                let parent = self
+                    .shared
+                    .invoked_sessions
+                    .borrow()
+                    .parent(self.key)
+                    .map(|(parent, _)| parent);
+                if let Some(parent) = parent {
+                    self.require_accepted(parent, &event)?;
+                }
                 // Onto the invoking session's external queue; ignored once
                 // this session's cancellation began (official case 252).
                 self.shared
@@ -441,6 +450,7 @@ impl SessionLinks {
             }
             Ok(DispatchDecision::Invocation(routed)) => {
                 if let Some(target) = self.child(&routed.invoke_id) {
+                    self.require_accepted(target, &routed.event)?;
                     self.shared
                         .invoked_sessions
                         .borrow_mut()
@@ -452,6 +462,24 @@ impl SessionLinks {
                 Ok(SendDisposition::Undeliverable)
             }
             Err(error) => Err(error),
+        }
+    }
+
+    /// Fails a `<send>` to the session `receiver` whose document does not
+    /// accept its event (`accepts-event-data`): `invalid-input`, which the
+    /// sending machine raises as error.execution, so nothing is routed
+    /// (namespaces/event, "At run time").
+    fn require_accepted(
+        &self,
+        receiver: SessionKey,
+        event: &WitEvent,
+    ) -> Result<(), ComponentError> {
+        match self.shared.accepts_event_data(receiver, event) {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(invalid_input(
+                "the receiving session's document does not accept the event's data",
+            )),
+            Err(error) => Err(fatal(&self.shared, RunFailure::Host(error))),
         }
     }
 

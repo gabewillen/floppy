@@ -67,8 +67,8 @@ and bind these digests:
 | --- | --- | --- |
 | corpus digest | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` |
 | errata SHA-256 | `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f` | `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a` |
-| producer report digest | `db6ef5859982f41f68af1df07c2e0a766179b34f5ccddea1a0d49032b0ffc1b1` | `71c37788acb475072daf070608d9d40abcfa9e96dded66862662cf0714310e21` |
-| canonical artifact SHA-256 | `9298381cc9d350677545bb335cd3046ca6474f951fc778501a9921324ed724a9` | `abe92b0ab19ae05ddc7f741055530c9724bcbb3572fb1368bcd5f7106c88f4a8` |
+| producer report digest | `e3ede7c7940b91d20ba4866e70559deaea2b958ad5187960f3f7282dfed0f2da` | `e638452638539e158b3697c90f23dea0bdf2de7f0ae8632bb32d69ba4c27044f` |
+| canonical artifact SHA-256 | `42599ca8ae2c032752b22a886475cf7ecf917d2e66eb28d15167bab673399bc4` | `759288f4141efb51ffa62952545707f7c4ecb410ad66ed0f2c6ccdaaf71e1e40` |
 
 Each repository namespace also has its own implementation report plan in
 the same format, run through the same pipeline and reported separately
@@ -274,7 +274,9 @@ compiler checks each schema against its dialect's metaschema (2020-12,
 session snapshots show it on each transition. At run time a `<send>` or
 `<raise>` whose data its own schema, or for an event the session delivers to
 itself the schema of a transition handling it, rejects is not dispatched and
-raises `error.execution`; transitions still match by name. See the
+raises `error.execution`; so is a send to another session whose receiving
+document's transitions reject its data, and host input they reject is
+refused. Transitions still match by name. See the
 [`event` vocabulary](namespaces/event/README.md).
 
 **Observability.** Spans and measurements go through OpenTelemetry at
@@ -367,10 +369,8 @@ The full list, with evidence, is in
   bounded structurally, with Wasm memory and fuel as the outer bound (only
   process limits in native builds); a data-model call that reaches its
   fuel cap ends the session.
-- `event:schema` contracts are checked where a session creates an event for
-  itself (`<send>` to its own queues, `<raise>`) and on a `<send>`'s own
-  schema; an event sent to another session or delivered by the host is not
-  checked against the receiving document's transitions.
+- `event:schema` contracts are not checked for autoforwarded copies,
+  invoked services' events, BasicHTTP sends, donedata, or `event:schemaexpr`.
 - There is no save or restore of session state, in process or durable;
   SCXML defines no persistence.
 - The compiler component's packaging path is not exercised under Wasmtime.

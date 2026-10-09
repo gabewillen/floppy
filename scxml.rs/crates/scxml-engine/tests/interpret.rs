@@ -3501,3 +3501,26 @@ fn transitions_still_match_external_events_by_name_alone() {
     session.send(&event).expect("the event is processed");
     assert_eq!(session.active(), ["done"]);
 }
+
+#[test]
+fn accepts_event_data_judges_an_arriving_event_by_every_transition_handling_it() {
+    // What a host asks the receiving session before it routes another
+    // session's event or delivers its own input (WIT
+    // `session.accepts-event-data`): only the document's transitions
+    // count, matched by descriptor in any state.
+    let ir = machine(
+        &format!(r#"initial="s" {EVENT_NS}"#),
+        &format!(
+            r#"<state id="s"><transition event="go" target="t" {OBJECT_SCHEMA}/></state>
+               <state id="t"><transition event="go.*" event:schema='{{"type":"object","maxProperties":1}}'/>
+                 <transition event="other" event:schema="false"/></state>"#
+        ),
+    );
+    let mut engine = Engine::new(ir).expect("supported");
+    assert!(engine.accepts_event_data("go", &object(r#"{"n":1}"#)));
+    assert!(!engine.accepts_event_data("go", &number(2.0)));
+    assert!(!engine.accepts_event_data("go.sub", &object(r#"{"n":1,"m":2}"#)));
+    assert!(engine.accepts_event_data("go.sub", &object(r#"{"n":1}"#)));
+    assert!(engine.accepts_event_data("elsewhere", &number(2.0)));
+    assert!(!engine.accepts_event_data("other", &DataValue::Absent));
+}

@@ -2,7 +2,7 @@
 
 The implementation report plan of the `event` attribute vocabulary, in the format of the
 [W3C SCXML IRP](../../../tests/conformance/w3c-irp/README.md): 9
-assertions, one per numbered statement of [`../README.md`](../README.md#statements) ("Statements"), tested by 30
+assertions, one per numbered statement of [`../README.md`](../README.md#statements) ("Statements"), tested by 31
 mandatory documents. It runs through exactly the pipeline the W3C IRP runs
 through (the canonical compiler, the shipped Wasm components under the
 Wasmtime session host, the same oracles and report envelope) and is
@@ -46,14 +46,14 @@ scx conformance run --corpus namespaces/event/irp/prepared/xpath \
 ```
 
 The `generate_irp_baselines` example regenerates the baselines with every
-other suite's. The current baselines (manifest SHA-256 `752489322a87da78a2a026b58f6f663e507b2822ac5d092d911088fe3960a50d`,
+other suite's. The current baselines (manifest SHA-256 `52480f387d2f160d6f8d71e39957879ec33cc7aa3a397d7a892bbb3e19042250`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 the canonical release of docs/conformance.md, empty filter identity) measure:
 
 | Data model | Passed / Applicable | Rejections | Not Passing | Corpus digest | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | --- | --- | --- |
-| ECMAScript | 30 / 30 | 17 | 0 | `deed5d764a3e7991a750336b098442c00f7bc688c37f28c340fc0e73bd279e04` | `b1b84a3332c708c15d40311a54115f9376b90f2ae8f406a5a1fe2c1030a906f6` | `a04d3824ad73ec01c8da2ee71b2b350b26e009868d3e4bbe98790fd49bdb0956` |
-| XPath | 30 / 30 | 17 | 0 | `8f38379d291faa6a264c3ca33872f414dd9720cc1ae1f4c98f0dc099baa4ad2f` | `33aee575e73722687ffd3e9d494083456e681008cc31e69a45e311514e40fd71` | `c935e9f949186fae34611ac884593c74aa2d4f63b7abfbd16b82e9d04830d6e1` |
+| ECMAScript | 31 / 31 | 17 | 0 | `455523a0e66ea84c40c48847a76abfa67be153464a75b2f40c0d215a8b19dd90` | `ccc55626562e6daef167e47f54531e5647921b9a7bb0d9a65fc948e1a9056a98` | `f0d549ccaa69dfc5db588886d10956b7f5dd465a34d04ab755c48ace8d44d05b` |
+| XPath | 31 / 31 | 17 | 0 | `4dfa00406c0aaa9bbaddadc18db12bc155b6d82dad1e26970795aa8c0658f04b` | `4ece16e32adc06b5e8e42869b3357c8ec0a5d7c605221069e5fd7bcdc220d16b` | `c72aada3f9488a931a1a3d6e5f5e29e237b1cca37b08bde346e3cf100584fd41` |
 
 The report identity lists no extension component. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
 the suite and its baselines statically, and `irp_components.rs` reproduces

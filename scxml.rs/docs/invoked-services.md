@@ -316,9 +316,9 @@ A package declares no events. The schemas of the events a service sends
 live in the document itself: an `event:schema` on each transition that
 handles them ([namespaces/event](../namespaces/event/README.md)). A
 service's events are not checked against them (a service is not an SCXML
-session; the engine checks only the events a session creates with `<send>`
-and `<raise>`), and transitions match a service's events by name exactly
-as without them.
+session; the checks cover the events SCXML sessions create with `<send>`
+and `<raise>`, and the host's own input), and transitions match a
+service's events by name exactly as without them.
 
 ## What the validator checks
 

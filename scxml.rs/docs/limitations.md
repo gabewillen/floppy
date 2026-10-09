@@ -25,17 +25,17 @@ disagree are in [spec-errata.md](spec-errata.md).
   errata SHA-256
   `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f`,
   producer report digest
-  `db6ef5859982f41f68af1df07c2e0a766179b34f5ccddea1a0d49032b0ffc1b1`,
+  `e3ede7c7940b91d20ba4866e70559deaea2b958ad5187960f3f7282dfed0f2da`,
   and canonical artifact SHA-256
-  `9298381cc9d350677545bb335cd3046ca6474f951fc778501a9921324ed724a9`.
+  `42599ca8ae2c032752b22a886475cf7ecf917d2e66eb28d15167bab673399bc4`.
   The XPath evidence binds corpus digest
   `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca`,
   errata SHA-256
   `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a`,
   producer report digest
-  `71c37788acb475072daf070608d9d40abcfa9e96dded66862662cf0714310e21`,
+  `e638452638539e158b3697c90f23dea0bdf2de7f0ae8632bb32d69ba4c27044f`,
   and canonical artifact SHA-256
-  `abe92b0ab19ae05ddc7f741055530c9724bcbb3572fb1368bcd5f7106c88f4a8`.
+  `759288f4141efb51ffa62952545707f7c4ecb410ad66ed0f2c6ccdaaf71e1e40`.
   The report bytes are checked in under
   [`tests/conformance/w3c-irp/baselines`](../tests/conformance/w3c-irp/baselines).
   These are measured IRP results of the shipped components under the
@@ -390,16 +390,12 @@ In detail:
   schema compiles every `pattern` it holds as a regular expression; the
   work of compiling a pathological pattern is bounded only by the schema's
   size (and, in the components, fuel), not by a pattern-specific bound.
-- At run time a session checks only the events it creates for itself
-  against its own document's transition schemas
-  ([namespaces/event](../namespaces/event/README.md#at-run-time)): an event
-  sent to another session (`#_parent`, `#_<invokeid>`) is not checked
-  against the receiving document's transitions, and neither is an event a
-  host delivers (`scx run` standard input, an embedder's `send`). The
-  sending engine does not have the receiving document, and a host must not
-  judge events itself; closing this gap needs a machine interface the
-  receiving session answers. XML data (the XPath data model's) satisfies
-  only the schema `true`.
+- Run-time `event:schema` contracts
+  ([namespaces/event](../namespaces/event/README.md#at-run-time)) are not
+  checked for an `<invoke autoforward>` copy, the events an invoked
+  service returns, a `BasicHTTP` `<send>`, donedata and done events, or
+  `event:schemaexpr`. XML data (the XPath data model's) satisfies only the
+  schema `true`.
 - A data-model call that exhausts its per-call fuel
   (`DEFAULT_DATA_MODEL_CALL_FUEL`) or otherwise traps ends the session
   (`machine-platform`), not `error.execution`: Wasmtime leaves a trapped
