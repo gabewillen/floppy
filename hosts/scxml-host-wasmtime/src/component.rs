@@ -1964,27 +1964,29 @@ mod tests {
             .parent()
             .and_then(std::path::Path::parent)
             .expect("host crate has a workspace parent");
-        let target = workspace.join("target/component-proof");
-        let status = std::process::Command::new("sh")
-            .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
-            .arg("scxml_machine")
-            .current_dir(workspace)
-            // The Cargo target every host suite builds the release components
-            // in, so they compile once; this suite's artifacts stay its own.
-            .env(
-                "CARGO_TARGET_DIR",
-                workspace.join("target/session-host-proof"),
-            )
-            // This suite's own artifact directory: suites sharing the Cargo
-            // target never rewrite a manifest another suite is reading.
-            .env(
-                "SCXML_WASM_ARTIFACTS_DIR",
-                target.join("wasm-artifacts/component-lifecycle"),
-            )
-            .status()
-            .expect("lifecycle proof can invoke the capability script");
-        assert!(status.success(), "release capability proof must pass");
-        let release = target.join("wasm-artifacts/component-lifecycle");
+        let release = crate::prebuilt::release_dir().unwrap_or_else(|| {
+            let target = workspace.join("target/component-proof");
+            let status = std::process::Command::new("sh")
+                .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+                .arg("scxml_machine")
+                .current_dir(workspace)
+                // The Cargo target every host suite builds the release components
+                // in, so they compile once; this suite's artifacts stay its own.
+                .env(
+                    "CARGO_TARGET_DIR",
+                    workspace.join("target/session-host-proof"),
+                )
+                // This suite's own artifact directory: suites sharing the Cargo
+                // target never rewrite a manifest another suite is reading.
+                .env(
+                    "SCXML_WASM_ARTIFACTS_DIR",
+                    target.join("wasm-artifacts/component-lifecycle"),
+                )
+                .status()
+                .expect("lifecycle proof can invoke the capability script");
+            assert!(status.success(), "release capability proof must pass");
+            target.join("wasm-artifacts/component-lifecycle")
+        });
         let manifest = std::fs::read(release.join("manifest.tsv"))
             .expect("capability script writes its manifest");
         let digest = crate::TrustedManifestDigest::from_hex(&format!(

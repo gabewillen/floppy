@@ -17,6 +17,8 @@
 
 #![cfg(feature = "wasmtime")]
 
+mod prebuilt;
+
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -55,29 +57,32 @@ fn build_artifacts() -> Artifacts {
         .expect("host crate has a workspace parent")
         .to_path_buf();
     let target = workspace.join("target/validator-proof");
-    let directory = target.join("wasm-artifacts/validator-component");
-    let status = Command::new("sh")
-        .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
-        .args([
-            "scxml_data_model_ecmascript",
-            "scxml_data_model_null",
-            "scxml_data_model_xpath",
-            "scxml_validator",
-        ])
-        .current_dir(&workspace)
-        // The Cargo target every host suite builds the release components
-        // in, so they compile once; this suite's artifacts stay its own.
-        .env(
-            "CARGO_TARGET_DIR",
-            workspace.join("target/session-host-proof"),
-        )
-        .env("SCXML_WASM_ARTIFACTS_DIR", &directory)
-        .status()
-        .expect("the capability script runs");
-    assert!(
-        status.success(),
-        "validator and data-model components must verify"
-    );
+    let directory = prebuilt::release_dir().unwrap_or_else(|| {
+        let directory = target.join("wasm-artifacts/validator-component");
+        let status = Command::new("sh")
+            .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+            .args([
+                "scxml_data_model_ecmascript",
+                "scxml_data_model_null",
+                "scxml_data_model_xpath",
+                "scxml_validator",
+            ])
+            .current_dir(&workspace)
+            // The Cargo target every host suite builds the release components
+            // in, so they compile once; this suite's artifacts stay its own.
+            .env(
+                "CARGO_TARGET_DIR",
+                workspace.join("target/session-host-proof"),
+            )
+            .env("SCXML_WASM_ARTIFACTS_DIR", &directory)
+            .status()
+            .expect("the capability script runs");
+        assert!(
+            status.success(),
+            "validator and data-model components must verify"
+        );
+        directory
+    });
     let manifest = read(&directory.join("manifest.tsv"));
     let trusted = TrustedManifestDigest::from_hex(&format!("{:x}", Sha256::digest(&manifest)))
         .expect("manifest digest is canonical");

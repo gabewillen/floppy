@@ -32,6 +32,7 @@
 #![cfg(feature = "wasmtime")]
 
 mod common;
+mod prebuilt;
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -103,30 +104,32 @@ fn build_artifacts() -> Artifacts {
         .parent()
         .and_then(Path::parent)
         .expect("host crate has a workspace parent");
-    let target = workspace.join("target/component-proof");
-    let status = Command::new("sh")
-        .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
-        .arg("scxml_machine")
-        .current_dir(workspace)
-        // The Cargo target every host suite builds the release components
-        // in, so they compile once; this suite's artifacts stay its own.
-        .env(
-            "CARGO_TARGET_DIR",
-            workspace.join("target/session-host-proof"),
-        )
-        // This suite's own artifact directory: suites sharing the Cargo
-        // target never rewrite a manifest another suite is reading.
-        .env(
-            "SCXML_WASM_ARTIFACTS_DIR",
-            target.join("wasm-artifacts/machine-ir-modes"),
-        )
-        .status()
-        .expect("the capability script runs");
-    assert!(
-        status.success(),
-        "release capability and packaging proof must pass"
-    );
-    let release = target.join("wasm-artifacts/machine-ir-modes");
+    let release = prebuilt::release_dir().unwrap_or_else(|| {
+        let target = workspace.join("target/component-proof");
+        let status = Command::new("sh")
+            .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+            .arg("scxml_machine")
+            .current_dir(workspace)
+            // The Cargo target every host suite builds the release components
+            // in, so they compile once; this suite's artifacts stay its own.
+            .env(
+                "CARGO_TARGET_DIR",
+                workspace.join("target/session-host-proof"),
+            )
+            // This suite's own artifact directory: suites sharing the Cargo
+            // target never rewrite a manifest another suite is reading.
+            .env(
+                "SCXML_WASM_ARTIFACTS_DIR",
+                target.join("wasm-artifacts/machine-ir-modes"),
+            )
+            .status()
+            .expect("the capability script runs");
+        assert!(
+            status.success(),
+            "release capability and packaging proof must pass"
+        );
+        target.join("wasm-artifacts/machine-ir-modes")
+    });
     let manifest = read(&release.join("manifest.tsv"));
     let template_bytes = read(&release.join("scxml_machine.virtualized.wasm"));
     let template = authenticate_component(

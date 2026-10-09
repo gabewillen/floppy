@@ -3,6 +3,7 @@
 #![cfg(feature = "wasmtime")]
 
 mod common;
+mod prebuilt;
 
 use std::path::Path;
 use std::process::Command;
@@ -35,26 +36,29 @@ fn build_virtualized_artifacts() -> Artifacts {
         .parent()
         .and_then(Path::parent)
         .expect("host crate has a workspace parent");
-    let target = workspace.join("target/capability-graph-proof");
-    let status = Command::new("sh")
-        .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
-        .args(["scxml_clock", "scxml_ioprocessor_scxml", "scxml_machine"])
-        .current_dir(workspace)
-        // The Cargo target every host suite builds the release components
-        // in, so they compile once; this suite's artifacts stay its own.
-        .env(
-            "CARGO_TARGET_DIR",
-            workspace.join("target/session-host-proof"),
-        )
-        .env(
-            "SCXML_WASM_ARTIFACTS_DIR",
-            target.join("wasm-artifacts/release"),
-        )
-        .status()
-        .expect("capability proof can invoke the artifact verification script");
-    assert!(status.success(), "capability components must verify");
+    let release = prebuilt::release_dir().unwrap_or_else(|| {
+        let target = workspace.join("target/capability-graph-proof");
+        let status = Command::new("sh")
+            .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+            .args(["scxml_clock", "scxml_ioprocessor_scxml", "scxml_machine"])
+            .current_dir(workspace)
+            // The Cargo target every host suite builds the release components
+            // in, so they compile once; this suite's artifacts stay its own.
+            .env(
+                "CARGO_TARGET_DIR",
+                workspace.join("target/session-host-proof"),
+            )
+            .env(
+                "SCXML_WASM_ARTIFACTS_DIR",
+                target.join("wasm-artifacts/release"),
+            )
+            .status()
+            .expect("capability proof can invoke the artifact verification script");
+        assert!(status.success(), "capability components must verify");
+        target.join("wasm-artifacts/release")
+    });
 
-    let manifest = target.join("wasm-artifacts/release/manifest.tsv");
+    let manifest = release.join("manifest.tsv");
     let manifest_bytes = std::fs::read(&manifest).expect("artifact manifest is readable");
     let trusted_digest =
         TrustedManifestDigest::from_hex(&format!("{:x}", Sha256::digest(&manifest_bytes)))

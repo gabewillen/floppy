@@ -242,7 +242,9 @@ pub(crate) fn local_invoked_documents(
     };
     invoked_documents(&base, &String::from_utf8_lossy(source), |url| {
         let child = url.to_file_path().ok()?;
-        let bytes = std::fs::read(&child).ok()?;
+        // The run path's reader: only a regular file is opened, and a child
+        // that cannot be read is skipped as `prefetch` skips it.
+        let bytes = crate::read_source(&child).ok()?;
         let event_schemas = crate::event_schemas::load(&child, &bytes);
         Some(InvokedDocument {
             text: String::from_utf8(bytes).ok()?,

@@ -7,6 +7,8 @@
 
 #![cfg(feature = "wasmtime")]
 
+mod prebuilt;
+
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -33,25 +35,28 @@ fn component() -> &'static AuthenticatedComponent {
             .parent()
             .and_then(Path::parent)
             .expect("host crate has a workspace parent");
-        let target = workspace.join("target/basichttp-proof");
-        let status = Command::new("sh")
-            .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
-            .arg("scxml_ioprocessor_basichttp")
-            .current_dir(workspace)
-            // The Cargo target every host suite builds the release components
-            // in, so they compile once; this suite's artifacts stay its own.
-            .env(
-                "CARGO_TARGET_DIR",
-                workspace.join("target/session-host-proof"),
-            )
-            .env(
-                "SCXML_WASM_ARTIFACTS_DIR",
-                target.join("wasm-artifacts/release"),
-            )
-            .status()
-            .expect("the artifact verification script runs");
-        assert!(status.success(), "the BasicHTTP component must verify");
-        let manifest = target.join("wasm-artifacts/release/manifest.tsv");
+        let release = prebuilt::release_dir().unwrap_or_else(|| {
+            let target = workspace.join("target/basichttp-proof");
+            let status = Command::new("sh")
+                .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+                .arg("scxml_ioprocessor_basichttp")
+                .current_dir(workspace)
+                // The Cargo target every host suite builds the release components
+                // in, so they compile once; this suite's artifacts stay its own.
+                .env(
+                    "CARGO_TARGET_DIR",
+                    workspace.join("target/session-host-proof"),
+                )
+                .env(
+                    "SCXML_WASM_ARTIFACTS_DIR",
+                    target.join("wasm-artifacts/release"),
+                )
+                .status()
+                .expect("the artifact verification script runs");
+            assert!(status.success(), "the BasicHTTP component must verify");
+            target.join("wasm-artifacts/release")
+        });
+        let manifest = release.join("manifest.tsv");
         let manifest_bytes = std::fs::read(&manifest).expect("artifact manifest is readable");
         let trusted =
             TrustedManifestDigest::from_hex(&format!("{:x}", Sha256::digest(&manifest_bytes)))

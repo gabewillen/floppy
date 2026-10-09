@@ -82,18 +82,21 @@ fn codec_bytes() -> Vec<u8> {
                 .parent()
                 .and_then(Path::parent)
                 .expect("host crate has a workspace parent");
-            let target_root = workspace.join("target/session-host-proof");
-            let artifacts = target_root.join("wasm-artifacts/codec-parity");
-            let status = Command::new("sh")
-                .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
-                .arg("--artifacts-dir")
-                .arg(&artifacts)
-                .arg("scxml_snapshot_codec")
-                .current_dir(workspace)
-                .env("CARGO_TARGET_DIR", &target_root)
-                .status()
-                .expect("the capability script runs");
-            assert!(status.success(), "the codec artifact build must pass");
+            let artifacts = crate::prebuilt::release_dir().unwrap_or_else(|| {
+                let target_root = workspace.join("target/session-host-proof");
+                let artifacts = target_root.join("wasm-artifacts/codec-parity");
+                let status = Command::new("sh")
+                    .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+                    .arg("--artifacts-dir")
+                    .arg(&artifacts)
+                    .arg("scxml_snapshot_codec")
+                    .current_dir(workspace)
+                    .env("CARGO_TARGET_DIR", &target_root)
+                    .status()
+                    .expect("the capability script runs");
+                assert!(status.success(), "the codec artifact build must pass");
+                artifacts
+            });
             std::fs::read(artifacts.join("scxml_snapshot_codec.virtualized.wasm"))
                 .expect("the codec artifact is readable")
         })

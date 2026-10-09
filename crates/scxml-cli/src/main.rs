@@ -1159,6 +1159,14 @@ fn read_source(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let span = observe(Module::Cli, Operation::CliReadSource);
     let shown = path.display();
     let result = (|| -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        // Opening a FIFO or a device can block, so only a regular file is
+        // opened; the handle is checked again in case the path changed between.
+        if !fs::metadata(path)
+            .map_err(|error| format!("cannot read `{shown}`: {error}"))?
+            .is_file()
+        {
+            return Err(format!("cannot read `{shown}`: not a regular file").into());
+        }
         let mut file =
             fs::File::open(path).map_err(|error| format!("cannot read `{shown}`: {error}"))?;
         let metadata = file

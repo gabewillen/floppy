@@ -14,6 +14,37 @@ Thank you for your interest in contributing. Before you start:
 - Contributions are dual licensed under Apache-2.0 OR MIT, as described in the
   [README](README.md#license).
 
+## Fast proof and full proof
+
+Two tiers of local proof run the same tests; they differ in how many of the
+CI steps they repeat.
+
+The **fast proof** is the everyday one, for each slice of work: format, lint,
+and every workspace test, all against one release built and verified once
+(see `SCXML_COMPONENTS_DIR` below):
+
+```console
+sh scripts/verify-wasm-capabilities.sh
+export SCXML_COMPONENTS_DIR="${CARGO_TARGET_DIR:-$PWD/target}/wasm-artifacts/release"
+export SCXML_COMPONENTS_MANIFEST_SHA256=$(shasum -a 256 "$SCXML_COMPONENTS_DIR/manifest.tsv" | cut -d ' ' -f 1)
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --all-targets --locked
+```
+
+The workspace test run already includes the Wasmtime host's tests with the
+`wasmtime` and `http` features (the CLI's default features enable them), the
+conformance tests through the components, and the UI goldens. On a host other
+than the canonical Linux x86_64 build, `irp_components.rs`'s byte-for-byte
+baseline identity checks fail by design (see the `irp-components` job below);
+every case result still reproduces.
+
+The **full proof** is every step of the `rust`, `wasm32-tests`,
+`wasm-components`, `irp-components`, and `browser-host` jobs below, exactly as
+CI runs them. Run it at phase and release boundaries, before claiming
+completion for a surface (AGENTS.md), and whenever a change can move component
+bytes, the IRP baselines, or a published contract.
+
 ## Required workspace proof
 
 Rust 1.98, `rustfmt`, `clippy`, and `wasm32-wasip2` are pinned by
@@ -172,7 +203,20 @@ its own artifacts directory; each test suite that builds components does, so
 no suite reads a manifest another suite is rewriting. The script also gives
 each run its own `TMPDIR` inside that directory, because the pinned
 `wasi-virt` passes components to `wasm-opt` through a fixed temporary file
-name and concurrent runs sharing one temporary directory fail.
+name and concurrent runs sharing one temporary directory fail. A rerun over
+unchanged components leaves every artifact and the manifest untouched
+(byte-identical outputs are not rewritten), so it does not make Cargo rebuild
+the `scx` that embeds them; its packaging CLI is built with
+`SCXML_WASM_ARTIFACTS_DIR` unset, since that build embeds nothing.
+
+With `SCXML_COMPONENTS_DIR` naming a release directory the script wrote with
+no component arguments and `SCXML_COMPONENTS_MANIFEST_SHA256` the SHA-256 of
+its `manifest.tsv`, every test suite that runs components (the Wasmtime host's
+unit and integration tests, the CLI's, and the conformance tests) reads them
+from that one directory instead of running the script into its own; a suite
+fails when the manifest does not have the trusted digest. The one exception is
+`component_execution.rs`, which proves the script's single-component manifest
+and always builds its own.
 
 The required `irp-components` job is the conformance gate. It builds and
 verifies the eight release components the conformance executor links and

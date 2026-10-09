@@ -22,6 +22,8 @@
 )]
 #![cfg(all(feature = "wasmtime", target_os = "linux"))]
 
+mod prebuilt;
+
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -77,18 +79,21 @@ fn components() -> ReleaseComponents {
         .parent()
         .and_then(Path::parent)
         .expect("host crate has a workspace parent");
-    let target = workspace.join("target/session-host-proof");
-    let release = target.join("wasm-artifacts/linear-memory-mappings");
-    let status = Command::new("sh")
-        .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
-        .arg("--artifacts-dir")
-        .arg(&release)
-        .args(COMPONENTS)
-        .current_dir(workspace)
-        .env("CARGO_TARGET_DIR", &target)
-        .status()
-        .expect("the capability script runs");
-    assert!(status.success(), "the release capability proof must pass");
+    let release = prebuilt::release_dir().unwrap_or_else(|| {
+        let target = workspace.join("target/session-host-proof");
+        let release = target.join("wasm-artifacts/linear-memory-mappings");
+        let status = Command::new("sh")
+            .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+            .arg("--artifacts-dir")
+            .arg(&release)
+            .args(COMPONENTS)
+            .current_dir(workspace)
+            .env("CARGO_TARGET_DIR", &target)
+            .status()
+            .expect("the capability script runs");
+        assert!(status.success(), "the release capability proof must pass");
+        release
+    });
     let manifest = std::fs::read(release.join("manifest.tsv")).expect("manifest is readable");
     let trusted = TrustedManifestDigest::from_hex(&format!("{:x}", Sha256::digest(&manifest)))
         .expect("manifest digest is canonical");

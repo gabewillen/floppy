@@ -28,8 +28,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use scxml_reporting::explain;
 use scxml_reporting::{Applicability, ArtifactEnvelope, decode_canonical};
@@ -297,9 +300,7 @@ fn check_rustfix(
         return;
     }
     compare(&fixed_snapshot, fixed_source.as_bytes(), failures);
-    let fixed_dir = root.join("target/ui-rustfix");
-    fs::create_dir_all(&fixed_dir).expect("rustfix scratch directory must be creatable");
-    mirror_schema_files(root, &fixed_dir);
+    let fixed_dir = root.join(RUSTFIX_DIR);
     let fixed_path = fixed_dir.join(format!("{case}.scx"));
     fs::write(&fixed_path, &fixed_source).expect("fixed source must be writable");
     let fixed_relative = fixed_path
@@ -368,6 +369,23 @@ const MAYBE_INCORRECT_EXCEPTIONS: &[(&str, &str, &str)] = &[(
 /// The JSON Schema files the cases' `event:schema` references name relative
 /// to `tests/ui` (`tests/ui/event-schemas`), copied beside the fixed sources
 /// in `dir`, so a fixed source resolves them exactly as its case does.
+/// The scratch directory of the machine-applicable rustfix round trips.
+const RUSTFIX_DIR: &str = "target/ui-rustfix";
+
+/// The scratch directory of the per-fix round trips.
+const EACH_FIX_DIR: &str = "target/ui-each-fix";
+
+/// Creates both fix scratch directories with their schema mirrors once,
+/// before any case runs: the cases run concurrently, and each writes only
+/// files named after itself.
+fn prepare_fix_scratch(root: &Path) {
+    for dir in [RUSTFIX_DIR, EACH_FIX_DIR] {
+        let dir = root.join(dir);
+        fs::create_dir_all(&dir).expect("fix scratch directory must be creatable");
+        mirror_schema_files(root, &dir);
+    }
+}
+
 fn mirror_schema_files(root: &Path, dir: &Path) {
     let source = root.join("tests/ui/event-schemas");
     let target = dir.join("event-schemas");
@@ -398,9 +416,7 @@ fn check_each_fix_round_trip(
     let payload = report
         .validator_payload()
         .expect("UI snapshots are validator artifacts");
-    let fixed_dir = root.join("target/ui-each-fix");
-    fs::create_dir_all(&fixed_dir).expect("per-fix scratch directory must be creatable");
-    mirror_schema_files(root, &fixed_dir);
+    let fixed_dir = root.join(EACH_FIX_DIR);
     let before = code_counts(report, false);
     for (diagnostic_index, diagnostic) in payload.diagnostics.iter().enumerate() {
         for (fix_index, fix) in diagnostic.fixes.iter().enumerate() {
@@ -565,45 +581,88 @@ fn check_coverage(observed_codes: &BTreeSet<String>) {
     }
 }
 
+/// The mismatches one case found and the diagnostic codes it observed.
+type CaseResult = (Vec<String>, BTreeSet<String>);
+
+/// Checks one case: its snapshots, its must-not-fire rule, and its fix round
+/// trips. Returns the mismatches it found and the codes it observed.
+fn check_case(root: &Path, case: &str) -> CaseResult {
+    let mut failures = Vec::new();
+    let source = fs::read_to_string(root.join(format!("tests/ui/{case}.scx")))
+        .expect("UI case must be UTF-8");
+    let args = case_args(&source);
+    let report = check_snapshots(root, case, &args, &mut failures);
+    if case.starts_with("valid-") {
+        let diagnostics = &report
+            .validator_payload()
+            .expect("validator payload")
+            .diagnostics;
+        if !diagnostics.is_empty() {
+            failures.push(format!(
+                "{case}: must-not-fire case produced {:?}",
+                diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.code.as_str())
+                    .collect::<Vec<_>>()
+            ));
+        }
+    }
+    let observed_codes = report
+        .validator_payload()
+        .expect("validator payload")
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.clone())
+        .collect();
+    check_rustfix(root, case, &args, &report, &mut failures);
+    check_each_fix_round_trip(root, case, &args, &report, &mut failures);
+    (failures, observed_codes)
+}
+
 #[test]
 fn ui_snapshots_round_trips_and_code_coverage() {
     let root = workspace_root();
-    let mut failures = Vec::new();
-    let mut observed_codes = BTreeSet::new();
     let cases = cases(&root);
     assert!(!cases.is_empty(), "tests/ui must contain cases");
-    for case in &cases {
-        let source = fs::read_to_string(root.join(format!("tests/ui/{case}.scx")))
-            .expect("UI case must be UTF-8");
-        let args = case_args(&source);
-        let report = check_snapshots(&root, case, &args, &mut failures);
-        if case.starts_with("valid-") {
-            let diagnostics = &report
-                .validator_payload()
-                .expect("validator payload")
-                .diagnostics;
-            if !diagnostics.is_empty() {
-                failures.push(format!(
-                    "{case}: must-not-fire case produced {:?}",
-                    diagnostics
-                        .iter()
-                        .map(|diagnostic| diagnostic.code.as_str())
-                        .collect::<Vec<_>>()
-                ));
-            }
+    prepare_fix_scratch(&root);
+    // Every case is independent (its own `scx` processes and scratch
+    // files), so the cases run on a pool of threads; their results are
+    // merged in case order, so the report reads as a sequential run's.
+    let next = AtomicUsize::new(0);
+    let results: Vec<Mutex<Option<CaseResult>>> = cases.iter().map(|_| Mutex::new(None)).collect();
+    let workers = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
+    let mut observed_codes = BTreeSet::new();
+    std::thread::scope(|scope| {
+        let generated = scope.spawn(|| {
+            let mut codes = BTreeSet::new();
+            check_generated_budget_cases(&root, &mut codes);
+            codes
+        });
+        for _ in 0..workers {
+            scope.spawn(|| {
+                loop {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(case) = cases.get(index) else { break };
+                    let result = check_case(&root, case);
+                    *results[index]
+                        .lock()
+                        .expect("no case panicked holding its slot") = Some(result);
+                }
+            });
         }
-        observed_codes.extend(
-            report
-                .validator_payload()
-                .expect("validator payload")
-                .diagnostics
-                .iter()
-                .map(|diagnostic| diagnostic.code.clone()),
-        );
-        check_rustfix(&root, case, &args, &report, &mut failures);
-        check_each_fix_round_trip(&root, case, &args, &report, &mut failures);
+        observed_codes = generated
+            .join()
+            .expect("the generated budget cases complete");
+    });
+    let mut failures = Vec::new();
+    for slot in results {
+        let (case_failures, case_codes) = slot
+            .into_inner()
+            .expect("no case panicked holding its slot")
+            .expect("every case ran");
+        failures.extend(case_failures);
+        observed_codes.extend(case_codes);
     }
-    check_generated_budget_cases(&root, &mut observed_codes);
     assert!(
         failures.is_empty(),
         "{} UI snapshot mismatch(es):\n\n{}",

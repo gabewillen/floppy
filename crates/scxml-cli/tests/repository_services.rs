@@ -23,6 +23,10 @@
 //! mock: the null data model's release component repackaged as
 //! `example`, pinned by tag or tagless, and run.
 
+// The run's shared release (`SCXML_COMPONENTS_DIR`), one helper for every suite.
+#[path = "../../../hosts/scxml-host-wasmtime/tests/prebuilt/mod.rs"]
+mod prebuilt;
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
@@ -74,17 +78,20 @@ fn release() -> &'static Release {
     static RELEASE: OnceLock<Release> = OnceLock::new();
     RELEASE.get_or_init(|| {
         let workspace = workspace();
-        let target = workspace.join("target/cli-components");
-        let dir = target.join("wasm-artifacts/repository-services");
-        let status = Command::new("sh")
-            .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
-            .args(COMPONENTS)
-            .current_dir(&workspace)
-            .env("CARGO_TARGET_DIR", &target)
-            .env("SCXML_WASM_ARTIFACTS_DIR", &dir)
-            .status()
-            .expect("the capability script runs");
-        assert!(status.success(), "the release capability proof must pass");
+        let dir = prebuilt::release_dir().unwrap_or_else(|| {
+            let target = workspace.join("target/cli-components");
+            let dir = target.join("wasm-artifacts/repository-services");
+            let status = Command::new("sh")
+                .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+                .args(COMPONENTS)
+                .current_dir(&workspace)
+                .env("CARGO_TARGET_DIR", &target)
+                .env("SCXML_WASM_ARTIFACTS_DIR", &dir)
+                .status()
+                .expect("the capability script runs");
+            assert!(status.success(), "the release capability proof must pass");
+            dir
+        });
         let manifest = fs::read_to_string(dir.join("manifest.tsv")).expect("manifest");
         Release {
             dir: dir.display().to_string(),

@@ -203,6 +203,11 @@ pub use basichttp::{
 mod capability_graph;
 #[cfg(feature = "wasmtime")]
 mod session_host;
+// The unit tests that run components read the run's shared release when the
+// environment names one, as the integration tests do.
+#[cfg(all(test, feature = "wasmtime"))]
+#[path = "../tests/prebuilt/mod.rs"]
+mod prebuilt;
 #[cfg(feature = "wasmtime")]
 pub use capability_graph::{
     CapabilityGraphComponents, CapabilityGraphExecution, execute_capability_graph,

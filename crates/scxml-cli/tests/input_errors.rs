@@ -118,3 +118,98 @@ fn a_missing_file_names_its_path() {
         "{stderr}"
     );
 }
+
+/// Runs `scx validate` and kills it after a bound, so a read that never ends
+/// fails the test instead of hanging it; `None` when it did not finish.
+#[cfg(unix)]
+fn validate_within(root: &Path, relative: &str, bound: std::time::Duration) -> Option<Output> {
+    use std::process::Stdio;
+    use std::time::Instant;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_scx"))
+        .current_dir(root)
+        .args(["validate", relative, "--format", "json"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("scx must run");
+    let deadline = Instant::now() + bound;
+    while child.try_wait().expect("scx must be waitable").is_none() {
+        if Instant::now() > deadline {
+            child.kill().expect("a hung scx must be killable");
+            child.wait().expect("a killed scx must be reaped");
+            return None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    Some(
+        child
+            .wait_with_output()
+            .expect("scx output must be readable"),
+    )
+}
+
+/// A FIFO in the fixture directory, replacing any left by an earlier run.
+#[cfg(unix)]
+fn fifo(path: &Path) {
+    let _ = fs::remove_file(path);
+    let status = Command::new("mkfifo")
+        .arg(path)
+        .status()
+        .expect("mkfifo must run");
+    assert!(status.success(), "mkfifo must create {}", path.display());
+}
+
+/// A root source that is a FIFO is refused as not a regular file instead of
+/// blocking on the open.
+#[cfg(unix)]
+#[test]
+fn a_fifo_source_is_refused_without_blocking() {
+    let root = workspace_root();
+    let directory = root.join("target/cli-input-errors/fifo-root");
+    fs::create_dir_all(&directory).expect("fixture directory must be creatable");
+    fifo(&directory.join("root.scxml"));
+    let output = validate_within(
+        &root,
+        "target/cli-input-errors/fifo-root/root.scxml",
+        std::time::Duration::from_secs(120),
+    )
+    .expect("validate must not block on a FIFO source");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8(output.stderr).expect("stderr is UTF-8");
+    assert!(stderr.contains("not a regular file"), "{stderr}");
+}
+
+/// A literal `<invoke src>` naming a FIFO or a device is not read: the child
+/// is skipped as the run path skips it, and validation finishes.
+#[cfg(unix)]
+#[test]
+fn an_invoked_document_that_is_not_a_regular_file_is_skipped() {
+    let root = workspace_root();
+    let directory = root.join("target/cli-input-errors/invoke-special");
+    fs::create_dir_all(&directory).expect("fixture directory must be creatable");
+    fifo(&directory.join("child.scxml"));
+    // The bounds are wide because a loaded host can delay a debug `scx` by
+    // tens of seconds; an unbounded read of `/dev/zero` grows memory by
+    // gigabytes a second, so that case is killed sooner than a blocked open.
+    for (name, src, bound) in [
+        ("fifo.scxml", "child.scxml", 120),
+        ("zero.scxml", "file:///dev/zero", 20),
+    ] {
+        fs::write(
+            directory.join(name),
+            format!(
+                r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="s"><state id="s"><invoke src="{src}"/></state></scxml>"#
+            ),
+        )
+        .expect("fixture must be writable");
+        let relative = format!("target/cli-input-errors/invoke-special/{name}");
+        let output = validate_within(&root, &relative, std::time::Duration::from_secs(bound))
+            .unwrap_or_else(|| panic!("validate must not block reading `{src}`"));
+        assert!(
+            matches!(output.status.code(), Some(0 | 1)),
+            "{name}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        decode_canonical(&output.stdout).expect("json is a canonical report");
+    }
+}
