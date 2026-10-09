@@ -32,6 +32,8 @@
 
 #![cfg(feature = "wasmtime")]
 
+mod prebuilt;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
@@ -74,32 +76,34 @@ fn build_artifacts() -> Artifacts {
         .and_then(Path::parent)
         .expect("host crate has a workspace parent")
         .to_path_buf();
-    let target = workspace.join("target/data-model-proof");
-    let status = Command::new("sh")
-        .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
-        .args([
-            "scxml_data_model_ecmascript",
-            "scxml_data_model_null",
-            "scxml_data_model_xpath",
-            "scxml_machine",
-        ])
-        .current_dir(&workspace)
-        // The Cargo target every host suite builds the release components
-        // in, so they compile once; this suite's artifacts stay its own.
-        .env(
-            "CARGO_TARGET_DIR",
-            workspace.join("target/session-host-proof"),
-        )
-        // This suite's own artifact directory: suites sharing the Cargo
-        // target never rewrite a manifest another suite is reading.
-        .env(
-            "SCXML_WASM_ARTIFACTS_DIR",
-            target.join("wasm-artifacts/data-model-component"),
-        )
-        .status()
-        .expect("the capability script runs");
-    assert!(status.success(), "data-model components must verify");
-    let release = target.join("wasm-artifacts/data-model-component");
+    let release = prebuilt::release_dir().unwrap_or_else(|| {
+        let target = workspace.join("target/data-model-proof");
+        let status = Command::new("sh")
+            .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+            .args([
+                "scxml_data_model_ecmascript",
+                "scxml_data_model_null",
+                "scxml_data_model_xpath",
+                "scxml_machine",
+            ])
+            .current_dir(&workspace)
+            // The Cargo target every host suite builds the release components
+            // in, so they compile once; this suite's artifacts stay its own.
+            .env(
+                "CARGO_TARGET_DIR",
+                workspace.join("target/session-host-proof"),
+            )
+            // This suite's own artifact directory: suites sharing the Cargo
+            // target never rewrite a manifest another suite is reading.
+            .env(
+                "SCXML_WASM_ARTIFACTS_DIR",
+                target.join("wasm-artifacts/data-model-component"),
+            )
+            .status()
+            .expect("the capability script runs");
+        assert!(status.success(), "data-model components must verify");
+        target.join("wasm-artifacts/data-model-component")
+    });
     let manifest = read(&release.join("manifest.tsv"));
     let trusted = TrustedManifestDigest::from_hex(&format!("{:x}", Sha256::digest(&manifest)))
         .expect("manifest digest is canonical");

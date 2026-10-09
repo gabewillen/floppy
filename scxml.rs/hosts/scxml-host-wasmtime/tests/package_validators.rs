@@ -10,6 +10,8 @@
 
 #![cfg(feature = "wasmtime")]
 
+mod prebuilt;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, OnceLock};
@@ -49,23 +51,26 @@ fn build_artifacts() -> Artifacts {
         .and_then(Path::parent)
         .expect("host crate has a workspace parent")
         .to_path_buf();
-    let directory = workspace.join("target/validator-proof/wasm-artifacts/package-validators");
-    let status = Command::new("sh")
-        .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
-        .args([
-            "scxml_extension_example",
-            "scxml_package_validator_example",
-            "scxml_validator",
-        ])
-        .current_dir(&workspace)
-        .env(
-            "CARGO_TARGET_DIR",
-            workspace.join("target/session-host-proof"),
-        )
-        .env("SCXML_WASM_ARTIFACTS_DIR", &directory)
-        .status()
-        .expect("the capability script runs");
-    assert!(status.success(), "the components must verify");
+    let directory = prebuilt::release_dir().unwrap_or_else(|| {
+        let directory = workspace.join("target/validator-proof/wasm-artifacts/package-validators");
+        let status = Command::new("sh")
+            .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+            .args([
+                "scxml_extension_example",
+                "scxml_package_validator_example",
+                "scxml_validator",
+            ])
+            .current_dir(&workspace)
+            .env(
+                "CARGO_TARGET_DIR",
+                workspace.join("target/session-host-proof"),
+            )
+            .env("SCXML_WASM_ARTIFACTS_DIR", &directory)
+            .status()
+            .expect("the capability script runs");
+        assert!(status.success(), "the components must verify");
+        directory
+    });
     let manifest = read(&directory.join("manifest.tsv"));
     let trusted = TrustedManifestDigest::from_hex(&format!("{:x}", Sha256::digest(&manifest)))
         .expect("manifest digest is canonical");

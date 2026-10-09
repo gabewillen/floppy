@@ -17,6 +17,8 @@
 )]
 #![cfg(feature = "wasmtime")]
 
+mod prebuilt;
+
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, mpsc};
@@ -53,16 +55,18 @@ fn release_components() -> ReleaseComponents {
         .parent()
         .and_then(Path::parent)
         .expect("host crate has a workspace parent");
-    let target = workspace.join("target/session-host-proof");
-    let status = Command::new("sh")
-        .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
-        .args(COMPONENTS)
-        .current_dir(workspace)
-        .env("CARGO_TARGET_DIR", &target)
-        .status()
-        .expect("the capability script runs");
-    assert!(status.success(), "the release capability proof must pass");
-    let release = target.join("wasm-artifacts/release");
+    let release = prebuilt::release_dir().unwrap_or_else(|| {
+        let target = workspace.join("target/session-host-proof");
+        let status = Command::new("sh")
+            .arg(workspace.join("scripts/verify-wasm-capabilities.sh"))
+            .args(COMPONENTS)
+            .current_dir(workspace)
+            .env("CARGO_TARGET_DIR", &target)
+            .status()
+            .expect("the capability script runs");
+        assert!(status.success(), "the release capability proof must pass");
+        target.join("wasm-artifacts/release")
+    });
     let manifest = std::fs::read(release.join("manifest.tsv")).expect("manifest is readable");
     let trusted = TrustedManifestDigest::from_hex(&format!("{:x}", Sha256::digest(&manifest)))
         .expect("manifest digest is canonical");

@@ -12,6 +12,8 @@
 )]
 #![cfg(feature = "wasmtime")]
 
+mod prebuilt;
+
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
@@ -68,19 +70,22 @@ fn workspace() -> &'static Path {
 fn release() -> &'static Release {
     static RELEASE: OnceLock<Release> = OnceLock::new();
     RELEASE.get_or_init(|| {
-        let target = workspace().join("target/session-host-proof");
-        let artifacts = target.join("wasm-artifacts/namespace-extension components");
-        let status = Command::new("sh")
-            .arg(workspace().join("scripts/verify-wasm-capabilities.sh"))
-            .args(COMPONENTS.iter().map(|(_, name)| *name))
-            .current_dir(workspace())
-            .env("CARGO_TARGET_DIR", &target)
-            // This suite's own artifact directory: suites sharing the Cargo
-            // target never rewrite a manifest another suite is reading.
-            .env("SCXML_WASM_ARTIFACTS_DIR", &artifacts)
-            .status()
-            .expect("the capability script runs");
-        assert!(status.success(), "the release capability proof must pass");
+        let artifacts = prebuilt::release_dir().unwrap_or_else(|| {
+            let target = workspace().join("target/session-host-proof");
+            let artifacts = target.join("wasm-artifacts/namespace-extension components");
+            let status = Command::new("sh")
+                .arg(workspace().join("scripts/verify-wasm-capabilities.sh"))
+                .args(COMPONENTS.iter().map(|(_, name)| *name))
+                .current_dir(workspace())
+                .env("CARGO_TARGET_DIR", &target)
+                // This suite's own artifact directory: suites sharing the Cargo
+                // target never rewrite a manifest another suite is reading.
+                .env("SCXML_WASM_ARTIFACTS_DIR", &artifacts)
+                .status()
+                .expect("the capability script runs");
+            assert!(status.success(), "the release capability proof must pass");
+            artifacts
+        });
         let manifest = std::fs::read(artifacts.join("manifest.tsv")).expect("manifest is readable");
         let trusted = TrustedManifestDigest::from_hex(&format!("{:x}", Sha256::digest(&manifest)))
             .expect("manifest digest is canonical");

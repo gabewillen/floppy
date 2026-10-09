@@ -18,6 +18,9 @@
 mod common;
 
 use std::collections::BTreeMap;
+use std::num::NonZeroUsize;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use scxml_compiler_core::lower;
 use scxml_syntax::{SourceId, SourceText, is_xml_space, parse_xml};
@@ -1695,54 +1698,100 @@ fn the_validator_mirrors_the_compiler_bounds() {
     );
 }
 
+/// Checks one document of `key`'s entry and returns what it found wrong.
+fn check_rejection_document(key: &str, label: &str, source: &str, code: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let document = match parse_xml(SourceText::new(SOURCE, "case.scxml", source)) {
+        Ok(document) => document,
+        Err(error) => {
+            failures.push(format!("{label}: not well-formed: {error:?}"));
+            return failures;
+        }
+    };
+    if !cfg!(target_arch = "wasm32") && is_bound_key(key) {
+        native_bound_document(label, source, &document, &mut failures);
+        return failures;
+    }
+    match lower(&document) {
+        Ok(_) => failures.push(format!("{label}: lowering accepted it")),
+        Err(error) if !format!("{error:?}").contains(key) => {
+            failures.push(format!("{label}: lowering failed with {error:?} first"));
+        }
+        Err(_) => {}
+    }
+    let report = common::validate(source);
+    let errors: Vec<&str> = report
+        .diagnostics()
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == Severity::Error)
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect();
+    if !errors.iter().any(|found| found.starts_with(code)) {
+        failures.push(format!(
+            "{label}: validate reports no {code} error, only {errors:?}"
+        ));
+    }
+    let output = common::compile(source);
+    if output
+        .validation
+        .report
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.code == "COMP001")
+    {
+        failures.push(format!("{label}: compile reached lowering (COMP001)"));
+    }
+    failures
+}
+
 #[test]
 fn every_reachable_lowering_rejection_is_a_validator_error() {
-    let mut failures = Vec::new();
-    for entry in table() {
-        for (index, (source, code)) in entry.documents.iter().enumerate() {
-            let label = format!("`{}` document {index}", entry.key);
-            let document = match parse_xml(SourceText::new(SOURCE, "case.scxml", source.as_str())) {
-                Ok(document) => document,
-                Err(error) => {
-                    failures.push(format!("{label}: not well-formed: {error:?}"));
-                    continue;
-                }
-            };
-            if !cfg!(target_arch = "wasm32") && is_bound_key(entry.key) {
-                native_bound_document(&label, source, &document, &mut failures);
-                continue;
-            }
-            match lower(&document) {
-                Ok(_) => failures.push(format!("{label}: lowering accepted it")),
-                Err(error) if !format!("{error:?}").contains(entry.key) => {
-                    failures.push(format!("{label}: lowering failed with {error:?} first"));
-                }
-                Err(_) => {}
-            }
-            let report = common::validate(source);
-            let errors: Vec<&str> = report
-                .diagnostics()
+    let table = table();
+    let documents: Vec<(&str, String, &str, &str)> = table
+        .iter()
+        .flat_map(|entry| {
+            entry
+                .documents
                 .iter()
-                .filter(|diagnostic| diagnostic.severity == Severity::Error)
-                .map(|diagnostic| diagnostic.code.as_str())
-                .collect();
-            if !errors.iter().any(|found| found.starts_with(code)) {
-                failures.push(format!(
-                    "{label}: validate reports no {code} error, only {errors:?}"
-                ));
-            }
-            let output = common::compile(source);
-            if output
-                .validation
-                .report
-                .diagnostics()
-                .iter()
-                .any(|diagnostic| diagnostic.code == "COMP001")
-            {
-                failures.push(format!("{label}: compile reached lowering (COMP001)"));
-            }
+                .enumerate()
+                .map(|(index, (source, code))| {
+                    (
+                        entry.key,
+                        format!("`{}` document {index}", entry.key),
+                        source.as_str(),
+                        *code,
+                    )
+                })
+        })
+        .collect();
+    // Every document is checked on its own, so they run on a pool of
+    // threads; the findings are reported in table order.
+    let next = AtomicUsize::new(0);
+    let results: Vec<Mutex<Vec<String>>> = documents.iter().map(|_| Mutex::default()).collect();
+    let workers = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            scope.spawn(|| {
+                loop {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    let Some((key, label, source, code)) = documents.get(index) else {
+                        break;
+                    };
+                    *results[index]
+                        .lock()
+                        .expect("no check panicked holding its slot") =
+                        check_rejection_document(key, label, source, code);
+                }
+            });
         }
-    }
+    });
+    let failures: Vec<String> = results
+        .into_iter()
+        .flat_map(|slot| {
+            slot.into_inner()
+                .expect("no check panicked holding its slot")
+        })
+        .collect();
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 

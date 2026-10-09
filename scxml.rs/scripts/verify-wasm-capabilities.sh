@@ -147,7 +147,18 @@ rm -rf "$run_tmp"
 mkdir -p "$run_tmp"
 TMPDIR=$run_tmp
 export TMPDIR
-trap 'rm -rf "$run_tmp"; rm -f "$manifest_tmp" "$proof_dir"/*.determinism-check.wasm "$packaged_dir"/*.determinism-check.*' EXIT HUP INT TERM
+trap 'rm -rf "$run_tmp"; rm -f "$manifest_tmp" "$proof_dir"/*.fresh.wasm "$proof_dir"/*.determinism-check.wasm "$packaged_dir"/*.determinism-check.*' EXIT HUP INT TERM
+
+# Usage: publish NEW PATH
+#
+# Moves NEW to PATH unless PATH already holds exactly the same bytes, in
+# which case NEW is removed and PATH keeps its modification time. Cargo
+# reruns a build script that embeds these files (crates/scxml-cli/build.rs)
+# when their modification time changes, so rerunning this script over
+# unchanged components must not touch them.
+publish() {
+    if cmp -s "$1" "$2"; then rm -f "$1"; else mv "$1" "$2"; fi
+}
 
 expected_imports() {
     case "$1" in
@@ -297,6 +308,15 @@ in_manifest() {
     esac
 }
 
+# The packaging CLI below embeds no components (`--no-default-features`), so
+# the caller's SCXML_WASM_ARTIFACTS_DIR is not an input of its build. It is
+# unset for that build: scxml-cli's build script reruns when the variable
+# changes, so every caller naming its own artifacts directory would otherwise
+# recompile the CLI in a shared Cargo target.
+build_packaging_cli() {
+    (unset SCXML_WASM_ARTIFACTS_DIR; cargo build --locked -p scxml-cli --no-default-features)
+}
+
 artifact_count=0
 for component in $components; do
     expected_imports "$component" >/dev/null
@@ -324,6 +344,7 @@ done
 for component in $components; do
     raw="$release_dir/$component.wasm"
     virtualized="$proof_dir/$component.virtualized.wasm"
+    fresh="$proof_dir/$component.fresh.wasm"
     repeat="$proof_dir/$component.determinism-check.wasm"
     test -f "$raw" || { echo "missing release component artifact: $raw" >&2; exit 1; }
 
@@ -361,14 +382,15 @@ for component in $components; do
         # deny-all provider instead (see the .wat header).
         deny="$proof_dir/wasi-cli-deny.wasm"
         wasm-tools parse "$workspace/components/scxml-service-files/wasi-cli-deny.wat" -o "$deny"
-        wasm-tools compose "$virt_input" -d "$deny" -o "$virtualized" >/dev/null 2>&1
+        wasm-tools compose "$virt_input" -d "$deny" -o "$fresh" >/dev/null 2>&1
         wasm-tools compose "$virt_input" -d "$deny" -o "$repeat" >/dev/null 2>&1
     else
         # No other component passes a WASI interface through to its host.
-        wasi-virt "$virt_input" -o "$virtualized"
+        wasi-virt "$virt_input" -o "$fresh"
         wasi-virt "$virt_input" -o "$repeat"
     fi
-    cmp -s "$virtualized" "$repeat" || { echo "non-deterministic wasi-virt output: $component" >&2; exit 1; }
+    cmp -s "$fresh" "$repeat" || { echo "non-deterministic wasi-virt output: $component" >&2; exit 1; }
+    publish "$fresh" "$virtualized"
     wasm-tools validate --features component-model,cm-async "$virtualized"
     world=$(wasm-tools component wit "$virtualized")
     imports=$(printf '%s\n' "$world" | sed -n 's/^  import \(.*\);$/\1/p')
@@ -400,7 +422,7 @@ for component in $components; do
     printf 'verified %s sha256=%s bytes=%s\n' "$component" "$digest" "$size"
 done
 
-mv "$manifest_tmp" "$manifest"
+publish "$manifest_tmp" "$manifest"
 manifest_digest=$(sha256_file "$manifest")
 printf 'artifact-manifest path=%s sha256=%s\n' "$manifest" "$manifest_digest"
 
@@ -423,7 +445,7 @@ case " $components " in
         packaged="$packaged_dir/representative-machine.component.wasm"
         report="$packaged_dir/representative-machine.component.report.json"
         mkdir -p "$packaged_dir"
-        cargo build --locked -p scxml-cli --no-default-features
+        build_packaging_cli
         cli="$target_root/debug/scx"
         package() {
             "$cli" compile "$fixture" --policy off --artifact component-wasm \
@@ -483,7 +505,7 @@ case "$has_machine$has_script" in
         fixture="$workspace/tests/fixtures/script-machine.scx"
         scripted_dir="$proof_dir/scripted"
         mkdir -p "$scripted_dir"
-        cargo build --locked -p scxml-cli --no-default-features
+        build_packaging_cli
         cli="$target_root/debug/scx"
         pinned_ir="$scripted_dir/script-machine.scxml-ir.json"
         runtime_ir="$scripted_dir/script-machine.runtime.scxml-ir.json"
