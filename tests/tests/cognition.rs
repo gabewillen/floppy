@@ -275,7 +275,14 @@ impl Mock {
     /// trace's count), waits until that many arrived, at most [`WAIT`];
     /// without it (blessing), until none arrived for [`SETTLE`].
     fn settle(&self, expected: Option<usize>) {
-        let count = || self.received.lock().expect("the log lock").len();
+        let count = || {
+            self.received
+                .lock()
+                .expect("the log lock")
+                .iter()
+                .filter(|request| pinned(&request.target))
+                .count()
+        };
         let start = Instant::now();
         let mut seen = count();
         let mut quiet = Instant::now();
@@ -443,14 +450,23 @@ fn strings(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
 }
 
-/// Closes the run and asserts its pinned trace, with every request the
-/// mock received.
+/// Whether a request to `target` is pinned in a trace. A request to a
+/// backend that never answers is not: a stage cancelled or timed out
+/// before its service sends it (a load-dependent race) never makes it.
+fn pinned(target: &str) -> bool {
+    !target.starts_with(&format!("/{}/", Decision::Hang.path()))
+        && !target.starts_with(&format!("/{}/", Generation::Hang.path()))
+}
+
+/// Closes the run and asserts its pinned trace, with every pinned request
+/// the mock received.
 fn close(run: Run, mock: &Mock, test: &str) -> Finished {
     let finished = run.close(WAIT);
     mock.settle(trace::pinned_requests(test));
     let requests: Vec<(String, Json)> = mock
         .received("")
         .into_iter()
+        .filter(|request| pinned(&request.target))
         .map(|request| (request.target, request.body))
         .collect();
     trace::assert_trace(test, &finished.all, &requests);
@@ -904,6 +920,17 @@ fn cancels_in(
             && record["text"] == "turn 2: bot.input"
     });
     assert!(texts(&records, "bot.reboot").is_empty());
+    if stage == "reasoning" {
+        // The second turn's decision request is pinned: wait for its
+        // answer before closing.
+        run.until(WAIT, |record| {
+            record["type"] == "log"
+                && record["label"] == "cognition.stage"
+                && record["text"]
+                    .as_str()
+                    .is_some_and(|text| text.starts_with("intuition"))
+        });
+    }
     close(run, &mock, test);
 }
 
