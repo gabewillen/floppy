@@ -220,6 +220,16 @@ inlines the browser `validate` options type so no unapproved
   traces unchanged. Still scripted in the body: validators,
   `attentionBias`, `envelope` (later slices).
 
+- `<decision:selection location choices>`, `<decision:tuner location
+  thresholdlocation observe>`: reasoning's strict dispatch schema (mosfet
+  `_selection_item_branch`/`dispatch_tool`) and intuition's
+  `ConfidenceTuner` (mosfet defaults as Rust constants; the threshold is
+  written as a probability) are namespace elements; the stage results are
+  plain `<assign>`s. Reasoning's `onChoices` cond is gone: the generate
+  service's strict-schema check already fails an off-choices reply as
+  `schema-mismatch`. Intuition and reasoning now script only `isObject`
+  (validators go with the event-schema slice), traces unchanged.
+
 Next: phase 4 (bot core and abilities), per
 `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 
