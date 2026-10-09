@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.speaking.output",
+  "additionalProperties": false,
+  "description": "Speak completed: original text plus audio format metadata used for playout.",
+  "properties": {
+    "text": {
+      "description": "Text that was spoken.",
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Media type of the encoded audio (e.g. audio/pcm, audio/wav).",
+      "examples": [
+        "audio/pcm",
+        "audio/wav"
+      ],
+      "title": "Media Type"
+    },
+    "sample_rate_hz": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Sample rate of the encoded audio in hertz, when known.",
+      "examples": [
+        24000
+      ],
+      "title": "Sample Rate Hz"
+    },
+    "channels": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Channel count of the encoded audio, when known.",
+      "examples": [
+        1
+      ],
+      "title": "Channels"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "type": "object"
+}

@@ -85,10 +85,65 @@ phase 7; until then every backend is selected by its `env:baseurl` slot.
 | 1 | Namespaces and services: `scxml` (now scxml.rs's embedded `scx` namespace, decision D17: `scx:validate` wrapping the validator component, returning canonical diagnostics and fixes), `generate` (OpenAI text and structured output), `decision` (enabled-transition candidates, TypeSafe ranking, schema fill and validation before emit) | `scxml` namespace implemented, then moved to scxml.rs as `scx` (`scx:validate`); `services/generate` implemented (one Chat Completions call per `<invoke>`, text or schema-validated structured output, `generate.result`/`generate.failed`, never blocking the session; `env:apikey`/`env:baseurl`); `decision` split per D13: the namespace's `decision:choice` (snapshot choices of `event:schema` transitions whose guards evaluate to true) and `services/decision` (request kinds `choose`, `rank`, `classify`; grounded per-member fill, validation against the choices' schema before emit, `decision.abstain`, `decision.failed`; TypeSafe `system_one` backend behind the `Backend` trait, `env:apikey`/`env:baseurl`) |
 | 2 | Builder bot: `bots/builder/` SCXML (intake, design, author, `scx:validate`, fix or regenerate with bounded retries as states, simulate the draft as an invoked child via `#_<invokeid>`, ending in the final states `done`/`failed` whose `<donedata>` carries the result), run with `scx run` | `bots/builder/builder.scx` implemented (contract schemas in `bots/builder/schemas`; design and author invoke the generate service and triage invokes the decision service on the `decision:choice` choices, each with `<finalize>`/`done.invoke` and a `builder.timeout` that preempts and cancels the call; cond-based fallback; simulation as an invoked child); runs with `scx run --env-file .env bots/builder/builder.scx` (decisions D14, D16; [bots/builder/README.md](../bots/builder/README.md#running)); deterministic harness in `tests/tests/builder_bot.rs`, which runs that command (including a timeout firing while a generation is in flight); live results in [live-proof.md](live-proof.md) |
 | 3 | Memory service on SQLite | Not started |
-| 4 | Bot core: body and cognition as SCXML, abilities as invoked children, mosfet's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | Not started |
+| 4 | Bot core: body and cognition as SCXML, abilities as invoked children, mosfet's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | In progress: event contracts extracted ([Phase 4 event contracts](#phase-4-event-contracts)) |
 | 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Not started |
 | 6 | Speech, vision, and devices as services (`speech`, `vision`, `phone`, audio) | Not started |
 | 7 | Defaults and release: NVIDIA Nemotron and CLM backends, PGlite memory, tagged releases with `SHA256SUMS` for repository namespaces and services | Not started |
+
+## Phase 4 event contracts
+
+Every phase 4 event has one JSON Schema 2020-12 file titled by its name,
+extracted from mosfet's own pydantic models
+(`embeddable_json_schema(event_json_schema(E))` for each `hsm.Event` E):
+body events in `bots/floppy/schemas/`, ability events in
+`abilities/schemas/`, and the full list of mosfet's domain event names in
+`abilities/schemas/mosfet-event-names.json`. Documents reference these files
+(`event:schema="schemas/<event>.json"`); they never carry inline copies. A
+schema reference is relative to its document and cannot leave the
+document's directory (no `..`), so an ability document lives directly in
+`abilities/` (`abilities/<ability>.scx`) and the body in `bots/floppy/`.
+
+The extraction script runs with mosfet's interpreter; it is kept outside
+this repository, with the floppy plans, as
+`~/.agents/projects/floppy/scripts/extract_phase4_contracts.py`:
+
+```sh
+~/VSCode/stateforward/mosfet/mosfet.py/.venv/bin/python -I \
+  ~/.agents/projects/floppy/scripts/extract_phase4_contracts.py ~/VSCode/stateforward/floppy
+```
+
+Mapping rules (the byte-for-byte rule covers event names, not data shapes):
+
+- `title` is the event name and `$schema` is 2020-12; mosfet's
+  descriptions and examples are kept.
+- mosfet's runtime-only fields are dropped (`operation_id`, `generation`,
+  `parent_operation_id`, `parent_generation`, `token`, `request_id`,
+  `actor_id`, `capability`): SCXML invoke cancellation replaces the
+  cancel-token protocol. Fields pydantic marks `SkipJsonSchema` never
+  appear.
+- Correlated, non-tool events of a processing turn (the body's
+  `bot.processing.*` results and the cognition cascade) require
+  `turn`, a positive integer the body counts. mosfet's cognition
+  `TurnData` object collapses into `turn` plus its `input`; a bare list
+  payload (`bot.ability.cognition.output`) becomes `{turn, output}`. Tool
+  events, whose data a model fills, carry no `turn`.
+- Media is a reference: `environment.sound`'s `audio` and
+  `environment.visual`'s `image` are `uri-reference` strings, not base64
+  bytes. `timedelta` would map to integer milliseconds and other `bytes` to
+  base64url strings; no phase 4 event has either.
+- `StimulusData` stays the envelope `{event, data, id?, source?, target?}`.
+- A recursive "any JSON value" definition (conversation's
+  `MessageContent`) becomes `{}`, which admits the same values, so every
+  schema is ref-free.
+- A name with several mosfet models (`bot.ability.failed`) is their
+  `anyOf`.
+- floppy-only names are marked `[floppy name]` at the start of the
+  description (phase 4: `bot.ability.offers`).
+
+`generate.*` and `decision.*` are not copied beside the abilities: they are
+service results, never offered as choices, so an ability needs no schema on
+the transitions taking them. `tests/tests/contracts.rs` checks the set, the
+rules, and every `.scx` under `abilities/` and `bots/floppy/`.
 
 ## Known gaps carried from phase 0
 

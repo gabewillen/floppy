@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.cognition.input",
+  "additionalProperties": false,
+  "description": "InputData payload for the cognition. Bot supplies the stimulus, abilities, named HSM instances, and focus name; the cognition builds tools from snapshots. Selected events are dispatched by Processing.",
+  "properties": {
+    "focus": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Instance name the bot is looking at, if any.",
+      "examples": [
+        "device-a"
+      ],
+      "title": "Focus"
+    },
+    "focus_candidates": {
+      "default": [],
+      "description": "Instance names that may become focus for this turn (body attention policy).",
+      "examples": [
+        [
+          "device-a"
+        ],
+        [
+          "device-a",
+          "device-b"
+        ]
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Focus Candidates",
+      "type": "array"
+    },
+    "turn": {
+      "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "type": "object",
+  "examples": [
+    {
+      "focus": "device-a",
+      "focus_candidates": [
+        "device-a"
+      ],
+      "turn": 1
+    }
+  ],
+  "required": [
+    "turn"
+  ]
+}

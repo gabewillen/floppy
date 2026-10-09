@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "contract.ping",
+  "description": "[floppy name] Test-only: the parent's ping to its child.",
+  "type": "object",
+  "properties": {"turn": {"type": "integer", "minimum": 1}},
+  "required": ["turn"],
+  "additionalProperties": false
+}

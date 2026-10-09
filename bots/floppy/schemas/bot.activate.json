@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.activate",
+  "description": "No-payload command that activates a bot.",
+  "properties": {},
+  "type": "object",
+  "examples": [
+    {}
+  ]
+}

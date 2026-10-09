@@ -1,0 +1,13 @@
+<!-- Contract fixture, broken on purpose: sends its parent an event the
+     parent never takes. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" initial="waiting">
+  <state id="waiting">
+    <onentry>
+      <send event="contract.ready" target="#_parent"/>
+      <send event="contract.unanswered" target="#_parent"/>
+    </onentry>
+    <transition event="contract.ping" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

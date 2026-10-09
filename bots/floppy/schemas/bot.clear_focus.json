@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.clear_focus",
+  "description": "Clear body focus so no device is the active attention target. Use only when focus should end (for example the focused device is gone). Do not use this as a default response to user speech — prefer a behavior/topology route or reasoning input. Why this was selected is selection-envelope reason, not a field here.",
+  "properties": {},
+  "type": "object",
+  "examples": [
+    {}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "contract.ready",
+  "description": "[floppy name] Test-only: the child announces itself.",
+  "type": "object",
+  "additionalProperties": false
+}

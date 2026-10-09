@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.behavior.create",
+  "additionalProperties": false,
+  "description": "Create a new executable behavior. Select may omit source (intent only); the create write step must author full Starlark HSM source from the behavior Starlark API and the observed pattern — not by copying canned examples. The source's lifetime decides how it runs: a turn behavior (default) answers one matching turn; a persistent routine (lifetime = \"persistent\") keeps running on hsm.every / hsm.at schedules across turns and restarts, for recurring or time-based needs or when the user asked for something recurring.",
+  "properties": {
+    "event": {
+      "const": "bot.behavior.create",
+      "default": "bot.behavior.create",
+      "description": "Behavior create event name (discriminator).",
+      "title": "Event",
+      "type": "string"
+    },
+    "name": {
+      "description": "Stable PascalCase behavior / HSM model name to install.",
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "triggers": {
+      "default": [],
+      "description": "External environment event names that may propose this behavior to fast intuition. Installed on the inventory instance alongside the Starlark program's own triggers.",
+      "examples": [
+        [
+          "environment.sound"
+        ]
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Triggers",
+      "type": "array"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Human-readable summary of what the behavior does, shown in inventory and reflection. The install keeps the caller-supplied description when present.",
+      "examples": [
+        "Say hello when a knock sound arrives."
+      ],
+      "title": "Description"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Why this behavior is being installed now: the observed pattern across recent episodes that justifies it. Recorded for reflection, never dispatched.",
+      "examples": [
+        "Same knock→greeting pattern across recent episodes."
+      ],
+      "title": "Reason"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Starlark HSM behavior source authored for this install. Required on the create write step. Must declare input_event, output_event, and behavior = hsm.define(Name, ...) (or behavior_program(...)) with string-named callbacks. Invent names, schemas, guards, and effects from the observed pattern using the Starlark behavior API. A persistent routine also sets lifetime = \"persistent\" and schedules transitions with hsm.every / hsm.at. Select intent may omit this field.",
+      "title": "Source"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "description": "Say hello when a knock sound arrives.",
+      "event": "bot.behavior.create",
+      "name": "GreetOnKnock",
+      "reason": "Same knock→greeting pattern across recent episodes.",
+      "triggers": [
+        "environment.sound"
+      ]
+    },
+    {
+      "description": "Persistent routine: brief the user at 08:00 on weekdays.",
+      "event": "bot.behavior.create",
+      "name": "MorningBriefing",
+      "reason": "The user asked to hear a briefing every weekday morning."
+    }
+  ]
+}

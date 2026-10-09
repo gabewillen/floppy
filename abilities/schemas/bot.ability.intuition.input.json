@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.intuition.input",
+  "description": "Typed Cognition request for one intuitive processing stage.",
+  "properties": {
+    "turn": {
+      "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "processing_input": {
+      "additionalProperties": false,
+      "description": "Processing input: stimulus payload plus HSM event schemas available for selection. Processor output is always an array of selected events.",
+      "examples": [
+        {
+          "input": "incoming speech",
+          "schemas": [
+            "bot.ability.cognition.ignore"
+          ]
+        }
+      ],
+      "properties": {
+        "input": {
+          "description": "Incoming stimulus event or payload.",
+          "examples": [
+            "incoming speech"
+          ],
+          "title": "Input"
+        },
+        "instructions": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional system policy stamped by Processing for model-facing processors. Not part of the stimulus; providers use this as the system prompt when present.",
+          "examples": [
+            "Return an immediate typed result only when the input is already unambiguous."
+          ],
+          "title": "Instructions"
+        }
+      },
+      "required": [
+        "input"
+      ],
+      "title": "InputData",
+      "type": "object"
+    },
+    "input": {
+      "additionalProperties": false,
+      "description": "Live body input for this turn: the stimulus plus the abilities, named actors, and focus candidates the stage may select from. Built by the Cognition host from live body context.",
+      "examples": [
+        {
+          "focus": "device-a",
+          "focus_candidates": [
+            "device-a"
+          ]
+        }
+      ],
+      "properties": {
+        "focus": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Instance name the bot is looking at, if any.",
+          "examples": [
+            "device-a"
+          ],
+          "title": "Focus"
+        },
+        "focus_candidates": {
+          "default": [],
+          "description": "Instance names that may become focus for this turn (body attention policy).",
+          "examples": [
+            [
+              "device-a"
+            ],
+            [
+              "device-a",
+              "device-b"
+            ]
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Focus Candidates",
+          "type": "array"
+        }
+      },
+      "title": "InputData",
+      "type": "object"
+    }
+  },
+  "required": [
+    "turn",
+    "processing_input",
+    "input"
+  ],
+  "type": "object"
+}

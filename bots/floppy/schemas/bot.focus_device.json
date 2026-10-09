@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.focus_device",
+  "description": "Move body attention (focus) to one configured device. device is required and must be a live focus candidate. Prefer this only when a device should become the active attention target — not as a substitute for speaking or reasoning. Why this was selected is selection-envelope reason, not a field here.",
+  "properties": {
+    "device": {
+      "description": "Required stable configured device reference that should become focused.",
+      "examples": [
+        "device-a"
+      ],
+      "minLength": 1,
+      "title": "Device",
+      "type": "string"
+    }
+  },
+  "required": [
+    "device"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "device": "device-a"
+    }
+  ]
+}
