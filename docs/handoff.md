@@ -153,6 +153,22 @@ inlines the browser `validate` options type so no unapproved
   the ignored `floppy_live.rs` `live_cascade` (passed on the CPA gateway,
   `gabe-codex-1/gpt-6-luna`, 17 s).
 
+- Phase 4 choices and routing (floppy `a59eb060`, `8e108a78`): on each
+  `processing` entry the body assembles the turn's choices (its own
+  `bot.focus_device`, pinned to the turn's focus candidates, and
+  `bot.clear_focus` while focused, read by a filtered `<decision:choice>`;
+  plus each ability's latest offers tagged `target`), compacts them and
+  holds them to 32 KiB (else the turn fails before the cognition), and
+  sends them as `bot.ability.cognition.input.choices` (`[floppy field]`).
+  Reasoning selects only from them (a `target` enum per event). A
+  completed turn passes through `routing`, which sends each selection to
+  `#_internal` or `#_<target>` and logs `bot.route`/`bot.route.dropped`;
+  `floppy.routed` ends it. Focus is taken only as a routed selection. No
+  ability offers `bot.ability.communication.respond` until communication
+  lands, so the bot does not speak yet. Live: `live_choices` and
+  `live_cascade` passed on the CPA gateway (`gabe-codex-1/gpt-6-luna`,
+  22 s for both).
+
 Next: phase 4 (bot core and abilities), per
 `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 
