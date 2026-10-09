@@ -112,10 +112,8 @@ fn model() -> String {
 /// One question turn through the full cascade: autonomy's seam leaves it
 /// unhandled, intuition (the decision service on `TypeSafe`) hands it to
 /// reasoning or abstains, and reasoning (the model) selects from the
-/// body's assembled choices, which the body routes. (No ability offers
-/// `bot.ability.communication.respond` until communication exists, so the
-/// reply is not checked here.) The env files must also hold
-/// `TYPESAFE_API_KEY`.
+/// body's assembled choices, which the body routes (`live_chat` checks
+/// what is said). The env files must also hold `TYPESAFE_API_KEY`.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_cascade() {
@@ -162,7 +160,7 @@ fn live_cascade() {
 
 /// One turn on a bot with a lamp, for an input that names the lamp: the
 /// body's choices are its own `bot.focus_device` (pinned to the lamp) and
-/// the cognition's offer; whatever the cascade selects is routed (a focus
+/// the cognition's and the communication's offers; whatever the cascade selects is routed (a focus
 /// on the lamp moves the body's attention there), and nothing is dropped.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
@@ -184,7 +182,7 @@ fn live_choices() {
     let mut all = records;
     all.extend(finished.records);
     keep("live_choices", &all);
-    let choices = "bot.focus_device bot.ability.cognition.ignore@cognition";
+    let choices = "bot.focus_device bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication";
     let output = texts(&all, "bot.output")
         .pop()
         .and_then(|text| serde_json::from_str::<Json>(&text).ok());
@@ -205,5 +203,60 @@ fn live_choices() {
     assert!(
         pass,
         "the turn's choices or routing were wrong (target/floppy-live/live_choices.json)"
+    );
+}
+
+/// One text turn through mosfet's communication path: a
+/// `bot.ability.communication.input` addressed to the bot is admitted into
+/// the conversation, whose product is the turn's stimulus; the cascade
+/// selects `bot.ability.communication.respond`, which the body routes to
+/// the communication and speaking says (`bot.say`), and the spoken text is
+/// recorded in the conversation.
+#[test]
+#[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
+fn live_chat() {
+    let mut run = start();
+    run.event("bot.activate", &json!({"model": model()}));
+    run.event(
+        "bot.ability.communication.input",
+        &json!({
+            "source_ids": ["gabe"],
+            "target_ids": ["floppy"],
+            "content": "Hi floppy! Please say hello back to me.",
+            "content_type": "text/plain"
+        }),
+    );
+    let records = run.until(Duration::from_mins(6), |record| {
+        let text = record["text"].as_str().unwrap_or("");
+        record["type"] == "log"
+            && match record["label"].as_str() {
+                Some("communication.history" | "bot.processing.failed") => true,
+                Some("bot.processing.completed") => {
+                    !text.contains("bot.ability.communication.respond")
+                }
+                _ => false,
+            }
+    });
+    let finished = run.close(Duration::from_mins(1));
+    let mut all = records;
+    all.extend(finished.records);
+    keep("live_chat", &all);
+    let output = texts(&all, "bot.output")
+        .pop()
+        .and_then(|text| serde_json::from_str::<Json>(&text).ok());
+    let said = texts(&all, "bot.say");
+    let pass = texts(&all, "communication.product") == ["0"]
+        && output.as_ref().is_some_and(|output| output["turn"] == 1)
+        && all_routed(&all, output.as_ref())
+        && said.len() == 1
+        && said.iter().all(|text| !text.trim().is_empty())
+        && texts(&all, "bot.ability.speaking.output").len() == 1
+        && texts(&all, "conversation")
+            .iter()
+            .any(|line| line == "outbound 1");
+    println!("live chat: {}", if pass { "pass" } else { "fail" });
+    assert!(
+        pass,
+        "the input was not answered through communication.respond (target/floppy-live/live_chat.json)"
     );
 }

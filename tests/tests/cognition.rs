@@ -39,6 +39,11 @@ const WAIT: Duration = Duration::from_secs(90);
 const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-fake\n";
 const IGNORE: &str = "bot.ability.cognition.ignore";
 const HANDOFF: &str = "bot.ability.reasoning.input";
+const RESPOND: &str = "bot.ability.communication.respond";
+const ACTIVATE: &str = "bot.ability.communication.activate";
+/// The turn's choices as the body logs them: the cognition's offer and the
+/// communication's.
+const CHOICES: &str = "bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication";
 
 /// The decision backend's scripted answer.
 #[derive(Clone, Copy)]
@@ -77,6 +82,8 @@ enum Generation {
     Ignore,
     /// A selection of an event outside the choices.
     OffChoice,
+    /// The communication's activate, then a response to say.
+    Respond,
     /// Answers 500.
     Fail,
     /// Never answers.
@@ -88,6 +95,7 @@ impl Generation {
         match self {
             Self::Ignore => "gignore",
             Self::OffChoice => "offchoice",
+            Self::Respond => "grespond",
             Self::Fail => "gfail",
             Self::Hang => "ghang",
         }
@@ -173,6 +181,10 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
         "/low/v1/systemone" => ok(decided(body, IGNORE, 0.34)?),
         "/gignore/v1/chat/completions" => selection(json!([
             {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}
+        ])),
+        "/grespond/v1/chat/completions" => selection(json!([
+            {"event": ACTIVATE, "data": {}, "reason": "talk here", "target": "communication"},
+            {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet", "target": "communication"}
         ])),
         "/offchoice/v1/chat/completions" => selection(json!([
             {"event": "bot.focus_device", "data": {"device": "lamp"}, "reason": "look"}
@@ -353,6 +365,21 @@ fn label_is(label: &'static str) -> impl Fn(&Json) -> bool {
     move |record| record["type"] == "log" && record["label"] == label
 }
 
+/// Records until a log of each of `labels` has been seen (their order
+/// across sessions is not fixed).
+fn until_all(run: &Run, labels: &[&str]) -> Vec<Json> {
+    let seen = std::cell::RefCell::new(std::collections::BTreeSet::new());
+    run.until(WAIT, |record| {
+        if record["type"] == "log"
+            && let Some(label) = record["label"].as_str()
+            && labels.contains(&label)
+        {
+            seen.borrow_mut().insert(label.to_owned());
+        }
+        seen.borrow().len() == labels.len()
+    })
+}
+
 fn turn_ended(record: &Json) -> bool {
     record["type"] == "log"
         && matches!(
@@ -453,13 +480,10 @@ fn a_deliberative_handoff_escalates_to_reasoning() {
     );
     // Reasoning selected from the body's assembled choices (the
     // cognition's offer, tagged), and the body routed the selection back.
-    assert_eq!(
-        texts(&records, "bot.choices"),
-        strings(&["bot.ability.cognition.ignore@cognition"])
-    );
+    assert_eq!(texts(&records, "bot.choices"), strings(&[CHOICES]));
     assert_eq!(
         texts(&records, "reasoning"),
-        strings(&["turn 1: bot.ability.cognition.ignore@cognition"])
+        strings(&[&format!("turn 1: {CHOICES}")])
     );
     assert_eq!(
         texts(&records, "bot.route"),
@@ -500,14 +524,20 @@ fn a_deliberative_handoff_escalates_to_reasoning() {
             );
             assert_eq!(branch["additionalProperties"], false);
             assert!(branch["properties"]["data"].get("examples").is_none());
-            assert_eq!(branch["properties"]["target"]["enum"], json!(["cognition"]));
-            branch["properties"]["event"]["enum"][0]
+            let event = branch["properties"]["event"]["enum"][0]
                 .as_str()
                 .expect("a pinned event")
-                .to_owned()
+                .to_owned();
+            let target = if event == IGNORE {
+                "cognition"
+            } else {
+                "communication"
+            };
+            assert_eq!(branch["properties"]["target"]["enum"], json!([target]));
+            event
         })
         .collect();
-    assert_eq!(pinned, strings(&[IGNORE]));
+    assert_eq!(pinned, strings(&[IGNORE, RESPOND, ACTIVATE]));
     let prompt = body["messages"]
         .as_array()
         .and_then(|messages| messages.last())
@@ -520,6 +550,52 @@ fn a_deliberative_handoff_escalates_to_reasoning() {
     );
     let keys: Vec<&String> = prompt.as_object().expect("an object").keys().collect();
     assert_eq!(keys, ["focus", "focus_candidates", "stimulus"]);
+    close(run);
+}
+
+/// The whole text path on fake backends: "say hi" escalates to reasoning,
+/// which selects the communication's activate and respond; the body routes
+/// both to the communication, which says the response through speaking
+/// and records it in its conversation.
+#[test]
+fn a_reasoned_response_is_said_through_the_communication() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Escalate, Generation::Respond, &[]);
+    let mut run = start(&bot);
+    say(&mut run, "say hi");
+    let records = until_all(
+        &run,
+        &["communication.history", "bot.ability.speaking.output"],
+    );
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "intuition unhandled (deliberative_input)",
+            "reasoning handled"
+        ])
+    );
+    assert_eq!(
+        texts(&records, "bot.route"),
+        strings(&[
+            "bot.ability.communication.activate -> communication",
+            "bot.ability.communication.respond -> communication"
+        ])
+    );
+    assert_eq!(
+        texts(&records, "communication.activate"),
+        strings(&["conversation"])
+    );
+    assert_eq!(texts(&records, "bot.say"), strings(&["Hi! I am floppy."]));
+    assert_eq!(
+        texts(&records, "bot.ability.speaking.output"),
+        strings(&[r#"{"text":"Hi! I am floppy."}"#])
+    );
+    assert_eq!(texts(&records, "conversation"), strings(&["outbound 0"]));
+    assert!(
+        texts(&records, "bot.route.dropped").is_empty(),
+        "{records:?}"
+    );
     close(run);
 }
 

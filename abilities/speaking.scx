@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Speaking ability in text mode (mosfet abilities/speaking): the
+  communication (abilities/communication.scx) invokes it as its child
+  "speaking" and routes each selected response to it. Cognition never
+  selects it directly (mosfet: bot.ability.speaking.input is not offered).
+
+    idle -bot.ability.speaking.input-> emitting -> idle
+
+  emitting writes the words as <log label="bot.say"> and answers the parent
+  with bot.ability.speaking.output {text}: no audio, so media_type,
+  sample_rate_hz and channels stay absent (null). Speech synthesis and
+  playout (mosfet's encoding and playing states) are phase 6; recording the
+  outbound message into the conversation is the communication's (its
+  sibling conversation is out of this session's reach: SCXML sends go only
+  to #_parent and to a session's own children). An input that does not
+  satisfy schemas/bot.ability.speaking.input.json answers
+  bot.ability.speaking.apply.failed {message}.
+
+  Readiness: every entry into idle sends bot.ability.offers {ability:
+  "speaking", choices: []} to the parent; it offers nothing.
+
+  Bindings: none (no service, no I/O).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="speaking" initial="idle">
+  <datamodel>
+    <data id="text" expr="null"/>
+  </datamodel>
+  <script>
+    function isObject(value) {
+      return value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value);
+    }
+    // schemas/bot.ability.speaking.input.json
+    function validInput(data) {
+      return isObject(data)
+        &amp;&amp; Object.keys(data).every(function (k) { return k === 'text'; })
+        &amp;&amp; typeof data.text === 'string' &amp;&amp; data.text.length &gt; 0;
+    }
+  </script>
+
+  <state id="idle">
+    <onentry>
+      <send event="bot.ability.offers" target="#_parent">
+        <param name="ability" expr="'speaking'"/>
+        <param name="choices" expr="[]"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json"
+                cond="validInput(_event.data)" target="emitting">
+      <assign location="text" expr="_event.data.text"/>
+    </transition>
+    <transition event="bot.ability.speaking.input">
+      <send event="bot.ability.speaking.apply.failed" target="#_parent">
+        <param name="message" expr="'bot.ability.speaking.input does not satisfy schemas/bot.ability.speaking.input.json'"/>
+      </send>
+    </transition>
+  </state>
+
+  <!-- Text mode: the words are the output. -->
+  <state id="emitting">
+    <onentry>
+      <log label="bot.say" expr="text"/>
+      <send event="bot.ability.speaking.output" target="#_parent">
+        <param name="text" expr="text"/>
+      </send>
+    </onentry>
+    <transition target="idle"/>
+  </state>
+</scxml>

@@ -11,14 +11,26 @@
       cancelled and invoked again)
     cancelling_processing -cancel timeout-> degraded (a final sink)
 
-  Abilities: live holds <invoke id="cognition">; leaving live cancels every
-  ability (SCXML 6.4), which replaces mosfet's cleanup states. An ability is
-  ready when it sends its first bot.ability.offers; the body is active when
-  every expected ability is ready. A run-tagged activation timer
+  Abilities: live holds <invoke id="cognition"> and <invoke
+  id="communication"> (abilities/communication.scx, which holds the
+  conversation and speaking); leaving live cancels every ability (SCXML
+  6.4), which replaces mosfet's cleanup states. An ability is ready when it
+  sends its first bot.ability.offers; the body is active when every
+  expected ability is ready. A run-tagged activation timer
   (activation_timeout_ms), an error event, or an ability ending while
-  activating fails the activation (bot.activating.failed) back to inactive.
+  activating fails the activation (bot.activating.failed) back to inactive;
+  an ability ending while active degrades the bot.
 
-  Turns: bot.input in unfocused or focused starts a processing turn. The
+  Communication: bot.ability.communication.input from outside, while
+  active, goes to the communication, which admits it into its
+  conversation; the conversation's product (bot.ability.conversation.output
+  whose last message is inbound) comes back as a stimulus like bot.input.
+  The communication says a routed bot.ability.communication.respond
+  through speaking and answers bot.ability.speaking.output or
+  bot.ability.communication.failed, which the body logs.
+
+  Turns: bot.input or a conversation product in unfocused or focused
+  starts a processing turn. The
   body counts the turn, computes the turn's attention bias (focus,
   focus_candidates: an ECMAScript port of mosfet's attention_bias_for_turn),
   assembles the turn's choices (below), sends bot.ability.cognition.input
@@ -64,7 +76,9 @@
   as <log label="EVENT" expr="JSON data">: bot.activated,
   bot.activating.failed, bot.deactivated, bot.processing.completed,
   bot.processing.failed, and bot.output (the turn's selected events, one
-  record per completed turn); bot.choices logs each turn's assembled
+  record per completed turn), plus the communication's
+  bot.ability.speaking.output and bot.ability.communication.failed;
+  bot.choices logs each turn's assembled
   choices as event@target, bot.route each routed selection, and bot.focus
   each focus change.
 
@@ -96,7 +110,7 @@
     <!-- Lifecycle: each entry into live is one run; the abilities expected
          and the offers each has sent this run. -->
     <data id="live_run" expr="0"/>
-    <data id="expected" expr="['cognition']"/>
+    <data id="expected" expr="['cognition', 'communication']"/>
     <data id="offers" expr="({})"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
@@ -179,6 +193,24 @@
     }
     function fromCognition() {
       return _event.invokeid === 'cognition';
+    }
+    function fromCommunication() {
+      return _event.invokeid === 'communication';
+    }
+    // abilities/schemas/bot.ability.communication.input.json (the
+    // communication rechecks it in full).
+    function validCommunicationInput(data) {
+      return isObject(data) &amp;&amp; Array.isArray(data.source_ids) &amp;&amp; data.source_ids.length &gt; 0
+        &amp;&amp; Array.isArray(data.target_ids) &amp;&amp; data.content !== undefined
+        &amp;&amp; typeof data.content_type === 'string' &amp;&amp; data.content_type.length &gt; 0;
+    }
+    // abilities/schemas/bot.ability.conversation.output.json, from the
+    // communication: a conversation product (its last message inbound).
+    function conversationProduct() {
+      var data = _event.data;
+      return fromCommunication() &amp;&amp; isObject(data) &amp;&amp; Array.isArray(data.messages)
+        &amp;&amp; data.messages.length &gt; 0 &amp;&amp; isObject(data.messages[data.messages.length - 1])
+        &amp;&amp; data.messages[data.messages.length - 1].direction === 'inbound';
     }
     function allReady() {
       return expected.every(function (id) { return offers[id] !== undefined; });
@@ -332,6 +364,7 @@
     <invoke id="cognition" type="scxml" src="../../abilities/cognition.scx">
       <param name="model" expr="model"/>
     </invoke>
+    <invoke id="communication" type="scxml" src="../../abilities/communication.scx"/>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
     <transition event="bot.ability.offers" cond="expected.indexOf(_event.invokeid) &gt;= 0 &amp;&amp; validOffers(_event.data) &amp;&amp; _event.data.ability === _event.invokeid">
@@ -376,8 +409,26 @@
 
     <state id="active" initial="unfocused">
       <!-- An ability that ends while the bot is active leaves it degraded. -->
-      <transition event="done.invoke.cognition" target="degraded">
-        <assign location="degraded_reason" expr="'the ability cognition ended while active'"/>
+      <transition event="done.invoke" cond="expected.indexOf(_event.invokeid) &gt;= 0" target="degraded">
+        <assign location="degraded_reason" expr="'the ability ' + _event.invokeid + ' ended while active'"/>
+      </transition>
+      <!-- Communication input from outside goes to the communication, whose
+           conversation answers with a product (a turn's stimulus, below). -->
+      <transition event="bot.ability.communication.input"
+                  cond="!_event.invokeid &amp;&amp; validCommunicationInput(_event.data)">
+        <send event="bot.ability.communication.input" target="#_communication">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.communication.input" cond="!_event.invokeid">
+        <log label="bot.rejected" expr="'bot.ability.communication.input does not satisfy abilities/schemas/bot.ability.communication.input.json'"/>
+      </transition>
+      <!-- What the communication said, and its failures. -->
+      <transition event="bot.ability.speaking.output" cond="fromCommunication() &amp;&amp; isObject(_event.data) &amp;&amp; typeof _event.data.text === 'string'">
+        <log label="bot.ability.speaking.output" expr="JSON.stringify(_event.data)"/>
+      </transition>
+      <transition event="bot.ability.communication.failed" cond="fromCommunication() &amp;&amp; isObject(_event.data) &amp;&amp; typeof _event.data.message === 'string'">
+        <log label="bot.ability.communication.failed" expr="JSON.stringify(_event.data)"/>
       </transition>
       <!-- The body's own choices (mosfet: focus on active, clear only while
            a device is focused), offered on processing entry and taken only
@@ -401,6 +452,9 @@
                     cond="!_event.invokeid &amp;&amp; validInput(_event.data)" target="processing">
           <assign location="stimulus" expr="envelope()"/>
         </transition>
+        <transition event="bot.ability.conversation.output" cond="conversationProduct()" target="processing">
+          <assign location="stimulus" expr="envelope()"/>
+        </transition>
       </state>
 
       <state id="focused">
@@ -409,6 +463,9 @@
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json"
                     cond="!_event.invokeid &amp;&amp; validInput(_event.data)" target="processing">
+          <assign location="stimulus" expr="envelope()"/>
+        </transition>
+        <transition event="bot.ability.conversation.output" cond="conversationProduct()" target="processing">
           <assign location="stimulus" expr="envelope()"/>
         </transition>
       </state>
@@ -463,6 +520,10 @@
           <script>queue.push(envelope());</script>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
+        <transition event="bot.ability.conversation.output" cond="conversationProduct()">
+          <script>queue.push(envelope());</script>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
       </state>
 
       <!-- The turn timed out: wait (bounded) for the cognition's
@@ -488,6 +549,10 @@
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json"
                     cond="!_event.invokeid &amp;&amp; validInput(_event.data)">
+          <script>queue.push(envelope());</script>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
+        <transition event="bot.ability.conversation.output" cond="conversationProduct()">
           <script>queue.push(envelope());</script>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>

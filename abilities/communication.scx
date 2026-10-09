@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Communication ability (mosfet abilities/communication/
+  communication.py): it holds the conversation, admits communication input
+  into it, and says the response the cognition selects through Speaking.
+  The body (bots/floppy/floppy.scx) invokes it as its child
+  "communication".
+
+    attached { inactive -children ready-> active
+               active -respond-> preparing_response -> dispatching_response
+                 -> responding -speaking output, failure or hop timeout->
+                 active }
+
+  Children: attached holds <invoke id="conversation"> (abilities/
+  conversation.scx, the one active conversation) and <invoke
+  id="speaking"> (abilities/speaking.scx, text mode). Each is ready with its
+  first bot.ability.offers; inactive waits for both (mosfet attaches the
+  conversation composite there). A child that cannot start, or ends, sends
+  bot.ability.communication.failed {message} to the body and ends this
+  ability in its final state degraded.
+
+  Input: bot.ability.communication.input {source_ids, target_ids, content,
+  content_type, ...} in active goes to the conversation as
+  bot.ability.conversation.input (mosfet's routed input to the active
+  conversation). The conversation answers every commit with
+  bot.ability.conversation.output {parent, messages}; one whose last
+  message is inbound is a conversation product and goes on to the body,
+  which takes it as a turn's stimulus; the others are history only.
+
+  Responding: bot.ability.communication.respond {text} (non-blank) in
+  active numbers the response (preparing_response), sends
+  bot.ability.speaking.input {text} to the speaking child
+  (dispatching_response), and waits in responding, bounded by the hop
+  timer bot.ability.communication.response.hop.timed_out
+  (response_timeout_ms, mosfet's 6 s; the transition takes only the timer
+  of the response in hand, _event.sendid). Speaking's output goes on to the
+  body as bot.ability.speaking.output and is recorded in the conversation
+  as an outbound bot.ability.conversation.append (mosfet's Speaking records
+  it; here the communication does, since only it can reach the
+  conversation). A speaking failure or the hop timeout answers the body
+  with bot.ability.communication.failed {message}. Input and responses that
+  arrive outside active wait in the data model queue, in order, and are
+  taken on the return to active (mosfet defers them).
+
+  Activate: bot.ability.communication.activate {} keeps the one
+  conversation active (a catalog of conversations to switch between is
+  loaded through memory, phase 3); it is taken and logged.
+
+  Offers: every entry into active sends bot.ability.offers {ability:
+  "communication", choices} to the body: <decision:choice events=
+  "bot.ability.communication.respond bot.ability.communication.activate">
+  (mosfet's tool events; input is not one), compacted ($schema, title and
+  examples dropped) and held to max_offers_bytes (32 KiB; over it the offer
+  is empty and logged). The children offer nothing, so nothing is relayed.
+
+  Contracts: the events it takes reference abilities/schemas/ by
+  event:schema (never inline) and are rechecked by cond.
+
+  Bindings: the decision namespace package (no service, no I/O).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="communication" initial="attached">
+  <datamodel>
+    <data id="response_timeout_ms" expr="6000"/>
+    <data id="ready" expr="({})"/>
+    <data id="queue" expr="[]"/>
+    <!-- The response in hand: its number, words and hop timer. -->
+    <data id="operation" expr="0"/>
+    <data id="response" expr="null"/>
+    <data id="hop_timer" expr="null"/>
+    <data id="failure" expr="null"/>
+    <!-- The offers. -->
+    <data id="offering" expr="false"/>
+    <data id="offered" expr="[]"/>
+    <data id="max_offers_bytes" expr="32768"/>
+  </datamodel>
+  <script>
+    function isObject(value) {
+      return value !== null &amp;&amp; typeof value === 'object' &amp;&amp; !Array.isArray(value);
+    }
+    function isIdentity(value) {
+      return typeof value === 'string'
+        || (Array.isArray(value) &amp;&amp; value.every(function (n) { return typeof n === 'number'; }));
+    }
+    function identities(list, least) {
+      return Array.isArray(list) &amp;&amp; list.length &gt;= least &amp;&amp; list.every(isIdentity)
+        &amp;&amp; list.every(function (id, i) {
+          return list.findIndex(function (other) { return JSON.stringify(other) === JSON.stringify(id); }) === i;
+        });
+    }
+    function optionalCount(value) {
+      return value === undefined || value === null || (Number.isInteger(value) &amp;&amp; value &gt;= 1);
+    }
+    // schemas/bot.ability.communication.input.json
+    function validInput(data) {
+      return isObject(data)
+        &amp;&amp; Object.keys(data).every(function (k) {
+          return ['source_ids', 'target_ids', 'content', 'content_type', 'sample_rate_hz', 'channels'].indexOf(k) &gt;= 0;
+        })
+        &amp;&amp; identities(data.source_ids, 1) &amp;&amp; identities(data.target_ids, 0)
+        &amp;&amp; data.content !== undefined
+        &amp;&amp; typeof data.content_type === 'string' &amp;&amp; data.content_type.length &gt; 0
+        &amp;&amp; optionalCount(data.sample_rate_hz) &amp;&amp; optionalCount(data.channels);
+    }
+    // schemas/bot.ability.communication.respond.json, and mosfet's
+    // non-blank check.
+    function validRespond(data) {
+      return isObject(data)
+        &amp;&amp; Object.keys(data).every(function (k) { return k === 'text'; })
+        &amp;&amp; typeof data.text === 'string' &amp;&amp; data.text.trim().length &gt; 0;
+    }
+    // schemas/bot.ability.communication.activate.json
+    function validActivate(data) {
+      return isObject(data) &amp;&amp; Object.keys(data).length === 0;
+    }
+    // schemas/bot.ability.speaking.output.json
+    function validSpoken(data) {
+      return isObject(data) &amp;&amp; typeof data.text === 'string' &amp;&amp; data.text.length &gt; 0;
+    }
+    // schemas/bot.ability.speaking.apply.failed.json
+    function validFailure(data) {
+      return isObject(data) &amp;&amp; typeof data.message === 'string';
+    }
+    // schemas/bot.ability.conversation.output.json: a conversation product
+    // (mosfet _has_conversation_product) when the last message is inbound.
+    function validHistory(data) {
+      return isObject(data) &amp;&amp; Array.isArray(data.messages)
+        &amp;&amp; data.messages.every(function (m) { return isObject(m) &amp;&amp; (m.direction === 'inbound' || m.direction === 'outbound'); });
+    }
+    function isProduct(data) {
+      return validHistory(data) &amp;&amp; data.messages.length &gt; 0
+        &amp;&amp; data.messages[data.messages.length - 1].direction === 'inbound';
+    }
+    function fromChild() {
+      return _event.invokeid === 'conversation' || _event.invokeid === 'speaking';
+    }
+    function bothReady() {
+      return ready.conversation === true &amp;&amp; ready.speaking === true;
+    }
+    function compactSchema(schema) {
+      if (Array.isArray(schema)) { return schema.map(compactSchema); }
+      if (!isObject(schema)) { return schema; }
+      var out = {};
+      Object.keys(schema).forEach(function (key) {
+        var value = schema[key];
+        if (['$schema', 'title', 'examples'].indexOf(key) &gt;= 0) { return; }
+        if (['properties', 'patternProperties', '$defs', 'definitions'].indexOf(key) &gt;= 0 &amp;&amp; isObject(value)) {
+          var named = {};
+          Object.keys(value).forEach(function (name) { named[name] = compactSchema(value[name]); });
+          out[key] = named;
+        } else if (['enum', 'const', 'required', 'default'].indexOf(key) &gt;= 0) {
+          out[key] = value;
+        } else {
+          out[key] = compactSchema(value);
+        }
+      });
+      return out;
+    }
+    function compactOffers(list) {
+      var compacted = list.map(function (choice) {
+        var entry = {event: choice.event, schema: compactSchema(choice.schema)};
+        if (typeof choice.description === 'string') { entry.description = choice.description; }
+        return entry;
+      });
+      return JSON.stringify(compacted).length &lt;= max_offers_bytes ? compacted : [];
+    }
+    function defer() {
+      queue.push({event: _event.name, data: _event.data});
+    }
+    function queued(name) {
+      return queue.length &gt; 0 &amp;&amp; queue[0].event === name;
+    }
+    function hopTimedOut() {
+      return _event.sendid === hop_timer &amp;&amp; isObject(_event.data) &amp;&amp; _event.data.operation === operation;
+    }
+  </script>
+
+  <state id="attached" initial="inactive">
+    <invoke id="conversation" type="scxml" src="conversation.scx"/>
+    <invoke id="speaking" type="scxml" src="speaking.scx"/>
+
+    <transition event="bot.ability.offers" cond="fromChild() &amp;&amp; isObject(_event.data) &amp;&amp; _event.data.ability === _event.invokeid">
+      <assign location="ready[_event.invokeid]" expr="true"/>
+    </transition>
+    <!-- Conversation products go on to the body; the rest is history. -->
+    <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
+                cond="_event.invokeid === 'conversation' &amp;&amp; isProduct(_event.data)">
+      <log label="communication.product" expr="String(_event.data.messages[_event.data.messages.length - 1].sequence)"/>
+      <send event="bot.ability.conversation.output" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
+                cond="_event.invokeid === 'conversation' &amp;&amp; validHistory(_event.data)">
+      <log label="communication.history" expr="String(_event.data.messages.length)"/>
+    </transition>
+    <!-- A child that cannot run, or ends, degrades the ability. -->
+    <transition event="error.*" cond="fromChild()" target="degraded">
+      <assign location="failure" expr="'the ' + _event.invokeid + ' child could not run (' + _event.name + ')'"/>
+    </transition>
+    <transition event="done.invoke" cond="fromChild()" target="degraded">
+      <assign location="failure" expr="'the ' + _event.invokeid + ' child ended'"/>
+    </transition>
+    <!-- A speaking answer for no response in hand. -->
+    <transition event="bot.ability.speaking.output bot.ability.speaking.apply.failed" cond="_event.invokeid === 'speaking'">
+      <log label="communication.stale" expr="_event.name"/>
+    </transition>
+
+    <!-- Waits for the conversation and speaking. A child that cannot
+         start raises its error with no invokeid (SCXML 6.4.2). -->
+    <state id="inactive">
+      <transition cond="bothReady()" target="active"/>
+      <transition event="error.*" target="degraded">
+        <assign location="failure" expr="'a child could not start (' + _event.name + ')'"/>
+      </transition>
+      <transition event="bot.ability.communication.input bot.ability.communication.respond" cond="!fromChild()">
+        <script>defer();</script>
+        <log label="communication.deferred" expr="_event.name"/>
+      </transition>
+      <transition event="bot.ability.communication.activate" event:schema="schemas/bot.ability.communication.activate.json"
+                  cond="validActivate(_event.data)">
+        <log label="communication.activate" expr="'conversation'"/>
+      </transition>
+    </state>
+
+    <state id="active">
+      <onentry>
+        <assign location="offering" expr="true"/>
+        <decision:choice location="offered" events="bot.ability.communication.respond bot.ability.communication.activate"/>
+        <assign location="offering" expr="false"/>
+        <if cond="compactOffers(offered).length &lt; offered.length">
+          <log label="communication.offers.dropped" expr="'the offers are over ' + max_offers_bytes + ' bytes'"/>
+        </if>
+        <assign location="offered" expr="compactOffers(offered)"/>
+        <log label="communication.offers" expr="offered.map(function (choice) { return choice.event; }).join(' ')"/>
+        <send event="bot.ability.offers" target="#_parent">
+          <param name="ability" expr="'communication'"/>
+          <param name="choices" expr="offered"/>
+        </send>
+      </onentry>
+      <!-- What waited, in order. -->
+      <transition cond="queued('bot.ability.communication.input')">
+        <send event="bot.ability.conversation.input" target="#_conversation">
+          <content expr="queue.shift().data"/>
+        </send>
+      </transition>
+      <transition cond="queued('bot.ability.communication.respond')" target="preparing_response">
+        <assign location="response" expr="queue.shift().data.text"/>
+      </transition>
+      <transition event="bot.ability.communication.respond" event:schema="schemas/bot.ability.communication.respond.json"
+                  cond="offering || (!fromChild() &amp;&amp; validRespond(_event.data))" target="preparing_response">
+        <assign location="response" expr="_event.data.text"/>
+      </transition>
+      <transition event="bot.ability.communication.respond" cond="!fromChild()">
+        <log label="communication.rejected" expr="'bot.ability.communication.respond needs one non-blank text'"/>
+        <send event="bot.ability.communication.failed" target="#_parent">
+          <param name="message" expr="'Communication response text must be non-blank.'"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.communication.activate" event:schema="schemas/bot.ability.communication.activate.json"
+                  cond="offering || (!fromChild() &amp;&amp; validActivate(_event.data))">
+        <log label="communication.activate" expr="'conversation'"/>
+      </transition>
+      <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json"
+                  cond="!fromChild() &amp;&amp; validInput(_event.data)">
+        <send event="bot.ability.conversation.input" target="#_conversation">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+    </state>
+
+    <!-- The response is numbered. -->
+    <state id="preparing_response">
+      <onentry>
+        <assign location="operation" expr="operation + 1"/>
+      </onentry>
+      <transition target="dispatching_response"/>
+    </state>
+
+    <!-- The response goes to speaking. -->
+    <state id="dispatching_response">
+      <onentry>
+        <send event="bot.ability.speaking.input" target="#_speaking">
+          <param name="text" expr="response"/>
+        </send>
+      </onentry>
+      <transition target="responding"/>
+    </state>
+
+    <!-- Waits (bounded) for speaking's answer. -->
+    <state id="responding">
+      <onentry>
+        <send idlocation="hop_timer" event="bot.ability.communication.response.hop.timed_out" delayexpr="response_timeout_ms + 'ms'">
+          <param name="operation" expr="operation"/>
+        </send>
+      </onentry>
+      <onexit>
+        <cancel sendidexpr="hop_timer"/>
+      </onexit>
+      <transition event="bot.ability.speaking.output" event:schema="schemas/bot.ability.speaking.output.json"
+                  cond="_event.invokeid === 'speaking' &amp;&amp; validSpoken(_event.data)" target="active">
+        <send event="bot.ability.speaking.output" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
+        <send event="bot.ability.conversation.append" target="#_conversation">
+          <content expr="({message: {sequence: 0, direction: 'outbound', source_ids: [], target_ids: [], content: _event.data.text, content_type: 'text/plain', provenance: {event: 'bot.ability.conversation.append', id: 'response-' + operation}}})"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.speaking.apply.failed" event:schema="schemas/bot.ability.speaking.apply.failed.json"
+                  cond="_event.invokeid === 'speaking' &amp;&amp; validFailure(_event.data)" target="active">
+        <send event="bot.ability.communication.failed" target="#_parent">
+          <param name="message" expr="_event.data.message"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.communication.response.hop.timed_out" event:schema="schemas/bot.ability.communication.response.hop.timed_out.json"
+                  cond="hopTimedOut()" target="active">
+        <log label="communication.hop.timed_out" expr="'response ' + operation + ' after ' + response_timeout_ms + ' ms'"/>
+        <send event="bot.ability.communication.failed" target="#_parent">
+          <param name="message" expr="'Speaking response timed out.'"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.communication.input bot.ability.communication.respond" cond="!fromChild()">
+        <script>defer();</script>
+        <log label="communication.deferred" expr="_event.name"/>
+      </transition>
+    </state>
+  </state>
+
+  <!-- A child could not run: the ability ends (the body degrades). -->
+  <final id="degraded">
+    <onentry>
+      <log label="communication.degraded" expr="failure"/>
+      <send event="bot.ability.communication.failed" target="#_parent">
+        <param name="message" expr="failure"/>
+      </send>
+    </onentry>
+  </final>
+</scxml>
