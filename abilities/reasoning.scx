@@ -14,37 +14,36 @@
   model request carries no recalled episode. Phase 3 replaces each such send
   with an <invoke> of services/memory.
 
-  Choices: applying's own event:schema transitions, read by
-  <decision:choice events="..."> on entry: bot.ability.communication.respond
-  (say something) and bot.ability.cognition.ignore. Their guards read
-  offering, which is true only while the choices are read, so they are
-  offered and never taken here: a selection is returned, not taken (the
-  body routes it, a later slice, which also brings the body's assembled
-  choices). The structured-output schema is built from the choices as
-  mosfet's dispatch tool: {events: [anyOf one branch per choice]}, each
-  branch {event (a one-value enum), data (the event's schema without
-  $schema, title and examples), reason}, every field required and no extra
-  property, sent strict. The generate service returns only a reply that
-  satisfies it; a selection of an event outside the choices is rejected by
-  cond as well.
+  Choices: the body's assembled choices for the turn (the <param>
+  choices: the body's own and each ability's offers, tagged with the
+  offering ability's invoke id as target). A selection is returned, not
+  taken: the body routes it. The structured-output schema is built from
+  the choices as mosfet's dispatch tool: {events: [anyOf one branch per
+  offered event]}, each branch {event (a one-value enum), data (the event's
+  schema without $schema, title and examples), reason, and target (an enum
+  of the abilities offering it) when an ability offers it}, every field
+  required and no extra property, sent strict. The generate service
+  returns only a reply that satisfies it; a selection outside the choices
+  (event or target) is rejected by cond as well. With no choices the stage
+  fails without a model call.
 
-  Input: the <param>s turn, stimulus, focus, focus_candidates and model.
-  Output: <donedata>, received by the cognition as done.invoke.reasoning:
+  Input: the <param>s turn, stimulus, focus, focus_candidates, choices and
+  model. Output: <donedata>, received by the cognition as
+  done.invoke.reasoning:
 
-    {turn, handled: true, selected: [{event, data, reason}]}
+    {turn, handled: true, selected: [{event, data, reason, target?}]}
     {turn, handled: false, failed: true, reason}
 
   The cognition's hop timeout bounds the stage (leaving it cancels the model
   call, SCXML 6.4).
 
-  Bindings: the decision namespace and the generate service package,
+  Bindings: the generate service package,
   resolved from their repository URIs; env scopes FLOPPY_API_KEY and
   FLOPPY_BASE_URL to the service's <invoke> (no default backend: without
   either it answers generate.failed unconfigured). The generate service's
   events are recorded by <finalize>.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="reasoning" initial="recalling">
@@ -55,10 +54,9 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
-    <data id="system" expr="'You are the deliberate reasoning of floppy, a small companion robot. You receive one stimulus the robot observed, as JSON, with what the robot is looking at. Select every event the robot should take for it from the offered events (an empty list selects none), with its data and a short reason. To say something, select bot.ability.communication.respond with the complete text to say.'"/>
-    <!-- The model call: its choices, schema, invocation, and reply. -->
-    <data id="offering" expr="false"/>
     <data id="choices" expr="[]"/>
+    <data id="system" expr="'You are the deliberate reasoning of floppy, a small companion robot. You receive one stimulus the robot observed, as JSON, with what the robot is looking at. Select every event the robot should take for it from the offered events (an empty list selects none), with its data, its target when the event names one, and a short reason. When an offered event says something, give it the complete text to say.'"/>
+    <!-- The model call: its schema, invocation, and reply. -->
     <data id="schema" expr="null"/>
     <data id="gen_id" expr="null"/>
     <data id="selected" expr="null"/>
@@ -88,6 +86,22 @@
       }
       return copy;
     }
+    // The offered events in choices order, each with the targets offering
+    // it (an empty list: the body's own event).
+    function offeredEvents() {
+      var events = [];
+      var byName = {};
+      choices.forEach(function (choice) {
+        if (byName[choice.event] === undefined) {
+          byName[choice.event] = {event: choice.event, schema: choice.schema, description: choice.description, targets: []};
+          events.push(byName[choice.event]);
+        }
+        if (typeof choice.target === 'string' &amp;&amp; byName[choice.event].targets.indexOf(choice.target) &lt; 0) {
+          byName[choice.event].targets.push(choice.target);
+        }
+      });
+      return events;
+    }
     // mosfet processing._selection_item_branch / dispatch_tool.
     function selectionSchema(offered) {
       return {
@@ -98,7 +112,7 @@
             description: 'All events necessary for the input this turn; an empty array selects none.',
             items: {
               anyOf: offered.map(function (choice) {
-                return {
+                var branch = {
                   type: 'object',
                   description: typeof choice.description === 'string' ? choice.description : choice.event,
                   properties: {
@@ -109,6 +123,11 @@
                   required: ['event', 'data', 'reason'],
                   additionalProperties: false
                 };
+                if (choice.targets.length &gt; 0) {
+                  branch.properties.target = {type: 'string', 'enum': choice.targets, description: 'The ability that receives this event.'};
+                  branch.required.push('target');
+                }
+                return branch;
               })
             }
           }
@@ -118,9 +137,12 @@
       };
     }
     function onChoices(events) {
-      var names = choices.map(function (choice) { return choice.event; });
+      var offered = offeredEvents();
       return Array.isArray(events) &amp;&amp; events.every(function (item) {
-        return isObject(item) &amp;&amp; names.indexOf(item.event) &gt;= 0;
+        var match = offered.filter(function (choice) { return isObject(item) &amp;&amp; choice.event === item.event; })[0];
+        return match !== undefined &amp;&amp; (match.targets.length === 0
+          ? item.target === undefined
+          : match.targets.indexOf(item.target) &gt;= 0);
       });
     }
     function fail(reason) {
@@ -141,6 +163,11 @@
       </send>
     </onentry>
     <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
+                cond="isObject(_event.data) &amp;&amp; _event.data.turn === turn &amp;&amp; _event.data.memory_consulted === false &amp;&amp; choices.length === 0"
+                target="done">
+      <script>fail('the reasoning has no choices to select from');</script>
+    </transition>
+    <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
                 cond="isObject(_event.data) &amp;&amp; _event.data.turn === turn &amp;&amp; _event.data.memory_consulted === false"
                 target="applying"/>
   </state>
@@ -148,13 +175,10 @@
   <!-- One structured model call; leaving this state cancels it. -->
   <state id="applying">
     <onentry>
-      <assign location="offering" expr="true"/>
-      <decision:choice location="choices" events="bot.ability.communication.respond bot.ability.cognition.ignore"/>
-      <assign location="offering" expr="false"/>
-      <assign location="schema" expr="selectionSchema(choices)"/>
+      <assign location="schema" expr="selectionSchema(offeredEvents())"/>
       <assign location="selected" expr="null"/>
       <assign location="gen_failure" expr="null"/>
-      <log label="reasoning" expr="'turn ' + turn + ': ' + choices.map(function (c) { return c.event; }).join(' ')"/>
+      <log label="reasoning" expr="'turn ' + turn + ': ' + choices.map(function (c) { return c.target === undefined ? c.event : c.event + '@' + c.target; }).join(' ')"/>
     </onentry>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
@@ -169,12 +193,6 @@
         <assign location="gen_failure" expr="_event.name === 'generate.failed' &amp;&amp; isObject(_event.data) ? _event.data.code : gen_failure"/>
       </finalize>
     </invoke>
-
-    <!-- The events the model may select (offered, never taken here). -->
-    <transition event="bot.ability.communication.respond" event:schema="schemas/bot.ability.communication.respond.json"
-                cond="offering"/>
-    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json"
-                cond="offering"/>
 
     <transition event="done.invoke" cond="_event.invokeid === gen_id &amp;&amp; selected !== null &amp;&amp; onChoices(selected)" target="retaining"/>
     <transition event="done.invoke" cond="_event.invokeid === gen_id &amp;&amp; selected !== null" target="done">

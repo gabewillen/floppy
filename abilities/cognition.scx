@@ -51,7 +51,14 @@
 
   Readiness: every entry into idle sends bot.ability.offers {ability,
   choices} to the parent: the choices <decision:choice events=...> reads,
-  bot.ability.cognition.ignore.
+  bot.ability.cognition.ignore, compacted ($schema, title and examples
+  dropped) and held to max_offers_bytes (32 KiB; over it the offer is empty
+  and logged). The stages are per-turn children that offer nothing, so
+  there are no descendant offers to relay.
+
+  Choices: each turn's input carries the body's assembled choices (its own
+  and every ability's offers, tagged with their target); they go to
+  reasoning, whose selections the body routes.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline) and are rechecked by cond; the stages'
@@ -75,6 +82,7 @@
     <data id="stimulus" expr="null"/>
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
+    <data id="choices" expr="[]"/>
     <!-- The intuition's confidence tuner (mosfet ConfidenceTuner). -->
     <data id="tuner" expr="({mean: 70, variance: 100, n: 0})"/>
     <!-- The stage in hand: its name, hop timer, and answer. -->
@@ -86,6 +94,7 @@
     <!-- The offers. -->
     <data id="offering" expr="false"/>
     <data id="offered" expr="[]"/>
+    <data id="max_offers_bytes" expr="32768"/>
   </datamodel>
   <script>
     function isObject(value) {
@@ -100,7 +109,7 @@
     // schemas/bot.ability.cognition.input.json
     function validInput(data) {
       return isObject(data)
-        &amp;&amp; Object.keys(data).every(function (k) { return ['turn', 'stimulus', 'focus', 'focus_candidates'].indexOf(k) &gt;= 0; })
+        &amp;&amp; Object.keys(data).every(function (k) { return ['turn', 'stimulus', 'focus', 'focus_candidates', 'choices'].indexOf(k) &gt;= 0; })
         &amp;&amp; isTurn(data.turn)
         &amp;&amp; isObject(data.stimulus)
         &amp;&amp; Object.keys(data.stimulus).every(function (k) { return ['event', 'data', 'id', 'source', 'target'].indexOf(k) &gt;= 0; })
@@ -109,7 +118,44 @@
         &amp;&amp; isOptionalString(data.stimulus.id) &amp;&amp; isOptionalString(data.stimulus.source) &amp;&amp; isOptionalString(data.stimulus.target)
         &amp;&amp; isOptionalString(data.focus)
         &amp;&amp; (data.focus_candidates === undefined
-            || (Array.isArray(data.focus_candidates) &amp;&amp; data.focus_candidates.every(function (c) { return typeof c === 'string'; })));
+            || (Array.isArray(data.focus_candidates) &amp;&amp; data.focus_candidates.every(function (c) { return typeof c === 'string'; })))
+        &amp;&amp; (data.choices === undefined || (Array.isArray(data.choices) &amp;&amp; data.choices.every(validChoice)));
+    }
+    function validChoice(c) {
+      return isObject(c)
+        &amp;&amp; Object.keys(c).every(function (k) { return ['event', 'schema', 'description', 'target'].indexOf(k) &gt;= 0; })
+        &amp;&amp; typeof c.event === 'string' &amp;&amp; c.event.length &gt; 0 &amp;&amp; c.schema !== undefined
+        &amp;&amp; (c.description === undefined || typeof c.description === 'string')
+        &amp;&amp; (c.target === undefined || (typeof c.target === 'string' &amp;&amp; c.target.length &gt; 0));
+    }
+    // An offered schema without $schema, title and examples (property
+    // names are kept).
+    function compactSchema(schema) {
+      if (Array.isArray(schema)) { return schema.map(compactSchema); }
+      if (!isObject(schema)) { return schema; }
+      var out = {};
+      Object.keys(schema).forEach(function (key) {
+        var value = schema[key];
+        if (['$schema', 'title', 'examples'].indexOf(key) &gt;= 0) { return; }
+        if (['properties', 'patternProperties', '$defs', 'definitions'].indexOf(key) &gt;= 0 &amp;&amp; isObject(value)) {
+          var named = {};
+          Object.keys(value).forEach(function (name) { named[name] = compactSchema(value[name]); });
+          out[key] = named;
+        } else if (['enum', 'const', 'required', 'default'].indexOf(key) &gt;= 0) {
+          out[key] = value;
+        } else {
+          out[key] = compactSchema(value);
+        }
+      });
+      return out;
+    }
+    function compactOffers(list) {
+      var compacted = list.map(function (choice) {
+        var entry = {event: choice.event, schema: compactSchema(choice.schema)};
+        if (typeof choice.description === 'string') { entry.description = choice.description; }
+        return entry;
+      });
+      return JSON.stringify(compacted).length &lt;= max_offers_bytes ? compacted : [];
     }
     // schemas/bot.ability.cognition.cancel.json
     function validCancel(data) {
@@ -151,6 +197,10 @@
       <assign location="offering" expr="true"/>
       <decision:choice location="offered" events="bot.ability.cognition.ignore"/>
       <assign location="offering" expr="false"/>
+      <if cond="compactOffers(offered).length &lt; offered.length">
+        <log label="cognition.offers.dropped" expr="'the offers are over ' + max_offers_bytes + ' bytes'"/>
+      </if>
+      <assign location="offered" expr="compactOffers(offered)"/>
       <log label="cognition.offers" expr="offered.map(function (choice) { return choice.event; }).join(' ')"/>
       <send event="bot.ability.offers" target="#_parent">
         <param name="ability" expr="'cognition'"/>
@@ -163,6 +213,7 @@
       <assign location="stimulus" expr="_event.data.stimulus"/>
       <assign location="focus" expr="_event.data.focus === undefined ? null : _event.data.focus"/>
       <assign location="focus_candidates" expr="_event.data.focus_candidates === undefined ? [] : _event.data.focus_candidates"/>
+      <assign location="choices" expr="_event.data.choices === undefined ? [] : _event.data.choices"/>
     </transition>
     <transition event="bot.ability.cognition.input">
       <log label="cognition.rejected" expr="'bot.ability.cognition.input does not satisfy schemas/bot.ability.cognition.input.json'"/>
@@ -284,6 +335,7 @@
         <param name="stimulus" expr="stimulus"/>
         <param name="focus" expr="focus"/>
         <param name="focus_candidates" expr="focus_candidates"/>
+        <param name="choices" expr="choices"/>
         <param name="model" expr="model"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"

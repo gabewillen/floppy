@@ -21,8 +21,9 @@
   Turns: bot.input in unfocused or focused starts a processing turn. The
   body counts the turn, computes the turn's attention bias (focus,
   focus_candidates: an ECMAScript port of mosfet's attention_bias_for_turn),
-  sends bot.ability.cognition.input {turn, stimulus, focus,
-  focus_candidates} to the cognition, and arms bot.processing.timed_out
+  assembles the turn's choices (below), sends bot.ability.cognition.input
+  {turn, stimulus, focus, focus_candidates, choices} to the cognition, and
+  arms bot.processing.timed_out
   (processing_timeout_ms) for the turn. Replies count only when they come
   from the cognition for the current turn. A timeout sends
   bot.ability.cognition.cancel {turn} and waits in cancelling_processing,
@@ -32,11 +33,40 @@
   order) and start the next turns, one per return to unfocused or focused,
   before any later event.
 
+  Choices (mosfet's per-turn dispatch inventory, assembled in SCXML): on
+  processing entry the body reads its own choices with <decision:choice
+  location="body_choices" events="bot.focus_device bot.clear_focus"> (the
+  transitions on active, offered only while offering is true:
+  bot.focus_device when the turn has focus candidates, bot.clear_focus when
+  a device is focused), pins bot.focus_device's device to an enum of the
+  turn's focus_candidates, and appends each ability's latest
+  bot.ability.offers choices tagged with the ability's invoke id as target
+  (the body's own carry no target). Every schema is compacted ($schema,
+  title and examples dropped); when the choices are still over
+  max_choices_bytes (32 KiB, phase 4 spike (b): a relayed list of 48264 B
+  fails the whole invoke tree) every description is dropped too, and if
+  they are still over the turn fails without reaching the cognition. The
+  routing table routes maps each offered event to the targets offering it.
+
+  Routing: a completed turn goes through routing, which sends each selected
+  event of the output, in order, to its receiver: an event the body offered
+  to itself (#_internal), else the ability whose invoke id is the
+  selection's target, or the only ability offering it when the selection
+  names none (#_<id>). A selection the routing table cannot place (not
+  offered this turn, or an unoffered target) is dropped with
+  <log label="bot.route.dropped">, and so is a routed body event that no
+  transition takes (bot.focus_device for a device outside the turn's
+  candidates, bot.clear_focus with nothing focused). floppy.routed [floppy
+  name], raised after the selections, ends routing once every routed body
+  event has been taken (the internal queue is FIFO).
+
   Outputs: the root has no parent, so each event the body emits is written
   as <log label="EVENT" expr="JSON data">: bot.activated,
   bot.activating.failed, bot.deactivated, bot.processing.completed,
   bot.processing.failed, and bot.output (the turn's selected events, one
-  record per completed turn). Routing selections is a later slice.
+  record per completed turn); bot.choices logs each turn's assembled
+  choices as event@target, bot.route each routed selection, and bot.focus
+  each focus change.
 
   Contracts: the body's own events reference schemas/ by event:schema and
   are rechecked by cond; the abilities' events are described in
@@ -50,6 +80,7 @@
   service, no default backend); without them a turn fails.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="floppy" initial="inactive">
   <datamodel>
@@ -74,6 +105,17 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="queue" expr="[]"/>
+    <!-- The turn's choices and routing table, and its selections. -->
+    <data id="max_choices_bytes" expr="32768"/>
+    <data id="offering" expr="false"/>
+    <data id="body_choices" expr="[]"/>
+    <data id="choices" expr="[]"/>
+    <data id="routes" expr="({})"/>
+    <data id="choices_failure" expr="null"/>
+    <data id="selections" expr="[]"/>
+    <data id="routing_selections" expr="false"/>
+    <data id="selection" expr="null"/>
+    <data id="route" expr="null"/>
     <data id="degraded_reason" expr="null"/>
   </datamodel>
   <script>
@@ -163,6 +205,105 @@
       }
       return bias;
     }
+    // An offered schema without what a model does not need to fill it:
+    // $schema, title and examples everywhere (property names are kept), and
+    // every description unless descriptions is true.
+    function compactSchema(schema, descriptions) {
+      if (Array.isArray(schema)) {
+        return schema.map(function (item) { return compactSchema(item, descriptions); });
+      }
+      if (!isObject(schema)) { return schema; }
+      var out = {};
+      Object.keys(schema).forEach(function (key) {
+        var value = schema[key];
+        if (['$schema', 'title', 'examples'].indexOf(key) &gt;= 0) { return; }
+        if (key === 'description' &amp;&amp; !descriptions) { return; }
+        if (['properties', 'patternProperties', '$defs', 'definitions'].indexOf(key) &gt;= 0 &amp;&amp; isObject(value)) {
+          var named = {};
+          Object.keys(value).forEach(function (name) { named[name] = compactSchema(value[name], descriptions); });
+          out[key] = named;
+        } else if (['enum', 'const', 'required', 'default'].indexOf(key) &gt;= 0) {
+          out[key] = value;
+        } else {
+          out[key] = compactSchema(value, descriptions);
+        }
+      });
+      return out;
+    }
+    function compactChoices(list, descriptions) {
+      return list.map(function (choice) {
+        var entry = {event: choice.event, schema: compactSchema(choice.schema, descriptions)};
+        if (descriptions &amp;&amp; typeof choice.description === 'string') { entry.description = choice.description; }
+        if (typeof choice.target === 'string') { entry.target = choice.target; }
+        return entry;
+      });
+    }
+    // The turn's choices: the body's own (focus pinned to the turn's
+    // candidates), then each ability's latest offers tagged with its id;
+    // and the routing table. Sets choices_failure when they do not fit.
+    function assembleChoices() {
+      var all = [];
+      body_choices.forEach(function (choice) {
+        var entry = JSON.parse(JSON.stringify(choice));
+        if (entry.event === 'bot.focus_device' &amp;&amp; isObject(entry.schema)
+            &amp;&amp; isObject(entry.schema.properties) &amp;&amp; isObject(entry.schema.properties.device)) {
+          entry.schema.properties.device['enum'] = focus_candidates.slice();
+        }
+        all.push(entry);
+      });
+      expected.forEach(function (id) {
+        (offers[id] === undefined ? [] : offers[id]).forEach(function (choice) {
+          var entry = JSON.parse(JSON.stringify(choice));
+          entry.target = id;
+          all.push(entry);
+        });
+      });
+      choices = compactChoices(all, true);
+      if (JSON.stringify(choices).length &gt; max_choices_bytes) {
+        choices = compactChoices(all, false);
+      }
+      routes = {};
+      choices.forEach(function (choice) {
+        var target = choice.target === undefined ? null : choice.target;
+        if (routes[choice.event] === undefined) { routes[choice.event] = []; }
+        if (routes[choice.event].indexOf(target) &lt; 0) { routes[choice.event].push(target); }
+      });
+      var size = JSON.stringify(choices).length;
+      choices_failure = size &gt; max_choices_bytes
+        ? 'the turn\'s choices are ' + size + ' bytes, over ' + max_choices_bytes
+        : null;
+    }
+    function choiceNames() {
+      return choices.map(function (choice) {
+        return choice.target === undefined ? choice.event : choice.event + '@' + choice.target;
+      }).join(' ');
+    }
+    // Where one selection goes: {ok, target (null: the body itself), why}.
+    function routeOf(selection) {
+      if (!isObject(selection) || typeof selection.event !== 'string') {
+        return {ok: false, why: 'a malformed selection'};
+      }
+      var targets = routes[selection.event];
+      if (targets === undefined) {
+        return {ok: false, why: selection.event + ' was not offered this turn'};
+      }
+      var named = typeof selection.target === 'string' ? selection.target : null;
+      if (named !== null) {
+        return targets.indexOf(named) &gt;= 0
+          ? {ok: true, target: named}
+          : {ok: false, why: selection.event + ' is not offered by ' + named};
+      }
+      return targets.length === 1
+        ? {ok: true, target: targets[0]}
+        : {ok: false, why: selection.event + ' names no target among ' + JSON.stringify(targets)};
+    }
+    function selectionData(selection) {
+      return selection.data === undefined || selection.data === null ? {} : selection.data;
+    }
+    // A routed body event: taken only while routing a turn's selections.
+    function routed() {
+      return routing_selections &amp;&amp; _event.type === 'internal';
+    }
     // The stimulus envelope of the event in hand (abilities/schemas/
     // bot.ability.cognition.input.json, stimulus).
     function envelope() {
@@ -238,6 +379,19 @@
       <transition event="done.invoke.cognition" target="degraded">
         <assign location="degraded_reason" expr="'the ability cognition ended while active'"/>
       </transition>
+      <!-- The body's own choices (mosfet: focus on active, clear only while
+           a device is focused), offered on processing entry and taken only
+           as routed selections of the turn. -->
+      <transition event="bot.focus_device" event:schema="schemas/bot.focus_device.json"
+                  cond="offering ? focus_candidates.length &gt; 0 : (routed() &amp;&amp; validFocus(_event.data) &amp;&amp; focus_candidates.indexOf(_event.data.device) &gt;= 0 &amp;&amp; devices.indexOf(_event.data.device) &gt;= 0)">
+        <assign location="focused_device" expr="_event.data.device"/>
+        <log label="bot.focus" expr="focused_device"/>
+      </transition>
+      <transition event="bot.clear_focus" event:schema="schemas/bot.clear_focus.json"
+                  cond="offering ? focused_device !== null : (routed() &amp;&amp; isObject(_event.data) &amp;&amp; focused_device !== null)">
+        <assign location="focused_device" expr="null"/>
+        <log label="bot.focus" expr="'none'"/>
+      </transition>
 
       <state id="unfocused">
         <transition cond="queue.length &gt; 0" target="processing">
@@ -246,10 +400,6 @@
         <transition event="bot.input" event:schema="schemas/bot.input.json"
                     cond="!_event.invokeid &amp;&amp; validInput(_event.data)" target="processing">
           <assign location="stimulus" expr="envelope()"/>
-        </transition>
-        <transition event="bot.focus_device" event:schema="schemas/bot.focus_device.json"
-                    cond="validFocus(_event.data) &amp;&amp; devices.indexOf(_event.data.device) &gt;= 0" target="focused">
-          <assign location="focused_device" expr="_event.data.device"/>
         </transition>
       </state>
 
@@ -260,14 +410,6 @@
         <transition event="bot.input" event:schema="schemas/bot.input.json"
                     cond="!_event.invokeid &amp;&amp; validInput(_event.data)" target="processing">
           <assign location="stimulus" expr="envelope()"/>
-        </transition>
-        <transition event="bot.focus_device" event:schema="schemas/bot.focus_device.json"
-                    cond="validFocus(_event.data) &amp;&amp; devices.indexOf(_event.data.device) &gt;= 0">
-          <assign location="focused_device" expr="_event.data.device"/>
-        </transition>
-        <transition event="bot.clear_focus" event:schema="schemas/bot.clear_focus.json"
-                    cond="isObject(_event.data)" target="unfocused">
-          <assign location="focused_device" expr="null"/>
         </transition>
       </state>
 
@@ -280,19 +422,31 @@
             focus = bias.focus;
             focus_candidates = bias.focus_candidates;
           </script>
-          <send event="bot.ability.cognition.input" target="#_cognition">
-            <content expr="({turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates})"/>
-          </send>
-          <send id="processing-timer" event="bot.processing.timed_out" delayexpr="processing_timeout_ms + 'ms'">
-            <param name="turn" expr="turn"/>
-          </send>
+          <assign location="offering" expr="true"/>
+          <decision:choice location="body_choices" events="bot.focus_device bot.clear_focus"/>
+          <assign location="offering" expr="false"/>
+          <script>assembleChoices();</script>
+          <log label="bot.choices" expr="choiceNames()"/>
+          <if cond="choices_failure === null">
+            <send event="bot.ability.cognition.input" target="#_cognition">
+              <content expr="({turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, choices: choices})"/>
+            </send>
+            <send id="processing-timer" event="bot.processing.timed_out" delayexpr="processing_timeout_ms + 'ms'">
+              <param name="turn" expr="turn"/>
+            </send>
+          </if>
         </onentry>
         <onexit>
           <cancel sendid="processing-timer"/>
         </onexit>
-        <transition event="bot.ability.cognition.output" cond="fromCognition() &amp;&amp; validOutput(_event.data)" target="returning">
+        <!-- The choices do not fit: the turn fails before the cognition. -->
+        <transition cond="choices_failure !== null" target="returning">
+          <log label="bot.processing.failed" expr="JSON.stringify({message: choices_failure, turn: turn})"/>
+        </transition>
+        <transition event="bot.ability.cognition.output" cond="fromCognition() &amp;&amp; validOutput(_event.data)" target="routing">
           <log label="bot.output" expr="JSON.stringify({turn: turn, output: _event.data.output})"/>
           <log label="bot.processing.completed" expr="JSON.stringify({output: _event.data.output, focus_candidates: focus_candidates, turn: turn})"/>
+          <assign location="selections" expr="_event.data.output"/>
         </transition>
         <transition event="bot.ability.failed" cond="fromCognition() &amp;&amp; forTurn(_event.data)" target="returning">
           <log label="bot.processing.failed" expr="JSON.stringify({message: typeof _event.data.message === 'string' &amp;&amp; _event.data.message.length &gt; 0 ? _event.data.message : 'the cognition failed', turn: turn})"/>
@@ -339,6 +493,37 @@
         </transition>
       </state>
 
+      <!-- The completed turn's selections, each sent to its receiver; the
+           routed body events are taken (by active's transitions) before
+           floppy.routed. -->
+      <state id="routing">
+        <onentry>
+          <assign location="routing_selections" expr="true"/>
+          <foreach array="selections" item="selection">
+            <assign location="route" expr="routeOf(selection)"/>
+            <if cond="!route.ok">
+              <log label="bot.route.dropped" expr="route.why"/>
+            <elseif cond="route.target === null"/>
+              <log label="bot.route" expr="selection.event + ' -&gt; bot'"/>
+              <send eventexpr="selection.event" target="#_internal">
+                <content expr="selectionData(selection)"/>
+              </send>
+            <else/>
+              <log label="bot.route" expr="selection.event + ' -&gt; ' + route.target"/>
+              <send eventexpr="selection.event" targetexpr="'#_' + route.target">
+                <content expr="selectionData(selection)"/>
+              </send>
+            </if>
+          </foreach>
+          <raise event="floppy.routed"/>
+        </onentry>
+        <onexit>
+          <assign location="routing_selections" expr="false"/>
+          <assign location="selections" expr="[]"/>
+        </onexit>
+        <transition event="floppy.routed" target="returning"/>
+      </state>
+
       <!-- Back to attention: focused when a device is focused. -->
       <state id="returning">
         <transition cond="focused_device !== null" target="focused"/>
@@ -349,6 +534,10 @@
       <transition event="bot.ability.cognition.output bot.ability.failed bot.ability.cognition.cancelled bot.ability.processing.cancelled"
                   cond="fromCognition()">
         <log label="bot.stale" expr="_event.name + ' for turn ' + (isObject(_event.data) ? _event.data.turn : 'none') + ' (current ' + turn + ')'"/>
+      </transition>
+      <!-- A routed body event no transition above took. -->
+      <transition event="*" cond="routed() &amp;&amp; _event.name !== 'floppy.routed'">
+        <log label="bot.route.dropped" expr="_event.name + ' was not taken'"/>
       </transition>
     </state>
   </state>

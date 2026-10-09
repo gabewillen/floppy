@@ -5,20 +5,29 @@
   abilities/cognition.scx beside a copy of the body.
 
   Readiness: each entry into idle sends bot.ability.offers unless mode is
-  'silent' (the test rewrites mode's expr).
+  'silent' (the test rewrites mode's expr): bot.ability.cognition.ignore
+  with a schema carrying $schema, title, examples and a description (which
+  the body compacts), or, when mode is 'huge', also a choice whose schema
+  is over 32 KiB (the body fails such a turn).
 
   Each turn's behavior is the name of the bot.input observation the turn
   carries (stimulus.data.observation.event):
 
-  * reply: answers the turn with one selection;
+  * reply: answers the turn with one bot.ability.communication.respond
+    selection (offered by no ability);
+  * ignore: selects bot.ability.cognition.ignore for target cognition;
+  * focus: selects bot.focus_device for the observation's data;
+  * elsewhere: selects bot.ability.cognition.ignore for target speaking;
   * fail: answers bot.ability.failed;
   * stale: answers for another turn first, then for this one;
   * reboot: asks the body for a reboot (bot.reboot);
   * hang: never answers, and acknowledges a cancel;
   * deaf: never answers and never acknowledges a cancel.
 
-  It logs double.input per turn (turn, behavior, observation data) and
-  double.exit when it is cancelled.
+  It logs double.input per turn (turn, behavior, observation data),
+  double.choices (the turn's choices as JSON), double.ignore when a routed
+  bot.ability.cognition.ignore reaches it, and double.exit when it is
+  cancelled.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        version="1.0" datamodel="ecmascript" name="cognition_double" initial="alive">
@@ -27,6 +36,8 @@
     <data id="mode" expr="'ready'"/>
     <data id="turn" expr="0"/>
     <data id="action" expr="null"/>
+    <data id="observed" expr="null"/>
+    <data id="ignore" expr="({event: 'bot.ability.cognition.ignore', description: 'Deliberately ignore this stimulus.', schema: {'$schema': 'https://json-schema.org/draft/2020-12/schema', title: 'bot.ability.cognition.ignore', description: 'Deliberately ignore this stimulus.', type: 'object', properties: {}, additionalProperties: false, examples: [{}]}})"/>
   </datamodel>
   <state id="alive" initial="idle">
     <onexit>
@@ -35,13 +46,27 @@
     <state id="idle">
       <onentry>
         <if cond="mode === 'ready'">
-          <send event="bot.ability.offers" target="#_parent"><content>{"ability": "cognition", "choices": []}</content></send>
+          <send event="bot.ability.offers" target="#_parent">
+            <param name="ability" expr="'cognition'"/>
+            <param name="choices" expr="[ignore]"/>
+          </send>
+        </if>
+        <if cond="mode === 'huge'">
+          <send event="bot.ability.offers" target="#_parent">
+            <param name="ability" expr="'cognition'"/>
+            <param name="choices" expr="[ignore, {event: 'bot.ability.cognition.input', schema: {type: 'object', properties: {pick: {type: 'string', 'enum': Array.from({length: 3000}, function (_, i) { return 'value-' + (1000 + i); })}}}}]"/>
+          </send>
         </if>
       </onentry>
       <transition event="bot.ability.cognition.input" target="working">
         <assign location="turn" expr="_event.data.turn"/>
         <assign location="action" expr="_event.data.stimulus.data.observation.event"/>
-        <log label="double.input" expr="turn + ' ' + action + ' ' + JSON.stringify(_event.data.stimulus.data.observation.data)"/>
+        <assign location="observed" expr="_event.data.stimulus.data.observation.data"/>
+        <log label="double.input" expr="turn + ' ' + action + ' ' + JSON.stringify(observed)"/>
+        <log label="double.choices" expr="JSON.stringify(_event.data.choices)"/>
+      </transition>
+      <transition event="bot.ability.cognition.ignore">
+        <log label="double.ignore" expr="JSON.stringify(_event.data)"/>
       </transition>
       <transition event="bot.ability.cognition.cancel">
         <send event="bot.ability.cognition.cancelled" target="#_parent"><param name="turn" expr="_event.data.turn"/></send>
@@ -54,13 +79,33 @@
             <param name="turn" expr="turn"/>
             <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {text: 'reply ' + turn}}]"/>
           </send>
-        <elseif cond="action === 'fail'"/>
+        </if>
+        <if cond="action === 'ignore'">
+          <send event="bot.ability.cognition.output" target="#_parent">
+            <param name="turn" expr="turn"/>
+            <param name="output" expr="[{event: 'bot.ability.cognition.ignore', data: {}, reason: 'nothing to do', target: 'cognition'}]"/>
+          </send>
+        </if>
+        <if cond="action === 'elsewhere'">
+          <send event="bot.ability.cognition.output" target="#_parent">
+            <param name="turn" expr="turn"/>
+            <param name="output" expr="[{event: 'bot.ability.cognition.ignore', data: {}, target: 'speaking'}]"/>
+          </send>
+        </if>
+        <if cond="action === 'focus'">
+          <send event="bot.ability.cognition.output" target="#_parent">
+            <param name="turn" expr="turn"/>
+            <param name="output" expr="[{event: 'bot.focus_device', data: {device: observed}, reason: 'look'}]"/>
+          </send>
+        </if>
+        <if cond="action === 'fail'">
           <send event="bot.ability.failed" target="#_parent">
             <param name="message" expr="'double failed'"/>
             <param name="turn" expr="turn"/>
             <param name="input" expr="({})"/>
           </send>
-        <elseif cond="action === 'stale'"/>
+        </if>
+        <if cond="action === 'stale'">
           <send event="bot.ability.cognition.output" target="#_parent">
             <param name="turn" expr="turn + 100"/>
             <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {text: 'stale'}}]"/>
@@ -69,11 +114,12 @@
             <param name="turn" expr="turn"/>
             <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {text: 'fresh ' + turn}}]"/>
           </send>
-        <elseif cond="action === 'reboot'"/>
+        </if>
+        <if cond="action === 'reboot'">
           <send event="bot.reboot" target="#_parent"><content>{"reason": "cognition_child_teardown_failed"}</content></send>
         </if>
       </onentry>
-      <transition cond="['reply', 'fail', 'stale'].indexOf(action) &gt;= 0" target="idle"/>
+      <transition cond="['reply', 'ignore', 'elsewhere', 'focus', 'fail', 'stale'].indexOf(action) &gt;= 0" target="idle"/>
       <transition event="bot.ability.cognition.cancel" cond="action !== 'deaf'" target="idle">
         <send event="bot.ability.cognition.cancelled" target="#_parent"><param name="turn" expr="turn"/></send>
       </transition>

@@ -13,6 +13,11 @@
 //! The body writes each event it emits as a `log` record labelled with the
 //! event's name; the double logs `double.input` and `double.exit`.
 //!
+//! The double offers `bot.ability.cognition.ignore`; the routing tests
+//! check the turn's assembled choices (`double.choices`) and where the
+//! body routes each selection (`bot.route`, `bot.route.dropped`,
+//! `bot.focus`, `double.ignore`).
+//!
 //! One test runs the real cognition (`abilities/cognition.scx` and its
 //! stages) with no backend: the intuition's decision fails fast with
 //! `unconfigured`, and so does the turn.
@@ -475,5 +480,242 @@ fn without_a_decision_backend_the_real_cognitions_turn_fails_unconfigured() {
             r#"{"message":"the intuition failed: the decision failed (unconfigured)","turn":1}"#
         )])
     );
+    close(run);
+}
+
+/// An offered schema as the body compacts it: `$schema`, `title` and
+/// `examples` dropped everywhere but in property names.
+fn compacted(schema: &Json) -> Json {
+    match schema {
+        Json::Array(items) => Json::Array(items.iter().map(compacted).collect()),
+        Json::Object(members) => Json::Object(
+            members
+                .iter()
+                .filter(|(key, _)| !matches!(key.as_str(), "$schema" | "title" | "examples"))
+                .map(|(key, value)| {
+                    let value = match (key.as_str(), value) {
+                        ("properties", Json::Object(named)) => Json::Object(
+                            named
+                                .iter()
+                                .map(|(name, schema)| (name.clone(), compacted(schema)))
+                                .collect(),
+                        ),
+                        ("enum" | "const" | "required" | "default", value) => value.clone(),
+                        (_, value) => compacted(value),
+                    };
+                    (key.clone(), value)
+                })
+                .collect(),
+        ),
+        value => value.clone(),
+    }
+}
+
+/// The body's `bot.focus_device` choice for a turn whose focus candidates
+/// are `candidates`.
+fn focus_choice(candidates: &[&str]) -> Json {
+    let schema: Json = serde_json::from_str(
+        &std::fs::read_to_string(workspace().join("bots/floppy/schemas/bot.focus_device.json"))
+            .expect("the schema is readable"),
+    )
+    .expect("the schema is JSON");
+    let description = schema["description"]
+        .as_str()
+        .and_then(|text| text.lines().next())
+        .expect("a description")
+        .to_owned();
+    let mut schema = compacted(&schema);
+    schema["properties"]["device"]["enum"] = json!(candidates);
+    json!({"event": "bot.focus_device", "schema": schema, "description": description})
+}
+
+fn clear_choice() -> Json {
+    let schema: Json = serde_json::from_str(
+        &std::fs::read_to_string(workspace().join("bots/floppy/schemas/bot.clear_focus.json"))
+            .expect("the schema is readable"),
+    )
+    .expect("the schema is JSON");
+    let description = schema["description"]
+        .as_str()
+        .and_then(|text| text.lines().next())
+        .expect("a description")
+        .to_owned();
+    json!({"event": "bot.clear_focus", "schema": compacted(&schema), "description": description})
+}
+
+/// The double's offer, compacted and tagged with its target.
+fn ignore_choice() -> Json {
+    json!({
+        "event": "bot.ability.cognition.ignore",
+        "description": "Deliberately ignore this stimulus.",
+        "schema": {
+            "description": "Deliberately ignore this stimulus.",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "target": "cognition"
+    })
+}
+
+fn device_input(action: &str, data: &str, device: &str) -> Json {
+    json!({"observation": {"event": action, "data": data}, "target_device": device})
+}
+
+fn last_json(records: &[Json], label: &str) -> Json {
+    let text = logs(records)
+        .into_iter()
+        .filter(|(l, _)| l == label)
+        .map(|(_, text)| text)
+        .next_back()
+        .unwrap_or_else(|| panic!("a {label} log: {records:?}"));
+    serde_json::from_str(&text).expect("the log text is JSON")
+}
+
+#[test]
+fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
+    let body = layout(
+        &Cognition::Double("'ready'"),
+        &[("devices", "['lamp', 'fan']")],
+    );
+    let mut run = start(&body);
+    activated(&mut run);
+    // Unfocused, the input names the lamp: the only candidate. The body
+    // offers bot.focus_device pinned to it (no clear_focus: nothing is
+    // focused), then the double's offer, compacted and tagged.
+    run.event("bot.input", &device_input("focus", "lamp", "lamp"));
+    let records = run.until(WAIT, label_is("bot.focus"));
+    assert_eq!(
+        last_json(&records, "double.choices"),
+        json!([focus_choice(&["lamp"]), ignore_choice()])
+    );
+    assert_eq!(
+        only(&records, &["bot.choices", "bot.route", "bot.focus"]),
+        pairs(&[
+            (
+                "bot.choices",
+                "bot.focus_device bot.ability.cognition.ignore@cognition"
+            ),
+            ("bot.route", "bot.focus_device -> bot"),
+            ("bot.focus", "lamp"),
+        ])
+    );
+    // Focused on the lamp, an input for the lamp again: clear_focus is
+    // offered now. A focus on the fan, outside the turn's candidates, is
+    // routed to the body and taken by no transition.
+    run.event("bot.input", &device_input("focus", "fan", "lamp"));
+    let records = run.until(WAIT, label_is("bot.route.dropped"));
+    assert_eq!(
+        last_json(&records, "double.choices"),
+        json!([focus_choice(&["lamp"]), clear_choice(), ignore_choice()])
+    );
+    assert_eq!(
+        only(&records, &["bot.route", "bot.route.dropped", "bot.focus"]),
+        pairs(&[
+            ("bot.route", "bot.focus_device -> bot"),
+            ("bot.route.dropped", "bot.focus_device was not taken"),
+        ])
+    );
+    // Still focused on the lamp: the next turn's candidates include it.
+    run.event("bot.input", &device_input("focus", "fan", "fan"));
+    let records = run.until(WAIT, label_is("bot.focus"));
+    assert_eq!(
+        last_json(&records, "double.choices")[0],
+        focus_choice(&["lamp", "fan"])
+    );
+    assert_eq!(
+        only(&records, &["bot.focus"]),
+        pairs(&[("bot.focus", "fan")])
+    );
+    close(run);
+}
+
+#[test]
+fn a_selection_the_turn_did_not_offer_is_dropped() {
+    let body = layout(&Cognition::Double("'ready'"), &[]);
+    let mut run = start(&body);
+    activated(&mut run);
+    // No ability offers bot.ability.communication.respond, and no device
+    // is configured, so the body offers no focus.
+    run.event("bot.input", &input("reply", "hello"));
+    let records = run.until(WAIT, label_is("bot.route.dropped"));
+    assert_eq!(
+        last_json(&records, "double.choices"),
+        json!([ignore_choice()])
+    );
+    assert_eq!(
+        only(&records, &["bot.route.dropped"]),
+        pairs(&[(
+            "bot.route.dropped",
+            "bot.ability.communication.respond was not offered this turn"
+        )])
+    );
+    // An offered event for an ability that does not offer it.
+    run.event("bot.input", &input("elsewhere", "x"));
+    let records = run.until(WAIT, label_is("bot.route.dropped"));
+    assert_eq!(
+        only(
+            &records,
+            &["bot.route", "bot.route.dropped", "double.ignore"]
+        ),
+        pairs(&[(
+            "bot.route.dropped",
+            "bot.ability.cognition.ignore is not offered by speaking"
+        )])
+    );
+    close(run);
+}
+
+#[test]
+fn an_ignore_selection_reaches_the_cognition_and_ends_the_turn() {
+    let body = layout(&Cognition::Double("'ready'"), &[]);
+    let mut run = start(&body);
+    activated(&mut run);
+    run.event("bot.input", &input("ignore", "noise"));
+    let records = run.until(WAIT, label_is("double.ignore"));
+    assert_eq!(
+        only(
+            &records,
+            &[
+                "bot.processing.completed",
+                "bot.route",
+                "bot.route.dropped",
+                "double.ignore"
+            ]
+        ),
+        pairs(&[
+            (
+                "bot.processing.completed",
+                r#"{"output":[{"data":{},"event":"bot.ability.cognition.ignore","reason":"nothing to do","target":"cognition"}],"focus_candidates":[],"turn":1}"#
+            ),
+            ("bot.route", "bot.ability.cognition.ignore -> cognition"),
+            ("double.ignore", "{}"),
+        ])
+    );
+    // The bot is back in attention and takes the next turn.
+    run.event("bot.input", &input("reply", "next"));
+    let records = run.until(WAIT, label_is("double.input"));
+    assert_eq!(
+        only(&records, &["double.input"]),
+        pairs(&[("double.input", r#"2 reply "next""#)])
+    );
+    close(run);
+}
+
+#[test]
+fn choices_over_the_budget_fail_the_turn_before_the_cognition() {
+    let body = layout(&Cognition::Double("'huge'"), &[]);
+    let mut run = start(&body);
+    activated(&mut run);
+    run.event("bot.input", &input("reply", "x"));
+    let records = run.until(WAIT, label_is("bot.processing.failed"));
+    let failed = last_json(&records, "bot.processing.failed");
+    assert_eq!(failed["turn"], 1, "{failed}");
+    let message = failed["message"].as_str().expect("a message");
+    assert!(
+        message.starts_with("the turn's choices are ") && message.ends_with(" bytes, over 32768"),
+        "{message}"
+    );
+    assert!(only(&records, &["double.input"]).is_empty(), "{records:?}");
     close(run);
 }

@@ -39,7 +39,6 @@ const WAIT: Duration = Duration::from_secs(90);
 const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-fake\n";
 const IGNORE: &str = "bot.ability.cognition.ignore";
 const HANDOFF: &str = "bot.ability.reasoning.input";
-const RESPOND: &str = "bot.ability.communication.respond";
 
 /// The decision backend's scripted answer.
 #[derive(Clone, Copy)]
@@ -74,8 +73,8 @@ impl Decision {
 /// The generate backend's scripted answer.
 #[derive(Clone, Copy)]
 enum Generation {
-    /// One `bot.ability.communication.respond` selection.
-    Respond,
+    /// One `bot.ability.cognition.ignore` selection for the cognition.
+    Ignore,
     /// A selection of an event outside the choices.
     OffChoice,
     /// Answers 500.
@@ -87,7 +86,7 @@ enum Generation {
 impl Generation {
     const fn path(self) -> &'static str {
         match self {
-            Self::Respond => "respond",
+            Self::Ignore => "gignore",
             Self::OffChoice => "offchoice",
             Self::Fail => "gfail",
             Self::Hang => "ghang",
@@ -172,8 +171,8 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
         "/escalate/v1/systemone" => ok(decided(body, HANDOFF, 0.8)?),
         "/abstain/v1/systemone" => ok(decided(body, "none of these", 0.8)?),
         "/low/v1/systemone" => ok(decided(body, IGNORE, 0.34)?),
-        "/respond/v1/chat/completions" => selection(json!([
-            {"event": RESPOND, "data": {"text": "Hello there!"}, "reason": "a greeting"}
+        "/gignore/v1/chat/completions" => selection(json!([
+            {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}
         ])),
         "/offchoice/v1/chat/completions" => selection(json!([
             {"event": "bot.focus_device", "data": {"device": "lamp"}, "reason": "look"}
@@ -392,7 +391,7 @@ fn intuition_handles_an_ignore_without_reasoning() {
     let bot = layout(&mock, Decision::Ignore, Generation::Fail, &[]);
     let mut run = start(&bot);
     say(&mut run, "background noise");
-    let records = run.until(WAIT, turn_ended);
+    let records = run.until(WAIT, label_is("cognition.ignore"));
     assert_eq!(
         json_text(&records, "bot.output"),
         json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "intuition: nothing to do"}]})
@@ -412,6 +411,12 @@ fn intuition_handles_an_ignore_without_reasoning() {
         texts(&records, "reflection"),
         strings(&["absent (phase 5)"])
     );
+    // The body routed the selection to the only ability offering it.
+    assert_eq!(
+        texts(&records, "bot.route"),
+        strings(&["bot.ability.cognition.ignore -> cognition"])
+    );
+    assert_eq!(texts(&records, "cognition.ignore"), strings(&["idle"]));
     // The decision offered intuition's two choices; no model was asked.
     let decisions = mock.received("/systemone");
     assert_eq!(decisions.len(), 1, "one decision per turn");
@@ -438,13 +443,27 @@ fn intuition_handles_an_ignore_without_reasoning() {
 #[test]
 fn a_deliberative_handoff_escalates_to_reasoning() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Escalate, Generation::Respond, &[]);
+    let bot = layout(&mock, Decision::Escalate, Generation::Ignore, &[]);
     let mut run = start(&bot);
     say(&mut run, "what is the capital of France?");
-    let records = run.until(WAIT, turn_ended);
+    let records = run.until(WAIT, label_is("cognition.ignore"));
     assert_eq!(
         json_text(&records, "bot.output"),
-        json!({"turn": 1, "output": [{"event": RESPOND, "data": {"text": "Hello there!"}, "reason": "a greeting"}]})
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}]})
+    );
+    // Reasoning selected from the body's assembled choices (the
+    // cognition's offer, tagged), and the body routed the selection back.
+    assert_eq!(
+        texts(&records, "bot.choices"),
+        strings(&["bot.ability.cognition.ignore@cognition"])
+    );
+    assert_eq!(
+        texts(&records, "reasoning"),
+        strings(&["turn 1: bot.ability.cognition.ignore@cognition"])
+    );
+    assert_eq!(
+        texts(&records, "bot.route"),
+        strings(&["bot.ability.cognition.ignore -> cognition"])
     );
     assert_eq!(
         texts(&records, "cognition.stage"),
@@ -471,24 +490,24 @@ fn a_deliberative_handoff_escalates_to_reasoning() {
     let branches = format["schema"]["properties"]["events"]["items"]["anyOf"]
         .as_array()
         .expect("one branch per choice");
-    let mut pinned: Vec<String> = branches
+    let pinned: Vec<String> = branches
         .iter()
         .map(|branch| {
             assert_eq!(
                 branch["required"],
-                json!(["event", "data", "reason"]),
+                json!(["event", "data", "reason", "target"]),
                 "{branch}"
             );
             assert_eq!(branch["additionalProperties"], false);
             assert!(branch["properties"]["data"].get("examples").is_none());
+            assert_eq!(branch["properties"]["target"]["enum"], json!(["cognition"]));
             branch["properties"]["event"]["enum"][0]
                 .as_str()
                 .expect("a pinned event")
                 .to_owned()
         })
         .collect();
-    pinned.sort();
-    assert_eq!(pinned, strings(&[IGNORE, RESPOND]));
+    assert_eq!(pinned, strings(&[IGNORE]));
     let prompt = body["messages"]
         .as_array()
         .and_then(|messages| messages.last())
@@ -507,7 +526,7 @@ fn a_deliberative_handoff_escalates_to_reasoning() {
 #[test]
 fn an_abstention_escalates_to_reasoning() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Abstain, Generation::Respond, &[]);
+    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
     let mut run = start(&bot);
     say(&mut run, "hmm");
     let records = run.until(WAIT, turn_ended);
@@ -526,7 +545,7 @@ fn an_abstention_escalates_to_reasoning() {
 #[test]
 fn low_confidence_is_observed_by_the_tuner_and_escalates() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Low, Generation::Respond, &[]);
+    let bot = layout(&mock, Decision::Low, Generation::Ignore, &[]);
     let mut run = start(&bot);
     say(&mut run, "one");
     let first = run.until(WAIT, turn_ended);
@@ -559,7 +578,7 @@ fn after_the_warmup_the_threshold_follows_the_tuner() {
     let bot = layout(
         &mock,
         Decision::Low,
-        Generation::Respond,
+        Generation::Ignore,
         &[(
             "abilities/cognition.scx",
             &[("tuner", "({mean: 70, variance: 100, n: 8})")],
@@ -622,7 +641,7 @@ fn a_selection_outside_the_choices_never_becomes_output() {
 #[test]
 fn an_intuition_failure_fails_the_turn() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Fail, Generation::Respond, &[]);
+    let bot = layout(&mock, Decision::Fail, Generation::Ignore, &[]);
     let mut run = start(&bot);
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
@@ -640,7 +659,7 @@ fn an_intuition_that_does_not_decide_in_time_fails_the_turn() {
     let bot = layout(
         &mock,
         Decision::Hang,
-        Generation::Respond,
+        Generation::Ignore,
         &[("abilities/intuition.scx", &[("decision_timeout_ms", "300")])],
     );
     let mut run = start(&bot);
@@ -685,7 +704,7 @@ fn reboots_on_a_silent_stage(
 
 #[test]
 fn a_silent_intuition_asks_the_body_for_a_reboot() {
-    reboots_on_a_silent_stage(Decision::Hang, Generation::Respond, "intuition", "500");
+    reboots_on_a_silent_stage(Decision::Hang, Generation::Ignore, "intuition", "500");
 }
 
 #[test]
@@ -728,7 +747,7 @@ fn cancels_in(decision: Decision, generation: Generation, stage: &str, timeout_m
 
 #[test]
 fn a_cancel_during_intuition_is_acknowledged() {
-    cancels_in(Decision::Hang, Generation::Respond, "intuition", "1500");
+    cancels_in(Decision::Hang, Generation::Ignore, "intuition", "1500");
 }
 
 #[test]
