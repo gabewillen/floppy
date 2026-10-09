@@ -51,10 +51,10 @@
 
   Readiness: every entry into idle sends bot.ability.offers {ability,
   choices} to the parent: the choices <decision:choice events=...> reads,
-  bot.ability.cognition.ignore, compacted ($schema, title and examples
-  dropped) and held to max_offers_bytes (32 KiB; over it the offer is empty
-  and logged). The stages are per-turn children that offer nothing, so
-  there are no descendant offers to relay.
+  bot.ability.cognition.ignore, compacted by <decision:compact> ($schema,
+  title and examples dropped; over 32 KiB descriptions dropped too; still
+  over, the offer is empty and logged). The stages are per-turn children
+  that offer nothing, so there are no descendant offers to relay.
 
   Choices: each turn's input carries the body's assembled choices (its own
   and every ability's offers, tagged with their target); they go to
@@ -94,7 +94,7 @@
     <!-- The offers. -->
     <data id="offering" expr="false"/>
     <data id="offered" expr="[]"/>
-    <data id="max_offers_bytes" expr="32768"/>
+    <data id="offers_over" expr="false"/>
   </datamodel>
   <script>
     function isObject(value) {
@@ -127,35 +127,6 @@
         &amp;&amp; typeof c.event === 'string' &amp;&amp; c.event.length &gt; 0 &amp;&amp; c.schema !== undefined
         &amp;&amp; (c.description === undefined || typeof c.description === 'string')
         &amp;&amp; (c.target === undefined || (typeof c.target === 'string' &amp;&amp; c.target.length &gt; 0));
-    }
-    // An offered schema without $schema, title and examples (property
-    // names are kept).
-    function compactSchema(schema) {
-      if (Array.isArray(schema)) { return schema.map(compactSchema); }
-      if (!isObject(schema)) { return schema; }
-      var out = {};
-      Object.keys(schema).forEach(function (key) {
-        var value = schema[key];
-        if (['$schema', 'title', 'examples'].indexOf(key) &gt;= 0) { return; }
-        if (['properties', 'patternProperties', '$defs', 'definitions'].indexOf(key) &gt;= 0 &amp;&amp; isObject(value)) {
-          var named = {};
-          Object.keys(value).forEach(function (name) { named[name] = compactSchema(value[name]); });
-          out[key] = named;
-        } else if (['enum', 'const', 'required', 'default'].indexOf(key) &gt;= 0) {
-          out[key] = value;
-        } else {
-          out[key] = compactSchema(value);
-        }
-      });
-      return out;
-    }
-    function compactOffers(list) {
-      var compacted = list.map(function (choice) {
-        var entry = {event: choice.event, schema: compactSchema(choice.schema)};
-        if (typeof choice.description === 'string') { entry.description = choice.description; }
-        return entry;
-      });
-      return JSON.stringify(compacted).length &lt;= max_offers_bytes ? compacted : [];
     }
     // schemas/bot.ability.cognition.cancel.json
     function validCancel(data) {
@@ -197,10 +168,10 @@
       <assign location="offering" expr="true"/>
       <decision:choice location="offered" events="bot.ability.cognition.ignore"/>
       <assign location="offering" expr="false"/>
-      <if cond="compactOffers(offered).length &lt; offered.length">
-        <log label="cognition.offers.dropped" expr="'the offers are over ' + max_offers_bytes + ' bytes'"/>
+      <decision:compact location="offered" bound="32768" overlocation="offers_over"/>
+      <if cond="offers_over">
+        <log label="cognition.offers.dropped" expr="'the offers are over 32768 bytes'"/>
       </if>
-      <assign location="offered" expr="compactOffers(offered)"/>
       <log label="cognition.offers" expr="offered.map(function (choice) { return choice.event; }).join(' ')"/>
       <send event="bot.ability.offers" target="#_parent">
         <param name="ability" expr="'cognition'"/>
