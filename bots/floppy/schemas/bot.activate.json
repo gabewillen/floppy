@@ -2,7 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.activate",
   "description": "No-payload command that activates a bot.",
-  "properties": {},
+  "properties": {
+    "model": {
+      "description": "The model the bot's model-backed abilities ask the generate service for; absent, each ability's default [floppy field].",
+      "minLength": 1,
+      "type": "string"
+    }
+  },
   "type": "object",
   "examples": [
     {}

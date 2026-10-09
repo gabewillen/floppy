@@ -42,6 +42,55 @@
       "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",
       "minimum": 1,
       "type": "integer"
+    },
+    "stimulus": {
+      "additionalProperties": false,
+      "description": "The event the body took for this turn, as an envelope: its name, its data, and optionally its id, source and target. mosfet passes the live stimulus object (SkipJsonSchema); floppy passes it as data [floppy field].",
+      "properties": {
+        "event": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "data": {},
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "event",
+        "data"
+      ],
+      "type": "object"
     }
   },
   "type": "object",
@@ -51,10 +100,20 @@
       "focus_candidates": [
         "device-a"
       ],
-      "turn": 1
+      "turn": 1,
+      "stimulus": {
+        "event": "bot.input",
+        "data": {
+          "observation": {
+            "event": "text",
+            "data": "hello"
+          }
+        }
+      }
     }
   ],
   "required": [
-    "turn"
+    "turn",
+    "stimulus"
   ]
 }
