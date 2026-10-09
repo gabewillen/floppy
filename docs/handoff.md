@@ -230,6 +230,19 @@ inlines the browser `validate` options type so no unapproved
   `schema-mismatch`. Intuition and reasoning now script only `isObject`
   (validators go with the event-schema slice), traces unchanged.
 
+- `namespaces/bot` (floppy `242fb57a`, `d5fffb8d`), a new floppy
+  namespace (`https://github.com/stateforward/floppy/namespaces/bot`,
+  component `floppy_bot`, imports `types`, `telemetry`,
+  `data-model-host`): `<bot:attention location focuslocation stimulus
+  devices focus sources>` (mosfet `attention_bias_for_turn`) and
+  `<bot:stimulus location event data source target? id?>` (the cognition
+  input's stimulus envelope, canonical JSON). The body's `attentionBias`
+  and `envelope` functions and its processing-entry and deferral scripts
+  are gone (deferral is `<bot:stimulus location="pending" ...>` plus
+  `queue.concat([pending])`), traces unchanged. Still scripted in the
+  body: validators only (`isObject`, `validX`, `forTurn`, `allReady`,
+  `routed`, ...).
+
 Next: phase 4 (bot core and abilities), per
 `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 
