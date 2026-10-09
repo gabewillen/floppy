@@ -51,15 +51,6 @@
     <data id="stimulus" expr="null"/>
     <data id="ignore" expr="({event: 'bot.ability.cognition.ignore', description: 'Deliberately ignore this stimulus.', schema: {'$schema': 'https://json-schema.org/draft/2020-12/schema', title: 'bot.ability.cognition.ignore', description: 'Deliberately ignore this stimulus.', type: 'object', properties: {}, additionalProperties: false, examples: [{}]}})"/>
   </datamodel>
-  <script>
-    function product(stimulus) {
-      return stimulus.event === 'bot.ability.conversation.output';
-    }
-    function lastText(stimulus) {
-      var messages = stimulus.data.messages;
-      return messages[messages.length - 1].content;
-    }
-  </script>
   <state id="alive" initial="idle">
     <onexit>
       <log label="double.exit" expr="model"/>
@@ -82,8 +73,8 @@
       <transition event="bot.ability.cognition.input" target="working">
         <assign location="turn" expr="_event.data.turn"/>
         <assign location="stimulus" expr="_event.data.stimulus"/>
-        <assign location="action" expr="product(stimulus) ? lastText(stimulus) : stimulus.data.observation.event"/>
-        <assign location="observed" expr="product(stimulus) ? stimulus.data.messages.length : stimulus.data.observation.data"/>
+        <assign location="action" expr="stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages[stimulus.data.messages.length - 1].content : stimulus.data.observation.event"/>
+        <assign location="observed" expr="stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages.length : stimulus.data.observation.data"/>
         <log label="double.input" expr="turn + ' ' + action + ' ' + JSON.stringify(observed)"/>
         <log label="double.choices" expr="JSON.stringify(_event.data.choices)"/>
       </transition>
