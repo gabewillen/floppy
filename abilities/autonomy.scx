@@ -60,8 +60,10 @@
 
   Memory: each transaction invokes the Memory ability (abilities/memory.scx)
   with the database and mosfet's statements. A transaction that fails or
-  outlasts memory_timeout_ms answers {turn, handled: false, failed: true,
-  reason}.
+  outlasts memory_timeout_ms (floppy's bound) is logged and the turn goes
+  on, as in mosfet: a failed load matches no inventory rows
+  (_on_load_behaviors_failure), and a failed usage or failure record takes
+  the same effect as a persisted one (persistence_failed).
 
   Contracts: the Memory ability's events reference abilities/schemas/ by
   event:schema. A candidate is builder output and gets no schema files.
@@ -152,14 +154,19 @@
       <assign location="rows" expr="_event.data.results[0].rows"/>
     </transition>
     <transition event="done.invoke.load" target="matched"/>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="_event.invokeid === 'load'" target="failed">
-      <assign location="answer" expr="'Autonomy behavior load failed: ' + _event.data.message"/>
+    <!-- mosfet _on_load_behaviors_failure: a failed load is a warning,
+         and the turn goes on with no inventory rows. -->
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="_event.invokeid === 'load'" target="matched">
+      <log label="autonomy.behaviors.load.failed" expr="_event.data.message"/>
+      <assign location="rows" expr="[]"/>
     </transition>
-    <transition event="error.*" cond="_event.invokeid === 'load'" target="failed">
-      <assign location="answer" expr="'Autonomy behavior load failed: ' + _event.name"/>
+    <transition event="error.*" cond="_event.invokeid === 'load'" target="matched">
+      <log label="autonomy.behaviors.load.failed" expr="_event.name"/>
+      <assign location="rows" expr="[]"/>
     </transition>
-    <transition event="bot.ability.autonomy.behaviors.load.failed" cond="_event.sendid === timer" target="failed">
-      <assign location="answer" expr="'Autonomy behavior load timed out after ' + memory_timeout_ms + ' ms'"/>
+    <transition event="bot.ability.autonomy.behaviors.load.failed" cond="_event.sendid === timer" target="matched">
+      <log label="autonomy.behaviors.load.failed" expr="'timed out after ' + memory_timeout_ms + ' ms'"/>
+      <assign location="rows" expr="[]"/>
     </transition>
   </state>
 
@@ -227,14 +234,15 @@
       <param name="statements" expr="[{sql: used_sql, parameters: [rows[index].values[0]]}]"/>
     </invoke>
     <transition event="done.invoke.usage" target="answered"/>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="_event.invokeid === 'usage'" target="failed">
-      <assign location="answer" expr="'Autonomy behavior usage failed: ' + _event.data.message"/>
+    <!-- mosfet: persistence_failed takes the same effect as persisted. -->
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="_event.invokeid === 'usage'" target="answered">
+      <log label="autonomy.behavior_usage.persistence_failed" expr="_event.data.message"/>
     </transition>
-    <transition event="error.*" cond="_event.invokeid === 'usage'" target="failed">
-      <assign location="answer" expr="'Autonomy behavior usage failed: ' + _event.name"/>
+    <transition event="error.*" cond="_event.invokeid === 'usage'" target="answered">
+      <log label="autonomy.behavior_usage.persistence_failed" expr="_event.name"/>
     </transition>
-    <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="_event.sendid === timer" target="failed">
-      <assign location="answer" expr="'Autonomy behavior usage timed out after ' + memory_timeout_ms + ' ms'"/>
+    <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="_event.sendid === timer" target="answered">
+      <log label="autonomy.behavior_usage.persistence_failed" expr="'timed out after ' + memory_timeout_ms + ' ms'"/>
     </transition>
   </state>
 
@@ -251,14 +259,15 @@
       <param name="statements" expr="[{sql: failed_sql, parameters: [rows[index].values[0]]}]"/>
     </invoke>
     <transition event="done.invoke.failure" target="advancing"/>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="_event.invokeid === 'failure'" target="failed">
-      <assign location="answer" expr="'Autonomy behavior usage failed: ' + _event.data.message"/>
+    <!-- mosfet: persistence_failed takes the same effect as persisted. -->
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="_event.invokeid === 'failure'" target="advancing">
+      <log label="autonomy.behavior_usage.persistence_failed" expr="_event.data.message"/>
     </transition>
-    <transition event="error.*" cond="_event.invokeid === 'failure'" target="failed">
-      <assign location="answer" expr="'Autonomy behavior usage failed: ' + _event.name"/>
+    <transition event="error.*" cond="_event.invokeid === 'failure'" target="advancing">
+      <log label="autonomy.behavior_usage.persistence_failed" expr="_event.name"/>
     </transition>
-    <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="_event.sendid === timer" target="failed">
-      <assign location="answer" expr="'Autonomy behavior usage timed out after ' + memory_timeout_ms + ' ms'"/>
+    <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="_event.sendid === timer" target="advancing">
+      <log label="autonomy.behavior_usage.persistence_failed" expr="'timed out after ' + memory_timeout_ms + ' ms'"/>
     </transition>
   </state>
 

@@ -24,7 +24,7 @@
   selection to its single enabler).
 
   Confidence (mosfet ConfidenceTuner, 0-100 scale): the tuner state
-  {mean, variance, n} comes in as a <param> and goes back in <donedata>, so
+  {mean, var, n} comes in as a <param> and goes back in <donedata>, so
   it lives in the cognition across turns. <decision:tuner> keeps it (mosfet's
   defaults: the floor 35 during the warmup of 8 observations, then
   max(floor / 2, mean - k_sigma * std); EMA alpha 0.08, variance floor 100)
@@ -35,7 +35,8 @@
   service reports no probability with a chosen event, so such a turn adds
   no observation (mosfet observes only a reported score). declined (the
   abstain label won) and no-candidates (nothing could be filled) escalate
-  too (mosfet's unhandled pass).
+  too, with mosfet's reason empty_product (an empty product). The decision
+  timer is deciding.after (floppy's own bound; mosfet's intuition has none).
 
   Output: <donedata>, received by the cognition as done.invoke.intuition:
 
@@ -67,7 +68,7 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="choices" expr="[]"/>
-    <data id="tuner" expr="({mean: 70, variance: 100, n: 0})"/>
+    <data id="tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <data id="decision_timeout_ms" expr="20000"/>
     <data id="instructions" expr="'You decide what a small companion robot does with one stimulus it observed. Choose the offered event the robot should take for it. Abstain when none of them fits, so slower reasoning handles it.'"/>
     <!-- The decision in flight. -->
@@ -84,7 +85,7 @@
       <assign location="stimulus_data" expr="stimulus !== null &amp;&amp; stimulus.data instanceof Object &amp;&amp; !Array.isArray(stimulus.data) ? stimulus.data : ({})"/>
       <decision:tuner location="tuner" thresholdlocation="threshold"/>
       <log label="intuition" expr="'turn ' + turn + ': threshold ' + threshold"/>
-      <send idlocation="decision_timer" event="floppy.intuition.timed_out" delayexpr="decision_timeout_ms + 'ms'"/>
+      <send idlocation="decision_timer" event="deciding.after" delayexpr="decision_timeout_ms + 'ms'"/>
     </onentry>
     <onexit>
       <cancel sendidexpr="decision_timer"/>
@@ -108,7 +109,7 @@
         <assign location="result" expr="({handled: false, reason: 'low_confidence', turn: turn, tuner: tuner})"/>
       <else/>
         <log label="intuition" expr="'turn ' + turn + ': abstained (' + _event.data.reason + ')'"/>
-        <assign location="result" expr="({handled: false, reason: _event.data.reason, turn: turn, tuner: tuner})"/>
+        <assign location="result" expr="({handled: false, reason: 'empty_product', turn: turn, tuner: tuner})"/>
       </if>
     </transition>
     <transition event="decision.failed" cond="decision_id !== null &amp;&amp; _event.invokeid === decision_id" target="done">
@@ -122,7 +123,7 @@
       <log label="intuition" expr="'turn ' + turn + ': ' + _event.name"/>
       <assign location="result" expr="({handled: true, selected: [{event: _event.name, data: Object(_event.data)}], reason: 'none', turn: turn, tuner: tuner})"/>
     </transition>
-    <transition event="floppy.intuition.timed_out" cond="_event.sendid === decision_timer" target="done">
+    <transition event="deciding.after" cond="_event.sendid === decision_timer" target="done">
       <assign location="result" expr="({handled: false, failed: true, reason: 'the decision timed out after ' + decision_timeout_ms + ' ms', turn: turn, tuner: tuner})"/>
     </transition>
     <transition event="error.*" target="done">

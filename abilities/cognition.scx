@@ -111,7 +111,7 @@
     <data id="focus_candidates" expr="[]"/>
     <data id="choices" expr="[]"/>
     <!-- The intuition's confidence tuner (mosfet ConfidenceTuner). -->
-    <data id="tuner" expr="({mean: 70, variance: 100, n: 0})"/>
+    <data id="tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <!-- The stage in hand: its name, hop timer, and answer. -->
     <data id="stage" expr="null"/>
     <data id="hop_timer" expr="null"/>
@@ -206,7 +206,7 @@
         <log label="cognition.stage" expr="'autonomy unhandled (' + _event.data.reason + ')'"/>
       </transition>
       <transition event="done.invoke.autonomy" cond="_event.data.turn === turn &amp;&amp; typeof _event.data.handled === 'boolean'" target="failing">
-        <assign location="failure" expr="(typeof _event.data.reason === 'string' &amp;&amp; _event.data.reason.length &gt; 0 ? _event.data.reason : 'the stage failed')"/>
+        <assign location="failure" expr="(typeof _event.data.reason === 'string' &amp;&amp; _event.data.reason.length &gt; 0 ? _event.data.reason : 'Cognition ability failed.')"/>
       </transition>
       <transition event="error.*" cond="_event.invokeid === 'autonomy'" target="failing">
         <assign location="failure" expr="'the autonomy could not run (' + _event.name + ')'"/>
@@ -247,7 +247,7 @@
       <transition event="done.invoke.intuition" cond="_event.data.turn === turn &amp;&amp; typeof _event.data.handled === 'boolean'" target="failing">
         <assign location="tuner" expr="_event.data.tuner instanceof Object &amp;&amp; !Array.isArray(_event.data.tuner) ? _event.data.tuner : tuner"/>
         <log label="cognition.tuner" expr="JSON.stringify(tuner)"/>
-        <assign location="failure" expr="'the intuition failed: ' + (typeof _event.data.reason === 'string' &amp;&amp; _event.data.reason.length &gt; 0 ? _event.data.reason : 'the stage failed')"/>
+        <assign location="failure" expr="(typeof _event.data.reason === 'string' &amp;&amp; _event.data.reason.length &gt; 0 ? _event.data.reason : 'Cognition ability failed.')"/>
       </transition>
       <transition event="error.*" cond="_event.invokeid === 'intuition'" target="failing">
         <assign location="failure" expr="'the intuition could not run (' + _event.name + ')'"/>
@@ -280,7 +280,7 @@
         <assign location="selected" expr="_event.data.selected"/>
       </transition>
       <transition event="done.invoke.reasoning" cond="_event.data.turn === turn &amp;&amp; typeof _event.data.handled === 'boolean'" target="failing">
-        <assign location="failure" expr="(typeof _event.data.reason === 'string' &amp;&amp; _event.data.reason.length &gt; 0 ? _event.data.reason : 'the stage failed')"/>
+        <assign location="failure" expr="(typeof _event.data.reason === 'string' &amp;&amp; _event.data.reason.length &gt; 0 ? _event.data.reason : 'Cognition ability failed.')"/>
       </transition>
       <transition event="error.*" cond="_event.invokeid === 'reasoning'" target="failing">
         <assign location="failure" expr="'the reasoning could not run (' + _event.name + ')'"/>
@@ -370,6 +370,11 @@
       <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
                   cond="_event.invokeid === 'reflection'">
         <log label="cognition.reflection.failed" expr="_event.data.message"/>
+        <if cond="routines_enabled">
+          <send event="bot.ability.routines.reconcile" target="#_routines">
+            <content expr="({})"/>
+          </send>
+        </if>
       </transition>
       <transition event="error.*" cond="_event.invokeid === 'reflection'" target="reflection_off">
         <log label="cognition.reflection.failed" expr="_event.name"/>

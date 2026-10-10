@@ -20,7 +20,9 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | `namespaces/decision/` | the canonical extension namespace (a Wasm component; synchronous executable content: `decision:choice`); the builder's `scx:validate` is scxml.rs's embedded `scx` namespace |
 | `namespaces/bot/` | the bot body's extension namespace (a Wasm component; synchronous executable content: `bot:attention`, `bot:stimulus`) |
 | `namespaces/conversation/` | the conversation's extension namespace (a Wasm component; synchronous executable content: `conversation:commit`) |
-| `services/{generate,decision}/` | canonical invoked services (Wasm components: model generation, decisions) |
+| `services/{generate,decision,sql,pgsql,speech}/` | canonical invoked services (Wasm components: model generation, decisions, SQLite and Postgres memory, speech) |
+| `abilities/` | the abilities, one SCXML document per mosfet machine, invoked as children of the body (`<invoke type="scxml">`), with their event schemas in `abilities/schemas/` |
+| `bots/floppy/` | the floppy bot: its SCXML document (`floppy.scx`) and the twins of the ability event schemas it takes |
 | `bots/builder/` | the builder bot: its SCXML document (`builder.scx`), schemas, and saved live examples |
 | `tests/` | `floppy-tests`: integration tests that run the bots, namespaces, and services through `scx run` |
 | `scripts/` | build and proof scripts |
@@ -51,7 +53,7 @@ echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestria
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" \
-    bots/floppy/floppy.scx
+    --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network bots/floppy/floppy.scx
 # A bot, with the packages of floppy's latest GitHub release (once one is
 # published).
 scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
@@ -116,7 +118,6 @@ overrides it), `abilities/cognition.scx`, `abilities/reasoning.scx` and
 | `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
 | `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (mosfet's 30 s attachment timeout) |
 | `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (mosfet's 5 min processing timeout) |
-| `bots/floppy/floppy.scx` | `cancel_timeout_ms` | `5000` | a timed-out turn's cancel acknowledgement (clamped to 100 to 5000) |
 | `abilities/cognition.scx` | `hop_timeout_ms` | `30000` | each cascade stage (mosfet's 30 s) |
 | `abilities/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
 | `abilities/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (mosfet's `TURN_SILENCE_BOUND`) |

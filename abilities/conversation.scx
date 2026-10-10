@@ -7,10 +7,10 @@
   bot.ability.conversation.input, and records each spoken response with
   bot.ability.conversation.append.
 
-    inactive -input-> active { waiting -input-> recalling -> waiting }
+    inactive -input-> active { waiting -input-> running -> waiting }
     append (inactive or active): commit the outbound message
 
-  Inputs: recalling (mosfet Conversation's memory stage): with a database
+  Inputs: running (mosfet Conversation's memory stage): with a database
   (the <param> database, the memory database file) it invokes the memory
   ability (abilities/memory.scx) with one transaction that recalls
   the relationship's memories (content where query_tags
@@ -90,7 +90,7 @@
 
     <state id="inactive">
       <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json"
-                  target="recalling">
+                  target="running">
         <assign location="input" expr="_event.data"/>
       </transition>
     </state>
@@ -98,14 +98,14 @@
     <state id="active" initial="waiting">
       <state id="waiting">
         <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json"
-                    target="recalling">
+                    target="running">
           <assign location="input" expr="_event.data"/>
         </transition>
       </state>
 
       <!-- Recall the relationship's memories and remember the input, or
            nothing without a database; then commit the inbound message. -->
-      <state id="recalling" initial="recalling_from">
+      <state id="running" initial="recalling_from">
         <onentry>
           <assign location="parent" expr="({event: 'bot.ability.conversation.input', data: input})"/>
           <conversation:commit location="message" keylocation="participants" direction="inbound"
@@ -136,7 +136,7 @@
                       cond="_event.invokeid === 'remember'" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
-              <param name="message" expr="'Conversation memory failed: ' + _event.data.message"/>
+              <param name="message" expr="_event.data.message"/>
             </send>
           </transition>
         </state>

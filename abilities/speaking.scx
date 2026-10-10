@@ -5,12 +5,12 @@
   "speaking" and routes each selected response to it. Cognition never
   selects it directly (mosfet: bot.ability.speaking.input is not offered).
 
-    idle -bot.ability.speaking.input-> emitting -> idle
+    idle -bot.ability.speaking.input-> playing -> idle
 
-  emitting writes the words as <log label="bot.say"> and answers the parent
+  playing (mosfet's state name) writes the words as <log label="bot.say"> and answers the parent
   with bot.ability.speaking.output {text}: no audio, so media_type,
-  sample_rate_hz and channels stay absent (null). Speech synthesis and
-  playout (mosfet's encoding and playing states) are phase 6; recording the
+  sample_rate_hz and channels stay absent (null). Speech synthesis
+  (mosfet's encoding state) and audio playout are phase 6; recording the
   outbound message into the conversation is the communication's (its
   sibling conversation is out of this session's reach: SCXML sends go only
   to #_parent and to a session's own children). The input's contract is
@@ -38,13 +38,13 @@
       </send>
     </onentry>
     <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json"
-                target="emitting">
+                target="playing">
       <assign location="text" expr="_event.data.text"/>
     </transition>
   </state>
 
   <!-- Text mode: the words are the output. -->
-  <state id="emitting">
+  <state id="playing">
     <onentry>
       <log label="bot.say" expr="text"/>
       <send event="bot.ability.speaking.output" target="#_parent">

@@ -51,7 +51,8 @@
   (processing_timeout_ms) for the turn. Replies count only when they come
   from the cognition for the current turn. A timeout sends
   bot.ability.cognition.cancel {turn} and waits in cancelling_processing,
-  bounded by cancel_timeout_ms clamped to 100..5000 ms: the acknowledgement
+  bounded by processing_timeout_ms clamped to 100..5000 ms (mosfet's
+  cancel wait): the acknowledgement
   fails the turn (bot.processing.failed); no acknowledgement degrades the
   bot. Stimuli that arrive during a turn wait, as <bot:stimulus>
   envelopes, in the data model queue (in order) and start the next turns, one per return to unfocused or focused,
@@ -134,7 +135,6 @@
     <data id="database" expr="'/memory/floppy.sqlite'"/>
     <data id="activation_timeout_ms" expr="30000"/>
     <data id="processing_timeout_ms" expr="300000"/>
-    <data id="cancel_timeout_ms" expr="5000"/>
     <!-- The configured devices (none until phase 6) and the live source id
          each one reports from. -->
     <data id="devices" expr="[]"/>
@@ -219,7 +219,7 @@
 
     <state id="activating">
       <onentry>
-        <send id="activation-timer" event="floppy.activating.timed_out" delayexpr="activation_timeout_ms + 'ms'">
+        <send id="activation-timer" event="activating.after" delayexpr="activation_timeout_ms + 'ms'">
           <param name="run" expr="live_run"/>
         </send>
       </onentry>
@@ -229,7 +229,7 @@
       <transition cond="waiting.length === 0" target="active">
         <log label="bot.activated" expr="JSON.stringify({})"/>
       </transition>
-      <transition event="floppy.activating.timed_out" cond="!_event.invokeid &amp;&amp; Object(_event.data).run === live_run" target="inactive">
+      <transition event="activating.after" cond="!_event.invokeid &amp;&amp; Object(_event.data).run === live_run" target="inactive">
         <log label="bot.diagnostic" expr="'the abilities ' + JSON.stringify(waiting) + ' were not ready within ' + activation_timeout_ms + ' ms'"/>
         <log label="bot.activating.failed" expr="JSON.stringify({})"/>
       </transition>
@@ -421,7 +421,7 @@
       <state id="cancelling_processing">
         <onentry>
           <send id="cancel-timer" event="bot.processing.cancel.timed_out"
-                delayexpr="Math.min(5000, Math.max(100, cancel_timeout_ms)) + 'ms'">
+                delayexpr="Math.min(5000, Math.max(100, processing_timeout_ms)) + 'ms'">
             <param name="turn" expr="turn"/>
           </send>
         </onentry>

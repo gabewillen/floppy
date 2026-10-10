@@ -150,7 +150,7 @@
     <!-- mosfet episodes.episode_insert_input; the memory id is the
          next rowid in hex, since SQLite in Wasm has no entropy and
          randomblob repeats across the sql service's invocations. -->
-    <data id="insert_episode">INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT printf('%032x', coalesce(max(rowid), 0) + 1) FROM bot_memory), 'short_term', ?, NULL, 'task', 'standard', 'retain', ?, 'application/json', 'cognitive_episode')</data>
+    <data id="insert_episode">INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT printf('%032x', coalesce(max(rowid), 0) + 1) FROM bot_memory), 'memory', ?, NULL, 'task', 'standard', 'retain', ?, 'application/json', 'cognitive_episode')</data>
   </datamodel>
 
   <state id="idle">

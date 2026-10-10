@@ -12,7 +12,7 @@
 
   Reading is the document's own composite (mosfet's machine root): it
   invokes abilities/vision.scx as its long-lived child "vision" (mosfet's
-  visual classifier, attached for reading's lifetime; invoke lifecycle
+  visual classifier, invoked for reading's lifetime; invoke lifecycle
   replaces mosfet's attachment group). Its other stages are mosfet's
   providers inline: the text decoder and the output encoder pass their
   input through (mosfet's mlx_vlm TextDecoder and ReadingOutputEncoder),

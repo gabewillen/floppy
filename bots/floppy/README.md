@@ -9,11 +9,11 @@ invoked per turn: [autonomy](../../abilities/autonomy.scx) (a seam until
 phase 5: no behaviors), [intuition](../../abilities/intuition.scx) (the
 decision service picks ignore or hands the turn on, with mosfet's
 self-tuning confidence gate), and [reasoning](../../abilities/reasoning.scx)
-(one structured model call over the turn's choices; memory is a seam until
-phase 3), and the [communication](../../abilities/communication.scx),
+(one structured model call over the turn's choices; it recalls and retains
+through the [memory](../../abilities/memory.scx) ability), and the [communication](../../abilities/communication.scx),
 which holds the [conversation](../../abilities/conversation.scx) (the
-committed text history, one transcript per participant set; memory recall
-is a seam until phase 3, and inferring participants and relationships from
+committed text history, one transcript per participant set, recalled and
+remembered through the memory ability; inferring participants and relationships from
 voice embeddings, mosfet's turn detectors, is phase 6) and
 [speaking](../../abilities/speaking.scx) (text mode: the words are logged
 as `bot.say`; speech synthesis and playout are phase 6). Each turn the body
@@ -52,8 +52,7 @@ The env file must set `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
 reasoning's `generate` service has no default backend, decision D31) and
 `TYPESAFE_API_KEY` (the intuition's `decision` service; `TYPESAFE_BASE_URL`
 is optional, `https://api.typesafe.ai` without it). Without the TypeSafe key
-every turn fails with `the intuition failed: the decision failed
-(unconfigured)`; without the model endpoint a turn that reaches reasoning
+every turn fails with `the decision failed (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
 `bot.activate` may name the model (`{"model": "..."}`); the default is
 `Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory.scx`, mosfet's

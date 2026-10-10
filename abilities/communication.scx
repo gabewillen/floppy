@@ -6,16 +6,16 @@
   The body (bots/floppy/floppy.scx) invokes it as its child
   "communication".
 
-    attached { inactive -children ready-> active
-               active -respond-> preparing_response -> dispatching_response
-                 -> responding -speaking output, failure or hop timeout->
-                 active }
+    communication { inactive -children ready-> active
+                    active -respond-> preparing_response -> dispatching_response
+                      -> responding -speaking output, failure or hop timeout->
+                      active }
 
-  Children: attached holds <invoke id="conversation"> (abilities/
+  Children: communication holds <invoke id="conversation"> (abilities/
   conversation.scx, the one active conversation) and <invoke
   id="speaking"> (abilities/speaking.scx, text mode). Each is ready with its
-  first bot.ability.offers; inactive waits for both (mosfet attaches the
-  conversation composite there). A child that cannot start, or ends, sends
+  first bot.ability.offers; inactive waits for both (mosfet's inactive
+  waits for the conversation composite). A child that cannot start, or ends, sends
   bot.ability.communication.failed {message} to the body and ends this
   ability in its final state degraded.
 
@@ -71,7 +71,7 @@
        xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       version="1.0" datamodel="ecmascript" name="communication" initial="attached">
+       version="1.0" datamodel="ecmascript" name="communication" initial="communication">
   <datamodel>
     <data id="response_timeout_ms" expr="6000"/>
     <!-- The memory database file, for the conversation (null:
@@ -94,7 +94,7 @@
     <data id="spoken" expr="null"/>
   </datamodel>
 
-  <state id="attached" initial="inactive">
+  <state id="communication" initial="inactive">
     <invoke id="conversation" type="scxml" src="conversation.scx">
       <param name="database" expr="database"/>
     </invoke>
@@ -133,7 +133,7 @@
       <assign location="failure" expr="'the ' + _event.invokeid + ' child ended'"/>
     </transition>
     <!-- A speaking answer for no response in hand. -->
-    <transition event="bot.ability.speaking.output bot.ability.speaking.apply.failed" cond="_event.invokeid === 'speaking'">
+    <transition event="bot.ability.speaking.output bot.ability.failed" cond="_event.invokeid === 'speaking'">
       <log label="communication.stale" expr="_event.name"/>
     </transition>
 
@@ -249,7 +249,7 @@
           <param name="message" expr="spoken"/>
         </send>
       </transition>
-      <transition event="bot.ability.speaking.apply.failed" event:schema="schemas/bot.ability.speaking.apply.failed.json"
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
                   cond="_event.invokeid === 'speaking'" target="active">
         <send event="bot.ability.communication.failed" target="#_parent">
           <param name="message" expr="_event.data.message"/>

@@ -461,7 +461,7 @@ fn a_turn_that_times_out_is_cancelled_and_fails() {
 fn an_unacknowledged_cancel_degrades_the_bot() {
     let body = layout(
         &Cognition::Double("'ready'"),
-        &[("processing_timeout_ms", "300"), ("cancel_timeout_ms", "1")],
+        &[("processing_timeout_ms", "300")],
     );
     let mut run = start(&body);
     activated(&mut run);
@@ -516,7 +516,7 @@ fn without_a_decision_backend_the_real_cognitions_turn_fails_unconfigured() {
         only(&records, &["bot.processing.failed"]),
         pairs(&[(
             "bot.processing.failed",
-            r#"{"message":"the intuition failed: the decision failed (unconfigured)","turn":1}"#
+            r#"{"message":"the decision failed (unconfigured)","turn":1}"#
         )])
     );
     close(

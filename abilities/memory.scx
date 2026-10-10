@@ -6,9 +6,9 @@
   service (services/sql, SQLite) or the pgsql service (services/pgsql,
   Postgres over its wire protocol, mosfet's providers/postgres_memory). An ability that remembers invokes it from the
   state that needs memory (reasoning's recalling and retaining, the
-  identity's recalling and adopting, the conversation's recalling), so
-  attaching memory is implicit: the invocation is the attachment, and
-  leaving the invoking state cancels it.
+  identity's recalling and adopting, the conversation's running), so
+  memory is an invoked child of that state: entering the state starts it,
+  and leaving the state cancels it.
 
     opening -> migrating -> applying -> applied (final)
 
