@@ -27,7 +27,7 @@
   substate cancels it (SCXML 6.4), which replaces mosfet's stage cancel
   tokens. Handled ends the turn with the stage's selections as the output;
   unhandled goes on to the next stage (autonomy always does without
-  memory: it gets the stimulus and the memory path, and runs the learned
+  a database: it gets the stimulus and the database, and runs the learned
   behaviors the stimulus triggers);
   failed (or an error.* from the stage) answers bot.ability.failed. The
   intuition tuner state is passed in by <param> and kept from the donedata.
@@ -95,10 +95,10 @@
        version="1.0" datamodel="ecmascript" name="cognition" initial="alive">
   <datamodel>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <!-- The memory database file, for autonomy and reasoning (null: no memory). -->
+    <data id="database" expr="null"/>
     <data id="hop_timeout_ms" expr="30000"/>
     <!-- The phase 5 seams' gates (off in phase 4). -->
-    <!-- The memory service's database path (null: no inventory). -->
-    <data id="memory" expr="null"/>
     <data id="reflection_enabled" expr="false"/>
     <data id="routines_enabled" expr="false"/>
     <!-- The turn in hand. -->
@@ -191,7 +191,7 @@
         <param name="turn" expr="turn"/>
         <param name="input" expr="({focus: focus, focus_candidates: focus_candidates})"/>
         <param name="stimulus" expr="stimulus"/>
-        <param name="memory" expr="memory"/>
+        <param name="database" expr="database"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
                   cond="_event.data.turn === turn" target="cancelling_autonomy"/>
@@ -268,6 +268,7 @@
         <param name="focus_candidates" expr="focus_candidates"/>
         <param name="choices" expr="choices"/>
         <param name="model" expr="model"/>
+        <param name="database" expr="database"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
                   cond="_event.data.turn === turn" target="cancelling_reasoning"/>

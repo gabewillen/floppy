@@ -1,7 +1,6 @@
-{"label":"memory","parent":"session","session":"session.5","text":"absent","type":"log"}
+{"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
 {"label":"identity.name","parent":"session","session":"session.5","text":"recalled null","type":"log"}
 {"label":"identity.offers","parent":"session","session":"session.5","text":"bot.ability.identity.adopt","type":"log"}
-{"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
 {"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"double.input","parent":"session","session":"session.1","text":"1 deaf \"x\"","type":"log"}

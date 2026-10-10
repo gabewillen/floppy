@@ -1,9 +1,8 @@
-{"label":"memory","parent":"session","session":"session.5","text":"absent","type":"log"}
+{"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
 {"label":"identity.name","parent":"session","session":"session.5","text":"recalled \"Floppy\"","type":"log"}
 {"label":"identity.offers","parent":"session","session":"session.5","text":"bot.ability.identity.adopt","type":"log"}
-{"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
-{"label":"memory","parent":"session.2","session":"session.3","text":"absent","type":"log"}
+{"label":"conversation.memories","parent":"session.2","session":"session.3","text":"recalled 0, remembered 1","type":"log"}
 {"label":"conversation","parent":"session.2","session":"session.3","text":"inbound 0 from [\"gabe\"] (1 in its transcript)","type":"log"}
 {"label":"communication.product","parent":"session","session":"session.2","text":"0","type":"log"}
 {"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication bot.ability.identity.adopt@identity","type":"log"}
