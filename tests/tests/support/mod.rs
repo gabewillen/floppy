@@ -259,7 +259,9 @@ impl Run {
         ] {
             let uri = service_uri(name);
             let granted = args.iter().any(|arg| arg.starts_with(&format!("{uri}=")));
-            if !granted && args.iter().any(|arg| binds(Path::new(arg), name)) {
+            // `scx` runs from the workspace root, so a relative document
+            // path is relative to it.
+            if !granted && args.iter().any(|arg| binds(&workspace().join(arg), name)) {
                 full.splice(1..1, grant());
             }
         }
