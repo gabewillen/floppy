@@ -288,9 +288,14 @@ pub const DEFAULT_MEMORIES: usize = 100;
 /// component, never exceed it. A session command is one host call even
 /// when it defers `<invoke>` starts or cancels to the host's loop: the
 /// command, every child start, cancel, and continuation carried out for it,
-/// and its own continuation spend one budget. A nested store's own per-call
-/// cap still applies inside it (for example `DEFAULT_DATA_MODEL_CALL_FUEL` per
-/// data-model call). Standalone APIs refuel their one store to it per call.
+/// and its own continuation spend one budget. The one exception is
+/// compiling a document the embedder served (an `<invoke src>` document):
+/// each is compiled once per run on a budget of its own, so the documents a
+/// tree invokes cost no call's fuel, and their compiles stay bounded by the
+/// fixed set the embedder serves (inline `<content>` is compiled on the
+/// call's budget). A nested store's own per-call cap still applies inside
+/// it (for example `DEFAULT_DATA_MODEL_CALL_FUEL` per data-model call).
+/// Standalone APIs refuel their one store to it per call.
 ///
 /// Logical runaways are bounded before fuel: one machine call runs at most
 /// `scxml_engine::MAX_COMMANDS_PER_RUN` (1 024) commands, so an eventless

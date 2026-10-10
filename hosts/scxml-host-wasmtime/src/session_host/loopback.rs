@@ -457,6 +457,7 @@ pub(crate) struct CompilerRuntime {
 }
 
 /// Outcome of compiling one child document.
+#[derive(Clone)]
 pub(crate) enum ChildCompile {
     /// Lowered Machine IR bytes.
     Lowered(Vec<u8>),

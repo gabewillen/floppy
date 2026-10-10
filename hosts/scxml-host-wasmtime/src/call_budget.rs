@@ -15,7 +15,9 @@
 //! deferred `<invoke>` start or cancel, every child start, cancel, and
 //! continuation the host carries out for it, and the call's own
 //! continuation spend one budget, as the same work done inside one
-//! uninterrupted call would.
+//! uninterrupted call would. [`CallBudget::apart`] runs its body on a
+//! budget of its own instead: the session host compiles each document its
+//! embedder serves that way, once per run.
 //! From then on every store runs on what is left of it: entering a store's
 //! Wasm grants the smaller of the store's own per-call cap (the fuel its call
 //! site set, such as the data-model or script per-call fuel) and the
@@ -120,6 +122,37 @@ impl CallBudget {
         }
         self.held.fetch_add(1, Ordering::Relaxed);
         let _held = Held(self);
+        body()
+    }
+
+    /// Runs `body` on a budget of its own, the configured fuel and copy
+    /// allowance, as if it were an outermost host call, then gives the
+    /// current call back what it had left: what `body` spends is never
+    /// charged to the call it runs inside. The session host compiles each
+    /// document its embedder serves this way, once per run.
+    pub(crate) fn apart<T>(&self, body: impl FnOnce() -> T) -> T {
+        /// Gives the call its remainder back when dropped (also on unwind).
+        struct Restore<'a> {
+            budget: &'a CallBudget,
+            remaining: u64,
+            copies_left: u64,
+        }
+        impl Drop for Restore<'_> {
+            fn drop(&mut self) {
+                self.budget
+                    .remaining
+                    .store(self.remaining, Ordering::Relaxed);
+                self.budget
+                    .copies_left
+                    .store(self.copies_left, Ordering::Relaxed);
+            }
+        }
+        let _restore = Restore {
+            budget: self,
+            remaining: self.remaining(),
+            copies_left: self.copies_left.load(Ordering::Relaxed),
+        };
+        self.start();
         body()
     }
 
@@ -504,6 +537,46 @@ mod tests {
             .expect("a fresh held budget");
         store.set_fuel(u64::MAX).expect("fuel");
         spin.call(&mut store, 100_000).expect("a fresh budget");
+    }
+
+    #[test]
+    fn a_call_run_apart_is_charged_to_its_own_budget() {
+        let engine = engine();
+        let budget = CallBudget::new(1_000_000);
+        let (mut store, instance) = instance(&engine, &budget);
+        let spin = instance
+            .get_typed_func::<i32, ()>(&mut store, "spin")
+            .expect("spin");
+        // Inside one held call, three calls run apart each spend a budget
+        // of their own (together they exceed one), and the held call keeps
+        // what it had left: two more calls that fit it alone still run.
+        budget
+            .hold(|| {
+                store.set_fuel(u64::MAX)?;
+                spin.call(&mut store, 50_000)?;
+                let left = budget.remaining();
+                for _ in 0..3 {
+                    budget.apart(|| {
+                        store.set_fuel(u64::MAX)?;
+                        spin.call(&mut store, 100_000)
+                    })?;
+                }
+                assert_eq!(budget.remaining(), left, "apart runs never charge the call");
+                store.set_fuel(u64::MAX)?;
+                spin.call(&mut store, 50_000)
+            })
+            .expect("the apart runs leave the held budget untouched");
+        // A call run apart still runs out of its own budget.
+        let trap = budget
+            .apart(|| {
+                store.set_fuel(u64::MAX)?;
+                spin.call(&mut store, SPINS_PAST_BUDGET)
+            })
+            .expect_err("over its own budget");
+        assert_eq!(
+            trap.downcast_ref::<wasmtime::Trap>(),
+            Some(&wasmtime::Trap::OutOfFuel)
+        );
     }
 
     #[test]

@@ -779,6 +779,14 @@ impl SessionLinks {
     /// bindings (the one this session loaded last), else this session's
     /// for inline `<content>`; and an `<invoke src>` document's schema
     /// files (none for inline `<content>`).
+    ///
+    /// A document the embedder served (an `<invoke src>` document) is
+    /// compiled once per run, on a fuel budget of its own
+    /// ([`crate::call_budget::CallBudget::apart`]): the documents an
+    /// embedder serves are a fixed set it loaded before the run, so their
+    /// compiles are bounded by that set, however many sessions invoke them
+    /// and whichever call does first. Inline `<content>`, which an
+    /// expression may write, is compiled each time on the call's budget.
     pub(crate) fn compile_invocation(
         &mut self,
         source_name: String,
@@ -786,17 +794,33 @@ impl SessionLinks {
     ) -> Result<Vec<u8>, ComponentError> {
         let span =
             scxml_telemetry::observe(Module::HostWasmtime, Operation::HostWasmtimeInvokeCompile);
-        let bindings = self
-            .loaded_bindings
-            .take()
-            .or_else(|| self.bindings.clone());
+        let loaded = self.loaded_bindings.take();
+        let served = loaded.is_some();
+        let bindings = loaded.or_else(|| self.bindings.clone());
         let event_schemas = self.loaded_event_schemas.take().unwrap_or_default();
         self.compiled_bindings.clone_from(&bindings);
         let core = Rc::clone(&self.core);
         let packages = core.extension_packages(bindings.as_deref());
-        let compiled = self.shared.with_compiler(&core, |compiler| {
-            compiler.compile(source_name, source, packages.iter(), event_schemas)
-        });
+        let compiled = if served {
+            let key = compile_key(&source_name, &source, &packages, &event_schemas);
+            if let Some(compiled) = self.shared.compiled_document(&key) {
+                Ok(compiled)
+            } else {
+                let compiled = core.call_budget.apart(|| {
+                    self.shared.with_compiler(&core, |compiler| {
+                        compiler.compile(source_name, source, packages.iter(), event_schemas)
+                    })
+                });
+                if let Ok(kept @ (ChildCompile::Lowered(_) | ChildCompile::Rejected)) = &compiled {
+                    self.shared.keep_compiled_document(key, kept.clone());
+                }
+                compiled
+            }
+        } else {
+            self.shared.with_compiler(&core, |compiler| {
+                compiler.compile(source_name, source, packages.iter(), event_schemas)
+            })
+        };
         match compiled {
             Ok(ChildCompile::Lowered(bytes)) => {
                 span.event(SignalEvent::ArtifactProduced);
@@ -1138,4 +1162,44 @@ fn http_trace_context(context: WitTraceContext) -> HttpTraceContext {
             BaggagePolicy::Propagate => HttpBaggagePolicy::Propagate,
         },
     }
+}
+
+/// The SHA-256 of everything compiling a child document reads: its source
+/// name and text, the packages it binds, and its schema files, each
+/// length-prefixed so no two inputs share a key.
+pub(crate) fn compile_key(
+    source_name: &str,
+    source: &str,
+    packages: &[crate::ExtensionPackage],
+    event_schemas: &BTreeMap<String, Vec<u8>>,
+) -> [u8; 32] {
+    use sha2::Digest as _;
+    let mut digest = sha2::Sha256::new();
+    let mut field = |bytes: &[u8]| {
+        digest.update((bytes.len() as u64).to_le_bytes());
+        digest.update(bytes);
+    };
+    field(source_name.as_bytes());
+    field(source.as_bytes());
+    field(&(packages.len() as u64).to_le_bytes());
+    for package in packages {
+        for text in [
+            &package.namespace_uri,
+            &package.package_version,
+            &package.extension_artifact,
+            &package.schema_artifact,
+            &package.schema_sha256,
+            &package.wit_world,
+            &package.wit_version,
+        ] {
+            field(text.as_bytes());
+        }
+        field(&package.schema);
+    }
+    field(&(event_schemas.len() as u64).to_le_bytes());
+    for (uri, bytes) in event_schemas {
+        field(uri.as_bytes());
+        field(bytes);
+    }
+    digest.finalize().into()
 }

@@ -1718,8 +1718,9 @@ const SELF_INVOKING_CHILD: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scx
 /// not inside that session's call, so the chain takes no native stack per
 /// level: it nests until the caller's command budget ends the step, and the
 /// run fails with that budget, never with a stack overflow. The whole chain
-/// starts inside the root's start, one host call of the fuel budget, so
-/// with the default fuel the same chain runs out of fuel first.
+/// starts inside the root's start, one host call of the fuel budget (the
+/// document itself is compiled once, apart from it), so every level's start
+/// must fit that budget.
 #[test]
 fn unbounded_self_invocation_nests_until_the_callers_command_budget() {
     const BUDGET: u64 = 4_000;
@@ -1742,16 +1743,6 @@ fn unbounded_self_invocation_nests_until_the_callers_command_budget() {
         "{failure}"
     );
     assert_eq!(failure.commands, BUDGET, "one command per nested start");
-    let failure = run_with(&host(), &root, &[], documents(), BUDGET)
-        .expect_err("the chain outgrows the default fuel");
-    assert!(
-        matches!(
-            &failure.failure,
-            RunFailure::Host(HostError::Wasmtime(trap))
-                if trap.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::OutOfFuel)
-        ),
-        "{failure}"
-    );
 }
 
 /// Serves one `<script src>` of ECMAScript text.
