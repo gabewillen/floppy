@@ -7,7 +7,9 @@
   bot.ability.conversation.output it answers, and the product of each
   bot.ability.cognition.input handoff (harness.output, its JSON), so
   the pinned trace holds each committed message field by field, and every
-  bot.ability.conversation.failed (harness.failed, its JSON). An external
+  bot.ability.conversation.failed (harness.failed, its JSON). It forwards
+  bot.ability.conversation.snapshot.request too and logs each
+  bot.ability.conversation.snapshot.output (harness.snapshot). An external
   harness.burst {inputs} sends each of its inputs to the conversation in
   one macrostep, so the later ones arrive while the first is in hand.
 -->
@@ -30,7 +32,11 @@
         </send>
       </foreach>
     </transition>
-    <transition event="bot.ability.conversation.input bot.ability.conversation.append" cond="_event.invokeid === undefined">
+    <transition event="bot.ability.conversation.snapshot.output" cond="_event.invokeid === 'conversation'">
+      <log label="harness.snapshot" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="bot.ability.conversation.input bot.ability.conversation.append bot.ability.conversation.snapshot.request"
+                cond="_event.invokeid === undefined">
       <send eventexpr="_event.name" target="#_conversation">
         <content expr="_event.data"/>
       </send>

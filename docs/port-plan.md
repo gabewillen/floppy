@@ -266,7 +266,7 @@ D33 to D43.
 | `_selection_item_branch`, `dispatch_tool` | `<decision:selection>` | `namespaces/decision` element |
 | `ConfidenceTuner` | `<decision:tuner>` | `namespaces/decision` element |
 | `model_facing_xml`, `InputData.model_facing_payload` (reasoning's `ProcessorInput` prompt and its budgets) | `promptProjection()` in `abilities/reasoning/reasoning.js` | ability script |
-| `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`, `_stable_context_ref`, `MessageProvenance` | `<conversation:commit>` | `namespaces/conversation` element |
+| `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`, `_stable_context_ref`, `relationship_context_ref`, `MessageProvenance` | `<conversation:commit>` (its `keylocation` receives the relationship context reference) | `namespaces/conversation` element |
 | `cognition.py` Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |
 | `autonomy.py` Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<content expr>` children) | stage `.scx` child |
 | `intuition.py` Intuition | `abilities/intuition/intuition.scx` invoking `services/decision` | stage `.scx` child and service |
@@ -421,9 +421,25 @@ decisions are D76 to D79.
   (`exchange`), and takes the completed turn; each wait is bounded by
   mosfet's 5 s (`turn_timeout_ms`). A failure, a timeout, or a start the
   detector's schema refuses answers `bot.ability.conversation.failed`
-  `{stage: "turn_detector"}` and commits nothing. Memory follows, and the
-  committed message is the turns' product, each distinct text once, with
-  the first turn's `turn_ref` (D79). Input that arrives while one is in hand waits in the
+  `{stage: "turn_detector"}` and commits nothing. The committed message is
+  the turns' product, each distinct text once, with the first turn's
+  `turn_ref` (D79).
+- **The conversation's relationships and memory.** Each input first finds
+  its relationship as mosfet's `_relationship_for_input` does (targetless
+  input shares the first ambient relationship, other input matches a
+  relationship in either direction, and an ambient relationship whose
+  participants include a target matches at the similarity threshold);
+  a new one takes the input's `relationship_context_ref`
+  (`{"identity_groups":[...]}`, which `<conversation:commit keylocation>`
+  writes) and the `session_ref` `relationship-` and that. The memory is
+  kept under the relationship's `context_ref`: `recalling_memory` recalls
+  it before the turns and `remembering_memory` remembers the input, as
+  mosfet's `Memory.to_json` writes it, after them, each its own invocation
+  of the memory ability bounded by 5 s. The conversation answers
+  `bot.ability.conversation.snapshot.request` with
+  `bot.ability.conversation.snapshot.output {request_ref, detector_refs}`
+  (its participants), and a repeated append (the same id, source and
+  target) with its unchanged history. Input that arrives while one is in hand waits in the
   conversation's queue and is taken, in order, on the return to `waiting`
   (mosfet defers it); before the turns every input without memory was
   committed in the macrostep it arrived in, so none could arrive.

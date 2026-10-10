@@ -33,7 +33,8 @@
   bot.ability.cognition.input {stimulus}. The communication says a routed
   bot.ability.communication.respond through speaking and answers
   bot.ability.speaking.output or bot.ability.communication.failed, and
-  forwards the conversation's bot.ability.conversation.failed, all of
+  forwards the conversation's bot.ability.conversation.failed and a
+  product that is not text, bot.ability.conversation.output, all of
   which the body logs. The same input goes to the identity, which hands
   over bot.ability.cognition.input {stimulus: bot.ability.identity.addressed}
   when the text names the bot, as the cognition hands over a routine's
@@ -339,6 +340,11 @@
       </transition>
       <transition event="bot.ability.conversation.failed" event:schema="schemas/bot.ability.conversation.failed.json">
         <log label="bot.ability.conversation.failed" expr="eventDataJson(_event)"/>
+      </transition>
+      <!-- A conversation product that is not text (mosfet's bot grants no
+           turn for it). -->
+      <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json">
+        <log label="bot.ability.conversation.output" expr="eventDataJson(_event)"/>
       </transition>
       <!-- What the listening could not hear. -->
       <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json">

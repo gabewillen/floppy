@@ -306,6 +306,28 @@ fn history_carrying_turns(body: &Path) -> Run {
     run
 }
 
+/// A product that is not text is no turn: the communication forwards the
+/// conversation's output itself, whose latest message is inbound (mosfet
+/// `_has_conversation_product`), and the body logs it.
+#[test]
+fn a_product_that_is_not_text_reaches_the_body_as_the_conversation_output() {
+    let body = layout(&Speaking::Real, &[]);
+    let mut run = started(&body);
+    run.event(
+        "bot.ability.communication.input",
+        &json!({"source_ids": ["gabe"], "target_ids": ["floppy"], "content": {"a": 1}, "content_type": "application/json"}),
+    );
+    let records = run.until(WAIT, label_is("bot.ability.conversation.output"));
+    let output: Json = serde_json::from_str(&texts(&records, "bot.ability.conversation.output")[0])
+        .expect("the output is JSON");
+    assert_eq!(output["messages"].as_array().map(Vec::len), Some(1));
+    assert_eq!(output["messages"][0]["direction"], json!("inbound"));
+    assert_eq!(output["messages"][0]["content"], json!({"a": 1}));
+    assert!(texts(&records, "communication.product").is_empty());
+    assert!(texts(&records, "double.input").is_empty());
+    drop(run.close(WAIT));
+}
+
 #[test]
 fn a_blank_response_fails_without_speaking() {
     let body = layout(&Speaking::Real, &[]);
@@ -431,23 +453,26 @@ fn conversation_event(name: &str, data: &Json) -> (String, Json) {
     (name.to_owned(), data.clone())
 }
 
-#[test]
-fn the_conversation_commits_each_message_into_its_history() {
-    let dir = unique_scratch("conversation");
-    support::copy_ability("conversation", &dir.join("abilities"));
-    let harness = dir.join("abilities/harness.scx");
-    std::fs::copy(
-        workspace().join("tests/fixtures/phase4/conversation_harness.scx"),
-        &harness,
-    )
-    .expect("the harness is copyable");
+/// The relationships' references in
+/// [`the_conversation_commits_each_message_into_its_history`]: mosfet's
+/// `relationship_context_ref`, the same in either direction.
+const FIRST: &str = r#"relationship-{"identity_groups":[["a\"b","bot"],["alice","zed",[0.447213595499958,0.894427190999916]]]}"#;
+const AMBIENT: &str = r#"relationship-{"identity_groups":[[],["alice"]]}"#;
+const THIRD: &str =
+    r#"relationship-{"identity_groups":[["bob",[0.847998304005088,0.52999894000318]],["bot"]]}"#;
+
+/// The events of [`the_conversation_commits_each_message_into_its_history`]:
+/// unsorted string and embedding identities, an escaped quote, audio in
+/// mixed case (dropped), structured content (kept), outbound references,
+/// the same provenance id from another source (committed) and from the
+/// same one (not committed again, still answered), a record without
+/// content or id, the first participants again, then in the other
+/// direction, another targetless source (the ambient relationship), and
+/// input addressed to an ambient participant.
+fn conversation_history_events() -> [(String, Json); 11] {
     let input = "bot.ability.conversation.input";
     let append = "bot.ability.conversation.append";
-    // Unsorted string and embedding identities, an escaped quote, audio in
-    // mixed case (dropped), structured content (kept), outbound references,
-    // a repeated provenance id (not committed again), a record without
-    // content or id, and the first participants again.
-    let events = [
+    [
         conversation_event(
             input,
             &json!({"source_ids": ["zed", "alice", [0.5, 1]], "target_ids": ["bot", "a\"b"], "content": "hello", "content_type": "text/plain"}),
@@ -470,13 +495,57 @@ fn the_conversation_commits_each_message_into_its_history() {
         ),
         conversation_event(
             append,
+            &json!({"message": {"sequence": 0, "direction": "outbound", "source_ids": ["bot"], "target_ids": [], "content": "once", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1", "source": "q"}}}),
+        ),
+        conversation_event(
+            append,
             &json!({"message": {"sequence": 0, "direction": "outbound", "source_ids": [], "target_ids": [], "content_type": "text/plain", "provenance": {"event": append, "id": null}}}),
         ),
         conversation_event(
             input,
             &json!({"source_ids": ["alice", "zed", [0.5, 1]], "target_ids": ["a\"b", "bot"], "content": "again", "content_type": "text/plain"}),
         ),
-    ];
+        conversation_event(
+            input,
+            &json!({"source_ids": ["bot", "a\"b"], "target_ids": ["zed", [0.5, 1], "alice"], "content": "back", "content_type": "text/plain"}),
+        ),
+        conversation_event(
+            input,
+            &json!({"source_ids": ["bob"], "target_ids": [], "content": "aside", "content_type": "text/plain"}),
+        ),
+        conversation_event(
+            input,
+            &json!({"source_ids": ["carol"], "target_ids": ["alice"], "content": "to alice", "content_type": "text/plain"}),
+        ),
+    ]
+}
+
+/// The snapshot after [`the_conversation_commits_each_message_into_its_history`]:
+/// each relationship's participants, by relationship and then identity.
+fn assert_snapshot(all: &[Json], first: &str, ambient: &str, third: &str) {
+    let snapshot: Json =
+        serde_json::from_str(&texts(all, "harness.snapshot")[0]).expect("the snapshot is JSON");
+    assert_eq!(
+        snapshot,
+        json!({"request_ref": "s-1", "detector_refs": [
+            [first, "a\"b"], [first, "alice"], [first, "bot"], [first, "zed"], [first, [0.5, 1]],
+            [third, "bob"], [third, [2, 1.25]],
+            [ambient, "alice"], [ambient, "bob"], [ambient, "carol"],
+        ]})
+    );
+}
+
+#[test]
+fn the_conversation_commits_each_message_into_its_history() {
+    let dir = unique_scratch("conversation");
+    support::copy_ability("conversation", &dir.join("abilities"));
+    let harness = dir.join("abilities/harness.scx");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/conversation_harness.scx"),
+        &harness,
+    )
+    .expect("the harness is copyable");
+    let events = conversation_history_events();
     let mut run = Run::start(&[harness.display().to_string()], &[]);
     let mut all = Vec::new();
     for (name, data) in &events {
@@ -485,16 +554,21 @@ fn the_conversation_commits_each_message_into_its_history() {
         // repeated id).
         all.extend(run.until(WAIT, label_is("conversation")));
     }
-    // Six commits, six outputs.
+    // Eleven answers.
     let seen = std::cell::Cell::new(texts(&all, "harness.output").len());
-    if seen.get() < 6 {
+    if seen.get() < 11 {
         all.extend(run.until(WAIT, |record| {
             if label_is("harness.output")(record) {
                 seen.set(seen.get() + 1);
             }
-            seen.get() == 6
+            seen.get() == 11
         }));
     }
+    run.event(
+        "bot.ability.conversation.snapshot.request",
+        &json!({"request_ref": "s-1"}),
+    );
+    all.extend(run.until(WAIT, label_is("harness.snapshot")));
     assert_eq!(
         texts(&all, "conversation"),
         strings(&[
@@ -502,45 +576,109 @@ fn the_conversation_commits_each_message_into_its_history() {
             r#"inbound 1 from ["alice"] (1 in its relationship)"#,
             r#"inbound 2 from ["bob",[2,1.25]] (1 in its relationship)"#,
             "outbound 3",
-            "outbound r-1 already committed",
             "outbound 4",
-            r#"inbound 5 from ["alice","zed",[0.5,1]] (2 in its relationship)"#,
+            "outbound r-1 already committed",
+            "outbound 5",
+            r#"inbound 6 from ["alice","zed",[0.5,1]] (2 in its relationship)"#,
+            r#"inbound 7 from ["a\"b","bot"] (3 in its relationship)"#,
+            r#"inbound 8 from ["bob"] (2 in its relationship)"#,
+            r#"inbound 9 from ["carol"] (3 in its relationship)"#,
         ])
     );
+    assert_snapshot(&all, FIRST, AMBIENT, THIRD);
     let finished = run.close(WAIT);
     let outputs = texts(&finished.all, "harness.output");
-    assert_eq!(outputs.len(), 6, "{outputs:?}");
-    let last: Json = serde_json::from_str(&outputs[5]).expect("the output is JSON");
-    assert_eq!(
-        last["messages"][0]["provenance"]["session_ref"],
-        json!(r#"relationship-["alice","zed",[0.5,1]]["a\"b","bot"]"#)
-    );
-    assert_eq!(last["messages"][1]["content"], Json::Null);
+    assert_eq!(outputs.len(), 11, "{outputs:?}");
+    let last: Json = serde_json::from_str(&outputs[10]).expect("the output is JSON");
+    let messages = &last["messages"];
+    for (sequence, session_ref) in [
+        (0, FIRST),
+        (1, AMBIENT),
+        (2, THIRD),
+        (6, FIRST),
+        (7, FIRST),
+        (8, AMBIENT),
+        (9, AMBIENT),
+    ] {
+        assert_eq!(
+            messages[sequence]["provenance"]["session_ref"],
+            json!(session_ref),
+            "{sequence}"
+        );
+    }
+    assert_eq!(messages[1]["content"], Json::Null);
     // Each source's turn (mosfet's identity order: names, then
     // embeddings) is exchanged with its turn detector, and the turns'
     // texts are committed joined, each distinct text once (D79).
-    assert_eq!(last["messages"][0]["content"], json!("hello"));
+    assert_eq!(messages[0]["content"], json!("hello"));
     assert_eq!(
-        last["messages"][0]["provenance"]["turn_ref"],
+        messages[0]["provenance"]["turn_ref"],
         json!("input-1:turn:alice")
     );
     assert_eq!(
-        last["messages"][1]["provenance"]["turn_ref"],
+        messages[1]["provenance"]["turn_ref"],
         json!("input-2:turn:alice")
     );
+    assert_eq!(messages[2]["content"], json!({"b": 1, "a": [true, null]}));
     assert_eq!(
-        last["messages"][2]["content"],
-        json!({"b": 1, "a": [true, null]})
-    );
-    assert_eq!(
-        last["messages"][2]["provenance"]["turn_ref"],
+        messages[2]["provenance"]["turn_ref"],
         json!("input-3:turn:bob")
     );
-    assert_eq!(last["messages"][5]["content"], json!("again"));
+    // An append's provenance keeps its id, source and target.
+    assert_eq!(
+        (
+            &messages[3]["provenance"]["source"],
+            &messages[4]["provenance"]["source"]
+        ),
+        (&json!("q"), &Json::Null)
+    );
+    assert_eq!(messages[6]["content"], json!("again"));
+    assert_eq!(
+        messages[7]["provenance"]["turn_ref"],
+        json!("input-5:turn:a\"b")
+    );
+    // The duplicate is answered with the history it did not change.
+    let duplicate: Json = serde_json::from_str(&outputs[5]).expect("the output is JSON");
+    assert_eq!(duplicate["messages"].as_array().map(Vec::len), Some(5));
     trace::assert_trace(
         "the_conversation_commits_each_message_into_its_history",
         &finished.all,
         &[],
+    );
+}
+
+/// The remembered input is mosfet's `Memory.to_json` (the expected texts
+/// are mosfet.py e305580's own).
+#[test]
+fn the_remembered_input_is_mosfets_memory_json() {
+    let dir = unique_scratch("conversation-payload");
+    std::fs::copy(
+        workspace().join("abilities/conversation/conversation.js"),
+        dir.join("conversation.js"),
+    )
+    .expect("the script is copyable");
+    let harness = dir.join("payload.scx");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/conversation_payload.scx"),
+        &harness,
+    )
+    .expect("the harness is copyable");
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    let mut all = Vec::new();
+    for input in [
+        json!({"source_ids": ["zed", "alice", [0.5, 1]], "target_ids": ["bot", "\u{e9}"], "content": {"b": 1, "a": [true, null, 1.5], "\u{e9}": "x"}, "content_type": "application/json"}),
+        json!({"source_ids": [[1e-5, 2], [3, 4], "q\"\n"], "target_ids": [], "content": ["\u{1f600}", 1e-7, 12_345_678_901_234_567_890.5_f64, {"\u{7f}": [], "z": {}}], "content_type": "text/x"}),
+    ] {
+        run.event("payload", &input);
+        all.extend(run.until(WAIT, label_is("payload")));
+    }
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&all, "payload"),
+        strings(&[
+            r#"{"content":{"__stateforward_memory_content__":"mapping","value":[["é","x"],["a",{"__stateforward_memory_content__":"list","value":[true,null,1.5]}],["b",1]]},"content_type":"application/json","source_ids":["alice","zed",[0.5,1.0]],"target_ids":["bot","é"]}"#,
+            "{\"content\":{\"__stateforward_memory_content__\":\"list\",\"value\":[\"\u{1f600}\",1e-07,1.2345678901234567e+19,{\"__stateforward_memory_content__\":\"mapping\",\"value\":[[\"\u{7f}\",{\"__stateforward_memory_content__\":\"list\",\"value\":[]}],[\"z\",{\"__stateforward_memory_content__\":\"mapping\",\"value\":[]}]]}]},\"content_type\":\"text/x\",\"source_ids\":[\"q\\\"\\n\",[1e-05,2.0],[3.0,4.0]],\"target_ids\":[]}",
+        ])
     );
 }
 

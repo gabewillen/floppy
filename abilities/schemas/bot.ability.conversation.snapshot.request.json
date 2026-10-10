@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.conversation.snapshot.request",
+  "description": "Request for the current inferred relationship snapshot.",
+  "properties": {
+    "request_ref": {
+      "description": "Caller correlation reference.",
+      "minLength": 1,
+      "title": "Request Ref",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_ref"
+  ],
+  "type": "object"
+}
