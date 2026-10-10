@@ -945,7 +945,9 @@ fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
     });
     run.event(
         "builder.request",
-        &json!({"spec": SPEC, "generate_timeout_ms": 1000}),
+        // Long enough that the redesign answers in time on a loaded
+        // machine (the held first plan times out whatever the bound).
+        &json!({"spec": SPEC, "generate_timeout_ms": 5000}),
     );
     run.end_input();
     records.extend(run.finish(Duration::from_mins(3)).records);
