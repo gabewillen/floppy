@@ -20,8 +20,9 @@
 
   Ticks: each bot.behavior.tick the routine sends its parent (#_parent)
   goes up to this runner's parent, as does each one the rest of the chain
-  passes up; a tick whose name is not the routine's is not forwarded
-  (mosfet Routines._is_stale_tick). scxml.rs checks the tick against the
+  passes up, once, by one transition on running; a tick whose name is
+  none of the chain's routines is not forwarded (mosfet
+  Routines._is_stale_tick). scxml.rs checks the tick against the
   transition's event:schema as it arrives.
 
   Stopping: a routine that ends, or cannot start (an error.* for it; a
@@ -43,21 +44,22 @@
   <script src="routines_runner.js"/>
 
   <parallel id="running">
+    <!-- A tick from the chain (the routine's, or the rest's): one
+         transition here, so a tick goes up once whichever region is on. -->
+    <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
+                cond="isRoutineTick(_event)">
+      <send event="bot.behavior.tick" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
     <!-- The first routine. -->
     <state id="routine_region" initial="routine_on">
       <state id="routine_on">
         <invoke id="routine" type="scxml">
           <content expr="routineSource(0)"/>
         </invoke>
-        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
-                    cond="isRunningTick(_event)">
-          <send event="bot.behavior.tick" target="#_parent">
-            <content expr="_event.data"/>
-          </send>
-        </transition>
         <transition event="done.invoke.routine" target="routine_off"/>
-        <transition event="error.*" cond="isRoutineError(_event)"
-                    target="routine_off">
+        <transition event="error.*" cond="isRoutineError(_event)" target="routine_off">
           <log label="routines.failed" expr="routineFailure(0, _event)"/>
         </transition>
       </state>
@@ -74,13 +76,7 @@
         <invoke id="rest" type="scxml" src="routines_runner.scx">
           <param name="routines" expr="restRoutines()"/>
         </invoke>
-        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
-                    cond="isRest(_event)">
-          <send event="bot.behavior.tick" target="#_parent">
-            <content expr="_event.data"/>
-          </send>
-        </transition>
-        <transition event="error.*" cond="isRest(_event)" target="rest_off">
+        <transition event="error.*" cond="isRestError(_event)" target="rest_off">
           <log label="routines.failed" expr="routineFailure(1, _event)"/>
         </transition>
       </state>

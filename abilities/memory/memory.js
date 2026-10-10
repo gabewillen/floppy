@@ -16,19 +16,8 @@ function engineRevisions() {
   return postgres ? [postgresql_0001, postgresql_0002] : [sqlite_0001, sqlite_0002];
 }
 
-function isMigration(_event) {
-  return _event.invokeid === 'migration';
-}
-
 // migrating and applying
 
 function couldNotRunFailure(_event) {
   return 'Memory could not run (' + _event.name + ')';
-}
-
-// applying
-
-// Either engine's transaction.
-function isApply(_event) {
-  return _event.invokeid.startsWith('apply');
 }

@@ -9,12 +9,6 @@ function hasDeferredInput() {
   return deferred.length > 0;
 }
 
-// Shared by every memory step.
-
-function isFromInvoke(_event, invokeid) {
-  return _event.invokeid === invokeid;
-}
-
 // The behaviors of select_behaviors' rows (named as the inventory's
 // fields) with their triggers from select_triggers' rows: the SQL both
 // engines run returns plain rows, assembled here.
@@ -82,22 +76,27 @@ function selectPrompt() {
   return JSON.stringify({cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, behaviors: behaviors});
 }
 
-// The events of a generate.result object reply, else selected unchanged.
+// The events of a generate.result object reply, else selected unchanged
+// (D41: the service's events are unchecked).
 function generatedSelection(_event) {
-  return _event.name === 'generate.result' && Object(_event.data).json instanceof Object ? _event.data.json.events : selected;
+  return Object(_event.data).json instanceof Object ? _event.data.json.events : selected;
 }
 
 // The code of a generate.failed, else gen_failure unchanged.
 function generateFailure(_event) {
-  return _event.name === 'generate.failed' && typeof Object(_event.data).code === 'string' ? _event.data.code : gen_failure;
+  return typeof Object(_event.data).code === 'string' ? _event.data.code : gen_failure;
 }
 
-function isGenerateDone(_event) {
+// An event of this hop's call. processing is entered once per reflection,
+// and each entry invokes the service under a fresh gen_id, so a late
+// event of an earlier entry's cancelled call does not match: scxml.rs
+// keeps the events a cancelled invocation queued before its cancel.
+function isGenerate(_event) {
   return _event.invokeid === gen_id;
 }
 
 function hasSelection(_event) {
-  return isGenerateDone(_event) && Array.isArray(selected);
+  return isGenerate(_event) && Array.isArray(selected);
 }
 
 function hasEmptySelection(_event) {
