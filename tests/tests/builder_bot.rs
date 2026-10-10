@@ -1,6 +1,7 @@
 //! Harness of the builder bot (`bots/builder/builder.scx`), run exactly as
-//! its README says: `scx run --env-file <file> bots/builder/builder.scx`,
-//! with the `builder.request` on standard input. Its packages resolve from
+//! its README says: `scx run --env-file <file> --dir <generate>=<dir>::/media
+//! bots/builder/builder.scx` (the harness grants the media directory,
+//! `support::media_grant`), with the `builder.request` on standard input. Its packages resolve from
 //! their repository URIs (the test cache `scripts/build-components.sh`
 //! published), its `env` attributes scope the values, and it ends in the
 //! final state `done` or `failed`, whose `<donedata>` `scx run` prints in its

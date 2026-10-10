@@ -100,7 +100,7 @@ Last updated: 2026-10-09.
 - Build floppy's components: `scripts/build-components.sh` (publishes a dev
   package cache under `target/components/package-cache`).
 - Run the builder bot (dev, until floppy has a release):
-  `scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx`
+  `scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx`
   with a `builder.request` event on stdin (see `bots/builder/README.md`).
 - Live tests: `FLOPPY_LIVE_ENV_FILE` (colon-separated env files) and
   `FLOPPY_LIVE_MODEL`.

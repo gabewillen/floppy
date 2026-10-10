@@ -1,4 +1,4 @@
-use floppy_service_generate::{FailureCode, Generation, parse_parameters};
+use floppy_service_generate::{FailureCode, Generation, ImageReadFailure, parse_parameters};
 use scxml_syntax::{Node, SourceId, SourceText, parse_xml};
 use scxml_types::DataValue;
 
@@ -257,14 +257,17 @@ fn the_contract_is_the_service_s_own() {
     .map(|code| code.name())
     .collect();
     assert_eq!(codes, FAILURE_CODES);
+    // No image is read here.
+    let no_files = |_: &str, _: usize| Err(ImageReadFailure::Unreadable);
     // Every listed parameter is one the service takes: given twice, it is
     // refused as repeated, never as unknown.
     let text = DataValue::String("x".to_owned());
     for name in PARAMETERS {
-        let error = parse_parameters([(name, &text), (name, &text)])
+        let error = parse_parameters([(name, &text), (name, &text)], no_files)
             .expect_err("a repeated parameter is refused");
         assert_eq!(error, "generate takes each parameter once", "{name}");
     }
-    let accepted: Result<Generation, _> = parse_parameters([("model", &text), ("prompt", &text)]);
+    let accepted: Result<Generation, _> =
+        parse_parameters([("model", &text), ("prompt", &text)], no_files);
     assert!(accepted.is_ok());
 }

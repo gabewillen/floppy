@@ -8,10 +8,10 @@ request on standard input:
 ```console
 # The locally built packages (the dev cache under target/).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
 # floppy's latest release, once one is published (phase 7).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
-  scx run --env-file .env bots/builder/builder.scx
+  scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
 ```
 
 or invoke it as a child and send it the request; it ends with one of two
@@ -189,6 +189,12 @@ Everything a run needs is in the document:
   (`env:apikey`, `env:baseurl`), and `TYPESAFE_API_KEY` and
   `TYPESAFE_BASE_URL` only to the decision service's. `scx run` lists each
   variable and the `<invoke>`s it goes to before running (names only).
+* The `generate` service imports `wasi:filesystem` (it reads the images a
+  message names, `services/generate/README.md`), so the run grants it a
+  media directory, `--dir
+  "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media"`
+  (create `media/` first; it is ignored by git): `scx run` refuses a run
+  that binds the service without it. The builder sends no images.
 * `scx:validate` is scxml.rs's `scx` namespace
   (`https://github.com/stateforward/scxml.rs/namespaces/scx`), which `scx`
   embeds, so it needs no package and no fetch, and it runs within the
@@ -222,10 +228,10 @@ From the repository root, after `sh scripts/build-components.sh` and with
 ```console
 # The locally built packages (the dev cache under target/).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
 # floppy's latest release, once one is published (phase 7).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
-  scx run --env-file .env bots/builder/builder.scx
+  scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
 ```
 
 Standard output carries one JSON record per line: `log` records with the
