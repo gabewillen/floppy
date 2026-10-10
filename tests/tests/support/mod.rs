@@ -257,6 +257,11 @@ impl Run {
         if !granted && args.iter().any(|arg| binds_sql(Path::new(arg))) {
             full.splice(1..1, memory_grant());
         }
+        let pgsql = service_uri("pgsql");
+        let granted = args.iter().any(|arg| arg.starts_with(&format!("{pgsql}=")));
+        if !granted && args.iter().any(|arg| binds(Path::new(arg), "pgsql")) {
+            full.splice(1..1, pgsql_grant());
+        }
         let mut command = command(&full);
         for (name, value) in env {
             command.env(name, value);
@@ -448,11 +453,28 @@ pub fn memory_grant() -> Vec<String> {
     ]
 }
 
+/// `--wasi` letting the pgsql service connect (`inherit-network`): the
+/// memory ability names it beside the sql service, so a run that binds one
+/// binds both.
+pub fn pgsql_grant() -> Vec<String> {
+    vec![
+        "--wasi".to_owned(),
+        format!("{}=inherit-network", service_uri("pgsql")),
+    ]
+}
+
 /// Whether the `.scx` document at `path`, or a document it loads by a
 /// literal relative `<invoke src>` (recursively), names the sql service's
 /// URI. Anything that is not a readable `.scx` file names none.
 pub fn binds_sql(path: &Path) -> bool {
-    fn visit(path: &Path, seen: &mut Vec<PathBuf>) -> bool {
+    binds(path, "sql")
+}
+
+/// Whether the `.scx` document at `path`, or a document it loads by a
+/// literal relative `<invoke src>` (recursively), names the floppy service
+/// `name`'s URI.
+pub fn binds(path: &Path, name: &str) -> bool {
+    fn visit(path: &Path, uri: &str, seen: &mut Vec<PathBuf>) -> bool {
         let Ok(path) = path.canonicalize() else {
             return false;
         };
@@ -463,7 +485,7 @@ pub fn binds_sql(path: &Path) -> bool {
         let Ok(text) = std::fs::read_to_string(&path) else {
             return false;
         };
-        if text.contains(&service_uri("sql")) {
+        if text.contains(&format!("{uri}\"")) {
             return true;
         }
         let dir = path.parent().unwrap_or(Path::new("/")).to_owned();
@@ -471,9 +493,9 @@ pub fn binds_sql(path: &Path) -> bool {
             .skip(1)
             .filter_map(|rest| rest.split('"').next())
             .filter(|src| !src.contains(':'))
-            .any(|src| visit(&dir.join(src), seen))
+            .any(|src| visit(&dir.join(src), uri, seen))
     }
-    visit(path, &mut Vec::new())
+    visit(path, &service_uri(name), &mut Vec::new())
 }
 
 /// A scratch directory of its own for each call (tests run in parallel).
@@ -503,4 +525,62 @@ pub fn run_document(
     let mut run = Run::start(&full, env);
     run.end_input();
     run.finish(limit)
+}
+
+/// One `PGlite` server for a Postgres-engine test: `node
+/// $FLOPPY_PGLITE_SERVER --port 0` (the `pglite-server` script of
+/// `@electric-sql/pglite-socket`, `dist/scripts/server.js`), a fresh
+/// in-memory database on a free loopback port, stopped when dropped.
+pub struct Pglite {
+    child: Child,
+    /// Its `IP:PORT`.
+    pub address: String,
+}
+
+impl Pglite {
+    /// Starts a server; `None` when `FLOPPY_PGLITE_SERVER` is unset.
+    pub fn start() -> Option<Self> {
+        let script = std::env::var_os("FLOPPY_PGLITE_SERVER")?;
+        let mut child = Command::new("node")
+            .arg(script)
+            .args(["--port", "0", "--max-connections", "8"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("node runs the PGlite server");
+        let stdout = child.stdout.take().expect("stdout is piped");
+        let mut lines = BufReader::new(stdout).lines();
+        let address = loop {
+            let line = lines
+                .next()
+                .expect("the PGlite server reports where it listens")
+                .expect("the PGlite server's output is text");
+            if let Some(listening) = line.split_once("listening on ") {
+                let listening: Json =
+                    serde_json::from_str(listening.1).expect("the address is JSON");
+                break format!(
+                    "{}:{}",
+                    listening["host"].as_str().expect("a host"),
+                    listening["port"]
+                );
+            }
+        };
+        // Keep draining its output so the server never blocks on a full
+        // pipe.
+        std::thread::spawn(move || for _ in lines {});
+        Some(Self { child, address })
+    }
+
+    /// The Postgres connection URI of its database.
+    pub fn database(&self) -> String {
+        format!("postgresql://postgres@{}/postgres", self.address)
+    }
+}
+
+impl Drop for Pglite {
+    fn drop(&mut self) {
+        let _killed = self.child.kill();
+        let _waited = self.child.wait();
+    }
 }

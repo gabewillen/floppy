@@ -54,7 +54,7 @@ expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 expected_wasi_sdk='25.0'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
 namespace_components='floppy_decision floppy_bot floppy_conversation'
-service_components='floppy_service_generate floppy_service_decision floppy_service_sql'
+service_components='floppy_service_generate floppy_service_decision floppy_service_sql floppy_service_pgsql'
 # Package validator components (stateforward:scxml-validator/package-validator),
 # each named by its package's manifest (`validator-artifact`).
 validator_components='floppy_service_generate_validator'
@@ -150,6 +150,24 @@ expected_imports() {
                 'wasi:io/streams@0.2.12' \
                 'wasi:filesystem/types@0.2.12' \
                 'wasi:filesystem/preopens@0.2.12'
+            ;;
+        # The pgsql service: one async `invoke` export and the Postgres wire
+        # protocol on a TCP connection the run grants. It keeps exactly the
+        # sockets it imports for the host (which links them only under
+        # `--wasi URI=inherit-network`) and the wasi:io interfaces its
+        # streams use; wasi:cli and the monotonic clock are denied by the
+        # composed provider (services/pgsql/wasi-cli-deny.wat).
+        floppy_service_pgsql)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'wasi:io/poll@0.2.12' \
+                'wasi:io/error@0.2.12' \
+                'wasi:io/streams@0.2.12' \
+                'wasi:sockets/network@0.2.12' \
+                'wasi:sockets/instance-network@0.2.12' \
+                'wasi:sockets/tcp@0.2.12' \
+                'wasi:sockets/tcp-create-socket@0.2.12'
             ;;
         # A package validator's world imports nothing: its export's record
         # types arrive through the types-only types and document interfaces.
@@ -271,15 +289,17 @@ build_component() {
         virt_input=$seeded
         ;;
     esac
-    if [ "$component" = floppy_service_sql ]; then
+    if [ "$component" = floppy_service_sql ] || [ "$component" = floppy_service_pgsql ]; then
         # The sql service keeps its filesystem imports for the host: a
         # wasi-virt adapter would virtualize the filesystem too, so the
         # standard library's and wasi-libc's other WASI imports (wasi:cli and
         # the monotonic clock) are satisfied by the pinned deny-all provider
         # instead (see the .wat header), as scxml.rs does for its files
         # example service.
-        deny="$run_tmp/wasi-cli-deny-sql.wasm"
-        wasm-tools parse "$workspace/services/sql/wasi-cli-deny.wat" -o "$deny"
+        # The pgsql service likewise keeps its sockets.
+        service_dir=${component#floppy_service_}
+        deny="$run_tmp/wasi-cli-deny-$service_dir.wasm"
+        wasm-tools parse "$workspace/services/$service_dir/wasi-cli-deny.wat" -o "$deny"
         wasm-tools compose "$virt_input" -d "$deny" -o "$virtualized" >/dev/null 2>&1
         wasm-tools compose "$virt_input" -d "$deny" -o "$repeat" >/dev/null 2>&1
     elif wasm-tools component wit "$virt_input" | sed -n 's/^  import \(.*\);$/\1/p' | grep -q '^wasi:'; then
