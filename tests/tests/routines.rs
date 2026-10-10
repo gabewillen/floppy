@@ -26,17 +26,6 @@ use support::{Finished, Run, logs, unique_scratch, workspace};
 /// Bounded wait for the whole run (scx startup included).
 const WAIT: Duration = Duration::from_secs(120);
 
-fn copy_dir(from: &Path, to: &Path) {
-    std::fs::create_dir_all(to).expect("the directory is creatable");
-    for entry in std::fs::read_dir(from).expect("the directory is readable") {
-        let path = entry.expect("a directory entry").path();
-        if path.is_file() {
-            std::fs::copy(&path, to.join(path.file_name().expect("a file name")))
-                .expect("the file is copyable");
-        }
-    }
-}
-
 /// Lays out the routines, their runner and the ability schemas with the
 /// harness beside them; `database` (an ECMAScript expression) replaces the
 /// harness's database path. Returns the harness.

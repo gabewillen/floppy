@@ -129,9 +129,9 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
             for stage in ["cognition", "autonomy", "intuition", "reasoning"] {
                 support::copy_ability(stage, &abilities);
             }
-            copy_dir(
+            support::copy_tree(
                 &workspace().join("abilities/behaviors"),
-                &dir.join("abilities/behaviors"),
+                &abilities.join("behaviors"),
             );
         }
         Cognition::Missing => {}
