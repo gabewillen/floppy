@@ -14,11 +14,13 @@ phase 3), and the [communication](../../abilities/communication/communication.sc
 which holds the [conversation](../../abilities/conversation/conversation.scx) (the
 committed text history, one transcript per participant set; memory recall
 is a seam until phase 3, and inferring participants and relationships from
-voice embeddings, mosfet's turn detectors, is phase 6) and
+voice embeddings, mosfet's turn detectors, is not ported) and
 [speaking](../../abilities/speaking/speaking.scx) (the words are encoded to speech
 by [vocal](../../abilities/vocal/vocal.scx) through the speech service, logged as
 `bot.say`, played out as `environment.sound` after the efference copy to
-Listening, and recorded in the conversation). Each turn the body
+Listening, and recorded in the conversation), and the
+[listening](../../abilities/listening/listening.scx), its input ability
+(mosfet's Listening, phase 6: see Sound below). Each turn the body
 assembles the choices (its own
 `bot.focus_device`, pinned to the turn's focus candidates, and
 `bot.clear_focus` while a device is focused, plus each ability's latest
@@ -139,6 +141,12 @@ change.
   harness, with the speech service decoding against a fake backend
   (`tests/tests/support/hearing.rs`): decoded speech, labelled non-speech,
   failures, the stage timer, the product threshold and order.
+- `cargo test -p floppy-tests --test speech_service`: the speech service
+  against a fake backend (decoding, encoding, ElevenLabs, a missing grant,
+  an unconfigured or failing backend, malformed parameters).
+- `cargo test -p floppy-tests --test reading`: reading and vision under a
+  harness, image decoding against a generate double (mosfet's Reading;
+  nothing in the bot invokes it yet).
 - `cargo test -p floppy-tests --test cognition`: the cascade against fake
   decision and model backends (each path, the tuner, failures, hop timeouts
   and reboot requests, cancels).
@@ -146,7 +154,9 @@ change.
   path against the cognition double (a routed response said and recorded,
   conversation input as a turn whose stimulus carries the bounded history,
   a blank response, a response deferred behind one in flight and the hop
-  timeout, malformed input, a child that cannot start).
+  timeout, malformed input, a child that cannot start), and one response
+  spoken through the real speech service on a fake backend, its efference
+  copy reaching the listening before the sound.
 - `cargo test -p floppy-tests --test cognition` also runs the whole text
   path on fake backends: "say hi" escalates to reasoning, whose activate
   and respond the body routes to the communication, which says it.

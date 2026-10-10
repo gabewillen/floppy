@@ -94,6 +94,33 @@ Last updated: 2026-10-10.
   compilation, no cache), so the behavior tests' per-record bound is 300 s.
 - **Next:** phase 5 (behaviors and routines, stored in memory), 6, 7.
 
+## Phase 6 (2026-10-10): speech and vision
+
+- **Done on `main`** (`d569318`): `services/speech` (decode, encode, and the
+  voice operations `detect`, `diarize`, `identify` with the media steps
+  `normalize`, `append`, `clip`); mosfet's hearing leaves, sensitivity,
+  interpretation (open-speech window included) and listening, which the
+  body invokes as its input ability; the SpeechHeard seed in autonomy;
+  vocal and speaking in audio mode; image parts in the generate service;
+  vision and reading (invoked by nothing yet, as in mosfet). Decisions
+  D52, D57 to D59, D66, D67; D38 is superseded.
+  Plan: [plans/phase6-speech-vision.mdscript.md](plans/phase6-speech-vision.mdscript.md);
+  conventions: [port-plan.md](port-plan.md#phase-6-conventions).
+- **Running:** the floppy bot's run also grants the speech service the
+  media directory (`--dir https://github.com/stateforward/floppy/services/speech=HOST::/media`)
+  and needs `FLOPPY_SPEECH_BASE_URL`/`FLOPPY_SPEECH_API_KEY` (speaking,
+  speech decoding) and `FLOPPY_VOICE_BASE_URL`/`FLOPPY_VOICE_API_KEY`
+  (LocalAI: every sound goes through voice detection). Without them a
+  response fails and every sound is `bot.ability.listening.failed`.
+- **Not ported:** devices (phone, LiveKit, audio hardware; out of scope)
+  and the conversation's turn detectors (no slice in the phase 6 plan).
+  ElevenLabs encoding exists in the service (`provider` `elevenlabs`), but
+  no document selects it.
+- **Live:** `speech_service`'s `live_speech_round_trip_through_an_env_file`
+  is the one live speech test (ignored; it needs a speech backend in
+  `FLOPPY_LIVE_ENV_FILE`). No live run of hearing or reading is recorded
+  in [live-proof.md](live-proof.md) yet.
+
 ## Repositories
 
 | Repository | Path | Branch | Notes |

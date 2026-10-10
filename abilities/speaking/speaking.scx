@@ -19,7 +19,7 @@
   speech: the audio reference with its media_type, sample_rate_hz and
   channels (speaking's own, mosfet's 24000 Hz mono audio/pcm, where the
   encoder leaves one null), and its duration when the encoder measured one
-  (the speech service does not yet). Synthesis is bounded by mosfet's
+  (the speech service measures it for linear PCM). Synthesis is bounded by mosfet's
   5 s (encoding_timeout_ms); leaving encoding cancels vocal and its
   request.
 

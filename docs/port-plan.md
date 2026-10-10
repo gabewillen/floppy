@@ -22,7 +22,7 @@ invoked service). The decisions behind this plan are in
 | hsm state machines | SCXML documents (table below) |
 | Abilities (listening, speaking, cognition, memory, ...) | Invoked children, one `.scx` per mosfet machine in the flat `abilities/` directory: `<invoke id="<name>" type="scxml" src="../../abilities/<name>.scx">` from the body (a stage or sub-ability from its ability: `src="<name>.scx"`), literal `id` and `src`, talking to the parent through `#_parent` and to the child through `#_<invokeid>` (decisions D33, D34) |
 | Ability attachment protocol (`attachment.*`, `attachment.group.*`, `bot.ability.attachment.terminal`, yamux) | Not ported, and none of these names has a schema: `<invoke>` lifecycle is attach (start on state entry) and detach (cancel on state exit, `done.invoke.<id>` on completion); a group's attach is the body's parallel `<invoke>`s joined on each member's first `bot.ability.offers` (decision D6) |
-| Devices (phone, audio, smart phone) | Invoked services: `<invoke type="https://github.com/stateforward/floppy/services/<device>@<tag>">` (later phases) |
+| Devices (phone, audio, smart phone) | Invoked services: `<invoke type="https://github.com/stateforward/floppy/services/<device>@<tag>">` (out of scope for now; phase 6 ported none) |
 | Providers (SDK owners) | Invoked services (`services/`) for every effect: anything asynchronous, I/O-bound, or long-running (decision D13); extension namespaces (`namespaces/`) only for synchronous, quick executable content (table below) |
 | Starlark behaviors (compiled, stored, cached) | Validator-gated SCXML: the builder bot authors the behavior as an SCXML document, `scx:validate` gates it, and a simulation as an invoked child proves it before it is stored; a matched behavior runs as an invoked child |
 | Persistent routines (`hsm.every` / `hsm.at` across turns) | Long-lived invoked children whose schedules are self-rescheduling `<send delay>` loops; each tick is an event to the parent, which decides on it in a new turn |
@@ -72,14 +72,18 @@ component code.
 | `needle` (local tool-calling reflex model) | `services/decision` backend (the `Backend` trait) | later |
 | `sqlite_memory` | `services/sql`, SQLite compiled into the component (it imports `wasi:filesystem`; the run grants a directory) under `abilities/memory/memory.scx`, migrated by `abilities/migration/migration.scx` (decisions D44 to D51) | 3 |
 | `postgres_memory` | `services/pgsql`, the Postgres wire protocol over `wasi:sockets/tcp` (the run grants `inherit-network`) to PGlite served beside `scx` (pglite-socket) or any Postgres, behind the same sql contract and the same Memory ability, which picks it for a `postgresql://` `database`; tested on Postgres 16 (decisions D51, D69 to D72) | 7 |
-| `elevenlabs`, `moonshine`, `mlx_audio`, `pyannote` | `services/speech` (text-to-speech, speech-to-text, diarization backends) | 6 |
-| `livekit` | the `phone` device service | 6 |
-| `mlx_vlm` | a `vision` (reading) service | 6 |
+| `gemini`, `mlx_audio`, `moonshine` (speech) | `services/speech`: `decode` on `/audio/transcriptions` and `encode` on `/audio/speech` of an OpenAI-compatible backend (`FLOPPY_SPEECH_BASE_URL`, decision D57) | 6 |
+| `elevenlabs` | `services/speech` `encode` with `<param name="provider" expr="'elevenlabs'">` (its `text-to-speech` API, decision D57); no floppy document selects it yet | 6 |
+| `pyannote`, `mlx_audio` (voice activity, diarization, voice embeddings) | `services/speech` voice operations `detect`, `diarize`, `identify` on LocalAI's `/vad`, `/audio/diarization`, `/voice/embed` (`FLOPPY_VOICE_BASE_URL`, decision D66), with the media steps `normalize`, `append`, `clip` on files | 6 |
+| `mlx_vlm` | image decoding through `services/generate` with an image part (decision D58); the visual classifier is rule-based in `abilities/vision/vision.scx` | 6 |
+| `livekit` | the `phone` device service | out of scope (devices) |
 
 No backend is a default (decision D31): `generate` reaches only the
 endpoint a run names with `FLOPPY_BASE_URL` (direct vLLM on the DGX Sparks
-in the gitignored `.env`), and `decision` uses TypeSafe through its own
-`env` slots.
+in the gitignored `.env`), `decision` uses TypeSafe through its own
+`env` slots, and `speech` reaches only the endpoints a run names with
+`FLOPPY_SPEECH_BASE_URL` (speech decoding and encoding) and
+`FLOPPY_VOICE_BASE_URL` (voice detection, diarization and identification).
 
 ## Phases
 
@@ -91,7 +95,7 @@ in the gitignored `.env`), and `decision` uses TypeSafe through its own
 | 3 | Memory service on SQLite | Done: `services/sql` (`floppy_service_sql`), one SQLite transaction of mosfet's `Statement`s per `<invoke>` on a database file in a directory the run grants (`--dir URI=HOST::/memory`), answering `sql.result` or `sql.failed`; mosfet's Memory ability as `abilities/memory/memory.scx`, which migrates mosfet's schema and applies statements through it, answering `bot.ability.memory.output` or `bot.ability.failed`; reasoning recalls and retains cognitive episodes and standing directives, the identity recalls and remembers its adopted name, and the conversation recalls and remembers a relationship's memories (decisions D44 to D47, [plan](plans/phase3-memory.mdscript.md)). Reflection and behaviors use it in phase 5 |
 | 4 | Bot core: body and cognition as SCXML, abilities as invoked children, mosfet's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | Done through the script-validator cutover: the body `bots/floppy/floppy.scx`; `abilities/` cognition (autonomy seam, intuition, reasoning), communication (conversation, speaking in text mode); the `bot` and `conversation` namespaces and the decision elements; event contracts and runtime `event:schema` checks; no `<script>` (decisions D33 to D43, [Phase 4 conventions](#phase-4-conventions)). Identity, the phase 5 seams, and the saved live examples finish it ([plan](plans/phase4-bot-core.mdscript.md)) |
 | 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Not started |
-| 6 | Speech, vision, and devices as services (`speech`, `vision`, `phone`, audio) | Not started |
+| 6 | Speech, vision, and devices as services (`speech`, `vision`, `phone`, audio) | Done for speech and vision; devices are out of scope. `services/speech` (`floppy_service_speech`) decodes and encodes speech on OpenAI-compatible audio APIs and detects, diarizes and identifies voices on LocalAI's voice APIs (decisions D57, D66); the generate service reads images (D58). mosfet's hearing leaves, Listening (`Perceiving{Listening, Sensing}`, Sensitivity, Interpretation with the open-speech window; decision D67) and the SpeechHeard seed turn `environment.sound` into the turn's `bot.ability.listening.speech.output` stimulus and then `bot.ability.communication.input`; vocal and Speaking speak audio (D59, superseding D38); vision and Reading are ported, invoked by nothing yet as in mosfet ([Phase 6 conventions](#phase-6-conventions), [plan](plans/phase6-speech-vision.mdscript.md)) |
 | 7 | Defaults and release: PGlite memory, tagged releases with `SHA256SUMS` for repository namespaces and services (releases wait for going public) | Done except publishing. Memory on Postgres: `services/pgsql` behind the unchanged Memory ability, selected by its `database` (a `postgresql://` URI), migrating mosfet's full head schema in the Postgres dialect through the Alembic-style migration ability, with every ability's SQL portable to both engines and tested on Postgres 16; PGlite is reached over its socket server, not compiled into a component (decisions D48 to D51, D69 to D72). Defaults: README.md's [Defaults](../README.md#defaults) and `.env.example`, checked by `tests/tests/defaults.rs`; there is no default backend, so every run names its endpoint with `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (decision D31). Releases: canonical Linux builds, `SHA256SUMS` and a dry run of the release layout, prepared and checked locally ([release.md](release.md)); no tag, release or upload until the repositories are public ([plan](plans/phase7-pglite-defaults.mdscript.md)) |
 
 ## Phase 4 event contracts
@@ -220,9 +224,9 @@ D33 to D43.
   way the step ends with mosfet's event (`bot.ability.reasoning.recalled`,
   `.retained`, `bot.ability.identity.recalled`, `.adopted`), so the
   topology does not change (decision D44).
-- **Speaking in text mode.** Speaking says a response as
-  `<log label="bot.say">` and answers `bot.ability.speaking.output` until
-  the phase 6 speech service (decision D38).
+- **Speaking.** Phase 4 spoke in text mode (decision D38); phase 6
+  speaks audio (decision D59, [Phase 6 conventions](#phase-6-conventions)),
+  and the words are still logged as `<log label="bot.say">`.
 - **Traces.** Each deterministic test in `body.rs`, `cognition.rs` and
   `communication.rs` compares its whole run with
   `tests/fixtures/phase4/traces/<test>.ndjson` byte for byte; rewrite them
@@ -250,12 +254,18 @@ D33 to D43.
 | `reasoning.py` Reasoning | `abilities/reasoning/reasoning.scx` invoking `services/generate` | stage `.scx` child and service |
 | `communication.py` Communication | `abilities/communication/communication.scx` | ability `.scx` child |
 | `conversation.py` Conversation | `abilities/conversation/conversation.scx` | ability `.scx` child |
-| `speaking.py` Speaking | `abilities/speaking/speaking.scx` (text mode) | ability `.scx` child |
+| `speaking.py` Speaking | `abilities/speaking/speaking.scx` (`idle` → `encoding` → `playing` → `recording`, decision D59) | ability `.scx` child |
+| `vocal/speech/encoding.py` SpeechEncoding | `abilities/vocal/vocal.scx`, speaking's child, invoking `services/speech` `encode` | ability `.scx` child and service |
 | `identity/identity.py` Identity | `abilities/identity/identity.scx`; text name match `<bot:recognize>`; adoption and recall through `abilities/memory/memory.scx` (decisions D43, D44) | ability `.scx` child |
 | Reflection, Routines | `abilities/reflection/reflection.scx`, `abilities/routines/routines.scx` seams; routines are builder-built `.scx` children (phase 5) | ability `.scx` child |
 | Behaviors (Starlark) | builder-built `.scx` documents | generated `.scx` |
 | Memory and its providers | `abilities/memory/memory.scx` over `services/sql` (SQLite, phase 3) or `services/pgsql` (Postgres, phase 7), migrated by `abilities/migration/migration.scx` with `<migration:plan>` | ability `.scx` child + service |
-| Listening, reading, turn detectors, devices | phase 6 `.scx` children and Wasm services | out of phase 4 |
+| `listening` Listening (`Perceiving{Listening, Sensing}`) | `abilities/listening/listening.scx`, the body's input ability | ability `.scx` child |
+| `listening` Sensitivity, Interpretation | `abilities/sensitivity/sensitivity.scx`, `abilities/interpretation/interpretation.scx` (listening's children) | ability `.scx` child |
+| `hearing` SpeechDecoding, SoundClassification, VoiceDetection, VoiceDiarization, VoiceIdentification | `abilities/speech_decoding/`, `sound_classification/`, `voice_detection/`, `voice_diarization/`, `voice_identification/` (the interpretation's children; all but sound classification invoke `services/speech`) | stage `.scx` child and service |
+| `communication/behaviors.py` SpeechHeard seed | `abilities/behaviors/speech_heard/speech_heard.scx`, which autonomy runs before the learned behaviors | turn behavior `.scx` |
+| `vision` VisualClassification, `reading` Reading | `abilities/vision/vision.scx` (reading's child), `abilities/reading/reading.scx` (image decoding through `services/generate`); nothing invokes reading, as in mosfet | ability `.scx` child and service |
+| Conversation's turn detectors, devices | not ported: the phase 6 plan has no turn detector slice, and devices are out of scope | open |
 | payload validators | `event:schema` on the receiving transition plus a short correlation cond | `event:schema` |
 
 ### Builder output
@@ -275,6 +285,90 @@ runs the ACTIVE turn behaviors the stimulus triggers with `turn` and
 `tests/fixtures/phase4/behavior_double.scx` stands in for one;
 `tests/tests/contracts.rs` checks the rule on it and
 `tests/tests/cognition.rs` runs it from a memory inventory.
+
+## Phase 6 conventions
+
+How phase 6 writes mosfet's hearing, listening, vocal, speaking, vision and
+reading as SCXML. The phase 4 conventions hold; the decisions behind these
+are D52, D57 to D59, D66 and D67
+([plan](plans/phase6-speech-vision.mdscript.md)).
+
+- **Media by reference.** mosfet's bytes fields (`SoundData.audio`,
+  `VisualData.image`, the encoded speech) are URI references to files in a
+  directory the run grants the service that reads or writes them
+  (`--dir https://github.com/stateforward/floppy/services/speech=HOST::/media`,
+  and the same for `services/generate`); `media/hello.wav` names
+  `/media/hello.wav` in the guest. Documents never hold media, and a
+  reference outside the grant fails. Voiced audio is signed 16-bit PCM, in
+  a WAV container or raw with its rate and channels.
+- **Backends are the run's.** The speech package declares no
+  `http-origins`, so every operation reaches only what the run names:
+  speech decoding and encoding `FLOPPY_SPEECH_BASE_URL` and
+  `FLOPPY_SPEECH_API_KEY`, voice detection, diarization and identification
+  `FLOPPY_VOICE_BASE_URL` and `FLOPPY_VOICE_API_KEY` (LocalAI's
+  `silero-vad`, `pyannote-diarization` and `voice-detect-wespeaker-resnet34`),
+  image reading `FLOPPY_BASE_URL` and `FLOPPY_API_KEY`. Without them the
+  service answers `bot.ability.failed` ("the backend is not
+  configured") and sends nothing
+  (decisions D31, D57, D66). The models are each document's `model`
+  `<data>` ([README Defaults](../README.md#speech-and-voice-models)).
+- **Hearing stages.** Each of mosfet's hearing leaves is its own `.scx`
+  (`abilities/speech_decoding/`, `sound_classification/`,
+  `voice_detection/`, `voice_diarization/`, `voice_identification/`),
+  invoked by the interpretation per sound from the stage that needs it and
+  answering mosfet's output event (`bot.ability.hearing.*.output`) or
+  `bot.ability.failed`; leaving the stage cancels it, and each stage is
+  bounded by the interpretation's `stage_timeout_ms` (mosfet's 30 s). The
+  media steps mosfet does on bytes in memory (normalizing to PCM, joining
+  the open speech, clipping a voice span) are the speech service's
+  `normalize`, `append` and `clip` on files (decision D66). Sound
+  classification is mosfet's `KindSoundClassifier`: the sound's `kind`
+  label, no model.
+- **Interpretation.** mosfet's machine in full: `Idle`, then `Working`
+  (`DetectingVoice`, the open-speech window `HearingSpeech` /
+  `FeedingSpeech` / `SpeechEnded`, `ClassifyingSound`, `DiarizingVoice`,
+  `IdentifyingVoiceDirect`, `IdentifyingVoice`, `DecodingSpeech`, `HandingOff`). Its stages are
+  `<data>` switches named as mosfet's constructor names them
+  (`sound_classifier` and `speech_decoder` on, `diarizer` and
+  `voice_classifier` off); voice identification with speech decoding is
+  refused, as mosfet refuses it (decision D67).
+- **Listening products.** The listening (`Perceiving{Listening, Sensing}`)
+  scores each sound with its sensitivity against the efference copy, then
+  interprets it. A product the body takes as a turn's stimulus is decoded
+  speech, `bot.ability.listening.speech.output` (`content_type`
+  `text/plain`), or labelled non-speech, passed through as
+  `environment.sound`; either needs a perceived level of
+  `product_threshold_db` (mosfet's 3 dB). An unlabelled sound without voice
+  is dropped, and a sound that cannot be heard is
+  `bot.ability.listening.failed`, which the body logs.
+- **SpeechHeard.** Autonomy runs mosfet's trusted seed
+  (`abilities/behaviors/speech_heard/speech_heard.scx`) before the learned
+  behaviors when the stimulus is `bot.ability.listening.speech.output`;
+  speech with a source id is handled with mosfet's selection
+  `bot.ability.communication.input`, which the body routes to itself, so
+  heard speech enters the conversation as text does.
+- **Speaking audio.** Speaking is mosfet's `idle` → `encoding` → `playing`
+  → `recording` (decision D59): vocal encodes through the speech service
+  with mosfet's encoder defaults (`gemini-3.1-flash-tts-preview`, `Kore`,
+  24 kHz mono `audio/pcm`), the efference copy
+  `bot.ability.speaking.efference` leaves before the sound (the body
+  carries it to each of `listening_abilities`), the words are logged as
+  `bot.say`, the audio is broadcast as `environment.sound` by reference,
+  and the outbound message is recorded in the conversation. Every terminal
+  failure is `bot.ability.failed {message}`.
+- **Vision and reading.** Reading is mosfet's `Reading{Unfocused,
+  Focused{Classifying, DecodingText, DecodingImage,
+  PreparingUnreadableOutput, EncodingOutput}}` with vision as its
+  long-lived child; image decoding is the generate service with an image
+  part (decision D58). Nothing in the bot invokes reading, because mosfet
+  routes no `environment.visual` to it.
+- **Tests.** `tests/tests/speech_service.rs` (the service against a fake
+  backend on 127.0.0.1, ElevenLabs included, and an ignored live round
+  trip), `listening.rs` (the listening under a harness with the real speech
+  service on a fake backend: decoding, the open-speech window,
+  diarization, identification, failures, timeouts, the efference window),
+  `reading.rs` (reading against a generate double), and
+  `communication.rs` (a response spoken through the real speech service).
 
 ## Known gaps carried from phase 0
 

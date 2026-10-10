@@ -2,7 +2,7 @@
 //! `<invoke>`, as a `stateforward:scxml/invoked-service` Wasm component. It
 //! is mosfet's `SpeechDecoder` (hearing's `SpeechDecoding`) and
 //! `SpeechEncoder` (vocal's `SpeechEncoding`) providers in one service
-//! (decision D50): both directions are one `OpenAI`-compatible audio API.
+//! (decision D57): both directions are one `OpenAI`-compatible audio API.
 //! It is also the local models of mosfet's hearing that floppy cannot run
 //! in a document: the voice activity classifier (`VoiceDetection`), the
 //! diarizer (`VoiceDiarization`) and the voice classifier

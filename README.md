@@ -23,7 +23,7 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | `namespaces/migration/` | Alembic's revision walk as an extension namespace (a Wasm component; synchronous executable content: `migration:plan`) |
 | `services/{generate,decision}/` | canonical invoked services (Wasm components: model generation, decisions) |
 | `services/{sql,pgsql}/` | the memory engines (Wasm components: one SQLite or Postgres transaction per `<invoke>`, [sql](services/sql/README.md), [pgsql](services/pgsql/README.md)) |
-| `services/speech/` | speech decoding and encoding, voice detection, diarization and identification (a Wasm component) |
+| `services/speech/` | the speech service (a Wasm component: speech decoding and encoding on OpenAI-compatible audio APIs, voice detection, diarization and identification on LocalAI's voice APIs; decisions D57, D66; [speech](services/speech/README.md)) |
 | `bots/builder/` | the builder bot: its SCXML document (`builder.scx`), schemas, and saved live examples |
 | `bots/floppy/` | the floppy bot: the body (`floppy.scx`, mosfet's Bot) and its event contracts |
 | `abilities/` | the abilities and stages the bots invoke, each `<name>/<name>.scx` with `<name>/<name>.js` (memory, migration, cognition, communication, listening, ...) |
@@ -56,7 +56,7 @@ echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestria
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" \
-    bots/floppy/floppy.scx
+    --dir "https://github.com/stateforward/floppy/services/speech=$PWD/media::/media" bots/floppy/floppy.scx
 # A bot, with the packages of floppy's latest GitHub release (once one is
 # published: docs/release.md).
 scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
@@ -71,7 +71,9 @@ attributes decide which `<invoke>` receives which variable of the env file,
 and an `<invoke src>` loads by URI (relative to its document, `file:`, or
 `https:`) with no flag. The `generate` service reads the images a message
 names from a directory the run grants, so every run that binds it gives one
-`--dir` (create `media/` first; it is ignored by git), and the floppy bot's
+`--dir` (create `media/` first; it is ignored by git). The floppy bot's
+runs grant the `speech` service the same directory, where it reads what
+the bot hears and writes what it says, and the floppy bot's
 memory is a file in the directory the run grants the `sql` service (create
 `memory/` first). Each bot's README gives its input events and output
 ([bots/builder/README.md](bots/builder/README.md#running),
