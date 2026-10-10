@@ -1328,6 +1328,11 @@ fn a_cancel_during_reasoning_is_acknowledged() {
 /// The phase 5 seams' gates, on.
 const GATES_ON: &[(&str, &str)] = &[("reflection_enabled", "true"), ("routines_enabled", "true")];
 
+/// A body without a database: the seams' gate tests watch the seams, not
+/// memory (with one, reflection asks the model; `tests/tests/reflection.rs`
+/// covers it).
+const NO_DATABASE: &[(&str, &str)] = &[("database", "null")];
+
 /// With both gates on, the routines start (finding no routines), each
 /// output is followed by the reflection seam, and a settled reflection
 /// asks the routines to reconcile.
@@ -1338,7 +1343,10 @@ fn with_its_gates_on_the_cognition_reflects_and_reconciles_the_routines() {
         &mock,
         Decision::Abstain,
         Generation::Ignore,
-        &[("abilities/cognition.scx", GATES_ON)],
+        &[
+            ("abilities/cognition.scx", GATES_ON),
+            ("bots/floppy/floppy.scx", NO_DATABASE),
+        ],
     );
     let mut run = start(&bot);
     say(&mut run, "hmm");
@@ -1372,7 +1380,10 @@ fn a_routine_tick_becomes_a_turn() {
         &mock,
         Decision::Abstain,
         Generation::Ignore,
-        &[("abilities/cognition.scx", GATES_ON)],
+        &[
+            ("abilities/cognition.scx", GATES_ON),
+            ("bots/floppy/floppy.scx", NO_DATABASE),
+        ],
     );
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/routines_double.scx"),

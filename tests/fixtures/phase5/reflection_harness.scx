@@ -31,7 +31,7 @@
 
   <state id="running" initial="waiting">
     <invoke id="reflection" type="scxml" src="reflection.scx">
-      <param name="memory" expr="database"/>
+      <param name="database" expr="database"/>
       <param name="model" expr="'fake-model'"/>
     </invoke>
     <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">

@@ -7,7 +7,7 @@
   bot.behavior.break, applies it, and stores the turn's CognitiveEpisode.
   The cognition (abilities/cognition.scx) invokes it as its long-lived
   child "reflection" when its reflection gate is on, with the <param>s
-  memory (the memory database path; null keeps the phase 4 seam) and
+  database (the memory database; null keeps the phase 4 seam) and
   model, and sends it bot.ability.reflection.input {turn,
   cognition_input, cognition_output} after each turn's output.
 
@@ -22,9 +22,9 @@
   Memory: each step that reads or writes the inventory or the episodes is
   one transaction of the memory ability (abilities/memory.scx, a child per
   transaction answering bot.ability.memory.output or bot.ability.failed)
-  on the database the <param> memory names; the SQL lives in the <data>
+  on the database the <param> database names; the SQL lives in the <data>
   below (mosfet behavior/storage.py and cognition/episodes.py). With
-  memory null, recalling logs <log label="reflection" expr="'absent'"> and
+  database null, recalling logs <log label="reflection" expr="'absent'"> and
   answers at once, as the phase 4 seam did.
 
   recalling (mosfet _recall_activity, _load_all_behaviors): the prior
@@ -80,7 +80,7 @@
        version="1.0" datamodel="ecmascript" name="reflection" initial="idle">
   <datamodel>
     <!-- The cognition's <param>s. -->
-    <data id="memory" expr="null"/>
+    <data id="database" expr="null"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <data id="select_timeout_ms" expr="30000"/>
     <!-- The turn in hand (mosfet InputData). -->
@@ -169,7 +169,7 @@
   <!-- The prior episodes and the whole inventory, in one transaction. -->
   <state id="recalling">
     <onentry>
-      <if cond="memory === null">
+      <if cond="database === null">
         <log label="reflection" expr="'absent'"/>
         <send event="bot.ability.reflection.output" target="#_parent"/>
       <else/>
@@ -178,9 +178,9 @@
         <assign location="statements" expr="statements.concat([{sql: select_behaviors, parameters: [null, null]}])"/>
       </if>
     </onentry>
-    <transition cond="memory === null" target="idle"/>
+    <transition cond="database === null" target="idle"/>
     <invoke id="recalling_memory" type="scxml" src="memory.scx">
-      <param name="database" expr="memory"/>
+      <param name="database" expr="database"/>
       <param name="statements" expr="statements"/>
     </invoke>
     <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
@@ -268,7 +268,7 @@
       <assign location="statements" expr="[{sql: break_behavior, parameters: [typeof behavior.reason === 'string' ? behavior.reason.trim() : '', behavior.name]}]"/>
     </onentry>
     <invoke id="breaking_memory" type="scxml" src="memory.scx">
-      <param name="database" expr="memory"/>
+      <param name="database" expr="database"/>
       <param name="statements" expr="statements"/>
     </invoke>
     <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
@@ -302,7 +302,7 @@
         <assign location="statements" expr="statements.concat([{sql: select_behaviors, parameters: [intent.name, intent.name]}])"/>
       </onentry>
       <invoke id="preparing_memory" type="scxml" src="memory.scx">
-        <param name="database" expr="memory"/>
+        <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
       <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
@@ -372,7 +372,7 @@
         <assign location="statements" expr="statements.concat([{sql: insert_triggers, parameters: [intent.name, JSON.stringify(triggers)]}])"/>
       </onentry>
       <invoke id="accepting_memory" type="scxml" src="memory.scx">
-        <param name="database" expr="memory"/>
+        <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
       <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
@@ -395,7 +395,7 @@
         <assign location="statements" expr="[{sql: draft_behavior, parameters: [intent.name]}]"/>
       </onentry>
       <invoke id="abandoning_memory" type="scxml" src="memory.scx">
-        <param name="database" expr="memory"/>
+        <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
       <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
@@ -418,7 +418,7 @@
       <assign location="statements" expr="[{sql: insert_episode, parameters: [cognition_input.focus, JSON.stringify(episode)]}]"/>
     </onentry>
     <invoke id="storing_memory" type="scxml" src="memory.scx">
-      <param name="database" expr="memory"/>
+      <param name="database" expr="database"/>
       <param name="statements" expr="statements"/>
     </invoke>
     <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"

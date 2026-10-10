@@ -5,9 +5,9 @@
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
 {"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition","parent":"session","session":"session.1","text":"turn 1: bot.input","type":"log"}
-{"label":"autonomy","parent":"session.1","session":"session.7","text":"turn 1: no behaviors (phase 5)","type":"log"}
+{"label":"autonomy","parent":"session.1","session":"session.7","text":"turn 1: 0 matched for bot.input","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.8","text":"turn 1: threshold 0.35","type":"log"}
+{"label":"intuition","parent":"session.1","session":"session.9","text":"turn 1: threshold 0.35","type":"log"}
 {"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":70,\"n\":0,\"variance\":100}","type":"log"}
 {"label":"cognition.failed","parent":"session","session":"session.1","text":"the intuition failed: the decision failed (unconfigured)","type":"log"}
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}

@@ -354,7 +354,7 @@
     <state id="reflection_off"/>
     <state id="reflection_on">
       <invoke id="reflection" type="scxml" src="reflection.scx">
-        <param name="memory" expr="memory"/>
+        <param name="database" expr="database"/>
         <param name="model" expr="model"/>
       </invoke>
       <transition event="bot.ability.reflection.output" event:schema="schemas/bot.ability.reflection.output.json"
