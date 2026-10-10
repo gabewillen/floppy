@@ -14,7 +14,7 @@ created: 2026-10-10
 ## Rules For Every Slice
 
 * the phase 3 to 6 plans' rules hold
-* `abilities/memory.scx` keeps mosfet's Memory surface: callers' statements and results do not change with the engine
+* `abilities/memory/memory.scx` keeps mosfet's Memory surface: callers' statements and results do not change with the engine
 * mosfet's `postgres_memory` is the reference for the Postgres engine: `?` placeholders rewritten to `$n` (outside string literals, unlike mosfet's naive split), `created_at TIMESTAMPTZ DEFAULT NOW()`, results as `Row{columns, values}`; floppy migrates the full head schema (mosfet's `postgres_memory` creates only `bot_memory`, which would leave behaviors and short-term memory unstorable)
 * no release, tag, publish or `SHA256SUMS` upload until the user says the repositories are public; preparing them is in scope
 * no package default endpoint (D31): every run still names `FLOPPY_BASE_URL` and `FLOPPY_API_KEY`
@@ -39,8 +39,8 @@ These run in parallel; the first is a spike whose answer the second builds on, a
 
 ### Add Postgres Engine To Memory
 
-* goal: the Memory ability runs on Postgres when the run names it: `services/pgsql` (or the spike's choice) answers `sql.result`/`sql.failed` exactly as `services/sql` does, and `abilities/memory.scx` takes an `engine` param (`sqlite` default, `postgres`), migrating with the Postgres dialect of revisions 0001 and 0002 (`TIMESTAMPTZ`, `$n`)
-* files: the service, `abilities/memory.scx`, `tests/tests/memory.rs` (the same cases on both engines)
+* goal: the Memory ability runs on Postgres when the run names it: `services/pgsql` (or the spike's choice) answers `sql.result`/`sql.failed` exactly as `services/sql` does, and `abilities/memory/memory.scx` takes an `engine` param (`sqlite` default, `postgres`), migrating with the Postgres dialect of revisions 0001 and 0002 (`TIMESTAMPTZ`, `$n`)
+* files: the service, `abilities/memory/memory.scx`, `tests/tests/memory.rs` (the same cases on both engines)
 * done when: every memory, autonomy, reasoning, identity and conversation test passes on both engines
 
 ### Refresh Defaults

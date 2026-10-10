@@ -467,40 +467,6 @@ pub fn memory_grant() -> Vec<String> {
     ]
 }
 
-/// Copies the memory ability into `abilities` (a layout's `abilities/`):
-/// `memory.scx`, the migration ability it invokes (`migration.scx`), its
-/// revisions (`memory/sqlite/*.json`, `memory/postgresql/*.json`), and
-/// every ability schema (`schemas/`).
-pub fn copy_memory(abilities: &Path) {
-    for (from, to) in [
-        (workspace().join("abilities"), abilities.to_path_buf()),
-        (
-            workspace().join("abilities/memory/sqlite"),
-            abilities.join("memory/sqlite"),
-        ),
-        (
-            workspace().join("abilities/memory/postgresql"),
-            abilities.join("memory/postgresql"),
-        ),
-        (
-            workspace().join("abilities/schemas"),
-            abilities.join("schemas"),
-        ),
-    ] {
-        std::fs::create_dir_all(&to).expect("the directory is creatable");
-        for entry in std::fs::read_dir(&from).expect("the directory is readable") {
-            let path = entry.expect("a directory entry").path();
-            let name = path.file_name().expect("a file name");
-            let wanted = from != workspace().join("abilities")
-                || name == "memory.scx"
-                || name == "migration.scx";
-            if path.is_file() && wanted {
-                std::fs::copy(&path, to.join(name)).expect("the file is copyable");
-            }
-        }
-    }
-}
-
 /// `--dir` granting the generate service a fresh scratch directory at
 /// `/media`, where the images its messages name are read.
 pub fn media_grant() -> Vec<String> {
@@ -595,6 +561,52 @@ pub fn use_database(path: &Path, database: &str) {
         &format!(r#"<data id="database" expr="'{database}'""#),
     );
     std::fs::write(path, text).expect("the document copy is writable");
+}
+
+/// Copies the directory `from` to `to`, recursively.
+pub fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).expect("the directory is creatable");
+    for entry in std::fs::read_dir(from).expect("the directory is readable") {
+        let path = entry.expect("a directory entry").path();
+        let target = to.join(path.file_name().expect("a file name"));
+        if path.is_dir() {
+            copy_tree(&path, &target);
+        } else {
+            std::fs::copy(&path, &target).expect("the file is copyable");
+        }
+    }
+}
+
+/// Copies the ability `name` (`abilities/<name>/`: its document, its
+/// script, its schema twins, and any data beside them) into `abilities`,
+/// and returns the path of its copied document. The memory ability comes
+/// with the migration ability it invokes.
+pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
+    copy_tree(
+        &workspace().join("abilities").join(name),
+        &abilities.join(name),
+    );
+    if name == "memory" {
+        copy_ability("migration", abilities);
+    }
+    abilities.join(name).join(format!("{name}.scx"))
+}
+
+/// Whether `scx validate`'s standard error reports no error and no note,
+/// and only warnings that are `LINT019` for a function of the document's
+/// own `<script src>`: the validator reads inline scripts only, so it
+/// cannot prove that a cond or expr calling a function of `<name>.js` has
+/// no side effect (decision D65).
+pub fn validates_but_for_script_src(stderr: &str) -> bool {
+    let warnings =
+        stderr.matches("\nwarning[").count() + usize::from(stderr.starts_with("warning["));
+    stderr.contains(&format!(
+        "diagnostic summary: 0 error(s), {warnings} warning(s), 0 note(s)"
+    )) && stderr.matches("warning[LINT019]").count() == warnings
+        && stderr
+            .matches("which a `<script src>` may define or replace")
+            .count()
+            == warnings
 }
 
 /// One Postgres server for a Postgres-engine test, fresh for the test and

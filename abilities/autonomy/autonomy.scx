@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Autonomy stage (mosfet abilities/cognition/autonomy): the
+  cognition (abilities/cognition/cognition.scx) invokes it first in each turn. It
+  runs the trusted seeds the turn's stimulus triggers, then recalls the
+  learned turn behaviors whose triggers name the stimulus, and runs them
+  one at a time as candidates; the first that handles the turn answers it,
+  and otherwise the cascade goes on to intuition.
+
+    matching -> [seeding] -> inventory -> loading -> matched -> running <-> advancing
+                   |                                            |            |
+                   v                                            v            v
+                answered                                      using       unhandled
+                                                                |
+                                                                v
+                                                             answered
+
+  (seeding runs only when the stimulus triggers a seed; inventory ends at
+  once without memory.)
+
+  Input: the <param>s turn, input (focus and focus_candidates, mosfet's
+  bot.ability.autonomy.input, schemas/bot.ability.autonomy.input.json),
+  stimulus (the turn's stimulus envelope) and database (the memory
+  database; null means no learned inventory, and only the seeds
+  run).
+
+  Seeds (mosfet _prepare_match: the seeded behaviors ride before the
+  learned inventory, with or without memory): SpeechHeard
+  (abilities/behaviors/speech_heard/speech_heard.scx), triggered by
+  bot.ability.listening.speech.output, runs as the child "seed" with the
+  <param>s turn, input and stimulus (its input_adapter keeps the
+  cognition's input unchanged). It answers as a candidate does: handled
+  answers {turn, handled: true, selected, candidates, reason: "behavior"}
+  with no usage persisted (a seed is not an inventory row); not handled,
+  or silent within silence_ms, goes on to the inventory; an error.* for it
+  fails autonomy ("Autonomy native seed 'SpeechHeard' failed: ...", mosfet
+  _emit_native_start_failure). candidates names it first.
+
+  Matching (mosfet _prepare_match, _match_activity): one memory
+  transaction selects the ACTIVE behaviors of lifetime 'turn' that have a
+  trigger equal to the stimulus's event name, in inventory order (by name).
+  No match answers {turn, handled: false, candidates: [], reason:
+  "no-behaviors"}.
+
+  Candidates (mosfet _CandidateRun): each behavior's source is an SCXML
+  document (phase 5 plan, "Turn Behavior Contract"), run as the child
+  "candidate" by <invoke><content expr>, with the <param>s turn and input
+  (the stimulus's data, or {event: data} when it is not an object, plus
+  focus and focus_candidates: mosfet behavior_input_payload). It answers by
+  its final state's <donedata> {turn, handled, selected}:
+    * handled with selections: its used_count and last_used_at are
+      persisted, then autonomy answers {turn, handled: true, selected,
+      candidates, reason: "behavior"};
+    * not handled (mosfet candidate.advance), or no answer within
+      silence_ms (TURN_SILENCE_BOUND, candidate.silent): the next one runs;
+    * an error.* for it (candidate.failed): its failed_count and
+      last_failed_at are persisted, then the next one runs.
+  When none handles the turn: {turn, handled: false, candidates, reason:
+  "unhandled"}. candidates names the behaviors tried, in order.
+
+  Memory: each transaction invokes the Memory ability (abilities/memory/memory.scx)
+  with the database and mosfet's statements. A transaction that fails or
+  outlasts memory_timeout_ms answers {turn, handled: false, failed: true,
+  reason}.
+
+  Contracts: the Memory ability's events reference abilities/schemas/ by
+  event:schema. A candidate is builder output and gets no schema files.
+
+  Bindings: none of its own (the Memory ability binds the sql service).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="autonomy" initial="matching">
+  <datamodel>
+    <data id="turn" expr="0"/>
+    <data id="input" expr="null"/>
+    <data id="stimulus" expr="null"/>
+    <data id="database" expr="null"/>
+    <data id="silence_ms" expr="1000"/>
+    <data id="memory_timeout_ms" expr="10000"/>
+    <data id="rows" expr="[]"/>
+    <data id="index" expr="0"/>
+    <data id="tried" expr="[]"/>
+    <data id="behavior_input" expr="null"/>
+    <data id="answer" expr="null"/>
+    <data id="timer" expr="null"/>
+    <data id="select_sql">SELECT b.name, b.source FROM bot_behavior AS b JOIN bot_behavior_trigger AS t ON t.behavior_name = b.name WHERE b.status = 'ACTIVE' AND b.lifetime = 'turn' AND t."trigger" = ? ORDER BY b.name</data>
+    <data id="used_sql">UPDATE bot_behavior SET used_count = CAST(CAST(used_count AS INTEGER) + 1 AS TEXT), last_used_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z' WHERE name = ?</data>
+    <data id="failed_sql">UPDATE bot_behavior SET failed_count = CAST(CAST(failed_count AS INTEGER) + 1 AS TEXT), last_failed_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z' WHERE name = ?</data>
+  </datamodel>
+  <script src="autonomy.js"/>
+
+  <!-- The seeds the stimulus triggers run first. -->
+  <state id="matching">
+    <transition cond="triggersSpeechHeard()" target="seeding"/>
+    <transition target="inventory"/>
+  </state>
+
+  <!-- The SpeechHeard seed. -->
+  <state id="seeding">
+    <onentry>
+      <assign location="tried" expr="triedWithSeed()"/>
+      <log label="autonomy.candidate" expr="'SpeechHeard'"/>
+      <send idlocation="timer" event="bot.ability.autonomy.candidate.silent" delayexpr="silenceDelay()"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="timer"/>
+    </onexit>
+    <invoke id="seed" type="scxml" src="../behaviors/speech_heard/speech_heard.scx">
+      <param name="turn" expr="turn"/>
+      <param name="input" expr="input"/>
+      <param name="stimulus" expr="stimulus"/>
+    </invoke>
+    <transition event="done.invoke.seed" cond="isBehaviorHandled(_event)" target="answered">
+      <assign location="answer" expr="_event.data.selected"/>
+    </transition>
+    <transition event="done.invoke.seed" target="inventory">
+      <log label="autonomy.candidate.advance" expr="'SpeechHeard'"/>
+    </transition>
+    <transition event="bot.ability.autonomy.candidate.silent" cond="isTimerEvent(_event)" target="inventory">
+      <log label="autonomy.candidate.silent" expr="seedSilentLog()"/>
+    </transition>
+    <transition event="error.*" target="failed">
+      <assign location="answer" expr="seedFailedReason(_event)"/>
+    </transition>
+  </state>
+
+  <!-- Then the learned inventory, when there is memory. -->
+  <state id="inventory">
+    <onentry>
+      <if cond="hasNoMemory()">
+        <log label="autonomy" expr="noMemoryLog()"/>
+      </if>
+    </onentry>
+    <transition cond="hasNoMemoryAndNoCandidates()" target="done"/>
+    <transition cond="hasNoMemory()" target="unhandled"/>
+    <transition target="loading"/>
+  </state>
+
+  <!-- The inventory: the ACTIVE turn behaviors the stimulus triggers. -->
+  <state id="loading">
+    <onentry>
+      <send idlocation="timer" event="bot.ability.autonomy.behaviors.load.failed" delayexpr="memoryTimeoutDelay()"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="timer"/>
+    </onexit>
+    <invoke id="load" type="scxml" src="../memory/memory.scx">
+      <param name="database" expr="database"/>
+      <param name="statements" expr="behaviorSelectStatements()"/>
+    </invoke>
+    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" cond="isFromInvoke(_event, 'load')">
+      <assign location="rows" expr="behaviorsFromMemoryOutput(_event)"/>
+    </transition>
+    <transition event="done.invoke.load" target="matched"/>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromInvoke(_event, 'load')" target="failed">
+      <assign location="answer" expr="loadFailedReason(_event.data.message)"/>
+    </transition>
+    <transition event="error.*" cond="isFromInvoke(_event, 'load')" target="failed">
+      <assign location="answer" expr="loadFailedReason(_event.name)"/>
+    </transition>
+    <transition event="bot.ability.autonomy.behaviors.load.failed" cond="isTimerEvent(_event)" target="failed">
+      <assign location="answer" expr="loadTimedOutReason()"/>
+    </transition>
+  </state>
+
+  <state id="matched">
+    <onentry>
+      <log label="autonomy" expr="matchedLog()"/>
+    </onentry>
+    <transition cond="hasNoMatchAndNoCandidates()" target="done"/>
+    <transition cond="hasNoMatch()" target="unhandled"/>
+    <transition target="running"/>
+  </state>
+
+  <!-- One candidate: the behavior at index. -->
+  <state id="running">
+    <onentry>
+      <assign location="tried" expr="triedWithCandidate()"/>
+      <assign location="behavior_input" expr="behaviorInputPayload()"/>
+      <assign location="behavior_input.focus" expr="input.focus"/>
+      <assign location="behavior_input.focus_candidates" expr="input.focus_candidates"/>
+      <log label="autonomy.candidate" expr="candidateName()"/>
+      <send idlocation="timer" event="bot.ability.autonomy.candidate.silent" delayexpr="silenceDelay()"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="timer"/>
+    </onexit>
+    <invoke id="candidate" type="scxml">
+      <content expr="candidateSource()"/>
+      <param name="turn" expr="turn"/>
+      <param name="input" expr="behavior_input"/>
+    </invoke>
+    <transition event="done.invoke.candidate" cond="isBehaviorHandled(_event)" target="using">
+      <assign location="answer" expr="_event.data.selected"/>
+    </transition>
+    <transition event="done.invoke.candidate" target="advancing">
+      <log label="autonomy.candidate.advance" expr="candidateName()"/>
+    </transition>
+    <transition event="bot.ability.autonomy.candidate.silent" cond="isTimerEvent(_event)" target="advancing">
+      <log label="autonomy.candidate.silent" expr="candidateSilentLog()"/>
+    </transition>
+    <!-- A source that does not compile fails the invocation with no
+         invokeid (SCXML 3.12.2); nothing else here raises one. -->
+    <transition event="error.*" target="recording_failure">
+      <log label="autonomy.candidate.failed" expr="candidateFailedLog(_event)"/>
+    </transition>
+  </state>
+
+  <state id="advancing">
+    <onentry>
+      <assign location="index" expr="nextIndex()"/>
+    </onentry>
+    <transition cond="hasNextCandidate()" target="running"/>
+    <transition target="unhandled"/>
+  </state>
+
+  <!-- mosfet behavior_usage: the handled behavior's use is persisted. -->
+  <state id="using">
+    <onentry>
+      <send idlocation="timer" event="bot.ability.autonomy.behavior_usage.persistence_failed" delayexpr="memoryTimeoutDelay()"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="timer"/>
+    </onexit>
+    <invoke id="usage" type="scxml" src="../memory/memory.scx">
+      <param name="database" expr="database"/>
+      <param name="statements" expr="usedPersistenceStatements()"/>
+    </invoke>
+    <transition event="done.invoke.usage" target="answered"/>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromInvoke(_event, 'usage')" target="failed">
+      <assign location="answer" expr="usageFailedReason(_event.data.message)"/>
+    </transition>
+    <transition event="error.*" cond="isFromInvoke(_event, 'usage')" target="failed">
+      <assign location="answer" expr="usageFailedReason(_event.name)"/>
+    </transition>
+    <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="isTimerEvent(_event)" target="failed">
+      <assign location="answer" expr="usageTimedOutReason()"/>
+    </transition>
+  </state>
+
+  <!-- A failed candidate's failure is persisted, then the next one runs. -->
+  <state id="recording_failure">
+    <onentry>
+      <send idlocation="timer" event="bot.ability.autonomy.behavior_usage.persistence_failed" delayexpr="memoryTimeoutDelay()"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="timer"/>
+    </onexit>
+    <invoke id="failure" type="scxml" src="../memory/memory.scx">
+      <param name="database" expr="database"/>
+      <param name="statements" expr="failedPersistenceStatements()"/>
+    </invoke>
+    <transition event="done.invoke.failure" target="advancing"/>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromInvoke(_event, 'failure')" target="failed">
+      <assign location="answer" expr="usageFailedReason(_event.data.message)"/>
+    </transition>
+    <transition event="error.*" cond="isFromInvoke(_event, 'failure')" target="failed">
+      <assign location="answer" expr="usageFailedReason(_event.name)"/>
+    </transition>
+    <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="isTimerEvent(_event)" target="failed">
+      <assign location="answer" expr="usageTimedOutReason()"/>
+    </transition>
+  </state>
+
+  <final id="done">
+    <donedata>
+      <content expr="noBehaviorsOutput()"/>
+    </donedata>
+  </final>
+
+  <final id="unhandled">
+    <donedata>
+      <content expr="unhandledOutput()"/>
+    </donedata>
+  </final>
+
+  <final id="answered">
+    <donedata>
+      <content expr="answeredOutput()"/>
+    </donedata>
+  </final>
+
+  <final id="failed">
+    <donedata>
+      <content expr="failedOutput()"/>
+    </donedata>
+  </final>
+</scxml>

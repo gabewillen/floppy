@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.cognition.child.hop.timed_out",
+  "type": "object",
+  "properties": {
+    "turn": {
+      "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "turn"
+  ],
+  "description": "A cognition stage did not answer within its hop timeout."
+}

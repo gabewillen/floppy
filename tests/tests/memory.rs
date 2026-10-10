@@ -1,7 +1,7 @@
-//! The memory ability (`abilities/memory.scx`, mosfet's Memory) run as a
+//! The memory ability (`abilities/memory/memory.scx`, mosfet's Memory) run as a
 //! harness document's child through `scx run`: it migrates the database to
 //! mosfet's head schema and applies one transaction of statements through
-//! the sql service (the migration ability, `abilities/migration.scx`,
+//! the sql service (the migration ability, `abilities/migration/migration.scx`,
 //! brings it to mosfet's Alembic head first), answering its parent with `bot.ability.memory.output`
 //! (the statements' results only) or `bot.ability.failed`.
 //!
@@ -56,7 +56,7 @@ fn harness_on(database: &str, engine: &str, before: Option<&str>, statements: &s
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="{initial}">
   {aging}
   <state id="remembering">
-    <invoke id="memory" type="scxml" src="memory.scx">
+    <invoke id="memory" type="scxml" src="memory/memory.scx">
       <param name="database" expr="'{database}'"/>
       <param name="statements" expr="{statements}"/>
     </invoke>
@@ -76,7 +76,7 @@ fn harness_on(database: &str, engine: &str, before: Option<&str>, statements: &s
 /// service `directory`.
 fn run(directory: &Path, document: &str) -> Finished {
     let dir = unique_scratch("memory-ability");
-    support::copy_memory(&dir);
+    support::copy_ability("memory", &dir);
     let path = support::write(&dir, "harness.scx", document);
     let mut run = Run::start(
         &[

@@ -2,7 +2,7 @@
 <!--
   A behavior double (tests/tests/cognition.rs): a stand-in for one
   builder-produced turn behavior, which the test stores as an inventory
-  row's source and autonomy (abilities/autonomy.scx) invokes by
+  row's source and autonomy (abilities/autonomy/autonomy.scx) invokes by
   <invoke><content expr>.
 
   It follows the rule builder output follows (docs/port-plan.md, "Builder

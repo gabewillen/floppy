@@ -10,7 +10,7 @@ expressions and assigns its result through the data model, and does no I/O.
 | --- | --- | --- |
 | `<migration:plan location revisions current target?>` | `ScriptDirectory.iterate_revisions`, the `head`, `base`, `+N`, `-N` targets | `{from, to, steps}`, each step `{revision, direction, statements}` (`location`) |
 
-The migration ability ([`abilities/migration.scx`](../../abilities/migration.scx),
+The migration ability ([`abilities/migration/migration.scx`](../../abilities/migration/migration.scx),
 Alembic's `command.upgrade` and `command.downgrade`) reads `alembic_version`
 through the sql service, plans with this element, and applies the planned
 statements and the version row's guard in one sql transaction (decisions D48,

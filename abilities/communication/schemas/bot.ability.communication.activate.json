@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.communication.activate",
+  "additionalProperties": false,
+  "description": "Select which Conversation is active for attach and routing.\n\nThe instance is kept in the local engagement set if not already present.\nActivation is refused while Communication is engaged (behavior active).\nFuture: hosts load a Conversation via Memory, then activate it here.",
+  "properties": {},
+  "type": "object"
+}

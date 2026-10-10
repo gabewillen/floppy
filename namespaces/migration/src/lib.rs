@@ -4,7 +4,7 @@
 //! Alembic's revision graph walk, agnostic of the database (the user's
 //! direction: "make it like alembic that's agnostic of the database"): it
 //! knows revisions, never an engine, never SQL. The migration ability
-//! (`abilities/migration.scx`) reads the current revision through the sql
+//! (`abilities/migration/migration.scx`) reads the current revision through the sql
 //! service, plans with this element, and applies the planned statements in
 //! one transaction. Documents bind [`NAMESPACE_URI`] (conventionally with
 //! the prefix `migration`):

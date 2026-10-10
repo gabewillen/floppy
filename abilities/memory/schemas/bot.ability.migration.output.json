@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.migration.output",
+  "description": "[floppy name] Migration output after the database reached its target revision (Alembic's command.upgrade or command.downgrade). On rollback the ability fails and this payload is not emitted.",
+  "additionalProperties": false,
+  "properties": {
+    "from": {
+      "description": "The revision the database was at (null: base, no revision applied).",
+      "title": "From",
+      "type": ["string", "null"]
+    },
+    "to": {
+      "description": "The revision the database is at now (null: base).",
+      "title": "To",
+      "type": ["string", "null"]
+    }
+  },
+  "required": [
+    "from",
+    "to"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "from": null,
+      "to": "0002"
+    }
+  ]
+}

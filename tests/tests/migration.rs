@@ -1,8 +1,9 @@
-//! The migration ability (`abilities/migration.scx`, Alembic's
+//! The migration ability (`abilities/migration/migration.scx`, Alembic's
 //! `command.upgrade` and `command.downgrade`) run as a harness document's
 //! child through `scx run`, with mosfet's memory revisions
-//! (`abilities/memory/*.json`): it moves a database between revisions in
-//! one transaction, keeps Alembic's `alembic_version`, and answers its
+//! (`abilities/memory/sqlite/*.json`, `abilities/memory/postgresql/*.json`):
+//! it moves a database between revisions in one transaction, keeps
+//! Alembic's `alembic_version`, and answers its
 //! parent with `bot.ability.migration.output {from, to}` or
 //! `bot.ability.failed`.
 //!
@@ -45,7 +46,7 @@ fn harness_on(database: &str, engine: &str, dialect: &str, target: &str, inspect
     <data id="revision_0002" src="memory/{dialect}/0002_behavior_lifetime.json"/>
   </datamodel>
   <state id="migrating">
-    <invoke id="migration" type="scxml" src="migration.scx">
+    <invoke id="migration" type="scxml" src="migration/migration.scx">
       <param name="database" expr="'{database}'"/>
       <param name="revisions" expr="[revision_0001, revision_0002]"/>
       <param name="target" expr="{target}"/>
@@ -85,7 +86,7 @@ fn migrate(directory: &Path, target: &str, inspect: &str) -> Vec<(String, String
 /// logs.
 fn run(directory: &Path, document: &str) -> Vec<(String, String)> {
     let dir = unique_scratch("migration-ability");
-    support::copy_memory(&dir);
+    support::copy_ability("memory", &dir);
     let path = support::write(&dir, "harness.scx", document);
     let mut run = Run::start(
         &[

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.behavior.break",
+  "additionalProperties": false,
+  "description": "Break a behavior that no longer improves (or harms) robot behavior. Sets inventory status=BROKEN so Autonomy will not run it and a persistent routine stops; the row remains for a later bot.behavior.change repair. Optional reason becomes status_reason.",
+  "properties": {
+    "event": {
+      "const": "bot.behavior.break",
+      "default": "bot.behavior.break",
+      "description": "Behavior break event name (discriminator).",
+      "title": "Event",
+      "type": "string"
+    },
+    "name": {
+      "description": "Stable name of the behavior to set status=BROKEN.",
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Why this behavior is being retired: the observed harm or staleness. Becomes the inventory status_reason so a later change can repair it.",
+      "examples": [
+        "Greeted while the bot was already mid-conversation."
+      ],
+      "title": "Reason"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "event": "bot.behavior.break",
+      "name": "GreetOnKnock",
+      "reason": "Greeted while the bot was already mid-conversation."
+    }
+  ]
+}

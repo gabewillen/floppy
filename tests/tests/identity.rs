@@ -1,10 +1,10 @@
-//! The floppy bot's identity (`abilities/identity.scx`), run as the body's
+//! The floppy bot's identity (`abilities/identity/identity.scx`), run as the body's
 //! child through `scx run` on the wall clock.
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
 //! under `bots/floppy/`, the communication, conversation, speaking,
 //! identity, memory and every schema under `abilities/`) with
-//! `tests/fixtures/phase4/cognition_double.scx` as `abilities/cognition.scx`
+//! `tests/fixtures/phase4/cognition_double.scx` as `abilities/cognition/cognition.scx`
 //! (no model; an addressed turn answers "I am <name>", a `bot.input`
 //! observation `adopt` selects `bot.ability.identity.adopt` for its data).
 //! A bot is born nameless; a test that needs a name rewrites the identity's
@@ -55,26 +55,23 @@ fn layout(name: Option<&str>) -> PathBuf {
         &workspace().join("bots/floppy/schemas"),
         &dir.join("bots/floppy/schemas"),
     );
-    copy_dir(
-        &workspace().join("abilities/schemas"),
-        &dir.join("abilities/schemas"),
-    );
-    for name in ["communication", "conversation", "speaking", "identity"] {
-        let name = format!("{name}.scx");
-        std::fs::copy(
-            workspace().join("abilities").join(&name),
-            dir.join("abilities").join(&name),
-        )
-        .expect("the ability is copyable");
+    for name in [
+        "communication",
+        "conversation",
+        "speaking",
+        "identity",
+        "memory",
+    ] {
+        support::copy_ability(name, &dir.join("abilities"));
     }
-    support::copy_memory(&dir.join("abilities"));
+    std::fs::create_dir_all(dir.join("abilities/cognition")).expect("creatable");
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/cognition_double.scx"),
-        dir.join("abilities/cognition.scx"),
+        dir.join("abilities/cognition/cognition.scx"),
     )
     .expect("the double is copyable");
     if let Some(name) = name {
-        let path = dir.join("abilities/identity.scx");
+        let path = dir.join("abilities/identity/identity.scx");
         let text = std::fs::read_to_string(&path).expect("the identity is readable");
         let named = text.replacen(
             r#"<data id="name" expr="null"/>"#,

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.speaking.input",
+  "additionalProperties": false,
+  "description": "A request to speak. text is the entire payload: it is required, must be non-empty, and is synthesized and played immediately, so this request is never silent and never partial. The ability owns speech synthesis and playout, so nothing downstream supplies, completes, or edits the words. Speaking does not end a turn — it can accompany other events that keep running alongside it.",
+  "properties": {
+    "text": {
+      "description": "The words to say, verbatim: exactly this string is spoken aloud in the bot's own voice to whoever is present, as soon as this is selected, and cannot be taken back once heard. It is plain spoken language — what a listener would hear, not markup, not a stage direction, not a label for an utterance and not a description of one, because every one of those is read out loud just as literally. Required and non-empty: there is no way to send this and stay silent, so the choice not to speak is made by not selecting speech at all.",
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "type": "object"
+}

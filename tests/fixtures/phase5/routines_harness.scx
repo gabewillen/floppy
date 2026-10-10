@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Test harness of abilities/routines.scx (tests/tests/routines.rs). It
+  Test harness of abilities/routines/routines.scx (tests/tests/routines.rs). It
   stores four rows in behavior inventory through the Memory ability (memory.scx)
   (Alpha and Beta: ACTIVE persistent routines; Gamma: a BROKEN persistent
   routine; Delta: an ACTIVE turn behavior; Epsilon: an ACTIVE persistent
@@ -29,7 +29,7 @@
   </datamodel>
 
   <state id="seeding">
-    <invoke id="seed" type="scxml" src="memory.scx">
+    <invoke id="seed" type="scxml" src="memory/memory.scx">
       <param name="database" expr="database"/>
       <param name="statements" expr="['Alpha one', 'Beta one', 'Gamma one', 'Delta one', 'Epsilon one'].map(t =&gt; ({sql: insert, parameters: [t.split(' ')[0], t[0] === 'E' ? 'not scxml' : routine.replace('NAME', t.split(' ')[0]).replace('TEXT', t.split(' ')[1]), t[0] === 'G' ? 'BROKEN' : 'ACTIVE', t[0] === 'D' ? 'turn' : 'persistent']}))"/>
     </invoke>
@@ -41,7 +41,7 @@
 
   <parallel id="live">
     <state id="child">
-      <invoke id="routines" type="scxml" src="routines.scx">
+      <invoke id="routines" type="scxml" src="routines/routines.scx">
         <param name="database" expr="database"/>
       </invoke>
     </state>
@@ -60,7 +60,7 @@
       </state>
 
       <state id="changing">
-        <invoke id="change" type="scxml" src="memory.scx">
+        <invoke id="change" type="scxml" src="memory/memory.scx">
           <param name="database" expr="database"/>
           <param name="statements" expr="[{sql: update, parameters: [routine.replace('NAME', 'Alpha').replace('TEXT', 'two'), 'Alpha']}, {sql: remove, parameters: ['Beta']}]"/>
         </invoke>
