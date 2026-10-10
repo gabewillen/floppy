@@ -657,7 +657,11 @@ fn fsum(values: impl Iterator<Item = f64>) -> f64 {
     {
         let y = low * 2.0;
         let x = high + y;
-        if y == x - high {
+        // Exact float equality is the algorithm (CPython's msum): the
+        // doubled remainder survived the addition unrounded.
+        #[allow(clippy::float_cmp, reason = "fsum's exact rounding test")]
+        let exact = y == x - high;
+        if exact {
             high = x;
         }
     }
@@ -728,7 +732,11 @@ fn ascii_json_string(text: &str) -> String {
             _ => {
                 let mut units = [0_u16; 2];
                 for unit in character.encode_utf16(&mut units) {
-                    out.push_str(&format!("\\u{unit:04x}"));
+                    out.push_str("\\u");
+                    for shift in [12, 8, 4, 0] {
+                        let digit = u32::from((*unit >> shift) & 0xf);
+                        out.push(char::from_digit(digit, 16).unwrap_or('0'));
+                    }
                 }
             }
         }
