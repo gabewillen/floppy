@@ -604,27 +604,41 @@ fn attribute(text: &str) -> String {
         .replace('>', "&gt;")
 }
 
-/// Runs `statements` (mosfet `Statement`s) in one memory transaction
-/// against the database in `grant`'s directory; returns its output.
+/// Runs `statements` (mosfet `Statement`s) in one transaction of the
+/// Memory ability (`abilities/memory.scx`) against the database in
+/// `grant`'s directory; returns its output.
 fn transact(grant: &[String], statements: &Json) -> Json {
     let document = format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="applying">
   <datamodel><data id="statements" expr="{}"/></datamodel>
   <state id="applying">
-    <invoke id="apply" type="{}">
+    <invoke id="memory" type="scxml" src="memory.scx">
       <param name="database" expr="'{DATABASE}'"/>
       <param name="statements" expr="statements"/>
     </invoke>
-    <transition event="bot.ability.memory.output"><log label="output" expr="JSON.stringify(_event.data)"/></transition>
-    <transition event="done.invoke.apply" target="done"/>
+    <transition event="bot.ability.memory.output" target="done"><log label="output" expr="JSON.stringify(_event.data)"/></transition>
     <transition event="*" target="done"><log label="failed" expr="_event.name"/></transition>
   </state>
   <final id="done"/>
 </scxml>"#,
         attribute(&statements.to_string()),
-        support::service_uri("memory"),
     );
-    let finished = support::run_document("inventory.scx", &document, grant, &[], WAIT);
+    let dir = unique_scratch("inventory");
+    std::fs::copy(
+        workspace().join("abilities/memory.scx"),
+        dir.join("memory.scx"),
+    )
+    .expect("the ability is copyable");
+    let path = support::write(&dir, "inventory.scx", &document);
+    let mut args = grant.to_vec();
+    args.extend([
+        "--clock".to_owned(),
+        "logical".to_owned(),
+        path.display().to_string(),
+    ]);
+    let mut run = Run::start(&args, &[]);
+    run.end_input();
+    let finished = run.finish(WAIT);
     let output = logs(&finished.all)
         .into_iter()
         .find(|(label, _)| label == "output")

@@ -10,8 +10,8 @@
 {"label":"autonomy.candidate","parent":"session.1","session":"session.6","text":"Declines","type":"log"}
 {"label":"autonomy.candidate.advance","parent":"session.1","session":"session.6","text":"Declines","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (unhandled)","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.8","text":"turn 1: threshold 0.35","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.8","text":"turn 1: bot.ability.cognition.ignore","type":"log"}
+{"label":"intuition","parent":"session.1","session":"session.9","text":"turn 1: threshold 0.35","type":"log"}
+{"label":"intuition","parent":"session.1","session":"session.9","text":"turn 1: bot.ability.cognition.ignore","type":"log"}
 {"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":70,\"n\":0,\"variance\":100}","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition handled (none)","type":"log"}
 {"label":"reflection","parent":"session","session":"session.1","text":"absent (phase 5)","type":"log"}

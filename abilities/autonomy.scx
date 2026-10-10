@@ -17,7 +17,7 @@
 
   Input: the <param>s turn, input (focus and focus_candidates, mosfet's
   bot.ability.autonomy.input, schemas/bot.ability.autonomy.input.json),
-  stimulus (the turn's stimulus envelope) and memory (the memory service's
+  stimulus (the turn's stimulus envelope) and memory (the memory
   database path; null means no inventory, so nothing matches).
 
   Matching (mosfet _prepare_match, _match_activity): one memory
@@ -42,13 +42,15 @@
   When none handles the turn: {turn, handled: false, candidates, reason:
   "unhandled"}. candidates names the behaviors tried, in order.
 
-  Failure: a memory transaction that fails or outlasts memory_timeout_ms
-  answers {turn, handled: false, failed: true, reason}.
+  Memory: each transaction invokes the Memory ability (abilities/memory.scx)
+  with the database and mosfet's statements. A transaction that fails or
+  outlasts memory_timeout_ms answers {turn, handled: false, failed: true,
+  reason}.
 
-  Contracts: the memory service's events reference abilities/schemas/ by
+  Contracts: the Memory ability's events reference abilities/schemas/ by
   event:schema. A candidate is builder output and gets no schema files.
 
-  Bindings: the memory service (https://github.com/stateforward/floppy/services/memory).
+  Bindings: none of its own (the Memory ability binds the sql service).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -89,11 +91,11 @@
     <onexit>
       <cancel sendidexpr="timer"/>
     </onexit>
-    <invoke id="load" type="https://github.com/stateforward/floppy/services/memory">
+    <invoke id="load" type="scxml" src="memory.scx">
       <param name="database" expr="memory"/>
       <param name="statements" expr="[{sql: select_sql, parameters: [stimulus.event]}]"/>
     </invoke>
-    <transition event="bot.ability.memory.output" cond="_event.invokeid === 'load'">
+    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" cond="_event.invokeid === 'load'">
       <assign location="rows" expr="_event.data.results[0].rows"/>
     </transition>
     <transition event="done.invoke.load" target="matched"/>
@@ -166,7 +168,7 @@
     <onexit>
       <cancel sendidexpr="timer"/>
     </onexit>
-    <invoke id="usage" type="https://github.com/stateforward/floppy/services/memory">
+    <invoke id="usage" type="scxml" src="memory.scx">
       <param name="database" expr="memory"/>
       <param name="statements" expr="[{sql: used_sql, parameters: [rows[index].values[0]]}]"/>
     </invoke>
@@ -190,7 +192,7 @@
     <onexit>
       <cancel sendidexpr="timer"/>
     </onexit>
-    <invoke id="failure" type="https://github.com/stateforward/floppy/services/memory">
+    <invoke id="failure" type="scxml" src="memory.scx">
       <param name="database" expr="memory"/>
       <param name="statements" expr="[{sql: failed_sql, parameters: [rows[index].values[0]]}]"/>
     </invoke>
