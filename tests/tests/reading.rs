@@ -25,7 +25,7 @@ mod support;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use support::{Finished, Run, logs, unique_scratch, workspace};
+use support::{Finished, Run, logs, unique_scratch};
 
 /// The generate `<invoke>` of `abilities/reading/reading.scx`, which the copy
 /// replaces with the double.
