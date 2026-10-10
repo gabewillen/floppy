@@ -41,7 +41,7 @@ fn layout(database: &str) -> PathBuf {
                 r#"<data id="database" expr="'/memory/floppy.sqlite'"/>"#,
                 &format!(r#"<data id="database" expr="{database}"/>"#),
             );
-    let path = dir.join("abilities/harness/harness.scx");
+    let path = dir.join("abilities/harness.scx");
     std::fs::write(&path, harness).expect("the harness is writable");
     path
 }
