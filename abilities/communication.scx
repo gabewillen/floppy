@@ -76,7 +76,7 @@
     <data id="response_timeout_ms" expr="6000"/>
     <!-- The memory database file, for the conversation (null:
          no memory). -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
     <data id="ready" expr="({})"/>
     <data id="queue" expr="[]"/>
     <!-- The response in hand: its number, words and hop timer. -->
@@ -96,7 +96,7 @@
 
   <state id="attached" initial="inactive">
     <invoke id="conversation" type="scxml" src="conversation.scx">
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memory"/>
     </invoke>
     <invoke id="speaking" type="scxml" src="speaking.scx"/>
 

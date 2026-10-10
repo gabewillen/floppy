@@ -4,7 +4,7 @@
   bot's sense of its own name. The body (bots/floppy/floppy.scx) invokes it
   as its child "identity".
 
-    recalling -bot.ability.identity.recalled-> knowing { offering ->
+    recalling -bot.ability.identity.recalled-> knowing {
       listening -heard text-> recognizing -> listening }
     knowing -bot.ability.identity.adopt-> adopting
       -bot.ability.identity.adopted-> knowing
@@ -14,7 +14,7 @@
   not), else null.
 
   recalling (mosfet Identity._recall_name): with a database (the <param>
-  database, the memory database file) it invokes the memory ability
+  memory, the memory database file) it invokes the memory ability
   (abilities/memory.scx) to select the adopted names (query_tags
   self_name, subject_ref self, oldest first, at most 50, mosfet
   identity/name.py) and sends bot.ability.identity.recalled {name} to
@@ -41,13 +41,13 @@
   through <decision:choice events="bot.ability.identity.adopt">, compacted
   by <decision:compact> ($schema, title and examples dropped), in
   bot.ability.offers {ability: "identity", choices}, from knowing's
-  initial leaf offering (<decision:choice> reads the active leaf's
-  transitions); the first offers are the ability's readiness. adopting
-  (mosfet Identity._adopt_name) writes the name down before answering to
-  it: with a database it inserts the name (scope long_term, kind fact,
-  query_tags self_name, subject_ref self, created_at with milliseconds,
-  and the recall orders ties by insertion, so two adoptions in one second
-  keep their order) and sends
+  onentry (<decision:choice> reads knowing's own transitions there,
+  before a child is entered); the first offers are the ability's
+  readiness. adopting (mosfet Identity._adopt_name) writes the name down
+  before answering to it: with a database it inserts the name (scope
+  long_term, kind fact, query_tags self_name, subject_ref self, created_at
+  with milliseconds, and the recall orders ties by insertion, so two
+  adoptions in one second keep their order) and sends
   bot.ability.identity.adopted {name: {text, kind: "fact"}, persisted:
   true} (persisted [floppy field]) to #_internal; a write that fails sends
   bot.ability.identity.adopt.failed {message: "Identity could not remember
@@ -80,11 +80,11 @@
     <data id="offered" expr="[]"/>
     <data id="offers_over" expr="false"/>
     <data id="offer_names" expr="''"/>
-    <!-- Memory: the database file (null: no memory) and mosfet's
+    <!-- Memory: the database file (memory; null: no memory) and mosfet's
          statements (identity/name.py). A memory id is the next
          rowid as 32 hex digits: the sql service's randomblob is not
          unique across invocations. -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
     <data id="name_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND json_valid(content) ORDER BY created_at, rowid LIMIT 50'"/>
     <data id="name_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags, created_at) VALUES ((SELECT printf(\'%032x\', coalesce(max(rowid), 0) + 1) FROM bot_memory), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8, strftime(?9, ?10))'"/>
     <data id="recalled_name" expr="null"/>
@@ -98,7 +98,7 @@
       <assign location="recalled_name" expr="typeof name === 'string' &amp;&amp; name.length &gt; 0 ? {text: name, kind: 'fact'} : null"/>
     </onentry>
     <state id="recalling_from">
-      <transition cond="database === null" target="recalling_nothing"/>
+      <transition cond="memory === null" target="recalling_nothing"/>
       <transition target="recalling_memory"/>
     </state>
     <state id="recalling_nothing">
@@ -111,7 +111,7 @@
     </state>
     <state id="recalling_memory">
       <invoke id="recall" type="scxml" src="memory.scx">
-        <param name="database" expr="database"/>
+        <param name="database" expr="memory"/>
         <param name="statements" expr="[{sql: name_select, parameters: ['self_name', 'self']}]"/>
       </invoke>
       <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
@@ -137,31 +137,27 @@
     </transition>
   </state>
 
-  <state id="knowing" initial="offering">
+  <state id="knowing" initial="listening">
+    <!-- The offers, read on entry: the choices are knowing's own
+         transitions, since no child is entered yet. -->
+    <onentry>
+      <decision:choice location="offered" events="bot.ability.identity.adopt"/>
+      <decision:compact location="offered" bound="32768" overlocation="offers_over"/>
+      <if cond="offers_over">
+        <log label="identity.offers.dropped" expr="'the offers are over 32768 bytes'"/>
+      </if>
+      <decision:names location="offer_names" choices="offered"/>
+      <log label="identity.offers" expr="offer_names"/>
+      <send event="bot.ability.offers" target="#_parent">
+        <param name="ability" expr="'identity'"/>
+        <param name="choices" expr="offered"/>
+      </send>
+    </onentry>
     <!-- Offered for the whole time the ability is knowing: a bot can be
          given a name mid-sentence. -->
     <transition event="bot.ability.identity.adopt" event:schema="schemas/bot.ability.identity.adopt.json" target="adopting">
       <assign location="adopting_name" expr="_event.data.name"/>
     </transition>
-
-    <!-- The offers, read where a leaf is active (the choices are the
-         active configuration's transitions). -->
-    <state id="offering">
-      <onentry>
-        <decision:choice location="offered" events="bot.ability.identity.adopt"/>
-        <decision:compact location="offered" bound="32768" overlocation="offers_over"/>
-        <if cond="offers_over">
-          <log label="identity.offers.dropped" expr="'the offers are over 32768 bytes'"/>
-        </if>
-        <decision:names location="offer_names" choices="offered"/>
-        <log label="identity.offers" expr="offer_names"/>
-        <send event="bot.ability.offers" target="#_parent">
-          <param name="ability" expr="'identity'"/>
-          <param name="choices" expr="offered"/>
-        </send>
-      </onentry>
-      <transition target="listening"/>
-    </state>
 
     <state id="listening">
       <!-- A nameless bot hears words and nothing follows from them. -->
@@ -189,7 +185,7 @@
        (fail-closed: a name that could not be written down is not taken). -->
   <state id="adopting" initial="adopting_from">
     <state id="adopting_from">
-      <transition cond="database === null" target="adopting_nothing"/>
+      <transition cond="memory === null" target="adopting_nothing"/>
       <transition target="adopting_memory"/>
     </state>
     <state id="adopting_nothing">
@@ -207,7 +203,7 @@
         <assign location="name_parameters" expr="name_parameters.concat(['application/json', 'self_name', '%Y-%m-%dT%H:%M:%f', 'now'])"/>
       </onentry>
       <invoke id="remember" type="scxml" src="memory.scx">
-        <param name="database" expr="database"/>
+        <param name="database" expr="memory"/>
         <param name="statements" expr="[{sql: name_insert, parameters: name_parameters}]"/>
       </invoke>
       <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"

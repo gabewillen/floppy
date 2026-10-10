@@ -405,6 +405,55 @@ fn classify_takes_labels_in_every_form() {
 }
 
 #[test]
+fn a_turns_assembled_choices_are_one_candidate_per_event() {
+    // The body's choices (untagged) and the abilities' offers (tagged with
+    // their target), as `<decision:assemble>` writes them.
+    let choices = choices_from_json(&json!([
+        {"event": "bot.focus_device", "schema": {"type": "object"}},
+        {"event": "order.cancel", "schema": cancel_schema(), "target": "orders"},
+        {"event": "order.cancel", "schema": cancel_schema(), "target": "returns", "description": "Later"},
+    ]))
+    .expect("tagged choices parse");
+    let events: Vec<&str> = choices.iter().map(|choice| choice.event.as_str()).collect();
+    assert_eq!(events, ["bot.focus_device", "order.cancel"]);
+    assert_eq!(
+        choices
+            .get(1)
+            .and_then(|choice| choice.description.as_deref()),
+        Some("Cancel the order"),
+        "the first listing's description is kept"
+    );
+    for (repeated, why) in [
+        (
+            json!([{"event": "a", "schema": {}, "target": "x"}, {"event": "a", "schema": {}}]),
+            "a repeat without a target",
+        ),
+        (
+            json!([{"event": "a", "schema": {}}, {"event": "a", "schema": {}, "target": "x"}]),
+            "an untagged event listed again",
+        ),
+        (
+            json!([{"event": "a", "schema": {}, "target": "x"}, {"event": "a", "schema": {}, "target": "x"}]),
+            "the same target twice",
+        ),
+        (
+            json!([{"event": "a", "schema": {}, "target": "x"}, {"event": "a", "schema": {"type": "object"}, "target": "y"}]),
+            "another schema for the same event",
+        ),
+        (
+            json!([{"event": "a", "schema": {}, "target": ""}]),
+            "an empty target",
+        ),
+        (
+            json!([{"event": "a", "schema": {}, "target": "x"}, {"event": "a", "schema": {}, "target": "y", "description": 1}]),
+            "a repeat with a malformed description",
+        ),
+    ] {
+        assert!(choices_from_json(&repeated).is_err(), "{why}");
+    }
+}
+
+#[test]
 fn malformed_parameters_reject_the_start() {
     let state = ("state", order_state());
     let choices = ("choices", order_choices());

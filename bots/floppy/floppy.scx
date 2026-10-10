@@ -34,6 +34,12 @@
   routine's bot.behavior.tick the cognition forwards (phase 5 routines,
   gated off in phase 4).
 
+  Environment: environment.sound and environment.visual from outside,
+  while active, go to each input ability (input, mosfet's Bot input: the invoke ids
+  of the abilities that perceive raw stimuli; none until phase 6), in
+  order, by <foreach>; never to the cognition, which hears of a stimulus
+  only as an input ability's product.
+
   Turns: bot.input, a conversation product or an addressed in unfocused
   or focused
   starts a processing turn; <bot:stimulus> writes the event's stimulus
@@ -109,7 +115,7 @@
   Memory (mosfet's sqlite_memory): the body passes its database (a file in
   the directory the run grants the sql service at /memory, scx run's
   dir option) to the cognition, the communication and the identity as
-  <param name="database">; reasoning recalls and retains cognitive
+  <param name="memory">; reasoning recalls and retains cognitive
   episodes, the identity its adopted names, and the conversation its
   relationship memories (abilities/memory.scx over services/sql, one
   SQLite transaction per invocation). A run without the grant is refused
@@ -125,7 +131,7 @@
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <!-- The memory database file (mosfet's sqlite_memory
          database), in the directory the run grants the service at /memory. -->
-    <data id="database" expr="'/memory/floppy.sqlite'"/>
+    <data id="memory" expr="'/memory/floppy.sqlite'"/>
     <data id="activation_timeout_ms" expr="30000"/>
     <data id="processing_timeout_ms" expr="300000"/>
     <data id="cancel_timeout_ms" expr="5000"/>
@@ -139,6 +145,11 @@
     <data id="expected" expr="['cognition', 'communication', 'identity']"/>
     <data id="offers" expr="({})"/>
     <data id="waiting" expr="[]"/>
+    <!-- The input abilities each environment.* stimulus fans out to
+         (mosfet's Bot input, as invoke ids; none until phase 6), and the
+         one being sent to. -->
+    <data id="input" expr="[]"/>
+    <data id="ability" expr="null"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
     <data id="focused_device" expr="null"/>
@@ -179,13 +190,13 @@
     </onexit>
     <invoke id="cognition" type="scxml" src="../../abilities/cognition.scx">
       <param name="model" expr="model"/>
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memory"/>
     </invoke>
     <invoke id="communication" type="scxml" src="../../abilities/communication.scx">
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memory"/>
     </invoke>
     <invoke id="identity" type="scxml" src="../../abilities/identity.scx">
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memory"/>
     </invoke>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
@@ -248,6 +259,23 @@
         <send event="bot.ability.communication.input" target="#_identity">
           <content expr="_event.data"/>
         </send>
+      </transition>
+      <!-- Environment stimuli from outside go to every input ability. -->
+      <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+                  cond="!_event.invokeid">
+        <foreach array="input" item="ability">
+          <send event="environment.sound" targetexpr="'#_' + ability">
+            <content expr="_event.data"/>
+          </send>
+        </foreach>
+      </transition>
+      <transition event="environment.visual" event:schema="schemas/environment.visual.json"
+                  cond="!_event.invokeid">
+        <foreach array="input" item="ability">
+          <send event="environment.visual" targetexpr="'#_' + ability">
+            <content expr="_event.data"/>
+          </send>
+        </foreach>
       </transition>
       <!-- What the communication said, and its failures. -->
       <transition event="bot.ability.speaking.output" event:schema="schemas/bot.ability.speaking.output.json" cond="_event.invokeid === 'communication'">

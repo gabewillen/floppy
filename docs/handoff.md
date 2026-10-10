@@ -22,11 +22,13 @@ Last updated: 2026-10-09.
   (reference only). Phase 4's docs are closed: decisions D33 to D43,
   port-plan's [Phase 4 conventions](port-plan.md#phase-4-conventions), and
   the AGENTS.md layout and no-`<script>` rules.
-- **scxml.rs:** `main` and `feat/invoke-services` at `febf633`
+- **scxml.rs:** `main` and `feat/invoke-services` at `c5da80c`
   (`session.accepts-event-data`: a send between sessions, and host input,
   is checked against the receiving document's `event:schema`s; refused
-  host input is the `scx run` error record `machine-invalid-input`).
-  floppy's subtree is at `febf633`.
+  host input is the `scx run` error record `machine-invalid-input`; a
+  relative `srcexpr` resolves against the invoked document that evaluates
+  it; a snapshot read in a compound state's entry content is valid).
+  floppy's subtree is at `c5da80c`.
 - **Plan:** [plans/phase4-bot-core.mdscript.md](plans/phase4-bot-core.mdscript.md).
   Next slice: "Add Identity Text Ability", then Phase 5 seams, live
   examples, docs, and the phase-end catch-up (doc tests once, deferred live

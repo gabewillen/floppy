@@ -68,7 +68,8 @@ pub(crate) struct SessionLinks {
     /// The session clock's current time, shared with the data model.
     time: crate::data_model::SessionTime,
     /// The bindings of the `<invoke src>` document this session runs (or
-    /// that an inline `<content>` ancestor's runs); `None` for the host's.
+    /// that an inline `<content>` ancestor's runs), with its base URI;
+    /// `None` for the host's.
     bindings: Option<Rc<DocumentBindings>>,
     /// The bindings of the `<invoke src>` document this session loaded last
     /// (empty for one with none of its own), for the child it compiles
@@ -368,7 +369,17 @@ impl SessionLinks {
             DocumentKind::Data => EmbedderDocumentKind::Data,
             DocumentKind::Invocation => EmbedderDocumentKind::Invocation,
         };
-        match self.embedder.document(kind, uri) {
+        // A relative URI names a document relative to the document this
+        // session runs (RFC 3986 §5.1), when its base URI is known.
+        let resolved = self
+            .bindings
+            .as_deref()
+            .and_then(DocumentBindings::base_uri)
+            .map(|base| scxml_types::resolve_reference(base, uri));
+        match self
+            .embedder
+            .document(kind, resolved.as_deref().unwrap_or(uri))
+        {
             None => Err(component_error(
                 ErrorCode::Unavailable,
                 "document is not resolvable",
@@ -377,7 +388,11 @@ impl SessionLinks {
                 if kind == EmbedderDocumentKind::Invocation {
                     let bindings = self
                         .core
-                        .document_bindings(document.extensions, document.services)
+                        .document_bindings(
+                            document.extensions,
+                            document.services,
+                            document.base_uri,
+                        )
                         .map_err(|error| fatal(&self.shared, error.into()))?;
                     self.loaded_bindings = Some(bindings);
                     self.loaded_event_schemas = Some(document.event_schemas);

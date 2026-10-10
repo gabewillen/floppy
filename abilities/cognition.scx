@@ -26,7 +26,9 @@
   {turn, handled, selected?, reason?, tuner?, failed?}. Leaving a stage's
   substate cancels it (SCXML 6.4), which replaces mosfet's stage cancel
   tokens. Handled ends the turn with the stage's selections as the output;
-  unhandled goes on to the next stage (autonomy's honest seam always does);
+  unhandled goes on to the next stage (autonomy always does without
+  memory: it gets the stimulus and the memory path, and runs the learned
+  behaviors the stimulus triggers);
   failed (or an error.* from the stage) answers bot.ability.failed. The
   intuition tuner state is passed in by <param> and kept from the donedata.
 
@@ -46,14 +48,17 @@
   Ignore: bot.ability.cognition.ignore is taken here (in idle and
   processing) and does nothing but log; it is this ability's offer.
 
-  Reflection (gated by reflection_enabled, off in phase 4): on, each
-  output is followed by reflecting, which invokes abilities/reflection.scx
-  (the turn and its output as <param>s) and returns to idle on its
-  done.invoke.reflection (a next input does not wait for it); off, by
+  Reflection (gated by reflection_enabled, off in phase 4): on, a
+  reflection region invokes abilities/reflection.scx as the long-lived
+  child "reflection" (mosfet composes Reflection beside the turns), and
+  each output is followed by bot.ability.reflection.input {turn,
+  cognition_output} to it; its bot.ability.reflection.output settles the
+  turn. Off, each output is followed by
   <log label="reflection" expr="'absent (phase 5)'">.
 
   Routines (gated by routines_enabled, off in phase 4): the root is a
-  parallel of the turns and a routines region that, on, invokes
+  parallel of the turns, the reflection region and a routines region
+  that, on, invokes
   abilities/routines.scx as the long-lived child "routines". A settled
   reflection sends it bot.ability.routines.reconcile; each
   bot.behavior.tick it forwards goes on to the body, which takes it as a
@@ -68,7 +73,8 @@
 
   Choices: each turn's input carries the body's assembled choices (its own
   and every ability's offers, tagged with their target); they go to
-  reasoning, whose selections the body routes.
+  intuition (the decision service's enabled transitions) and to reasoning, and the body
+  routes either stage's selections.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline). scxml.rs checks them where each event is
@@ -89,9 +95,10 @@
        version="1.0" datamodel="ecmascript" name="cognition" initial="alive">
   <datamodel>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
-    <!-- The memory database file, for reasoning (null: no memory). -->
-    <data id="database" expr="null"/>
     <data id="hop_timeout_ms" expr="30000"/>
+    <!-- The memory database file, for autonomy and reasoning (null: no
+         memory). -->
+    <data id="memory" expr="null"/>
     <!-- The phase 5 seams' gates (off in phase 4). -->
     <data id="reflection_enabled" expr="false"/>
     <data id="routines_enabled" expr="false"/>
@@ -184,6 +191,8 @@
       <invoke id="autonomy" type="scxml" src="autonomy.scx">
         <param name="turn" expr="turn"/>
         <param name="input" expr="({focus: focus, focus_candidates: focus_candidates})"/>
+        <param name="stimulus" expr="stimulus"/>
+        <param name="memory" expr="memory"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
                   cond="_event.data.turn === turn" target="cancelling_autonomy"/>
@@ -217,6 +226,7 @@
         <param name="stimulus" expr="stimulus"/>
         <param name="focus" expr="focus"/>
         <param name="focus_candidates" expr="focus_candidates"/>
+        <param name="choices" expr="choices"/>
         <param name="tuner" expr="tuner"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
@@ -259,7 +269,7 @@
         <param name="focus_candidates" expr="focus_candidates"/>
         <param name="choices" expr="choices"/>
         <param name="model" expr="model"/>
-        <param name="database" expr="database"/>
+        <param name="memory" expr="memory"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
                   cond="_event.data.turn === turn" target="cancelling_reasoning"/>
@@ -282,11 +292,16 @@
           <param name="turn" expr="turn"/>
           <param name="output" expr="selected"/>
         </send>
+        <if cond="reflection_enabled">
+          <send event="bot.ability.reflection.input" target="#_reflection">
+            <param name="turn" expr="turn"/>
+            <param name="cognition_output" expr="selected"/>
+          </send>
+        <else/>
+          <log label="reflection" expr="'absent (phase 5)'"/>
+        </if>
       </onentry>
-      <transition cond="reflection_enabled" target="reflecting"/>
-      <transition target="idle">
-        <log label="reflection" expr="'absent (phase 5)'"/>
-      </transition>
+      <transition target="idle"/>
     </state>
     <state id="failing">
       <onentry>
@@ -325,41 +340,31 @@
     </state>
   </state>
 
-  <!-- The turn's reflection, after its output (mosfet's order). The next
-       turn's input does not wait for it: leaving cancels the reflection. -->
-  <state id="reflecting">
-    <invoke id="reflection" type="scxml" src="reflection.scx">
-      <param name="turn" expr="turn"/>
-      <param name="cognition_output" expr="selected"/>
-    </invoke>
-    <transition event="done.invoke.reflection" target="idle">
-      <log label="cognition.reflected" expr="'turn ' + turn"/>
-      <if cond="routines_enabled">
-        <send event="bot.ability.routines.reconcile" target="#_routines">
-          <content expr="({})"/>
-        </send>
-      </if>
-    </transition>
-    <transition event="error.*" cond="_event.invokeid === 'reflection'" target="idle">
-      <log label="cognition.reflection.failed" expr="_event.name"/>
-    </transition>
-    <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json"
-                target="processing">
-      <assign location="turn" expr="_event.data.turn"/>
-      <assign location="stimulus" expr="_event.data.stimulus"/>
-      <assign location="focus" expr="_event.data.focus === undefined ? null : _event.data.focus"/>
-      <assign location="focus_candidates" expr="_event.data.focus_candidates === undefined ? [] : _event.data.focus_candidates"/>
-      <assign location="choices" expr="_event.data.choices === undefined ? [] : _event.data.choices"/>
-    </transition>
-    <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json">
-      <send event="bot.ability.cognition.cancelled" target="#_parent">
-        <param name="turn" expr="_event.data.turn"/>
-      </send>
-    </transition>
-    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json">
-      <log label="cognition.ignore" expr="'reflecting'"/>
-    </transition>
   </state>
+
+  <!-- The reflection (gated): a long-lived child that reflects on each
+       turn after its output, beside the next turns. -->
+  <state id="reflection_region" initial="reflection_deciding">
+    <state id="reflection_deciding">
+      <transition cond="reflection_enabled" target="reflection_on"/>
+      <transition target="reflection_off"/>
+    </state>
+    <state id="reflection_off"/>
+    <state id="reflection_on">
+      <invoke id="reflection" type="scxml" src="reflection.scx"/>
+      <transition event="bot.ability.reflection.output" event:schema="schemas/bot.ability.reflection.output.json"
+                  cond="_event.invokeid === 'reflection'">
+        <log label="bot.ability.reflection.output" expr="'turn ' + turn"/>
+        <if cond="routines_enabled">
+          <send event="bot.ability.routines.reconcile" target="#_routines">
+            <content expr="({})"/>
+          </send>
+        </if>
+      </transition>
+      <transition event="error.*" cond="_event.invokeid === 'reflection'" target="reflection_off">
+        <log label="cognition.reflection.failed" expr="_event.name"/>
+      </transition>
+    </state>
   </state>
 
   <!-- The routines (gated): a long-lived child whose ticks go to the body,

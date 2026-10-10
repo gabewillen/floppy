@@ -210,7 +210,7 @@ D33 to D43.
   `<cancel>` on exit, and a sendid or turn cond. They have no document of
   their own.
 - **Memory.** Each memory step is a compound state whose first child
-  picks by `database` (the `<param>` the body passes, null without
+  picks by `memory` (the database file's `<param>` the body passes, null without
   memory): with a database it invokes the memory ability
   (`abilities/memory.scx`, over `services/sql`) with mosfet's statements as
   SQL `<data>` and takes `bot.ability.memory.output` (its `event:schema`)
@@ -245,7 +245,7 @@ D33 to D43.
 | `ConfidenceTuner` | `<decision:tuner>` | `namespaces/decision` element |
 | `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`, `_stable_context_ref`, `MessageProvenance` | `<conversation:commit>` | `namespaces/conversation` element |
 | `cognition.py` Cognition | `abilities/cognition.scx` | ability `.scx` child |
-| `autonomy.py` Autonomy | `abilities/autonomy.scx` (phase 5 seam: candidate behaviors are builder-built `.scx` children) | stage `.scx` child |
+| `autonomy.py` Autonomy | `abilities/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<content expr>` children) | stage `.scx` child |
 | `intuition.py` Intuition | `abilities/intuition.scx` invoking `services/decision` | stage `.scx` child and service |
 | `reasoning.py` Reasoning | `abilities/reasoning.scx` invoking `services/generate` | stage `.scx` child and service |
 | `communication.py` Communication | `abilities/communication.scx` | ability `.scx` child |
@@ -257,6 +257,24 @@ D33 to D43.
 | Memory and its providers | `abilities/memory.scx` over `services/sql` (phase 3) | ability `.scx` child + service |
 | Listening, reading, turn detectors, devices | phase 6 `.scx` children and Wasm services | out of phase 4 |
 | payload validators | `event:schema` on the receiving transition plus a short correlation cond | `event:schema` |
+
+### Builder output
+
+A builder-produced behavior or routine document is stored as its
+inventory row's `bot_behavior.source` and runs as an SCXML child invoked
+from that text (`<invoke id><content expr="source"/></invoke>`, phase 5),
+the one exception to the literal relative `src` rule. scxml.rs reads
+`event:schema` files only for a literal `<invoke src>` child; an invoked
+source gets none, and a schema-file reference rejects it when it is
+invoked (`error.execution`). So builder output carries no `event:schema`
+reference (and, like every floppy document, no inline schema and no
+`<script>`): its host checks what it answers. `abilities/autonomy.scx`
+runs the ACTIVE turn behaviors the stimulus triggers with `turn` and
+`input` and answers with the first one's `<donedata>` `handled` and
+`selected` (the phase 5 plan's "Turn Behavior Contract").
+`tests/fixtures/phase4/behavior_double.scx` stands in for one;
+`tests/tests/contracts.rs` checks the rule on it and
+`tests/tests/cognition.rs` runs it from a memory inventory.
 
 ## Known gaps carried from phase 0
 

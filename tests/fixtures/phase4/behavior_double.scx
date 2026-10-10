@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A behavior double (tests/tests/cognition.rs): a stand-in for one
+  builder-produced turn behavior, which the test stores as an inventory
+  row's source and autonomy (abilities/autonomy.scx) invokes by
+  <invoke><content expr>.
+
+  It follows the rule builder output follows (docs/port-plan.md, "Builder
+  output"): an invoked source gets no schema files, so it carries no
+  event:schema reference and no <script>. It takes autonomy's <param>s turn
+  and input, logs behavior.double with the turn, and handles the turn
+  through its <donedata>: one bot.ability.cognition.ignore selection for
+  the cognition.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="behavior_double" initial="handling">
+  <datamodel>
+    <data id="turn" expr="0"/>
+    <data id="input" expr="null"/>
+  </datamodel>
+
+  <state id="handling">
+    <onentry>
+      <log label="behavior.double" expr="'turn ' + turn"/>
+    </onentry>
+    <transition target="handled"/>
+  </state>
+
+  <final id="handled">
+    <donedata>
+      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.cognition.ignore', data: {}, reason: 'behavior: nothing to do', target: 'cognition'}]})"/>
+    </donedata>
+  </final>
+</scxml>
