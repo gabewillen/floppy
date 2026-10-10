@@ -141,7 +141,7 @@ function breakBehaviorStatements() {
 }
 
 function hasBrokenBehavior(_event) {
-  return isFromInvoke(_event, 'breaking_memory') && _event.data.results[0].rowcount === 1;
+  return _event.data.results[0].rowcount === 1;
 }
 
 function brokenLog() {

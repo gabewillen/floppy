@@ -79,10 +79,10 @@
     </invoke>
 
     <!-- The speech service's answer, kept until it ends. -->
-    <transition event="bot.ability.vocal.speech.encoding.output">
+    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="schemas/bot.ability.vocal.speech.encoding.output.json">
       <assign location="encoded" expr="encodedAnswer(_event)"/>
     </transition>
-    <transition event="bot.ability.failed">
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
       <assign location="failure" expr="failureAnswer(_event)"/>
     </transition>
     <transition event="done.invoke.speech" cond="hasEncoded()" target="idle">

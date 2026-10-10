@@ -67,6 +67,7 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="intuition" initial="deciding">
   <datamodel>
     <!-- The turn, from the cognition's <param>s. -->
@@ -132,7 +133,7 @@
     <!-- The service ended without an answer: the timer decides. -->
     <transition event="done.invoke.decision"/>
     <!-- mosfet's deliberate handoff event: the turn goes on to reasoning. -->
-    <transition event="bot.ability.reasoning.input" target="done">
+    <transition event="bot.ability.reasoning.input" event:schema="schemas/bot.ability.reasoning.input.json" target="done">
       <log label="intuition" expr="chosenLog(_event)"/>
       <assign location="result" expr="deliberativeInputResult()"/>
     </transition>
