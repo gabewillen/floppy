@@ -197,7 +197,7 @@ D33 to D43.
   `bot.ability.cognition.input.choices` [floppy field]. Reasoning selects
   only from them; the body's `routing` state delivers each selection to
   `#_internal` or `#_<target>` with a visible `<foreach>`/`<send>` and logs
-  `bot.route`/`bot.route.dropped`.
+  `floppy.route`/`floppy.route.dropped`.
 - **Per-turn stage children.** The cognition invokes each stage (autonomy,
   intuition, reasoning) per turn with `<param>`s named after the mosfet
   input event's fields and takes its result as `done.invoke.<stage>`
@@ -226,7 +226,7 @@ D33 to D43.
   `.retained`, `bot.ability.identity.recalled`, `.adopted`), so the
   topology does not change (decision D44).
 - **Speaking in text mode.** Speaking says a response as
-  `<log label="bot.say">` and answers `bot.ability.speaking.output` until
+  `<log label="floppy.say">` and answers `bot.ability.speaking.output` until
   the phase 6 speech service (decision D38).
 - **Traces.** Each deterministic test in `body.rs`, `cognition.rs` and
   `communication.rs` compares its whole run with

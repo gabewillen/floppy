@@ -11,7 +11,7 @@
 //! `<data id="name">`, which stands in for the invoker's `<param>`.
 //!
 //! The identity logs `identity.name`, `identity.heard`, `identity.offers`
-//! and `identity.adopt.failed`; the body logs each route (`bot.route`).
+//! and `identity.adopt.failed`; the body logs each route (`floppy.route`).
 //! The body gives the identity its database, in a directory each run is
 //! granted (`support::memory_grant`), so an adopted name outlives the run.
 //!
@@ -166,7 +166,7 @@ fn a_named_bot_is_addressed_by_its_name() {
         texts(&records, "identity.heard"),
         strings(&["addressed as Floppy"])
     );
-    assert_eq!(texts(&records, "bot.say"), strings(&["I am Floppy"]));
+    assert_eq!(texts(&records, "floppy.say"), strings(&["I am Floppy"]));
     let all = close(run, "a_named_bot_is_addressed_by_its_name");
     let mut turns: Vec<String> = texts(&all, "double.input")
         .into_iter()
@@ -224,7 +224,7 @@ fn an_adopted_name_is_answered_to() {
                 .is_some_and(|text| text.starts_with("adopted"))
     });
     assert_eq!(
-        texts(&records, "bot.route"),
+        texts(&records, "floppy.route"),
         strings(&["bot.ability.identity.adopt -> identity"])
     );
     assert_eq!(
@@ -241,7 +241,7 @@ fn an_adopted_name_is_answered_to() {
         texts(&records, "identity.heard"),
         strings(&["addressed as Floppy"])
     );
-    assert_eq!(texts(&records, "bot.say"), strings(&["I am Floppy"]));
+    assert_eq!(texts(&records, "floppy.say"), strings(&["I am Floppy"]));
     let all = close(run, "an_adopted_name_is_answered_to");
     assert_eq!(
         texts(&all, "identity.offers"),

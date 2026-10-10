@@ -17,7 +17,7 @@ remembered through the memory ability; inferring participants and relationships 
 voice embeddings, mosfet's turn detectors, is phase 6) and
 [speaking](../../abilities/speaking/speaking.scx) (the words are encoded to speech
 by [vocal](../../abilities/vocal/vocal.scx) through the speech service, logged as
-`bot.say`, played out as `environment.sound` after the efference copy to
+`floppy.say`, played out as `environment.sound` after the efference copy to
 Listening, and recorded in the conversation). Each turn the body
 assembles the choices (its own
 `bot.focus_device`, pinned to the turn's focus candidates, and
@@ -43,7 +43,7 @@ printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
     --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
-# A conversation: text addressed to the bot, answered through bot.say.
+# A conversation: text addressed to the bot, answered through floppy.say.
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
@@ -117,13 +117,15 @@ neither has a default backend. A sound that cannot be heard is logged as
 The root has no parent, so each event the body emits is a `log` record
 labelled with its name, its text the event's data as JSON: `bot.activated`,
 `bot.activating.failed`, `bot.deactivated`, `bot.processing.completed`,
-`bot.processing.failed`, `bot.output` (the turn's selected events), and,
-from the communication, `bot.ability.speaking.output` (what was said) and
-`bot.ability.communication.failed`, and `environment.sound` (speaking's
-playout, by reference); speaking logs the words as `bot.say`.
-`bot.choices` lists each turn's choices (`event` or `event@target`),
-`bot.route` each routed selection, `bot.route.dropped` each selection the
-turn did not offer or no transition took, and `bot.focus` each focus
+`bot.processing.failed`, and, from the communication,
+`bot.ability.speaking.output` (what was said),
+`bot.ability.communication.failed`, `bot.ability.conversation.failed`
+and `environment.sound` (speaking's playout, by reference). floppy's own
+records, which are not mosfet events, are labelled `floppy.*`:
+`floppy.output` is the turn's selected events, speaking logs the words as
+`floppy.say`, `floppy.choices` lists each turn's choices (`event` or `event@target`),
+`floppy.route` each routed selection, `floppy.route.dropped` each selection the
+turn did not offer or no transition took, and `floppy.focus` each focus
 change.
 
 ## Proof
@@ -158,4 +160,4 @@ change.
 - `... -- --ignored live_chat`: one live text turn through
   `bot.ability.communication.input`: the conversation's product is the
   stimulus, the reply is selected as `bot.ability.communication.respond`,
-  said (`bot.say`), and recorded in the conversation.
+  said (`floppy.say`), and recorded in the conversation.

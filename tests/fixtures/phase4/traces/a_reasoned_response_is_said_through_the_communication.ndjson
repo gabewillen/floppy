@@ -3,7 +3,7 @@
 {"label":"identity.name","parent":"session","session":"session.5","text":"recalled null","type":"log"}
 {"label":"identity.offers","parent":"session","session":"session.5","text":"bot.ability.identity.adopt","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
-{"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
+{"label":"floppy.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition","parent":"session","session":"session.1","text":"turn 1: bot.input","type":"log"}
 {"label":"autonomy","parent":"session.1","session":"session.11","text":"turn 1: 0 matched for bot.input","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
@@ -15,11 +15,11 @@
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"reasoning handled","type":"log"}
 {"label":"reflection","parent":"session","session":"session.1","text":"absent (phase 5)","type":"log"}
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}
-{"label":"bot.output","session":"session","text":"{\"turn\":1,\"output\":[{\"data\":{\"text\":\"Hi! I am floppy.\"},\"event\":\"bot.ability.communication.respond\",\"reason\":\"greet\",\"target\":\"communication\"}]}","type":"log"}
+{"label":"floppy.output","session":"session","text":"{\"turn\":1,\"output\":[{\"data\":{\"text\":\"Hi! I am floppy.\"},\"event\":\"bot.ability.communication.respond\",\"reason\":\"greet\",\"target\":\"communication\"}]}","type":"log"}
 {"label":"bot.processing.completed","session":"session","text":"{\"output\":[{\"data\":{\"text\":\"Hi! I am floppy.\"},\"event\":\"bot.ability.communication.respond\",\"reason\":\"greet\",\"target\":\"communication\"}],\"focus_candidates\":[],\"turn\":1}","type":"log"}
-{"label":"bot.route","session":"session","text":"bot.ability.communication.respond -> communication","type":"log"}
+{"label":"floppy.route","session":"session","text":"bot.ability.communication.respond -> communication","type":"log"}
 {"label":"speech.encode","parent":"session.20","session":"session.21","text":"encode Hi! I am floppy. -> media/speaking-1.pcm","type":"log"}
-{"label":"bot.say","parent":"session.2","session":"session.4","text":"Hi! I am floppy.","type":"log"}
+{"label":"floppy.say","parent":"session.2","session":"session.4","text":"Hi! I am floppy.","type":"log"}
 {"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}","type":"log"}
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}
 {"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"text\":\"Hi! I am floppy.\"}","type":"log"}

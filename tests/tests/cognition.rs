@@ -493,7 +493,7 @@ fn intuition_handles_an_ignore_without_reasoning() {
     say(&mut run, "background noise");
     let records = run.until(WAIT, label_is("cognition.ignore"));
     assert_eq!(
-        json_text(&records, "bot.output"),
+        json_text(&records, "floppy.output"),
         json!({"turn": 1, "output": [{"event": IGNORE, "data": {}}]})
     );
     assert_eq!(
@@ -515,7 +515,7 @@ fn intuition_handles_an_ignore_without_reasoning() {
     );
     // The body routed the selection to the only ability offering it.
     assert_eq!(
-        texts(&records, "bot.route"),
+        texts(&records, "floppy.route"),
         strings(&["bot.ability.cognition.ignore -> cognition"])
     );
     assert_eq!(texts(&records, "cognition.ignore"), strings(&["idle"]));
@@ -773,7 +773,7 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
         strings(&["autonomy handled"])
     );
     assert_eq!(
-        json_text(&records, "bot.output"),
+        json_text(&records, "floppy.output"),
         json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "behavior: nothing to do", "target": "cognition"}]})
     );
     // Neither intuition nor reasoning ran: no backend was asked.
@@ -826,7 +826,7 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
         strings(&["autonomy unhandled (unhandled)", "intuition handled (none)"])
     );
     assert_eq!(
-        json_text(&records, "bot.output"),
+        json_text(&records, "floppy.output"),
         json!({"turn": 1, "output": [{"event": IGNORE, "data": {}}]})
     );
     close(
@@ -845,18 +845,18 @@ fn reasoning_selects_from_the_turns_choices() {
     say(&mut run, "what is the capital of France?");
     let records = run.until(WAIT, label_is("cognition.ignore"));
     assert_eq!(
-        json_text(&records, "bot.output"),
+        json_text(&records, "floppy.output"),
         json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}]})
     );
     // Reasoning selected from the body's assembled choices (the
     // cognition's offer, tagged), and the body routed the selection back.
-    assert_eq!(texts(&records, "bot.choices"), strings(&[CHOICES]));
+    assert_eq!(texts(&records, "floppy.choices"), strings(&[CHOICES]));
     assert_eq!(
         texts(&records, "reasoning"),
         strings(&[&format!("turn 1: {CHOICES}")])
     );
     assert_eq!(
-        texts(&records, "bot.route"),
+        texts(&records, "floppy.route"),
         strings(&["bot.ability.cognition.ignore -> cognition"])
     );
     assert_eq!(
@@ -961,10 +961,13 @@ fn a_reasoned_response_is_said_through_the_communication() {
         ])
     );
     assert_eq!(
-        texts(&records, "bot.route"),
+        texts(&records, "floppy.route"),
         strings(&["bot.ability.communication.respond -> communication"])
     );
-    assert_eq!(texts(&records, "bot.say"), strings(&["Hi! I am floppy."]));
+    assert_eq!(
+        texts(&records, "floppy.say"),
+        strings(&["Hi! I am floppy."])
+    );
     assert_eq!(
         texts(&records, "bot.ability.speaking.output"),
         strings(&[
@@ -973,7 +976,7 @@ fn a_reasoned_response_is_said_through_the_communication() {
     );
     assert_eq!(texts(&records, "conversation"), strings(&["outbound 0"]));
     assert!(
-        texts(&records, "bot.route.dropped").is_empty(),
+        texts(&records, "floppy.route.dropped").is_empty(),
         "{records:?}"
     );
     close(
@@ -1057,7 +1060,7 @@ fn an_abstention_escalates_to_reasoning() {
             "reasoning handled"
         ])
     );
-    assert_eq!(texts(&records, "bot.output").len(), 1);
+    assert_eq!(texts(&records, "floppy.output").len(), 1);
     close(run, &mock, "an_abstention_escalates_to_reasoning");
 }
 
@@ -1086,7 +1089,7 @@ fn low_confidence_is_observed_by_the_tuner_and_escalates() {
             json_text(records, "cognition.tuner"),
             json!({"mean": 34, "var": 100, "n": n})
         );
-        assert_eq!(texts(records, "bot.output").len(), 1);
+        assert_eq!(texts(records, "floppy.output").len(), 1);
     }
     close(
         run,
@@ -1145,7 +1148,7 @@ fn a_reasoning_failure_fails_the_turn() {
         json_text(&records, "bot.processing.failed"),
         json!({"message": "the reasoning failed (status)", "turn": 1})
     );
-    assert!(texts(&records, "bot.output").is_empty());
+    assert!(texts(&records, "floppy.output").is_empty());
     close(run, &mock, "a_reasoning_failure_fails_the_turn");
 }
 
@@ -1161,7 +1164,7 @@ fn a_selection_outside_the_choices_never_becomes_output() {
         json_text(&records, "bot.processing.failed"),
         json!({"message": "the reasoning failed (schema-mismatch)", "turn": 1})
     );
-    assert!(texts(&records, "bot.output").is_empty());
+    assert!(texts(&records, "floppy.output").is_empty());
     close(
         run,
         &mock,
@@ -1240,7 +1243,7 @@ fn reboots_on_a_silent_stage(
         texts(&records, "bot.reboot"),
         strings(&[r#"{"reason":"cognition_child_teardown_failed"}"#])
     );
-    assert!(texts(&records, "bot.output").is_empty());
+    assert!(texts(&records, "floppy.output").is_empty());
     close(run, &mock, test);
 }
 
@@ -1363,7 +1366,7 @@ fn with_its_gates_on_the_cognition_reflects_and_reconciles_the_routines() {
     );
     let mut run = start(&bot);
     say(&mut run, "hmm");
-    let mut records = until_all(&run, &["bot.output", "bot.ability.reflection.output"]);
+    let mut records = until_all(&run, &["floppy.output", "bot.ability.reflection.output"]);
     if texts(&records, "routines").is_empty() {
         records.extend(run.until(WAIT, label_is("routines")));
     }
@@ -1417,7 +1420,7 @@ fn a_routine_tick_becomes_a_turn() {
     });
     let second = run.until(WAIT, turn_ended);
     assert_eq!(texts(&first, "routines.double"), strings(&["tick"]));
-    assert_eq!(texts(&second, "bot.output").len(), 1, "{second:?}");
+    assert_eq!(texts(&second, "floppy.output").len(), 1, "{second:?}");
     close(run, &mock, "a_routine_tick_becomes_a_turn");
 }
 
