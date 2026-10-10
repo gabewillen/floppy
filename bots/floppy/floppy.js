@@ -2,24 +2,7 @@
 // <script src="floppy.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// Shared: the sender of an event (its invoke id; none from outside or from
-// the body itself), event records, and send delays.
-
-function isFromOutside(_event) {
-  return !_event.invokeid;
-}
-
-function isFromCognition(_event) {
-  return _event.invokeid === 'cognition';
-}
-
-function isFromCommunication(_event) {
-  return _event.invokeid === 'communication';
-}
-
-function isFromListening(_event) {
-  return _event.invokeid === 'listening';
-}
+// Shared: event records and send delays.
 
 function eventDataJson(_event) {
   return JSON.stringify(_event.data);
@@ -53,22 +36,14 @@ function expectedAbilities() {
   return expected.slice();
 }
 
-function isExpectedAbility(_event) {
-  return expected.indexOf(_event.invokeid) >= 0;
-}
-
-// An expected ability's offers, sent under its own invoke id.
-function isAbilityOffers(_event) {
-  return isExpectedAbility(_event) && _event.data.ability === _event.invokeid;
-}
-
+// Whether the ability whose offers _event carries is still waited for.
 function isWaiting(_event) {
-  return waiting.indexOf(_event.invokeid) >= 0;
+  return waiting.indexOf(_event.data.ability) >= 0;
 }
 
-// waiting without the ability that sent _event.
+// waiting without the ability whose offers _event carries.
 function waitingWithout(_event) {
-  return waiting.slice(0, waiting.indexOf(_event.invokeid)).concat(waiting.slice(waiting.indexOf(_event.invokeid) + 1));
+  return waiting.filter(function (ability) { return ability !== _event.data.ability; });
 }
 
 // activating
@@ -78,8 +53,8 @@ function everyAbilityReady() {
 }
 
 // The activation timer of the current run.
-function isCurrentRunTimer(_event) {
-  return !_event.invokeid && Object(_event.data).run === live_run;
+function isCurrentRun(_event) {
+  return Object(_event.data).run === live_run;
 }
 
 function activationTimeoutDiagnostic() {
@@ -105,15 +80,20 @@ function hasFocusedDevice() {
 }
 
 // While offering, whether bot.focus_device is among the enabled transitions;
-// while routing, whether the routed selection names a candidate device.
-function focusDeviceEnabled(_event) {
-  return offering ? focus_candidates.length > 0 : routing_selections && focus_candidates.indexOf(_event.data.device) >= 0 && devices.indexOf(_event.data.device) >= 0;
+// while routing, whether it is a routed selection.
+function focusDeviceEnabled() {
+  return offering ? focus_candidates.length > 0 : routing_selections;
+}
+
+// Whether the routed bot.focus_device names a candidate device.
+function isFocusCandidate(_event) {
+  return focus_candidates.indexOf(_event.data.device) >= 0 && devices.indexOf(_event.data.device) >= 0;
 }
 
 // While offering, whether bot.clear_focus is among the enabled transitions;
-// while routing, whether the routed selection is taken.
+// while routing, whether it is a routed selection.
 function clearFocusEnabled() {
-  return offering ? hasFocusedDevice() : routing_selections && hasFocusedDevice();
+  return offering ? hasFocusedDevice() : routing_selections;
 }
 
 // unfocused, focused
@@ -149,9 +129,9 @@ function choicesOverFailure() {
   return JSON.stringify({message: 'the turn\'s choices are ' + choices_size + ' bytes, over 32768', turn: turn});
 }
 
-// A reply from the cognition for the current turn.
-function isCurrentTurnReply(_event) {
-  return _event.invokeid === 'cognition' && _event.data.turn === turn;
+// A reply or timer for the current turn.
+function isCurrentTurn(_event) {
+  return Object(_event.data).turn === turn;
 }
 
 function botOutput(_event) {
@@ -164,11 +144,6 @@ function processingCompleted() {
 
 function cognitionFailure(_event) {
   return JSON.stringify({message: typeof _event.data.message === 'string' && _event.data.message.length > 0 ? _event.data.message : 'Bot processing ability failed.', turn: turn});
-}
-
-// The body's own timer for the current turn.
-function isCurrentTurnTimer(_event) {
-  return !_event.invokeid && _event.data.turn === turn;
 }
 
 function turnJson() {
@@ -237,4 +212,3 @@ function abilityRouteLog(route) {
 function staleReplyLog(_event) {
   return _event.name + ' for turn ' + _event.data.turn + ' (current ' + turn + ')';
 }
-

@@ -78,6 +78,7 @@
        xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="intuition" initial="deciding">
   <datamodel>
     <!-- The turn, from the cognition's <param>s. -->
@@ -92,7 +93,6 @@
     <!-- The decision in flight. -->
     <data id="stimulus_data" expr="({})"/>
     <data id="threshold" expr="0"/>
-    <data id="decision_id" expr="null"/>
     <data id="decision_timer" expr="null"/>
     <data id="result" expr="null"/>
     <data id="failed_code" expr="null"/>
@@ -113,7 +113,7 @@
     <onexit>
       <cancel sendidexpr="decision_timer"/>
     </onexit>
-    <invoke idlocation="decision_id" type="https://github.com/stateforward/floppy/services/decision"
+    <invoke id="decision" type="https://github.com/stateforward/floppy/services/decision"
             env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
       <param name="choices" expr="choices"/>
       <param name="state" expr="decisionState()"/>
@@ -124,7 +124,7 @@
 
     <!-- The decision service's own events. -->
     <transition event="decision.abstain"
-                cond="isDecisionAbstain(_event)"
+                cond="isAbstainReason(_event)"
                 target="done">
       <if cond="isLowConfidence(_event)">
         <decision:tuner location="tuner" observe="Math.round(_event.data.confidence * 100)"/>
@@ -135,34 +135,37 @@
         <assign location="result" expr="abstainedResult(_event)"/>
       </if>
     </transition>
-    <transition event="decision.failed" cond="isDecisionEvent(_event)" target="done">
+    <transition event="decision.failed" target="done">
       <assign location="failed_code" expr="failedCode(_event)"/>
       <assign location="result" expr="decisionFailedResult()"/>
     </transition>
-    <!-- The chosen event: one of the choices, its data validated by the
-         service against the choice's schema. -->
-    <transition event="*" cond="isChosenEvent(_event)"
-                target="done">
-      <log label="intuition" expr="chosenLog(_event)"/>
-      <if cond="isDeliberativeInput(_event)">
-        <assign location="result" expr="deliberativeInputResult()"/>
-      <else/>
-        <assign location="result" expr="selectionResult(_event)"/>
-        <bot:verdict location="dispatch_selections" rejectionlocation="rejection" selections="result.selected"
-                     focus="focus" candidates="focus_candidates"/>
-        <if cond="isAccepted()">
-          <decision:route location="dispatch_selections" rejectionlocation="rejection" selections="dispatch_selections" choices="choices"/>
-        </if>
-        <if cond="isRejected()">
-          <assign location="result" expr="rejectedResult()"/>
-        </if>
-      </if>
-    </transition>
-    <transition event="deciding.after" cond="isDecisionTimeout(_event)" target="done">
+    <transition event="deciding.after" target="done">
       <assign location="result" expr="timedOutResult()"/>
     </transition>
     <transition event="error.*" target="done">
       <assign location="result" expr="couldNotRunResult(_event)"/>
+    </transition>
+    <!-- The service ended without an answer: the timer decides. -->
+    <transition event="done.invoke.decision"/>
+    <!-- mosfet's deliberate handoff event: the turn goes on to reasoning. -->
+    <transition event="bot.ability.reasoning.input" event:schema="schemas/bot.ability.reasoning.input.json" target="done">
+      <log label="intuition" expr="chosenLog(_event)"/>
+      <assign location="result" expr="deliberativeInputResult()"/>
+    </transition>
+    <!-- Any other event is the chosen one: one of the choices, its data
+         validated by the service against the choice's schema (the
+         transitions above come first). -->
+    <transition event="*" target="done">
+      <log label="intuition" expr="chosenLog(_event)"/>
+      <assign location="result" expr="selectionResult(_event)"/>
+      <bot:verdict location="dispatch_selections" rejectionlocation="rejection" selections="result.selected"
+                   focus="focus" candidates="focus_candidates"/>
+      <if cond="isAccepted()">
+        <decision:route location="dispatch_selections" rejectionlocation="rejection" selections="dispatch_selections" choices="choices"/>
+      </if>
+      <if cond="isRejected()">
+        <assign location="result" expr="rejectedResult()"/>
+      </if>
     </transition>
   </state>
 

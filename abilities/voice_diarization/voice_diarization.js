@@ -4,12 +4,10 @@
 
 // applying
 
-function isFromDiarizer(_event) {
-  return _event.invokeid === 'diarizer';
-}
-
-function isDiarizerOutput(_event) {
-  return _event.invokeid === 'diarizer' && Array.isArray(Object(_event.data).segments);
+// A diarization output with its segments (D41: the service's events are
+// unchecked).
+function hasSegments(_event) {
+  return Array.isArray(Object(_event.data).segments);
 }
 
 // mosfet's OutputData.
@@ -20,11 +18,6 @@ function diarizedResult(_event) {
 // mosfet's FailureData.
 function failedResult(_event) {
   return ({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceDiarization failed.'});
-}
-
-// Anything else the diarizer sends but its done event.
-function isOtherDiarizerEvent(_event) {
-  return _event.invokeid === 'diarizer' && _event.name.indexOf('done.') !== 0;
 }
 
 function mismatchedResult() {

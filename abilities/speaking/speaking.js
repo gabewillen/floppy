@@ -2,11 +2,7 @@
 // <script src="speaking.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// Shared: the sender of an event, the timer in hand, and send delays.
-
-function isFromVocal(_event) {
-  return _event.invokeid === 'vocal';
-}
+// Shared: the timer in hand and send delays.
 
 // The timer in hand (a timer is a bot.ability.speaking.apply.failed send).
 function isTimer(_event) {
@@ -75,12 +71,6 @@ function encodedMediaType() {
 
 function encodingTimedOutLog() {
   return 'encoding ' + operation + ' after ' + encoding_timeout_ms + ' ms';
-}
-
-// vocal's error or end, or a vocal that could not start (no invokeid,
-// SCXML 6.4.2).
-function isFromVocalOrStart(_event) {
-  return _event.invokeid === 'vocal' || !_event.invokeid;
 }
 
 function encodingRunFailure(_event) {

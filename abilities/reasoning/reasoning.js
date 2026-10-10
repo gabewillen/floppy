@@ -8,10 +8,6 @@ function hasNoDatabase() {
   return database === null;
 }
 
-function isFromInvoke(_event, invokeid) {
-  return _event.invokeid === invokeid;
-}
-
 // The input of bot.ability.reasoning.recalled and .retained.
 function focusInput() {
   return ({focus: focus, focus_candidates: focus_candidates});
@@ -81,22 +77,19 @@ function modelPrompt() {
   return JSON.stringify({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, prior_episodes: prior_episodes, standing_directives: standing_directives});
 }
 
-// The events of a generate.result object reply, else selected unchanged.
+// The events of a generate.result object reply, else selected unchanged
+// (D41: the service's events are unchecked).
 function generatedSelection(_event) {
-  return _event.name === 'generate.result' && Object(_event.data).json instanceof Object && !Array.isArray(_event.data.json) ? _event.data.json.events : selected;
+  return Object(_event.data).json instanceof Object && !Array.isArray(_event.data.json) ? _event.data.json.events : selected;
 }
 
 // The code of a generate.failed, else gen_failure unchanged.
 function generateFailure(_event) {
-  return _event.name === 'generate.failed' && typeof Object(_event.data).code === 'string' ? _event.data.code : gen_failure;
+  return typeof Object(_event.data).code === 'string' ? _event.data.code : gen_failure;
 }
 
-function isGenerateDone(_event) {
-  return _event.invokeid === gen_id;
-}
-
-function hasSelection(_event) {
-  return isGenerateDone(_event) && selected !== null;
+function hasSelection() {
+  return selected !== null;
 }
 
 function failedResult() {

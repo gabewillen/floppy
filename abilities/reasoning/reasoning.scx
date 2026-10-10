@@ -72,7 +72,7 @@
   scx run's dir option); env scopes FLOPPY_API_KEY and
   FLOPPY_BASE_URL to the service's <invoke> (no default backend: without
   either it answers generate.failed unconfigured). The generate service's
-  events are recorded by <finalize>.
+  events are recorded by one transition each.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
@@ -92,7 +92,6 @@
     <data id="system" expr="'You are the deliberate reasoning of floppy, a small companion robot. You receive one stimulus the robot observed, as JSON, with what the robot is looking at. Select every event the robot should take for it from the offered events (an empty list selects none), with its data, its target when the event names one, and a short reason. When an offered event says something, give it the complete text to say.'"/>
     <!-- The model call: its schema, invocation, and reply. -->
     <data id="schema" expr="null"/>
-    <data id="gen_id" expr="null"/>
     <data id="selected" expr="null"/>
     <data id="gen_failure" expr="null"/>
     <data id="result" expr="null"/>
@@ -148,8 +147,7 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                  cond="isFromInvoke(_event, 'recall')">
+      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json">
         <assign location="prior_episodes" expr="recalledContents(_event, 0)"/>
         <assign location="standing_directives" expr="recalledContents(_event, 1)"/>
         <send event="bot.ability.reasoning.recalled" target="#_internal">
@@ -161,8 +159,7 @@
           <param name="input" expr="focusInput()"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                  cond="isFromInvoke(_event, 'recall')" target="done">
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="done">
         <assign location="result" expr="recallFailedResult(_event.data.message)"/>
       </transition>
       <transition event="error.*" target="done">
@@ -188,7 +185,7 @@
       <decision:names location="choice_names" choices="choices"/>
       <log label="reasoning" expr="choiceNamesLog()"/>
     </onentry>
-    <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
+    <invoke id="generate" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
       <param name="model" expr="model"/>
       <param name="system" expr="system"/>
@@ -196,14 +193,16 @@
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
       <param name="strict" expr="true"/>
-      <finalize>
-        <assign location="selected" expr="generatedSelection(_event)"/>
-        <assign location="gen_failure" expr="generateFailure(_event)"/>
-      </finalize>
     </invoke>
 
-    <transition event="done.invoke" cond="hasSelection(_event)" target="dispatching"/>
-    <transition event="done.invoke" cond="isGenerateDone(_event)" target="done">
+    <transition event="generate.result">
+      <assign location="selected" expr="generatedSelection(_event)"/>
+    </transition>
+    <transition event="generate.failed">
+      <assign location="gen_failure" expr="generateFailure(_event)"/>
+    </transition>
+    <transition event="done.invoke.generate" cond="hasSelection()" target="dispatching"/>
+    <transition event="done.invoke.generate" target="done">
       <assign location="result" expr="failedResult()"/>
     </transition>
     <transition event="error.*" target="done">
@@ -252,8 +251,7 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="episodeInsertStatements()"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                  cond="isFromInvoke(_event, 'retain')">
+      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json">
         <send event="bot.ability.reasoning.retained" target="#_internal">
           <param name="turn" expr="turn"/>
           <param name="result" expr="selected"/>
@@ -262,8 +260,7 @@
           <param name="input" expr="focusInput()"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                  cond="isFromInvoke(_event, 'retain')" target="done">
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="done">
         <assign location="result" expr="retainFailedResult(_event.data.message)"/>
       </transition>
       <transition event="error.*" target="done">

@@ -19,10 +19,6 @@ function hasSegments() {
   return Array.isArray(segments);
 }
 
-function isFromClipper(_event) {
-  return _event.invokeid === 'clipper';
-}
-
 function clipFailedResult(_event) {
   return ({message: 'Voice identification opening segment conversion failed: ' + Object(_event.data).message});
 }
@@ -43,18 +39,15 @@ function unclippedResult() {
 
 // applying
 
-function isIdentifierOutput(_event) {
-  return _event.invokeid === 'identifier' && Array.isArray(Object(_event.data).embeddings);
+// An identification output with its embeddings (D41: the service's events
+// are unchecked).
+function hasEmbeddings(_event) {
+  return Array.isArray(Object(_event.data).embeddings);
 }
 
 // The segments and mosfet's OutputData.
 function identifiedResult(_event) {
   return ({segments: segments, embeddings: _event.data.embeddings});
-}
-
-// Anything else the identifier sends but its done event and bot.ability.failed.
-function isOtherIdentifierEvent(_event) {
-  return _event.invokeid === 'identifier' && _event.name.indexOf('done.') !== 0 && _event.name !== 'bot.ability.failed';
 }
 
 function mismatchedResult() {

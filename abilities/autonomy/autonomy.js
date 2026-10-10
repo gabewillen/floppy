@@ -4,10 +4,6 @@
 
 // Shared by seeding, loading, running, using and recording_failure.
 
-function isFromInvoke(event, invokeid) {
-  return event.invokeid === invokeid;
-}
-
 function isTimerEvent(event) {
   return event.sendid === timer;
 }

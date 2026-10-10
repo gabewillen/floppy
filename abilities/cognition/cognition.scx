@@ -95,7 +95,8 @@
   event:schema (never inline). scxml.rs checks them where each event is
   created: a send whose data a schema rejects is not routed and raises
   error.execution in its sender, so conds only correlate (the turn, the
-  hop timer). The stages' donedata is not checked by scxml.rs, so the
+  hop timer, and which of the concurrent children an error.* is from,
+  decision D81). The stages' donedata is not checked by scxml.rs, so the
   done.invoke conds also check its turn and shape.
 
   Bindings: the bot and decision namespace packages; the stages bind their own
@@ -363,23 +364,20 @@
         <param name="database" expr="database"/>
         <param name="model" expr="model"/>
       </invoke>
-      <transition event="bot.ability.reflection.output" event:schema="schemas/bot.ability.reflection.output.json"
-                  cond="isFromChild(_event, 'reflection')">
+      <transition event="bot.ability.reflection.output" event:schema="schemas/bot.ability.reflection.output.json">
         <log label="bot.ability.reflection.output" expr="turnLog()"/>
         <send event="bot.ability.routines.reconcile" target="#_routines">
           <content expr="({})"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                  cond="isFromChild(_event, 'reflection')">
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
         <log label="cognition.reflection.failed" expr="_event.data.message"/>
         <send event="bot.ability.routines.reconcile" target="#_routines">
           <content expr="({})"/>
         </send>
       </transition>
       <!-- mosfet _forward_reflection_reboot: the body restarts this ability. -->
-      <transition event="bot.reboot" event:schema="schemas/bot.reboot.json"
-                  cond="isFromChild(_event, 'reflection')" target="rebooting">
+      <transition event="bot.reboot" event:schema="schemas/bot.reboot.json" target="rebooting">
         <assign location="reboot_reason" expr="_event.data.reason"/>
       </transition>
       <transition event="error.*" cond="isFromChild(_event, 'reflection')" target="reflection_stopped">
@@ -396,8 +394,7 @@
       <invoke id="routines" type="scxml" src="../routines/routines.scx">
         <param name="database" expr="database"/>
       </invoke>
-      <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
-                  cond="isFromChild(_event, 'routines')">
+      <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json">
         <bot:stimulus location="tick" event="_event.name" data="_event.data" source="'routines'"/>
         <send event="bot.ability.cognition.input" target="#_parent">
           <param name="stimulus" expr="tick"/>

@@ -31,10 +31,6 @@ function classificationTimeoutMessage() {
   return 'the classification timed out after ' + stage_timeout_ms + ' ms';
 }
 
-function isVision(_event) {
-  return _event.invokeid === 'vision';
-}
-
 function classificationCouldNotRunMessage(_event) {
   return 'the classification could not run (' + _event.name + ')';
 }

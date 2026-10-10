@@ -71,7 +71,7 @@
     and decoding then fails as mosfet's does.
   * ClassifyingSound invokes abilities/sound_classification/sound_classification.scx: a
     labelled sound is non-speech and is handed off as the original
-    environment.sound; an unlabelled one is dropped when speech decoding
+    environment.sound's envelope; an unlabelled one is dropped when speech decoding
     is configured, else handed off as a silence observation.
   * DiarizingVoice invokes abilities/voice_diarization/voice_diarization.scx on the
     utterance (its clipped segments are floppy-diarized-<n>-<index>).
@@ -91,8 +91,10 @@
     mosfet); one speech product per diarized segment (its PCM, span,
     confidence, and, after identification, its embedding as its source
     identity); a silence observation as a speech product of the sound's
-    PCM; a labelled sound, or a sound that is not PCM, as the original
-    environment.sound.
+    PCM; a labelled sound, or a sound that is not PCM, as
+    bot.ability.cognition.input {stimulus} whose stimulus is the original
+    environment.sound's envelope (source "listening", the ability it hands
+    off for), as mosfet's interpretation hands it to the cognition.
 
   Files are written in the directory of the sound's audio reference, the
   directory the run grants the speech service.
@@ -110,10 +112,12 @@
   <donedata>, which scxml.rs does not check, so their shape is checked by
   cond.
 
-  Bindings: the speech service for the append step (no backend); the
-  stages bind their own services.
+  Bindings: the bot namespace package (<bot:stimulus>) and the speech
+  service for the append step (no backend); the stages bind their own
+  services.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="interpretation" initial="initializing">
   <datamodel>
@@ -185,8 +189,7 @@
         <assign location="sensed" expr="queuedSound()"/>
         <assign location="queue" expr="queueRest()"/>
       </transition>
-      <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json"
-                  cond="isFromOutside(_event)" target="DetectingVoice">
+      <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json" target="DetectingVoice">
         <assign location="sensed" expr="_event.data"/>
       </transition>
     </state>
@@ -194,8 +197,7 @@
     <!-- One busy region: the queue and the stage failure policy live
          once, not on every stage. -->
     <state id="Working" initial="DetectingVoice">
-      <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json"
-                  cond="isFromOutside(_event)">
+      <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json">
         <assign location="queue" expr="queueWithSound(_event)"/>
       </transition>
       <transition event="bot.ability.listening.stage.failed" event:schema="schemas/bot.ability.listening.stage.failed.json"
@@ -288,8 +290,7 @@
           <assign location="sensed" expr="queuedSound()"/>
           <assign location="queue" expr="queueRest()"/>
         </transition>
-        <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json"
-                    cond="isFromOutside(_event)" target="FeedingSpeech">
+        <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json" target="FeedingSpeech">
           <assign location="sensed" expr="_event.data"/>
         </transition>
       </state>
@@ -370,7 +371,7 @@
           <param name="output" expr="utteranceOutput()"/>
           <param name="wav" expr="open_wav"/>
         </invoke>
-        <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromOpenSpeech(_event)">
+        <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
           <send event="bot.ability.listening.stage.failed" target="#_internal">
             <content expr="childFailure(_event)"/>
           </send>
@@ -616,8 +617,9 @@
               <content expr="product"/>
             </send>
           <else/>
-            <send event="environment.sound" target="#_parent">
-              <content expr="completion.sensed.sound"/>
+            <bot:stimulus location="product" event="'environment.sound'" data="completion.sensed.sound" source="'listening'"/>
+            <send event="bot.ability.cognition.input" target="#_parent">
+              <param name="stimulus" expr="product"/>
             </send>
           </if>
         </transition>
@@ -625,8 +627,9 @@
              completion's sound, normalized to PCM where detection did so
              (mosfet hands off the completion chain's sensed sound). -->
         <transition target="Idle">
-          <send event="environment.sound" target="#_parent">
-            <content expr="completion.sensed.sound"/>
+          <bot:stimulus location="product" event="'environment.sound'" data="completion.sensed.sound" source="'listening'"/>
+          <send event="bot.ability.cognition.input" target="#_parent">
+            <param name="stimulus" expr="product"/>
           </send>
         </transition>
       </state>

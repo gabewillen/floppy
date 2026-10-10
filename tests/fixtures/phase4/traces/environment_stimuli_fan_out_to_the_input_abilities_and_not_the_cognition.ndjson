@@ -1,5 +1,6 @@
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
+{"label":"environment.sound","session":"session","text":"{\"audio\":\"media/audio-1\",\"kind\":\"knock\"}","type":"log"}
 {"label":"input.sound","parent":"session","session":"session.5","text":"{\"audio\":\"media/audio-1\",\"kind\":\"knock\"}","type":"log"}
 {"label":"input.visual","parent":"session","session":"session.5","text":"{\"image\":\"media/image-1\",\"media_type\":\"image/png\"}","type":"log"}
 {"label":"floppy.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication","type":"log"}

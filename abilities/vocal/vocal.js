@@ -4,25 +4,21 @@
 
 // applying
 
-function isFromSpeech(_event) {
-  return _event.invokeid === 'speech';
-}
-
-// The speech service's answer, when it is an encoding output with an audio
-// reference; else the answer kept so far (D41: its events are unchecked).
+// The speech service's encoding output, when it has an audio reference;
+// else the answer kept so far (D41: its events are unchecked).
 function encodedAnswer(_event) {
-  return _event.name === 'bot.ability.vocal.speech.encoding.output' && typeof Object(_event.data).audio === 'string' ? _event.data : encoded;
+  return typeof Object(_event.data).audio === 'string' ? _event.data : encoded;
 }
 
-// The speech service's failure message, when it is a failure with one;
-// else the failure kept so far.
+// The speech service's failure message, when it has one; else the failure
+// kept so far.
 function failureAnswer(_event) {
-  return _event.name === 'bot.ability.failed' && typeof Object(_event.data).message === 'string' ? _event.data.message : failure;
+  return typeof Object(_event.data).message === 'string' ? _event.data.message : failure;
 }
 
 // The service ended with an encoding.
-function hasEncoded(_event) {
-  return isFromSpeech(_event) && encoded !== null;
+function hasEncoded() {
+  return encoded !== null;
 }
 
 function failureMessage() {

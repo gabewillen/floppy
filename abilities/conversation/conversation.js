@@ -62,10 +62,6 @@ function isTimer(_event) {
   return _event.sendid === timer;
 }
 
-function isFromTurnDetector(_event) {
-  return _event.invokeid === 'turn_detector';
-}
-
 function timedOutMessage(what) {
   return what + ' timed out after ' + turn_timeout_ms / 1000 + ' seconds.';
 }
@@ -110,7 +106,7 @@ function turnEnd() {
 // The detector's completed turn for the source in hand.
 function isExchangedTurn(_event) {
   var turn = _event.data;
-  return isFromTurnDetector(_event) && turn.turn_ref === turnRef() && turn.conversation_ref === message.provenance.session_ref && turn.participant_ref === trackRef(turnSource()) && JSON.stringify(turn.source_participant_ref) === JSON.stringify(turnSource());
+  return turn.turn_ref === turnRef() && turn.conversation_ref === message.provenance.session_ref && turn.participant_ref === trackRef(turnSource()) && JSON.stringify(turn.source_participant_ref) === JSON.stringify(turnSource());
 }
 
 function turnsWith(_event) {
@@ -151,11 +147,6 @@ function statementsWithMemoryInsert() {
 // The insert's parameters with the remembered input.
 function memoryInsertParameters() {
   return statements[1].parameters.concat(['standard', 'retain', remembered, 'application/json', 'conversation_memory']);
-}
-
-// From the memory ability invoked as "remember".
-function isFromMemory(_event) {
-  return _event.invokeid === 'remember';
 }
 
 function memoriesLog(_event) {
