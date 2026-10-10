@@ -1,39 +1,44 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Reflection stage (mosfet abilities/cognition/reflection), as an
-  honest seam until phase 5: the cognition (abilities/cognition.scx)
-  invokes it after it has sent a turn's output to the body (mosfet's
-  order), when its reflection gate is on (it is off in phase 4).
+  floppy's Reflection ability (mosfet abilities/cognition/reflection), as
+  an honest seam until phase 5: the cognition (abilities/cognition.scx)
+  invokes it as its long-lived child "reflection" when its reflection
+  gate is on (it is off in phase 4), and sends it
+  bot.ability.reflection.input {turn, cognition_output} after each turn's
+  output.
 
-    idle -> recalling -> done
+    idle -bot.ability.reflection.input-> recalling -> idle
 
-  Input: the <param>s turn and cognition_output, the fields of
-  bot.ability.reflection.input (schemas/bot.ability.reflection.input.json).
   recalling is the memory seam (phase 3): it logs
   <log label="reflection" expr="'absent'"> and recalls no episodes, so
-  nothing is selected, revised or stored. Output: its top-level final
-  state's <donedata>, which the cognition receives as
-  done.invoke.reflection (SCXML 6.4); like bot.ability.reflection.output
-  it carries no payload.
+  nothing is selected, revised or stored, and it answers
+  bot.ability.reflection.output (no payload) to the cognition.
+
+  Contracts: the events it takes reference abilities/schemas/ by
+  event:schema (never inline).
+
+  Bindings: none (no service, no I/O).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="reflection" initial="idle">
   <datamodel>
     <data id="turn" expr="0"/>
-    <data id="cognition_output" expr="[]"/>
   </datamodel>
 
   <state id="idle">
-    <transition target="recalling"/>
+    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json"
+                target="recalling">
+      <assign location="turn" expr="_event.data.turn"/>
+    </transition>
   </state>
 
   <!-- The memory seam: no episodes to recall. -->
   <state id="recalling">
     <onentry>
       <log label="reflection" expr="'absent'"/>
+      <send event="bot.ability.reflection.output" target="#_parent"/>
     </onentry>
-    <transition target="done"/>
+    <transition target="idle"/>
   </state>
-
-  <final id="done"/>
 </scxml>

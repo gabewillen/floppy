@@ -1031,12 +1031,15 @@ fn with_its_gates_on_the_cognition_reflects_and_reconciles_the_routines() {
     );
     let mut run = start(&bot);
     say(&mut run, "hmm");
-    let mut records = until_all(&run, &["bot.output", "cognition.reflected"]);
+    let mut records = until_all(&run, &["bot.output", "bot.ability.reflection.output"]);
     if texts(&records, "routines").is_empty() {
         records.extend(run.until(WAIT, label_is("routines")));
     }
     assert_eq!(texts(&records, "reflection"), strings(&["absent"]));
-    assert_eq!(texts(&records, "cognition.reflected"), strings(&["turn 1"]));
+    assert_eq!(
+        texts(&records, "bot.ability.reflection.output"),
+        strings(&["turn 1"])
+    );
     let finished = close(
         run,
         &mock,
@@ -1102,5 +1105,5 @@ fn with_its_gates_off_the_cognition_invokes_no_seam() {
         strings(&["absent (phase 5)"])
     );
     assert!(texts(&finished.all, "routines").is_empty());
-    assert!(texts(&finished.all, "cognition.reflected").is_empty());
+    assert!(texts(&finished.all, "bot.ability.reflection.output").is_empty());
 }
