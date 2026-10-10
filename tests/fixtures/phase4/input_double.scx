@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  An input ability double for the body tests (tests/tests/body.rs): the
+  body's environment.* fan-out target. tests/tests/body.rs copies it to
+  abilities/identity.scx beside a copy of the body whose input_abilities
+  is ['identity'], so the body's literal <invoke id="identity"> reaches it.
+
+  On start it sends bot.ability.offers {ability: "identity", choices: []}
+  (its readiness), then logs input.sound or input.visual with the event's
+  data as JSON for each environment.sound or environment.visual it is
+  sent. It perceives nothing and sends no product.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="input_double" initial="perceiving">
+  <state id="perceiving">
+    <onentry>
+      <send event="bot.ability.offers" target="#_parent">
+        <param name="ability" expr="'identity'"/>
+        <param name="choices" expr="[]"/>
+      </send>
+    </onentry>
+    <transition event="environment.sound">
+      <log label="input.sound" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="environment.visual">
+      <log label="input.visual" expr="JSON.stringify(_event.data)"/>
+    </transition>
+  </state>
+</scxml>

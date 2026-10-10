@@ -22,6 +22,11 @@
 //! `bot.focus`, `double.ignore`). `tests/tests/communication.rs` covers
 //! what the communication does with what it is routed.
 //!
+//! One test sets `input_abilities` to `['identity']` and puts
+//! `tests/fixtures/phase4/input_double.scx` in the identity's place; the
+//! double logs `input.sound` and `input.visual` for each `environment.*`
+//! stimulus the body fans out to it.
+//!
 //! One test runs the real cognition (`abilities/cognition.scx` and its
 //! stages) with no backend: the intuition's decision fails fast with
 //! `unconfigured`, and so does the turn.
@@ -797,5 +802,50 @@ fn choices_over_the_budget_fail_the_turn_before_the_cognition() {
     close(
         run,
         "choices_over_the_budget_fail_the_turn_before_the_cognition",
+    );
+}
+
+#[test]
+fn environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition() {
+    let body = layout(
+        &Cognition::Double("'ready'"),
+        &[("input_abilities", "['identity']")],
+    );
+    // The input double stands in for the identity, the one input ability.
+    let abilities = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the layout's root")
+        .join("abilities");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/input_double.scx"),
+        abilities.join("identity.scx"),
+    )
+    .expect("the input double is copyable");
+    let mut run = start(&body);
+    activated(&mut run);
+    let sound = json!({"audio": "media/audio-1", "kind": "knock"});
+    let visual = json!({"image": "media/image-1", "media_type": "image/png"});
+    run.event("environment.sound", &sound);
+    run.event("environment.visual", &visual);
+    run.until(WAIT, label_is("input.visual"));
+    // The stimuli start no turn: the next turn is the first.
+    run.event("bot.input", &input("reply", "after"));
+    run.until(WAIT, label_is("bot.processing.completed"));
+    let finished = close(
+        run,
+        "environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition",
+    );
+    assert_eq!(
+        only(
+            &finished.all,
+            &["input.sound", "input.visual", "double.input"]
+        ),
+        pairs(&[
+            ("input.sound", &sound.to_string()),
+            ("input.visual", &visual.to_string()),
+            ("double.input", r#"1 reply "after""#),
+        ])
     );
 }

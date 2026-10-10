@@ -34,6 +34,12 @@
   routine's bot.behavior.tick the cognition forwards (phase 5 routines,
   gated off in phase 4).
 
+  Environment: environment.sound and environment.visual from outside,
+  while active, go to each input ability (input_abilities, the invoke ids
+  of the abilities that perceive raw stimuli; none until phase 6), in
+  order, by <foreach>; never to the cognition, which hears of a stimulus
+  only as an input ability's product.
+
   Turns: bot.input, a conversation product or an addressed in unfocused
   or focused
   starts a processing turn; <bot:stimulus> writes the event's stimulus
@@ -127,6 +133,10 @@
     <data id="expected" expr="['cognition', 'communication', 'identity']"/>
     <data id="offers" expr="({})"/>
     <data id="waiting" expr="[]"/>
+    <!-- The abilities each environment.* stimulus fans out to (invoke
+         ids; none until phase 6), and the one being sent to. -->
+    <data id="input_abilities" expr="[]"/>
+    <data id="input_ability" expr="null"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
     <data id="focused_device" expr="null"/>
@@ -231,6 +241,23 @@
         <send event="bot.ability.communication.input" target="#_identity">
           <content expr="_event.data"/>
         </send>
+      </transition>
+      <!-- Environment stimuli from outside go to every input ability. -->
+      <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+                  cond="!_event.invokeid">
+        <foreach array="input_abilities" item="input_ability">
+          <send event="environment.sound" targetexpr="'#_' + input_ability">
+            <content expr="_event.data"/>
+          </send>
+        </foreach>
+      </transition>
+      <transition event="environment.visual" event:schema="schemas/environment.visual.json"
+                  cond="!_event.invokeid">
+        <foreach array="input_abilities" item="input_ability">
+          <send event="environment.visual" targetexpr="'#_' + input_ability">
+            <content expr="_event.data"/>
+          </send>
+        </foreach>
       </transition>
       <!-- What the communication said, and its failures. -->
       <transition event="bot.ability.speaking.output" event:schema="schemas/bot.ability.speaking.output.json" cond="_event.invokeid === 'communication'">
