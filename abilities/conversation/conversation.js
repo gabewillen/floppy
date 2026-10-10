@@ -37,8 +37,9 @@ function memoryInsertParameters() {
   return statements[1].parameters.concat(['standard', 'retain', remembered, 'application/json', 'conversation_memory']);
 }
 
+// From the memory ability invoked as "remember".
 function isFromMemory(_event) {
-  return _event.invokeid === 'memory';
+  return _event.invokeid === 'remember';
 }
 
 function memoriesLog(_event) {

@@ -54,14 +54,15 @@
   each output is followed by bot.ability.reflection.input {turn,
   cognition_input, cognition_output} to it; its
   bot.ability.reflection.output settles the turn, and its
-  bot.ability.failed {message} is logged. The reflection takes the memory
+  bot.ability.failed {message} is logged. The reflection takes the
   database path and the model by <param>. Off, each output is followed by
   <log label="reflection" expr="'absent (phase 5)'">.
 
   Routines (gated by routines_enabled, off in phase 4): the root is a
   parallel of the turns, the reflection region and a routines region
   that, on, invokes
-  abilities/routines/routines.scx as the long-lived child "routines". A settled
+  abilities/routines/routines.scx as the long-lived child "routines" with the
+  database as <param name="database">. A settled
   reflection sends it bot.ability.routines.reconcile; each
   bot.behavior.tick it forwards goes on to the body, which takes it as a
   turn's stimulus (mosfet _observe_routine_tick). Off, nothing is invoked.
@@ -97,7 +98,7 @@
        version="1.0" datamodel="ecmascript" name="cognition" initial="alive">
   <datamodel>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
-    <!-- The memory database file, for autonomy and reasoning (null: no memory). -->
+    <!-- The memory database file, for autonomy, reasoning, reflection and routines (null: no memory). -->
     <data id="database" expr="null"/>
     <data id="hop_timeout_ms" expr="30000"/>
     <!-- The phase 5 seams' gates (off in phase 4). -->
@@ -386,7 +387,9 @@
     </state>
     <state id="routines_off"/>
     <state id="routines_on">
-      <invoke id="routines" type="scxml" src="../routines/routines.scx"/>
+      <invoke id="routines" type="scxml" src="../routines/routines.scx">
+        <param name="database" expr="database"/>
+      </invoke>
       <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
                   cond="isFromChild(_event, 'routines')">
         <send event="bot.behavior.tick" target="#_parent">

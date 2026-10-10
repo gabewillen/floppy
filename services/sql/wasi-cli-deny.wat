@@ -1,5 +1,7 @@
 ;; Deny-all `wasi:cli` (and monotonic-clock) provider composed into the
-;; sql service before release (see scripts/build-components.sh).
+;; sql service before release (see scripts/build-components.sh), and into
+;; the generate service, which keeps `wasi:filesystem` the same way to read
+;; the images its messages name.
 ;;
 ;; Adapted from scxml.rs's files example service
 ;; (scxml.rs/components/scxml-service-files/wasi-cli-deny.wat): the same

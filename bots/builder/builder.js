@@ -55,7 +55,7 @@ function requestMaxAttempts(_event) {
 }
 
 function requestModel(_event) {
-  return _event.data.model === undefined ? 'Qwen/Qwen3.8-Flash-Next' : _event.data.model;
+  return _event.data.model === undefined ? model : _event.data.model;
 }
 
 function requestGenerateTimeoutMs(_event) {

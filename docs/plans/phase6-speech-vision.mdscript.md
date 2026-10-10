@@ -30,7 +30,7 @@ created: 2026-10-10
 | `ImageDecoder` (mlx_vlm Qwen2-VL, "Read all visible text in this image. Return only the text.") | the generate service with an image content part (`image_url`, a `data:` URL the service builds from the referenced file) |
 | `SpeechDecoding`, `SoundClassification`, `VoiceDetection`, `VoiceDiarization`, `VoiceIdentification` (hearing leaves, `idle` → `applying` → `idle`) | `abilities/hearing/*.scx`, each invoking its service or logging `absent` |
 | `Listening` (`Perceiving{Listening, Sensing}`, `Sensitivity`, `Interpretation`) | `abilities/listening/listening.scx` and its children, the product `bot.ability.listening.speech.output` as the cognition's stimulus |
-| `SpeechHeard` seed (`bot.behavior.speech_heard.input`/`.output`) | `abilities/behaviors/speech_heard.scx`, a turn behavior autonomy runs before the learned ones |
+| `SpeechHeard` seed (`bot.behavior.speech_heard.input`/`.output`) | `abilities/behaviors/speech_heard/speech_heard.scx`, a turn behavior autonomy runs before the learned ones |
 | `SpeechEncoding` (vocal) and `Speaking` (`idle` → `encoding` → `playing` → `recording`) | `abilities/vocal/vocal.scx` and `abilities/speaking/speaking.scx` in audio mode: playout is an `environment.sound` the body broadcasts, with the efference copy to listening |
 | `VisualClassification`, `Reading` (`Unfocused`, `Focused{Classifying, DecodingText, DecodingImage, PreparingUnreadableOutput, EncodingOutput}`) | `abilities/vision/vision.scx`, `abilities/reading/reading.scx` |
 
@@ -65,7 +65,7 @@ The slices below run in parallel. Each depends only on what is already on `main`
 ### Add Speech Heard Seed
 
 * goal: mosfet's `SpeechHeard` seed: autonomy runs the trusted seeds before the learned behaviors, and an admissible `bot.ability.listening.speech.output` (non-empty `source_ids`) becomes `bot.ability.communication.input`
-* files: `abilities/behaviors/speech_heard.scx`, `abilities/autonomy/autonomy.scx` (seeds first, then the inventory, as `_prepare_match`), tests
+* files: `abilities/behaviors/speech_heard/speech_heard.scx`, `abilities/autonomy/autonomy.scx` (seeds first, then the inventory, as `_prepare_match`), tests
 * the seed's selection is mosfet's `SelectedEvent` (`event: bot.ability.communication.input`, `data: TurnData`)
 
 ### Add Vocal And Speaking Audio

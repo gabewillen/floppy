@@ -37,15 +37,15 @@ Activate it, then give it inputs, on standard input:
 # The locally built packages (the dev cache under target/).
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory bots/floppy/floppy.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network bots/floppy/floppy.scx
 # A conversation: text addressed to the bot, answered through bot.say.
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory bots/floppy/floppy.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network bots/floppy/floppy.scx
 # floppy's latest release, once one is published (phase 7).
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
-  scx run --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory bots/floppy/floppy.scx
+  scx run --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network bots/floppy/floppy.scx
 ```
 
 The env file must set `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
@@ -56,14 +56,26 @@ every turn fails with `the intuition failed: the decision failed
 (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
 `bot.activate` may name the model (`{"model": "..."}`); the default is
-`Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory.scx`, mosfet's
+`Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory/memory.scx`, mosfet's
 Memory) keeps the bot's database, `/memory/floppy.sqlite`, through the sql
 service (`services/sql`, SQLite), in the directory the run grants that
 service: `--dir
 https://github.com/stateforward/floppy/services/sql=HOST::/memory`
 preopens the host directory `HOST` (here `memory/`, created first with
 `mkdir -p memory`) at `/memory`, and the run is refused without it. The
-other services import no WASI resources.
+memory ability also names the Postgres engine, the pgsql service
+(`services/pgsql`, Postgres over its wire protocol), so the run grants it
+the network too (`--wasi
+https://github.com/stateforward/floppy/services/pgsql=inherit-network`),
+though it is used only when the database is a Postgres connection URI
+(`postgresql://USER@IP:PORT/DBNAME`, for example PGlite served by
+`pglite-server` from `@electric-sql/pglite-socket`). The `generate` service
+imports `wasi:filesystem` too (it reads the images a message names), so
+the run grants it a media directory the same way (create `media/` first;
+it is ignored by git).
+[`.env.example`](../../.env.example) names the variables, and the README's
+[Defaults](../../README.md#defaults) lists the model, the timeouts and the
+bounds this bot ships with.
 
 The root has no parent, so each event the body emits is a `log` record
 labelled with its name, its text the event's data as JSON: `bot.activated`,

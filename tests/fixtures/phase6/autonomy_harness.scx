@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Test harness of abilities/autonomy/autonomy.scx (tests/tests/cognition.rs, the
+  SpeechHeard seed's tests): it stands in for the cognition, which invokes
+  autonomy first in each turn. Each external bot.ability.cognition.input
+  {turn, stimulus, focus, focus_candidates} becomes one autonomy run as the
+  child "autonomy" with the cognition's <param>s (database is its <data>,
+  null unless the test rewrites it), and its <donedata> is logged whole
+  (harness.output, its JSON). The stimulus doubles the body's envelope of
+  a listening product the body cannot take yet.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="waiting">
+  <datamodel>
+    <data id="database" expr="null"/>
+    <data id="request" expr="null"/>
+  </datamodel>
+  <state id="waiting">
+    <transition event="bot.ability.cognition.input" cond="_event.invokeid === undefined" target="running">
+      <assign location="request" expr="_event.data"/>
+    </transition>
+  </state>
+  <state id="running">
+    <invoke id="autonomy" type="scxml" src="autonomy/autonomy.scx">
+      <param name="turn" expr="request.turn"/>
+      <param name="input" expr="({focus: request.focus, focus_candidates: request.focus_candidates})"/>
+      <param name="stimulus" expr="request.stimulus"/>
+      <param name="database" expr="database"/>
+    </invoke>
+    <transition event="done.invoke.autonomy" target="waiting">
+      <log label="harness.output" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="error.*" target="waiting">
+      <log label="harness.error" expr="_event.name"/>
+    </transition>
+  </state>
+</scxml>

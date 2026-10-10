@@ -2,7 +2,7 @@
 // <script src="autonomy.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// Shared by loading, using and recording_failure.
+// Shared by seeding, loading, running, using and recording_failure.
 
 function isFromInvoke(event, invokeid) {
   return event.invokeid === invokeid;
@@ -18,9 +18,44 @@ function memoryTimeoutDelay() {
 
 // matching
 
-// database null means no inventory, so nothing matches.
+// The stimulus triggers the SpeechHeard seed.
+function triggersSpeechHeard() {
+  return stimulus.event === 'bot.ability.listening.speech.output';
+}
+
+// seeding
+
+function triedWithSeed() {
+  return tried.concat(['SpeechHeard']);
+}
+
+function silenceDelay() {
+  return silence_ms + 'ms';
+}
+
+// Shared by seeding and running: the child answered the turn.
+function isBehaviorHandled(event) {
+  return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected);
+}
+
+function seedSilentLog() {
+  return 'SpeechHeard after ' + silence_ms + ' ms';
+}
+
+// mosfet _emit_native_start_failure.
+function seedFailedReason(event) {
+  return 'Autonomy native seed \'SpeechHeard\' failed: ' + event.name;
+}
+
+// inventory
+
+// database null means no learned inventory.
 function hasNoMemory() {
   return database === null;
+}
+
+function hasNoMemoryAndNoCandidates() {
+  return database === null && tried.length === 0;
 }
 
 function noMemoryLog() {
@@ -56,6 +91,10 @@ function hasNoMatch() {
   return rows.length === 0;
 }
 
+function hasNoMatchAndNoCandidates() {
+  return rows.length === 0 && tried.length === 0;
+}
+
 // running
 
 // The name of the behavior at index.
@@ -76,14 +115,6 @@ function triedWithCandidate() {
 // running assigns after it.
 function behaviorInputPayload() {
   return (stimulus.data !== null && typeof stimulus.data === 'object' ? Object.assign({}, stimulus.data) : {event: stimulus.data});
-}
-
-function silenceDelay() {
-  return silence_ms + 'ms';
-}
-
-function isBehaviorHandled(event) {
-  return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected);
 }
 
 function candidateSilentLog() {

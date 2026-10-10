@@ -50,7 +50,7 @@ Last updated: 2026-10-09.
 - **Branch:** `claude/project-thread-r7141w` (from `claude/project-thread-brkerr`),
   pushed to `gabewillen/floppy`; the phase 4 branch merges its commits.
 - **Done:** `services/sql` (one SQLite transaction per `<invoke>`, any
-  schema) and `abilities/memory.scx` (mosfet's Memory: migrates mosfet's
+  schema) and `abilities/memory/memory.scx` (mosfet's Memory: migrates mosfet's
   schema and applies statements through the sql service), decisions D44 to
   D47. Reasoning, identity and conversation recall and remember through the
   memory ability, and the body passes its database `/memory/floppy.sqlite`
@@ -108,7 +108,7 @@ Last updated: 2026-10-09.
 - Build floppy's components: `scripts/build-components.sh` (publishes a dev
   package cache under `target/components/package-cache`).
 - Run the builder bot (dev, until floppy has a release):
-  `scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx`
+  `scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx`
   with a `builder.request` event on stdin (see `bots/builder/README.md`).
 - Live tests: `FLOPPY_LIVE_ENV_FILE` (colon-separated env files) and
   `FLOPPY_LIVE_MODEL`.

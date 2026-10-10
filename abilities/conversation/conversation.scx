@@ -125,7 +125,7 @@
             <assign location="statements" expr="statementsWithMemoryInsert()"/>
             <assign location="statements[1].parameters" expr="memoryInsertParameters()"/>
           </onentry>
-          <invoke id="memory" type="scxml" src="../memory/memory.scx">
+          <invoke id="remember" type="scxml" src="../memory/memory.scx">
             <param name="database" expr="database"/>
             <param name="statements" expr="statements"/>
           </invoke>
