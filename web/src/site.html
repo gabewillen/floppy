@@ -1,0 +1,258 @@
+<title>floppy · SI powered software robots</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: a blueprint sheet. Header rule, then one route at a time: home (robot drawing + what floppy is) or the parts register (index | sheet). Single look by choice. */
+:root{
+  --bg:#103766; --grid:rgba(214,232,255,.07); --grid2:rgba(214,232,255,.14); --ink:#e8f1ff; --mute:#9db8dc; --acc:#7fd0ff; --warn:#ffd27a;
+  --f-c:"Barlow Condensed","Arial Narrow",sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-mono);background-image:linear-gradient(var(--grid2) 1px,transparent 1px),linear-gradient(90deg,var(--grid2) 1px,transparent 1px),linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:100px 100px,100px 100px,20px 20px,20px 20px}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+floppy-site{display:block;padding:0 16px 56px}
+.hd{max-width:1200px;margin:0 auto;padding-block:20px 14px;display:flex;gap:16px;justify-content:space-between;align-items:center;flex-wrap:wrap;border-bottom:1.5px solid var(--ink)}
+.brand{border:0;background:none;padding:0;font:600 30px/1 var(--f-c);letter-spacing:.04em;text-transform:uppercase}
+.brand span{color:var(--acc)}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav a{color:var(--mute);text-decoration:none;padding:5px 12px;font:600 15px var(--f-c);letter-spacing:.1em;text-transform:uppercase}
+nav button{border:1.5px solid transparent;background:none;padding:5px 12px;font:600 15px var(--f-c);letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+nav button[aria-current="page"]{border-color:var(--ink);color:var(--ink)}
+.wrap{max-width:1200px;margin:0 auto}
+
+/* home */
+.home{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;padding-top:28px;align-items:start}
+@media (max-width:900px){.home{grid-template-columns:minmax(0,1fr)}}
+floppy-robot{display:block;border:1.5px solid var(--ink);position:relative}
+floppy-robot .cap{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1.5px solid var(--ink)}
+floppy-robot .cap div{padding:8px 10px;border-right:1px solid var(--mute);font-size:12px;overflow-wrap:anywhere}
+floppy-robot .cap div:last-child{border-right:0}
+floppy-robot .cap b{display:block;font:600 11px var(--f-c);letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+floppy-robot .stage{position:relative}
+floppy-robot svg{display:block;width:100%;height:auto}
+floppy-robot floppy-bot{position:absolute;left:23.33%;top:9.52%;width:53.33%;height:76.19%}
+floppy-robot .moods{display:flex;flex-wrap:wrap;gap:4px;padding:8px 10px;border-top:1px dashed rgba(157,184,220,.45)}
+floppy-robot .moods button{border:1px solid var(--mute);background:transparent;padding:2px 8px;font-size:11.5px;color:var(--mute)}
+floppy-robot .moods button[aria-pressed="true"]{border-color:var(--acc);color:var(--acc)}
+.pitch h1{font:600 clamp(40px,6vw,72px)/.95 var(--f-c);letter-spacing:.01em;text-transform:uppercase;margin:0 0 16px;text-wrap:balance}
+.pitch h1 span{color:var(--acc)}
+.pitch p.sub{font:600 clamp(18px,2.2vw,24px)/1.25 var(--f-c);letter-spacing:.04em;text-transform:uppercase;color:var(--warn);margin:-4px 0 18px}
+.pitch p{font-size:14px;line-height:1.7;color:var(--ink);max-width:62ch;margin:0 0 14px}
+.pitch p.m{color:var(--mute)}
+.pitch pre{margin:18px 0;overflow-x:auto;font-size:12.5px;line-height:1.6;border-left:2px solid var(--acc);padding-left:12px}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1.5px solid var(--ink);margin-top:18px}
+.tiles button{border:0;border-right:1px solid var(--mute);background:transparent;padding:14px;text-align:left;display:grid;gap:2px}
+.tiles button:last-child{border-right:0}
+.tiles button:hover{background:rgba(127,208,255,.1)}
+.tiles b{font:600 40px/1 var(--f-c);color:var(--acc);font-variant-numeric:tabular-nums}
+.tiles span{font:600 14px var(--f-c);letter-spacing:.14em;text-transform:uppercase}
+.tiles small{font-size:11px;color:var(--mute)}
+@media (max-width:520px){.tiles{grid-template-columns:minmax(0,1fr)}.tiles button{border-right:0;border-bottom:1px solid var(--mute)}}
+
+/* register */
+.reg{display:grid;grid-template-columns:330px minmax(0,1fr);gap:24px;padding-top:20px}
+@media (max-width:900px){.reg{grid-template-columns:minmax(0,1fr)}}
+floppy-register{display:block;border:1.5px solid var(--ink);align-self:start}
+.q{display:flex;align-items:center;gap:8px;border-bottom:1.5px solid var(--ink);padding:8px 10px}
+.q input{border:0;background:transparent;flex:1;min-width:0}
+.q input::placeholder{color:var(--mute)}
+.kinds{display:flex;border-bottom:1.5px solid var(--ink)}
+.kinds button{flex:1;border:0;border-right:1px solid var(--mute);background:transparent;padding:8px 4px;font:600 15px var(--f-c);letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+.kinds button:last-child{border-right:0}
+.kinds button[aria-pressed="true"]{color:var(--bg);background:var(--ink)}
+floppy-register ol{list-style:none;margin:0;padding:0;max-height:640px;overflow-y:auto}
+floppy-register li button{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;width:100%;text-align:left;border:0;border-bottom:1px dashed rgba(157,184,220,.45);background:transparent;padding:8px 10px;font-size:12.5px}
+floppy-register li button[aria-pressed="true"]{background:rgba(127,208,255,.16);color:var(--acc)}
+floppy-register li i{font-style:normal;color:var(--mute)}
+floppy-register li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+floppy-register .empty{padding:12px;color:var(--mute);font-size:12.5px}
+floppy-sheet{display:block;border:1.5px solid var(--ink);min-width:0}
+floppy-sheet .ttl{padding:16px 18px 0}
+floppy-sheet h3{font:600 34px/1 var(--f-c);letter-spacing:.02em;margin:0;overflow-wrap:anywhere}
+floppy-sheet .sub{color:var(--mute);font-size:12.5px;margin-top:6px;line-height:1.5;max-width:80ch;overflow-wrap:anywhere}
+floppy-sheet .draw{overflow-x:auto;padding:8px 8px 0}
+floppy-sheet .draw svg{display:block;min-width:620px;width:100%;height:auto}
+floppy-sheet .tblock{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1.5px solid var(--ink)}
+floppy-sheet .tblock div{padding:8px 10px;border-right:1px solid var(--mute);font-size:12px;overflow-wrap:anywhere}
+floppy-sheet .tblock div:last-child{border-right:0}
+floppy-sheet .tblock b{display:block;font:600 11px var(--f-c);letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin-bottom:2px}
+floppy-sheet .snip{border-top:1.5px solid var(--ink);padding:12px 18px;display:grid;gap:8px}
+floppy-sheet .snip pre{margin:0;overflow-x:auto;font-size:12.5px;line-height:1.55;border-left:2px solid var(--acc);padding-left:12px}
+floppy-sheet .snip b{font:600 12px var(--f-c);letter-spacing:.14em;text-transform:uppercase;color:var(--acc)}
+floppy-sheet .rel{border-top:1.5px solid var(--ink);padding:12px 18px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+floppy-sheet .rel b{font:600 12px var(--f-c);letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin-right:6px}
+floppy-sheet .rel button,floppy-sheet .rel span{border:1px solid var(--mute);background:transparent;padding:2px 8px;font-size:12px}
+@media (max-width:600px){floppy-sheet .tblock{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+
+<floppy-site></floppy-site>
+
+<!-- <floppy-bot>, bundled with esbuild; its machines run on the same hsm.ts. -->
+<script type="module">/*CRITTER*/</script>
+
+<script type="module">
+import * as lib from "https://cdn.jsdelivr.net/npm/@stateforward/hsm.ts@1.3.3/dist/index.js";
+
+/* hsm.ts host helpers. */
+const hsm = (() => {
+  function from(Base) {
+    class HostElement extends Base {}
+    for (const [k, d] of Object.entries(Object.getOwnPropertyDescriptors(lib.Instance.prototype))) {
+      if (k !== "constructor") Object.defineProperty(HostElement.prototype, k, d);
+    }
+    return HostElement;
+  }
+  const BIND = Symbol("hsm-bind");
+  const start = (i, m) => { if (i[BIND]) return i; const s = lib.start(i, m); s[BIND] = true; return s; };
+  const live = (host, name, data) => { try { void Promise.resolve(host.dispatch({ name, kind: lib.Kinds.Event, data })).catch(e => console.error(e)); } catch (e) { console.error(e); } };
+  return { ...lib, from, start, live };
+})();
+
+/* Packages: services/<name>/package/*.service.json, namespaces/<name>/package/*.extension.json and *.xsd. */
+/*DATA*/
+const key = p => p.kind + "/" + p.id;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const snipOf = p => p.snip || `<scxml xmlns="http://www.w3.org/2005/07/scxml"\n       xmlns:${p.prefix}="${p.uri}">`;
+const nsOf = p => P.find(x => x.kind === "namespace" && x.id === p.ns);
+const label = p => p.kind === "element" ? "<" + p.id + ">" : p.id;
+
+/* ---------------------------------------------------------------
+   <floppy-robot>: the robot drawing. The character lives in
+   stateforward/floppy; until its file is in, the sheet shows its
+   frame and dimensions.
+---------------------------------------------------------------- */
+class FloppyRobot extends HTMLElement {
+  connectedCallback() {
+    const moods = ["normal", "happy", "focused", "surprised", "skeptic", "worried", "sleepy"];
+    this.innerHTML = `<div class="stage"><svg viewBox="0 0 600 420" aria-hidden="true">
+      <rect x="140" y="40" width="320" height="320" fill="none" stroke="#9db8dc" stroke-dasharray="6 6" stroke-opacity=".5"/>
+      <line x1="300" y1="30" x2="300" y2="370" stroke="#9db8dc" stroke-opacity=".25" stroke-dasharray="2 6"/>
+      <g stroke="#7fd0ff" fill="#7fd0ff" font-size="11">
+        <line x1="140" y1="390" x2="460" y2="390"/><path d="M140 390l8 -4v8zM460 390l-8 -4v8z"/><line x1="140" y1="370" x2="140" y2="398" stroke-opacity=".6"/><line x1="460" y1="370" x2="460" y2="398" stroke-opacity=".6"/>
+        <line x1="500" y1="40" x2="500" y2="360"/><path d="M500 40l-4 8h8zM500 360l-4 -8h8z"/>
+        <text x="300" y="410" text-anchor="middle" stroke="none">body</text>
+        <text x="512" y="80" stroke="none">eye</text><text x="512" y="94" stroke="none">stalks</text>
+        <line x1="372" y1="150" x2="508" y2="84" stroke-dasharray="2 3"/>
+      </g></svg>
+      <floppy-bot expression="happy" track ink="#e8f1ff" eye="#103766" pupil="#7fd0ff" title="poke me"></floppy-bot></div>
+      <div class="moods" role="group" aria-label="Expression">${moods.map(m => `<button data-mood="${m}" aria-pressed="${m === "happy"}">${m}</button>`).join("")}</div>
+      <div class="cap"><div><b>Drawing</b>&lt;floppy-bot&gt;</div><div><b>Source</b>web/src/face</div><div><b>Behavior</b>hsm.ts machines</div></div>`;
+    this.addEventListener("click", e => {
+      const b = e.target.closest("[data-mood]"); if (!b) return;
+      this.querySelector("floppy-bot").setAttribute("expression", b.dataset.mood);
+      this.querySelectorAll("[data-mood]").forEach(x => x.setAttribute("aria-pressed", x === b));
+    });
+  }
+}
+customElements.define("floppy-robot", FloppyRobot);
+
+/* ---------------------------------------------------------------
+   <floppy-register>: the index. Its machine holds the kind filter
+   and the search; picking a row asks the site to open that part.
+---------------------------------------------------------------- */
+class FloppyRegister extends hsm.from(HTMLElement) {
+  static model = hsm.define("Register",
+    hsm.initial(hsm.target("listing")),
+    hsm.state("listing",
+      hsm.entry(FloppyRegister.paint),
+      hsm.transition(hsm.on("filter"), hsm.effect((c, r, e) => { r.kind = e.data; FloppyRegister.paint(c, r); })),
+      hsm.transition(hsm.on("search"), hsm.effect((c, r, e) => { r.q = e.data; FloppyRegister.paintList(r); })),
+      hsm.transition(hsm.on("mark"), hsm.effect((c, r, e) => { r.sel = e.data; FloppyRegister.paintList(r); }))));
+  kind = "all"; q = ""; sel = null;
+  connectedCallback() {
+    if (this.dataset.kind) this.kind = this.dataset.kind;
+    this.sel = this.dataset.sel || null;
+    hsm.start(this, FloppyRegister.model);
+    this.addEventListener("click", e => {
+      const k = e.target.closest("[data-kind]"); if (k) return hsm.live(this, "filter", k.dataset.kind);
+      const s = e.target.closest("[data-sel]"); if (s) this.dispatchEvent(new CustomEvent("floppy-open", { bubbles: true, detail: s.dataset.sel }));
+    });
+    this.addEventListener("input", e => { if (e.target.id === "reg-q") hsm.live(this, "search", e.target.value); });
+  }
+  list() { return ALL.filter(p => (this.kind === "all" || p.kind === this.kind) && (!this.q || (p.id + " " + p.sum).toLowerCase().includes(this.q.toLowerCase()))); }
+  static paint(_c, r) {
+    r.innerHTML = `<label class="q"><span aria-hidden="true">⌕</span><input id="reg-q" placeholder="find a part" value="${esc(r.q)}" aria-label="Search parts"></label>
+      <div class="kinds" role="group" aria-label="Kind">${[["all", "All"], ["service", "Svc"], ["namespace", "NS"], ["element", "Elem"]].map(([k, l]) => `<button data-kind="${k}" aria-pressed="${r.kind === k}">${l}</button>`).join("")}</div><ol></ol>`;
+    FloppyRegister.paintList(r);
+  }
+  static paintList(r) {
+    const l = r.list();
+    r.querySelector("ol").innerHTML = l.length ? l.map(x => `<li><button data-sel="${key(x)}" aria-pressed="${key(x) === r.sel}"><i>${x.kind[0].toUpperCase()}</i><span>${esc(label(x))}</span><i>${x.ver === "built in" ? "scx" : x.ver}</i></button></li>`).join("") : `<li class="empty">No part matches “${esc(r.q)}”.</li>`;
+  }
+}
+customElements.define("floppy-register", FloppyRegister);
+
+/* ---------------------------------------------------------------
+   <floppy-sheet>: one part's drawing. Pins in on the left (params
+   or attributes), out on the right (events or elements), env slots
+   on top, grants below.
+---------------------------------------------------------------- */
+/*SHEET*/
+class FloppySheet extends HTMLElement {
+  show(p) {
+    const rel = p.kind === "namespace" ? p.elements.filter(e => !e.includes(" ")).map(e => `<button data-sel="element/${p.prefix}:${e}">&lt;${p.prefix}:${e}&gt;</button>`)
+      : p.kind === "element" && nsOf(p) ? [`<button data-sel="namespace/${p.ns}">${p.ns} namespace</button>`]
+      : p.kind === "service" ? p.used.map(u => `<span>${esc(u)}</span>`) : [];
+    this.innerHTML = sheetC(p).replace(/^<div class="sheet">/, "").replace(/<\/div>$/, "") +
+      (rel.length ? `<div class="rel"><b>${p.kind === "namespace" ? "Elements" : p.kind === "element" ? "Comes with" : "Used by"}</b>${rel.join("")}</div>` : "");
+  }
+}
+customElements.define("floppy-sheet", FloppySheet);
+
+/* ---------------------------------------------------------------
+   <floppy-site>: the router. Its machine is the page:
+     home | register | part
+---------------------------------------------------------------- */
+class FloppySite extends hsm.from(HTMLElement) {
+  static model = hsm.define("Site",
+    hsm.initial(hsm.target("browsing")),
+    hsm.state("browsing",
+      hsm.initial(hsm.target("home")),
+      hsm.transition(hsm.on("go_home"), hsm.target("home")),
+      hsm.transition(hsm.on("go_register"), hsm.target("register")),
+      hsm.transition(hsm.on("open"), hsm.target("part"), hsm.effect((c, s, e) => { s.part = e.data; })),
+      hsm.state("home", hsm.entry(FloppySite.show("home"))),
+      hsm.state("register", hsm.entry(FloppySite.show("register"))),
+      hsm.state("part", hsm.entry(FloppySite.show("part")), hsm.transition(hsm.on("open"), hsm.effect((c, s, e) => { s.part = e.data; FloppySite.paintPart(s); })))));
+  part = null; kind = "all";
+  connectedCallback() {
+    hsm.start(this, FloppySite.model);
+    this.addEventListener("click", e => {
+      const n = e.target.closest("[data-go]"); if (n) { if (n.dataset.kind) this.kind = n.dataset.kind; return hsm.live(this, "go_" + n.dataset.go); }
+      const s = e.target.closest("floppy-sheet [data-sel]"); if (s) hsm.live(this, "open", s.dataset.sel);
+    });
+    this.addEventListener("floppy-open", e => hsm.live(this, "open", e.detail));
+  }
+  /* Entry actions run before state() reports the new state, so each entry names its page. */
+  static show(page) { return (c, s) => FloppySite.paint(c, s, page); }
+  static paint(_c, s, page) {
+    const c = k => ALL.filter(p => p.kind === k).length;
+    const nav = `<header class="hd"><button class="brand" data-go="home">floppy <span>■</span></button>
+      <nav aria-label="Site">${[["home", "Home"], ["register", "Parts register"]].map(([k, l]) => `<button data-go="${k}" ${page === k || (k === "register" && page === "part") ? 'aria-current="page"' : ""}>${l}</button>`).join("")}<a href="workshop/">Workshop</a></nav></header>`;
+    let body = "";
+    if (page === "home") body = `<section class="home"><floppy-robot></floppy-robot>
+      <div class="pitch"><h1>SI powered <span>software robots</span></h1>
+      <p class="sub">Every SI powered part is a Wasm component, so it runs sandboxed by default.</p>
+      <p>floppy bots are software robots: a state machine for a body and super intelligence (SI) for a brain. Every bot runs with <code>scx run</code>. Its abilities are invoked children, and its SI (model generation, decisions, memory, speech) comes from invoked services: versioned Wasm components that never block the machine.</p>
+      <p class="m">Extension namespaces hold only synchronous, quick executable content.</p>
+      <pre>scx run --env-file .env \\
+  --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" \\
+  bots/builder/builder.scx</pre>
+      <div class="tiles">${[["service", "Services", "Wasm components"], ["namespace", "Namespaces", "typed building blocks"], ["element", "Elements", "executable content"]].map(([k, l, d]) => `<button data-go="register" data-kind="${k}"><b>${c(k)}</b><span>${l}</span><small>${d}</small></button>`).join("")}</div></div></section>`;
+    else body = `<section class="reg"><floppy-register data-kind="${s.kind}" data-sel="${page === "part" ? s.part : ""}"></floppy-register><floppy-sheet></floppy-sheet></section>`;
+    s.innerHTML = nav + `<div class="wrap">${body}</div>`;
+    s.kind = "all";
+    if (page !== "home") FloppySite.paintPart(s);
+  }
+  static paintPart(s) {
+    const reg = s.querySelector("floppy-register"), list = reg ? reg.list() : ALL;
+    const p = ALL.find(x => key(x) === s.part) || list[0] || ALL[0];
+    if (reg) hsm.live(reg, "mark", key(p));
+    s.querySelector("floppy-sheet").show(p);
+  }
+}
+customElements.define("floppy-site", FloppySite);
+</script>
