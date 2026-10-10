@@ -5,7 +5,7 @@
 //!
 //! The harness stores behavior inventory rows through the Memory ability in
 //! a directory the run grants, invokes the routines with the database path
-//! as `<param name="memory">`, changes the inventory and asks for a
+//! as `<param name="database">`, changes the inventory and asks for a
 //! reconcile. The routines log `bot.ability.routines.reconciled` (the
 //! running set's names) and `bot.ability.routines.reconcile.failed`; the
 //! harness logs `harness.tick` (the first tick of each routine revision),
@@ -126,8 +126,8 @@ fn a_failed_inventory_load_keeps_the_running_set() {
     std::fs::write(
         &harness,
         text.replace(
-            r#"<param name="memory" expr="database"/>"#,
-            r#"<param name="memory" expr="'relative.sqlite'"/>"#,
+            r#"<param name="database" expr="database"/>"#,
+            r#"<param name="database" expr="'relative.sqlite'"/>"#,
         ),
     )
     .expect("the harness is writable");

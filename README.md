@@ -102,8 +102,9 @@ read `FLOPPY_TRACE_BLESS`. Those are test settings, not bot variables.
 (direct vLLM; the CPA gateway lists it as `sparks/qwen3.8-flash-next`). It is
 the `model` `<data>` of `bots/builder/builder.scx` (a `builder.request`'s
 `model` overrides it), `bots/floppy/floppy.scx` (a `bot.activate`'s `model`
-overrides it), and `abilities/cognition.scx` and `abilities/reasoning.scx`
-(each takes its invoker's by `<param>`).
+overrides it), `abilities/cognition.scx`, `abilities/reasoning.scx` and
+`abilities/reflection.scx` (each takes its invoker's by `<param>`), and
+`abilities/reading.scx` (mosfet's image decoder).
 
 ### Timeouts and bounds
 
@@ -121,6 +122,8 @@ overrides it), and `abilities/cognition.scx` and `abilities/reasoning.scx`
 | `abilities/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (mosfet's `TURN_SILENCE_BOUND`) |
 | `abilities/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
 | `abilities/communication.scx` | `response_timeout_ms` | `6000` | saying one response (mosfet's 6 s) |
+| `abilities/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (mosfet's 30 s) |
+| `abilities/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (mosfet's 30 s) |
 | `abilities/conversation.scx` | `max_messages` | `20` | the history that reaches one turn |
 
 The cognition's phase 5 gates are off (`reflection_enabled`,

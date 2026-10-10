@@ -122,7 +122,10 @@ fn every_model_data_is_the_default_model_and_the_name_appears_nowhere_else() {
             path.display()
         );
     }
-    assert_eq!(models, 4, "builder, floppy, cognition and reasoning");
+    assert_eq!(
+        models, 6,
+        "builder, floppy, cognition, reasoning, reflection and reading"
+    );
     assert!(
         read(Path::new("README.md")).contains(&format!("`{}`", support::DEFAULT_MODEL)),
         "README.md's Defaults names the model"
