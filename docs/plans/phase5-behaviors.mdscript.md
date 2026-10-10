@@ -48,6 +48,9 @@ created: 2026-10-10
 
 * Match Turn Behaviors In Autonomy: `abilities/autonomy/autonomy.scx` loads the ACTIVE turn behaviors whose trigger is the stimulus's event name (one Memory ability transaction, by name) and runs each source as the child `candidate` by `<content expr>` with a 1 s silence bound; handled persists `used_count`/`last_used_at`, a source that cannot run persists `failed_count`/`last_failed_at`; the cognition passes `stimulus` and `memory` (`<data id="memory">`, null until the body passes it); tests `autonomy_runs_the_learned_behaviors_the_stimulus_triggers`, `when_no_learned_behavior_handles_the_turn_intuition_runs`. A source that does not compile fails the invocation with an `error.execution` that carries no invokeid (SCXML 3.12.2), so the candidate state takes any `error.*`
 
+* Reflect On Turns: `abilities/reflection.scx` takes `<param name="memory">` and `model` from the cognition and `bot.ability.reflection.input {turn, cognition_input, cognition_output}` (D62); `recalling` reads the prior episodes and the whole inventory in one Memory transaction, `processing` asks the generate service to select at most one of the inventory events through its enabled transitions (D60, mosfet `SELECT_INSTRUCTIONS`, a 30 s `bot.ability.reflection.select.hop.timed_out`), `breaking` marks the row BROKEN with its trimmed reason, and `storing` inserts the turn's `CognitiveEpisode`; failures answer `bot.ability.failed {message}` (D64); memory null keeps the phase 4 seam and its traces; tests `tests/tests/reflection.rs` (harness `tests/fixtures/phase5/reflection_harness.scx`): an empty selection stores the episode and the next turn recalls it, a break keeps the row BROKEN, an unknown break and two selections fail. SQLite's `randomblob` repeats across the sql service's invocations, so the episode's memory id is the next rowid in hex (as the phase 3 callers do)
+* Revise Behaviors With The Builder: `revising` stores a create's DRAFT stub, loads the row, invokes `bots/builder/builder.scx` and sends it `builder.request` (mosfet `CHANGE_INSTRUCTIONS` and `ChangeWriteInput` as the spec, the turn behavior and persistent routine contracts as constraints); `done` replaces the row ACTIVE with grounded triggers and usage kept (lifetime by D61), `failed` marks it DRAFT `validation` and fails the turn; tests: a create is built and stored ACTIVE with its grounded trigger, a failed build leaves a validation draft
+
 ## Slices
 
 Autonomy, routines, and reflection with revision are independent and can run in parallel threads; each takes the database path as `<param name="memory">` from the cognition, which the phase 3 thread is wiring for reasoning.
@@ -57,15 +60,6 @@ Autonomy, routines, and reflection with revision are independent and can run in 
 
 * goal: routines selects the ACTIVE `persistent` rows on each reconcile, starts each one as a child, restarts one whose source revision changed, stops removed ones, and forwards a running routine's `bot.behavior.tick` (mosfet `_reconcile_activity`)
 * SCXML holds a fixed set of invokes per state, so the routines run as a chain: a runner document invokes the first routine by `<content expr>` and itself for the rest, and passes ticks up; a reconcile whose revisions changed restarts the chain
-
-### Reflect On Turns
-
-* goal: reflection recalls prior episodes and every behavior, asks the generate service to select at most one of `bot.behavior.create`, `bot.behavior.change`, `bot.behavior.break` (mosfet `SELECT_INSTRUCTIONS`), applies it, and stores the turn's `CognitiveEpisode`
-* break marks the row `BROKEN` with its reason; create and change go to the next slice
-
-### Revise Behaviors With The Builder
-
-* goal: create and change invoke the builder with a spec from the `ChangeData`, the existing source and the turn; `done` stores the document `ACTIVE` with its grounded triggers (mosfet `_grounded_triggers`); `failed` stores it `DRAFT` with reason `validation` (create first stores the DRAFT stub, as mosfet's preparing)
 
 ### Turn The Seams On
 
@@ -79,3 +73,8 @@ Autonomy, routines, and reflection with revision are independent and can run in 
 
 * D48: a behavior's program is an SCXML document the builder authors, stored in `bot_behavior.source` and invoked from it by `<content expr>`; mosfet's Starlark globals other than the program (`triggers`, `description`, `lifetime`) are the row's columns
 * D49: the turn behavior contract keeps the phase 4 builder seam's `<donedata>` `{turn, handled, selected}`: a final state is SCXML's one way to answer an invoker exactly once, and it carries mosfet's handled/unhandled distinction
+* D60: reflection selects through the enabled transitions: its `processing` state holds one transition per inventory event (`bot.behavior.create`, `change`, `break`) with its `event:schema`, `<decision:choice>` reads them and `<decision:selection>` builds the strict schema, and the one selection is sent to `#_internal`, so scxml.rs checks its data against the event's schema before the transition taking it applies it (mosfet `_SelectedEvent`)
+* D61: a behavior's `lifetime` is `persistent` when its built document sends `bot.behavior.tick` (the persistent routine contract) and `turn` otherwise: mosfet reads it from the program's `lifetime` global, and the tick send is the SCXML program's equivalent
+* D62: `bot.ability.reflection.input` carries mosfet's `cognition_input` (`{stimulus, focus, focus_candidates}`, a `[floppy field]` description, required): mosfet passes the live `InputData` (`SkipJsonSchema`), and reflection needs it for the episode, the select prompt, the builder's spec and the grounded triggers
+* D63: the inventory and episode reads return one JSON value per statement (SQLite `json_group_array`/`json_object`), so the document parses one cell instead of mapping rows; the write SQL is mosfet's clauses (delete then insert for `store_behavior`, an `UPDATE` for `mark_broken`/`mark_draft`, which leave the same row), and timestamps are SQLite's (`strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`, mosfet `utc_now_iso`)
+* D64: a reflection failure answers the cognition `bot.ability.failed {message}` (mosfet `_fail_from_stage`) with mosfet's messages, and the cognition logs it as `cognition.reflection.failed`; a revision whose build fails marks the row DRAFT (`validation`) and fails the turn without storing its episode, as mosfet's `_abandon`

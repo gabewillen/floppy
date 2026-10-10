@@ -28,7 +28,7 @@
 //!   the receiving document;
 //! * every `bot.*` or `environment.*` name used is mosfet's or a marked
 //!   floppy name;
-//! * the layout rule (decision D44): the document is `<name>/<name>.scx`,
+//! * the layout rule (decision D48): the document is `<name>/<name>.scx`,
 //!   its only `<script>` is the root `<script src="<name>.js"/>` naming the
 //!   `<name>.js` beside it, and the document itself has no `function`
 //!   token; each schema it references is a byte-identical twin of its

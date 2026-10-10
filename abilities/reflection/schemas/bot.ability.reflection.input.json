@@ -4,6 +4,100 @@
   "additionalProperties": false,
   "description": "Reflection input after the host handled a cognition result. Reflection recalls prior episodes, may select create/change/break, runs a change pass for create/change, marks break, and stores this turn.",
   "properties": {
+    "cognition_input": {
+      "additionalProperties": false,
+      "description": "Original input payload given to cognition for this turn: its stimulus, focus and focus candidates. mosfet passes the live InputData (SkipJsonSchema); floppy passes it as data [floppy field].",
+      "properties": {
+        "stimulus": {
+          "additionalProperties": false,
+          "description": "The event the body took for this turn, as an envelope: its name, its data, and optionally its id, source and target. mosfet passes the live stimulus object (SkipJsonSchema); floppy passes it as data [floppy field].",
+          "properties": {
+            "event": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "data": {},
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "type": "object"
+        },
+        "focus": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Instance name the bot is looking at, if any.",
+          "examples": [
+            "device-a"
+          ],
+          "title": "Focus"
+        },
+        "focus_candidates": {
+          "default": [],
+          "description": "Instance names that may become focus for this turn (body attention policy).",
+          "examples": [
+            [
+              "device-a"
+            ],
+            [
+              "device-a",
+              "device-b"
+            ]
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Focus Candidates",
+          "type": "array"
+        }
+      },
+      "required": [
+        "stimulus"
+      ],
+      "title": "Cognition Input",
+      "type": "object"
+    },
     "cognition_output": {
       "description": "Typed cognition output selected for this turn and already handled by the host.",
       "items": {
@@ -101,6 +195,7 @@
     }
   },
   "required": [
+    "cognition_input",
     "cognition_output",
     "turn"
   ],

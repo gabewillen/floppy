@@ -4,15 +4,26 @@
   System 2 pass. The cognition (abilities/cognition/cognition.scx) invokes it once
   per turn that intuition left unhandled.
 
-    recalling (memory seam) -> applying (an invoked generate service)
-      -> retaining (memory seam) -> done
+    recalling -> applying (an invoked generate service) -> retaining -> done
 
-  Memory is an honest seam until phase 3: recalling and retaining each log
-  <log label="memory" expr="'absent'"> and send their mosfet result event to itself (#_internal)
-  (bot.ability.reasoning.recalled, bot.ability.reasoning.retained) with
-  memory_consulted (and memory_written) false and nothing recalled; the
-  model request carries no recalled episode. Phase 3 replaces each such send
-  with an <invoke> of services/memory.
+  Memory (mosfet Reasoning._recall_activity and _retain_activity): with a
+  database (the <param> database, the memory database file), recalling
+  invokes the memory ability (abilities/memory/memory.scx) with one
+  transaction of mosfet's two selects, prior cognitive episodes
+  (query_tags cognitive_episode) and standing directives (query_tags
+  standing_directive), each for the turn's context or none, oldest first,
+  at most 50, and sends itself bot.ability.reasoning.recalled with them and
+  memory_consulted true; retaining inserts the turn's episode
+  ({focus, focus_candidates, stimulus_name, output, behavior} as JSON,
+  query_tags cognitive_episode) and sends itself
+  bot.ability.reasoning.retained with memory_written true. The context is
+  the stimulus's target_device (mosfet _context_ref_from_input). A memory
+  failure fails the stage ("Reasoning memory recall failed: ..."). Without
+  a database (mosfet's Reasoning without a memory collaborator) each step
+  logs <log label="memory" expr="'absent'"> and sends its event with
+  memory_consulted and memory_written false and nothing recalled. The
+  model prompt carries the stimulus, the focus, and the recalled
+  prior_episodes and standing_directives (mosfet ProcessorInput).
 
   Choices: the body's assembled choices for the turn (the <param>
   choices: the body's own and each ability's offers, tagged with the
@@ -27,8 +38,8 @@
   selection outside the choices (event or target) fails the stage as
   schema-mismatch. With no choices the stage fails without a model call.
 
-  Input: the <param>s turn, stimulus, focus, focus_candidates, choices and
-  model. Output: <donedata>, received by the cognition as
+  Input: the <param>s turn, stimulus, focus, focus_candidates, choices,
+  model and database. Output: <donedata>, received by the cognition as
   done.invoke.reasoning:
 
     {turn, handled: true, selected: [{event, data, reason, target?}]}
@@ -39,8 +50,9 @@
 
   Bindings: the generate service package and the decision namespace
   (<decision:selection> builds the schema, <decision:names> writes the
-  logged choice names), resolved from their
-  repository URIs; env scopes FLOPPY_API_KEY and
+  logged choice names), resolved from their repository URIs, and the
+  memory ability's sql service package (a run grants it its directory,
+  scx run's dir option); env scopes FLOPPY_API_KEY and
   FLOPPY_BASE_URL to the service's <invoke> (no default backend: without
   either it answers generate.failed unconfigured). The generate service's
   events are recorded by <finalize>.
@@ -66,28 +78,80 @@
     <data id="selected" expr="null"/>
     <data id="gen_failure" expr="null"/>
     <data id="result" expr="null"/>
+    <!-- Memory: the database file (null: no memory) and mosfet's
+         statements (episodes.py, directives.py), with ?2 the context. A memory id is the next
+         rowid as 32 hex digits: the sql service's randomblob is not
+         unique across invocations. -->
+    <data id="database" expr="null"/>
+    <data id="context_ref" expr="null"/>
+    <data id="prior_episodes" expr="[]"/>
+    <data id="standing_directives" expr="[]"/>
+    <data id="statements" expr="[]"/>
+    <data id="episode" expr="null"/>
+    <data id="episode_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND (?2 IS NULL OR context_ref IS NULL OR context_ref = ?2) AND json_valid(content) ORDER BY created_at LIMIT 50'"/>
+    <data id="episode_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT printf(\'%032x\', coalesce(max(rowid), 0) + 1) FROM bot_memory), ?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
   </datamodel>
   <script src="reasoning.js"/>
 
-  <!-- Memory seam (phase 3): nothing is recalled. -->
-  <state id="recalling">
+  <!-- Recall prior episodes and standing directives, or nothing without
+       a database. -->
+  <state id="recalling" initial="recalling_from">
     <onentry>
-      <log label="memory" expr="'absent'"/>
-      <send event="bot.ability.reasoning.recalled" target="#_internal">
-        <param name="turn" expr="turn"/>
-        <param name="host_input" expr="hostInput()"/>
-        <param name="prior_episodes" expr="[]"/>
-        <param name="memory_consulted" expr="false"/>
-        <param name="input" expr="focusInput()"/>
-      </send>
+      <assign location="context_ref" expr="contextRefFromInput()"/>
     </onentry>
+    <state id="recalling_from">
+      <transition cond="hasNoDatabase()" target="recalling_nothing"/>
+      <transition target="recalling_memory"/>
+    </state>
+    <state id="recalling_nothing">
+      <onentry>
+        <log label="memory" expr="'absent'"/>
+        <send event="bot.ability.reasoning.recalled" target="#_internal">
+          <param name="turn" expr="turn"/>
+          <param name="host_input" expr="hostInput()"/>
+          <param name="prior_episodes" expr="[]"/>
+          <param name="memory_consulted" expr="false"/>
+          <param name="input" expr="focusInput()"/>
+        </send>
+      </onentry>
+    </state>
+    <state id="recalling_memory">
+      <onentry>
+        <assign location="statements" expr="episodeSelectStatements()"/>
+        <assign location="statements" expr="directiveSelectStatements()"/>
+      </onentry>
+      <invoke id="recall" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="statements"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+                  cond="isFromInvoke(_event, 'recall')">
+        <assign location="prior_episodes" expr="recalledContents(_event, 0)"/>
+        <assign location="standing_directives" expr="recalledContents(_event, 1)"/>
+        <send event="bot.ability.reasoning.recalled" target="#_internal">
+          <param name="turn" expr="turn"/>
+          <param name="host_input" expr="hostInput()"/>
+          <param name="prior_episodes" expr="prior_episodes"/>
+          <param name="standing_directives" expr="standing_directives"/>
+          <param name="memory_consulted" expr="true"/>
+          <param name="input" expr="focusInput()"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                  cond="isFromInvoke(_event, 'recall')" target="done">
+        <assign location="result" expr="recallFailedResult(_event.data.message)"/>
+      </transition>
+      <transition event="error.*" target="done">
+        <assign location="result" expr="recallFailedResult(_event.name)"/>
+      </transition>
+    </state>
     <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
                 cond="hasRecalledWithoutChoices(_event)"
                 target="done">
       <assign location="result" expr="noChoicesResult()"/>
     </transition>
     <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
-                cond="hasRecalled(_event)"
+                cond="isCurrentTurn(_event)"
                 target="applying"/>
   </state>
 
@@ -123,21 +187,52 @@
     </transition>
   </state>
 
-  <!-- Memory seam (phase 3): nothing is written. -->
-  <state id="retaining">
-    <onentry>
-      <log label="memory" expr="'absent'"/>
-      <send event="bot.ability.reasoning.retained" target="#_internal">
-        <param name="turn" expr="turn"/>
-        <param name="result" expr="selected"/>
-        <param name="memory_consulted" expr="false"/>
-        <param name="memory_written" expr="false"/>
-        <param name="input" expr="focusInput()"/>
-      </send>
-    </onentry>
+  <!-- Retain the turn's episode, or nothing without a database. -->
+  <state id="retaining" initial="retaining_from">
+    <state id="retaining_from">
+      <transition cond="hasNoDatabase()" target="retaining_nothing"/>
+      <transition target="retaining_memory"/>
+    </state>
+    <state id="retaining_nothing">
+      <onentry>
+        <log label="memory" expr="'absent'"/>
+        <send event="bot.ability.reasoning.retained" target="#_internal">
+          <param name="turn" expr="turn"/>
+          <param name="result" expr="selected"/>
+          <param name="memory_consulted" expr="false"/>
+          <param name="memory_written" expr="false"/>
+          <param name="input" expr="focusInput()"/>
+        </send>
+      </onentry>
+    </state>
+    <state id="retaining_memory">
+      <onentry>
+        <assign location="episode" expr="episodeContent()"/>
+      </onentry>
+      <invoke id="retain" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="episodeInsertStatements()"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+                  cond="isFromInvoke(_event, 'retain')">
+        <send event="bot.ability.reasoning.retained" target="#_internal">
+          <param name="turn" expr="turn"/>
+          <param name="result" expr="selected"/>
+          <param name="memory_consulted" expr="true"/>
+          <param name="memory_written" expr="true"/>
+          <param name="input" expr="focusInput()"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                  cond="isFromInvoke(_event, 'retain')" target="done">
+        <assign location="result" expr="retainFailedResult(_event.data.message)"/>
+      </transition>
+      <transition event="error.*" target="done">
+        <assign location="result" expr="retainFailedResult(_event.name)"/>
+      </transition>
+    </state>
     <transition event="bot.ability.reasoning.retained" event:schema="schemas/bot.ability.reasoning.retained.json"
-                cond="hasRetained(_event)"
-                target="done">
+                cond="isCurrentTurn(_event)" target="done">
       <assign location="result" expr="selectedResult()"/>
     </transition>
   </state>

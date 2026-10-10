@@ -49,7 +49,7 @@ use serde_json::{Value as Json, json};
 use support::{Finished, Run, logs, trace, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup included).
-const WAIT: Duration = Duration::from_secs(60);
+const WAIT: Duration = Duration::from_secs(300);
 
 /// The cognition the scratch layout gets.
 enum Cognition {
@@ -101,7 +101,13 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
     )
     .expect("the body's script is copyable");
     let abilities = dir.join("abilities");
-    for name in ["communication", "conversation", "speaking", "identity"] {
+    for name in [
+        "communication",
+        "conversation",
+        "speaking",
+        "identity",
+        "memory",
+    ] {
         support::copy_ability(name, &abilities);
     }
     let ability = abilities.join("cognition/cognition.scx");

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.identity.adopt.failed",
+  "description": "FailureData signal produced when an ability operation cannot complete.",
+  "properties": {
+    "message": {
+      "description": "Human-readable failure message for the ability operation.",
+      "examples": [
+        "Provider request failed."
+      ],
+      "title": "Message",
+      "type": "string"
+    }
+  },
+  "required": [
+    "message"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "message": "Provider request failed."
+    }
+  ]
+}

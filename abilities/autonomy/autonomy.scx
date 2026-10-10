@@ -17,8 +17,8 @@
 
   Input: the <param>s turn, input (focus and focus_candidates, mosfet's
   bot.ability.autonomy.input, schemas/bot.ability.autonomy.input.json),
-  stimulus (the turn's stimulus envelope) and memory (the memory
-  database path; null means no inventory, so nothing matches).
+  stimulus (the turn's stimulus envelope) and database (the memory
+  database; null means no inventory, so nothing matches).
 
   Matching (mosfet _prepare_match, _match_activity): one memory
   transaction selects the ACTIVE behaviors of lifetime 'turn' that have a
@@ -59,7 +59,7 @@
     <data id="turn" expr="0"/>
     <data id="input" expr="null"/>
     <data id="stimulus" expr="null"/>
-    <data id="memory" expr="null"/>
+    <data id="database" expr="null"/>
     <data id="silence_ms" expr="1000"/>
     <data id="memory_timeout_ms" expr="10000"/>
     <data id="rows" expr="[]"/>
@@ -76,11 +76,11 @@
 
   <state id="matching">
     <onentry>
-      <if cond="hasNoInventory()">
-        <log label="autonomy" expr="noBehaviorsLog()"/>
+      <if cond="hasNoMemory()">
+        <log label="autonomy" expr="noMemoryLog()"/>
       </if>
     </onentry>
-    <transition cond="hasNoInventory()" target="done"/>
+    <transition cond="hasNoMemory()" target="done"/>
     <transition target="loading"/>
   </state>
 
@@ -93,7 +93,7 @@
       <cancel sendidexpr="timer"/>
     </onexit>
     <invoke id="load" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="memory"/>
+      <param name="database" expr="database"/>
       <param name="statements" expr="behaviorSelectStatements()"/>
     </invoke>
     <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" cond="isFromInvoke(_event, 'load')">
@@ -170,7 +170,7 @@
       <cancel sendidexpr="timer"/>
     </onexit>
     <invoke id="usage" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="memory"/>
+      <param name="database" expr="database"/>
       <param name="statements" expr="usedPersistenceStatements()"/>
     </invoke>
     <transition event="done.invoke.usage" target="answered"/>
@@ -194,7 +194,7 @@
       <cancel sendidexpr="timer"/>
     </onexit>
     <invoke id="failure" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="memory"/>
+      <param name="database" expr="database"/>
       <param name="statements" expr="failedPersistenceStatements()"/>
     </invoke>
     <transition event="done.invoke.failure" target="advancing"/>

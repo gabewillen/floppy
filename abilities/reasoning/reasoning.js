@@ -2,10 +2,14 @@
 // <script src="reasoning.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// recalling
+// Shared by recalling and retaining.
 
-function hostInput() {
-  return ({input: stimulus});
+function hasNoDatabase() {
+  return database === null;
+}
+
+function isFromInvoke(_event, invokeid) {
+  return _event.invokeid === invokeid;
 }
 
 // The input of bot.ability.reasoning.recalled and .retained.
@@ -13,13 +17,43 @@ function focusInput() {
   return ({focus: focus, focus_candidates: focus_candidates});
 }
 
-// mosfet Reasoning._has_recalled: this turn's recall, memory not consulted.
-function hasRecalled(_event) {
-  return _event.data.turn === turn && _event.data.memory_consulted === false;
+// This turn's bot.ability.reasoning.recalled or .retained.
+function isCurrentTurn(_event) {
+  return _event.data.turn === turn;
+}
+
+// recalling
+
+// mosfet _context_ref_from_input: the stimulus's target_device, or null.
+function contextRefFromInput() {
+  return typeof Object(Object(stimulus).data).target_device === 'string' ? stimulus.data.target_device : null;
+}
+
+function hostInput() {
+  return ({input: stimulus});
+}
+
+// mosfet episodes.py: the prior cognitive episodes.
+function episodeSelectStatements() {
+  return [{sql: episode_select, parameters: ['cognitive_episode', context_ref]}];
+}
+
+// mosfet directives.py: the standing directives appended.
+function directiveSelectStatements() {
+  return statements.concat([{sql: episode_select, parameters: ['standing_directive', context_ref]}]);
+}
+
+// The parsed contents of the rows of one statement's result.
+function recalledContents(_event, index) {
+  return _event.data.results[index].rows.map(function (row) { return JSON.parse(row.values[0]); });
+}
+
+function recallFailedResult(detail) {
+  return ({turn: turn, handled: false, failed: true, reason: 'Reasoning memory recall failed: ' + detail});
 }
 
 function hasRecalledWithoutChoices(_event) {
-  return hasRecalled(_event) && choices.length === 0;
+  return isCurrentTurn(_event) && choices.length === 0;
 }
 
 function noChoicesResult() {
@@ -33,7 +67,7 @@ function choiceNamesLog() {
 }
 
 function modelPrompt() {
-  return JSON.stringify({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates});
+  return JSON.stringify({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, prior_episodes: prior_episodes, standing_directives: standing_directives});
 }
 
 // The events of a generate.result object reply, else selected unchanged.
@@ -64,9 +98,17 @@ function couldNotRunResult(_event) {
 
 // retaining
 
-// mosfet Reasoning._has_retained: this turn's retain, memory not written.
-function hasRetained(_event) {
-  return _event.data.turn === turn && _event.data.memory_written === false;
+// The turn's episode, as JSON.
+function episodeContent() {
+  return JSON.stringify({focus: context_ref, focus_candidates: [], stimulus_name: stimulus.event, output: selected, behavior: null});
+}
+
+function episodeInsertStatements() {
+  return [{sql: episode_insert, parameters: ['memory', context_ref, 'task', 'standard', 'retain', episode, 'application/json', 'cognitive_episode']}];
+}
+
+function retainFailedResult(detail) {
+  return ({turn: turn, handled: false, failed: true, reason: 'Reasoning memory retain failed: ' + detail});
 }
 
 function selectedResult() {

@@ -54,7 +54,12 @@
 //! WASI port (`SQLITE_WASI`: single-threaded, no extension loading, the
 //! `unix-dotfile` locking VFS, no WAL); it reaches the granted directory
 //! through `wasi:filesystem` and reads the wall clock for
-//! `CURRENT_TIMESTAMP`.
+//! `CURRENT_TIMESTAMP`. It has no entropy source (no `/dev/urandom`, and
+//! the component imports no `wasi:random`), so SQLite seeds its PRNG from
+//! the time in seconds: `random()` and `randomblob()` repeat across
+//! invocations in the same second and are not identifiers. A statement that
+//! needs a fresh key derives it inside its transaction (for example from
+//! `max(rowid)`).
 //!
 //! # Events
 //!

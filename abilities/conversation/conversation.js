@@ -9,6 +9,48 @@ function inputEnvelope() {
   return {event: 'bot.ability.conversation.input', data: input};
 }
 
+// recalling_from
+
+function isMemoryAbsent() {
+  return database === null;
+}
+
+// recalling_memory
+
+// The input as remembered: {source_ids, target_ids, content, content_type} as JSON.
+function rememberedInput() {
+  return JSON.stringify({source_ids: input.source_ids, target_ids: input.target_ids, content: input.content, content_type: input.content_type});
+}
+
+// The recall of the relationship's memories (mosfet conversation_memory_recall_input).
+function memoryRecallStatements() {
+  return [{sql: memory_select, parameters: ['conversation_memory', message.provenance.session_ref]}];
+}
+
+// The statements with the input's insert (mosfet conversation_memory_insert_input).
+function statementsWithMemoryInsert() {
+  return statements.concat([{sql: memory_insert, parameters: ['memory', message.provenance.session_ref, 'conversation']}]);
+}
+
+// The insert's parameters with the remembered input.
+function memoryInsertParameters() {
+  return statements[1].parameters.concat(['standard', 'retain', remembered, 'application/json', 'conversation_memory']);
+}
+
+function isFromMemory(_event) {
+  return _event.invokeid === 'memory';
+}
+
+function memoriesLog(_event) {
+  return 'recalled ' + _event.data.results[0].rowcount + ', remembered ' + _event.data.results[1].rowcount;
+}
+
+function memoryFailedMessage(_event) {
+  return 'Conversation memory failed: ' + _event.data.message;
+}
+
+// committing
+
 function historyWithMessage() {
   return history.concat([message]);
 }

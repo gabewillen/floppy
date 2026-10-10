@@ -11,7 +11,7 @@ Last updated: 2026-10-09.
 
 ## Current state (2026-10-09) — resume here
 
-- **Layout (2026-10-10, D44):** every bot and ability is
+- **Layout (2026-10-10, D48):** every bot and ability is
   `<name>/<name>.scx` with its ECMAScript in `<name>/<name>.js` beside it
   (one root `<script src="<name>.js"/>`; conds and exprs call its
   functions). Abilities are `abilities/<ability>/<ability>.scx`, each with
@@ -44,6 +44,27 @@ Last updated: 2026-10-09.
 - **Open for the user:** harden
   `scxml_conformance::RunReport::read_json` (`--baseline`) like the scx
   readers; the gateway report.
+
+## Phase 3 (2026-10-10): memory service
+
+- **Branch:** `claude/project-thread-r7141w` (from `claude/project-thread-brkerr`),
+  pushed to `gabewillen/floppy`; the phase 4 branch merges its commits.
+- **Done:** `services/sql` (one SQLite transaction per `<invoke>`, any
+  schema) and `abilities/memory.scx` (mosfet's Memory: migrates mosfet's
+  schema and applies statements through the sql service), decisions D44 to
+  D47. Reasoning, identity and conversation recall and remember through the
+  memory ability, and the body passes its database `/memory/floppy.sqlite`
+  (README: the run grants
+  `--dir https://github.com/stateforward/floppy/services/sql=HOST::/memory`).
+  Plan: [plans/phase3-memory.mdscript.md](plans/phase3-memory.mdscript.md).
+- **Building:** the sql component is C (SQLite), so
+  `scripts/build-components.sh` (and every test, which runs it) needs
+  wasi-sdk 25 at `WASI_SDK_PATH` (it checks `$WASI_SDK_PATH/VERSION`).
+- **Tests:** a run whose documents bind the sql service gets a fresh
+  granted directory from `support::memory_grant()` unless it passes its
+  own. Each `scx run` takes 15 to 25 s of CPU to start (component
+  compilation, no cache), so the behavior tests' per-record bound is 300 s.
+- **Next:** phase 5 (behaviors and routines, stored in memory), 6, 7.
 
 ## Repositories
 

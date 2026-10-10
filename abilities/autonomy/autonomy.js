@@ -18,13 +18,13 @@ function memoryTimeoutDelay() {
 
 // matching
 
-// memory null means no inventory, so nothing matches.
-function hasNoInventory() {
-  return memory === null;
+// database null means no inventory, so nothing matches.
+function hasNoMemory() {
+  return database === null;
 }
 
-function noBehaviorsLog() {
-  return 'turn ' + turn + ': no behaviors (phase 5)';
+function noMemoryLog() {
+  return 'turn ' + turn + ': no memory';
 }
 
 // loading

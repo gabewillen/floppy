@@ -38,6 +38,11 @@ function historyLength(_event) {
   return String(_event.data.messages.length);
 }
 
+// A failed conversation input, as stage: message.
+function conversationFailedLog(_event) {
+  return _event.data.stage + ': ' + _event.data.message;
+}
+
 function childRunFailure(_event) {
   return 'the ' + _event.invokeid + ' child could not run (' + _event.name + ')';
 }

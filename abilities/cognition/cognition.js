@@ -98,3 +98,10 @@ function tunerLog() {
 function intuitionFailure(_event) {
   return 'the intuition failed: ' + stageFailure(_event);
 }
+
+// completing
+
+// The reflection's cognition_input: the turn's stimulus, focus and focus_candidates.
+function cognitionInput() {
+  return ({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates});
+}
