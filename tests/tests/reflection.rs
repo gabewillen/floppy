@@ -72,23 +72,18 @@ fn draft(scxml: &str) -> String {
     .to_string()
 }
 
-/// A streamed Chat Completions answer carrying `content`.
-fn streamed(content: &str) -> String {
-    let chunk = |delta: Json, finish: Option<&str>| {
-        json!({
-            "object": "chat.completion.chunk",
-            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
-        })
-    };
-    [
-        chunk(json!({"role": "assistant", "content": ""}), None),
-        chunk(json!({"content": content}), None),
-        chunk(json!({}), Some("stop")),
-    ]
-    .iter()
-    .map(|chunk| format!("data: {chunk}\n\n"))
-    .chain(std::iter::once("data: [DONE]\n\n".to_owned()))
-    .collect()
+/// A non-streamed Chat Completions answer carrying `content`, as the
+/// generate service asks for one by default.
+fn completion(content: &str) -> String {
+    json!({
+        "object": "chat.completion",
+        "choices": [{
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {"role": "assistant", "content": content},
+        }],
+    })
+    .to_string()
 }
 
 fn create_selection() -> Json {
@@ -139,12 +134,14 @@ fn answer(target: &str, body: &Json) -> Option<String> {
         .pointer("/response_format/json_schema/name")?
         .as_str()?;
     match schema {
-        "dispatch" => Some(streamed(&json!({"events": selection(route)?}).to_string())),
-        "topology_plan" => Some(streamed(PLAN)),
-        "scxml_draft" if route == "buildfail" => Some(streamed(&draft(
+        "dispatch" => Some(completion(
+            &json!({"events": selection(route)?}).to_string(),
+        )),
+        "topology_plan" => Some(completion(PLAN)),
+        "scxml_draft" if route == "buildfail" => Some(completion(&draft(
             &BEHAVIOR.replace("target=\"answered\"", "target=\"nowhere\""),
         ))),
-        "scxml_draft" => Some(streamed(&draft(BEHAVIOR))),
+        "scxml_draft" => Some(completion(&draft(BEHAVIOR))),
         _ => None,
     }
 }
