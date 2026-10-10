@@ -13,3 +13,4 @@
 {"label":"cognition.failed","parent":"session","session":"session.1","text":"the intuition failed: the decision timed out after 300 ms","type":"log"}
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}
 {"label":"bot.processing.failed","session":"session","text":"{\"message\":\"the intuition failed: the decision timed out after 300 ms\",\"turn\":1}","type":"log"}
+{"body":null,"target":"","type":"request"}

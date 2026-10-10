@@ -512,9 +512,16 @@ fn intuition_dispatches_an_offered_event_to_its_target() {
         texts(&records, "bot.route"),
         strings(&["bot.ability.communication.activate -> communication"])
     );
-    assert_eq!(selection_labels(&mock), strings(&[IGNORE, ACTIVATE, "none of these"]));
+    assert_eq!(
+        selection_labels(&mock),
+        strings(&[IGNORE, ACTIVATE, "none of these"])
+    );
     assert!(mock.received("/chat/completions").is_empty());
-    close(run, &mock, "intuition_dispatches_an_offered_event_to_its_target");
+    close(
+        run,
+        &mock,
+        "intuition_dispatches_an_offered_event_to_its_target",
+    );
 }
 
 #[test]
@@ -551,7 +558,10 @@ fn intuition_handles_an_ignore_without_reasoning() {
     assert_eq!(texts(&records, "cognition.ignore"), strings(&["idle"]));
     // The decision offered the turn's choices it could fill (respond's
     // text and adopt's name have no grounded value); no model was asked.
-    assert_eq!(selection_labels(&mock), strings(&[IGNORE, ACTIVATE, "none of these"]));
+    assert_eq!(
+        selection_labels(&mock),
+        strings(&[IGNORE, ACTIVATE, "none of these"])
+    );
     assert!(mock.received("/chat/completions").is_empty());
     let finished = close(run, &mock, "intuition_handles_an_ignore_without_reasoning");
     // The cognition offers ignore from each idle entry (the activation's
