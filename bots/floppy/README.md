@@ -4,18 +4,18 @@ The floppy bot is the port of mosfet's Bot: an SCXML machine,
 [`floppy.scx`](floppy.scx), whose abilities are invoked children under
 [`../../abilities/`](../../abilities/). Phase 4 is in progress: the body runs
 its lifecycle and processing turns, and its abilities are the
-[cognition](../../abilities/cognition.scx), mosfet's cascade of stages
-invoked per turn: [autonomy](../../abilities/autonomy.scx) (a seam until
-phase 5: no behaviors), [intuition](../../abilities/intuition.scx) (the
+[cognition](../../abilities/cognition/cognition.scx), mosfet's cascade of stages
+invoked per turn: [autonomy](../../abilities/autonomy/autonomy.scx) (a seam until
+phase 5: no behaviors), [intuition](../../abilities/intuition/intuition.scx) (the
 decision service picks ignore or hands the turn on, with mosfet's
-self-tuning confidence gate), and [reasoning](../../abilities/reasoning.scx)
+self-tuning confidence gate), and [reasoning](../../abilities/reasoning/reasoning.scx)
 (one structured model call over the turn's choices; it recalls and retains
-through the [memory](../../abilities/memory.scx) ability), and the [communication](../../abilities/communication.scx),
-which holds the [conversation](../../abilities/conversation.scx) (the
+through the [memory](../../abilities/memory/memory.scx) ability), and the [communication](../../abilities/communication/communication.scx),
+which holds the [conversation](../../abilities/conversation/conversation.scx) (the
 committed text history, one transcript per participant set, recalled and
 remembered through the memory ability; inferring participants and relationships from
 voice embeddings, mosfet's turn detectors, is phase 6) and
-[speaking](../../abilities/speaking.scx) (text mode: the words are logged
+[speaking](../../abilities/speaking/speaking.scx) (text mode: the words are logged
 as `bot.say`; speech synthesis and playout are phase 6). Each turn the body
 assembles the choices (its own
 `bot.focus_device`, pinned to the turn's focus candidates, and
@@ -55,7 +55,7 @@ is optional, `https://api.typesafe.ai` without it). Without the TypeSafe key
 every turn fails with `the decision failed (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
 `bot.activate` may name the model (`{"model": "..."}`); the default is
-`Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory.scx`, mosfet's
+`Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory/memory.scx`, mosfet's
 Memory) keeps the bot's database, `/memory/floppy.sqlite`, through the sql
 service (`services/sql`, SQLite), in the directory the run grants that
 service: `--dir

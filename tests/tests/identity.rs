@@ -1,10 +1,10 @@
-//! The floppy bot's identity (`abilities/identity.scx`), run as the body's
+//! The floppy bot's identity (`abilities/identity/identity.scx`), run as the body's
 //! child through `scx run` on the wall clock.
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
 //! under `bots/floppy/`, the communication, conversation, speaking,
 //! identity, memory and every schema under `abilities/`) with
-//! `tests/fixtures/phase4/cognition_double.scx` as `abilities/cognition.scx`
+//! `tests/fixtures/phase4/cognition_double.scx` as `abilities/cognition/cognition.scx`
 //! (no model; an addressed turn answers "I am <name>", a `bot.input`
 //! observation `adopt` selects `bot.ability.identity.adopt` for its data).
 //! A bot is born nameless; a test that needs a name rewrites the identity's
@@ -55,10 +55,6 @@ fn layout(name: Option<&str>) -> PathBuf {
         &workspace().join("bots/floppy/schemas"),
         &dir.join("bots/floppy/schemas"),
     );
-    copy_dir(
-        &workspace().join("abilities/schemas"),
-        &dir.join("abilities/schemas"),
-    );
     for name in [
         "communication",
         "conversation",
@@ -66,20 +62,16 @@ fn layout(name: Option<&str>) -> PathBuf {
         "identity",
         "memory",
     ] {
-        let name = format!("{name}.scx");
-        std::fs::copy(
-            workspace().join("abilities").join(&name),
-            dir.join("abilities").join(&name),
-        )
-        .expect("the ability is copyable");
+        support::copy_ability(name, &dir.join("abilities"));
     }
+    std::fs::create_dir_all(dir.join("abilities/cognition")).expect("creatable");
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/cognition_double.scx"),
-        dir.join("abilities/cognition.scx"),
+        dir.join("abilities/cognition/cognition.scx"),
     )
     .expect("the double is copyable");
     if let Some(name) = name {
-        let path = dir.join("abilities/identity.scx");
+        let path = dir.join("abilities/identity/identity.scx");
         let text = std::fs::read_to_string(&path).expect("the identity is readable");
         let named = text.replacen(
             r#"<data id="name" expr="null"/>"#,
@@ -255,11 +247,11 @@ fn an_adopted_name_is_answered_to() {
     );
 }
 
-#[test]
-fn an_adopted_name_is_recalled_by_the_next_run() {
-    let body = layout(None);
-    let grant = support::memory_grant();
-    let (mut run, _) = started_with(&body, &grant);
+/// Adopts "Floppy", then "Pip", in one run and wakes the next run with
+/// `grant` before the body; returns that run and its records up to the
+/// activation.
+fn adopted_then_recalled(body: &Path, grant: &[String]) -> (Run, Vec<Json>) {
+    let (mut run, _) = started_with(body, grant);
     run.event("bot.input", &input("adopt", "Floppy"));
     run.until(WAIT, label_is("identity.offers"));
     run.event("bot.input", &input("adopt", "Pip"));
@@ -271,10 +263,30 @@ fn an_adopted_name_is_recalled_by_the_next_run() {
     assert!(texts(&records, "identity.adopt.failed").is_empty());
     drop(run.close(WAIT));
     // The next run wakes up with the name it took last.
-    let (run, records) = started_with(&body, &grant);
+    let (run, records) = started_with(body, grant);
     assert_eq!(
         texts(&records, "identity.name"),
         strings(&[r#"recalled "Pip""#])
     );
+    (run, records)
+}
+
+#[test]
+fn an_adopted_name_is_recalled_by_the_next_run() {
+    let body = layout(None);
+    let (run, _) = adopted_then_recalled(&body, &support::memory_grant());
     close(run, "an_adopted_name_is_recalled_by_the_next_run");
+}
+
+/// The same on the Postgres engine: the body's database is a `PGlite`
+/// server's connection URI.
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_an_adopted_name_is_recalled_by_the_next_run() {
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    let body = layout(None);
+    support::use_database(&body, &server.database());
+    let (run, records) = adopted_then_recalled(&body, &support::pgsql_grant());
+    assert!(texts(&records, "memory").is_empty(), "{records:?}");
+    drop(run.close(WAIT));
 }

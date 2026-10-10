@@ -19,4 +19,4 @@ manifest [`package/bot.extension.json`](package/bot.extension.json) pins.
 (imports: `types`, `telemetry`, `data-model-host`) and publishes it into the
 dev package cache. The floppy body ([`bots/floppy/floppy.scx`](../../bots/floppy/floppy.scx))
 uses `attention` and `stimulus`; the identity ability
-([`abilities/identity.scx`](../../abilities/identity.scx)) uses `recognize`.
+([`abilities/identity/identity.scx`](../../abilities/identity/identity.scx)) uses `recognize`.

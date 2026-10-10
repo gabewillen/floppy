@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.communication.respond",
+  "additionalProperties": false,
+  "description": "A response to communicate aloud. Communication routes the text through its injected Speaking ability; cognition does not select Speaking directly.",
+  "properties": {
+    "text": {
+      "description": "The complete non-blank text to communicate. It is spoken verbatim by the configured Speaking ability after this action is selected.",
+      "examples": [
+        "I am doing well, thank you."
+      ],
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "text": "I am doing well, thank you."
+    }
+  ]
+}

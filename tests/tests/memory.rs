@@ -1,4 +1,4 @@
-//! The memory ability (`abilities/memory.scx`, mosfet's Memory) run as a
+//! The memory ability (`abilities/memory/memory.scx`, mosfet's Memory) run as a
 //! harness document's child through `scx run`: it migrates the database to
 //! mosfet's head schema and applies one transaction of statements through
 //! the sql service, answering its parent with `bot.ability.memory.output`
@@ -21,7 +21,7 @@ mod support;
 use std::path::Path;
 use std::time::Duration;
 
-use support::{Finished, Pglite, Run, logs, service_uri, unique_scratch, workspace};
+use support::{Finished, Pglite, Run, logs, service_uri, unique_scratch};
 
 /// The SQLite database every SQLite case uses (in the granted directory).
 const SQLITE: &str = "/memory/floppy.sqlite";
@@ -55,7 +55,7 @@ fn harness_on(database: &str, engine: &str, before: Option<&str>, statements: &s
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="{initial}">
   {aging}
   <state id="remembering">
-    <invoke id="memory" type="scxml" src="memory.scx">
+    <invoke id="memory" type="scxml" src="memory/memory.scx">
       <param name="database" expr="'{database}'"/>
       <param name="statements" expr="{statements}"/>
     </invoke>
@@ -75,11 +75,7 @@ fn harness_on(database: &str, engine: &str, before: Option<&str>, statements: &s
 /// service `directory`.
 fn run(directory: &Path, document: &str) -> Finished {
     let dir = unique_scratch("memory-ability");
-    std::fs::copy(
-        workspace().join("abilities/memory.scx"),
-        dir.join("memory.scx"),
-    )
-    .expect("the ability is copyable");
+    support::copy_ability("memory", &dir);
     let path = support::write(&dir, "harness.scx", document);
     let mut run = Run::start(
         &[

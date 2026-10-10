@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Reading ability (mosfet abilities/reading): it focuses on one
+  readable text or image input and answers its invoker with normalized
+  readable text. Nothing in the bot invokes it yet: mosfet maps no
+  environment.visual to reading, so neither does floppy.
+
+    Reading { Unfocused -bot.ability.reading.input-> Focused {
+      Classifying { Applying -> Classified },
+      DecodingText | DecodingImage | PreparingUnreadableOutput,
+      EncodingOutput } -> Unfocused }
+
+  Reading is the document's own composite (mosfet's machine root): it
+  invokes abilities/vision/vision.scx as its long-lived child "vision" (mosfet's
+  visual classifier, invoked for reading's lifetime; invoke lifecycle
+  replaces mosfet's attachment group). Its other stages are mosfet's
+  providers inline: the text decoder and the output encoder pass their
+  input through (mosfet's mlx_vlm TextDecoder and ReadingOutputEncoder),
+  and the image decoder is the generate service with an image part.
+
+  Applying sends the input to the vision child as
+  bot.ability.vision.classification.input and turns its
+  bot.ability.vision.classification.output into
+  bot.ability.reading.classification.completed {input, classification}
+  (mosfet's private completion), which goes to Classified. Classified is
+  mosfet's choice: text classified as text goes to DecodingText, an image
+  classified as image to DecodingImage, unreadable to
+  PreparingUnreadableOutput, and any other pairing answers
+  bot.ability.reading.failed {stage: "classification"} at once.
+
+  DecodingText sends bot.ability.reading.text.decoded {text, source_kind:
+  "text", confidence}; PreparingUnreadableOutput sends
+  bot.ability.reading.unreadable.output.ready {text: "", source_kind:
+  "unreadable", confidence}; DecodingImage invokes the generate service
+  with one user message whose content is mosfet's ImageDecoder prompt
+  ("Read all visible text in this image. Return only the text.") as a
+  text part ({kind: "text", content}) and the input's reference as an
+  image part ({kind: "image", content}), mosfet's reading parts, and sends
+  bot.ability.reading.image.decoded {text (the reply, trimmed as mosfet
+  does), source_kind: "image", confidence}. The confidence is the
+  classification's. EncodingOutput sends
+  bot.ability.reading.output.encoded with the candidate unchanged, and the
+  transition taking it answers the parent with bot.ability.reading.output
+  {text, source_kind, confidence}.
+
+  Failures: a stage that cannot complete sends
+  bot.ability.reading.stage.failed {stage, message} to itself, and Focused
+  answers the parent with bot.ability.reading.failed {stage, message} and
+  returns to Unfocused: the vision child's bot.ability.failed, an error
+  while classifying, generate.failed (its code in the message), a reply
+  without text, or an error while decoding the image. Applying and
+  DecodingImage are each bounded by mosfet's 30 s stage timeout
+  (stage_timeout_ms); leaving DecodingImage cancels the model call (SCXML
+  6.4).
+
+  Defer queue (mosfet defers the input while Focused): an input arriving
+  while Focused is appended to queue, and Unfocused takes the oldest one
+  as it is entered.
+
+  Media by reference: an image input's content is a reference (a URI
+  reference) to the image file in the media directory the run grants the
+  generate service as its guest directory /media (scx run's dir grant
+  for https://github.com/stateforward/floppy/services/generate, so
+  "media/page.png" names /media/page.png); the service reads the file and
+  sends it as a data: URL, and an unreadable reference rejects the start
+  (error.execution, a failed image_decoding). This document never holds
+  image bytes.
+
+  Logs: reading.focused (the input's kind), reading.output (the
+  source_kind) and reading.failed (the stage).
+
+  Contracts: every event it takes, its own included, references its
+  abilities/schemas/ file by event:schema. The generate service's events
+  are not checked by scxml.rs (it checks only events between SCXML
+  sessions), so their conds check their shape.
+
+  Bindings: the generate service package, resolved from its repository
+  URI; env scopes FLOPPY_API_KEY and FLOPPY_BASE_URL to its <invoke> (no
+  default backend: without either it answers generate.failed
+  unconfigured). model is the vision model the Sparks serve; an invoker
+  may pass another by <param>.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="Reading" initial="Reading">
+  <datamodel>
+    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="prompt" expr="'Read all visible text in this image. Return only the text.'"/>
+    <data id="stage_timeout_ms" expr="30000"/>
+    <!-- The operation in flight. -->
+    <data id="input" expr="null"/>
+    <data id="classified" expr="null"/>
+    <data id="candidate" expr="null"/>
+    <data id="stage_timer" expr="null"/>
+    <data id="gen_id" expr="null"/>
+    <data id="queue" expr="[]"/>
+  </datamodel>
+  <script src="reading.js"/>
+
+  <state id="Reading" initial="Unfocused">
+    <invoke id="vision" type="scxml" src="../vision/vision.scx"/>
+
+    <state id="Unfocused">
+      <!-- An input that waited while Focused, oldest first. -->
+      <transition cond="hasDeferredInput()" target="Focused">
+        <assign location="input" expr="queue.shift()"/>
+        <log label="reading.focused" expr="input.kind"/>
+      </transition>
+      <transition event="bot.ability.reading.input" event:schema="schemas/bot.ability.reading.input.json"
+                  target="Focused">
+        <assign location="input" expr="_event.data"/>
+        <log label="reading.focused" expr="input.kind"/>
+      </transition>
+    </state>
+
+    <state id="Focused" initial="Classifying">
+      <transition event="bot.ability.reading.input" event:schema="schemas/bot.ability.reading.input.json">
+        <assign location="queue" expr="deferredQueue(_event)"/>
+      </transition>
+      <transition event="bot.ability.reading.stage.failed" event:schema="schemas/bot.ability.reading.stage.failed.json"
+                  target="Unfocused">
+        <log label="reading.failed" expr="stageFailureLog(_event)"/>
+        <send event="bot.ability.reading.failed" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+
+      <state id="Classifying" initial="Applying">
+        <!-- The vision child classifies the input. -->
+        <state id="Applying">
+          <onentry>
+            <send idlocation="stage_timer" event="bot.ability.reading.stage.failed" delayexpr="stageTimeoutDelay()">
+              <param name="stage" expr="'classification'"/>
+              <param name="message" expr="classificationTimeoutMessage()"/>
+            </send>
+            <send event="bot.ability.vision.classification.input" target="#_vision">
+              <content expr="input"/>
+            </send>
+          </onentry>
+          <onexit>
+            <cancel sendidexpr="stage_timer"/>
+          </onexit>
+          <transition event="bot.ability.vision.classification.output"
+                      event:schema="schemas/bot.ability.vision.classification.output.json" cond="isVision(_event)">
+            <send event="bot.ability.reading.classification.completed" target="#_internal">
+              <param name="input" expr="input"/>
+              <param name="classification" expr="_event.data"/>
+            </send>
+          </transition>
+          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isVision(_event)">
+            <send event="bot.ability.reading.stage.failed" target="#_internal">
+              <param name="stage" expr="'classification'"/>
+              <param name="message" expr="_event.data.message"/>
+            </send>
+          </transition>
+          <transition event="error.*">
+            <send event="bot.ability.reading.stage.failed" target="#_internal">
+              <param name="stage" expr="'classification'"/>
+              <param name="message" expr="classificationCouldNotRunMessage(_event)"/>
+            </send>
+          </transition>
+          <transition event="bot.ability.reading.classification.completed"
+                      event:schema="schemas/bot.ability.reading.classification.completed.json" target="Classified">
+            <assign location="classified" expr="_event.data"/>
+          </transition>
+        </state>
+
+        <!-- mosfet's choice: the route the classification selects. -->
+        <state id="Classified">
+          <transition cond="classifiedAsText()" target="DecodingText"/>
+          <transition cond="classifiedAsImage()" target="DecodingImage"/>
+          <transition cond="classifiedAsUnreadable()" target="PreparingUnreadableOutput"/>
+          <transition target="Unfocused">
+            <log label="reading.failed" expr="'classification: the route did not match the input'"/>
+            <send event="bot.ability.reading.failed" target="#_parent">
+              <param name="stage" expr="'classification'"/>
+              <param name="message" expr="'Reading classification route did not match the input payload.'"/>
+            </send>
+          </transition>
+        </state>
+      </state>
+
+      <!-- The text decoder: the text is already readable. -->
+      <state id="DecodingText">
+        <onentry>
+          <send event="bot.ability.reading.text.decoded" target="#_internal">
+            <param name="text" expr="classified.input.content"/>
+            <param name="source_kind" expr="'text'"/>
+            <param name="confidence" expr="classified.classification.confidence"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.reading.text.decoded" event:schema="schemas/bot.ability.reading.text.decoded.json"
+                    target="EncodingOutput">
+          <assign location="candidate" expr="_event.data"/>
+        </transition>
+      </state>
+
+      <!-- The image decoder: the vision model reads the referenced image. -->
+      <state id="DecodingImage">
+        <onentry>
+          <send idlocation="stage_timer" event="bot.ability.reading.stage.failed" delayexpr="stageTimeoutDelay()">
+            <param name="stage" expr="'image_decoding'"/>
+            <param name="message" expr="imageDecodingTimeoutMessage()"/>
+          </send>
+        </onentry>
+        <onexit>
+          <cancel sendidexpr="stage_timer"/>
+        </onexit>
+        <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
+                env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
+          <param name="model" expr="model"/>
+          <param name="messages" expr="imageDecodingMessages()"/>
+        </invoke>
+        <transition event="generate.result" cond="isGenerateTextResult(_event)">
+          <send event="bot.ability.reading.image.decoded" target="#_internal">
+            <param name="text" expr="decodedImageText(_event)"/>
+            <param name="source_kind" expr="'image'"/>
+            <param name="confidence" expr="classified.classification.confidence"/>
+          </send>
+        </transition>
+        <transition event="generate.failed" cond="isGenerate(_event)">
+          <send event="bot.ability.reading.stage.failed" target="#_internal">
+            <param name="stage" expr="'image_decoding'"/>
+            <param name="message" expr="imageDecodingFailedMessage(_event)"/>
+          </send>
+        </transition>
+        <transition event="done.invoke" cond="isGenerate(_event)">
+          <send event="bot.ability.reading.stage.failed" target="#_internal">
+            <param name="stage" expr="'image_decoding'"/>
+            <param name="message" expr="'the image decoding returned no text'"/>
+          </send>
+        </transition>
+        <transition event="error.*">
+          <send event="bot.ability.reading.stage.failed" target="#_internal">
+            <param name="stage" expr="'image_decoding'"/>
+            <param name="message" expr="imageDecodingCouldNotRunMessage(_event)"/>
+          </send>
+        </transition>
+        <transition event="bot.ability.reading.image.decoded" event:schema="schemas/bot.ability.reading.image.decoded.json"
+                    target="EncodingOutput">
+          <assign location="candidate" expr="_event.data"/>
+        </transition>
+      </state>
+
+      <!-- Unreadable input reads as no text. -->
+      <state id="PreparingUnreadableOutput">
+        <onentry>
+          <send event="bot.ability.reading.unreadable.output.ready" target="#_internal">
+            <param name="text" expr="''"/>
+            <param name="source_kind" expr="'unreadable'"/>
+            <param name="confidence" expr="classified.classification.confidence"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.reading.unreadable.output.ready"
+                    event:schema="schemas/bot.ability.reading.unreadable.output.ready.json" target="EncodingOutput">
+          <assign location="candidate" expr="_event.data"/>
+        </transition>
+      </state>
+
+      <!-- The output encoder: the normalized output is kept as it is. -->
+      <state id="EncodingOutput">
+        <onentry>
+          <send event="bot.ability.reading.output.encoded" target="#_internal">
+            <content expr="candidate"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.reading.output.encoded" event:schema="schemas/bot.ability.reading.output.encoded.json"
+                    target="Unfocused">
+          <log label="reading.output" expr="_event.data.source_kind"/>
+          <send event="bot.ability.reading.output" target="#_parent">
+            <content expr="_event.data"/>
+          </send>
+        </transition>
+      </state>
+    </state>
+  </state>
+</scxml>

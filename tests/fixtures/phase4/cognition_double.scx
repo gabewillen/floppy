@@ -2,7 +2,7 @@
 <!--
   A cognition double for the body tests (tests/tests/body.rs): the body's
   child "cognition" without a model. tests/tests/body.rs copies it to
-  abilities/cognition.scx beside a copy of the body.
+  abilities/cognition/cognition.scx beside a copy of the body.
 
   Readiness: each entry into idle sends bot.ability.offers unless mode is
   'silent' (the test rewrites mode's expr): bot.ability.cognition.ignore

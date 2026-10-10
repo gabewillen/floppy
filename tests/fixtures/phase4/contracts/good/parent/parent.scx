@@ -1,0 +1,16 @@
+<!-- Contract fixture, parent: takes the child's contract.ready (schema
+     file) and sends it a schema-valid contract.ping. Every check in
+     tests/tests/contracts.rs passes on this pair. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" initial="invoking">
+  <script src="parent.js"/>
+  <state id="invoking">
+    <invoke id="child" type="scxml" src="../child/child.scx"/>
+    <transition event="contract.ready" event:schema="schemas/contract.ready.json" cond="fromChild(_event)">
+      <send event="contract.ping" target="#_child"><content>{"turn": 1}</content></send>
+    </transition>
+    <transition event="done.invoke.child" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>
