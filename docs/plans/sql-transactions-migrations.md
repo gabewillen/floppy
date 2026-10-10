@@ -70,39 +70,68 @@ stays open and holds one transaction:
   whether to retry. The invoking state's `<send delay>` bounds how long a
   transaction may stay open.
 
-## 3. Migrations: a parameter of the service, applied atomically
+## 3. Migrations: an Alembic-style migration ability, agnostic of the database
 
-```xml
-<data id="migrations" expr="[revision_0001, revision_0002]"/>
-<data id="revision_0001" src="memory/0001.sql"/>   <!-- mosfet Alembic 0001 -->
-<data id="revision_0002" src="memory/0002.sql"/>
-...
-<param name="migrations" expr="migrations"/>
-```
+The user's direction: "make it like alembic that's agnostic of the database
+so we have a migration service, and then sql has the transaction". The sql
+service keeps only transactions. Migrations become their own layer that
+knows revisions and never a database engine. A Wasm service cannot invoke
+another service, so the layer is two pieces:
 
-* `migrations` is an ordered array of revision scripts. Revision *n* brings
-  `PRAGMA user_version` from *n−1* to *n*, a linear history like
-  Alembic's.
-* Each script may hold several DDL statements: it is the document's own
-  trusted schema, run as a batch.
-* On every invocation that passes `migrations`, the service runs the
-  following in the same transaction as the statements, under the write lock:
-  1. It reads `user_version`.
-  2. It runs the missing revisions in order.
-  3. It sets `user_version` to the newest revision.
-* Version check and migration are therefore atomic: two concurrent first
-  runs cannot both migrate, and memory.scx's read-then-migrate step and its
-  retry go away.
-* A database newer than the newest revision is refused untouched:
-  `sql.failed {code: "schema-version"}`. A revision that fails rolls
-  everything back.
-* `sql.result` carries only the statements' results. `user_version` is
-  readable as a statement when a document needs it.
-* Revisions are append-only. A shipped revision never changes, and
-  downgrades are not supported (Alembic's `downgrade` is not ported).
-* The memory ability passes mosfet's 0001 and 0002 this way, and phase 5's
-  behaviors reuse them. A bot that needs its own tables uses its own
-  database file and its own revision list.
+* **`<migration:plan>`**: a pure Wasm namespace element in a new
+  `namespaces/migration`, with no I/O, synchronous logic per D13. It takes
+  the revisions, the current revision and a target, and writes the ordered
+  steps.
+  * It walks the revision graph as Alembic does, by `revision` and
+    `down_revision`.
+  * Targets are `head`, `base`, a revision id, or relative `+N`/`-N`.
+  * A step is `{revision, direction: "upgrade" | "downgrade", statements}`.
+  * Unknown revisions, multiple heads and cycles fail the element
+    (`error.execution`).
+* **`abilities/migration.scx`**: the runner, which plays Alembic's
+  `command.upgrade` and `command.downgrade`. It is invoked with
+  `<param name="database">`, `<param name="revisions">` and
+  `<param name="target">` (default `head`), and runs these states:
+  1. **Reading:** it invokes the sql service for the current version.
+  2. **Planning:** `<migration:plan>` computes the steps.
+  3. **Applying:** one sql transaction runs every step's statements and
+     updates the version row.
+  4. **Done:** `<donedata>` returns `{previous, current}`.
+
+  A failure answers `migration.failed {message, code}` and commits nothing.
+
+Revisions are data, like Alembic's script directory. One file per revision
+(`<data src="memory/migrations/0001.json">`) holds
+`{revision, down_revision, upgrade: [statements], downgrade: [statements]}`.
+
+* The statements are plain SQL for whatever engine the database is, so the
+  layer itself is agnostic. It never parses SQL, and phase 7's PGlite engine
+  reuses the same runner.
+* The version lives in Alembic's own table, `alembic_version (version_num)`,
+  not SQLite's `PRAGMA user_version`. That is portable, it is what mosfet's
+  databases already carry, and an existing mosfet SQLite file migrates in
+  place.
+
+Transactions:
+
+* The read and the apply are separate invocations. The apply's first
+  statement re-checks the version row inside the transaction:
+  `UPDATE alembic_version SET version_num = ?new WHERE version_num IS ?old`,
+  and the runner checks its rowcount.
+* So a concurrent migration that got there first makes the apply fail
+  cleanly with `code: "version-changed"`. The runner then re-reads once.
+* DDL is transactional on SQLite and Postgres, so a whole upgrade is one
+  transaction (Alembic's default for these engines).
+
+Usage:
+
+* The memory ability invokes the migration ability once per database open,
+  then its statements. A bot can also run it at activation.
+* `scx run` of a one-line document is the `alembic upgrade head` /
+  `downgrade -1` command line.
+
+Every name comes from Alembic: revision, down_revision, head, base,
+upgrade, downgrade, current, alembic_version.
 
 ## 4. Errors as events
 
@@ -110,10 +139,11 @@ stays open and holds one transaction:
 | --- | --- |
 | malformed `<param>` (missing database, bad statements or migrations) | `error.execution` (the invocation never starts) |
 | no grant for the directory | the run is refused before it starts (exit 2) |
-| SQL error, constraint, busy, bound exceeded, newer schema | `sql.failed {message, code}` |
+| SQL error, constraint, busy, bound exceeded | `sql.failed {message, code}` |
+| unknown target or revision, multiple heads, a lost version race | `migration.failed {message, code}` from the migration ability |
 
 * `code` is SQLite's extended result-code name (`SQLITE_CONSTRAINT_PRIMARYKEY`,
-  `SQLITE_BUSY`), or `schema-version`, `bound` or `cancelled`, so a
+  `SQLITE_BUSY`), or `bound` or `cancelled`, so a
   document can `cond` on it without parsing text.
 * `message` never carries a bound value or a path.
 * After `sql.failed` the invocation ends: nothing commits, and
@@ -125,5 +155,5 @@ stays open and holds one transaction:
   Every phase 3 caller works in batch mode, but phase 5's behavior
   authoring (validate, simulate, then store or discard) fits a transaction
   held open across events.
-* **Migrations as `.sql` files via `<data src>`** (recommended, if scxml.rs
-  loads them as text) or as strings in `<data expr>`, as now.
+* **Revision files.** Recommended: JSON files via `<data src>` (scxml.rs
+  parses JSON `<data src>` as data).
