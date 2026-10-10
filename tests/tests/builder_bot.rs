@@ -1,6 +1,7 @@
 //! Harness of the builder bot (`bots/builder/builder.scx`), run exactly as
-//! its README says: `scx run --env-file <file> bots/builder/builder.scx`,
-//! with the `builder.request` on standard input. Its packages resolve from
+//! its README says: `scx run --env-file <file> --dir <generate>=<dir>::/media
+//! bots/builder/builder.scx` (the harness grants the media directory,
+//! `support::media_grant`), with the `builder.request` on standard input. Its packages resolve from
 //! their repository URIs (the test cache `scripts/build-components.sh`
 //! published), its `env` attributes scope the values, and it ends in the
 //! final state `done` or `failed`, whose `<donedata>` `scx run` prints in its
@@ -669,6 +670,8 @@ fn run(mock: &Mock, test: &str, route: &str, env: &[&str], request: &Json) -> Ve
 /// scratch file.
 fn run_builder(mock: &Mock, test: &str, route: &str, builder: &str, request: &Json) -> Vec<Json> {
     let dir = scratch("builder-variant");
+    std::fs::copy(builder_dir().join("builder.js"), dir.join("builder.js"))
+        .expect("the builder's script is copyable");
     let document = write(&dir, &format!("{test}.scx"), builder);
     let env = env_file(test, mock, route, "typesafe", &ALL);
     start(&document, "logical", &[env], request, &[])
@@ -711,10 +714,8 @@ fn builder_validates_clean_with_its_repository_packages() {
     let validated = validate(&builder_dir().join("builder.scx"), &[]);
     assert!(validated.status.success(), "{}", validated.stderr);
     assert!(
-        validated
-            .stderr
-            .contains("diagnostic summary: 0 error(s), 0 warning(s), 0 note(s)"),
-        "builder.scx validates without an error, a warning, or a note: {}",
+        support::validates_but_for_script_src(&validated.stderr),
+        "builder.scx validates without an error, a note, or a warning but LINT019 for builder.js: {}",
         validated.stderr
     );
 }
@@ -1419,14 +1420,13 @@ fn a_blank_spec_is_answered_with_builder_failed() {
 
 /// Builds the spec with the real `generate` (and `decision`) backends on the
 /// wall clock (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, default
-/// `Qwen/Qwen3.8-Flash-Next`). Writes the produced bot under `target/builder-live/` and
+/// [`support::DEFAULT_MODEL`]). Writes the produced bot under `target/builder-live/` and
 /// prints only pass or fail and counts.
 #[test]
 #[ignore = "makes real model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_builder_through_an_env_file() {
     let env_files = support::live_env_files();
-    let model =
-        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "Qwen/Qwen3.8-Flash-Next".into());
+    let model = support::live_model();
     let finished = start(
         &builder_document(),
         "wall",

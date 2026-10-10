@@ -1,10 +1,11 @@
 //! Phase 4 event contracts: one canonical JSON Schema file per event,
 //! extracted from mosfet's pydantic models (docs/port-plan.md, "Phase 4
 //! event contracts"). Body events live in `bots/floppy/schemas/`, ability
-//! events in `abilities/schemas/`, beside the documents that reference
-//! them: an `event:schema` file reference is relative to its document and
-//! cannot leave the document's directory, so documents reference these
-//! files (`schemas/<event>.json`) and never carry inline copies.
+//! events in `abilities/schemas/`: an `event:schema` file reference is
+//! relative to its document and cannot leave the document's directory, so
+//! each ability references twins of these files in its own
+//! `abilities/<ability>/schemas/` (`schemas/<event>.json`) and never
+//! carries inline copies.
 //!
 //! Checked here, over the schema set:
 //!
@@ -27,9 +28,14 @@
 //!   the receiving document;
 //! * every `bot.*` or `environment.*` name used is mosfet's or a marked
 //!   floppy name;
-//! * no `<script>` element and no `function` token: payload checks are
-//!   `event:schema` (scxml.rs checks them where an event is created), and
-//!   a transition taking one contract event carries its `event:schema`;
+//! * the layout rule (decision D65): the document is `<name>/<name>.scx`,
+//!   its only `<script>` is the root `<script src="<name>.js"/>` naming the
+//!   `<name>.js` beside it, and the document itself has no `function`
+//!   token; each schema it references is a byte-identical twin of its
+//!   `abilities/schemas/` source;
+//! * payload checks are `event:schema` (scxml.rs checks them where an
+//!   event is created), and a transition taking one contract event carries
+//!   its `event:schema`;
 //! * every `cond`, and every `expr` outside `<data>`, is at most 160
 //!   characters [floppy rule];
 //! * every `<invoke type="scxml">` has a literal `id` and either a
@@ -85,7 +91,7 @@ const BODY_EVENTS: [&str; 14] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 52] = [
+const ABILITY_EVENTS: [&str; 64] = [
     "bot.ability.failed",
     "bot.ability.cognition.input",
     "bot.ability.cognition.output",
@@ -143,6 +149,19 @@ const ABILITY_EVENTS: [&str; 52] = [
     "bot.ability.listening.sensitivity.score",
     "bot.ability.listening.sensitivity.output",
     "bot.ability.listening.sensitivity.failed",
+    // Phase 6: mosfet's VisualClassification and Reading.
+    "bot.ability.vision.classification.input",
+    "bot.ability.vision.classification.output",
+    "bot.ability.vision.classification.apply.completed",
+    "bot.ability.reading.input",
+    "bot.ability.reading.output",
+    "bot.ability.reading.failed",
+    "bot.ability.reading.stage.failed",
+    "bot.ability.reading.classification.completed",
+    "bot.ability.reading.text.decoded",
+    "bot.ability.reading.image.decoded",
+    "bot.ability.reading.unreadable.output.ready",
+    "bot.ability.reading.output.encoded",
 ];
 
 /// The correlated events of one processing turn: each requires `turn`.
@@ -372,6 +391,48 @@ fn the_bodys_twins_are_byte_identical_to_their_ability_schemas() {
             twin == source,
             "bots/floppy/schemas/{file} differs from abilities/schemas/{file}"
         );
+    }
+}
+
+#[test]
+fn each_abilitys_twins_are_byte_identical_and_exactly_what_it_references() {
+    for document in documents_under(&workspace().join("abilities")) {
+        let dir = document.parent().expect("a document has a directory");
+        let referenced: BTreeSet<String> = Parsed::read(&document).with(|root| {
+            let mut referenced = BTreeSet::new();
+            root.visit(&mut |element| {
+                for attribute in element.attributes.iter().filter(|a| is_schema_attribute(a)) {
+                    if let Some(file) = attribute.value.strip_prefix("schemas/") {
+                        referenced.insert(file.split('#').next().unwrap_or(file).to_owned());
+                    }
+                }
+            });
+            referenced
+        });
+        let twins: BTreeSet<String> = match std::fs::read_dir(dir.join("schemas")) {
+            Ok(entries) => entries
+                .map(|entry| {
+                    entry
+                        .expect("a directory entry")
+                        .file_name()
+                        .into_string()
+                        .expect("a UTF-8 file name")
+                })
+                .collect(),
+            Err(_) => BTreeSet::new(),
+        };
+        assert_eq!(twins, referenced, "{}", dir.display());
+        for file in twins {
+            let twin =
+                std::fs::read(dir.join("schemas").join(&file)).expect("the twin is readable");
+            let source =
+                std::fs::read(ability_schemas().join(&file)).expect("the source is readable");
+            assert!(
+                twin == source,
+                "{}/schemas/{file} differs from abilities/schemas/{file}",
+                dir.display()
+            );
+        }
     }
 }
 
@@ -690,21 +751,30 @@ fn unknown_domain_names(document: &Parsed, known: &BTreeSet<String>) -> Vec<Stri
     })
 }
 
-/// The structure rule's problems in one document: a `<script>` element, a
-/// `function` token, a `cond` or (outside `<data>`) `expr` over
+/// The structure rule's problems in one document: a `function` token in
+/// the document itself; with `own_script`, anything but exactly one root
+/// `<script src="<name>.js"/>` naming the existing `<name>/<name>.js` beside
+/// `<name>/<name>.scx`, else any `<script>`; a `cond` or (outside `<data>`) `expr` over
 /// [`MAX_EXPRESSION_CHARS`], a transition taking one contract event without
 /// an `event:schema`, or an SCXML `<invoke>` without a literal `id` and
 /// either a literal relative `src`, a `srcexpr` (builder output; see
 /// [`builder_output_problems`]) or a `<content expr>` (a stored behavior).
-fn structure_problems(document: &Parsed, contract: &BTreeSet<String>) -> Vec<String> {
+fn structure_problems(
+    document: &Parsed,
+    contract: &BTreeSet<String>,
+    own_script: bool,
+) -> Vec<String> {
     let mut problems = Vec::new();
     if document.source.contains("function") {
         problems.push("a `function` token".to_owned());
     }
+    if own_script {
+        problems.extend(script_problems(document));
+    }
     document.with(|root| {
         root.visit(&mut |element| {
             let name = element.name.local_name.as_str();
-            if name == "script" {
+            if name == "script" && !own_script {
                 problems.push("a <script> element".to_owned());
             }
             for attribute in ["cond", "expr"] {
@@ -760,6 +830,59 @@ fn structure_problems(document: &Parsed, contract: &BTreeSet<String>) -> Vec<Str
     problems
 }
 
+/// The layout rule's problems in one document: it is `<name>/<name>.scx`,
+/// and its only `<script>` is the root `<script src="<name>.js"/>`, with no
+/// body, naming the `<name>/<name>.js` beside it.
+fn script_problems(document: &Parsed) -> Vec<String> {
+    let mut problems = Vec::new();
+    let stem = document
+        .path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .expect("a UTF-8 document name");
+    let dir = document.path.parent().expect("a document has a directory");
+    if dir.file_name().and_then(|name| name.to_str()) != Some(stem) {
+        problems.push(format!("the document is not {stem}/{stem}.scx"));
+    }
+    let script = format!("{stem}.js");
+    if !dir.join(&script).is_file() {
+        problems.push(format!("no {script} beside the document"));
+    }
+    document.with(|root| {
+        let mut roots = 0;
+        for child in &root.children {
+            if let scxml_syntax::Node::Element(element) = child
+                && element.name.local_name == "script"
+            {
+                roots += 1;
+                let src_ok = element
+                    .attribute("src")
+                    .is_some_and(|src| src.value == script);
+                if !src_ok || !element.children.is_empty() {
+                    problems.push(format!(
+                        "a root <script> other than <script src=\"{script}\"/>"
+                    ));
+                }
+            }
+        }
+        if roots != 1 {
+            problems.push(format!(
+                "{roots} root <script src=\"{script}\"/> elements, not one"
+            ));
+        }
+        let mut all = 0;
+        root.visit(&mut |element| {
+            if element.name.local_name == "script" {
+                all += 1;
+            }
+        });
+        if all != roots {
+            problems.push("a <script> outside the root".to_owned());
+        }
+    });
+    problems
+}
+
 /// The builder output rule's problems in one document a `srcexpr`
 /// invokes: any `event:schema` (a `srcexpr` child gets no schema files, and
 /// floppy documents carry no inline schema), and the structure rule's.
@@ -775,7 +898,7 @@ fn builder_output_problems(document: &Parsed) -> Vec<String> {
             }
         });
     });
-    problems.extend(structure_problems(document, &BTreeSet::new()));
+    problems.extend(structure_problems(document, &BTreeSet::new(), false));
     problems
 }
 
@@ -793,13 +916,11 @@ fn known_names() -> BTreeSet<String> {
     known
 }
 
+/// `scx validate` reports nothing but `LINT019` for the document's own
+/// `<script src>` functions ([`support::validates_but_for_script_src`]).
 fn validates_clean(path: &Path) -> Result<(), String> {
     let validated = output(&["validate".to_owned(), path.display().to_string()]);
-    if validated.status.success()
-        && validated
-            .stderr
-            .contains("diagnostic summary: 0 error(s), 0 warning(s), 0 note(s)")
-    {
+    if validated.status.success() && support::validates_but_for_script_src(&validated.stderr) {
         Ok(())
     } else {
         Err(validated.stderr)
@@ -812,7 +933,7 @@ fn document_problems(path: &Path, known: &BTreeSet<String>) -> Vec<String> {
     let mut problems = schema_reference_problems(&document);
     problems.extend(unreceived_sends(&document));
     problems.extend(unknown_domain_names(&document, known));
-    problems.extend(structure_problems(&document, &contract_events()));
+    problems.extend(structure_problems(&document, &contract_events(), true));
     if let Err(stderr) = validates_clean(path) {
         problems.push(format!("scx validate: {stderr}"));
     }
@@ -831,7 +952,7 @@ fn every_phase4_document_meets_the_contracts() {
 #[test]
 fn the_contract_checks_pass_on_a_clean_parent_and_child() {
     let known = known_names();
-    for name in ["good/parent.scx", "good/child.scx"] {
+    for name in ["good/parent/parent.scx", "good/child/child.scx"] {
         let problems = document_problems(&fixture(name), &known);
         assert!(problems.is_empty(), "{name}: {problems:#?}");
     }
@@ -858,21 +979,53 @@ fn the_contract_checks_catch_each_broken_contract() {
 }
 
 #[test]
+fn a_document_needs_its_own_root_script_and_nothing_else() {
+    assert_eq!(
+        script_problems(&Parsed::read(&fixture("bad/parent.scx"))),
+        [
+            "the document is not parent/parent.scx",
+            "no parent.js beside the document",
+            "0 root <script src=\"parent.js\"/> elements, not one",
+        ]
+    );
+    let dir = support::unique_scratch("contracts-script").join("doc");
+    std::fs::create_dir_all(&dir).expect("creatable");
+    support::write(&dir, "doc.js", "");
+    let problems = |body: &str| {
+        let text = format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript">{body}<state id="s"/></scxml>"#
+        );
+        script_problems(&Parsed::read(&support::write(&dir, "doc.scx", &text)))
+    };
+    assert!(problems(r#"<script src="doc.js"/>"#).is_empty());
+    assert_eq!(
+        problems(r#"<script src="other.js"/>"#),
+        [r#"a root <script> other than <script src="doc.js"/>"#]
+    );
+    assert_eq!(
+        problems(r#"<script src="doc.js">var x = 1;</script>"#),
+        [r#"a root <script> other than <script src="doc.js"/>"#]
+    );
+}
+
+#[test]
 fn validate_judges_a_literal_payload_against_the_childs_schema_file() {
     let dir = support::unique_scratch("contracts-event011");
     for name in [
-        "child.scx",
-        "schemas/contract.ping.json",
-        "schemas/contract.ready.json",
+        "child/child.scx",
+        "child/child.js",
+        "child/schemas/contract.ping.json",
+        "parent/parent.js",
+        "parent/schemas/contract.ready.json",
     ] {
         let target = dir.join(name);
         std::fs::create_dir_all(target.parent().expect("a parent")).expect("creatable");
         std::fs::copy(fixture(&format!("good/{name}")), &target).expect("copyable");
     }
-    let parent = std::fs::read_to_string(fixture("good/parent.scx"))
+    let parent = std::fs::read_to_string(fixture("good/parent/parent.scx"))
         .expect("readable")
         .replace(r#"{"turn": 1}"#, r#"{"turn": 0}"#);
-    let path = support::write(&dir, "parent.scx", &parent);
+    let path = support::write(&dir.join("parent"), "parent.scx", &parent);
     let stderr = validates_clean(&path).expect_err("a ping with turn 0 breaks the child's schema");
     assert!(stderr.contains("EVENT011"), "{stderr}");
 }
@@ -884,7 +1037,7 @@ fn builder_output_carries_no_event_schema_and_meets_the_structure_rule() {
     assert!(problems.is_empty(), "{problems:#?}");
     validates_clean(&double).expect("the behavior double validates clean");
     // A schema reference, valid in a literal child, breaks builder output.
-    let referencing = Parsed::read(&fixture("good/child.scx"));
+    let referencing = Parsed::read(&fixture("good/child/child.scx"));
     assert!(
         builder_output_problems(&referencing)
             .iter()
@@ -903,6 +1056,7 @@ fn an_scxml_invoke_needs_a_literal_id_and_a_relative_src_a_srcexpr_or_content() 
         structure_problems(
             &Parsed::read(&support::write(&dir, "invoke.scx", &text)),
             &BTreeSet::new(),
+            false,
         )
     };
     for allowed in [

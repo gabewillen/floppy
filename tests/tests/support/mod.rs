@@ -48,6 +48,15 @@ pub const GRANTED: [&str; 4] = [
     "TYPESAFE_BASE_URL",
 ];
 
+/// The model floppy ships (README.md, "Defaults"): every document's `model`
+/// `<data>`, checked by `tests/tests/defaults.rs`.
+pub const DEFAULT_MODEL: &str = "Qwen/Qwen3.8-Flash-Next";
+
+/// The model of a live test: `FLOPPY_LIVE_MODEL`, else [`DEFAULT_MODEL`].
+pub fn live_model() -> String {
+    std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_owned())
+}
+
 /// The env files of a live test: `FLOPPY_LIVE_ENV_FILE`, one path or
 /// several joined like `PATH` (`:` on Unix), each given to `scx run` as an
 /// `--env-file` in order (a variable takes its last file's entry), so keys
@@ -246,27 +255,28 @@ impl Run {
     /// Starts `scx run` with `args` (the document among them) and the
     /// extra environment `env`.
     ///
-    /// A run whose document tree binds the sql service (decided by
-    /// [`binds_sql`]) and that grants it no directory gets a fresh one
-    /// ([`memory_grant`]): the service imports `wasi:filesystem`, and a run
-    /// that binds it without a `--dir` grant is refused. So does a run
-    /// whose tree binds the speech service (the listening's speech
-    /// decoding), which gets a fresh, empty media directory
-    /// ([`media_grant`]).
+    /// A run whose document tree binds the sql, the generate or the speech
+    /// service (decided by [`binds`]) and that grants it no directory gets
+    /// a fresh one ([`memory_grant`], [`media_grant`],
+    /// [`speech_media_grant`]): those services import `wasi:filesystem`,
+    /// and a run that binds one without a `--dir` grant is refused. One
+    /// that binds the pgsql service gets the network ([`pgsql_grant`]).
     pub fn start(args: &[String], env: &[(&str, &str)]) -> Self {
         let mut full = vec!["run".to_owned()];
         full.extend_from_slice(args);
-        let sql = service_uri("sql");
-        let granted = args.iter().any(|arg| arg.starts_with(&format!("{sql}=")));
-        if !granted && args.iter().any(|arg| binds_sql(Path::new(arg))) {
-            full.splice(1..1, memory_grant());
-        }
-        let speech = service_uri("speech");
-        let granted = args
-            .iter()
-            .any(|arg| arg.starts_with(&format!("{speech}=")));
-        if !granted && args.iter().any(|arg| binds(Path::new(arg), &speech)) {
-            full.splice(1..1, media_grant(&unique_scratch("media")));
+        for (name, grant) in [
+            ("sql", memory_grant as fn() -> Vec<String>),
+            ("generate", media_grant),
+            ("pgsql", pgsql_grant),
+            ("speech", || speech_media_grant(&unique_scratch("media"))),
+        ] {
+            let uri = service_uri(name);
+            let granted = args.iter().any(|arg| arg.starts_with(&format!("{uri}=")));
+            // `scx` runs from the workspace root, so a relative document
+            // path is relative to it.
+            if !granted && args.iter().any(|arg| binds(&workspace().join(arg), name)) {
+                full.splice(1..1, grant());
+            }
         }
         let mut command = command(&full);
         for (name, value) in env {
@@ -459,9 +469,32 @@ pub fn memory_grant() -> Vec<String> {
     ]
 }
 
+/// `--dir` granting the generate service a fresh scratch directory at
+/// `/media`, where the images its messages name are read.
+pub fn media_grant() -> Vec<String> {
+    vec![
+        "--dir".to_owned(),
+        format!(
+            "{}={}::/media",
+            service_uri("generate"),
+            unique_scratch("media").display()
+        ),
+    ]
+}
+
+/// `--wasi` letting the pgsql service connect (`inherit-network`): the
+/// memory ability names it beside the sql service, so a run that binds one
+/// binds both.
+pub fn pgsql_grant() -> Vec<String> {
+    vec![
+        "--wasi".to_owned(),
+        format!("{}=inherit-network", service_uri("pgsql")),
+    ]
+}
+
 /// `--dir` granting the speech service `media` at `/media`, where the
 /// audio references (`media/<file>`) of `environment.sound` resolve.
-pub fn media_grant(media: &Path) -> Vec<String> {
+pub fn speech_media_grant(media: &Path) -> Vec<String> {
     vec![
         "--dir".to_owned(),
         format!("{}={}::/media", service_uri("speech"), media.display()),
@@ -469,16 +502,9 @@ pub fn media_grant(media: &Path) -> Vec<String> {
 }
 
 /// Whether the `.scx` document at `path`, or a document it loads by a
-/// literal relative `<invoke src>` (recursively), names the sql service's
+/// literal relative `<invoke src>` (recursively), names the service `name`'s
 /// URI. Anything that is not a readable `.scx` file names none.
-pub fn binds_sql(path: &Path) -> bool {
-    binds(path, &service_uri("sql"))
-}
-
-/// Whether the `.scx` document at `path`, or a document it loads by a
-/// literal relative `<invoke src>` (recursively), names `uri`. Anything
-/// that is not a readable `.scx` file names none.
-pub fn binds(path: &Path, uri: &str) -> bool {
+pub fn binds(path: &Path, name: &str) -> bool {
     fn visit(path: &Path, uri: &str, seen: &mut Vec<PathBuf>) -> bool {
         let Ok(path) = path.canonicalize() else {
             return false;
@@ -490,7 +516,7 @@ pub fn binds(path: &Path, uri: &str) -> bool {
         let Ok(text) = std::fs::read_to_string(&path) else {
             return false;
         };
-        if text.contains(uri) {
+        if text.contains(&format!("{uri}\"")) {
             return true;
         }
         let dir = path.parent().unwrap_or(Path::new("/")).to_owned();
@@ -500,7 +526,7 @@ pub fn binds(path: &Path, uri: &str) -> bool {
             .filter(|src| !src.contains(':'))
             .any(|src| visit(&dir.join(src), uri, seen))
     }
-    visit(path, uri, &mut Vec::new())
+    visit(path, &service_uri(name), &mut Vec::new())
 }
 
 /// A scratch directory of its own for each call (tests run in parallel).
@@ -532,8 +558,8 @@ pub fn run_document(
     run.finish(limit)
 }
 
-/// The listening's documents (abilities/listening.scx, its children and
-/// its hearing leaves).
+/// The listening's abilities (abilities/listening/, its children and its
+/// hearing leaves).
 pub const LISTENING: [&str; 8] = [
     "listening",
     "sensitivity",
@@ -545,37 +571,32 @@ pub const LISTENING: [&str; 8] = [
     "speech_decoding",
 ];
 
-/// Copies the listening's documents into the layout's `abilities`
+/// Copies the listening's abilities into the layout's `abilities`
 /// directory.
 pub fn copy_listening(abilities: &Path) {
     for name in LISTENING {
-        let name = format!("{name}.scx");
-        std::fs::copy(
-            workspace().join("abilities").join(&name),
-            abilities.join(&name),
-        )
-        .expect("the listening document is copyable");
+        copy_ability(name, abilities);
     }
 }
 
-/// The speech service `<invoke>` opening tag in `abilities/vocal.scx`.
+/// The speech service `<invoke>` opening tag in `abilities/vocal/vocal.scx`.
 const SPEECH_INVOKE: &str = r#"<invoke id="speech" type="https://github.com/stateforward/floppy/services/speech"
             env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">"#;
 
-/// Writes `abilities/vocal.scx` into the laid-out `abilities` directory
+/// Copies the vocal ability into the laid-out `abilities` directory
 /// with its speech service `<invoke>` rewritten to invoke
 /// `tests/fixtures/phase6/speech_double.scx` (copied beside it, its `mode`
 /// set to the ECMAScript expression `mode`): the double of the speech
 /// service's encoding events, until the service lands.
 pub fn double_speech(abilities: &Path, mode: &str) {
-    let vocal = std::fs::read_to_string(workspace().join("abilities/vocal.scx"))
-        .expect("the vocal ability is readable");
+    let path = copy_ability("vocal", abilities);
+    let vocal = std::fs::read_to_string(&path).expect("the vocal ability is readable");
     assert!(
         vocal.contains(SPEECH_INVOKE),
-        "abilities/vocal.scx invokes the speech service"
+        "abilities/vocal/vocal.scx invokes the speech service"
     );
     std::fs::write(
-        abilities.join("vocal.scx"),
+        &path,
         vocal.replacen(
             SPEECH_INVOKE,
             r#"<invoke id="speech" type="scxml" src="speech_double.scx">"#,
@@ -592,8 +613,108 @@ pub fn double_speech(abilities: &Path, mode: &str) {
         "the speech double declares its mode"
     );
     std::fs::write(
-        abilities.join("speech_double.scx"),
+        abilities.join("vocal/speech_double.scx"),
         double.replacen(declared, &format!(r#"<data id="mode" expr="{mode}"/>"#), 1),
     )
     .expect("the speech double copy is writable");
+}
+
+/// Copies the directory `from` to `to`, recursively.
+pub fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).expect("the directory is creatable");
+    for entry in std::fs::read_dir(from).expect("the directory is readable") {
+        let path = entry.expect("a directory entry").path();
+        let target = to.join(path.file_name().expect("a file name"));
+        if path.is_dir() {
+            copy_tree(&path, &target);
+        } else {
+            std::fs::copy(&path, &target).expect("the file is copyable");
+        }
+    }
+}
+
+/// Copies the ability `name` (`abilities/<name>/`: its document, its
+/// script, and its schema twins) into `abilities`, and returns the path of
+/// its copied document.
+pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
+    copy_tree(
+        &workspace().join("abilities").join(name),
+        &abilities.join(name),
+    );
+    abilities.join(name).join(format!("{name}.scx"))
+}
+
+/// Whether `scx validate`'s standard error reports no error and no note,
+/// and only warnings that are `LINT019` for a function of the document's
+/// own `<script src>`: the validator reads inline scripts only, so it
+/// cannot prove that a cond or expr calling a function of `<name>.js` has
+/// no side effect (decision D65).
+pub fn validates_but_for_script_src(stderr: &str) -> bool {
+    let warnings =
+        stderr.matches("\nwarning[").count() + usize::from(stderr.starts_with("warning["));
+    stderr.contains(&format!(
+        "diagnostic summary: 0 error(s), {warnings} warning(s), 0 note(s)"
+    )) && stderr.matches("warning[LINT019]").count() == warnings
+        && stderr
+            .matches("which a `<script src>` may define or replace")
+            .count()
+            == warnings
+}
+
+/// One `PGlite` server for a Postgres-engine test: `node
+/// $FLOPPY_PGLITE_SERVER --port 0` (the `pglite-server` script of
+/// `@electric-sql/pglite-socket`, `dist/scripts/server.js`), a fresh
+/// in-memory database on a free loopback port, stopped when dropped.
+pub struct Pglite {
+    child: Child,
+    /// Its `IP:PORT`.
+    pub address: String,
+}
+
+impl Pglite {
+    /// Starts a server; `None` when `FLOPPY_PGLITE_SERVER` is unset.
+    pub fn start() -> Option<Self> {
+        let script = std::env::var_os("FLOPPY_PGLITE_SERVER")?;
+        let mut child = Command::new("node")
+            .arg(script)
+            .args(["--port", "0", "--max-connections", "8"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("node runs the PGlite server");
+        let stdout = child.stdout.take().expect("stdout is piped");
+        let mut lines = BufReader::new(stdout).lines();
+        let address = loop {
+            let line = lines
+                .next()
+                .expect("the PGlite server reports where it listens")
+                .expect("the PGlite server's output is text");
+            if let Some(listening) = line.split_once("listening on ") {
+                let listening: Json =
+                    serde_json::from_str(listening.1).expect("the address is JSON");
+                break format!(
+                    "{}:{}",
+                    listening["host"].as_str().expect("a host"),
+                    listening["port"]
+                );
+            }
+        };
+        // Keep draining its output so the server never blocks on a full
+        // pipe.
+        std::thread::spawn(move || for _ in lines {});
+        Some(Self { child, address })
+    }
+
+    /// The Postgres connection URI of its database.
+    pub fn database(&self) -> String {
+        format!("postgresql://postgres@{}/postgres", self.address)
+    }
+}
+
+impl Drop for Pglite {
+    fn drop(&mut self) {
+        let _killed = self.child.kill();
+        let _waited = self.child.wait();
+    }
 }

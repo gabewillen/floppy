@@ -1,5 +1,5 @@
-//! The floppy bot's cognition cascade (`abilities/cognition.scx` with its
-//! stages `abilities/autonomy.scx`, `intuition.scx`, and `reasoning.scx`),
+//! The floppy bot's cognition cascade (`abilities/cognition/cognition.scx` with its
+//! stages `abilities/autonomy/autonomy.scx`, `intuition.scx`, and `reasoning.scx`),
 //! run as the body's child through `scx run` on the wall clock.
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
@@ -205,7 +205,9 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
 fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
     let mut request_line = String::new();
-    if reader.read_line(&mut request_line).is_err() {
+    // A connection closed before its request line (a cancelled call's,
+    // under load) is no request.
+    if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
         return;
     }
     let mut length = 0;
@@ -356,11 +358,7 @@ fn layout(
         &workspace().join("bots/floppy/schemas"),
         &dir.join("bots/floppy/schemas"),
     );
-    copy_dir(&workspace().join("abilities"), &dir.join("abilities"));
-    copy_dir(
-        &workspace().join("abilities/schemas"),
-        &dir.join("abilities/schemas"),
-    );
+    support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
     support::double_speech(&dir.join("abilities"), "'encode'");
     for (path, data) in edits {
         rewrite(&dir.join(path), data);
@@ -546,6 +544,8 @@ fn intuition_handles_an_ignore_without_reasoning() {
             "intuition handled (none)"
         ])
     );
+    // The body gives the cognition its memory: autonomy looks the
+    // stimulus's behaviors up there (a fresh database holds none).
     assert_eq!(
         texts(&records, "autonomy"),
         strings(&["turn 1: 0 matched for bot.input"])
@@ -606,14 +606,14 @@ fn attribute(text: &str) -> String {
 }
 
 /// Runs `statements` (mosfet `Statement`s) in one transaction of the
-/// Memory ability (`abilities/memory.scx`) against the database in
+/// Memory ability (`abilities/memory/memory.scx`) against the database in
 /// `grant`'s directory; returns its output.
 fn transact(grant: &[String], statements: &Json) -> Json {
     let document = format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="applying">
   <datamodel><data id="statements" expr="{}"/></datamodel>
   <state id="applying">
-    <invoke id="memory" type="scxml" src="memory.scx">
+    <invoke id="memory" type="scxml" src="memory/memory.scx">
       <param name="database" expr="'{DATABASE}'"/>
       <param name="statements" expr="statements"/>
     </invoke>
@@ -625,11 +625,7 @@ fn transact(grant: &[String], statements: &Json) -> Json {
         attribute(&statements.to_string()),
     );
     let dir = unique_scratch("inventory");
-    std::fs::copy(
-        workspace().join("abilities/memory.scx"),
-        dir.join("memory.scx"),
-    )
-    .expect("the ability is copyable");
+    support::copy_ability("memory", &dir);
     let path = support::write(&dir, "inventory.scx", &document);
     let mut args = grant.to_vec();
     args.extend([
@@ -754,7 +750,10 @@ fn autonomy_runs_the_learned_behaviors_the_stimulus_triggers() {
         &mock,
         Decision::Fail,
         Generation::Fail,
-        &[("abilities/cognition.scx", &[("database", memory.as_str())])],
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[("database", memory.as_str())],
+        )],
     );
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
@@ -822,7 +821,10 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
         &mock,
         Decision::Ignore,
         Generation::Fail,
-        &[("abilities/cognition.scx", &[("database", memory.as_str())])],
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[("database", memory.as_str())],
+        )],
     );
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
@@ -1099,7 +1101,7 @@ fn after_the_warmup_the_threshold_follows_the_tuner() {
         Decision::Low,
         Generation::Ignore,
         &[(
-            "abilities/cognition.scx",
+            "abilities/cognition/cognition.scx",
             &[("tuner", "({mean: 70, variance: 100, n: 8})")],
         )],
     );
@@ -1187,7 +1189,10 @@ fn an_intuition_that_does_not_decide_in_time_fails_the_turn() {
         &mock,
         Decision::Hang,
         Generation::Ignore,
-        &[("abilities/intuition.scx", &[("decision_timeout_ms", "300")])],
+        &[(
+            "abilities/intuition/intuition.scx",
+            &[("decision_timeout_ms", "300")],
+        )],
     );
     let mut run = start(&bot);
     say(&mut run, "hello");
@@ -1217,7 +1222,10 @@ fn reboots_on_a_silent_stage(
         &mock,
         decision,
         generation,
-        &[("abilities/cognition.scx", &[("hop_timeout_ms", hop_ms)])],
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[("hop_timeout_ms", hop_ms)],
+        )],
     );
     let mut run = start(&bot);
     say(&mut run, "hello");
@@ -1347,7 +1355,7 @@ fn with_its_gates_on_the_cognition_reflects_and_reconciles_the_routines() {
         Decision::Abstain,
         Generation::Ignore,
         &[
-            ("abilities/cognition.scx", GATES_ON),
+            ("abilities/cognition/cognition.scx", GATES_ON),
             ("bots/floppy/floppy.scx", NO_DATABASE),
         ],
     );
@@ -1384,7 +1392,7 @@ fn a_routine_tick_becomes_a_turn() {
         Decision::Abstain,
         Generation::Ignore,
         &[
-            ("abilities/cognition.scx", GATES_ON),
+            ("abilities/cognition/cognition.scx", GATES_ON),
             ("bots/floppy/floppy.scx", NO_DATABASE),
         ],
     );
@@ -1395,7 +1403,7 @@ fn a_routine_tick_becomes_a_turn() {
             .and_then(Path::parent)
             .and_then(Path::parent)
             .expect("the scratch root")
-            .join("abilities/routines.scx"),
+            .join("abilities/routines/routines.scx"),
     )
     .expect("the double is copyable");
     let mut run = start(&bot);
@@ -1431,4 +1439,187 @@ fn with_its_gates_off_the_cognition_invokes_no_seam() {
     );
     assert!(texts(&finished.all, "routines").is_empty());
     assert!(texts(&finished.all, "bot.ability.reflection.output").is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// The SpeechHeard seed (abilities/behaviors/speech_heard/speech_heard.scx), run by
+// autonomy under `tests/fixtures/phase6/autonomy_harness.scx`, which stands
+// in for the cognition: the body cannot take a listening product yet, so
+// each stimulus is a double of `bot.ability.listening.speech.output`.
+
+const SPEECH: &str = "bot.ability.listening.speech.output";
+const COMMUNICATION_INPUT: &str = "bot.ability.communication.input";
+
+/// A scratch `abilities/` with every ability document, seed and schema,
+/// and the harness beside them, its `<data id="database">` set to `database`.
+fn autonomy_harness(database: &str) -> PathBuf {
+    let dir = unique_scratch("autonomy");
+    support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
+    let harness = dir.join("abilities/harness.scx");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase6/autonomy_harness.scx"),
+        &harness,
+    )
+    .expect("the harness is copyable");
+    rewrite(&harness, &[("database", database)]);
+    harness
+}
+
+/// mosfet's `SpeechData` (its interpretation example, decoded) heard from
+/// `source_ids`.
+fn speech(source_ids: &Json) -> Json {
+    json!({
+        "content": "what is the weather like?",
+        "content_type": "text/plain",
+        "voice_detection": {"segments": [{"start_seconds": 0.0, "end_seconds": 0.4, "confidence": 0.9}]},
+        "media_type": "audio/pcm",
+        "sample_rate_hz": 48000,
+        "channels": 1,
+        "source_ids": source_ids,
+    })
+}
+
+/// One turn of autonomy over `stimulus` (event, data): the cognition's
+/// input, then its answer.
+fn autonomy_turn(run: &mut Run, turn: u64, event: &str, data: &Json) -> Json {
+    run.event(
+        "bot.ability.cognition.input",
+        &json!({
+            "turn": turn,
+            "stimulus": {"event": event, "data": data, "source": "listening"},
+            "focus": null,
+            "focus_candidates": [],
+        }),
+    );
+    let records = run.until(WAIT, label_is("harness.output"));
+    json_text(&records, "harness.output")
+}
+
+/// The selection mosfet's `SpeechHeard` makes: one
+/// `bot.ability.communication.input` carrying the speech as `TurnData`.
+fn admitted(turn: u64) -> Json {
+    json!({
+        "turn": turn,
+        "handled": true,
+        "selected": [{
+            "event": COMMUNICATION_INPUT,
+            "data": {
+                "source_ids": ["caller"],
+                "target_ids": [],
+                "content": "what is the weather like?",
+                "content_type": "text/plain",
+                "sample_rate_hz": 48000,
+                "channels": 1,
+            },
+            "reason": "seeded speech admit via communication",
+        }],
+        "candidates": ["SpeechHeard"],
+        "reason": "behavior",
+    })
+}
+
+/// Whether the schema file `abilities/schemas/<event>.json` admits `data`.
+fn admits(event: &str, data: &Json) -> bool {
+    let text = std::fs::read(workspace().join(format!("abilities/schemas/{event}.json")))
+        .expect("the schema is readable");
+    let resolved = scxml_event_schema::resolve(&text, None).expect("the schema resolves");
+    let schema =
+        scxml_event_schema::CompiledSchema::new(&resolved.schema).expect("the schema compiles");
+    let canonical = scxml_event_schema::canonical_json(data);
+    let value =
+        scxml_types::DataValue::canonical_json_object(&canonical).expect("canonical JSON is data");
+    schema.admits(&value)
+}
+
+/// mosfet's `SpeechHeard` seed without memory (seed-only autonomy): speech
+/// with a source becomes a `bot.ability.communication.input` selection
+/// whose data the communication's schema admits; speech with no source is
+/// unhandled; a stimulus no seed triggers runs nothing.
+#[test]
+fn the_speech_heard_seed_admits_identified_speech_as_communication_input() {
+    let harness = autonomy_harness("null");
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    let first = autonomy_turn(&mut run, 1, SPEECH, &speech(&json!(["caller"])));
+    assert_eq!(first, admitted(1));
+    assert!(admits(COMMUNICATION_INPUT, &first["selected"][0]["data"]));
+    assert_eq!(
+        autonomy_turn(&mut run, 2, SPEECH, &speech(&json!([]))),
+        json!({"turn": 2, "handled": false, "candidates": ["SpeechHeard"], "reason": "unhandled"})
+    );
+    assert_eq!(
+        autonomy_turn(
+            &mut run,
+            3,
+            "bot.input",
+            &json!({"observation": {"event": "text", "data": "hello"}})
+        ),
+        json!({"turn": 3, "handled": false, "candidates": [], "reason": "no-behaviors"})
+    );
+    let finished = run.close(WAIT);
+    assert_eq!(
+        texts(&finished.all, "autonomy.candidate"),
+        strings(&["SpeechHeard", "SpeechHeard"])
+    );
+    assert_eq!(
+        texts(&finished.all, "autonomy.candidate.advance"),
+        strings(&["SpeechHeard"])
+    );
+    trace::assert_trace(
+        "the_speech_heard_seed_admits_identified_speech_as_communication_input",
+        &finished.all,
+        &[],
+    );
+}
+
+/// mosfet `_prepare_match`: the seeds run before the learned inventory. A
+/// learned behavior the speech triggers runs only when the seed does not
+/// handle the turn, and only its use is counted.
+#[test]
+fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
+    let double =
+        std::fs::read_to_string(workspace().join("tests/fixtures/phase4/behavior_double.scx"))
+            .expect("the double is readable");
+    let grant = inventory(&[Learned {
+        name: "Double",
+        trigger: SPEECH,
+        status: "ACTIVE",
+        source: &double,
+    }]);
+    let harness = autonomy_harness(&format!("'{DATABASE}'"));
+    let mut args = grant.clone();
+    args.push(harness.display().to_string());
+    let mut run = Run::start(&args, &[]);
+    assert_eq!(
+        autonomy_turn(&mut run, 1, SPEECH, &speech(&json!(["caller"]))),
+        admitted(1)
+    );
+    assert_eq!(
+        autonomy_turn(&mut run, 2, SPEECH, &speech(&json!([]))),
+        json!({
+            "turn": 2,
+            "handled": true,
+            "selected": [{"event": IGNORE, "data": {}, "reason": "behavior: nothing to do", "target": "cognition"}],
+            "candidates": ["SpeechHeard", "Double"],
+            "reason": "behavior",
+        })
+    );
+    let finished = run.close(WAIT);
+    assert_eq!(
+        texts(&finished.all, "autonomy.candidate"),
+        strings(&["SpeechHeard", "SpeechHeard", "Double"])
+    );
+    assert_eq!(
+        texts(&finished.all, "autonomy"),
+        strings(&[&format!("turn 2: 1 matched for {SPEECH}")])
+    );
+    assert_eq!(
+        texts(&finished.all, "behavior.double"),
+        strings(&["turn 2"])
+    );
+    trace::assert_trace(
+        "autonomy_runs_the_seeds_before_the_learned_behaviors",
+        &finished.all,
+        &[],
+    );
+    assert_eq!(usage(&grant), json!([["Double", "1", "0"]]));
 }

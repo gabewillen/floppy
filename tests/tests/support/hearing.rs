@@ -473,7 +473,7 @@ pub fn granted(test: &str, backend: &Backend, files: &[(&str, Vec<u8>)]) -> Gran
     )
     .expect("the env file is writable");
     let mut args = vec!["--env-file".to_owned(), env.display().to_string()];
-    args.extend(super::media_grant(&media));
+    args.extend(super::speech_media_grant(&media));
     Granted { args, media }
 }
 

@@ -66,14 +66,10 @@ fn copy_dir(from: &Path, to: &Path) {
 /// `devices`; returns the body's path.
 fn with_devices(devices: &str) -> PathBuf {
     let dir = unique_scratch("floppy-live");
-    for sub in [
-        "bots/floppy",
-        "bots/floppy/schemas",
-        "abilities",
-        "abilities/schemas",
-    ] {
+    for sub in ["bots/floppy", "bots/floppy/schemas"] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
     }
+    support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
     let body = dir.join("bots/floppy/floppy.scx");
     let text = std::fs::read_to_string(&body).expect("the body is readable");
     let declared = r#"<data id="devices" expr="[]"/>"#;
@@ -106,7 +102,7 @@ fn all_routed(records: &[Json], output: Option<&Json>) -> bool {
 }
 
 fn model() -> String {
-    std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "Qwen/Qwen3.8-Flash-Next".into())
+    support::live_model()
 }
 
 /// One question turn through the full cascade: autonomy's seam leaves it
@@ -265,15 +261,11 @@ fn live_chat() {
 /// (standing in for the invoker's `<param>`); returns the body's path.
 fn with_name(name: &str) -> PathBuf {
     let dir = unique_scratch("floppy-live");
-    for sub in [
-        "bots/floppy",
-        "bots/floppy/schemas",
-        "abilities",
-        "abilities/schemas",
-    ] {
+    for sub in ["bots/floppy", "bots/floppy/schemas"] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
     }
-    let identity = dir.join("abilities/identity.scx");
+    support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
+    let identity = dir.join("abilities/identity/identity.scx");
     let text = std::fs::read_to_string(&identity).expect("the identity is readable");
     let declared = r#"<data id="name" expr="null"/>"#;
     assert!(text.contains(declared), "the identity declares its name");

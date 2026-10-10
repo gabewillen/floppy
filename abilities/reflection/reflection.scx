@@ -1,0 +1,449 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Reflection ability (mosfet abilities/cognition/reflection) with
+  its Revision (reflection/revision.py): after each turn's output it
+  recalls prior episodes and the behavior inventory, asks the model to
+  select at most one of bot.behavior.create, bot.behavior.change or
+  bot.behavior.break, applies it, and stores the turn's CognitiveEpisode.
+  The cognition (abilities/cognition/cognition.scx) invokes it as its long-lived
+  child "reflection" when its reflection gate is on, with the <param>s
+  database (the memory database; null keeps the phase 4 seam) and
+  model, and sends it bot.ability.reflection.input {turn,
+  cognition_input, cognition_output} after each turn's output.
+
+    idle -bot.ability.reflection.input-> recalling -> processing
+      processing -bot.behavior.break-> breaking -> storing
+      processing -bot.behavior.create|change-> revising { preparing ->
+        authoring -> accepting | abandoning } -> storing
+      processing -empty selection-> storing
+    storing -> idle (bot.ability.reflection.output to the cognition)
+    any failure -> failing (bot.ability.failed {message}) -> idle
+
+  Memory: each step that reads or writes the inventory or the episodes is
+  one transaction of the memory ability (abilities/memory/memory.scx, a child per
+  transaction answering bot.ability.memory.output or bot.ability.failed)
+  on the database the <param> database names; the SQL lives in the <data>
+  below (mosfet behavior/storage.py and cognition/episodes.py). With
+  database null, recalling logs <log label="reflection" expr="'absent'"> and
+  answers at once, as the phase 4 seam did.
+
+  recalling (mosfet _recall_activity, _load_all_behaviors): the prior
+  episodes (query_tags cognitive_episode, the turn's focus or none, oldest
+  first, at most 50) and every behavior row with its triggers, any status.
+
+  processing (mosfet _dispatch_select, SELECT_INSTRUCTIONS): its
+  transitions for the three inventory events are the enabled transitions
+  <decision:choice> reads, and <decision:selection> builds the strict
+  schema the generate service fills from {cognition_input,
+  cognition_output, prior_episodes, behaviors}. An empty selection goes to
+  storing; more than one fails; one is sent to this session (#_internal),
+  where scxml.rs checks its data against the event's schema and the
+  transition taking it applies it. The model call is bounded by
+  bot.ability.reflection.select.hop.timed_out (mosfet's 30 s).
+
+  breaking (mosfet _apply_break): status BROKEN with the trimmed reason
+  and status_updated_at; the row stays for a later change. An unknown
+  name fails.
+
+  revising (mosfet Revision): preparing stores a create's DRAFT stub
+  (empty source, its triggers and description) unless the name exists,
+  and loads the row (a change of an unknown name fails). authoring invokes
+  the builder bot (bots/builder/builder.scx) and sends it builder.request
+  with a spec built from the intent, the existing row and the turn
+  (CHANGE_INSTRUCTIONS, ChangeWriteInput) and the turn behavior or
+  persistent routine contract as constraints (docs/plans/
+  phase5-behaviors.mdscript.md); the builder's own validate, simulate and
+  no-progress loop is mosfet's check-and-retry. Its done is accepting: the
+  document replaces the row ACTIVE (delete triggers, delete row, insert
+  row, insert triggers, mosfet inventory.store_behavior), keeping the
+  usage counters, with mosfet's _grounded_triggers and lifetime
+  persistent when the document sends bot.behavior.tick, else turn. Its
+  failed is abandoning: the row is marked DRAFT with status_reason
+  validation, and the turn fails.
+
+  storing (mosfet _store_activity): one CognitiveEpisode {focus,
+  focus_candidates, stimulus_name, output, behavior} inserted with
+  query_tags cognitive_episode, then bot.ability.reflection.output.
+
+  Contracts: the events it takes reference abilities/schemas/ by
+  event:schema (never inline). The builder's answer is its <donedata>,
+  which scxml.rs does not check, so its conds check the shape.
+
+  Bindings: the decision namespace package and the generate service
+  package; env scopes FLOPPY_API_KEY and FLOPPY_BASE_URL to the select
+  call (the builder scopes its own).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="reflection" initial="idle">
+  <datamodel>
+    <!-- The cognition's <param>s. -->
+    <data id="database" expr="null"/>
+    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="select_timeout_ms" expr="30000"/>
+    <!-- The turn in hand (mosfet InputData). -->
+    <data id="turn" expr="0"/>
+    <data id="cognition_input" expr="null"/>
+    <data id="cognition_output" expr="[]"/>
+    <!-- Recalled (mosfet SelectInput). -->
+    <data id="prior_episodes" expr="[]"/>
+    <data id="behaviors" expr="[]"/>
+    <!-- The select call. -->
+    <data id="choices" expr="[]"/>
+    <data id="schema" expr="null"/>
+    <data id="gen_id" expr="null"/>
+    <data id="selected" expr="null"/>
+    <data id="gen_failure" expr="null"/>
+    <data id="hop_timer" expr="null"/>
+    <!-- The applied inventory event (mosfet _AppliedEventData.behavior). -->
+    <data id="behavior" expr="null"/>
+    <!-- Revision (mosfet ChangeWriteInput): the intent, whether it was a
+         create, the stored row, and the builder's answer. -->
+    <data id="intent" expr="null"/>
+    <data id="create_intent" expr="null"/>
+    <data id="existing_behavior" expr="null"/>
+    <data id="write" expr="null"/>
+    <data id="request" expr="null"/>
+    <data id="written" expr="null"/>
+    <data id="triggers" expr="[]"/>
+    <data id="evidence" expr="[]"/>
+    <data id="lifetime" expr="'turn'"/>
+    <data id="row" expr="[]"/>
+    <!-- The turn's CognitiveEpisode. -->
+    <data id="episode" expr="null"/>
+    <!-- The memory transaction in hand and its answer. -->
+    <data id="statements" expr="[]"/>
+    <data id="results" expr="null"/>
+    <data id="failure" expr="null"/>
+
+    <!-- mosfet SELECT_INSTRUCTIONS, with a routine's schedules as SCXML
+         delayed sends. -->
+    <data id="select_instructions" expr="'Select at most one offered behavior inventory event (bot.behavior.create, change, or break) when a clear repeated pattern across this turn and prior_episodes should improve future behavior, or when this turn shows a recurring or time-based need, including the user explicitly asking for something to happen on a schedule or repeatedly, that a persistent routine would serve. Otherwise return an empty selection. Use only offered events; data must match the event schema. behaviors lists installed inventory with lifetime (turn: Autonomy runs it for one matching turn; persistent: a routine that keeps running on delayed-send schedules across turns and restarts), status (ACTIVE|DRAFT|BROKEN), status_reason, status_updated_at, and usage: used_count / last_used_at (handled Autonomy runs) and failed_count / last_failed_at. Prefer change over break when used_count is low (not enough practice evidence). Prefer break when failures or harm outweigh practice value; include reason. create delegates a DRAFT behavior revision; change revises an existing behavior; break sets status=BROKEN (keeps inventory for later change; Autonomy will not run it and a broken routine stops); change a routine to reschedule or revise it, break it to stop it. Select intent may omit source; do not invent source here.'"/>
+    <!-- mosfet CHANGE_INSTRUCTIONS, for the builder: the program is an
+         SCXML document. -->
+    <data id="change_instructions" expr="'Author or revise the SCXML program of the stored behavior. existing_behavior is the current inventory row (source may be empty for a new create stub; status may be DRAFT or BROKEN for unfinished or retired behaviors). If existing_behavior.source is empty, write a full new program from this turn, prior_episodes, and intent: invent event contracts, guards, and effects from the observed pattern only. If source is non-empty, rewrite or patch it so it better fits this turn and prior_episodes. The output is a cognition event selection object (keys: event, target?, data?, reason?) or a list of such objects, matching the shape of prior episode and this-turn outputs. Derive input fields, guards, and selection field names from the observed pattern. At runtime, fill selection data from the live input; never hardcode identifier values copied from episode examples. A turn behavior (default) answers one matching turn. When the intent or the turn calls for something recurring or time-based (or the user asked for it), write a persistent routine instead.'"/>
+    <data id="turn_contract" expr="'Write a turn behavior: its datamodel declares turn and input, which its invoker sets with param elements (input is an object with focus, focus_candidates and the stimulus); it sends nothing to its invoker and ends within one second in a top-level final state whose donedata content is the object {turn, handled, selected}: handled true with selected the list of selections, or handled false with selected an empty list. Its tests drive no input events and expect it to finish.'"/>
+    <data id="routine_contract" expr="'Or, for a recurring need, write a persistent routine: it takes no params and never finishes; each schedule is a delayed send to itself of at least 60s that, when it fires, sends bot.behavior.tick to #_parent with data {name, trigger, scheduled_at, fired_at, output}, output a non-empty list of selections, and schedules itself again.'"/>
+    <data id="no_schema_files" expr="'It is loaded from text, so it gets no schema files: any event:schema it carries is inline.'"/>
+
+    <!-- mosfet episodes.episode_select_input (statement 0) and
+         storage.select_all_behaviors_clauses (statement 1), each one JSON
+         value. -->
+    <data id="select_episodes">SELECT json_group_array(json(content)) FROM (SELECT content FROM bot_memory WHERE query_tags = 'cognitive_episode' AND json_valid(content) AND (? IS NULL OR context_ref IS NULL OR context_ref = ?) ORDER BY created_at LIMIT 50)</data>
+    <data id="select_behaviors">SELECT json_group_array(json_object('name', name, 'source', source, 'description', description, 'examples', json(examples_json), 'lifetime', lifetime, 'status', status, 'status_reason', status_reason, 'status_updated_at', status_updated_at, 'used_count', CAST(used_count AS INTEGER), 'last_used_at', last_used_at, 'failed_count', CAST(failed_count AS INTEGER), 'last_failed_at', last_failed_at, 'triggers', json((SELECT json_group_array("trigger") FROM (SELECT "trigger" FROM bot_behavior_trigger WHERE behavior_name = b.name ORDER BY "trigger"))))) FROM (SELECT * FROM bot_behavior WHERE ? IS NULL OR name = ? ORDER BY name) AS b</data>
+    <!-- mosfet storage.mark_broken + inventory.store_behavior. -->
+    <data id="break_behavior">UPDATE bot_behavior SET status = 'BROKEN', status_reason = ?, status_updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
+    <!-- mosfet revision._draft: the create stub, only for a new name; its
+         triggers only when the stub was just inserted. -->
+    <data id="insert_draft">INSERT INTO bot_behavior (name, source, description, status, status_reason, status_updated_at) SELECT ?, '', ?, 'DRAFT', '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE NOT EXISTS (SELECT 1 FROM bot_behavior WHERE name = ?)</data>
+    <data id="insert_draft_triggers">INSERT INTO bot_behavior_trigger (behavior_name, "trigger") SELECT DISTINCT ?, value FROM json_each(?) WHERE changes() = 1</data>
+    <!-- mosfet inventory.store_behavior (storage.replace_behavior_clauses):
+         delete triggers, delete row, insert row, insert triggers. -->
+    <data id="delete_triggers">DELETE FROM bot_behavior_trigger WHERE behavior_name = ?</data>
+    <data id="delete_behavior">DELETE FROM bot_behavior WHERE name = ?</data>
+    <data id="insert_behavior">INSERT INTO bot_behavior (name, source, description, examples_json, lifetime, status, status_reason, status_updated_at, used_count, last_used_at, failed_count, last_failed_at) VALUES (?, ?, ?, ?, ?, 'ACTIVE', '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), ?, ?, ?, ?)</data>
+    <data id="insert_triggers">INSERT INTO bot_behavior_trigger (behavior_name, "trigger") SELECT DISTINCT ?, value FROM json_each(?)</data>
+    <!-- mosfet storage.mark_draft(reason=validation), usage kept. -->
+    <data id="draft_behavior">UPDATE bot_behavior SET status = 'DRAFT', status_reason = 'validation', status_updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
+    <!-- mosfet episodes.episode_insert_input; the memory id is the
+         next rowid in hex, since SQLite in Wasm has no entropy and
+         randomblob repeats across the sql service's invocations. -->
+    <data id="insert_episode">INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT printf('%032x', coalesce(max(rowid), 0) + 1) FROM bot_memory), 'short_term', ?, NULL, 'task', 'standard', 'retain', ?, 'application/json', 'cognitive_episode')</data>
+  </datamodel>
+  <script src="reflection.js"/>
+
+  <state id="idle">
+    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json"
+                target="recalling">
+      <assign location="turn" expr="_event.data.turn"/>
+      <assign location="cognition_input" expr="_event.data.cognition_input"/>
+      <assign location="cognition_output" expr="_event.data.cognition_output"/>
+      <assign location="prior_episodes" expr="[]"/>
+      <assign location="behaviors" expr="[]"/>
+      <assign location="behavior" expr="null"/>
+      <assign location="failure" expr="null"/>
+    </transition>
+  </state>
+
+  <!-- The prior episodes and the whole inventory, in one transaction. -->
+  <state id="recalling">
+    <onentry>
+      <if cond="hasNoDatabase()">
+        <log label="reflection" expr="'absent'"/>
+        <send event="bot.ability.reflection.output" target="#_parent"/>
+      <else/>
+        <assign location="results" expr="null"/>
+        <assign location="statements" expr="episodeSelectStatements()"/>
+        <assign location="statements" expr="behaviorSelectStatements()"/>
+      </if>
+    </onentry>
+    <transition cond="hasNoDatabase()" target="idle"/>
+    <invoke id="recalling_memory" type="scxml" src="../memory/memory.scx">
+      <param name="database" expr="database"/>
+      <param name="statements" expr="statements"/>
+    </invoke>
+    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+                cond="isFromInvoke(_event, 'recalling_memory')" target="processing">
+      <assign location="prior_episodes" expr="resultValue(_event, 0)"/>
+      <assign location="behaviors" expr="resultValue(_event, 1)"/>
+      <log label="reflection" expr="recalledLog()"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                cond="isFromInvoke(_event, 'recalling_memory')" target="failing">
+      <assign location="failure" expr="recallFailedMessage(_event.data.message)"/>
+    </transition>
+    <transition event="error.*" target="failing">
+      <assign location="failure" expr="recallFailedMessage(_event.name)"/>
+    </transition>
+  </state>
+
+  <!-- The select step: one structured model call over the enabled
+       transitions for the inventory events. -->
+  <state id="processing">
+    <onentry>
+      <decision:choice location="choices" events="bot.behavior.create bot.behavior.change bot.behavior.break"/>
+      <decision:compact location="choices"/>
+      <decision:selection location="schema" choices="choices"/>
+      <assign location="selected" expr="null"/>
+      <assign location="gen_failure" expr="null"/>
+      <send idlocation="hop_timer" event="bot.ability.reflection.select.hop.timed_out" delayexpr="selectTimeoutDelay()"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="hop_timer"/>
+    </onexit>
+    <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
+            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
+      <param name="model" expr="model"/>
+      <param name="system" expr="select_instructions"/>
+      <param name="prompt" expr="selectPrompt()"/>
+      <param name="schema" expr="schema"/>
+      <param name="schemaname" expr="'dispatch'"/>
+      <param name="strict" expr="true"/>
+      <finalize>
+        <assign location="selected" expr="generatedSelection(_event)"/>
+        <assign location="gen_failure" expr="generateFailure(_event)"/>
+      </finalize>
+    </invoke>
+
+    <!-- The inventory events (mosfet behavior_events()). -->
+    <transition event="bot.behavior.create" event:schema="schemas/bot.behavior.create.json" target="revising">
+      <assign location="create_intent" expr="_event.data"/>
+      <assign location="intent" expr="_event.data"/>
+    </transition>
+    <transition event="bot.behavior.change" event:schema="schemas/bot.behavior.change.json" target="revising">
+      <assign location="create_intent" expr="null"/>
+      <assign location="intent" expr="_event.data"/>
+    </transition>
+    <transition event="bot.behavior.break" event:schema="schemas/bot.behavior.break.json" target="breaking">
+      <assign location="behavior" expr="_event.data"/>
+    </transition>
+
+    <transition event="done.invoke" cond="hasEmptySelection(_event)" target="storing">
+      <log label="reflection.selected" expr="'none'"/>
+    </transition>
+    <transition event="done.invoke" cond="hasSingleSelection(_event)">
+      <log label="reflection.selected" expr="selectedEvent()"/>
+      <send eventexpr="selectedEvent()" target="#_internal">
+        <content expr="selectedData()"/>
+      </send>
+    </transition>
+    <transition event="done.invoke" cond="hasSelection(_event)" target="failing">
+      <assign location="failure" expr="'Reflection select must return at most one behavior event.'"/>
+    </transition>
+    <transition event="done.invoke" cond="isGenerateDone(_event)" target="failing">
+      <assign location="failure" expr="generateFailedMessage()"/>
+    </transition>
+    <transition event="bot.ability.reflection.select.hop.timed_out" cond="isSelectHopTimeout(_event)" target="failing">
+      <assign location="failure" expr="selectTimedOutMessage()"/>
+    </transition>
+    <transition event="error.*" target="failing">
+      <assign location="failure" expr="selectFailedMessage(_event.name)"/>
+    </transition>
+  </state>
+
+  <!-- mosfet _apply_break: status BROKEN, the row kept. -->
+  <state id="breaking">
+    <onentry>
+      <assign location="statements" expr="breakBehaviorStatements()"/>
+    </onentry>
+    <invoke id="breaking_memory" type="scxml" src="../memory/memory.scx">
+      <param name="database" expr="database"/>
+      <param name="statements" expr="statements"/>
+    </invoke>
+    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+                cond="hasBrokenBehavior(_event)" target="storing">
+      <log label="reflection.inventory" expr="brokenLog()"/>
+    </transition>
+    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+                cond="isFromInvoke(_event, 'breaking_memory')" target="failing">
+      <assign location="failure" expr="unknownBreakMessage()"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                cond="isFromInvoke(_event, 'breaking_memory')" target="failing">
+      <assign location="failure" expr="breakFailedMessage(_event.data.message)"/>
+    </transition>
+    <transition event="error.*" target="failing">
+      <assign location="failure" expr="breakFailedMessage(_event.name)"/>
+    </transition>
+  </state>
+
+  <!-- mosfet Revision: author and check one create or change with the
+       builder bot, then store the result. -->
+  <state id="revising" initial="preparing">
+    <!-- mosfet Revision._prepare: a create's DRAFT stub, then the row. -->
+    <state id="preparing">
+      <onentry>
+        <assign location="statements" expr="[]"/>
+        <if cond="isCreate()">
+          <assign location="statements" expr="insertDraftStatements()"/>
+          <assign location="statements" expr="insertDraftTriggersStatements()"/>
+        </if>
+        <assign location="statements" expr="intentBehaviorSelectStatements()"/>
+      </onentry>
+      <invoke id="preparing_memory" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="statements"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+                cond="isFromInvoke(_event, 'preparing_memory')" target="authoring">
+        <assign location="existing_behavior" expr="preparedBehavior(_event)"/>
+      </transition>
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                cond="isFromInvoke(_event, 'preparing_memory')" target="failing">
+        <assign location="failure" expr="revisionFailedMessage(_event.data.message)"/>
+      </transition>
+      <transition event="error.*" target="failing">
+        <assign location="failure" expr="revisionFailedMessage(_event.name)"/>
+      </transition>
+    </state>
+
+    <!-- The builder authors, validates and simulates the program. The
+         request goes once the builder has started (the next macrostep). -->
+    <state id="authoring">
+      <onentry>
+        <if cond="isUnknownBehavior()">
+          <assign location="failure" expr="unknownBehaviorMessage()"/>
+          <raise event="bot.ability.reflection.revision.failed"/>
+        <else/>
+          <log label="reflection.revision" expr="revisionLog()"/>
+          <send event="bot.ability.reflection.revision.requested"/>
+        </if>
+      </onentry>
+      <invoke id="builder" type="scxml" src="../../bots/builder/builder.scx"/>
+      <transition event="bot.ability.reflection.revision.failed" target="failing"/>
+      <transition event="bot.ability.reflection.revision.requested">
+        <assign location="write" expr="changeWriteInput()"/>
+        <assign location="write" expr="changeWriteInputWithIntent()"/>
+        <assign location="request" expr="builderRequest()"/>
+        <assign location="request.constraints" expr="builderConstraints()"/>
+        <send event="builder.request" target="#_builder">
+          <content expr="request"/>
+        </send>
+      </transition>
+      <transition event="done.invoke.builder" cond="hasWrittenScxml(_event)" target="accepting">
+        <assign location="written" expr="_event.data.scxml"/>
+      </transition>
+      <transition event="done.invoke.builder" target="abandoning">
+        <assign location="failure" expr="abandonedMessage(_event)"/>
+      </transition>
+      <transition event="error.*" target="failing">
+        <assign location="failure" expr="revisionFailedMessage(_event.name)"/>
+      </transition>
+    </state>
+
+    <!-- mosfet Revision._accept: the row replaced ACTIVE, usage kept, with
+         grounded triggers (mosfet _grounded_triggers). -->
+    <state id="accepting">
+      <onentry>
+        <assign location="evidence" expr="evidenceStimulusNames()"/>
+        <assign location="evidence" expr="evidenceTriggerNames()"/>
+        <assign location="triggers" expr="intentTriggers()"/>
+        <assign location="triggers" expr="groundedTriggers()"/>
+        <assign location="triggers" expr="acceptedTriggers()"/>
+        <assign location="lifetime" expr="writtenLifetime()"/>
+        <assign location="behavior" expr="appliedBehavior()"/>
+        <assign location="behavior" expr="appliedBehaviorWithSource()"/>
+        <assign location="row" expr="behaviorRow()"/>
+        <assign location="row" expr="behaviorRowWithUsage()"/>
+        <assign location="row" expr="behaviorRowWithFailures()"/>
+        <assign location="statements" expr="replaceBehaviorStatements()"/>
+        <assign location="statements" expr="replaceBehaviorWithRow()"/>
+        <assign location="statements" expr="replaceBehaviorWithTriggers()"/>
+      </onentry>
+      <invoke id="accepting_memory" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="statements"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+                cond="isFromInvoke(_event, 'accepting_memory')" target="storing">
+        <log label="reflection.inventory" expr="acceptedLog()"/>
+      </transition>
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                cond="isFromInvoke(_event, 'accepting_memory')" target="failing">
+        <assign location="failure" expr="revisionFailedMessage(_event.data.message)"/>
+      </transition>
+      <transition event="error.*" target="failing">
+        <assign location="failure" expr="revisionFailedMessage(_event.name)"/>
+      </transition>
+    </state>
+
+    <!-- mosfet Revision._abandon: the row kept as DRAFT (validation), and
+         the turn fails. -->
+    <state id="abandoning">
+      <onentry>
+        <assign location="statements" expr="draftBehaviorStatements()"/>
+      </onentry>
+      <invoke id="abandoning_memory" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="statements"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+                  cond="isFromInvoke(_event, 'abandoning_memory')" target="failing">
+        <log label="reflection.inventory" expr="draftLog()"/>
+      </transition>
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                  cond="isFromInvoke(_event, 'abandoning_memory')" target="failing"/>
+      <transition event="error.*" target="failing"/>
+    </state>
+  </state>
+
+  <!-- mosfet _store_activity: this turn's episode. -->
+  <state id="storing">
+    <onentry>
+      <assign location="episode" expr="cognitiveEpisode()"/>
+      <assign location="episode.stimulus_name" expr="cognition_input.stimulus.event"/>
+      <assign location="episode.output" expr="cognition_output"/>
+      <assign location="episode.behavior" expr="behavior"/>
+      <assign location="statements" expr="insertEpisodeStatements()"/>
+    </onentry>
+    <invoke id="storing_memory" type="scxml" src="../memory/memory.scx">
+      <param name="database" expr="database"/>
+      <param name="statements" expr="statements"/>
+    </invoke>
+    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+                cond="isFromInvoke(_event, 'storing_memory')" target="idle">
+      <log label="reflection.stored" expr="storedLog()"/>
+      <send event="bot.ability.reflection.output" target="#_parent"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                cond="isFromInvoke(_event, 'storing_memory')" target="failing">
+      <assign location="failure" expr="episodeStoreFailedMessage(_event.data.message)"/>
+    </transition>
+    <transition event="error.*" target="failing">
+      <assign location="failure" expr="episodeStoreFailedMessage(_event.name)"/>
+    </transition>
+  </state>
+
+  <!-- mosfet _fail_from_stage: the failure goes to the cognition. -->
+  <state id="failing">
+    <onentry>
+      <log label="reflection.failed" expr="failure"/>
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="failure"/>
+      </send>
+    </onentry>
+    <transition target="idle"/>
+  </state>
+</scxml>

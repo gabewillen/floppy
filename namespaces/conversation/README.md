@@ -19,7 +19,7 @@ digest the manifest
 pins. `scripts/build-components.sh` builds, virtualizes and checks the
 component (imports: `types`, `telemetry`, `data-model-host`) and publishes it
 into the dev package cache. The conversation
-([`abilities/conversation.scx`](../../abilities/conversation.scx)) commits
+([`abilities/conversation/conversation.scx`](../../abilities/conversation/conversation.scx)) commits
 inbound and outbound messages with it, and the communication
-([`abilities/communication.scx`](../../abilities/communication.scx)) builds
+([`abilities/communication/communication.scx`](../../abilities/communication/communication.scx)) builds
 the outbound record it appends.

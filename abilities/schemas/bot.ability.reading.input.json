@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.reading.input",
+  "description": "Readable source candidate that focuses the reading ability.",
+  "properties": {
+    "kind": {
+      "description": "Input carrier that determines the first concrete reading route after classification.",
+      "enum": [
+        "image",
+        "text"
+      ],
+      "examples": [
+        "text",
+        "image"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "content": {
+      "description": "Readable source payload. Text inputs carry the text; image inputs carry a reference (a URI reference) to the image file in the media directory the run grants, never bytes [floppy field].",
+      "examples": [
+        "Read this note.",
+        "media/receipt.png"
+      ],
+      "title": "Content",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "content"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "kind": "text",
+      "content": "Read this note."
+    },
+    {
+      "kind": "image",
+      "content": "media/receipt.png"
+    }
+  ]
+}

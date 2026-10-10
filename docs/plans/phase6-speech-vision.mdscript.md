@@ -29,10 +29,10 @@ created: 2026-10-10
 | `SpeechEncoder` providers (gemini, elevenlabs, mlx_audio, moonshine) | `services/speech`, `encode`: `POST {base}/audio/speech` (OpenAI-compatible), or ElevenLabs `text-to-speech` when the run names it |
 | `ImageDecoder` (mlx_vlm Qwen2-VL, "Read all visible text in this image. Return only the text.") | the generate service with an image content part (`image_url`, a `data:` URL the service builds from the referenced file) |
 | `SpeechDecoding`, `SoundClassification`, `VoiceDetection`, `VoiceDiarization`, `VoiceIdentification` (hearing leaves, `idle` → `applying` → `idle`) | `abilities/hearing/*.scx`, each invoking its service or logging `absent` |
-| `Listening` (`Perceiving{Listening, Sensing}`, `Sensitivity`, `Interpretation`) | `abilities/listening.scx` and its children, the product `bot.ability.listening.speech.output` as the cognition's stimulus |
-| `SpeechHeard` seed (`bot.behavior.speech_heard.input`/`.output`) | `abilities/behaviors/speech_heard.scx`, a turn behavior autonomy runs before the learned ones |
-| `SpeechEncoding` (vocal) and `Speaking` (`idle` → `encoding` → `playing` → `recording`) | `abilities/vocal.scx` and `abilities/speaking.scx` in audio mode: playout is an `environment.sound` the body broadcasts, with the efference copy to listening |
-| `VisualClassification`, `Reading` (`Unfocused`, `Focused{Classifying, DecodingText, DecodingImage, PreparingUnreadableOutput, EncodingOutput}`) | `abilities/vision.scx`, `abilities/reading.scx` |
+| `Listening` (`Perceiving{Listening, Sensing}`, `Sensitivity`, `Interpretation`) | `abilities/listening/listening.scx` and its children, the product `bot.ability.listening.speech.output` as the cognition's stimulus |
+| `SpeechHeard` seed (`bot.behavior.speech_heard.input`/`.output`) | `abilities/behaviors/speech_heard/speech_heard.scx`, a turn behavior autonomy runs before the learned ones |
+| `SpeechEncoding` (vocal) and `Speaking` (`idle` → `encoding` → `playing` → `recording`) | `abilities/vocal/vocal.scx` and `abilities/speaking/speaking.scx` in audio mode: playout is an `environment.sound` the body broadcasts, with the efference copy to listening |
+| `VisualClassification`, `Reading` (`Unfocused`, `Focused{Classifying, DecodingText, DecodingImage, PreparingUnreadableOutput, EncodingOutput}`) | `abilities/vision/vision.scx`, `abilities/reading/reading.scx` |
 
 ## Slices
 
@@ -57,7 +57,7 @@ The slices below run in parallel. Each depends only on what is already on `main`
 ### Add Hearing And Listening
 
 * goal: `environment.sound` becomes the cognition's stimulus `bot.ability.listening.speech.output` through mosfet's Listening and Interpretation
-* files: `abilities/hearing/` (speech decoding, sound classification, voice detection, diarization, identification), `abilities/listening.scx` (and its `sensitivity` and `interpretation` children), their schemas, the body's input abilities (fan-out C already sends `environment.sound` to them), tests
+* files: `abilities/hearing/` (speech decoding, sound classification, voice detection, diarization, identification), `abilities/listening/listening.scx` (and its `sensitivity` and `interpretation` children), their schemas, the body's input abilities (fan-out C already sends `environment.sound` to them), tests
 * sound classification is mosfet's `KindSoundClassifier` (the `kind` label, no model); voice detection, diarization and identification are seams; speech decoding invokes the speech service, so the product's `content_type` becomes `text/plain`
 * labeled non-speech sound passes through as `environment.sound`, as mosfet does
 * tests use a double of the speech service's decoding events until the speech service lands
@@ -65,19 +65,19 @@ The slices below run in parallel. Each depends only on what is already on `main`
 ### Add Speech Heard Seed
 
 * goal: mosfet's `SpeechHeard` seed: autonomy runs the trusted seeds before the learned behaviors, and an admissible `bot.ability.listening.speech.output` (non-empty `source_ids`) becomes `bot.ability.communication.input`
-* files: `abilities/behaviors/speech_heard.scx`, `abilities/autonomy.scx` (seeds first, then the inventory, as `_prepare_match`), tests
+* files: `abilities/behaviors/speech_heard/speech_heard.scx`, `abilities/autonomy/autonomy.scx` (seeds first, then the inventory, as `_prepare_match`), tests
 * the seed's selection is mosfet's `SelectedEvent` (`event: bot.ability.communication.input`, `data: TurnData`)
 
 ### Add Vocal And Speaking Audio
 
 * goal: speaking leaves text mode (D38): `encoding` invokes the vocal encoding (the speech service), `playing` broadcasts `environment.sound` with the encoded audio and sends listening the efference copy (`bot.ability.speaking.efference`), and `recording` records the text in the conversation, each with mosfet's 5 s bound
-* files: `abilities/vocal.scx`, `abilities/speaking.scx`, `abilities/communication.scx` if the efference route needs it, schemas, tests; `bot.say` stays as a log of the text
+* files: `abilities/vocal/vocal.scx`, `abilities/speaking/speaking.scx`, `abilities/communication/communication.scx` if the efference route needs it, schemas, tests; `bot.say` stays as a log of the text
 * tests use a double of the speech service's encoding events until it lands
 
 ### Add Vision And Reading
 
 * goal: mosfet's `VisualClassification` (rule-based: `text` stays text, an image is `image`) and `Reading` (`bot.ability.reading.input` → `bot.ability.reading.output` `{text, source_kind, confidence}` or `bot.ability.reading.failed`), image decoding through the generate service's image parts
-* files: `abilities/vision.scx`, `abilities/reading.scx`, schemas, tests; nothing maps `environment.visual` to reading (mosfet has no such route)
+* files: `abilities/vision/vision.scx`, `abilities/reading/reading.scx`, schemas, tests; nothing maps `environment.visual` to reading (mosfet has no such route)
 
 ### Document Phase 6
 

@@ -4,19 +4,19 @@ The floppy bot is the port of mosfet's Bot: an SCXML machine,
 [`floppy.scx`](floppy.scx), whose abilities are invoked children under
 [`../../abilities/`](../../abilities/). Phase 4 is in progress: the body runs
 its lifecycle and processing turns, and its abilities are the
-[cognition](../../abilities/cognition.scx), mosfet's cascade of stages
-invoked per turn: [autonomy](../../abilities/autonomy.scx) (a seam until
-phase 5: no behaviors), [intuition](../../abilities/intuition.scx) (the
+[cognition](../../abilities/cognition/cognition.scx), mosfet's cascade of stages
+invoked per turn: [autonomy](../../abilities/autonomy/autonomy.scx) (a seam until
+phase 5: no behaviors), [intuition](../../abilities/intuition/intuition.scx) (the
 decision service picks ignore or hands the turn on, with mosfet's
-self-tuning confidence gate), and [reasoning](../../abilities/reasoning.scx)
+self-tuning confidence gate), and [reasoning](../../abilities/reasoning/reasoning.scx)
 (one structured model call over the turn's choices; memory is a seam until
-phase 3), and the [communication](../../abilities/communication.scx),
-which holds the [conversation](../../abilities/conversation.scx) (the
+phase 3), and the [communication](../../abilities/communication/communication.scx),
+which holds the [conversation](../../abilities/conversation/conversation.scx) (the
 committed text history, one transcript per participant set; memory recall
 is a seam until phase 3, and inferring participants and relationships from
 voice embeddings, mosfet's turn detectors, is phase 6) and
-[speaking](../../abilities/speaking.scx) (the words are encoded to speech
-by [vocal](../../abilities/vocal.scx) through the speech service, logged as
+[speaking](../../abilities/speaking/speaking.scx) (the words are encoded to speech
+by [vocal](../../abilities/vocal/vocal.scx) through the speech service, logged as
 `bot.say`, played out as `environment.sound` after the efference copy to
 Listening, and recorded in the conversation). Each turn the body
 assembles the choices (its own
@@ -41,17 +41,17 @@ Activate it, then give it inputs, on standard input:
 # The locally built packages (the dev cache under target/).
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory \
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
     --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
 # A conversation: text addressed to the bot, answered through bot.say.
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory \
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
     --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
 # floppy's latest release, once one is published (phase 7).
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
-  scx run --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory \
+  scx run --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
     --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
 ```
 
@@ -63,26 +63,38 @@ every turn fails with `the intuition failed: the decision failed
 (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
 `bot.activate` may name the model (`{"model": "..."}`); the default is
-`Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory.scx`, mosfet's
+`Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory/memory.scx`, mosfet's
 Memory) keeps the bot's database, `/memory/floppy.sqlite`, through the sql
 service (`services/sql`, SQLite), in the directory the run grants that
 service: `--dir
 https://github.com/stateforward/floppy/services/sql=HOST::/memory`
 preopens the host directory `HOST` (here `memory/`, created first with
-`mkdir -p memory`) at `/memory`, and the run is refused without it.
+`mkdir -p memory`) at `/memory`, and the run is refused without it. The
+memory ability also names the Postgres engine, the pgsql service
+(`services/pgsql`, Postgres over its wire protocol), so the run grants it
+the network too (`--wasi
+https://github.com/stateforward/floppy/services/pgsql=inherit-network`),
+though it is used only when the database is a Postgres connection URI
+(`postgresql://USER@IP:PORT/DBNAME`, for example PGlite served by
+`pglite-server` from `@electric-sql/pglite-socket`). The `generate` service
+imports `wasi:filesystem` too (it reads the images a message names), so
+the run grants it a media directory the same way (create `media/` first;
+it is ignored by git).
 Speaking needs `FLOPPY_SPEECH_BASE_URL` and `FLOPPY_SPEECH_API_KEY` (the
 speech service has no default backend) and the speech service granted the
 media directory its audio is written to (`--dir
 https://github.com/stateforward/floppy/services/speech=HOST::/media`);
 without them a response fails with `bot.ability.communication.failed`.
-The other services import no WASI resources.
+[`.env.example`](../../.env.example) names the variables, and the README's
+[Defaults](../../README.md#defaults) lists the model, the timeouts and the
+bounds this bot ships with.
 
 Sound (phase 6): `environment.sound` `{audio, media_type, sample_rate_hz,
-channels, kind, ...}` goes to the [listening](../../abilities/listening.scx),
+channels, kind, ...}` goes to the [listening](../../abilities/listening/listening.scx),
 the body's input ability (mosfet's Listening), and speaking's efference copy
 goes to it too, so the bot can tell its own voice apart. Its
-[sensitivity](../../abilities/sensitivity.scx) scores the sound against the
-body's prediction and its [interpretation](../../abilities/interpretation.scx)
+[sensitivity](../../abilities/sensitivity/sensitivity.scx) scores the sound against the
+body's prediction and its [interpretation](../../abilities/interpretation/interpretation.scx)
 (mosfet's Interpretation) works out what it was: voice detection on every
 sound, an open-speech window that joins voiced sounds into one utterance until
 a sound without voice closes it, then (as configured in its data) diarization,
