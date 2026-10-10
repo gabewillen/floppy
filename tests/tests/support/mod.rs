@@ -24,6 +24,7 @@
     reason = "each test binary uses the part of the shared support it needs"
 )]
 
+pub mod hearing;
 pub mod trace;
 
 use std::cell::RefCell;
@@ -248,7 +249,10 @@ impl Run {
     /// A run whose document tree binds the sql service (decided by
     /// [`binds_sql`]) and that grants it no directory gets a fresh one
     /// ([`memory_grant`]): the service imports `wasi:filesystem`, and a run
-    /// that binds it without a `--dir` grant is refused.
+    /// that binds it without a `--dir` grant is refused. So does a run
+    /// whose tree binds the speech service (the listening's speech
+    /// decoding), which gets a fresh, empty media directory
+    /// ([`media_grant`]).
     pub fn start(args: &[String], env: &[(&str, &str)]) -> Self {
         let mut full = vec!["run".to_owned()];
         full.extend_from_slice(args);
@@ -256,6 +260,13 @@ impl Run {
         let granted = args.iter().any(|arg| arg.starts_with(&format!("{sql}=")));
         if !granted && args.iter().any(|arg| binds_sql(Path::new(arg))) {
             full.splice(1..1, memory_grant());
+        }
+        let speech = service_uri("speech");
+        let granted = args
+            .iter()
+            .any(|arg| arg.starts_with(&format!("{speech}=")));
+        if !granted && args.iter().any(|arg| binds(Path::new(arg), &speech)) {
+            full.splice(1..1, media_grant(&unique_scratch("media")));
         }
         let mut command = command(&full);
         for (name, value) in env {
@@ -448,11 +459,27 @@ pub fn memory_grant() -> Vec<String> {
     ]
 }
 
+/// `--dir` granting the speech service `media` at `/media`, where the
+/// audio references (`media/<file>`) of `environment.sound` resolve.
+pub fn media_grant(media: &Path) -> Vec<String> {
+    vec![
+        "--dir".to_owned(),
+        format!("{}={}::/media", service_uri("speech"), media.display()),
+    ]
+}
+
 /// Whether the `.scx` document at `path`, or a document it loads by a
 /// literal relative `<invoke src>` (recursively), names the sql service's
 /// URI. Anything that is not a readable `.scx` file names none.
 pub fn binds_sql(path: &Path) -> bool {
-    fn visit(path: &Path, seen: &mut Vec<PathBuf>) -> bool {
+    binds(path, &service_uri("sql"))
+}
+
+/// Whether the `.scx` document at `path`, or a document it loads by a
+/// literal relative `<invoke src>` (recursively), names `uri`. Anything
+/// that is not a readable `.scx` file names none.
+pub fn binds(path: &Path, uri: &str) -> bool {
+    fn visit(path: &Path, uri: &str, seen: &mut Vec<PathBuf>) -> bool {
         let Ok(path) = path.canonicalize() else {
             return false;
         };
@@ -463,7 +490,7 @@ pub fn binds_sql(path: &Path) -> bool {
         let Ok(text) = std::fs::read_to_string(&path) else {
             return false;
         };
-        if text.contains(&service_uri("sql")) {
+        if text.contains(uri) {
             return true;
         }
         let dir = path.parent().unwrap_or(Path::new("/")).to_owned();
@@ -471,9 +498,9 @@ pub fn binds_sql(path: &Path) -> bool {
             .skip(1)
             .filter_map(|rest| rest.split('"').next())
             .filter(|src| !src.contains(':'))
-            .any(|src| visit(&dir.join(src), seen))
+            .any(|src| visit(&dir.join(src), uri, seen))
     }
-    visit(path, &mut Vec::new())
+    visit(path, uri, &mut Vec::new())
 }
 
 /// A scratch directory of its own for each call (tests run in parallel).
@@ -518,14 +545,8 @@ pub const LISTENING: [&str; 8] = [
     "speech_decoding",
 ];
 
-/// The speech service's `<invoke>` in `abilities/speech_decoding.scx`.
-const SPEECH_INVOKE: &str = r#"<invoke id="decoder" type="https://github.com/stateforward/floppy/services/speech"
-            env:baseurl="FLOPPY_SPEECH_BASE_URL" env:apikey="FLOPPY_SPEECH_API_KEY">"#;
-
 /// Copies the listening's documents into the layout's `abilities`
-/// directory, with `speech_decoding.scx`'s speech service replaced by
-/// `tests/fixtures/phase6/speech_double.scx` (a double of the service's
-/// decoding events, until the speech service lands).
+/// directory.
 pub fn copy_listening(abilities: &Path) {
     for name in LISTENING {
         let name = format!("{name}.scx");
@@ -535,20 +556,4 @@ pub fn copy_listening(abilities: &Path) {
         )
         .expect("the listening document is copyable");
     }
-    let path = abilities.join("speech_decoding.scx");
-    let text = std::fs::read_to_string(&path).expect("the decoding leaf is readable");
-    assert!(
-        text.contains(SPEECH_INVOKE),
-        "speech_decoding.scx invokes the speech service"
-    );
-    let text = text.replace(
-        SPEECH_INVOKE,
-        r#"<invoke id="decoder" type="scxml" src="speech_double.scx">"#,
-    );
-    std::fs::write(&path, text).expect("the decoding leaf copy is writable");
-    std::fs::copy(
-        workspace().join("tests/fixtures/phase6/speech_double.scx"),
-        abilities.join("speech_double.scx"),
-    )
-    .expect("the speech double is copyable");
 }

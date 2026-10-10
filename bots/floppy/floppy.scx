@@ -75,7 +75,9 @@
   bound, so its send raises error.execution in the sender) every description is
   dropped too, and if they are still over the turn fails without reaching
   the cognition. The routing table routes maps each offered event to the
-  targets offering it.
+  targets offering it, and routes a selected
+  bot.ability.communication.input to the body itself, which takes it as
+  outside communication input.
 
   Routing: a completed turn goes through routing, where <decision:route>
   places each selected event of the output, in order, and the body sends it
@@ -362,6 +364,10 @@
           <!-- bound: 32 KiB, the failure message below names it. -->
           <decision:assemble location="choices" routeslocation="routes" choices="body_choices" offers="offers"
                              bound="32768" overlocation="choices_over" sizelocation="choices_size"/>
+          <!-- A selected bot.ability.communication.input (mosfet's
+               SpeechHeard seed admits heard speech this way) is the body's
+               own: it goes through active's transition for outside input. -->
+          <assign location="routes['bot.ability.communication.input']" expr="[null]"/>
           <decision:names location="choice_names" choices="choices"/>
           <log label="bot.choices" expr="choice_names"/>
           <if cond="!choices_over">

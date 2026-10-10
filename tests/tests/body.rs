@@ -851,10 +851,20 @@ fn environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition() {
 #[test]
 fn the_listenings_products_are_turn_stimuli() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
-    let mut run = start(&body);
+    // The real speech service decodes against a fake backend on 127.0.0.1
+    // that hears an audio file's name as words.
+    let backend = support::hearing::Backend::start();
+    let mut args = support::hearing::granted(
+        "the_listenings_products_are_turn_stimuli",
+        &backend,
+        &["reply-to-me.wav", "ring.wav"],
+    )
+    .args;
+    args.push(body.display().to_string());
+    let mut run = Run::start(&args, &[]);
     activated(&mut run);
-    // Decoded speech (the speech double decodes the file name's words): a
-    // turn whose stimulus is bot.ability.listening.speech.output.
+    // Decoded speech: a turn whose stimulus is
+    // bot.ability.listening.speech.output.
     let speech = json!({"audio": "media/reply-to-me.wav", "sample_rate_hz": 16000});
     run.event("environment.sound", &speech);
     run.until(WAIT, label_is("bot.processing.completed"));
@@ -872,6 +882,49 @@ fn the_listenings_products_are_turn_stimuli() {
             ("double.input", r#"1 reply "reply to me""#),
             ("bot.ability.speaking.output", r#"{"text":"reply 1"}"#),
             ("double.input", r#"2 ignore "phone.ringing""#),
+        ])
+    );
+    assert_eq!(backend.received().len(), 1, "only the speech is decoded");
+}
+
+#[test]
+fn a_selected_communication_input_reaches_the_communication() {
+    let body = layout(&Cognition::Double("'ready'"), &[]);
+    let backend = support::hearing::Backend::start();
+    let mut args = support::hearing::granted(
+        "a_selected_communication_input_reaches_the_communication",
+        &backend,
+        &["admit-reply-now.wav"],
+    )
+    .args;
+    args.push(body.display().to_string());
+    let mut run = Run::start(&args, &[]);
+    activated(&mut run);
+    // Heard speech whose turn selects bot.ability.communication.input (as
+    // mosfet's SpeechHeard seed does): the body routes it to itself and
+    // relays it to the communication, whose conversation product is the
+    // next turn's stimulus.
+    let speech = json!({"audio": "media/admit-reply-now.wav", "sample_rate_hz": 16000});
+    run.event("environment.sound", &speech);
+    run.until(WAIT, label_is("bot.ability.speaking.output"));
+    let finished = close(
+        run,
+        "a_selected_communication_input_reaches_the_communication",
+    );
+    assert_eq!(
+        only(
+            &finished.all,
+            &["double.input", "bot.route", "bot.ability.speaking.output"]
+        ),
+        pairs(&[
+            ("double.input", r#"1 admit "admit reply now""#),
+            ("bot.route", "bot.ability.communication.input -> bot"),
+            ("double.input", "2 reply 1"),
+            (
+                "bot.route",
+                "bot.ability.communication.respond -> communication"
+            ),
+            ("bot.ability.speaking.output", r#"{"text":"reply 2"}"#),
         ])
     );
 }

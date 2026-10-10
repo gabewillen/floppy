@@ -32,6 +32,9 @@
   * unoffered: selects bot.ability.reasoning.input (offered by no ability
     the body invokes);
   * adopt: selects bot.ability.identity.adopt for the observation's data;
+  * admit: selects bot.ability.communication.input naming no target, the
+    speech's words after the first from source "caller" (as mosfet's
+    SpeechHeard seed admits heard speech);
   * ignore: selects bot.ability.cognition.ignore for target cognition;
   * focus: selects bot.focus_device for the observation's data;
   * elsewhere: selects bot.ability.cognition.ignore for target speaking;
@@ -137,6 +140,12 @@
             <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {text: 'I am ' + observed}}]"/>
           </send>
         </if>
+        <if cond="action === 'admit'">
+          <send event="bot.ability.cognition.output" target="#_parent">
+            <param name="turn" expr="turn"/>
+            <param name="output" expr="[{event: 'bot.ability.communication.input', data: {source_ids: ['caller'], target_ids: [], content: observed.split(' ').slice(1).join(' '), content_type: 'text/plain', sample_rate_hz: stimulus.data.sample_rate_hz, channels: stimulus.data.channels}}]"/>
+          </send>
+        </if>
         <if cond="action === 'ignore'">
           <send event="bot.ability.cognition.output" target="#_parent">
             <param name="turn" expr="turn"/>
@@ -176,7 +185,7 @@
           <send event="bot.reboot" target="#_parent"><content>{"reason": "cognition_child_teardown_failed"}</content></send>
         </if>
       </onentry>
-      <transition cond="['reply', 'blank', 'twice', 'then_blank', 'unoffered', 'adopt', 'addressed', 'ignore', 'elsewhere', 'focus', 'fail', 'stale'].indexOf(action) &gt;= 0" target="idle"/>
+      <transition cond="['reply', 'blank', 'twice', 'then_blank', 'unoffered', 'adopt', 'admit', 'addressed', 'ignore', 'elsewhere', 'focus', 'fail', 'stale'].indexOf(action) &gt;= 0" target="idle"/>
       <transition event="bot.ability.cognition.cancel" cond="action !== 'deaf'" target="idle">
         <send event="bot.ability.cognition.cancelled" target="#_parent"><param name="turn" expr="turn"/></send>
       </transition>

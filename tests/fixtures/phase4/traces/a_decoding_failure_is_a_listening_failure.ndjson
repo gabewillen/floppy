@@ -1,7 +1,5 @@
 {"label":"harness.ready","session":"session","text":"{\"ability\":\"listening\",\"choices\":[]}","type":"log"}
 {"label":"voice_detection","parent":"session.3","session":"session.4","text":"absent","type":"log"}
-{"label":"speech.decode","parent":"session.6","session":"session.7","text":"{\"operation\":\"decode\",\"model\":\"whisper-1\",\"audio\":\"media/fail.wav\",\"media_type\":null}","type":"log"}
-{"label":"harness.failed","session":"session","text":"{\"message\":\"unconfigured\",\"stage\":\"speech_decoding\"}","type":"log"}
-{"label":"voice_detection","parent":"session.3","session":"session.8","text":"absent","type":"log"}
-{"label":"speech.decode","parent":"session.10","session":"session.11","text":"{\"operation\":\"decode\",\"model\":\"whisper-1\",\"audio\":\"media/again.wav\",\"media_type\":null}","type":"log"}
+{"label":"harness.failed","session":"session","text":"{\"message\":\"Speech decoding failed: the backend answered an error status.\",\"stage\":\"speech_decoding\"}","type":"log"}
+{"label":"voice_detection","parent":"session.3","session":"session.7","text":"absent","type":"log"}
 {"label":"harness.speech","session":"session","text":"{\"channels\":1,\"content\":\"again\",\"content_type\":\"text/plain\",\"media_type\":\"audio/pcm\",\"parent\":{\"data\":{\"audio\":\"media/again.wav\",\"sample_rate_hz\":16000},\"event\":\"environment.sound\"},\"sample_rate_hz\":16000,\"source_ids\":[],\"voice_detection\":{\"segments\":[]}}","type":"log"}

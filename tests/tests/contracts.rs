@@ -797,44 +797,9 @@ fn validates_clean(path: &Path) -> Result<(), String> {
             .contains("diagnostic summary: 0 error(s), 0 warning(s), 0 note(s)")
     {
         Ok(())
-    } else if speech_service_pending(&validated.stderr) {
-        validates_clean(&speech_decoding_with_its_double(path))
     } else {
         Err(validated.stderr)
     }
-}
-
-/// Whether `stderr` refuses the speech service's package while the speech
-/// service is not yet in this workspace (phase 6 builds it in a parallel
-/// slice; `abilities/speech_decoding.scx` invokes it). Once
-/// `services/speech/` exists, the document validates like every other.
-fn speech_service_pending(stderr: &str) -> bool {
-    !workspace().join("services/speech").is_dir()
-        && !stderr.contains("error[")
-        && stderr.contains(&format!(
-            "repository service `{}`: its package is not in the extension cache",
-            support::service_uri("speech")
-        ))
-}
-
-/// A scratch copy of the listening's documents beside `path`'s schemas,
-/// with the speech service replaced by its double
-/// (`support::copy_listening`): the decoding leaf it returns is validated
-/// in the original's place.
-fn speech_decoding_with_its_double(path: &Path) -> PathBuf {
-    let dir = support::unique_scratch("contracts").join("abilities");
-    std::fs::create_dir_all(dir.join("schemas")).expect("the scratch is creatable");
-    for entry in std::fs::read_dir(ability_schemas()).expect("the schemas are listable") {
-        let schema = entry.expect("a directory entry").path();
-        std::fs::copy(
-            &schema,
-            dir.join("schemas")
-                .join(schema.file_name().expect("a name")),
-        )
-        .expect("the schema is copyable");
-    }
-    support::copy_listening(&dir);
-    dir.join(path.file_name().expect("a document has a file name"))
 }
 
 /// Every contract check over one document: its problems.

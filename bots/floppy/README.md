@@ -26,7 +26,9 @@ body itself or to the ability that offered it: a selected
 `bot.ability.communication.respond` is said through speaking and recorded
 in the conversation. Input addressed to the bot as
 `bot.ability.communication.input` is admitted into the conversation, whose
-updated history is the next turn's stimulus. The full Contract, Topology, Bindings, and Proof sections come
+updated history is the next turn's stimulus; so is a turn's selected
+`bot.ability.communication.input` (mosfet's SpeechHeard seed admits heard
+speech this way), which the body routes to itself. The full Contract, Topology, Bindings, and Proof sections come
 with the phase's saved live examples.
 
 ## Running
@@ -37,15 +39,17 @@ Activate it, then give it inputs, on standard input:
 # The locally built packages (the dev cache under target/).
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env bots/floppy/floppy.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env \
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
 # A conversation: text addressed to the bot, answered through bot.say.
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env bots/floppy/floppy.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env \
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
 # floppy's latest release, once one is published (phase 7).
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
-  scx run --env-file .env bots/floppy/floppy.scx
+  scx run --env-file .env --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
 ```
 
 The env file must set `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
@@ -56,8 +60,10 @@ every turn fails with `the intuition failed: the decision failed
 (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
 `bot.activate` may name the model (`{"model": "..."}`); the default is
-`Qwen/Qwen3.8-Flash-Next`. The services import no WASI resources, so the run
-needs no grants.
+`Qwen/Qwen3.8-Flash-Next`. The speech service (the listening's speech
+decoding) reads audio from a directory, so every run grants it one at
+`/media` (`--dir ...speech=media::/media`, any host directory); the other
+services import no WASI resources.
 
 Sound (phase 6): `environment.sound` `{audio, media_type, sample_rate_hz,
 channels, kind, ...}` goes to the [listening](../../abilities/listening.scx),
@@ -70,7 +76,8 @@ sound whose `kind` labels it is non-speech and comes back as the turn's
 `environment.sound` stimulus, and any other sound is decoded by the speech
 service into the turn's `bot.ability.listening.speech.output` stimulus
 (`content_type` `text/plain`). `audio` is a reference to a file in the
-directory the run grants the speech service, and decoding needs
+directory the run grants the speech service (`media/hello.wav` is
+`hello.wav` there), and decoding needs
 `FLOPPY_SPEECH_BASE_URL` and `FLOPPY_SPEECH_API_KEY` (no default backend); a
 sound that cannot be heard is logged as `bot.ability.listening.failed`.
 
@@ -92,9 +99,9 @@ change.
   and the choices and routing (the offer union, focus grounding, dropped
   selections, ignore, the 32 KiB budget).
 - `cargo test -p floppy-tests --test listening`: the listening under a
-  harness, with a double of the speech service's decoding events
-  (`tests/fixtures/phase6/speech_double.scx`): decoded speech, labelled
-  non-speech, failures, the stage timer, the product threshold and order.
+  harness, with the speech service decoding against a fake backend
+  (`tests/tests/support/hearing.rs`): decoded speech, labelled non-speech,
+  failures, the stage timer, the product threshold and order.
 - `cargo test -p floppy-tests --test cognition`: the cascade against fake
   decision and model backends (each path, the tuner, failures, hop timeouts
   and reboot requests, cancels).
