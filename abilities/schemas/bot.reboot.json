@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.reboot",
+  "description": "Request a full Bot-owned teardown and activation cycle.",
+  "properties": {
+    "reason": {
+      "description": "Stable unrecoverable failure category that requires a clean robot lifecycle restart.",
+      "enum": [
+        "cognition_child_teardown_failed",
+        "cognition_cancel_teardown_failed",
+        "cognition_detach_rollback_failed",
+        "learning_child_teardown_failed",
+        "learning_detach_rollback_failed"
+      ],
+      "examples": [
+        "cognition_child_teardown_failed"
+      ],
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "type": "object"
+}

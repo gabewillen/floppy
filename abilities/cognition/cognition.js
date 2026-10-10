@@ -32,13 +32,13 @@ function isChildHopTimeout(_event) {
 }
 
 function hopTimeoutLog() {
-  return 'turn ' + turn + ': ' + stage + ' after ' + hop_timeout_ms + ' ms';
+  return 'turn ' + turn + ': ' + stage + ' after ' + child_operation_timeout_ms + ' ms';
 }
 
 // running_autonomy, running_intuition, running_reasoning
 
 function hopDelay() {
-  return hop_timeout_ms + 'ms';
+  return child_operation_timeout_ms + 'ms';
 }
 
 // The stage's input param, and bot.ability.failed's input (mosfet _build_processing_input).

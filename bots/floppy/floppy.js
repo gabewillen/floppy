@@ -17,10 +17,6 @@ function isFromCommunication(_event) {
   return _event.invokeid === 'communication';
 }
 
-function isFromIdentity(_event) {
-  return _event.invokeid === 'identity';
-}
-
 function eventDataJson(_event) {
   return JSON.stringify(_event.data);
 }
@@ -129,11 +125,6 @@ function queuedStimulus() {
 // queue without its first stimulus.
 function queueRest() {
   return queue.slice(1);
-}
-
-// A conversation output whose last message is inbound.
-function isConversationProduct(_event) {
-  return _event.invokeid === 'communication' && _event.data.messages.length > 0 && _event.data.messages.slice(-1)[0].direction === 'inbound';
 }
 
 // processing

@@ -4,8 +4,10 @@
   abilities/communication/conversation): the committed history of one
   conversation. The communication (abilities/communication/communication.scx) invokes it
   as its child "conversation", routes each admitted input to it as
-  bot.ability.conversation.input, and records each spoken response with
-  bot.ability.conversation.append.
+  bot.ability.conversation.routed_input {parent} (parent: the
+  communication's input event as an envelope {event, data}), and records
+  each spoken response with bot.ability.conversation.append. A direct
+  bot.ability.conversation.input is taken too, as in mosfet.
 
     inactive -input-> active { waiting -input-> running -> waiting }
     append (inactive or active): commit the outbound message
@@ -20,49 +22,56 @@
   conversation, mosfet conversation_memory_insert_input); the
   relationship is the message's session_ref. The recalled memories are
   host-only (mosfet excludes them from the output) and are logged by
-  count only. A memory failure answers bot.ability.conversation.failed
-  {stage: "memory", message} and commits nothing. Without a database it
+  count only. The memory step is bounded by memory_timeout_ms (mosfet's
+  5 s turn stage timeout); a memory failure or that timeout answers
+  bot.ability.conversation.failed {stage: "memory", message} and commits
+  nothing. Without a database it
   logs <log label="memory" expr="'absent'">. The inbound message is then
   committed with
   the next sequence: text/* content as given, audio/* content dropped
   (media never enters the model-facing history), any other content as
   given; its provenance is the input event, with session_ref the
   relationship of its sorted source and target identities. Each message is
-  also indexed in transcripts, keyed by its sorted source identities (one
-  transcript per participant set; inference of participants and
+  also indexed in relationships, keyed by its sorted source identities (one
+  relationship per participant set; inference of participants and
   relationships from voice embeddings, mosfet's turn detectors, is phase 6).
 
   Appends: outbound messages only, committed with the next sequence and
   provenance event bot.ability.conversation.append; an append whose
   provenance id was already committed is not committed again.
 
-  Output: every commit answers the parent with
-  bot.ability.conversation.output {parent, messages}: parent is the input
-  that caused the latest inbound commit (an envelope {event, data}), and
-  messages is the committed history in causal order, its last
-  max_messages messages only (a bound on what reaches the model per turn;
-  sequences stay the history's).
+  Output: every commit's product is bot.ability.conversation.output
+  {parent, messages}: parent is the input that caused the latest inbound
+  commit (an envelope {event, data}), and messages is the committed
+  history in causal order. An inbound commit of text (string content,
+  content_type text/*) hands it to the parent as a stimulus,
+  bot.ability.cognition.input {stimulus} (the product's envelope with
+  source "conversation", mosfet's text contribution handoff); every other
+  commit sends the product itself, history only.
 
   Readiness: the session's start sends bot.ability.offers
   {ability: "conversation", choices: []} to the parent; it offers nothing
   (mosfet's conversation input is not a tool event).
 
   Commits: <conversation:commit> (the conversation namespace) builds each
-  committed message and its transcript key (its sorted source ids); the
-  document appends it to history and transcripts and remembers each
+  committed message and its relationship key (its sorted source ids); the
+  document appends it to history and relationships and remembers each
   committed outbound provenance id in appended.
 
-  Bindings: the conversation namespace package and the memory ability's
+  Bindings: the bot and conversation namespace packages and the memory ability's
   sql service package (a run grants it its directory: scx run's dir option).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="conversation" initial="conversation">
   <datamodel>
-    <data id="max_messages" expr="20"/>
+    <data id="memory_timeout_ms" expr="5000"/>
     <data id="history" expr="[]"/>
-    <data id="transcripts" expr="({})"/>
+    <data id="relationships" expr="({})"/>
+    <!-- The product's stimulus envelope, for the handoff. -->
+    <data id="product" expr="null"/>
     <data id="parent" expr="null"/>
     <data id="input" expr="null"/>
     <data id="participants" expr="null"/>
@@ -92,17 +101,29 @@
     </onentry>
 
     <state id="inactive">
+      <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json"
+                  target="running">
+        <assign location="input" expr="_event.data.parent.data"/>
+        <assign location="parent" expr="_event.data.parent"/>
+      </transition>
       <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json"
                   target="running">
         <assign location="input" expr="_event.data"/>
+        <assign location="parent" expr="inputEnvelope()"/>
       </transition>
     </state>
 
     <state id="active" initial="waiting">
       <state id="waiting">
+        <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json"
+                    target="running">
+          <assign location="input" expr="_event.data.parent.data"/>
+          <assign location="parent" expr="_event.data.parent"/>
+        </transition>
         <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json"
                     target="running">
           <assign location="input" expr="_event.data"/>
+          <assign location="parent" expr="inputEnvelope()"/>
         </transition>
       </state>
 
@@ -110,7 +131,6 @@
            nothing without a database; then commit the inbound message. -->
       <state id="running" initial="recalling_from">
         <onentry>
-          <assign location="parent" expr="inputEnvelope()"/>
           <conversation:commit location="message" keylocation="participants" direction="inbound"
                                event="parent.event" message="input" sequence="history.length"/>
         </onentry>
@@ -122,11 +142,15 @@
         </state>
         <state id="recalling_memory">
           <onentry>
+            <send id="memory-after" event="recalling_memory.after" delayexpr="memoryTimeoutDelay()"/>
             <assign location="remembered" expr="rememberedInput()"/>
             <assign location="statements" expr="memoryRecallStatements()"/>
             <assign location="statements" expr="statementsWithMemoryInsert()"/>
             <assign location="statements[1].parameters" expr="memoryInsertParameters()"/>
           </onentry>
+          <onexit>
+            <cancel sendid="memory-after"/>
+          </onexit>
           <invoke id="remember" type="scxml" src="../memory/memory.scx">
             <param name="database" expr="database"/>
             <param name="statements" expr="statements"/>
@@ -142,16 +166,30 @@
               <param name="message" expr="memoryFailedMessage(_event)"/>
             </send>
           </transition>
+          <transition event="recalling_memory.after" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'memory'"/>
+              <param name="message" expr="'Conversation memory recall timed out.'"/>
+            </send>
+          </transition>
         </state>
         <state id="committing">
           <transition target="waiting">
             <assign location="history" expr="historyWithMessage()"/>
-            <assign location="transcripts[participants]" expr="transcriptWithMessage()"/>
+            <assign location="relationships[participants]" expr="relationshipWithMessage()"/>
             <log label="conversation" expr="inboundCommitLog()"/>
-            <send event="bot.ability.conversation.output" target="#_parent">
-              <param name="parent" expr="parent"/>
-              <param name="messages" expr="outputMessages()"/>
-            </send>
+            <if cond="isTextMessage()">
+              <bot:stimulus location="product" event="'bot.ability.conversation.output'"
+                            data="({parent: parent, messages: history})" source="'conversation'"/>
+              <send event="bot.ability.cognition.input" target="#_parent">
+                <param name="stimulus" expr="product"/>
+              </send>
+            <else/>
+              <send event="bot.ability.conversation.output" target="#_parent">
+                <param name="parent" expr="parent"/>
+                <param name="messages" expr="history"/>
+              </send>
+            </if>
           </transition>
         </state>
       </state>
@@ -164,14 +202,14 @@
                            event="_event.name" message="_event.data.message"
                            provenance="_event.data.message.provenance" sequence="history.length"/>
       <assign location="history" expr="historyWithMessage()"/>
-      <assign location="transcripts[participants]" expr="transcriptWithMessage()"/>
+      <assign location="relationships[participants]" expr="relationshipWithMessage()"/>
       <if cond="hasProvenanceId()">
         <assign location="appended" expr="appendedWithProvenance()"/>
       </if>
       <log label="conversation" expr="outboundCommitLog()"/>
       <send event="bot.ability.conversation.output" target="#_parent">
         <param name="parent" expr="parent"/>
-        <param name="messages" expr="outputMessages()"/>
+        <param name="messages" expr="history"/>
       </send>
     </transition>
     <transition event="bot.ability.conversation.append" event:schema="schemas/bot.ability.conversation.append.json"

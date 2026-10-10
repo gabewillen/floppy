@@ -5,8 +5,8 @@ The floppy bot is the port of mosfet's Bot: an SCXML machine,
 [`../../abilities/`](../../abilities/). Phase 4 is in progress: the body runs
 its lifecycle and processing turns, and its abilities are the
 [cognition](../../abilities/cognition/cognition.scx), mosfet's cascade of stages
-invoked per turn: [autonomy](../../abilities/autonomy/autonomy.scx) (a seam until
-phase 5: no behaviors), [intuition](../../abilities/intuition/intuition.scx) (the
+invoked per turn: [autonomy](../../abilities/autonomy/autonomy.scx) (it runs the
+learned behaviors a stimulus triggers; none without memory), [intuition](../../abilities/intuition/intuition.scx) (the
 decision service picks ignore or hands the turn on, with mosfet's
 self-tuning confidence gate), and [reasoning](../../abilities/reasoning/reasoning.scx)
 (one structured model call over the turn's choices; it recalls and retains

@@ -12,6 +12,19 @@ function isFromInvoke(_event, invokeid) {
   return _event.invokeid === invokeid;
 }
 
+// The queue with the event appended, as {event, data}.
+function deferredQueue(_event) {
+  return queue.concat([{event: _event.name, data: _event.data}]);
+}
+
+function isQueuedNext(eventName) {
+  return queue.length > 0 && queue[0].event === eventName;
+}
+
+function queueRest() {
+  return queue.slice(1);
+}
+
 // recalling
 
 // The name the session started with, as a fact, or null.
@@ -48,6 +61,11 @@ function canRecognize() {
   return name !== null;
 }
 
+// The text a communication input carries: string content of a text/* type, else null.
+function heardText(data) {
+  return data.content_type.indexOf('text/') === 0 ? data.content : null;
+}
+
 // recognizing
 
 function addressedLog() {
@@ -78,6 +96,6 @@ function adoptFailedMessage(_event) {
   return 'Identity could not remember the name it took: ' + _event.data.message;
 }
 
-function adoptedNameLog(_event) {
-  return 'adopted ' + JSON.stringify(name) + ' (persisted: ' + _event.data.persisted + ')';
+function adoptedNameLog() {
+  return 'adopted ' + JSON.stringify(name);
 }

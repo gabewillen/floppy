@@ -32,7 +32,10 @@
 
   Ticks: each bot.behavior.tick the chain passes up goes to the cognition
   (#_parent), which hands it to the body as a stimulus: a new turn the bot
-  decides on (mosfet _forward_tick).
+  decides on (mosfet _forward_tick). A tick that arrives while reconciling
+  waits in the data model queue ticks (mosfet defers it) and is taken in
+  running, in order: forwarded when its routine is in the running set,
+  else dropped as stale (mosfet _drop_stale_tick, logged routines.stale).
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline).
@@ -52,6 +55,8 @@
     <data id="desired" expr="[]"/>
     <data id="routines" expr="[]"/>
     <data id="restart" expr="false"/>
+    <!-- Ticks deferred while reconciling. -->
+    <data id="ticks" expr="[]"/>
   </datamodel>
   <script src="routines.js"/>
 
@@ -90,7 +95,16 @@
         </state>
       </state>
 
-      <state id="running"/>
+      <state id="running">
+        <transition cond="hasRunningTick()">
+          <send event="bot.behavior.tick" target="#_parent">
+            <content expr="ticks.shift()"/>
+          </send>
+        </transition>
+        <transition cond="ticks.length &gt; 0">
+          <log label="routines.stale" expr="ticks.shift().name"/>
+        </transition>
+      </state>
     </state>
 
     <!-- The running set, as a chain of runners. -->
@@ -108,6 +122,11 @@
         <invoke id="runner" type="scxml" src="../routines_runner/routines_runner.scx">
           <param name="routines" expr="routines"/>
         </invoke>
+        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
+                    cond="isFromInvoke(_event, 'runner') &amp;&amp; In('reconciling')">
+          <assign location="ticks" expr="ticks.concat([_event.data])"/>
+          <log label="routines.deferred" expr="_event.data.name"/>
+        </transition>
         <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
                     cond="isFromInvoke(_event, 'runner')">
           <send event="bot.behavior.tick" target="#_parent">

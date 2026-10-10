@@ -1223,7 +1223,7 @@ fn reboots_on_a_silent_stage(
         generation,
         &[(
             "abilities/cognition/cognition.scx",
-            &[("hop_timeout_ms", hop_ms)],
+            &[("child_operation_timeout_ms", hop_ms)],
         )],
     );
     let mut run = start(&bot);

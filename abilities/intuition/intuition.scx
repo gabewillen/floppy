@@ -35,7 +35,11 @@
   service reports no probability with a chosen event, so such a turn adds
   no observation (mosfet observes only a reported score). declined (the
   abstain label won) and no-candidates (nothing could be filled) escalate
-  too, with mosfet's reason empty_product (an empty product). The decision
+  too, with mosfet's reason empty_product (an empty product). A chosen
+  bot.ability.reasoning.input (mosfet's deliberate handoff event) escalates
+  with reason deliberative_input. mosfet's per-event confidence_gate is off
+  by default and the decision service reports no per-event confidence, so
+  there is no gate_dropped_all here. The decision
   timer is deciding.after (floppy's own bound; mosfet's intuition has none).
 
   Output: <donedata>, received by the cognition as done.invoke.intuition:
@@ -122,7 +126,11 @@
     <transition event="*" cond="isChosenEvent(_event)"
                 target="done">
       <log label="intuition" expr="chosenLog(_event)"/>
-      <assign location="result" expr="selectionResult(_event)"/>
+      <if cond="isDeliberativeInput(_event)">
+        <assign location="result" expr="deliberativeInputResult()"/>
+      <else/>
+        <assign location="result" expr="selectionResult(_event)"/>
+      </if>
     </transition>
     <transition event="deciding.after" cond="isDecisionTimeout(_event)" target="done">
       <assign location="result" expr="timedOutResult()"/>

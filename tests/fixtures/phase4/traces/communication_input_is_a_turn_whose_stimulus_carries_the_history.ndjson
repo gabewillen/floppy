@@ -3,7 +3,7 @@
 {"label":"identity.offers","parent":"session","session":"session.5","text":"bot.ability.identity.adopt","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
 {"label":"conversation.memories","parent":"session.2","session":"session.3","text":"recalled 0, remembered 1","type":"log"}
-{"label":"conversation","parent":"session.2","session":"session.3","text":"inbound 0 from [\"gabe\"] (1 in its transcript)","type":"log"}
+{"label":"conversation","parent":"session.2","session":"session.3","text":"inbound 0 from [\"gabe\"] (1 in its relationship)","type":"log"}
 {"label":"communication.product","parent":"session","session":"session.2","text":"0","type":"log"}
 {"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"double.input","parent":"session","session":"session.1","text":"1 reply 1","type":"log"}
@@ -17,7 +17,7 @@
 {"label":"conversation","parent":"session.2","session":"session.3","text":"outbound 1","type":"log"}
 {"label":"communication.history","parent":"session","session":"session.2","text":"2","type":"log"}
 {"label":"conversation.memories","parent":"session.2","session":"session.3","text":"recalled 1, remembered 1","type":"log"}
-{"label":"conversation","parent":"session.2","session":"session.3","text":"inbound 2 from [\"gabe\"] (2 in its transcript)","type":"log"}
+{"label":"conversation","parent":"session.2","session":"session.3","text":"inbound 2 from [\"gabe\"] (2 in its relationship)","type":"log"}
 {"label":"communication.product","parent":"session","session":"session.2","text":"2","type":"log"}
 {"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"double.input","parent":"session","session":"session.1","text":"2 reply 3","type":"log"}

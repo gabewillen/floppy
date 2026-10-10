@@ -73,10 +73,9 @@ const FLOPPY_NAME: &str = "[floppy name]";
 const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// The body's events (`bots/floppy/schemas/`).
-const BODY_EVENTS: [&str; 15] = [
+const BODY_EVENTS: [&str; 14] = [
     "bot.activate",
     "bot.deactivate",
-    "bot.reboot",
     "bot.input",
     "bot.focus_device",
     "bot.clear_focus",
@@ -92,8 +91,9 @@ const BODY_EVENTS: [&str; 15] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 54] = [
+const ABILITY_EVENTS: [&str; 56] = [
     "bot.ability.failed",
+    "bot.reboot",
     "bot.ability.cognition.input",
     "bot.ability.cognition.output",
     "bot.ability.cognition.cancel",
@@ -115,6 +115,7 @@ const ABILITY_EVENTS: [&str; 54] = [
     "bot.ability.communication.failed",
     "bot.ability.communication.response.hop.timed_out",
     "bot.ability.conversation.input",
+    "bot.ability.conversation.routed_input",
     "bot.ability.conversation.append",
     "bot.ability.conversation.output",
     "bot.ability.conversation.failed",
@@ -155,12 +156,11 @@ const ABILITY_EVENTS: [&str; 54] = [
 /// The correlated events of one processing turn: each requires `turn`.
 /// Tool events (the ones a model chooses, such as
 /// `bot.ability.cognition.ignore`) never do: their data is the model's.
-const CORRELATED: [&str; 18] = [
+const CORRELATED: [&str; 17] = [
     "bot.processing.completed",
     "bot.processing.failed",
     "bot.processing.timed_out",
     "bot.processing.cancel.timed_out",
-    "bot.ability.cognition.input",
     "bot.ability.cognition.output",
     "bot.ability.cognition.cancel",
     "bot.ability.cognition.cancelled",
@@ -193,6 +193,7 @@ const NAMES_FILE: &str = "mosfet-event-names.json";
 
 /// The ability events the body takes, twinned into `bots/floppy/schemas/`.
 const BODY_TWINS: [&str; 11] = [
+    "bot.reboot",
     "bot.ability.offers",
     "bot.ability.communication.input",
     "bot.ability.communication.failed",
@@ -201,9 +202,8 @@ const BODY_TWINS: [&str; 11] = [
     "bot.ability.cognition.cancelled",
     "bot.ability.processing.cancelled",
     "bot.ability.failed",
-    "bot.ability.conversation.output",
-    "bot.ability.identity.addressed",
-    "bot.behavior.tick",
+    "bot.ability.cognition.input",
+    "bot.ability.conversation.failed",
 ];
 
 /// The longest `cond` or (outside `<data>`) `expr` a phase 4 document may

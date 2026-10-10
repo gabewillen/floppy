@@ -118,14 +118,13 @@ overrides it), `abilities/cognition/cognition.scx`, `abilities/reasoning/reasoni
 | `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
 | `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (mosfet's 30 s attachment timeout) |
 | `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (mosfet's 5 min processing timeout) |
-| `abilities/cognition/cognition.scx` | `hop_timeout_ms` | `30000` | each cascade stage (mosfet's 30 s) |
+| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage (mosfet's 30 s) |
 | `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
 | `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (mosfet's `TURN_SILENCE_BOUND`) |
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
 | `abilities/communication/communication.scx` | `response_timeout_ms` | `6000` | saying one response (mosfet's 6 s) |
 | `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (mosfet's 30 s) |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (mosfet's 30 s) |
-| `abilities/conversation/conversation.scx` | `max_messages` | `20` | the history that reaches one turn |
 
 The cognition's phase 5 gates are off (`reflection_enabled`,
 `routines_enabled`). The floppy bot's `database` is `/memory/floppy.sqlite`,

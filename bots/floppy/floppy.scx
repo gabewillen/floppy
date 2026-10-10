@@ -9,13 +9,17 @@
     live -bot.deactivate-> deactivating -> inactive
     live -bot.reboot (from cognition)-> live (re-entered: every ability is
       cancelled and invoked again)
+    activating -bot.deactivate-> inactive (mosfet's activation_cleanup)
     cancelling_processing -cancel timeout-> degraded (a final sink)
 
   Abilities: live holds <invoke id="cognition">, <invoke
   id="communication"> (abilities/communication/communication.scx, which holds the
   conversation and speaking) and <invoke id="identity">
   (abilities/identity/identity.scx, the bot's name); leaving live cancels every ability (SCXML
-  6.4), which replaces mosfet's cleanup states. An ability is ready when it
+  6.4), which replaces mosfet's cleanup states: an SCXML invoke cancel is
+  synchronous, so there is nothing for mosfet's 5 min deactivation
+  timeout or its reboot preserve/reset cleanup to wait on, and every
+  reboot restarts the abilities from their documents (mosfet's reset). An ability is ready when it
   sends its first bot.ability.offers; the body is active when every
   expected ability is ready. A run-tagged activation timer
   (activation_timeout_ms), an error event, or an ability ending while
@@ -24,15 +28,15 @@
 
   Communication: bot.ability.communication.input from outside, while
   active, goes to the communication, which admits it into its
-  conversation; the conversation's product (bot.ability.conversation.output
-  whose last message is inbound) comes back as a stimulus like bot.input.
-  The communication says a routed bot.ability.communication.respond
-  through speaking and answers bot.ability.speaking.output or
-  bot.ability.communication.failed, which the body logs. The same input
-  goes to the identity, which answers bot.ability.identity.addressed
-  {name} when the text names the bot; that too is a stimulus, as is a
-  routine's bot.behavior.tick the cognition forwards (phase 5 routines,
-  gated off in phase 4).
+  conversation; the conversation's text product comes back as
+  bot.ability.cognition.input {stimulus}. The communication says a routed
+  bot.ability.communication.respond through speaking and answers
+  bot.ability.speaking.output or bot.ability.communication.failed, and
+  forwards the conversation's bot.ability.conversation.failed, all of
+  which the body logs. The same input goes to the identity, which hands
+  over bot.ability.cognition.input {stimulus: bot.ability.identity.addressed}
+  when the text names the bot, as the cognition hands over a routine's
+  bot.behavior.tick (phase 5 routines, gated off in phase 4).
 
   Environment: environment.sound and environment.visual from outside,
   while active, go to each input ability (input, mosfet's Bot input: the invoke ids
@@ -40,10 +44,11 @@
   order, by <foreach>; never to the cognition, which hears of a stimulus
   only as an input ability's product.
 
-  Turns: bot.input, a conversation product or an addressed in unfocused
-  or focused
-  starts a processing turn; <bot:stimulus> writes the event's stimulus
-  envelope {event, data, source}. The body counts the turn, computes the
+  Turns: bot.input, or an ability's bot.ability.cognition.input handoff
+  (mosfet grants any ability product the turn, blind to its content), in
+  unfocused or focused starts a processing turn; the stimulus is the
+  envelope {event, data, source} <bot:stimulus> writes for bot.input, or
+  the handoff's stimulus as given. The body counts the turn, computes the
   turn's attention bias with <bot:attention> (focus, focus_candidates:
   mosfet's attention_bias_for_turn from device identity only), assembles the turn's choices (below), sends bot.ability.cognition.input
   {turn, stimulus, focus, focus_candidates, choices} to the cognition, and
@@ -242,6 +247,9 @@
         <log label="bot.diagnostic" expr="activatingDoneDiagnostic(_event)"/>
         <log label="bot.activating.failed" expr="emptyDataJson()"/>
       </transition>
+      <!-- mosfet's activation_cleanup: back to inactive, with no
+           bot.deactivated (the bot never became active). -->
+      <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="inactive"/>
     </state>
 
     <state id="active" initial="unfocused">
@@ -285,6 +293,9 @@
       <transition event="bot.ability.communication.failed" event:schema="schemas/bot.ability.communication.failed.json" cond="isFromCommunication(_event)">
         <log label="bot.ability.communication.failed" expr="eventDataJson(_event)"/>
       </transition>
+      <transition event="bot.ability.conversation.failed" event:schema="schemas/bot.ability.conversation.failed.json" cond="isFromCommunication(_event)">
+        <log label="bot.ability.conversation.failed" expr="eventDataJson(_event)"/>
+      </transition>
       <!-- The body's own choices (mosfet: focus on active, clear only while
            a device is focused), offered on processing entry and taken only
            as routed selections of the turn. -->
@@ -308,17 +319,9 @@
                     cond="isFromOutside(_event)" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
-        <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
-                    cond="isConversationProduct(_event)" target="processing">
-          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
-        </transition>
-        <transition event="bot.ability.identity.addressed" event:schema="schemas/bot.ability.identity.addressed.json"
-                    cond="isFromIdentity(_event)" target="processing">
-          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
-        </transition>
-        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
-                    cond="isFromCognition(_event)" target="processing">
-          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+        <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json"
+                    cond="isExpectedAbility(_event)" target="processing">
+          <assign location="stimulus" expr="_event.data.stimulus"/>
         </transition>
       </state>
 
@@ -331,17 +334,9 @@
                     cond="isFromOutside(_event)" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
-        <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
-                    cond="isConversationProduct(_event)" target="processing">
-          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
-        </transition>
-        <transition event="bot.ability.identity.addressed" event:schema="schemas/bot.ability.identity.addressed.json"
-                    cond="isFromIdentity(_event)" target="processing">
-          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
-        </transition>
-        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
-                    cond="isFromCognition(_event)" target="processing">
-          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+        <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json"
+                    cond="isExpectedAbility(_event)" target="processing">
+          <assign location="stimulus" expr="_event.data.stimulus"/>
         </transition>
       </state>
 
@@ -399,21 +394,9 @@
           <assign location="queue" expr="queueWithPending()"/>
           <log label="bot.deferred" expr="deferredCount()"/>
         </transition>
-        <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
-                    cond="isConversationProduct(_event)">
-          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
-          <assign location="queue" expr="queueWithPending()"/>
-          <log label="bot.deferred" expr="deferredCount()"/>
-        </transition>
-        <transition event="bot.ability.identity.addressed" event:schema="schemas/bot.ability.identity.addressed.json"
-                    cond="isFromIdentity(_event)">
-          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
-          <assign location="queue" expr="queueWithPending()"/>
-          <log label="bot.deferred" expr="deferredCount()"/>
-        </transition>
-        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
-                    cond="isFromCognition(_event)">
-          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+        <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json"
+                    cond="isExpectedAbility(_event)">
+          <assign location="pending" expr="_event.data.stimulus"/>
           <assign location="queue" expr="queueWithPending()"/>
           <log label="bot.deferred" expr="deferredCount()"/>
         </transition>
@@ -450,21 +433,9 @@
           <assign location="queue" expr="queueWithPending()"/>
           <log label="bot.deferred" expr="deferredCount()"/>
         </transition>
-        <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
-                    cond="isConversationProduct(_event)">
-          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
-          <assign location="queue" expr="queueWithPending()"/>
-          <log label="bot.deferred" expr="deferredCount()"/>
-        </transition>
-        <transition event="bot.ability.identity.addressed" event:schema="schemas/bot.ability.identity.addressed.json"
-                    cond="isFromIdentity(_event)">
-          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
-          <assign location="queue" expr="queueWithPending()"/>
-          <log label="bot.deferred" expr="deferredCount()"/>
-        </transition>
-        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
-                    cond="isFromCognition(_event)">
-          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+        <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json"
+                    cond="isExpectedAbility(_event)">
+          <assign location="pending" expr="_event.data.stimulus"/>
           <assign location="queue" expr="queueWithPending()"/>
           <log label="bot.deferred" expr="deferredCount()"/>
         </transition>
@@ -528,8 +499,10 @@
   </state>
 
   <!-- A sink: the cognition did not acknowledge a cancel, or ended while
-       active. The bot takes no more turns: degraded is a top-level final
-       state, so the session ends with the reason as its result. -->
+       active. The bot takes no more turns. mosfet's degraded is a state
+       with no way out; here it is a top-level final state (scx validate
+       refuses a state that can never exit, LINT002), so the session ends
+       with the reason as its result. -->
   <final id="degraded">
     <onentry>
       <log label="bot.degraded" expr="degraded_reason"/>

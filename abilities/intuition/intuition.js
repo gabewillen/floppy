@@ -68,6 +68,15 @@ function chosenLog(_event) {
   return 'turn ' + turn + ': ' + _event.name;
 }
 
+// mosfet's deliberate handoff event: the turn goes on to reasoning.
+function isDeliberativeInput(_event) {
+  return _event.name === 'bot.ability.reasoning.input';
+}
+
+function deliberativeInputResult() {
+  return ({handled: false, reason: 'deliberative_input', turn: turn, tuner: tuner});
+}
+
 // The turn's one selection {event, data} (mosfet's escalation reason none).
 function selectionResult(_event) {
   return ({handled: true, selected: [{event: _event.name, data: Object(_event.data)}], reason: 'none', turn: turn, tuner: tuner});

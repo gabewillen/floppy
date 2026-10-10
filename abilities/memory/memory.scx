@@ -21,8 +21,12 @@
   passed to the engine unchanged.
 
   opening picks the engine. migrating reads the schema version: SQLite's
-  PRAGMA user_version, or Postgres's alembic_version table (mosfet's
-  Alembic version table, created when missing). applying runs, in one
+  PRAGMA user_version (mosfet's SQLite store keeps an Alembic
+  alembic_version table instead), or Postgres's alembic_version table,
+  created when missing. mosfet's postgres_memory provider has no
+  migrations (it creates bot_memory only); floppy migrates Postgres like
+  SQLite so that every table the abilities use exists on both [floppy
+  behavior]. applying runs, in one
   transaction, the migrations the database lacks (mosfet's Alembic
   revisions 0001 and 0002, in each engine's dialect: the same tables,
   columns, defaults and indexes; SQLite records them as user_version 1 and
