@@ -1,0 +1,13 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel>
+    <data id="seen" expr="[]"/>
+  </datamodel>
+  <script src="scripts/side-effects.js"/>
+  <state id="a">
+    <onentry>
+      <log label="seen" expr="remember('entry')"/>
+    </onentry>
+    <transition event="go" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

@@ -916,11 +916,13 @@ fn known_names() -> BTreeSet<String> {
     known
 }
 
-/// `scx validate` reports nothing but `LINT019` for the document's own
-/// `<script src>` functions ([`support::validates_but_for_script_src`]).
 fn validates_clean(path: &Path) -> Result<(), String> {
     let validated = output(&["validate".to_owned(), path.display().to_string()]);
-    if validated.status.success() && support::validates_but_for_script_src(&validated.stderr) {
+    if validated.status.success()
+        && validated
+            .stderr
+            .contains("diagnostic summary: 0 error(s), 0 warning(s), 0 note(s)")
+    {
         Ok(())
     } else {
         Err(validated.stderr)

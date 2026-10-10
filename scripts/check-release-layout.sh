@@ -118,7 +118,7 @@ cache="$work/cache"
 mirror_flags="--cache-dir $cache --github-api-base $base/api --github-raw-base $base/raw --github-download-base $base/download"
 
 cd "$workspace"
-for document in bots/*/*.scx abilities/*.scx; do
+for document in bots/*/*.scx abilities/*/*.scx abilities/behaviors/*/*.scx; do
     # shellcheck disable=SC2086 # the flags hold no whitespace
     "$scx" validate $mirror_flags "$document" > "$work/validate.log" 2>&1 || {
         cat "$work/validate.log" >&2

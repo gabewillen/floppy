@@ -129,6 +129,20 @@ hard cutover.
   own schema files; a remote `src` is not judged, nothing is fetched), and
   `snapshot run` and `run` pass the documents they loaded before the
   session.
+- The side-effect analysis (`SCXML074`, `LINT020`, `LINT019`) reads a
+  `<script src>` file the caller supplies: the functions it declares are
+  judged by their bodies like an inline `<script>`'s, so a `cond` or
+  `<log expr>` calling a pure one is clean, an effect in one is labeled at
+  the `src` value (`(in `<src>`)`), and only a `<script src>` with no file
+  stays unread. The caller reads the files:
+  `Validator::with_script_resources` and
+  `scxml_validator_core::ScriptResources` (text keyed by `src` as authored,
+  its XML white space collapsed), `validate_expressions_with_scripts`, the
+  validator WIT `validation-request` field `scripts` (`script-resource`),
+  and the browser `validate` option `scripts`. `scx validate`, `compile`,
+  `snapshot run`, and `run` read the `file:` scripts a document's
+  `<script src>` elements name (a remote script stays unread; nothing is
+  fetched for validation).
 - Browser host parity, slice 1: `createValidator` runs the bundled validator
   component (the `scx validate` report, byte for byte); the validator and
   compiler take the page's extension packages and `event:schema` files
