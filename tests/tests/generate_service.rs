@@ -78,31 +78,18 @@ struct Received {
     body: Vec<u8>,
 }
 
-/// A streamed Chat Completions answer (server-sent events, as the generate
-/// service asks for) carrying `content`, split in two deltas.
-fn streamed(content: &str) -> String {
-    let middle = content.chars().count() / 2;
-    let head: String = content.chars().take(middle).collect();
-    let tail: String = content.chars().skip(middle).collect();
-    let chunk = |delta: serde_json::Value, finish: Option<&str>| {
-        serde_json::json!({
-            "object": "chat.completion.chunk",
-            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
-        })
-    };
-    [
-        chunk(
-            serde_json::json!({"role": "assistant", "content": ""}),
-            None,
-        ),
-        chunk(serde_json::json!({"content": head}), None),
-        chunk(serde_json::json!({"content": tail}), None),
-        chunk(serde_json::json!({}), Some("stop")),
-    ]
-    .iter()
-    .map(|chunk| format!("data: {chunk}\n\n"))
-    .chain(std::iter::once("data: [DONE]\n\n".to_owned()))
-    .collect()
+/// A non-streamed Chat Completions answer carrying `content`, as the
+/// generate service asks for one by default.
+fn completion(content: &str) -> String {
+    serde_json::json!({
+        "object": "chat.completion",
+        "choices": [{
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {"role": "assistant", "content": content},
+        }],
+    })
+    .to_string()
 }
 
 /// A deterministic fake Chat Completions backend on 127.0.0.1: the first
@@ -161,12 +148,14 @@ impl Mock {
                 });
                 let (status, answer) = match target.as_str() {
                     "/text/v1/chat/completions" => {
-                        ("200 OK", streamed("Hello from the fake backend!"))
+                        ("200 OK", completion("Hello from the fake backend!"))
                     }
                     "/json/v1/chat/completions" => {
-                        ("200 OK", streamed(r#"{"score":41,"answer":"yes"}"#))
+                        ("200 OK", completion(r#"{"score":41,"answer":"yes"}"#))
                     }
-                    "/mismatch/v1/chat/completions" => ("200 OK", streamed(r#"{"answer":"yes"}"#)),
+                    "/mismatch/v1/chat/completions" => {
+                        ("200 OK", completion(r#"{"answer":"yes"}"#))
+                    }
                     "/fail/v1/chat/completions" => (
                         "500 Internal Server Error",
                         r#"{"error":{"message":"boom"}}"#.to_owned(),
@@ -265,7 +254,7 @@ fn a_text_generation_posts_the_canonical_request_and_returns_the_reply() {
     );
     assert_eq!(
         String::from_utf8(received[0].body.clone()).expect("UTF-8"),
-        r#"{"messages":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"model":"mock-model","reasoning_effort":"low","stream":true}"#,
+        r#"{"messages":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"model":"mock-model","reasoning_effort":"low"}"#,
         "the request body is canonical JSON"
     );
 }
@@ -373,7 +362,7 @@ fn an_image_part_reaches_the_backend_as_a_data_url() {
     assert_eq!(received.len(), 1, "exactly one request");
     assert_eq!(
         String::from_utf8(received[0].body.clone()).expect("UTF-8"),
-        r#"{"messages":[{"content":[{"text":"Read all visible text in this image. Return only the text.","type":"text"},{"image_url":{"url":"data:image/png;base64,iVBORw0KGgphYg=="},"type":"image_url"}],"role":"user"}],"model":"mock-model","reasoning_effort":"low","stream":true}"#,
+        r#"{"messages":[{"content":[{"text":"Read all visible text in this image. Return only the text.","type":"text"},{"image_url":{"url":"data:image/png;base64,iVBORw0KGgphYg=="},"type":"image_url"}],"role":"user"}],"model":"mock-model","reasoning_effort":"low"}"#,
         "the image is sent as a data URL of the granted file's bytes"
     );
 }
@@ -702,6 +691,7 @@ fn leaving_the_invoking_state_closes_the_streaming_model_call() {
   <state id="ask">
     <invoke id="gen" type="{generate}" env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
       {TEXT_PARAMS}
+      <param name="stream" expr="true"/>
     </invoke>
     <transition event="generate.result"><log label="reply" expr="_event.data.text"/></transition>
     <transition event="leave" target="away"/>
