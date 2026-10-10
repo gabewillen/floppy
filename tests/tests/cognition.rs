@@ -412,7 +412,11 @@ fn start(bot: &Bot) -> Run {
     run
 }
 
+/// Says `text` to the bot once reflection has settled every earlier
+/// output: it runs beside the next turn, so a turn started before it
+/// settles interleaves with it at a load-dependent point.
 fn say(run: &mut Run, text: &str) {
+    settle_reflection(run);
     run.event(
         "bot.input",
         &json!({"observation": {"event": "text", "data": text}}),
@@ -487,9 +491,8 @@ fn reflection_settled(record: &Json) -> bool {
         )
 }
 
-/// Waits until reflection has settled every output read so far: it runs
-/// beside the next turn, so a run closed before it settles would cut it
-/// short at a load-dependent point.
+/// Waits until reflection has settled every output read so far (a run
+/// closed before it settles would cut it short at a load-dependent point).
 fn settle_reflection(run: &Run) {
     let outputs = run.count(label_is("bot.output"));
     while run.count(reflection_settled) < outputs {
@@ -1088,11 +1091,9 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
     let mut run = start(&bot);
     say(&mut run, "remember this");
     run.until(WAIT, turn_ended);
-    // Reflection stores the turn's episode too, beside the next turn
-    // (mosfet's Reasoning `_retain_activity` and Reflection
-    // `_store_activity` both insert one); the next turn waits for it so
-    // that its recall is fixed.
-    settle_reflection(&run);
+    // Reflection stores the turn's episode too (mosfet's Reasoning
+    // `_retain_activity` and Reflection `_store_activity` both insert
+    // one); `say` waits for it, so the next turn's recall is fixed.
     say(&mut run, "and this");
     run.until(WAIT, turn_ended);
     let prompts = prompts(&mock);

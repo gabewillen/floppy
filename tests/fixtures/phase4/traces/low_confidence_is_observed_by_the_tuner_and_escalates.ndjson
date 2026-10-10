@@ -19,15 +19,15 @@
 {"label":"bot.route","session":"session","text":"bot.ability.cognition.ignore -> cognition","type":"log"}
 {"label":"cognition.ignore","parent":"session","session":"session.1","text":"idle","type":"log"}
 {"label":"reflection","parent":"session.1","session":"session.2","text":"turn 1: 1 episodes, 0 behaviors","type":"log"}
-{"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
-{"label":"cognition","parent":"session","session":"session.1","text":"turn 2: bot.input","type":"log"}
-{"label":"autonomy","parent":"session.1","session":"session.26","text":"turn 2: 0 matched for bot.input","type":"log"}
-{"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.29","text":"turn 2: threshold 0.35","type":"log"}
 {"label":"reflection.selected","parent":"session.1","session":"session.2","text":"none","type":"log"}
 {"label":"reflection.stored","parent":"session.1","session":"session.2","text":"turn 1","type":"log"}
-{"label":"bot.ability.reflection.output","parent":"session","session":"session.1","text":"turn 2","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.29","text":"turn 2: low confidence 34","type":"log"}
+{"label":"bot.ability.reflection.output","parent":"session","session":"session.1","text":"turn 1","type":"log"}
+{"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
+{"label":"cognition","parent":"session","session":"session.1","text":"turn 2: bot.input","type":"log"}
+{"label":"autonomy","parent":"session.1","session":"session.30","text":"turn 2: 0 matched for bot.input","type":"log"}
+{"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
+{"label":"intuition","parent":"session.1","session":"session.33","text":"turn 2: threshold 0.35","type":"log"}
+{"label":"intuition","parent":"session.1","session":"session.33","text":"turn 2: low confidence 34","type":"log"}
 {"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":34,\"n\":2,\"variance\":100}","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition unhandled (low_confidence)","type":"log"}
 {"label":"reasoning","parent":"session.1","session":"session.34","text":"turn 2: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
