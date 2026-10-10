@@ -76,15 +76,8 @@ function stageFailure(_event) {
   return (typeof _event.data.reason === 'string' && _event.data.reason.length > 0 ? _event.data.reason : 'Cognition ability failed.');
 }
 
-// An error.* from the child invokeid. The turn's stage, the reflection and
-// the routines run at once, and a child that fails after it started raises
-// error.communication in this session whichever child it is (scxml.rs
-// names no invoke in it), so only the event's invokeid tells them apart.
-function isFromChild(_event, invokeid) {
-  return _event.invokeid === invokeid;
-}
-
-// The failure of a stage that could not run (an error.* from it).
+// The failure of a stage that failed after it started (its
+// error.communication.<invokeid>).
 function stageRunFailure(name, _event) {
   return 'the ' + name + ' could not run (' + _event.name + ')';
 }

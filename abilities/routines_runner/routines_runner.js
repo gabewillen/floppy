@@ -8,19 +8,6 @@ function routineSource(index) {
   return routines[index].source;
 }
 
-// An error.* for the routine, or one with no invokeid (a source that does
-// not compile). The routine and the rest run at once, and a child that
-// fails after it started raises error.communication in this session
-// whichever child it is (scxml.rs names no invoke in it), so only the
-// event's invokeid tells them apart.
-function isRoutineError(_event) {
-  return _event.invokeid === 'routine' || _event.invokeid === undefined;
-}
-
-function isRestError(_event) {
-  return _event.invokeid === 'rest';
-}
-
 // routine_on and rest_on
 
 function routineFailure(index, _event) {

@@ -85,9 +85,10 @@
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline). scxml.rs checks them where each event is
   created: a send whose data a schema rejects is not routed and raises
-  error.execution in its sender, so conds only correlate (the turn, the
-  hop timer, and which of the concurrent children an error.* is from,
-  decision D81). The stages' donedata is not checked by scxml.rs, so the
+  error.execution in its sender, so conds only correlate (the turn and
+  the hop timer, decision D81). A child that fails after it started
+  raises error.communication.<invokeid>, so each region takes only its
+  own child's failure by name. The stages' donedata is not checked by scxml.rs, so the
   done.invoke conds also check its turn and shape.
 
   Bindings: the bot and decision namespace packages; the stages bind their own
@@ -213,7 +214,7 @@
       <transition event="done.invoke.autonomy" cond="matchesStageOutput(_event)" target="failing">
         <assign location="failure" expr="stageFailure(_event)"/>
       </transition>
-      <transition event="error.*" cond="isFromChild(_event, 'autonomy')" target="failing">
+      <transition event="error.communication.autonomy" target="failing">
         <assign location="failure" expr="stageRunFailure('autonomy', _event)"/>
       </transition>
     </state>
@@ -254,7 +255,7 @@
         <log label="cognition.tuner" expr="tunerLog()"/>
         <assign location="failure" expr="intuitionFailure(_event)"/>
       </transition>
-      <transition event="error.*" cond="isFromChild(_event, 'intuition')" target="failing">
+      <transition event="error.communication.intuition" target="failing">
         <assign location="failure" expr="stageRunFailure('intuition', _event)"/>
       </transition>
     </state>
@@ -287,7 +288,7 @@
       <transition event="done.invoke.reasoning" cond="matchesStageOutput(_event)" target="failing">
         <assign location="failure" expr="stageFailure(_event)"/>
       </transition>
-      <transition event="error.*" cond="isFromChild(_event, 'reasoning')" target="failing">
+      <transition event="error.communication.reasoning" target="failing">
         <assign location="failure" expr="stageRunFailure('reasoning', _event)"/>
       </transition>
     </state>
@@ -370,7 +371,7 @@
       <transition event="bot.reboot" event:schema="schemas/bot.reboot.json" target="rebooting">
         <assign location="reboot_reason" expr="_event.data.reason"/>
       </transition>
-      <transition event="error.*" cond="isFromChild(_event, 'reflection')" target="reflection_stopped">
+      <transition event="error.communication.reflection" target="reflection_stopped">
         <log label="cognition.reflection.failed" expr="_event.name"/>
       </transition>
     </state>
@@ -390,7 +391,7 @@
           <param name="stimulus" expr="tick"/>
         </send>
       </transition>
-      <transition event="error.*" cond="isFromChild(_event, 'routines')" target="routines_stopped">
+      <transition event="error.communication.routines" target="routines_stopped">
         <log label="cognition.routines.failed" expr="_event.name"/>
       </transition>
     </state>

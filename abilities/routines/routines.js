@@ -2,16 +2,6 @@
 // <script src="routines.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// chain_on
-
-// An error.* from the runner. The recall and the runner run at once, and a
-// child that fails after it started raises error.communication in this
-// session whichever child it is (scxml.rs names no invoke in it), so only
-// the event's invokeid tells them apart.
-function isRunnerError(_event) {
-  return _event.invokeid === 'runner';
-}
-
 // reconciling
 
 // database null means no inventory: nothing runs.

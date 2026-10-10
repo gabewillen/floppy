@@ -132,7 +132,7 @@
             <content expr="_event.data"/>
           </send>
         </transition>
-        <transition event="error.*" cond="isRunnerError(_event)" target="chain_off">
+        <transition event="error.communication.runner" target="chain_off">
           <log label="routines.failed" expr="_event.name"/>
         </transition>
       </state>

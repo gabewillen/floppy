@@ -25,8 +25,9 @@
   Routines._is_stale_tick). scxml.rs checks the tick against the
   transition's event:schema as it arrives.
 
-  Stopping: a routine that ends, or cannot start (an error.* for it; a
-  source that does not compile raises one with no invokeid), stays
+  Stopping: a routine that ends, fails (error.communication.routine), or
+  cannot start (a source that does not compile raises error.execution in
+  this session), stays
   stopped until its source changes (mosfet: "it stays stopped until
   changed"), and the rest keep running. Each runner nests one level deeper
   (scxml.rs bounds the nested invoke depth at 32 below the root session),
@@ -59,7 +60,7 @@
           <content expr="routineSource(0)"/>
         </invoke>
         <transition event="done.invoke.routine" target="routine_off"/>
-        <transition event="error.*" cond="isRoutineError(_event)" target="routine_off">
+        <transition event="error.communication.routine error.execution" target="routine_off">
           <log label="routines.failed" expr="routineFailure(0, _event)"/>
         </transition>
       </state>
@@ -76,7 +77,7 @@
         <invoke id="rest" type="scxml" src="routines_runner.scx">
           <param name="routines" expr="restRoutines()"/>
         </invoke>
-        <transition event="error.*" cond="isRestError(_event)" target="rest_off">
+        <transition event="error.communication.rest" target="rest_off">
           <log label="routines.failed" expr="routineFailure(1, _event)"/>
         </transition>
       </state>
