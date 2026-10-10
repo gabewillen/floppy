@@ -100,7 +100,18 @@ function intuitionFailure(_event) {
   return stageFailure(_event);
 }
 
+// An escalated intuition's environment actions (mosfet _environment_actions), else none.
+function environmentActions(_event) {
+  return Array.isArray(_event.data.selected) ? _event.data.selected : [];
+}
+
 // completing
+
+// The turn's output: an escalated intuition's environment actions first,
+// then the handling stage's selections.
+function turnOutput() {
+  return environment_actions.concat(selected);
+}
 
 // The reflection's cognition_input: the turn's stimulus, focus and focus_candidates.
 function cognitionInput() {

@@ -23,12 +23,28 @@
   failed: ..."). Without
   a database (mosfet's Reasoning without a memory collaborator) each step
   logs <log label="memory" expr="'absent'"> and sends its event with
-  memory_consulted and memory_written false and nothing recalled. The
-  model prompt carries the stimulus, the focus, and the recalled
-  prior_episodes and standing_directives (mosfet ProcessorInput) as JSON,
-  where mosfet renders it as model-facing XML. applying ends on the
-  generate service's done.invoke, which stands in for mosfet's private
-  bot.ability.reasoning.reasoned completion.
+  memory_consulted and memory_written false and nothing recalled.
+
+  Prompt (mosfet processing.py InputData.model_facing_payload over
+  cognition/event.py model_facing_xml): the user message is mosfet's
+  ProcessorInput as model-facing XML, built by promptProjection() in
+  reasoning.js: <cognition:processor_input> holding host_input (a
+  processing:input whose input field is the stimulus, stamped
+  stimulus:event, stimulus:id, stimulus:source and stimulus:target),
+  prior_episodes (cognition:cognitive_episode) and standing_directives
+  (cognition:directive), each list with its count; no focus (mosfet's
+  ProcessorInput has none). The stimulus's data is JSON here, so it renders
+  as mosfet renders a payload that is not a model: a content field, an
+  object as entry elements, an array as item elements. ElementTree's
+  indent and serialization (two spaces, an empty element as <name />) are
+  reproduced. mosfet's budgets hold: 262144 encoded bytes, 4096 nodes, 4096
+  collection items and 65536 characters per scalar for the projection, and
+  262144 bytes for the system prompt, the projection and the dispatch
+  schema together; over any, the stage fails without a model call with
+  mosfet's message (for example "prompt projection encoded byte budget
+  exceeded"). applying ends on the generate service's done.invoke, which
+  stands in for mosfet's private bot.ability.reasoning.reasoned
+  completion.
 
   Choices: the body's assembled choices for the turn (the <param>
   choices: the body's own and each ability's offers, tagged with the
@@ -79,6 +95,7 @@
     <data id="system" expr="'You are the deliberate reasoning of floppy, a small companion robot. You receive one stimulus the robot observed, as JSON, with what the robot is looking at. Select every event the robot should take for it from the offered events (an empty list selects none), with its data, its target when the event names one, and a short reason. When an offered event says something, give it the complete text to say.'"/>
     <!-- The model call: its schema, invocation, and reply. -->
     <data id="schema" expr="null"/>
+    <data id="projection" expr="null"/>
     <data id="gen_id" expr="null"/>
     <data id="selected" expr="null"/>
     <data id="gen_failure" expr="null"/>
@@ -170,12 +187,17 @@
       <assign location="gen_failure" expr="null"/>
       <decision:names location="choice_names" choices="choices"/>
       <log label="reasoning" expr="choiceNamesLog()"/>
+      <assign location="projection" expr="promptProjection()"/>
     </onentry>
+    <!-- Over a prompt budget: fail before the model call is started. -->
+    <transition cond="hasNoPrompt()" target="done">
+      <assign location="result" expr="projectionFailedResult()"/>
+    </transition>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
       <param name="model" expr="model"/>
       <param name="system" expr="system"/>
-      <param name="prompt" expr="modelPrompt()"/>
+      <param name="prompt" expr="projection.prompt"/>
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
       <param name="strict" expr="true"/>

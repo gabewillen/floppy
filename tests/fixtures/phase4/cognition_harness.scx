@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Test harness of abilities/cognition/cognition.scx (tests/tests/cognition.rs,
+  the intuition's environment actions): it stands in for the body. Each
+  external bot.ability.cognition.input {turn, stimulus, choices, ...} is
+  sent on to the cognition, invoked as the child "cognition" with no
+  memory, and each turn's answer is logged whole (harness.output, the JSON
+  of a bot.ability.cognition.output; harness.failed, of a
+  bot.ability.failed). harness.ready logs each of its offers.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="running">
+  <state id="running">
+    <invoke id="cognition" type="scxml" src="cognition/cognition.scx">
+      <param name="database" expr="null"/>
+    </invoke>
+    <transition event="bot.ability.cognition.input" cond="_event.invokeid === undefined">
+      <send event="bot.ability.cognition.input" target="#_cognition">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.offers" cond="_event.invokeid === 'cognition'">
+      <log label="harness.ready" expr="'cognition'"/>
+    </transition>
+    <transition event="bot.ability.cognition.output" cond="_event.invokeid === 'cognition'">
+      <log label="harness.output" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="bot.ability.failed" cond="_event.invokeid === 'cognition'">
+      <log label="harness.failed" expr="JSON.stringify(_event.data)"/>
+    </transition>
+  </state>
+</scxml>

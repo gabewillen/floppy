@@ -29,7 +29,7 @@ invoked service). The decisions behind this plan are in
 | pydantic event data models | JSON Schema files referenced by `event:schema` on the transitions that take the event; scxml.rs checks them where the event is created (`<send>`, `<raise>`, a send between sessions) and on host input (decision D41) |
 | Hand-written payload validators (`model_validate`, field checks) | `event:schema` only; a `cond` correlates (which child, which turn, which timer) and never checks a payload's shape (decision D42) |
 | Helper functions (attention bias, envelopes, choice assembly and compaction, routing, confidence tuner, message commit) | floppy namespace elements that write to a `location` (`namespaces/bot`, `namespaces/conversation`, `namespaces/decision`; decision D40) |
-| Model-facing event choice lists and payload filling (Intuition, Processor) | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices; the `decision` service, invoked with it, asks a backend, fills the chosen event's data to its schema, validates it, and emits it |
+| Model-facing event choice lists and payload filling (Intuition, Processor) | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices; the `decision` service, invoked with it, asks a backend, fills the offered events' data to their schemas and validates it; `choose` emits the chosen event, `select` (mosfet's TypeSafe `Processor.process`, which intuition uses) emits `decision.selected` with every groundable event and its own confidence |
 | Event names `bot.*`, `bot.ability.*`, `phone.*` | Unchanged, byte for byte |
 | Telemetry (`mosfet.telemetry`) | scxml.rs's OpenTelemetry facade (guests through the telemetry WIT; the native runtime, `scx`, through scxml.rs's own) |
 
@@ -208,6 +208,13 @@ D33 to D43.
   `<donedata>`; leaving the stage cancels it, which replaces mosfet's
   cancel-token protocol. State a stage keeps across turns (the intuition's
   tuner) is passed in by `<param>` and returned in `<donedata>`.
+- **Partial selections.** A stage that leaves the turn unhandled may still
+  hand out selections (the intuition's environment actions on
+  `low_confidence` or `deliberative_input`, mosfet `_environment_actions`)
+  as the `selected` of its unhandled `<donedata>`. The cognition keeps them
+  and puts them first in the turn's one `bot.ability.cognition.output`,
+  before the handling stage's selections, so the body routes them first;
+  the reflection gets the handling stage's selections only.
 - **Defer queue.** A deferring state appends the event (the body uses a
   `<bot:stimulus>` envelope) to the `queue` data with
   `queue.concat([...])`; the state that handles it takes `queue.shift()`
@@ -252,6 +259,7 @@ D33 to D43.
 | choice-name logs | `<decision:names>` | `namespaces/decision` element |
 | `_selection_item_branch`, `dispatch_tool` | `<decision:selection>` | `namespaces/decision` element |
 | `ConfidenceTuner` | `<decision:tuner>` | `namespaces/decision` element |
+| `model_facing_xml`, `InputData.model_facing_payload` (reasoning's `ProcessorInput` prompt and its budgets) | `promptProjection()` in `abilities/reasoning/reasoning.js` | ability script |
 | `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`, `_stable_context_ref`, `MessageProvenance` | `<conversation:commit>` | `namespaces/conversation` element |
 | `cognition.py` Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |
 | `autonomy.py` Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<content expr>` children) | stage `.scx` child |

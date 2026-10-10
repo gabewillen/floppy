@@ -149,7 +149,6 @@ fn every_failure_code_and_abstain_reason_satisfy_the_builder_event_schemas() {
     for data in [
         r#"{"reason":"no-candidates"}"#,
         r#"{"confidence":0.25,"reason":"declined"}"#,
-        r#"{"confidence":0.5,"reason":"below-threshold"}"#,
     ] {
         assert!(
             abstain.admits(&scxml_types::DataValue::JsonObject(data.into())),
@@ -169,7 +168,15 @@ fn choose_asks_the_selection_and_the_grounded_members_in_one_batch() {
         .collect();
     // order.ship: sku (evidence), carrier (enum); order.cancel: reason
     // (enum); order.hold: nothing required.
-    assert_eq!(names, ["selection", "fill.0.0", "fill.0.1", "fill.1.0"]);
+    assert_eq!(
+        names,
+        [
+            "selection",
+            "order.ship::sku",
+            "order.ship::carrier",
+            "order.cancel::reason"
+        ]
+    );
     let selection: Vec<&str> = batch.questions[0]
         .criteria
         .iter()
@@ -179,9 +186,25 @@ fn choose_asks_the_selection_and_the_grounded_members_in_one_batch() {
         selection,
         ["order.ship", "order.cancel", "order.hold", ABSTAIN_LABEL]
     );
+    // mosfet `_event_wording`: the description's first line, else the
+    // event name; the pass criterion's wording is mosfet's.
+    let descriptions: Vec<&Json> = batch.questions[0]
+        .criteria
+        .iter()
+        .map(|criterion| &criterion.description)
+        .collect();
     assert_eq!(
-        batch.questions[0].criteria[0].description,
-        "Ship the order."
+        descriptions,
+        [
+            "Ship the order.",
+            "Cancel the order",
+            "order.hold",
+            "None of these: leave the turn unhandled."
+        ]
+    );
+    assert_eq!(
+        batch.questions[2].instructions,
+        "Which value fills 'carrier' for order.ship? Fill one payload field for the selected event: the criteria are the exact values the evidence offers. Pick the value the turn supports."
     );
     assert_eq!(batch.state, json!({"qty": 2, "sku": "A-1"}));
     let request = prepared.request(&TypeSafe, 1, Part::Reference(2));
@@ -195,8 +218,11 @@ fn choose_asks_the_selection_and_the_grounded_members_in_one_batch() {
     let body: Json = serde_json::from_slice(&request.body).expect("JSON");
     assert_eq!(body["model"], TypeSafe::DEFAULT_MODEL);
     assert_eq!(
-        body["questions"]["fill.0.1"]["criteria"],
-        json!({"fedex": null, "ups": null})
+        body["questions"]["order.ship::carrier"]["criteria"],
+        json!({
+            "fedex": "Which value fills 'carrier' for order.ship?",
+            "ups": "Which value fills 'carrier' for order.ship?"
+        })
     );
 }
 
@@ -205,10 +231,10 @@ fn choose_returns_the_chosen_event_with_grounded_data_validated_against_its_sche
     let returned = choose().decide(
         &TypeSafe,
         ok(&json!({
-            "selection": {"order.ship": 0.7, "order.cancel": 0.1, "order.hold": 0.1, "none of these": 0.1},
-            "fill.0.0": {"A-1": 1.0},
-            "fill.0.1": {"ups": 0.2, "fedex": 0.8},
-            "fill.1.0": {"customer": 0.5, "stock": 0.5},
+            "selection": {"order.ship": 0.7, "order.cancel": 0.1, "order.hold": 0.1, "__unhandled__": 0.1},
+            "order.ship::sku": {"A-1": 1.0},
+            "order.ship::carrier": {"ups": 0.2, "fedex": 0.8},
+            "order.cancel::reason": {"customer": 0.5, "stock": 0.5},
         })),
     );
     assert_eq!(
@@ -225,10 +251,10 @@ fn choose_breaks_ties_by_label_bytes() {
     let returned = choose().decide(
         &TypeSafe,
         ok(&json!({
-            "selection": {"order.ship": 0.4, "order.cancel": 0.4, "order.hold": 0.1, "none of these": 0.1},
-            "fill.0.0": {"A-1": 1.0},
-            "fill.0.1": {"ups": 0.5, "fedex": 0.5},
-            "fill.1.0": {"customer": 0.5, "stock": 0.5},
+            "selection": {"order.ship": 0.4, "order.cancel": 0.4, "order.hold": 0.1, "__unhandled__": 0.1},
+            "order.ship::sku": {"A-1": 1.0},
+            "order.ship::carrier": {"ups": 0.5, "fedex": 0.5},
+            "order.cancel::reason": {"customer": 0.5, "stock": 0.5},
         })),
     );
     assert_eq!(returned.name, "order.cancel");
@@ -236,39 +262,18 @@ fn choose_breaks_ties_by_label_bytes() {
 }
 
 #[test]
-fn choose_abstains_when_declined_below_threshold_or_with_nothing_to_offer() {
+fn choose_abstains_when_declined_or_with_nothing_to_offer() {
     let declined = choose().decide(
         &TypeSafe,
         ok(&json!({
-            "selection": {"none of these": 0.9, "order.ship": 0.1},
-            "fill.0.0": {"A-1": 1.0},
-            "fill.0.1": {"ups": 1.0},
-            "fill.1.0": {"stock": 1.0},
+            "selection": {"__unhandled__": 0.9, "order.ship": 0.1},
+            "order.ship::sku": {"A-1": 1.0},
+            "order.ship::carrier": {"ups": 1.0},
+            "order.cancel::reason": {"stock": 1.0},
         })),
     );
     assert_eq!(declined.name, ABSTAIN_EVENT);
     assert_eq!(declined.data, r#"{"confidence":0.9,"reason":"declined"}"#);
-    let strict = prepared(&[
-        ("choices", order_choices()),
-        ("state", order_state()),
-        (
-            "threshold",
-            Data::Number(scxml_types::FiniteNumber::new(0.8).expect("finite")),
-        ),
-    ]);
-    let below = strict.decide(
-        &TypeSafe,
-        ok(&json!({
-            "selection": {"order.hold": 0.6, "none of these": 0.4},
-            "fill.0.0": {"A-1": 1.0},
-            "fill.0.1": {"ups": 1.0},
-            "fill.1.0": {"stock": 1.0},
-        })),
-    );
-    assert_eq!(
-        below.data,
-        r#"{"confidence":0.6,"reason":"below-threshold"}"#
-    );
     // A choices whose every event lacks a grounded required member offers
     // nothing: it abstains without a request.
     let ungroundable = Data::JsonArray(canonical_json(&json!([
@@ -293,6 +298,132 @@ fn choose_abstains_when_declined_below_threshold_or_with_nothing_to_offer() {
     }
 }
 
+fn select() -> Prepared {
+    prepared(&[
+        ("kind", Data::String("select".into())),
+        ("choices", order_choices()),
+        ("state", order_state()),
+    ])
+}
+
+#[test]
+fn select_returns_every_offered_event_with_its_own_probability() {
+    let prepared = select();
+    // The same batch as choose, with mosfet's selection instructions.
+    assert_eq!(prepared.batch().questions.len(), 4);
+    assert!(
+        prepared.batch().questions[0]
+            .instructions
+            .starts_with("Choose the single criterion that answers this turn")
+    );
+    let returned = prepared.decide(
+        &TypeSafe,
+        ok(&json!({
+            "selection": {"order.ship": 0.5, "order.cancel": 0.25, "order.hold": 0.125, "__unhandled__": 0.125},
+            "order.ship::sku": {"A-1": 1.0},
+            "order.ship::carrier": {"ups": 0.2, "fedex": 0.8},
+            "order.cancel::reason": {"customer": 0.4, "stock": 0.6},
+        })),
+    );
+    assert_eq!(returned.name, SELECTED_EVENT);
+    assert_eq!(
+        returned.data,
+        canonical_json(&json!({"selections": [
+            {"event": "order.ship", "data": {"carrier": "fedex", "sku": "A-1"}, "confidence": 0.5},
+            {"event": "order.cancel", "data": {"reason": "stock"}, "confidence": 0.25},
+            {"event": "order.hold", "data": {}, "confidence": 0.125},
+        ]}))
+    );
+    // The pass criterion winning leaves the turn unhandled.
+    let declined = select().decide(
+        &TypeSafe,
+        ok(&json!({
+            "selection": {"__unhandled__": 0.7, "order.ship": 0.3},
+            "order.ship::sku": {"A-1": 1.0},
+            "order.ship::carrier": {"ups": 1.0},
+            "order.cancel::reason": {"stock": 1.0},
+        })),
+    );
+    assert_eq!(declined.name, ABSTAIN_EVENT);
+    assert_eq!(declined.data, r#"{"confidence":0.7,"reason":"declined"}"#);
+    // An event whose filled data fails its schema fails the whole answer.
+    let mismatched = prepared_select_with_evidence(r#"{"carrier":"dhl","sku":"A-1"}"#).decide(
+        &TypeSafe,
+        ok(&json!({
+            "selection": {"order.hold": 1.0},
+            "order.ship::sku": {"A-1": 1.0},
+            "order.ship::carrier": {"dhl": 1.0},
+            "order.cancel::reason": {"stock": 1.0},
+        })),
+    );
+    assert_eq!(mismatched, Returned::failed(FailureCode::SchemaMismatch));
+}
+
+fn prepared_select_with_evidence(evidence: &str) -> Prepared {
+    prepared(&[
+        ("kind", Data::String("select".into())),
+        ("choices", order_choices()),
+        ("state", order_state()),
+        ("data", Data::JsonObject(evidence.into())),
+    ])
+}
+
+#[test]
+fn members_ground_from_non_null_evidence_then_enum_never_const() {
+    let choices = Data::JsonArray(canonical_json(&json!([
+        {"event": "lamp.set", "schema": {
+            "type": "object",
+            "properties": {
+                "mode": {"enum": ["on", null, "off"]},
+                "room": {"const": "hall"},
+            },
+            "required": ["mode"],
+        }},
+        {"event": "lamp.move", "schema": {
+            "type": "object",
+            "properties": {"room": {"const": "hall"}},
+            "required": ["room"],
+        }},
+    ])));
+    let asked = prepared(&[
+        ("kind", Data::String("select".into())),
+        ("choices", choices.clone()),
+        ("state", Data::JsonObject(r#"{"turn":{}}"#.into())),
+        ("data", Data::JsonObject(r#"{"mode":null}"#.into())),
+    ]);
+    // lamp.move's room has only a const: it is not offered.
+    let batch = asked.batch();
+    let names: Vec<&str> = batch
+        .questions
+        .iter()
+        .map(|question| question.name.as_str())
+        .collect();
+    assert_eq!(names, ["selection", "lamp.set::mode"]);
+    let options: Vec<&str> = batch.questions[1]
+        .criteria
+        .iter()
+        .map(|criterion| criterion.label.as_str())
+        .collect();
+    assert_eq!(
+        options,
+        ["on", "off"],
+        "null evidence and null enum values are no options"
+    );
+    // With evidence, its value comes first.
+    let evidenced = prepared(&[
+        ("kind", Data::String("select".into())),
+        ("choices", choices),
+        ("state", Data::JsonObject(r#"{"turn":{}}"#.into())),
+        ("data", Data::JsonObject(r#"{"mode":"dim"}"#.into())),
+    ]);
+    let options: Vec<&str> = evidenced.batch().questions[1]
+        .criteria
+        .iter()
+        .map(|criterion| criterion.label.as_str())
+        .collect();
+    assert_eq!(options, ["dim", "on", "off"]);
+}
+
 #[test]
 fn filled_data_that_fails_the_schema_is_never_returned() {
     // The evidence offers a carrier the schema's enum does not admit, and
@@ -309,9 +440,9 @@ fn filled_data_that_fails_the_schema_is_never_returned() {
         &TypeSafe,
         ok(&json!({
             "selection": {"order.ship": 1.0},
-            "fill.0.0": {"A-1": 1.0},
-            "fill.0.1": {"dhl": 0.9, "ups": 0.05, "fedex": 0.05},
-            "fill.1.0": {"stock": 1.0},
+            "order.ship::sku": {"A-1": 1.0},
+            "order.ship::carrier": {"dhl": 0.9, "ups": 0.05, "fedex": 0.05},
+            "order.cancel::reason": {"stock": 1.0},
         })),
     );
     assert_eq!(returned, Returned::failed(FailureCode::SchemaMismatch));
@@ -344,9 +475,9 @@ fn a_failed_request_or_a_malformed_answer_returns_its_failure_code() {
             &TypeSafe,
             ok(&json!({
                 "selection": {"order.refund": 1.0},
-                "fill.0.0": {"A-1": 1.0},
-                "fill.0.1": {"ups": 1.0},
-                "fill.1.0": {"stock": 1.0},
+                "order.ship::sku": {"A-1": 1.0},
+                "order.ship::carrier": {"ups": 1.0},
+                "order.cancel::reason": {"stock": 1.0},
             }))
         ),
         Returned::failed(FailureCode::Malformed)
@@ -420,8 +551,8 @@ fn a_turns_assembled_choices_are_one_candidate_per_event() {
         choices
             .get(1)
             .and_then(|choice| choice.description.as_deref()),
-        Some("Cancel the order"),
-        "the first listing's description is kept"
+        None,
+        "the first listing's description (none: its schema has only a title) is kept"
     );
     for (repeated, why) in [
         (
@@ -512,13 +643,23 @@ fn malformed_parameters_reject_the_start() {
         (
             vec![
                 state.clone(),
+                (
+                    "choices",
+                    Data::JsonArray(r#"[{"event":"__unhandled__","schema":{}}]"#.into()),
+                ),
+            ],
+            "a choice naming the pass criterion",
+        ),
+        (
+            vec![
+                state.clone(),
                 choices.clone(),
                 (
                     "threshold",
                     Data::Number(scxml_types::FiniteNumber::new(1.5).expect("finite")),
                 ),
             ],
-            "a threshold above 1",
+            "a threshold, which neither choose nor select takes",
         ),
         (
             vec![

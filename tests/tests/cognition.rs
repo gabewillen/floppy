@@ -57,7 +57,8 @@ const CHOICES: &str = "bot.ability.cognition.ignore@cognition bot.ability.commun
 enum Decision {
     /// Chooses ignore (0.8).
     Ignore,
-    /// Chooses "none of these" (0.8): reasoning handles the turn.
+    /// Chooses the pass criterion `__unhandled__` (0.8): reasoning handles
+    /// the turn.
     Abstain,
     /// Chooses ignore with 0.34 (each other label 0.33).
     Low,
@@ -204,7 +205,7 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
     }
     match target {
         "/ignore/v1/systemone" => ok(decided(body, IGNORE, 0.8)?),
-        "/abstain/v1/systemone" => ok(decided(body, "none of these", 0.8)?),
+        "/abstain/v1/systemone" => ok(decided(body, "__unhandled__", 0.8)?),
         "/low/v1/systemone" => ok(decided_with(body, IGNORE, 0.34, Some(0.33))?),
         "/gignore/v1/chat/completions" => selection(json!([
             {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}
@@ -578,7 +579,7 @@ fn intuition_handles_an_ignore_without_reasoning() {
     // The decision offered the turn's choices it could fill (respond's
     // text and adopt's name have no grounded value); reasoning asked no
     // model.
-    assert_eq!(selection_labels(&mock), strings(&[IGNORE, "none of these"]));
+    assert_eq!(selection_labels(&mock), strings(&["__unhandled__", IGNORE]));
     assert!(reasoning_requests(&mock).is_empty());
     let finished = close(run, &mock, "intuition_handles_an_ignore_without_reasoning");
     // Reflection reflected on the turn after its output (the backend's
@@ -980,24 +981,26 @@ fn reasoning_selects_from_the_turns_choices() {
         .and_then(|messages| messages.last())
         .and_then(|message| message["content"].as_str())
         .expect("the user message");
-    let prompt: Json = serde_json::from_str(prompt).expect("the prompt is JSON");
-    assert_eq!(
-        prompt["stimulus"]["data"]["observation"]["data"],
-        "what is the capital of France?"
+    // mosfet's model_facing_xml of the ProcessorInput: the host input
+    // (stimulus and instructions), prior episodes and standing directives,
+    // no focus.
+    assert!(
+        prompt.starts_with("<cognition:processor_input>\n  <host_input>"),
+        "{prompt}"
     );
-    let keys: Vec<&String> = prompt.as_object().expect("an object").keys().collect();
-    assert_eq!(
-        keys,
-        [
-            "focus",
-            "focus_candidates",
-            "prior_episodes",
-            "standing_directives",
-            "stimulus"
-        ]
+    assert!(
+        prompt.contains("what is the capital of France?"),
+        "{prompt}"
     );
-    assert_eq!(prompt["prior_episodes"], json!([]));
-    assert_eq!(prompt["standing_directives"], json!([]));
+    assert!(
+        prompt.contains("<prior_episodes count=\"0\" />"),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains("<standing_directives count=\"0\" />"),
+        "{prompt}"
+    );
+    assert!(!prompt.contains("focus"), "{prompt}");
     let finished = close(run, &mock, "reasoning_selects_from_the_turns_choices");
     assert_eq!(
         texts(&finished.all, "bot.ability.reflection.output"),
@@ -1053,8 +1056,8 @@ fn a_reasoned_response_is_said_through_the_communication() {
     );
 }
 
-/// The user message of each reasoning request, parsed.
-fn prompts(mock: &Mock) -> Vec<Json> {
+/// The user message of each reasoning request (mosfet's model-facing XML).
+fn prompts(mock: &Mock) -> Vec<String> {
     reasoning_requests(mock)
         .iter()
         .map(|request| {
@@ -1063,7 +1066,7 @@ fn prompts(mock: &Mock) -> Vec<Json> {
                 .and_then(|messages| messages.last())
                 .and_then(|message| message["content"].as_str())
                 .expect("the user message");
-            serde_json::from_str(prompt).expect("the prompt is JSON")
+            prompt.to_owned()
         })
         .collect()
 }
@@ -1101,16 +1104,23 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
     run.until(WAIT, turn_ended);
     let prompts = prompts(&mock);
     assert_eq!(prompts.len(), 2, "{prompts:?}");
-    assert_eq!(prompts[0]["prior_episodes"], json!([]));
-    let episode = json!({
-        "focus": null,
-        "focus_candidates": [],
-        "stimulus_name": "bot.input",
-        "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}],
-        "behavior": null
-    });
-    // Reasoning's episode, then reflection's.
-    assert_eq!(prompts[1]["prior_episodes"], json!([episode, episode]));
+    assert!(
+        prompts[0].contains("\n  <prior_episodes count=\"0\" />\n"),
+        "{}",
+        prompts[0]
+    );
+    // Reasoning's episode, then reflection's, each a
+    // cognition:cognitive_episode (mosfet episodes.CognitiveEpisode).
+    let episode = format!(
+        "    <cognition:cognitive_episode stimulus_name=\"bot.input\">\n      <focus_candidates count=\"0\" />\n      <output count=\"1\">\n        <cognition:event target=\"cognition\" event=\"{IGNORE}\" reason=\"nothing to say\">\n          <data />\n        </cognition:event>\n      </output>\n    </cognition:cognitive_episode>\n"
+    );
+    assert!(
+        prompts[1].contains(&format!(
+            "\n  <prior_episodes count=\"2\">\n{episode}{episode}  </prior_episodes>\n"
+        )),
+        "{}",
+        prompts[1]
+    );
     close_as(run, &mock, test);
 }
 
@@ -1143,10 +1153,11 @@ fn low_confidence_is_observed_by_the_tuner_and_escalates() {
     say(&mut run, "two");
     let second = run.until(WAIT, turn_ended);
     for (records, n) in [(&first, 1), (&second, 2)] {
-        // During the warmup the threshold is the floor, 35.
+        // The tuner observes the selections' least confidence first; during
+        // the warmup the threshold is then the floor, 35.
         assert_eq!(
             texts(records, "intuition")[0],
-            format!("turn {n}: threshold 0.35")
+            format!("turn {n}: {IGNORE} (confidence 34, threshold 0.35)")
         );
         assert_eq!(
             texts(records, "cognition.stage")[1],
@@ -1180,29 +1191,151 @@ fn after_the_warmup_the_threshold_follows_the_tuner() {
         )],
     );
     let mut run = start(&bot);
+    // The threshold a turn's intuition log reports.
+    let threshold = |records: &[Json], n: u64| -> f64 {
+        texts(records, "intuition")[0]
+            .strip_prefix(&format!("turn {n}: {IGNORE} (confidence 34, threshold "))
+            .and_then(|rest| rest.strip_suffix(')'))
+            .and_then(|value| value.parse().ok())
+            .expect("a threshold")
+    };
     say(&mut run, "one");
     let first = run.until(WAIT, turn_ended);
-    // max(35 / 2, 70 - 1 * sqrt(100)) = 60.
-    assert_eq!(texts(&first, "intuition")[0], "turn 1: threshold 0.6");
+    // mosfet observes before it compares: delta = 34 - 70; mean = 70 +
+    // 0.08 * delta; variance = max(100, 0.92 * 100 + 0.08 * delta^2); the
+    // threshold is then max(35 / 2, mean - sqrt(variance)), about 53.1.
     let tuner = json_text(&first, "cognition.tuner");
     let number = |key: &str| tuner[key].as_f64().expect("a number");
-    // delta = 34 - 70; mean = 70 + 0.08 * delta; variance =
-    // max(100, 0.92 * 100 + 0.08 * delta^2).
     assert!((number("mean") - 67.12).abs() < 1e-9, "{tuner}");
     assert!((number("var") - 195.68).abs() < 1e-9, "{tuner}");
     assert_eq!(tuner["n"], 9);
+    let expected = (67.12 - 195.68_f64.sqrt()) / 100.0;
+    assert!((threshold(&first, 1) - expected).abs() < 1e-9);
+    assert_eq!(
+        texts(&first, "cognition.stage")[1],
+        "intuition unhandled (low_confidence)"
+    );
     say(&mut run, "two");
     let second = run.until(WAIT, turn_ended);
-    let threshold: f64 = texts(&second, "intuition")[0]
-        .strip_prefix("turn 2: threshold ")
-        .and_then(|value| value.parse().ok())
-        .expect("a threshold");
-    let expected = (67.12 - 195.68_f64.sqrt()) / 100.0;
-    assert!((threshold - expected).abs() < 1e-9, "{threshold}");
+    let delta: f64 = 34.0 - 67.12;
+    let mean = 67.12 + 0.08 * delta;
+    let variance = (0.92 * 195.68 + 0.08 * delta * delta).max(100.0);
+    let expected = (mean - variance.sqrt()) / 100.0;
+    assert!((threshold(&second, 2) - expected).abs() < 1e-9);
     close(
         run,
         &mock,
         "after_the_warmup_the_threshold_follows_the_tuner",
+    );
+}
+
+/// An ability schema as the body offers it (`$schema`, `title` and
+/// `examples` compacted away).
+fn offered_schema(event: &str) -> Json {
+    let text = std::fs::read(workspace().join(format!("abilities/schemas/{event}.json")))
+        .expect("the schema is readable");
+    let mut schema: Json = serde_json::from_slice(&text).expect("the schema is JSON");
+    let members = schema.as_object_mut().expect("the schema is an object");
+    for key in ["$schema", "title", "examples"] {
+        members.remove(key);
+    }
+    schema
+}
+
+/// mosfet's `low_confidence` keeps the environment actions: intuition gets
+/// every groundable event with its own confidence (ignore 0.34, respond
+/// 0.33 with the stimulus's text), observes their least, 33, and escalates
+/// under the floor 35 with respond (ignore is no environment action); the
+/// cognition routes respond first, then reasoning's selection. Reasoning's
+/// prompt is mosfet's model-facing XML of its `ProcessorInput`.
+#[test]
+fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Low, Generation::Ignore, &[]);
+    let abilities = bot
+        .body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the scratch root")
+        .join("abilities");
+    let harness = abilities.join("harness.scx");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/cognition_harness.scx"),
+        &harness,
+    )
+    .expect("the harness is copyable");
+    let mut run = Run::start(
+        &[
+            "--env-file".to_owned(),
+            bot.env.display().to_string(),
+            harness.display().to_string(),
+        ],
+        &[],
+    );
+    run.until(WAIT, label_is("harness.ready"));
+    run.event(
+        "bot.ability.cognition.input",
+        &json!({
+            "turn": 1,
+            "stimulus": {"event": "bot.input", "data": {"text": "hi"}, "source": "conversation"},
+            "focus": null,
+            "focus_candidates": [],
+            "choices": [
+                {"event": IGNORE, "schema": offered_schema(IGNORE), "target": "cognition"},
+                {"event": RESPOND, "schema": offered_schema(RESPOND), "target": "communication"},
+            ],
+        }),
+    );
+    let records = run.until(WAIT, label_is("harness.output"));
+    assert_eq!(
+        texts(&records, "intuition"),
+        strings(&[&format!(
+            "turn 1: {IGNORE} {RESPOND} (confidence 33, threshold 0.35)"
+        )])
+    );
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "intuition unhandled (low_confidence)",
+            "reasoning handled"
+        ])
+    );
+    assert_eq!(
+        json_text(&records, "harness.output"),
+        json!({"turn": 1, "output": [
+            {"event": RESPOND, "data": {"text": "hi"}},
+            {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"},
+        ]})
+    );
+    // The TypeSafe state is mosfet's turn document, and respond's text is
+    // grounded in the stimulus's value.
+    let decisions = mock.received("/systemone");
+    assert_eq!(decisions.len(), 1);
+    assert_eq!(
+        decisions[0].body["state"],
+        json!({"turn": {"envelope": {"name": "bot.input"}, "data": {"text": "hi"}}})
+    );
+    assert_eq!(
+        decisions[0].body["questions"][format!("{RESPOND}::text")]["criteria"],
+        json!({"hi": format!("Which value fills 'text' for {RESPOND}?")})
+    );
+    let reasoning = reasoning_requests(&mock);
+    assert_eq!(reasoning.len(), 1);
+    let user = reasoning[0].body["messages"]
+        .as_array()
+        .and_then(|messages| messages.iter().find(|message| message["role"] == "user"))
+        .and_then(|message| message["content"].as_str())
+        .expect("a user message");
+    assert_eq!(
+        user,
+        "<cognition:processor_input>\n  <host_input>\n    <processing:input>\n      <input stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n        <content>\n          <entry key=\"text\" value=\"hi\" />\n        </content>\n      </input>\n    </processing:input>\n  </host_input>\n  <prior_episodes count=\"0\" />\n  <standing_directives count=\"0\" />\n</cognition:processor_input>"
+    );
+    close(
+        run,
+        &mock,
+        "low_confidence_hands_out_the_environment_actions_before_reasoning",
     );
 }
 
