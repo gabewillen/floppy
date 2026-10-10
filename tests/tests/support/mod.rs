@@ -529,3 +529,20 @@ pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
     );
     abilities.join(name).join(format!("{name}.scx"))
 }
+
+/// Whether `scx validate`'s standard error reports no error and no note,
+/// and only warnings that are `LINT019` for a function of the document's
+/// own `<script src>`: the validator reads inline scripts only, so it
+/// cannot prove that a cond or expr calling a function of `<name>.js` has
+/// no side effect (decision D44).
+pub fn validates_but_for_script_src(stderr: &str) -> bool {
+    let warnings =
+        stderr.matches("\nwarning[").count() + usize::from(stderr.starts_with("warning["));
+    stderr.contains(&format!(
+        "diagnostic summary: 0 error(s), {warnings} warning(s), 0 note(s)"
+    )) && stderr.matches("warning[LINT019]").count() == warnings
+        && stderr
+            .matches("which a `<script src>` may define or replace")
+            .count()
+            == warnings
+}
