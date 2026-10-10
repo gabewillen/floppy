@@ -24,9 +24,9 @@ Last updated: 2026-10-10.
   in `abilities/memory/{sqlite,postgresql}/` and the version in
   `alembic_version`. Every ability's SQL is portable to both. Postgres
   support is tested on Postgres 16 (`FLOPPY_POSTGRES_BIN=<bin dir>` runs the
-  ignored `postgres_*` tests on a fresh cluster each); running them on
-  PGlite through pglite-socket (`FLOPPY_PGLITE_SERVER`) waits on the
-  user's approval. PGlite inside a component waits on `scx` admitting
+  ignored `postgres_*` tests on a fresh cluster each); the user chose SQLite
+  for now (2026-10-10), so running them on PGlite through pglite-socket
+  (`FLOPPY_PGLITE_SERVER`) is future work. PGlite inside a component waits on `scx` admitting
   exception handling (D71). Defaults are in README.md's "Defaults" and
   `.env.example` (`tests/tests/defaults.rs`). Releases are prepared, not
   published: [release.md](release.md); its open decisions (where the
