@@ -116,9 +116,10 @@ Last updated: 2026-10-10.
   `turn_exchange`, which runs one turn per source of each input through it
   before memory and commits the turns' product. Decisions D76 to D79;
   conventions: [port-plan.md](port-plan.md#turn-detector-conventions).
-- **For the maintainer (D79):** mosfet commits a multi-source text input
-  once per source (`hello hello hello`); floppy keeps mosfet's behavior
-  until told otherwise. The detector has no decoder (D77).
+- **Decided (D79):** mosfet commits a multi-source text input once per
+  source (`hello hello hello`); the maintainer chose to say it once, so
+  floppy joins each distinct turn text once. The detector has no decoder
+  (D77).
 
 ## Phase 6 (2026-10-10): speech and vision
 
