@@ -661,7 +661,8 @@ impl<S: Read + Write> Session<S> {
     }
 
     /// Starts the session (protocol 3.0) as `database.user` on
-    /// `database.name` and waits until the server is ready for a query.
+    /// `database.name`, in UTC (so `CURRENT_TIMESTAMP` reads as the SQLite
+    /// engine's does), and waits until the server is ready for a query.
     fn start(&mut self, database: &Database) -> Result<(), String> {
         let mut startup = Vec::new();
         startup.extend_from_slice(&196_608_u32.to_be_bytes());
@@ -672,6 +673,8 @@ impl<S: Read + Write> Session<S> {
             database.name.as_str(),
             "client_encoding",
             "UTF8",
+            "TimeZone",
+            "UTC",
             "",
         ] {
             startup.extend_from_slice(text.as_bytes());

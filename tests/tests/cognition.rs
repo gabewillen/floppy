@@ -614,15 +614,15 @@ fn attribute(text: &str) -> String {
 }
 
 /// Runs `statements` (mosfet `Statement`s) in one transaction of the
-/// Memory ability (`abilities/memory.scx`) against the database in
-/// `grant`'s directory; returns its output.
-fn transact(grant: &[String], statements: &Json) -> Json {
+/// Memory ability (`abilities/memory.scx`) against `database` (a file in
+/// `grant`'s directory, or a Postgres connection URI); returns its output.
+fn transact(grant: &[String], database: &str, statements: &Json) -> Json {
     let document = format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="applying">
   <datamodel><data id="statements" expr="{}"/></datamodel>
   <state id="applying">
     <invoke id="memory" type="scxml" src="memory.scx">
-      <param name="database" expr="'{DATABASE}'"/>
+      <param name="database" expr="'{database}'"/>
       <param name="statements" expr="statements"/>
     </invoke>
     <transition event="bot.ability.memory.output" target="done"><log label="output" expr="JSON.stringify(_event.data)"/></transition>
@@ -651,10 +651,15 @@ fn transact(grant: &[String], statements: &Json) -> Json {
     serde_json::from_str(&output.1).expect("the output is JSON")
 }
 
-/// A memory directory holding `learned` as mosfet's inventory rows
-/// (`bot_behavior`, `bot_behavior_trigger`); returns its `--dir` grant.
-fn inventory(learned: &[Learned<'_>]) -> Vec<String> {
-    let grant = support::memory_grant();
+/// `database` holding `learned` as mosfet's inventory rows
+/// (`bot_behavior`, `bot_behavior_trigger`), in a fresh memory directory
+/// for [`DATABASE`]; returns the run's grant.
+fn inventory(database: &str, learned: &[Learned<'_>]) -> Vec<String> {
+    let grant = if database == DATABASE {
+        support::memory_grant()
+    } else {
+        support::pgsql_grant()
+    };
     let mut statements = Vec::new();
     for row in learned {
         statements.push(json!({
@@ -666,14 +671,15 @@ fn inventory(learned: &[Learned<'_>]) -> Vec<String> {
             "parameters": [row.name, row.trigger],
         }));
     }
-    transact(&grant, &Json::Array(statements));
+    transact(&grant, database, &Json::Array(statements));
     grant
 }
 
 /// Each behavior's `[name, used_count, failed_count]`, by name.
-fn usage(grant: &[String]) -> Json {
+fn usage(grant: &[String], database: &str) -> Json {
     let output = transact(
         grant,
+        database,
         &json!([{"sql": "SELECT name, used_count, failed_count FROM bot_behavior ORDER BY name"}]),
     );
     Json::Array(
@@ -709,57 +715,88 @@ fn start_with(bot: &Bot, args: &[String]) -> Run {
 /// counted.
 #[test]
 fn autonomy_runs_the_learned_behaviors_the_stimulus_triggers() {
+    runs_the_learned_behaviors(
+        DATABASE,
+        Some("autonomy_runs_the_learned_behaviors_the_stimulus_triggers"),
+    );
+}
+
+/// The same on the Postgres engine: the inventory and the cognition's
+/// database are a `PGlite` server's.
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_autonomy_runs_the_learned_behaviors_the_stimulus_triggers() {
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    runs_the_learned_behaviors(&server.database(), None);
+}
+
+/// Closes the run, asserting the pinned trace of `test` when there is one
+/// (a Postgres run's trace carries its server's address).
+fn close_as(run: Run, mock: &Mock, test: Option<&str>) {
+    match test {
+        Some(test) => drop(close(run, mock, test)),
+        None => drop(run.close(WAIT)),
+    }
+}
+
+/// [`autonomy_runs_the_learned_behaviors_the_stimulus_triggers`] on
+/// `database`; `test` names its pinned trace.
+fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
     let mock = Mock::start();
     let silent = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><state id="waiting"/></scxml>"#;
     let declines = turn_behavior("({turn: turn, handled: false})");
     let double =
         std::fs::read_to_string(workspace().join("tests/fixtures/phase4/behavior_double.scx"))
             .expect("the double is readable");
-    let grant = inventory(&[
-        Learned {
-            name: "Asilent",
-            trigger: "bot.input",
-            status: "ACTIVE",
-            source: silent,
-        },
-        Learned {
-            name: "Bdeclines",
-            trigger: "bot.input",
-            status: "ACTIVE",
-            source: &declines,
-        },
-        Learned {
-            name: "Cbroken",
-            trigger: "bot.input",
-            status: "ACTIVE",
-            source: "<scxml",
-        },
-        Learned {
-            name: "Ddouble",
-            trigger: "bot.input",
-            status: "ACTIVE",
-            source: &double,
-        },
-        Learned {
-            name: "Edraft",
-            trigger: "bot.input",
-            status: "DRAFT",
-            source: &double,
-        },
-        Learned {
-            name: "Fother",
-            trigger: "environment.sound",
-            status: "ACTIVE",
-            source: &double,
-        },
-    ]);
-    let memory = format!("'{DATABASE}'");
+    let grant = inventory(
+        database,
+        &[
+            Learned {
+                name: "Asilent",
+                trigger: "bot.input",
+                status: "ACTIVE",
+                source: silent,
+            },
+            Learned {
+                name: "Bdeclines",
+                trigger: "bot.input",
+                status: "ACTIVE",
+                source: &declines,
+            },
+            Learned {
+                name: "Cbroken",
+                trigger: "bot.input",
+                status: "ACTIVE",
+                source: "<scxml",
+            },
+            Learned {
+                name: "Ddouble",
+                trigger: "bot.input",
+                status: "ACTIVE",
+                source: &double,
+            },
+            Learned {
+                name: "Edraft",
+                trigger: "bot.input",
+                status: "DRAFT",
+                source: &double,
+            },
+            Learned {
+                name: "Fother",
+                trigger: "environment.sound",
+                status: "ACTIVE",
+                source: &double,
+            },
+        ],
+    );
+    let memory = format!("'{database}'");
     let bot = layout(
         &mock,
         Decision::Fail,
         Generation::Fail,
         &[("abilities/cognition.scx", &[("database", memory.as_str())])],
     );
+    support::use_database(&bot.body, database);
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
     let records = run.until(WAIT, label_is("cognition.ignore"));
@@ -791,13 +828,9 @@ fn autonomy_runs_the_learned_behaviors_the_stimulus_triggers() {
     // Neither intuition nor reasoning ran: no backend was asked.
     assert!(texts(&records, "intuition").is_empty(), "{records:?}");
     assert!(mock.received("").is_empty());
-    close(
-        run,
-        &mock,
-        "autonomy_runs_the_learned_behaviors_the_stimulus_triggers",
-    );
+    close_as(run, &mock, test);
     assert_eq!(
-        usage(&grant),
+        usage(&grant, database),
         json!([
             ["Asilent", "0", "0"],
             ["Bdeclines", "0", "0"],
@@ -815,12 +848,15 @@ fn autonomy_runs_the_learned_behaviors_the_stimulus_triggers() {
 fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
     let mock = Mock::start();
     let declines = turn_behavior("({turn: turn, handled: false})");
-    let grant = inventory(&[Learned {
-        name: "Declines",
-        trigger: "bot.input",
-        status: "ACTIVE",
-        source: &declines,
-    }]);
+    let grant = inventory(
+        DATABASE,
+        &[Learned {
+            name: "Declines",
+            trigger: "bot.input",
+            status: "ACTIVE",
+            source: &declines,
+        }],
+    );
     let memory = format!("'{DATABASE}'");
     let bot = layout(
         &mock,
@@ -844,7 +880,7 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
         &mock,
         "when_no_learned_behavior_handles_the_turn_intuition_runs",
     );
-    assert_eq!(usage(&grant), json!([["Declines", "0", "0"]]));
+    assert_eq!(usage(&grant, DATABASE), json!([["Declines", "0", "0"]]));
 }
 
 #[test]
@@ -1017,8 +1053,25 @@ fn prompts(mock: &Mock) -> Vec<Json> {
 /// next turn's prompt carries it.
 #[test]
 fn a_reasoned_turn_is_recalled_by_the_next() {
+    reasoned_turns_recalled(DATABASE, Some("a_reasoned_turn_is_recalled_by_the_next"));
+}
+
+/// The same on the Postgres engine: the body's database is a `PGlite`
+/// server's, so the cognition's autonomy and reasoning, the identity and
+/// the conversation all keep their memory there.
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_a_reasoned_turn_is_recalled_by_the_next() {
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    reasoned_turns_recalled(&server.database(), None);
+}
+
+/// [`a_reasoned_turn_is_recalled_by_the_next`] with the body's database
+/// `database`; `test` names its pinned trace.
+fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
+    support::use_database(&bot.body, database);
     let mut run = start(&bot);
     say(&mut run, "remember this");
     run.until(WAIT, turn_ended);
@@ -1037,7 +1090,7 @@ fn a_reasoned_turn_is_recalled_by_the_next() {
             "behavior": null
         }])
     );
-    close(run, &mock, "a_reasoned_turn_is_recalled_by_the_next");
+    close_as(run, &mock, test);
 }
 
 #[test]
@@ -1582,12 +1635,15 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
     let double =
         std::fs::read_to_string(workspace().join("tests/fixtures/phase4/behavior_double.scx"))
             .expect("the double is readable");
-    let grant = inventory(&[Learned {
-        name: "Double",
-        trigger: SPEECH,
-        status: "ACTIVE",
-        source: &double,
-    }]);
+    let grant = inventory(
+        DATABASE,
+        &[Learned {
+            name: "Double",
+            trigger: SPEECH,
+            status: "ACTIVE",
+            source: &double,
+        }],
+    );
     let harness = autonomy_harness(&format!("'{DATABASE}'"));
     let mut args = grant.clone();
     args.push(harness.display().to_string());
@@ -1624,5 +1680,5 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
         &finished.all,
         &[],
     );
-    assert_eq!(usage(&grant), json!([["Double", "1", "0"]]));
+    assert_eq!(usage(&grant, DATABASE), json!([["Double", "1", "0"]]));
 }

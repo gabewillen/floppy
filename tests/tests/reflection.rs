@@ -17,6 +17,10 @@
 //! route. The decision backend (the builder's triage) always fails, so the
 //! builder falls back on its own. Nothing reaches the network; the keys are
 //! fake and reach the run only through an env file.
+//!
+//! Each `postgres_` test runs its case on the Postgres engine, the
+//! harness's database a fresh `PGlite` server's ([`support::Pglite`]); they
+//! are ignored unless `FLOPPY_PGLITE_SERVER` is set.
 
 #![allow(
     missing_docs,
@@ -256,10 +260,13 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
+/// The harness's SQLite database, in the directory each run is granted.
+const SQLITE: &str = "/memory/floppy.sqlite";
+
 /// Lays out the scratch copy with the harness seeded by `seed` (a
-/// statements expression) and an env file for `route`; returns the
-/// harness's path and the env file's.
-fn layout(mock: &Mock, route: &str, seed: &str) -> (PathBuf, PathBuf) {
+/// statements expression) on `database` and an env file for `route`;
+/// returns the harness's path and the env file's.
+fn layout(mock: &Mock, route: &str, seed: &str, database: &str) -> (PathBuf, PathBuf) {
     let dir = unique_scratch("reflection");
     copy_dir(&workspace().join("abilities"), &dir.join("abilities"));
     support::copy_memory(&dir.join("abilities"));
@@ -281,6 +288,7 @@ fn layout(mock: &Mock, route: &str, seed: &str) -> (PathBuf, PathBuf) {
             );
     let path = dir.join("abilities/reflection_harness.scx");
     std::fs::write(&path, harness).expect("the harness is writable");
+    support::use_database(&path, database);
     let env = dir.join("fake.env");
     std::fs::write(
         &env,
@@ -350,8 +358,19 @@ const SEED_BEHAVIOR: &str = "[{sql: &quot;INSERT INTO bot_behavior (name, source
 /// stored, and the next turn's select recalls it.
 #[test]
 fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it() {
+    an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(SQLITE);
+}
+
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it() {
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(&server.database());
+}
+
+fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(database: &str) {
     let mock = Mock::start();
-    let (harness, env) = layout(&mock, "none", "[]");
+    let (harness, env) = layout(&mock, "none", "[]", database);
     let mut run = start(&harness, &env);
     let first = reflect(&mut run, 1);
     assert_eq!(texts(&first, "harness.output"), ["answered"]);
@@ -418,8 +437,19 @@ fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it() {
 /// and the episode records the break.
 #[test]
 fn a_break_marks_the_behavior_broken_and_keeps_it() {
+    a_break_marks_the_behavior_broken_and_keeps_it_on(SQLITE);
+}
+
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_a_break_marks_the_behavior_broken_and_keeps_it() {
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    a_break_marks_the_behavior_broken_and_keeps_it_on(&server.database());
+}
+
+fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
     let mock = Mock::start();
-    let (harness, env) = layout(&mock, "break", SEED_BEHAVIOR);
+    let (harness, env) = layout(&mock, "break", SEED_BEHAVIOR, database);
     let mut run = start(&harness, &env);
     let records = reflect(&mut run, 1);
     drop(run.close(WAIT));
@@ -455,8 +485,19 @@ fn a_break_marks_the_behavior_broken_and_keeps_it() {
 /// stores nothing.
 #[test]
 fn a_break_of_an_unknown_behavior_fails() {
+    a_break_of_an_unknown_behavior_fails_on(SQLITE);
+}
+
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_a_break_of_an_unknown_behavior_fails() {
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    a_break_of_an_unknown_behavior_fails_on(&server.database());
+}
+
+fn a_break_of_an_unknown_behavior_fails_on(database: &str) {
     let mock = Mock::start();
-    let (harness, env) = layout(&mock, "breakunknown", "[]");
+    let (harness, env) = layout(&mock, "breakunknown", "[]", database);
     let mut run = start(&harness, &env);
     let records = reflect(&mut run, 1);
     drop(run.close(WAIT));
@@ -470,8 +511,19 @@ fn a_break_of_an_unknown_behavior_fails() {
 /// mosfet's select returns at most one inventory event.
 #[test]
 fn more_than_one_selection_fails() {
+    more_than_one_selection_fails_on(SQLITE);
+}
+
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_more_than_one_selection_fails() {
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    more_than_one_selection_fails_on(&server.database());
+}
+
+fn more_than_one_selection_fails_on(database: &str) {
     let mock = Mock::start();
-    let (harness, env) = layout(&mock, "two", SEED_BEHAVIOR);
+    let (harness, env) = layout(&mock, "two", SEED_BEHAVIOR, database);
     let mut run = start(&harness, &env);
     let records = reflect(&mut run, 1);
     drop(run.close(WAIT));
@@ -486,8 +538,19 @@ fn more_than_one_selection_fails() {
 /// ACTIVE with its grounded triggers, and the episode records it.
 #[test]
 fn a_create_is_built_and_stored_active_with_grounded_triggers() {
+    a_create_is_built_and_stored_active_with_grounded_triggers_on(SQLITE);
+}
+
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_a_create_is_built_and_stored_active_with_grounded_triggers() {
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    a_create_is_built_and_stored_active_with_grounded_triggers_on(&server.database());
+}
+
+fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str) {
     let mock = Mock::start();
-    let (harness, env) = layout(&mock, "create", "[]");
+    let (harness, env) = layout(&mock, "create", "[]", database);
     let mut run = start(&harness, &env);
     let records = reflect(&mut run, 1);
     drop(run.close(WAIT));
@@ -532,8 +595,19 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers() {
 /// `status_reason` validation, and the turn fails (mosfet `_abandon`).
 #[test]
 fn a_failed_build_leaves_a_validation_draft() {
+    a_failed_build_leaves_a_validation_draft_on(SQLITE);
+}
+
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_a_failed_build_leaves_a_validation_draft() {
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    a_failed_build_leaves_a_validation_draft_on(&server.database());
+}
+
+fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
     let mock = Mock::start();
-    let (harness, env) = layout(&mock, "buildfail", "[]");
+    let (harness, env) = layout(&mock, "buildfail", "[]", database);
     let mut run = start(&harness, &env);
     let records = reflect(&mut run, 1);
     drop(run.close(WAIT));
