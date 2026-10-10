@@ -1,0 +1,1120 @@
+<title>floppy Workshop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Solid fills, no glows or translucency, so lines and text stay crisp. Layout: the Blueprint sheet from the floppy site. Top rule, then palette | drawing | run panel. Blocks are line drawings: a tinted fill and a stroke in their family's hue, so the notches read as interlocking outlines. Single look by choice. */
+:root{
+  --bg:#103766; --grid:rgba(214,232,255,.07); --grid2:rgba(214,232,255,.14); --ink:#e8f1ff; --mute:#b9cfec; --acc:#7fd0ff; --warn:#ffd27a;
+  --panel:#103766; --well:#0a2447; --field:#061a35; --line:#e8f1ff; --dash:rgba(157,184,220,.45); --code:#0a2447; --hi:rgba(255,210,122,.22);
+  --ok:#8ff0b0; --bad:#ff9a8f; --led:#ffffff;
+  --c-root:#4a5d78; --c-state:#6a3fd1; --c-trans:#1f6fd1; --c-hook:#0e8a96; --c-invoke:#2e8b3a; --c-dm:#7a8b12;
+  --c-exec:#c47a00; --c-flow:#c0392b; --c-ext:#c0287a; --c-param:#8a5a2b; --c-other:#5f6b7a; --edge:#061a35;
+  --f-c:"Barlow Condensed","Arial Narrow",sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace; --f-ui:var(--f-mono);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-mono);background-image:linear-gradient(var(--grid2) 1px,transparent 1px),linear-gradient(90deg,var(--grid2) 1px,transparent 1px),linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:100px 100px,100px 100px,20px 20px,20px 20px}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+floppy-workshop{display:block;padding:0 16px 16px}
+.top{min-width:0;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;padding-block:18px 12px;border-bottom:1.5px solid var(--ink);margin-bottom:14px}
+.top h1{margin:0;font:600 30px/1 var(--f-c);letter-spacing:.04em;text-transform:uppercase}
+.top h1 span{color:var(--acc)}
+.top .doc{overflow-wrap:anywhere;min-width:0;font-size:12.5px;color:var(--mute)}
+.top .chip{font-size:11.5px;color:var(--mute);border:1px dashed var(--dash);padding:3px 10px;background:var(--bg)}
+.grid{display:grid;grid-template-columns:340px minmax(0,1fr) 330px;gap:14px;min-height:calc(100vh - 90px)}
+@media (max-width:1180px){floppy-workshop[data-mode] .grid{grid-template-columns:minmax(0,1fr)!important}}
+.panel{background:var(--panel);border:1.5px solid var(--line);min-width:0}
+.ph{padding:9px 12px;border-bottom:1.5px solid var(--line);font:600 14px var(--f-c);letter-spacing:.14em;text-transform:uppercase;color:var(--ink);display:flex;justify-content:space-between;gap:8px;align-items:center}
+
+/* palette */
+floppy-palette{display:block}
+.legend{padding:10px 12px;border-bottom:1px dashed var(--dash);display:grid;gap:6px}
+.legend p{margin:0;font-size:11.5px;color:var(--mute);line-height:1.5}
+.legend ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.legend li{display:flex;align-items:center;gap:8px;font-size:11.5px}
+.legend svg{flex:0 0 auto;color:var(--acc)}
+.cats{display:flex;flex-wrap:wrap;gap:4px;padding:10px 12px;border-bottom:1px dashed var(--dash)}
+.cats button{border:1px solid var(--mute);background:transparent;padding:2px 9px;font:600 13px var(--f-c);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.cats button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.items{display:grid;gap:12px;padding:10px 12px 16px;justify-items:start;overflow-x:auto}
+.items .hint{font-size:11.5px;color:var(--mute);margin:0;line-height:1.5}
+.items floppy-block{cursor:grab}
+
+/* canvas */
+floppy-canvas{display:block;border:1.5px solid var(--line);overflow:auto;position:relative;min-width:0;background:var(--well)}
+floppy-canvas .pad{padding:22px 26px 80px;min-width:max-content}
+.status{position:sticky;left:0;bottom:0;margin:0;padding:8px 12px;font-size:12px;background:var(--bg);border-top:1.5px solid var(--line);color:var(--mute);min-height:34px}
+.status.ok{color:var(--ok)} .status.bad{color:var(--bad)}
+
+/* blocks */
+floppy-block{display:block;position:relative;isolation:isolate;width:max-content;color:var(--ink);font-size:12px}
+floppy-block>svg.shape{position:absolute;left:0;top:0;z-index:-1;overflow:visible;pointer-events:none}
+floppy-block>.hd{display:flex;align-items:center;gap:7px;padding:11px 10px 8px 12px;min-height:38px;white-space:nowrap;cursor:grab}
+floppy-block>.hd .tag{font:700 16px/1 var(--f-c);letter-spacing:.06em;text-transform:uppercase;color:#fff}
+floppy-block>.hd .tag i{font-style:normal}
+floppy-block>.hd label{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:rgba(255,255,255,.88)}
+floppy-block>.hd input,floppy-block>.hd select{background:var(--field);color:var(--ink);border:0;border-bottom:1px solid var(--mute);border-radius:0;padding:1px 4px;font-family:var(--f-mono);font-size:11.5px;max-width:240px}
+floppy-block>.hd select option{background:var(--bg);color:var(--ink)}
+floppy-block>.hd .req-missing{border-bottom:1.5px dashed var(--bad);background:#3a2333}
+floppy-block>.hd select.add{width:26px;padding:0 4px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.85);appearance:none;text-align:center}
+floppy-block>.hd .x{border:1px solid rgba(255,255,255,.7);background:transparent;color:#fff;width:18px;height:18px;line-height:15px;font-size:12px;padding:0;margin-left:2px}
+floppy-block>.mouth{margin-left:16px;min-height:30px;position:relative;transition:min-height .12s}
+floppy-block>.mouth.empty{min-height:12px}
+floppy-block.sel>.mouth.empty,floppy-block[data-state="offering"]>.mouth.empty{min-height:30px}
+floppy-canvas[data-fam="square"] .mouth[data-fam="square"],floppy-canvas[data-fam="trap"] .mouth[data-fam="trap"],floppy-canvas[data-fam="round"] .mouth[data-fam="round"],floppy-canvas[data-fam="tri"] .mouth[data-fam="tri"],floppy-canvas[data-fam="double"] .mouth[data-fam="double"],floppy-canvas[data-fam="wave"] .mouth[data-fam="wave"]{min-height:30px;background:#123f3a;outline:1.5px dashed var(--ok);outline-offset:-1px}
+floppy-block>.ft{height:14px}
+floppy-block.sel>.hd{outline:1px dashed var(--ink);outline-offset:-3px}
+floppy-block.active>svg.shape path{stroke:var(--led)!important;stroke-width:3.5}
+floppy-block[data-state="lifted"]{opacity:.4}
+floppy-block[data-state="offering"]>.mouth{outline:1.5px dashed var(--ok);outline-offset:-2px}
+floppy-block[data-state="refusing"]>.mouth{outline:1.5px dashed var(--bad);outline-offset:-2px}
+.ins{position:absolute;left:0;right:-40px;height:2px;background:var(--ok);pointer-events:none;z-index:5}
+
+/* run panel */
+floppy-run{display:flex;flex-direction:column}
+.tabs{display:flex;border-bottom:1.5px solid var(--line)}
+.tabs button{flex:1;border:0;border-right:1px solid var(--mute);background:transparent;padding:8px 6px;font:600 14px var(--f-c);letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+.tabs button:last-child{border-right:0}
+.tabs button[aria-selected="true"]{color:var(--bg);background:var(--ink)}
+.tabs b{font:600 11px var(--f-mono);padding:0 5px;margin-left:5px;color:var(--bg);background:var(--ok)}
+.tabs b.bad{background:var(--bad)}
+.sec{padding:12px;display:grid;gap:8px;border-bottom:1px dashed var(--dash)}
+.sec h3{margin:0;font:600 13px var(--f-c);letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.cfg{font-size:12.5px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;color:var(--mute)}
+.cfg span{border:1px solid var(--line);background:var(--c-state);color:#fff;padding:2px 8px}
+.cfg span.leaf{border-color:var(--led);background:var(--led);color:#061a35;font-weight:700}
+.et{display:flex;justify-content:space-between;gap:8px;align-items:center;border:1.5px solid var(--acc);background:var(--well);color:var(--ink);padding:8px 10px;font-size:12px;text-align:left;width:100%}
+.et:hover{background:#12406f}
+.et small{font-size:11px;color:var(--acc);white-space:nowrap}
+.tm{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:12px;border:1px dashed var(--dash);padding:6px 8px}
+.tm button{border:1px solid var(--warn);color:var(--warn);background:transparent;padding:2px 8px;font-size:11px}
+.inject{display:flex;gap:6px}
+.inject input{flex:1;min-width:0;border:0;border-bottom:1px solid var(--mute);background:var(--code);padding:6px 8px;font-size:12px}
+.inject input::placeholder{color:var(--mute)}
+.inject button,.restart{border:1px solid var(--mute);background:transparent;padding:5px 10px;font:600 13px var(--f-c);letter-spacing:.1em;text-transform:uppercase;color:var(--ink)}
+.none{font-size:12px;color:var(--mute);margin:0;line-height:1.5}
+.log{list-style:none;margin:0;padding:0;font-size:11.5px;line-height:1.6;max-height:260px;overflow-y:auto}
+.log li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:6px;color:var(--mute)}
+.log li b{font-weight:400;color:var(--ink);overflow-wrap:anywhere}
+.log li:first-child b{color:var(--acc);font-weight:700}
+pre.src{margin:0;padding:12px;font-size:11.5px;line-height:1.55;overflow:auto;max-height:calc(100vh - 180px);background:var(--code)}
+pre.src mark{background:var(--hi);color:var(--warn)}
+.issues{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.issues li{font-size:12px;line-height:1.45;border-left:2px solid var(--bad);padding:4px 8px;background:var(--code)}
+.issues button{border:0;background:none;padding:0;color:var(--acc);text-decoration:underline;font-size:11.5px}
+/* Bill */
+[hidden]{display:none!important}
+floppy-side{display:flex;flex-direction:column}
+floppy-side>floppy-palette>.ph{display:none}
+floppy-bill{display:flex;flex-direction:column;min-height:0}
+.bill-hd{display:flex;gap:12px;align-items:center;padding:12px;border-bottom:1.5px solid var(--line)}
+.bill-hd .face{width:110px;height:128px;flex:0 0 auto;border:1px dashed var(--dash);position:relative;background:var(--well);overflow:hidden}
+.bill-hd floppy-bot{position:absolute;left:6px;top:6px;width:calc(100% - 12px);height:calc(100% - 12px);display:block}
+.bill-hd b{font:700 28px/1 var(--f-c);letter-spacing:.06em;text-transform:uppercase;display:block}
+.bill-hd>div>span{font-size:11.5px;color:var(--mute)}
+.steps{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:4px}
+.steps li{font:600 12px var(--f-c);letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--mute);color:var(--mute);padding:1px 6px}
+.steps li.done{border-color:var(--ok);color:var(--ok)}
+.steps li.now{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chat{flex:1;overflow-y:auto;padding:12px;display:grid;gap:12px;align-content:start;max-height:calc(100vh - 330px);min-height:260px}
+.msg{font-size:12.5px;line-height:1.55;overflow-wrap:anywhere;min-width:0}
+.msg.bill{border-left:2px solid var(--acc);padding:2px 0 2px 10px}
+.msg.you{justify-self:end;background:var(--ink);color:var(--bg);padding:6px 10px;max-width:85%}
+.msg code{font-size:11.5px;color:var(--acc)}
+.msg a{color:var(--acc)}
+.card{margin:8px 0 4px;padding:8px 10px;border:1.5px solid var(--line);background:var(--well);list-style:none}
+ol.card.plan{counter-reset:s;display:grid;gap:4px}
+ol.card.plan li{counter-increment:s;display:grid;grid-template-columns:20px minmax(0,1fr)}
+ol.card.plan li::before{content:counter(s);color:var(--acc);font-weight:700}
+.parts{display:grid;gap:8px}
+.parts li{display:grid;gap:1px}
+.parts li div{display:flex;gap:8px;align-items:baseline}
+.parts b{font:700 16px var(--f-c);letter-spacing:.06em;text-transform:uppercase}
+.parts small{font-size:10.5px;color:var(--mute)}
+.parts span{color:var(--mute);font-size:12px}
+.aside{margin:6px 0 0;color:var(--mute);font-size:11.5px}
+.setup{display:grid;gap:8px}
+.setup fieldset{border:0;border-top:1px dashed var(--dash);margin:0;padding:6px 0 0;display:grid;gap:6px;min-width:0}
+.setup legend{font:700 14px var(--f-c);letter-spacing:.1em;text-transform:uppercase;color:var(--acc);padding:0 6px 0 0}
+.setup label{display:grid;gap:2px;font-size:11px;color:var(--mute)}
+.setup input{background:var(--field);border:0;border-bottom:1px solid var(--mute);padding:4px 6px;font-size:12px;min-width:0;color:var(--ink)}
+.setup button,.chips button,.ask button,a.go{border:1.5px solid var(--acc);background:transparent;color:var(--ink);padding:5px 10px;font:600 14px var(--f-c);letter-spacing:.08em;text-transform:uppercase;text-decoration:none;display:inline-block;text-align:left}
+.setup button,a.go{background:var(--acc);color:var(--bg);justify-self:start}
+.chips button:hover{background:#12406f}
+.inst{display:grid;gap:6px}
+.inst li{display:grid;gap:1px}
+.inst b{color:var(--ok)}
+.inst span{color:var(--mute);font-size:11.5px}
+.result .files{display:flex;flex-wrap:wrap;gap:6px}
+.result .files span{border:1px solid var(--ink);padding:1px 6px;font-size:11.5px}
+.result pre{margin:4px 0 0;padding:6px 8px;background:var(--field);font-size:11.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.result p{margin:8px 0 4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 10px}
+.chips:empty{display:none}
+.ask{display:flex;gap:6px;padding:10px 12px;border-top:1.5px solid var(--line)}
+.ask input{flex:1;min-width:0;border:0;border-bottom:1px solid var(--mute);background:var(--field);padding:6px 8px;font-size:12px}
+.ask input::placeholder{color:var(--mute)}
+/* spaces */
+floppy-modes{display:flex;border:1.5px solid var(--line);margin-left:auto;flex-wrap:wrap}
+floppy-modes button{background:transparent;border:0;border-right:1px solid var(--mute);padding:6px 14px;font:600 15px var(--f-c);letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+floppy-modes button:last-child{border-right:0}
+floppy-modes button[aria-current="true"]{background:var(--ink);color:var(--bg)}
+floppy-workshop[data-mode] .grid>:is(floppy-bill,floppy-palette,floppy-run,floppy-observe){display:none}
+floppy-workshop[data-mode="build"] .grid>floppy-bill{display:flex}
+floppy-workshop[data-mode="workbench"] .grid>:is(floppy-palette,floppy-run){display:block}
+floppy-workshop[data-mode="testbench"] .grid>floppy-run{display:block}
+floppy-workshop[data-mode="observe"] .grid>floppy-observe{display:block}
+floppy-workshop[data-mode="build"] .grid{grid-template-columns:minmax(0,760px);justify-content:center}
+floppy-workshop[data-mode="build"] .grid>floppy-canvas{display:none}
+floppy-workshop[data-mode="workbench"] .grid{grid-template-columns:260px minmax(0,1fr) 330px}
+floppy-workshop[data-mode="testbench"] .grid{grid-template-columns:minmax(0,1fr) 360px}
+floppy-workshop[data-mode="observe"] .grid{grid-template-columns:minmax(0,1fr) 400px}
+floppy-workshop[data-mode="build"] .bill-hd .face{width:130px;height:150px}
+.pad.ro .hd{cursor:default}
+.pad.ro .hd :is(.x,select.add){display:none}
+.pad.ro .hd :is(input,select){pointer-events:none;background:transparent;border-bottom-color:transparent;appearance:none}
+floppy-observe .ph .dot{display:inline-block;width:9px;height:9px;border:1.5px solid var(--mute);margin-right:8px;vertical-align:1px}
+floppy-observe .ph .dot.on{background:var(--ok);border-color:var(--ok)}
+.pause{border:1px solid var(--acc);background:transparent;color:var(--ink);padding:2px 10px;font:600 13px var(--f-c);letter-spacing:.1em;text-transform:uppercase}
+.filt{display:flex;flex-wrap:wrap;gap:4px}
+.filt button{border:1px solid var(--mute);background:transparent;padding:1px 8px;font:600 13px var(--f-c);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.filt button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.stream{list-style:none;margin:0;padding:0;font-size:11.5px;max-height:calc(100vh - 330px);overflow-y:auto}
+.stream li{display:grid;grid-template-columns:64px 62px minmax(0,1fr);gap:6px;padding:4px 0;border-bottom:1px dashed rgba(157,184,220,.25)}
+.stream time{color:var(--mute)}
+.stream em{font:600 12px var(--f-c);letter-spacing:.08em;text-transform:uppercase}
+.stream b{font-weight:400;overflow-wrap:anywhere}
+.stream .in em{color:var(--acc)} .stream .out em{color:var(--warn)} .stream .state em{color:#c9b6ff} .stream .service em{color:var(--ok)} .stream .note em{color:var(--mute)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<floppy-workshop></floppy-workshop>
+
+<script type="module">/*CRITTER*/</script>
+<script type="module">
+import * as lib from "https://cdn.jsdelivr.net/npm/@stateforward/hsm.ts@1.3.3/dist/index.js";
+
+/* ---------------------------------------------------------------
+   hsm.ts host helpers:
+   from(HTMLElement) gives a custom element the Instance protocol,
+   start() binds a defined model onto it.
+---------------------------------------------------------------- */
+const hsm = (() => {
+  function from(Base) {
+    class HostElement extends Base {}
+    for (const [k, d] of Object.entries(Object.getOwnPropertyDescriptors(lib.Instance.prototype))) {
+      if (k !== "constructor") Object.defineProperty(HostElement.prototype, k, d);
+    }
+    return HostElement;
+  }
+  const BIND = Symbol("hsm-bind");
+  function start(instance, model) {
+    if (instance[BIND]) return instance;
+    const s = lib.start(instance, model);
+    s[BIND] = true;
+    return s;
+  }
+  const event = (name, data) => ({ name, kind: lib.Kinds.Event, data });
+  const live = (host, name, data) => { try { void Promise.resolve(host.dispatch(event(name, data))).catch(e => console.error(e)); } catch (e) { console.error(e); } };
+  return { ...lib, from, start, event, live };
+})();
+
+/* ---------------------------------------------------------------
+   The block catalog: extracted at build time from scxml.rs's W3C
+   SCXML 1.0 XSDs and the extension namespace XSDs (scxml.rs event,
+   env, datamodel, scx; floppy decision, bot, conversation, migration).
+---------------------------------------------------------------- */
+const CATALOG = /*CATALOG*/;
+const SCXML_NS = "http://www.w3.org/2005/07/scxml";
+const ENV_NS = "https://github.com/stateforward/scxml.rs/namespaces/env";
+const GH = "https://github.com/stateforward/floppy/";
+/* Service packages (services/<name>/package/*.service.json): their URIs and env slots. */
+const SERVICES = [
+  { name: "sql", env: [] }, { name: "pgsql", env: [] }, { name: "generate", env: ["apikey", "baseurl"] },
+  { name: "speech", env: ["apikey", "baseurl"] }, { name: "decision", env: ["apikey", "baseurl"] },
+];
+
+/* Every element spec by qualified tag: {attrs, kids:Set, any, ns}. */
+const SPECS = new Map();
+for (const [n, s] of Object.entries(CATALOG.scxml)) {
+  SPECS.set(n, { tag: n, ns: "", attrs: s.attrs, kids: new Set(s.children.filter(c => c !== "##other")), any: s.children.includes("##other"), text: s.text });
+}
+for (const [p, ns] of Object.entries(CATALOG.ext)) {
+  for (const [n, s] of Object.entries(ns.elements)) {
+    SPECS.set(p + ":" + n, { tag: p + ":" + n, ns: p, attrs: s.attrs, kids: new Set(s.children.filter(c => c !== "##other").map(c => p + ":" + c)), any: false, nested: s.nested, text: s.text });
+  }
+}
+
+/* ---------------------------------------------------------------
+   Notches from the XSD. Parents whose content models overlap form
+   one mouth family; a child's notch is the family of the mouths
+   that take it. A block fits where the XSD allows it AND its notch
+   matches the mouth's.
+---------------------------------------------------------------- */
+const FAM = (() => {
+  const parents = [...SPECS.values()].filter(s => s.kids.size).sort((a, b) => b.kids.size - a.kids.size);
+  const clusters = [];
+  const mouth = new Map();
+  for (const s of parents) {
+    let c = clusters.find(c => [...s.kids].filter(k => c.kids.has(k)).length / Math.min(s.kids.size, c.kids.size) >= 0.5);
+    if (!c) { c = { parents: [], kids: new Set() }; clusters.push(c); }
+    c.parents.push(s.tag); s.kids.forEach(k => c.kids.add(k)); mouth.set(s.tag, c);
+  }
+  const named = c => c.parents.includes("state") ? "structure" : c.parents.includes("onentry") ? "executable content" : c.parents.includes("invoke") ? "parameters" : c.parents.includes("datamodel") ? "data" : c.parents[0] + " content";
+  const SHAPES = ["square", "trap", "round", "tri", "double", "wave"];
+  const order = c => { const i = ["structure", "executable content", "parameters", "data"].indexOf(named(c)); return i < 0 ? 99 : i; };
+  clusters.sort((a, b) => order(a) - order(b));
+  clusters.forEach((c, i) => { c.name = named(c); c.shape = SHAPES[i % SHAPES.length]; c.members = []; });
+  const family = new Map();
+  for (const tag of SPECS.keys()) {
+    let best = null, n = 0;
+    for (const c of clusters) {
+      const k = c.parents.filter(p => SPECS.get(p).kids.has(tag)).length;
+      if (k > n) { best = c; n = k; }
+    }
+    /* Extension elements arrive through scxml.extra.content (xsd:any ##other);
+       scxml.rs runs them as executable content. */
+    if (!best && SPECS.get(tag).ns && !SPECS.get(tag).nested) best = mouth.get("onentry");
+    if (best) { family.set(tag, best); best.members.push(tag); }
+  }
+  return { clusters, mouth, family };
+})();
+
+/* What people read: the root block is the bot; other blocks go by their name. */
+const nm = tag => tag === "scxml" ? "bot" : tag;
+function xsdAllows(parent, child) {
+  const p = SPECS.get(parent), c = SPECS.get(child);
+  if (!p || !c) return false;
+  return p.kids.has(child) || (p.any && c.ns !== "" && !c.nested);
+}
+function fits(parent, child) {
+  const m = FAM.mouth.get(parent), f = FAM.family.get(child);
+  if (!m) return { ok: false, why: `${nm(parent)} takes no blocks inside.` };
+  if (!xsdAllows(parent, child)) return { ok: false, why: `${nm(child)} doesn't go inside ${nm(parent)}.` };
+  if (m !== f) return { ok: false, why: `${nm(parent)} takes ${m.name}; ${nm(child)} has a ${f ? f.name : "different"} notch.` };
+  return { ok: true, why: `${nm(child)} fits ${nm(parent)} (${m.name}).` };
+}
+
+/* ---------------------------------------------------------------
+   Document tree: {id, tag, attrs:{}, kids:[]}
+---------------------------------------------------------------- */
+let uid = 0;
+const N = (tag, attrs = {}, kids = []) => ({ id: "n" + (++uid), tag, attrs, kids });
+function trafficLight() {
+  const send = (event, more = {}) => N("send", { event, ...more });
+  return N("scxml", { version: "1.0", datamodel: "ecmascript", initial: "idle" }, [
+    N("state", { id: "idle" }, [N("onentry", {}, [send("light.red", { target: "#_parent" })]), N("transition", { target: "green" })]),
+    N("state", { id: "green" }, [
+      N("onentry", {}, [send("light.green", { target: "#_parent" }), send("timer.green", { delay: "5s" })]),
+      N("transition", { event: "timer.green", target: "yellow" }),
+      N("transition", { event: "ped.button", "event:schema": '{"type":"object"}', target: "yellow" })]),
+    N("state", { id: "yellow" }, [N("onentry", {}, [send("light.yellow", { target: "#_parent" }), send("timer.yellow", { delay: "2s" })]), N("transition", { event: "timer.yellow", target: "red" })]),
+    N("state", { id: "red" }, [N("onentry", {}, [send("light.red", { target: "#_parent" })]), N("transition", { target: "walk" })]),
+    N("state", { id: "walk" }, [N("onentry", {}, [send("walk.on", { target: "#_parent" }), send("timer.walk", { delay: "4s" })]), N("transition", { event: "timer.walk", target: "green" })]),
+  ]);
+}
+function walk(n, f, parent = null) { f(n, parent); n.kids.forEach(k => walk(k, f, n)); }
+function find(root, id) { let r = null, p = null; walk(root, (n, par) => { if (n.id === id) { r = n; p = par; } }); return r ? { node: r, parent: p } : null; }
+function stateIds(root) { const ids = []; walk(root, n => { if (["state", "parallel", "final", "history"].includes(n.tag) && n.attrs.id) ids.push(n.attrs.id); }); return ids; }
+function contains(a, b) { let hit = false; walk(a, n => { if (n === b) hit = true; }); return hit; }
+function fresh(tag, root, preset) {
+  const spec = SPECS.get(tag), attrs = {};
+  const used = new Set(stateIds(root));
+  for (const a of spec.attrs) {
+    if (a.use !== "required") continue;
+    if (a.fixed) attrs[a.name] = a.fixed;
+    else if (a.name === "id") { let i = 1; while (used.has(tag + "_" + i)) i++; attrs.id = tag + "_" + i; }
+    else if (a.name === "location") attrs.location = "result";
+    else attrs[a.name] = "";
+  }
+  if (["state", "parallel", "final"].includes(tag) && !attrs.id) { let i = 1; while (used.has(tag + "_" + i)) i++; attrs.id = tag + "_" + i; }
+  if (tag === "send") attrs.event = "my.event";
+  if (tag === "transition") attrs.event = "my.event";
+  if (preset) Object.assign(attrs, preset);
+  return N(tag, attrs);
+}
+
+/* ---------------------------------------------------------------
+   Block shapes: the notch polylines, 24px wide, 6px deep.
+---------------------------------------------------------------- */
+const D = 6, NX = 14, NW = 24;
+const SHAPE = {
+  square: [[0, 0], [3, 0], [3, 1], [21, 1], [21, 0], [24, 0]],
+  trap: [[0, 0], [6, 1], [18, 1], [24, 0]],
+  round: Array.from({ length: 13 }, (_, i) => { const a = Math.PI * i / 12; return [12 - 12 * Math.cos(a), Math.sin(a) * 1.2]; }),
+  tri: [[0, 0], [12, 1.4], [24, 0]],
+  double: [[0, 0], [2, 1], [10, 1], [12, 0], [14, 1], [22, 1], [24, 0]],
+  wave: [[0, 0], [4, 1], [8, 0], [12, 1], [16, 0], [20, 1], [24, 0]],
+};
+const seg = (shape, x0, y, rev) => { let p = SHAPE[shape].map(([dx, dy]) => [x0 + dx, y + dy * D]); if (rev) p = p.reverse(); return p.map(([x, yy]) => `L${x.toFixed(1)},${yy.toFixed(1)}`).join(""); };
+function colorOf(tag) {
+  if (tag === "scxml") return "var(--c-root)";
+  if (tag.includes(":")) return FAM.family.get(tag)?.name === "executable content" ? "var(--c-ext)" : "var(--c-other)";
+  if (["state", "parallel", "final", "initial", "history"].includes(tag)) return "var(--c-state)";
+  if (tag === "transition") return "var(--c-trans)";
+  if (["onentry", "onexit"].includes(tag)) return "var(--c-hook)";
+  if (tag === "invoke") return "var(--c-invoke)";
+  if (["datamodel", "data", "donedata"].includes(tag)) return "var(--c-dm)";
+  if (["if", "elseif", "else", "foreach"].includes(tag)) return "var(--c-flow)";
+  if (["param", "content", "finalize"].includes(tag)) return "var(--c-param)";
+  return "var(--c-exec)";
+}
+function shapeBlock(b) {
+  const W = b.offsetWidth, H = b.offsetHeight, R = 5;
+  const hd = b.querySelector(":scope>.hd"), mouth = b.querySelector(":scope>.mouth");
+  const own = FAM.family.get(b.tag)?.shape, hat = b.tag === "scxml" || !own;
+  let d = `M0,${R}Q0,0 ${R},0`;
+  if (!hat) d += `L${NX},0` + seg(own, NX, 0, false);
+  d += `L${W - R},0Q${W},0 ${W},${R}`;
+  if (mouth) {
+    const y0 = hd.offsetHeight, y1 = y0 + mouth.offsetHeight, mx = mouth.offsetLeft, ms = FAM.mouth.get(b.tag).shape;
+    d += `L${W},${y0}L${mx + NX + NW},${y0}` + seg(ms, mx + NX, y0, true) + `L${mx + 3},${y0}Q${mx},${y0} ${mx},${y0 + 3}L${mx},${y1 - 3}Q${mx},${y1} ${mx + 3},${y1}L${W},${y1}`;
+  }
+  d += `L${W},${H - R}Q${W},${H} ${W - R},${H}`;
+  if (!hat) d += `L${NX + NW},${H}` + seg(own, NX, H, true);
+  d += `L${R},${H}Q0,${H} 0,${H - R}Z`;
+  let svg = b.querySelector(":scope>svg.shape");
+  if (!svg) { svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("class", "shape"); svg.innerHTML = '<path stroke-width="2" stroke-linejoin="round"/>'; b.prepend(svg); }
+  svg.setAttribute("width", W); svg.setAttribute("height", H + D + 2);
+  const p = svg.firstChild; p.setAttribute("d", d); p.style.stroke = "var(--edge)"; p.style.fill = colorOf(b.tag); b.style.setProperty("--fam", colorOf(b.tag));
+}
+function shapeAll(root) { root.querySelectorAll("floppy-block").forEach(shapeBlock); }
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ---------------------------------------------------------------
+   <floppy-block>: one SCXML element. Its machine tracks whether it
+   is resting, lifted (being dragged), or offering/refusing its mouth
+   to a block hovering over it.
+---------------------------------------------------------------- */
+class FloppyBlock extends hsm.from(HTMLElement) {
+  static model = hsm.define("Block",
+    hsm.initial(hsm.target("resting")),
+    hsm.state("resting",
+      hsm.entry(FloppyBlock.mark("resting")),
+      hsm.transition(hsm.on("lift"), hsm.target("../lifted")),
+      hsm.transition(hsm.on("hover"), hsm.guard((c, b, e) => e.data.ok), hsm.target("../offering")),
+      hsm.transition(hsm.on("hover"), hsm.target("../refusing"))),
+    hsm.state("lifted", hsm.entry(FloppyBlock.mark("lifted")), hsm.transition(hsm.on("settle"), hsm.target("../resting"))),
+    hsm.state("offering", hsm.entry(FloppyBlock.mark("offering")), hsm.transition(hsm.on("leave"), hsm.target("../resting")), hsm.transition(hsm.on("settle"), hsm.target("../resting"))),
+    hsm.state("refusing", hsm.entry(FloppyBlock.mark("refusing")), hsm.transition(hsm.on("leave"), hsm.target("../resting")), hsm.transition(hsm.on("settle"), hsm.target("../resting"))),
+  );
+  /* Entry actions run before state() reports the new state, so each entry names its state. */
+  static mark(name) { return (_c, b) => { b.dataset.state = name; }; }
+  connectedCallback() { hsm.start(this, FloppyBlock.model); }
+  get tag() { return this.dataset.tag; }
+  /* Render the block for node n. ids: state ids for IDREF fields. */
+  static html(n, ids, opts = {}) {
+    const spec = SPECS.get(n.tag);
+    const required = spec.attrs.filter(a => a.use === "required").map(a => a.name);
+    const shown = [...new Set([...required.filter(r => !(spec.attrs.find(a => a.name === r)?.fixed)), ...Object.keys(n.attrs).filter(k => !(n.tag === "scxml" && k === "version"))])];
+    const field = k => {
+      const a = spec.attrs.find(x => x.name === k) || { name: k, type: "string" };
+      const v = n.attrs[k] ?? "", miss = required.includes(k) && v === "";
+      const cls = miss ? ' class="req-missing"' : "";
+      const data = opts.preview ? "disabled" : `data-attr="${esc(k)}"`;
+      let ctl;
+      if (a.type === "IDREFS" || (n.tag === "transition" && k === "target")) ctl = `<select ${data}${cls} aria-label="${esc(k)}"><option value=""></option>${ids.map(i => `<option ${i === v ? "selected" : ""}>${esc(i)}</option>`).join("")}</select>`;
+      else if (a.enum) ctl = `<select ${data}${cls} aria-label="${esc(k)}"><option value=""></option>${a.enum.map(i => `<option ${i === v ? "selected" : ""}>${esc(i)}</option>`).join("")}</select>`;
+      else ctl = `<input ${data}${cls} value="${esc(v)}" size="${Math.max(4, Math.min(34, String(v).length + 1))}" aria-label="${esc(k)}">`;
+      return `<label><span>${esc(k)}</span>${ctl}</label>`;
+    };
+    const addable = [
+      ...spec.attrs.filter(a => a.use !== "required" && !(a.name in n.attrs)).map(a => a.name),
+      ...CATALOG.globalAttrs.map(g => g.prefix + ":" + g.name).filter(k => !(k in n.attrs) && (k.startsWith("event:") ? n.tag === "transition" : n.tag === "data" || n.tag === "datamodel")),
+      ...(n.tag === "invoke" ? ["env:apikey", "env:baseurl"].filter(k => !(k in n.attrs)) : []),
+    ];
+    const tagLabel = n.tag.includes(":") ? `<i>${esc(n.tag.split(":")[0])}:</i>${esc(n.tag.split(":")[1])}` : esc(nm(n.tag));
+    const mouth = FAM.mouth.get(n.tag);
+    return `<floppy-block data-tag="${esc(n.tag)}" data-id="${n.id}" ${opts.preview ? `data-preview="${esc(opts.preview)}" draggable="true"` : ""} class="${opts.sel === n.id ? "sel" : ""} ${opts.active?.has(n.id) ? "active" : ""}">
+      <div class="hd" ${opts.preview ? "" : 'draggable="true"'}><span class="tag">${tagLabel}</span>${shown.map(field).join("")}
+      ${!opts.preview && addable.length ? `<select class="add" data-addattr aria-label="Add attribute"><option value="">+</option>${addable.map(k => `<option>${esc(k)}</option>`).join("")}</select>` : ""}
+      ${!opts.preview && n.tag !== "scxml" ? `<button class="x" data-remove aria-label="Remove block">×</button>` : ""}</div>
+      ${mouth ? `<div class="mouth${n.kids.length && !opts.preview ? "" : " empty"}" data-mouth="${n.id}" data-fam="${mouth.shape}">${opts.preview ? "" : n.kids.map(k => FloppyBlock.html(k, ids, opts)).join("")}</div><div class="ft"></div>` : ""}
+    </floppy-block>`;
+  }
+}
+customElements.define("floppy-block", FloppyBlock);
+
+/* ---------------------------------------------------------------
+   <floppy-palette>: the categories are the notch families and the
+   extension namespaces; its machine is the selected category.
+---------------------------------------------------------------- */
+const CATS = (() => {
+  const c = [];
+  const fam = name => FAM.clusters.find(x => x.name === name);
+  c.push({ key: "structure", label: "Structure", tags: ["state", "parallel", "final", "initial", "history", "transition", "onentry", "onexit", "invoke", "datamodel", "donedata"].filter(t => fam("structure").members.includes(t)) });
+  c.push({ key: "exec", label: "Executable", tags: fam("executable content").members.filter(t => !t.includes(":")) });
+  c.push({ key: "params", label: "Parameters", tags: fam("parameters").members });
+  c.push({ key: "data", label: "Data", tags: fam("data").members });
+  c.push({ key: "services", label: "Services", presets: [
+    ...SERVICES.map(s => ({ tag: "invoke", attrs: { type: GH + "services/" + s.name, ...Object.fromEntries(s.env.map(e => ["env:" + e, "FLOPPY_" + e.toUpperCase().replace("APIKEY", "API_KEY").replace("BASEURL", "BASE_URL")])) } })),
+    { tag: "invoke", attrs: { type: "scxml", src: "../memory/memory.scx" } }] });
+  for (const p of Object.keys(CATALOG.ext)) {
+    const tags = fam("executable content").members.filter(t => t.startsWith(p + ":"));
+    if (tags.length) c.push({ key: p, label: p + ":", tags });
+  }
+  return c;
+})();
+class FloppyPalette extends hsm.from(HTMLElement) {
+  static model = hsm.define("Palette",
+    hsm.initial(hsm.target("browsing")),
+    hsm.state("browsing",
+      hsm.entry(FloppyPalette.paint),
+      hsm.transition(hsm.on("category"), hsm.effect((c, p, e) => { p.cat = e.data; FloppyPalette.paint(c, p); }))));
+  cat = "structure";
+  connectedCallback() {
+    hsm.start(this, FloppyPalette.model);
+    this.addEventListener("click", e => { const b = e.target.closest("[data-cat]"); if (b) hsm.live(this, "category", b.dataset.cat); });
+  }
+  static paint(_c, p) {
+    const ws = p.closest("floppy-workshop"); if (!ws) return;
+    const cat = CATS.find(c => c.key === p.cat);
+    const items = cat.presets ? cat.presets.map((x, i) => ({ node: N(x.tag, { ...x.attrs }), key: cat.key + ":" + i })) : cat.tags.map(t => ({ node: fresh(t, ws.doc), key: t }));
+    p.presets = Object.fromEntries(items.map(i => [i.key, i.node]));
+    p.innerHTML = `<div class="ph">Blocks</div>
+      <div class="legend"><p>Notches show what fits where. A block snaps into any mouth with the same notch.</p><ul>
+      ${FAM.clusters.map(c => `<li><svg width="34" height="14" viewBox="-5 -2 34 14" aria-hidden="true"><path d="M-5,0L0,0${seg(c.shape, 0, 0, false)}L29,0L29,${-2}" fill="none" stroke="currentColor" stroke-width="2"/></svg>${esc(c.name)} <span style="color:var(--mute)">(${c.members.length})</span></li>`).join("")}</ul></div>
+      <div class="cats" role="group" aria-label="Category">${CATS.map(c => `<button data-cat="${c.key}" aria-pressed="${c.key === p.cat}">${esc(c.label)}</button>`).join("")}</div>
+      <div class="items"><p class="hint">Drag onto a mouth, or select a block and click.</p>${items.map(i => FloppyBlock.html(i.node, [], { preview: i.key })).join("")}</div>`;
+    requestAnimationFrame(() => shapeAll(p));
+  }
+}
+customElements.define("floppy-palette", FloppyPalette);
+
+/* ---------------------------------------------------------------
+   SCXML preview interpreter: one active configuration, eventless
+   transitions, delayed sends held as timers, enabled transitions
+   listed for the user to take.
+---------------------------------------------------------------- */
+function matchDesc(desc, name) { return (desc || "").split(/\s+/).some(d => d === "*" || d === name || (d && name.startsWith(d.replace(/\.?\*$/, "") + "."))); }
+class Interp {
+  constructor(root) { this.root = root; this.reset(); }
+  idx() { this.byId = new Map(); this.parent = new Map(); walk(this.root, (n, p) => { if (n.attrs.id) this.byId.set(n.attrs.id, n); this.parent.set(n, p); }); }
+  isState(n) { return ["state", "parallel", "final"].includes(n.tag); }
+  say(t) { this.log.push({ n: this.log.length + 1, t }); }
+  reset() { this.idx(); this.queue = []; this.active = []; this.log = []; this.timers = []; this.done = false; this.guard = 0; const first = this.initialOf(this.root); first ? this.enterNode(first) : this.say("no state to enter"); }
+  initialOf(n) {
+    const kids = n.kids.filter(k => this.isState(k));
+    if (n.attrs.initial && this.byId.has(n.attrs.initial.split(/\s+/)[0])) return this.byId.get(n.attrs.initial.split(/\s+/)[0]);
+    const ini = n.kids.find(k => k.tag === "initial"), t = ini?.kids.find(k => k.tag === "transition");
+    if (t && this.byId.has(t.attrs.target)) return this.byId.get(t.attrs.target);
+    return kids[0] || null;
+  }
+  leafOf(n) { let x = n, g = 0; while (x && x.tag !== "final" && x.kids.some(k => this.isState(k)) && g++ < 50) x = this.initialOf(x); return x; }
+  pathOf(n) { const p = []; let x = n; while (x && x.tag !== "scxml") { p.unshift(x); x = this.parent.get(x); } return p; }
+  run(list, where) {
+    for (const a of list) {
+      const t = a.tag;
+      if (t === "send") {
+        if (a.attrs.delay) { this.timers.push({ event: a.attrs.event || "(eventexpr)", delay: a.attrs.delay }); this.say(`send ${a.attrs.event} delay ${a.attrs.delay}`); }
+        else if (a.attrs.target === "#_parent") this.say(`send ${a.attrs.event} → #_parent`);
+        else { this.say(`send ${a.attrs.event}${a.attrs.target ? " → " + a.attrs.target : ""}`); if (!a.attrs.target || a.attrs.target === "#_internal") this.queue.push(a.attrs.event); }
+      } else if (t === "raise") { this.say(`raise ${a.attrs.event}`); this.queue.push(a.attrs.event); }
+      else if (t === "log") this.say(`log ${a.attrs.label || ""} ${a.attrs.expr || ""}`.trim());
+      else if (t === "assign") this.say(`assign ${a.attrs.location} = ${a.attrs.expr || ""}`);
+      else if (t === "cancel") this.say(`cancel ${a.attrs.sendid || ""}`);
+      else if (t === "if" || t === "foreach") { this.say(`${t} ${a.attrs.cond || a.attrs.array || ""} (taken)`); const cut = a.kids.findIndex(k => k.tag === "elseif" || k.tag === "else"); this.run(cut < 0 ? a.kids : a.kids.slice(0, cut), where); }
+      else if (t === "script") this.say("script (not run in preview)");
+      else if (t.includes(":")) this.say(`${t} ran (not run in preview)`);
+    }
+  }
+  enterNode(target) {
+    this.queue = this.queue || [];
+    const leaf = this.leafOf(target); if (!leaf) return;
+    const path = this.pathOf(leaf), old = this.active;
+    old.filter(n => !path.includes(n)).reverse().forEach(n => { n.kids.filter(k => k.tag === "onexit").forEach(k => this.run(k.kids, n)); n.kids.filter(k => k.tag === "invoke").forEach(k => this.say(`invoke ${k.attrs.id || k.attrs.type} cancelled`)); this.say("exit " + n.attrs.id); });
+    path.filter(n => !old.includes(n)).forEach(n => { this.say("enter " + n.attrs.id); n.kids.filter(k => k.tag === "onentry").forEach(k => this.run(k.kids, n)); n.kids.filter(k => k.tag === "invoke").forEach(k => this.say(`invoke ${k.attrs.id || ""} ${k.attrs.type || ""}${k.attrs.src ? " " + k.attrs.src : ""} started`.replace(/\s+/g, " "))); });
+    this.active = path;
+    if (leaf.tag === "final") {
+      const par = this.parent.get(leaf);
+      if (!par || par.tag === "scxml") { this.done = true; this.say("final " + leaf.attrs.id + ": the machine is done"); return; }
+      this.queue.push("done.state." + par.attrs.id);
+    }
+    this.settle();
+  }
+  settle() {
+    while (this.guard++ < 60) {
+      const free = this.transitions().find(t => !t.attrs.event);
+      if (free) { this.take(free, "eventless"); return; }
+      const ev = this.queue.shift(); if (!ev) break;
+      const t = this.transitions().find(t => t.attrs.event && matchDesc(t.attrs.event, ev));
+      if (t) { this.take(t, ev); return; } else this.say(`${ev} discarded: no transition`);
+    }
+    this.guard = 0;
+  }
+  transitions() { const out = []; [...this.active].reverse().forEach(s => s.kids.filter(k => k.tag === "transition").forEach(t => out.push(t))); return out; }
+  enabled() { return this.done ? [] : this.transitions().filter(t => t.attrs.event); }
+  take(t, label) {
+    this.say(label === "eventless" ? "eventless transition" : `event ${label}${t.attrs.cond ? " [" + t.attrs.cond + "]" : ""}`);
+    this.run(t.kids, t);
+    const tg = t.attrs.target && this.byId.get(t.attrs.target.split(/\s+/)[0]);
+    if (t.attrs.target && !tg) { this.say(`error.execution: no state "${t.attrs.target}"`); return; }
+    if (tg) this.enterNode(tg); else this.settle();
+  }
+  deliver(name) {
+    this.timers = this.timers.filter((x, i, a) => !(x.event === name && a.findIndex(y => y.event === name) === i));
+    const t = this.enabled().find(t => matchDesc(t.attrs.event, name));
+    if (t) this.take(t, name); else this.say(`${name} discarded: no enabled transition`);
+  }
+}
+
+/* XSD check: required attributes, fixed values, IDREFs, content models. */
+function check(root) {
+  const ids = new Set(stateIds(root)), out = [];
+  walk(root, (n, p) => {
+    const spec = SPECS.get(n.tag);
+    spec.attrs.filter(a => a.use === "required" && !n.attrs[a.name]).forEach(a => out.push({ id: n.id, msg: `${nm(n.tag)} needs ${a.name}` }));
+    spec.attrs.filter(a => a.fixed && n.attrs[a.name] && n.attrs[a.name] !== a.fixed).forEach(a => out.push({ id: n.id, msg: `${nm(n.tag)} ${a.name} must be ${a.fixed}` }));
+    ["target", "initial"].forEach(k => (n.attrs[k] || "").split(/\s+/).filter(Boolean).forEach(t => { if (!ids.has(t) && !(n.tag === "send" && k === "target")) out.push({ id: n.id, msg: `${nm(n.tag)} ${k} "${t}" names no state` }); }));
+    if (p && !xsdAllows(p.tag, n.tag)) out.push({ id: n.id, msg: `${nm(n.tag)} doesn't go inside ${nm(p.tag)}` });
+  });
+  return out;
+}
+
+/* Serialize to SCXML. */
+function toSCXML(root, activeIds) {
+  const prefixes = new Set();
+  walk(root, n => { if (n.tag.includes(":")) prefixes.add(n.tag.split(":")[0]); Object.keys(n.attrs).forEach(k => k.includes(":") && prefixes.add(k.split(":")[0])); });
+  const uri = p => p === "env" ? ENV_NS : CATALOG.ext[p]?.uri;
+  const lines = [];
+  const attrs = n => Object.entries(n.attrs).map(([k, v]) => ` ${k}=${v.includes('"') ? `'${v}'` : `"${v}"`}`).join("");
+  const emit = (n, depth) => {
+    const pad = "  ".repeat(depth);
+    let open = `<${n.tag}`;
+    if (n.tag === "scxml") open += ` xmlns="${SCXML_NS}"` + [...prefixes].map(p => `\n${pad}       xmlns:${p}="${uri(p)}"`).join("");
+    open += attrs(n);
+    const hot = activeIds.has(n.id);
+    const L = s => lines.push({ s: pad + s, hot });
+    if (!n.kids.length) { L(open + "/>"); return; }
+    L(open + ">"); n.kids.forEach(k => emit(k, depth + 1)); L(`</${n.tag}>`);
+  };
+  emit(root, 0);
+  return lines.map(l => l.hot ? `<mark>${esc(l.s)}</mark>` : esc(l.s)).join("\n");
+}
+
+/* ---------------------------------------------------------------
+   <floppy-run>: its machine is the panel tab; the preview machine
+   above runs the document.
+---------------------------------------------------------------- */
+class FloppyRun extends hsm.from(HTMLElement) {
+  static model = hsm.define("RunPanel",
+    hsm.initial(hsm.target("run")),
+    hsm.state("run", hsm.entry(FloppyRun.show("run")), hsm.transition(hsm.on("show_source"), hsm.target("../source")), hsm.transition(hsm.on("show_check"), hsm.target("../check")), hsm.transition(hsm.on("refresh"), hsm.effect(FloppyRun.paint))),
+    hsm.state("source", hsm.entry(FloppyRun.show("source")), hsm.transition(hsm.on("show_run"), hsm.target("../run")), hsm.transition(hsm.on("show_check"), hsm.target("../check")), hsm.transition(hsm.on("refresh"), hsm.effect(FloppyRun.paint))),
+    hsm.state("check", hsm.entry(FloppyRun.show("check")), hsm.transition(hsm.on("show_run"), hsm.target("../run")), hsm.transition(hsm.on("show_source"), hsm.target("../source")), hsm.transition(hsm.on("refresh"), hsm.effect(FloppyRun.paint))),
+  );
+  connectedCallback() {
+    hsm.start(this, FloppyRun.model);
+    this.addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.dataset.tab) return hsm.live(this, "show_" + b.dataset.tab);
+      this.dispatchEvent(new CustomEvent("floppy-intent", { bubbles: true, detail: { ...b.dataset } }));
+    });
+    this.addEventListener("submit", e => { e.preventDefault(); const v = this.querySelector("#inject-event").value.trim(); if (v) this.dispatchEvent(new CustomEvent("floppy-intent", { bubbles: true, detail: { inject: v } })); });
+  }
+  static show(tab) { return (c, r) => { r.tab = tab; FloppyRun.paint(c, r); }; }
+  static paint(_c, r) {
+    const ws = r.closest("floppy-workshop"); if (!ws || !ws.sim) return;
+    const tabs = ws.mode === "testbench" ? [["run", "Simulator"]] : [["source", "Code"], ["check", "Check"]];
+    const tab = tabs.some(t => t[0] === r.tab) ? r.tab : tabs[0][0], sim = ws.sim, issues = check(ws.doc);
+    const en = sim.enabled();
+    let body = "";
+    if (tab === "run") body = `
+      <div class="sec"><h3>Configuration</h3><div class="cfg">${sim.done ? "<span>done</span>" : sim.active.map((n, i, a) => `<span class="${i === a.length - 1 ? "leaf" : ""}">${esc(n.attrs.id)}</span>`).join("›")}</div></div>
+      <div class="sec"><h3>Enabled transitions</h3>${en.length ? en.map(t => { const tm = sim.timers.find(x => matchDesc(t.attrs.event, x.event)); return `<button class="et" data-take="${t.id}">${esc(t.attrs.event)}${t.attrs.cond ? " [" + esc(t.attrs.cond) + "]" : ""}<small>→ ${esc(t.attrs.target || "(no target)")}${tm ? " · after " + esc(tm.delay) : ""}</small></button>`; }).join("") : `<p class="none">${sim.done ? "The machine reached a top-level final state." : "No event-triggered transitions in this configuration."}</p>`}
+        ${sim.timers.length ? `<h3>Pending delayed sends</h3>${sim.timers.map(t => `<div class="tm">${esc(t.event)} · ${esc(t.delay)}<button data-deliver="${esc(t.event)}">Deliver now</button></div>`).join("")}` : ""}
+        <form class="inject"><input id="inject-event" placeholder="send an event, e.g. ped.button" aria-label="Event name"><button>Send</button></form>
+        <button class="restart" data-restart="1">Restart</button></div>
+      <div class="sec" style="border-bottom:0"><h3>Run log</h3><ol class="log">${sim.log.slice(-60).reverse().map(l => `<li><span>${l.n}</span><b>${esc(l.t)}</b></li>`).join("")}</ol></div>`;
+    if (tab === "source") body = `<pre class="src">${toSCXML(ws.doc, new Set(sim.active.map(n => n.id)))}</pre>`;
+    if (tab === "check") body = `<div class="sec" style="border-bottom:0"><h3>Checks</h3>${issues.length ? `<ul class="issues">${issues.map(i => `<li>${esc(i.msg)} <button data-select="${i.id}">show</button></li>`).join("")}</ul>` : '<p class="none">No problems: every required field is set, every target names a state, and every block sits where it fits.</p>'}</div>`;
+    r.innerHTML = (tabs.length === 1 ? `<div class="ph">${tabs[0][1]}</div>` : `<div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}${k === "check" ? `<b class="${issues.length ? "bad" : ""}">${issues.length}</b>` : ""}</button>`).join("")}</div>`) + body;
+  }
+}
+customElements.define("floppy-run", FloppyRun);
+
+/* ---------------------------------------------------------------
+   <floppy-canvas>: renders the document's blocks and turns DOM
+   drag events into intents for the workshop.
+---------------------------------------------------------------- */
+class FloppyCanvas extends HTMLElement {
+  paint(ws) {
+    const sim = ws.mode === "observe" ? ws.live : ws.sim, ids = stateIds(ws.doc), active = new Set(sim ? sim.active.map(n => n.id) : []);
+    this.innerHTML = `<div class="pad${ws.mode === "workbench" ? "" : " ro"}">${FloppyBlock.html(ws.doc, ids, { sel: ws.selected, active })}</div><p class="status ${ws.statusKind}" role="status">${esc(ws.status)}</p>`;
+    requestAnimationFrame(() => shapeAll(this));
+  }
+}
+customElements.define("floppy-canvas", FloppyCanvas);
+
+/* ---------------------------------------------------------------
+   Bill the builder: plans a robot, finds its parts in the register,
+   sets them up, installs them and generates the robot. Recipes stand
+   in for the model behind Bill in this mockup; the parts, versions
+   and settings are the register's real ones.
+---------------------------------------------------------------- */
+const RELAY = "http://127.0.0.1:8787/v1";
+const PART = {
+  generate: { kind: "service", ver: "0.1.0", why: "thinks up what to say or write", sandbox: "reaches only the model server you set" },
+  decision: { kind: "service", ver: "0.1.0", why: "decides what each request is about", sandbox: "reaches only the decision server you set" },
+  pgsql: { kind: "service", ver: "0.1.0", why: "looks up records in your Postgres database", sandbox: "reaches only the database you set" },
+  sql: { kind: "service", ver: "0.1.0", why: "keeps the robot's memory in a local database file", sandbox: "sees only its own folder" },
+  speech: { kind: "service", ver: "0.1.0", why: "turns audio into text and text into speech", sandbox: "sees only the media folder you grant" },
+  conversation: { kind: "namespace", ver: "0.1.0", why: "records each message the robot sends and receives", sandbox: "runs inside the robot, no access to anything" },
+  bot: { kind: "namespace", ver: "0.1.0", why: "tracks who and what the robot is paying attention to", sandbox: "runs inside the robot, no access to anything" },
+};
+const KEYED = [{ key: "apikey", label: "API key from", value: "FLOPPY_API_KEY" }, { key: "baseurl", label: "Model server", value: RELAY }];
+const SETTINGS = {
+  generate: KEYED,
+  decision: [{ key: "apikey", label: "API key from", value: "TYPESAFE_API_KEY" }, { key: "baseurl", label: "Decision server", value: "https://api.typesafe.ai/v1" }],
+  pgsql: [{ key: "database", label: "Database", value: "postgresql://shop@localhost:5432/shop" }],
+  sql: [{ key: "database", label: "Memory file", value: "memory.db" }],
+  speech: KEYED,
+};
+const svc = (id, kids, as) => N("invoke", { id: as || id, type: GH + "services/" + id }, kids);
+const prm = (name, expr) => N("param", { name, expr });
+const out = event => N("send", { event, target: "#_parent" });
+const commit = dir => N("conversation:commit", { location: "turn", direction: dir, event: dir === "inbound" ? "request.received" : "reply.sent", message: "_event.data.text", sequence: "seq" });
+const RECIPES = {
+  helpdesk: {
+    name: "helpdesk", event: "request.received", goal: "Sort and answer support requests",
+    plan: ["Wait for a request", "Decide what it's about: an order, a return, or something else", "Look up the records it needs", "Write an answer", "Keep a record of the exchange"],
+    parts: ["generate", "decision", "pgsql", "conversation"],
+    skeleton: ["waiting", "sorting", "looking_up", "answering", "replying"],
+    doc: () => N("scxml", { version: "1.0", datamodel: "ecmascript", initial: "waiting" }, [
+      N("state", { id: "waiting" }, [N("transition", { event: "request.received", target: "sorting" })]),
+      N("state", { id: "sorting" }, [N("onentry", {}, [commit("inbound")]), svc("decision", [prm("stimulus", "_event.data.text"), prm("choices", "['order','return','other']")]),
+        N("transition", { event: "decision.result", target: "looking_up" }), N("transition", { event: "decision.failed", target: "answering" })]),
+      N("state", { id: "looking_up" }, [svc("pgsql", [prm("database", "database"), prm("statements", "lookup")], "records"),
+        N("transition", { event: "sql.result", target: "answering" }), N("transition", { event: "sql.failed", target: "answering" })]),
+      N("state", { id: "answering" }, [svc("generate", [prm("model", "model"), prm("messages", "messages")]),
+        N("transition", { event: "generate.result", target: "replying" }), N("transition", { event: "generate.failed", target: "waiting" })]),
+      N("state", { id: "replying" }, [N("onentry", {}, [commit("outbound"), out("reply.sent")]), N("transition", { target: "waiting" })]),
+    ]),
+  },
+  greeter: {
+    name: "greeter", event: "visitor.arrived", goal: "Greet visitors and answer their questions out loud",
+    plan: ["Notice someone arriving", "Pay attention to them and listen", "Work out an answer", "Say it out loud", "Go back to watching the door"],
+    parts: ["speech", "generate", "bot"],
+    skeleton: ["watching", "listening", "thinking", "speaking"],
+    doc: () => N("scxml", { version: "1.0", datamodel: "ecmascript", initial: "watching" }, [
+      N("state", { id: "watching" }, [N("transition", { event: "visitor.arrived", target: "listening" })]),
+      N("state", { id: "listening" }, [N("onentry", {}, [N("bot:attention", { location: "attention", stimulus: "_event.data", devices: "['camera','microphone']", focus: "'visitor'" })]),
+        svc("speech", [prm("operation", "'decode'"), prm("audio", "_event.data.audio")], "ears"),
+        N("transition", { event: "speech.result", target: "thinking" }), N("transition", { event: "visitor.left", target: "watching" })]),
+      N("state", { id: "thinking" }, [svc("generate", [prm("model", "model"), prm("messages", "messages")]),
+        N("transition", { event: "generate.result", target: "speaking" }), N("transition", { event: "generate.failed", target: "watching" })]),
+      N("state", { id: "speaking" }, [N("onentry", {}, [out("voice.speak")]), svc("speech", [prm("operation", "'encode'"), prm("text", "answer")], "voice"),
+        N("transition", { event: "speech.result", target: "listening" }), N("transition", { event: "visitor.left", target: "watching" })]),
+    ]),
+  },
+  scribe: {
+    name: "scribe", event: "memo.received", goal: "Turn voice memos into tidy notes",
+    plan: ["Wait for a voice memo", "Turn the audio into text", "Write a short summary with action items", "Save the note and hand it back"],
+    parts: ["speech", "generate", "sql"],
+    skeleton: ["waiting", "transcribing", "summarizing", "saving"],
+    doc: () => N("scxml", { version: "1.0", datamodel: "ecmascript", initial: "waiting" }, [
+      N("state", { id: "waiting" }, [N("transition", { event: "memo.received", target: "transcribing" })]),
+      N("state", { id: "transcribing" }, [svc("speech", [prm("operation", "'decode'"), prm("audio", "_event.data.audio")]),
+        N("transition", { event: "speech.result", target: "summarizing" }), N("transition", { event: "speech.failed", target: "waiting" })]),
+      N("state", { id: "summarizing" }, [svc("generate", [prm("model", "model"), prm("messages", "messages")]),
+        N("transition", { event: "generate.result", target: "saving" }), N("transition", { event: "generate.failed", target: "waiting" })]),
+      N("state", { id: "saving" }, [N("onentry", {}, [out("note.ready")]), svc("sql", [prm("database", "database"), prm("statements", "save")], "notes"),
+        N("transition", { event: "sql.result", target: "waiting" })]),
+    ]),
+  },
+};
+const skeletonDoc = r => N("scxml", { version: "1.0", datamodel: "ecmascript", initial: r.skeleton[0] },
+  r.skeleton.map((id, i) => N("state", { id }, [N("transition", i === 0 ? { event: r.event, target: r.skeleton[1] } : { target: r.skeleton[(i + 1) % r.skeleton.length] })])));
+const recipeFor = text => /support|ticket|order|customer|request|email/i.test(text) ? "helpdesk" : /note|memo|meeting|transcri|record/i.test(text) ? "scribe" : "greeter";
+const STEPS = [["planning", "Plan"], ["finding", "Find"], ["setting_up", "Set up"], ["installing", "Install"], ["generating", "Generate"]];
+const MOOD = { hello: "happy", planning: "focused", finding: "skeptic", setting_up: "normal", installing: "focused", generating: "happy", ready: "happy" };
+const is = v => (c, b, e) => e.data === v;
+
+class FloppyBill extends hsm.from(HTMLElement) {
+  static model = hsm.define("Bill",
+    hsm.initial(hsm.target("hello")),
+    hsm.state("hello", hsm.entry(FloppyBill.at("hello", FloppyBill.greet)),
+      hsm.transition(hsm.on("pick"), hsm.target("../planning"), hsm.effect(FloppyBill.choose))),
+    hsm.state("planning", hsm.entry(FloppyBill.at("planning", FloppyBill.plan)),
+      hsm.transition(hsm.on("pick"), hsm.guard(is("ok")), hsm.target("../finding"), hsm.effect(FloppyBill.echo)),
+      hsm.transition(hsm.on("pick"), hsm.guard(is("over")), hsm.target("../hello"), hsm.effect(FloppyBill.echo))),
+    hsm.state("finding", hsm.entry(FloppyBill.at("finding", FloppyBill.find)),
+      hsm.transition(hsm.on("pick"), hsm.guard(is("ok")), hsm.target("../setting_up"), hsm.effect(FloppyBill.echo)),
+      hsm.transition(hsm.on("pick"), hsm.guard(is("over")), hsm.target("../hello"), hsm.effect(FloppyBill.echo))),
+    hsm.state("setting_up", hsm.entry(FloppyBill.at("setting_up", FloppyBill.setup)),
+      hsm.transition(hsm.on("save"), hsm.target("../installing"), hsm.effect(FloppyBill.keep))),
+    hsm.state("installing", hsm.entry(FloppyBill.at("installing", FloppyBill.install)),
+      hsm.transition(hsm.on("installed"), hsm.guard((c, b) => b.next < b.recipe.parts.length), hsm.effect(FloppyBill.installOne)),
+      hsm.transition(hsm.on("installed"), hsm.target("../generating"))),
+    hsm.state("generating", hsm.entry(FloppyBill.at("generating", FloppyBill.where)),
+      hsm.transition(hsm.on("pick"), hsm.target("../ready"), hsm.effect(FloppyBill.generate))),
+    hsm.state("ready", hsm.entry(FloppyBill.at("ready", FloppyBill.done)),
+      hsm.transition(hsm.on("pick"), hsm.guard(is("over")), hsm.target("../hello"), hsm.effect(FloppyBill.echo)),
+      hsm.transition(hsm.on("pick"), hsm.effect(FloppyBill.go))),
+  );
+  msgs = []; chips = []; recipe = null; values = {}; next = 0; stage = "hello"; place = "device";
+
+  connectedCallback() {
+    this.innerHTML = `<div class="bill-hd"><div class="face"><floppy-bot expression="happy" track ink="#e8f1ff" eye="#103766" pupil="#7fd0ff"></floppy-bot></div>
+        <div><b>Bill</b><span>the builder</span><ol class="steps"></ol></div></div>
+      <div class="chat" aria-live="polite"></div><div class="chips"></div>
+      <form class="ask"><input placeholder="Message Bill" aria-label="Message Bill"><button>Send</button></form>`;
+    this.chat = this.querySelector(".chat");
+    this.addEventListener("click", e => { const b = e.target.closest("[data-pick]"); if (b) { e.preventDefault(); hsm.live(this, "pick", b.dataset.pick); } });
+    this.addEventListener("submit", e => {
+      e.preventDefault();
+      if (e.target.matches(".setup")) { const v = {}; e.target.querySelectorAll("input").forEach(i => v[i.name] = i.value.trim()); return hsm.live(this, "save", v); }
+      const input = this.querySelector(".ask input"), text = input.value.trim(); if (!text) return; input.value = "";
+      if (this.stage === "hello") return hsm.live(this, "pick", "goal:" + text);
+      const first = this.chips.find(c => c[1] !== "over");
+      if (first && /^(y|yes|ok|okay|sure|go|looks good|do it)\b/i.test(text)) return hsm.live(this, "pick", first[1]);
+      this.add("you", esc(text)); this.add("bill", "Noted. Tap one of the buttons below when you're ready to keep going."); this.paint();
+    });
+    hsm.start(this, FloppyBill.model);
+  }
+  get ws() { return this.closest("floppy-workshop"); }
+  add(who, html) { this.msgs.push({ who, html }); }
+  static at(stage, fn) { return (c, b, e) => { b.stage = stage; fn(c, b, e); b.querySelector("floppy-bot")?.setAttribute("expression", MOOD[stage]); b.paint(); }; }
+  static echo(_c, b, e) { const chip = b.chips.find(c => c[1] === e.data); if (chip) b.add("you", esc(chip[0])); }
+
+  static greet(_c, b) {
+    b.recipe = null; b.next = 0;
+    b.add("bill", "Hi, I'm Bill. Tell me what your robot should do. I'll plan it, find its parts, set them up, install them and generate it.");
+    b.chips = Object.entries(RECIPES).map(([k, r]) => [r.goal, "goal:" + k]);
+  }
+  static choose(_c, b, e) {
+    const v = e.data.slice(5), key = RECIPES[v] ? v : recipeFor(v);
+    b.recipe = RECIPES[key]; b.add("you", esc(RECIPES[v] ? b.recipe.goal : v));
+  }
+  static plan(_c, b) {
+    const r = b.recipe;
+    b.add("bill", `Here's the plan for <b>${r.name}</b>. Each step is a state the robot moves through, and the sketch is waiting on the Workbench.
+      <ol class="card plan">${r.plan.map(s => `<li>${esc(s)}</li>`).join("")}</ol>`);
+    b.chips = [["Looks good", "ok"], ["Start over", "over"]];
+    b.ws?.load(skeletonDoc(r), `${r.name}/${r.name}.scx · plan`);
+  }
+  static find(_c, b) {
+    const r = b.recipe;
+    b.add("bill", `I found ${r.parts.length} parts in the register that cover it:
+      <ul class="card parts">${r.parts.map(id => { const p = PART[id]; return `<li><div><b>${id}</b><small>${p.kind} · ${p.ver}</small></div><span>${esc(p.why)}</span></li>`; }).join("")}</ul>
+      <p class="aside">All of them are published by stateforward/floppy. Browse more in the <a href="../">parts register</a>.</p>`);
+    b.chips = [["Use these parts", "ok"], ["Start over", "over"]];
+  }
+  static setup(_c, b) {
+    const need = b.recipe.parts.filter(id => SETTINGS[id]);
+    b.add("bill", `A few parts need settings. I filled in what I could. Keys are read from your environment, so you name the variable here, never the key itself.
+      <form class="card setup">${need.map(id => `<fieldset><legend>${id}</legend>${SETTINGS[id].map(s => `<label>${esc(s.label)}<input name="${id}.${s.key}" value="${esc(s.value)}" spellcheck="false"></label>`).join("")}</fieldset>`).join("")}
+      <button>Save settings</button></form>`);
+    b.chips = [];
+  }
+  static keep(_c, b, e) { b.values = e.data; b.add("you", "Saved the settings."); }
+  static install(_c, b) {
+    b.next = 0;
+    b.add("bill", `Installing. Every part runs sandboxed, so it can only touch what it's granted.<ul class="card inst"></ul>`);
+    b.chips = [];
+    setTimeout(() => hsm.live(b, "installed"), 450);
+  }
+  static installOne(_c, b) {
+    const id = b.recipe.parts[b.next++], p = PART[id], log = b.msgs[b.msgs.length - 1];
+    log.html = log.html.replace("</ul>", `<li><b>✓ ${id} ${p.ver}</b><span>checked and installed · ${esc(p.sandbox)}</span></li></ul>`);
+    b.paint();
+    setTimeout(() => hsm.live(b, "installed"), 550);
+  }
+  static where(_c, b) {
+    b.add("bill", "Everything's installed. Where should the robot run?");
+    b.chips = [["On this device", "device"], ["In the browser", "browser"]];
+  }
+  static generate(_c, b, e) {
+    b.place = e.data; b.add("you", e.data === "device" ? "On this device" : "In the browser");
+    const r = b.recipe;
+    b.ws?.load(r.doc(), `${r.name}/${r.name}.scx`, { name: r.name, place: e.data, event: r.event });
+  }
+  static done(_c, b) {
+    const r = b.recipe;
+    const how = b.place === "device"
+      ? `<p>Run it from a terminal:</p><pre>scx run --env-file .env ${r.name}/${r.name}.scx</pre>`
+      : `<p>It runs in a browser tab with the same sandboxed parts.</p>`;
+    b.add("bill", `<b>${r.name}</b> is ready.
+      <div class="card result"><div class="files"><span>${r.name}/${r.name}.scx</span><span>${r.name}/${r.name}.js</span></div>${how}</div>
+      Change its blocks on the Workbench, simulate it on the TestBench, or watch it live on Observe.`);
+    b.chips = [["Simulate on the TestBench", "testbench"], ["Open the Workbench", "workbench"], ["Watch it on Observe", "observe"], ["Build another robot", "over"]];
+  }
+  static go(_c, b, e) { b.ws?.setMode(e.data, e.data === "testbench" ? b.recipe?.event : null); }
+  paint() {
+    const at = STEPS.findIndex(s => s[0] === this.stage), stage = this.stage === "ready" ? STEPS.length : at;
+    this.querySelector(".steps").innerHTML = STEPS.map(([k, l], i) => `<li class="${i < stage ? "done" : i === stage ? "now" : ""}">${l}</li>`).join("");
+    this.chat.innerHTML = this.msgs.map(m => `<div class="msg ${m.who}">${m.html}</div>`).join("");
+    this.querySelector(".chips").innerHTML = this.chips.map(([l, v]) => `<button data-pick="${esc(v)}">${esc(l)}</button>`).join("");
+    this.querySelector(".ask input").placeholder = this.stage === "hello" ? "Or describe it yourself" : "Message Bill";
+    this.chat.scrollTop = this.chat.scrollHeight;
+  }
+}
+customElements.define("floppy-bill", FloppyBill);
+
+/* ---------------------------------------------------------------
+   <floppy-modes>: the four spaces. Build is where Bill lives, the
+   Workbench edits blocks, the TestBench simulates the robot, and
+   Observe watches a running robot read-only.
+---------------------------------------------------------------- */
+const MODES = [["build", "Build"], ["workbench", "Workbench"], ["testbench", "TestBench"], ["observe", "Observe"]];
+class FloppyModes extends hsm.from(HTMLElement) {
+  static model = hsm.define("Modes",
+    hsm.initial(hsm.target("build")),
+    ...MODES.map(([k]) => hsm.state(k, hsm.entry(FloppyModes.show(k)),
+      ...MODES.filter(([o]) => o !== k).map(([o]) => hsm.transition(hsm.on("show_" + o), hsm.target("../" + o))))));
+  static show(mode) { return (_c, m) => {
+    m.querySelectorAll("button").forEach(b => b.setAttribute("aria-current", String(b.dataset.mode === mode)));
+    m.closest("floppy-workshop")?.entered(mode);
+  }; }
+  connectedCallback() {
+    this.setAttribute("role", "navigation"); this.setAttribute("aria-label", "Workshop spaces");
+    this.innerHTML = MODES.map(([k, l]) => `<button data-mode="${k}">${l}</button>`).join("");
+    this.addEventListener("click", e => { const b = e.target.closest("[data-mode]"); if (b) hsm.live(this, "show_" + b.dataset.mode); });
+    hsm.start(this, FloppyModes.model);
+  }
+}
+
+/* ---------------------------------------------------------------
+   <floppy-observe>: a running robot, read-only. Its own copy of the
+   robot steps on a timer, as a deployed one would on its own
+   stimuli; the blocks light up and every event lands in the stream.
+---------------------------------------------------------------- */
+const KIND = t => t.startsWith("event ") ? "in" : /^(send|raise) /.test(t) ? "out" : /^(enter|exit|final) /.test(t) ? "state" : t.startsWith("invoke ") ? "service" : "note";
+class FloppyObserve extends hsm.from(HTMLElement) {
+  static model = hsm.define("Observe",
+    hsm.initial(hsm.target("idle")),
+    hsm.state("idle", hsm.entry(FloppyObserve.view("idle")), hsm.transition(hsm.on("watch"), hsm.target("../watching")), hsm.transition(hsm.on("filter"), hsm.effect(FloppyObserve.filter))),
+    hsm.state("watching", hsm.entry(FloppyObserve.view("watching")),
+      hsm.transition(hsm.after(() => FloppyObserve.everyMs), hsm.target("../watching"), hsm.effect(FloppyObserve.step)),
+      hsm.transition(hsm.on("pause"), hsm.target("../paused")),
+      hsm.transition(hsm.on("leave"), hsm.target("../idle")),
+      hsm.transition(hsm.on("filter"), hsm.effect(FloppyObserve.filter))),
+    hsm.state("paused", hsm.entry(FloppyObserve.view("paused")),
+      hsm.transition(hsm.on("resume"), hsm.target("../watching")),
+      hsm.transition(hsm.on("leave"), hsm.target("../idle")),
+      hsm.transition(hsm.on("filter"), hsm.effect(FloppyObserve.filter))),
+  );
+  static everyMs = 1400;
+  stream = []; seen = 0; show = "all"; t0 = performance.now();
+  connectedCallback() {
+    hsm.start(this, FloppyObserve.model);
+    this.addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.dataset.act) hsm.live(this, b.dataset.act);
+      if (b.dataset.show) hsm.live(this, "filter", b.dataset.show);
+    });
+  }
+  get ws() { return this.closest("floppy-workshop"); }
+  reset() { this.stream = []; this.seen = 0; this.t0 = performance.now(); }
+  static view(st) { return (c, o) => { o.st = st; FloppyObserve.paint(c, o); }; }
+  static filter(_c, o, e) { o.show = e.data; FloppyObserve.paint(_c, o); }
+  static step(_c, o) {
+    const ws = o.ws, live = ws.live; if (!live) return;
+    if (live.done) { ws.live = new Interp(ws.doc); o.seen = 0; o.push("note", "robot restarted"); }
+    else {
+      const opts = [...live.enabled().map(t => ({ t })), ...live.timers.map(x => ({ timer: x.event }))];
+      if (!opts.length) { ws.live = new Interp(ws.doc); o.seen = 0; o.push("note", "robot restarted"); }
+      else { const pick = opts[Math.floor(Math.random() * opts.length)]; if (pick.t) live.take(pick.t, pick.t.attrs.event.split(/\s+/)[0].replace(/\.\*$/, "")); else live.deliver(pick.timer); }
+    }
+    ws.live.log.slice(o.seen).forEach(l => o.push(KIND(l.t), l.t)); o.seen = ws.live.log.length;
+    ws.canvas.paint(ws);
+  }
+  push(kind, raw) { const text = raw.replace(/\s*https?:\/\/\S+\/services\/(\w+)/, "").replace(" (not run in preview)", ""); const ms = performance.now() - this.t0; this.stream.unshift({ kind, text, at: `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${(ms / 1000 % 60).toFixed(3).padStart(6, "0")}` }); this.stream.length = Math.min(this.stream.length, 200); }
+  static paint(_c, o) {
+    const ws = o.ws; if (!ws) return;
+    const live = ws.live, on = o.st === "watching", r = ws.robot;
+    const rows = o.stream.filter(s => o.show === "all" || s.kind === o.show);
+    o.innerHTML = `<div class="ph"><span><i class="dot ${on ? "on" : ""}"></i>${on ? "Live" : "Paused"} · ${esc(r.name)} · ${r.place === "browser" ? "in the browser" : "on this device"}</span>
+        <button class="pause" data-act="${on ? "pause" : "resume"}">${on ? "Pause" : "Resume"}</button></div>
+      <div class="sec"><h3>Now in</h3><div class="cfg">${live ? (live.done ? "<span>done</span>" : live.active.map((n, i, a) => `<span class="${i === a.length - 1 ? "leaf" : ""}">${esc(n.attrs.id)}</span>`).join("›")) : ""}</div></div>
+      <div class="sec" style="border-bottom:0"><h3>Event stream</h3>
+        <div class="filt" role="group" aria-label="Show">${[["all", "All"], ["in", "In"], ["out", "Out"], ["state", "States"], ["service", "Services"]].map(([k, l]) => `<button data-show="${k}" aria-pressed="${o.show === k}">${l}</button>`).join("")}</div>
+        <ol class="stream">${rows.length ? rows.map(s => `<li class="${s.kind}"><time>${s.at}</time><em>${s.kind}</em><b>${esc(s.text)}</b></li>`).join("") : '<li class="note"><b>Waiting for the robot…</b></li>'}</ol></div>`;
+  }
+}
+customElements.define("floppy-modes", FloppyModes);
+customElements.define("floppy-observe", FloppyObserve);
+
+
+/* ---------------------------------------------------------------
+   <floppy-workshop>: owns the document. Its machine:
+     editing { idle, dragging }   (drag_start, drop, drag_end)
+   Edits are transitions with effects; every edit repaints.
+---------------------------------------------------------------- */
+class FloppyWorkshop extends hsm.from(HTMLElement) {
+  static model = hsm.define("Workshop",
+    hsm.initial(hsm.target("editing")),
+    hsm.state("editing",
+      hsm.initial(hsm.target("idle")),
+      hsm.transition(hsm.on("add"), hsm.effect(FloppyWorkshop.add)),
+      hsm.transition(hsm.on("remove"), hsm.effect(FloppyWorkshop.remove)),
+      hsm.transition(hsm.on("set_attr"), hsm.effect(FloppyWorkshop.setAttr)),
+      hsm.transition(hsm.on("select"), hsm.effect(FloppyWorkshop.select)),
+      hsm.transition(hsm.on("take"), hsm.effect((c, w, e) => { w.sim.take(e.data, e.data.attrs.event); w.repaint(); })),
+      hsm.transition(hsm.on("deliver"), hsm.effect((c, w, e) => { w.sim.deliver(e.data); w.repaint(); })),
+      hsm.transition(hsm.on("restart"), hsm.effect((c, w) => { w.sim = new Interp(w.doc); w.repaint(); })),
+      hsm.transition(hsm.on("load"), hsm.effect(FloppyWorkshop.loadDoc)),
+      hsm.state("idle",
+        hsm.transition(hsm.on("drag_start"), hsm.target("../dragging"), hsm.effect(FloppyWorkshop.lift))),
+      hsm.state("dragging",
+        hsm.transition(hsm.on("drop"), hsm.guard(FloppyWorkshop.dropFits), hsm.target("../idle"), hsm.effect(FloppyWorkshop.place)),
+        hsm.transition(hsm.on("drop"), hsm.target("../idle"), hsm.effect(FloppyWorkshop.refuse)),
+        hsm.transition(hsm.on("drag_end"), hsm.target("../idle"), hsm.effect(FloppyWorkshop.settle)))),
+  );
+  doc = trafficLight();
+  mode = "build";
+  robot = { name: "traffic_light", place: "device", event: null };
+  live = null;
+  selected = null;
+  status = "Drag blocks by their header. Mouths outline green where the block fits.";
+  statusKind = "";
+  drag = null;
+
+  connectedCallback() {
+    this.innerHTML = `<div class="top"><h1>floppy <span>workshop</span></h1><span class="doc">bots/builder/examples/traffic_light/traffic_light.scx</span>
+      <floppy-modes></floppy-modes></div>
+      <div class="grid"><floppy-bill class="panel"></floppy-bill><floppy-palette class="panel"></floppy-palette><floppy-canvas></floppy-canvas><floppy-run class="panel"></floppy-run><floppy-observe class="panel"></floppy-observe></div>`;
+    this.sim = new Interp(this.doc);
+    hsm.start(this, FloppyWorkshop.model);
+    this.canvas = this.querySelector("floppy-canvas");
+    this.palette = this.querySelector("floppy-palette");
+    this.run = this.querySelector("floppy-run");
+    this.repaint();
+    this.wire();
+    if (document.fonts) document.fonts.ready.then(() => shapeAll(this));
+  }
+  repaint() {
+    if (this.sim && !this.sim.active.every(n => contains(this.doc, n))) this.sim = new Interp(this.doc);
+    this.canvas.paint(this);
+    hsm.live(this.run, "refresh");
+  }
+  say(msg, kind = "") { this.status = msg; this.statusKind = kind; }
+  load(doc, path, robot) { hsm.live(this, "load", { doc, path, robot }); }
+  setMode(mode, send) {
+    hsm.live(this.querySelector("floppy-modes"), "show_" + mode);
+    if (send) setTimeout(() => { hsm.live(this, "restart"); setTimeout(() => hsm.live(this, "deliver", send), 60); }, 60);
+  }
+  static HINT = { build: "", workbench: "Drag blocks by their header. Mouths outline green where the block fits.", testbench: "Simulating. Send events from the panel and watch the blocks light up.", observe: "Read-only. Blocks light up as the running robot moves." };
+  entered(mode) {
+    this.mode = mode; this.dataset.mode = mode; this.say(FloppyWorkshop.HINT[mode]);
+    const o = this.querySelector("floppy-observe");
+    if (!o?.dispatch) { if (this.canvas) this.repaint(); return; }
+    if (mode === "observe") { if (!this.live) { this.live = new Interp(this.doc); o.reset(); o.seen = 0; } hsm.live(o, "watch"); }
+    else hsm.live(o, "leave");
+    if (this.canvas) this.repaint();
+  }
+  static loadDoc(_c, w, e) { w.doc = e.data.doc; w.selected = null; w.sim = new Interp(w.doc); w.live = null; w.robot = e.data.robot || { name: e.data.path.split("/")[0], place: "device", event: null }; w.querySelector(".top .doc").textContent = e.data.path; w.say(FloppyWorkshop.HINT[w.mode], "ok"); w.repaint(); }
+
+  static add(_c, w, e) {
+    const { node, into, index } = e.data;
+    const target = into ? find(w.doc, into)?.node : (w.selected ? find(w.doc, w.selected)?.node : null);
+    let parent = target, at = index ?? (target ? target.kids.length : 0);
+    if (parent && !fits(parent.tag, node.tag).ok) {
+      const up = find(w.doc, parent.id)?.parent;
+      if (up && fits(up.tag, node.tag).ok) { at = up.kids.indexOf(parent) + 1; parent = up; }
+    }
+    if (!parent) { w.say("Select a block first, or drag the block onto a mouth.", "bad"); w.repaint(); return; }
+    const f = fits(parent.tag, node.tag);
+    if (!f.ok) { w.say(f.why, "bad"); w.repaint(); return; }
+    parent.kids.splice(at, 0, node); w.selected = node.id; w.say(f.why, "ok"); w.sim = new Interp(w.doc); w.repaint();
+  }
+  static remove(_c, w, e) { const f = find(w.doc, e.data); if (f?.parent) { f.parent.kids.splice(f.parent.kids.indexOf(f.node), 1); w.selected = null; w.say(`Removed ${nm(f.node.tag)}.`); w.sim = new Interp(w.doc); w.repaint(); } }
+  static setAttr(_c, w, e) {
+    const { id, key, value } = e.data, f = find(w.doc, id); if (!f) return;
+    const spec = SPECS.get(f.node.tag), req = spec.attrs.find(a => a.name === key)?.use === "required";
+    if (key === "id" && f.node.attrs.id) { const old = f.node.attrs.id; walk(w.doc, n => ["target", "initial"].forEach(k => { if (n.attrs[k] === old) n.attrs[k] = value; })); }
+    if (value === "" && !req) delete f.node.attrs[key]; else f.node.attrs[key] = value;
+    w.sim = new Interp(w.doc); w.repaint();
+  }
+  static select(_c, w, e) { w.selected = e.data; w.repaint(); const el = w.canvas.querySelector(`[data-id="${e.data}"]`); el?.scrollIntoView({ block: "nearest", inline: "nearest" }); }
+  static lift(_c, w, e) {
+    w.drag = e.data;
+    w.canvas.dataset.fam = FAM.family.get(e.data.tag)?.shape || "";
+    if (e.data.move) { const el = w.canvas.querySelector(`floppy-block[data-id="${e.data.move}"]`); if (el) hsm.live(el, "lift"); }
+  }
+  static dropFits(_c, w, e) { return !!e.data && fits(e.data.parentTag, w.drag.tag).ok && !(w.drag.move && contains(find(w.doc, w.drag.move).node, find(w.doc, e.data.into).node)); }
+  static place(_c, w, e) {
+    const { into, index } = e.data;
+    let node = w.drag.node;
+    if (w.drag.move) {
+      const f = find(w.doc, w.drag.move); node = f.node;
+      const from = f.parent.kids.indexOf(node); f.parent.kids.splice(from, 1);
+      const dest = find(w.doc, into).node; const at = (dest === f.parent && from < index) ? index - 1 : index;
+      dest.kids.splice(at, 0, node);
+    } else find(w.doc, into).node.kids.splice(index, 0, node);
+    w.say(fits(e.data.parentTag, node.tag).why, "ok"); w.selected = node.id; w.drag = null; delete w.canvas.dataset.fam; w.sim = new Interp(w.doc); w.repaint();
+  }
+  static refuse(_c, w, e) {
+    if (e.data?.remove && w.drag.move) { const f = find(w.doc, w.drag.move); f.parent.kids.splice(f.parent.kids.indexOf(f.node), 1); w.say(`Removed ${nm(f.node.tag)}.`); w.sim = new Interp(w.doc); }
+    else w.say(e.data ? (w.drag.move && contains(find(w.doc, w.drag.move).node, find(w.doc, e.data.into).node) ? "A block can't go inside itself." : fits(e.data.parentTag, w.drag.tag).why) : "Dropped outside a mouth.", e.data?.remove ? "" : "bad");
+    w.drag = null; delete w.canvas.dataset.fam; w.repaint();
+  }
+  static settle(_c, w) { w.drag = null; delete w.canvas.dataset.fam; w.repaint(); }
+
+  wire() {
+    /* palette and canvas clicks */
+    this.addEventListener("click", e => {
+      const prev = e.target.closest("floppy-palette floppy-block[data-preview]");
+      if (prev) { const node = structuredClone(this.palette.presets[prev.dataset.preview]); node.id = "n" + (++uid); return hsm.live(this, "add", { node }); }
+      if (e.target.closest("[data-remove]")) return hsm.live(this, "remove", e.target.closest("floppy-block").dataset.id);
+      const hd = e.target.closest("floppy-canvas floppy-block>.hd");
+      if (hd && !e.target.closest("input,select,button")) return hsm.live(this, "select", hd.parentElement.dataset.id);
+    });
+    this.addEventListener("floppy-intent", e => {
+      const d = e.detail;
+      if (d.take) { const t = find(this.doc, d.take)?.node; if (t) hsm.live(this, "take", t); }
+      else if (d.deliver) hsm.live(this, "deliver", d.deliver);
+      else if (d.inject) hsm.live(this, "deliver", d.inject);
+      else if (d.restart) hsm.live(this, "restart");
+      else if (d.select) { hsm.live(this, "select", d.select); }
+    });
+    this.addEventListener("change", e => {
+      const t = e.target, b = t.closest("floppy-canvas floppy-block"); if (!b) return;
+      if (t.dataset.addattr !== undefined) { if (t.value) { const f = find(this.doc, b.dataset.id); f.node.attrs[t.value] = t.value === "event:schema" ? '{"type":"object"}' : ""; this.repaint(); } return; }
+      if (t.dataset.attr) hsm.live(this, "set_attr", { id: b.dataset.id, key: t.dataset.attr, value: t.value.trim() });
+    });
+    this.addEventListener("input", e => { if (e.target.closest("floppy-canvas")) { const b = e.target.closest("floppy-block"); e.target.size = Math.max(4, Math.min(34, e.target.value.length + 1)); requestAnimationFrame(() => { let x = b; while (x) { shapeBlock(x); x = x.parentElement.closest("floppy-block"); } }); } });
+    /* drag and drop */
+    let hovered = null, marker = null;
+    const clear = () => { if (hovered) hsm.live(hovered, "leave"); hovered = null; marker?.remove(); marker = null; };
+    this.addEventListener("dragstart", e => {
+      if (this.mode !== "workbench") { e.preventDefault(); return; }
+      const prev = e.target.closest?.("floppy-block[data-preview]");
+      const hd = e.target.closest?.("floppy-canvas floppy-block>.hd");
+      if (prev) { const node = structuredClone(this.palette.presets[prev.dataset.preview]); node.id = "n" + (++uid); hsm.live(this, "drag_start", { node, tag: node.tag }); }
+      else if (hd) { const b = hd.parentElement; if (b.dataset.tag === "scxml") { e.preventDefault(); return; } hsm.live(this, "drag_start", { move: b.dataset.id, tag: b.dataset.tag }); }
+      else return;
+      try { e.dataTransfer.setData("text/plain", "floppy-block"); e.dataTransfer.effectAllowed = "move"; } catch (_) {}
+    });
+    const mouthAt = e => e.target.closest?.("floppy-canvas .mouth");
+    const indexAt = (mouth, y) => { const kids = [...mouth.children].filter(k => k.tagName === "FLOPPY-BLOCK"); const i = kids.findIndex(k => { const r = k.getBoundingClientRect(); return y < r.top + r.height / 2; }); return i < 0 ? kids.length : i; };
+    this.addEventListener("dragover", e => {
+      if (!this.drag) return;
+      if (e.target.closest("floppy-palette") && this.drag.move) { e.preventDefault(); clear(); this.say("Release to remove the block."); this.querySelector(".status").textContent = this.status; return; }
+      const m = mouthAt(e); if (!m) { clear(); return; }
+      const owner = m.parentElement, parentTag = owner.dataset.tag;
+      const self = this.drag.move && contains(find(this.doc, this.drag.move).node, find(this.doc, owner.dataset.id).node);
+      const f = self ? { ok: false, why: "A block can't go inside itself." } : fits(parentTag, this.drag.tag);
+      if (hovered !== owner) { clear(); hovered = owner; hsm.live(owner, "hover", f); this.say(f.why, f.ok ? "ok" : "bad"); const s = this.querySelector(".status"); s.textContent = f.why; s.className = "status " + (f.ok ? "ok" : "bad"); }
+      if (!f.ok) return;
+      e.preventDefault();
+      const i = indexAt(m, e.clientY), kids = [...m.children].filter(k => k.tagName === "FLOPPY-BLOCK");
+      if (!marker) { marker = document.createElement("div"); marker.className = "ins"; }
+      m.appendChild(marker);
+      marker.style.top = (i < kids.length ? kids[i].offsetTop - 2 : (kids.length ? kids[kids.length - 1].offsetTop + kids[kids.length - 1].offsetHeight - 2 : 6)) + "px";
+    });
+    this.addEventListener("drop", e => {
+      if (!this.drag) return; e.preventDefault();
+      if (e.target.closest("floppy-palette")) { clear(); return hsm.live(this, "drop", { remove: true }); }
+      const m = mouthAt(e); const data = m ? { into: m.parentElement.dataset.id, parentTag: m.parentElement.dataset.tag, index: indexAt(m, e.clientY) } : null;
+      clear(); hsm.live(this, "drop", data);
+    });
+    this.addEventListener("dragend", () => { clear(); if (this.drag) hsm.live(this, "drag_end"); });
+    this.addEventListener("keydown", e => { if ((e.key === "Delete" || e.key === "Backspace") && this.selected && !e.target.closest("input,select")) { const f = find(this.doc, this.selected); if (f?.parent) hsm.live(this, "remove", this.selected); } });
+  }
+}
+customElements.define("floppy-workshop", FloppyWorkshop);
+</script>

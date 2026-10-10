@@ -51,21 +51,21 @@
       <param name="media_type" expr="media_type"/>
     </invoke>
     <transition event="bot.ability.hearing.speech.decoding.output"
-                cond="isDecoderOutput(_event)" target="applied">
+                cond="hasDecodedText(_event)" target="applied">
       <assign location="output" expr="decodedOutput(_event)"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                cond="isFromDecoder(_event)" target="applied">
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
       <assign location="output" expr="failedOutput(_event)"/>
     </transition>
-    <transition event="*" cond="isOtherDecoderEvent(_event)" target="applied">
-      <assign location="output" expr="mismatchedOutput()"/>
-    </transition>
-    <transition event="done.invoke" cond="isFromDecoder(_event)" target="applied">
+    <transition event="done.invoke.decoder" target="applied">
       <assign location="output" expr="undecodedOutput()"/>
     </transition>
     <transition event="error.*" target="applied">
       <assign location="output" expr="errorOutput(_event)"/>
+    </transition>
+    <!-- Anything else the decoder sends (the transitions above come first). -->
+    <transition event="*" target="applied">
+      <assign location="output" expr="mismatchedOutput()"/>
     </transition>
   </state>
 

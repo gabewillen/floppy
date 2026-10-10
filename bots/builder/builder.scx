@@ -36,7 +36,7 @@
   cond: redesign when there is no plan yet, else repair.
 
   Model calls are invoked services, never executable content: each runs
-  while the session keeps processing events, its <finalize> records the
+  while the session keeps processing events, a transition records the
   result event, and done.invoke moves on. Bounds on time live in the
   topology: design and author arm builder.timeout after
   generate_timeout_ms and triage after decision_timeout_ms (each tagged with
@@ -182,14 +182,15 @@
       <param name="schema" expr="plan_schema"/>
       <param name="schemaname" expr="'topology_plan'"/>
       <param name="strict" expr="true"/>
-      <finalize>
-        <assign location="plan" expr="generateResultJson(_event, plan)"/>
-        <assign location="gen_failure" expr="generateFailedCode(_event, gen_failure)"/>
-      </finalize>
     </invoke>
-    <!-- The two events of the generate service; <finalize> records them. -->
-    <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service: text without a requested schema, or the JSON value that satisfies the requested schema.","oneOf":[{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},{"type":"object","properties":{"json":true},"required":["json"],"additionalProperties":false}]}'/>
-    <transition event="generate.failed" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.failed","description":"The generation failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}'/>
+    <!-- The two events of this call of the generate service, each recorded
+         (gen_id: a late event of an earlier attempt's call is not this one). -->
+    <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service: text without a requested schema, or the JSON value that satisfies the requested schema.","oneOf":[{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},{"type":"object","properties":{"json":true},"required":["json"],"additionalProperties":false}]}' cond="isFrom(_event, gen_id)">
+      <assign location="plan" expr="_event.data.json"/>
+    </transition>
+    <transition event="generate.failed" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.failed","description":"The generation failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
+      <assign location="gen_failure" expr="_event.data.code"/>
+    </transition>
     <transition event="done.invoke" cond="planGenerated(_event)" target="author">
       <assign location="mode" expr="'author'"/>
     </transition>
@@ -238,14 +239,15 @@
       <param name="schema" expr="draft_schema"/>
       <param name="schemaname" expr="'scxml_draft'"/>
       <param name="strict" expr="true"/>
-      <finalize>
-        <assign location="draft" expr="generateResultJson(_event, draft)"/>
-        <assign location="gen_failure" expr="generateFailedCode(_event, gen_failure)"/>
-      </finalize>
     </invoke>
-    <!-- The two events of the generate service; <finalize> records them. -->
-    <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service: text without a requested schema, or the JSON value that satisfies the requested schema.","oneOf":[{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},{"type":"object","properties":{"json":true},"required":["json"],"additionalProperties":false}]}'/>
-    <transition event="generate.failed" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.failed","description":"The generation failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}'/>
+    <!-- The two events of this call of the generate service, each recorded
+         (gen_id: a late event of an earlier attempt's call is not this one). -->
+    <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service: text without a requested schema, or the JSON value that satisfies the requested schema.","oneOf":[{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},{"type":"object","properties":{"json":true},"required":["json"],"additionalProperties":false}]}' cond="isFrom(_event, gen_id)">
+      <assign location="draft" expr="_event.data.json"/>
+    </transition>
+    <transition event="generate.failed" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.failed","description":"The generation failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
+      <assign location="gen_failure" expr="_event.data.code"/>
+    </transition>
     <transition event="done.invoke" cond="draftGenerated(_event)" target="validate">
       <assign location="scxml_text" expr="draft.scxml"/>
       <assign location="fix_passes" expr="0"/>

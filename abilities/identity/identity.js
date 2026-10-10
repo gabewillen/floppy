@@ -8,21 +8,9 @@ function hasNoDatabase() {
   return database === null;
 }
 
-function isFromInvoke(_event, invokeid) {
-  return _event.invokeid === invokeid;
-}
-
 // The queue with the event appended, as {event, data}.
 function deferredQueue(_event) {
   return queue.concat([{event: _event.name, data: _event.data}]);
-}
-
-function isQueuedNext(eventName) {
-  return queue.length > 0 && queue[0].event === eventName;
-}
-
-function queueRest() {
-  return queue.slice(1);
 }
 
 // recalling

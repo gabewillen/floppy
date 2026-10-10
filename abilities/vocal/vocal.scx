@@ -23,8 +23,8 @@
   run. An input that arrives while applying is logged and dropped: its
   invoker sends one per invocation.
 
-  The service's events are not checked by scxml.rs (D41), so <finalize>
-  keeps only an answer of the right shape.
+  The service's events are not checked by scxml.rs (D41), so applying
+  keeps only an answer of the right shape, one transition per event.
 
   Readiness: every entry into idle sends bot.ability.offers {ability:
   "vocal", choices: []} to the parent; it offers nothing.
@@ -76,18 +76,21 @@
       <param name="voice" expr="voice"/>
       <param name="output" expr="output"/>
       <param name="media_type" expr="media_type"/>
-      <finalize>
-        <assign location="encoded" expr="encodedAnswer(_event)"/>
-        <assign location="failure" expr="failureAnswer(_event)"/>
-      </finalize>
     </invoke>
 
-    <transition event="done.invoke" cond="hasEncoded(_event)" target="idle">
+    <!-- The speech service's answer, kept until it ends. -->
+    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="schemas/bot.ability.vocal.speech.encoding.output.json">
+      <assign location="encoded" expr="encodedAnswer(_event)"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
+      <assign location="failure" expr="failureAnswer(_event)"/>
+    </transition>
+    <transition event="done.invoke.speech" cond="hasEncoded()" target="idle">
       <send event="bot.ability.vocal.speech.encoding.output" target="#_parent">
         <content expr="encoded"/>
       </send>
     </transition>
-    <transition event="done.invoke" cond="isFromSpeech(_event)" target="idle">
+    <transition event="done.invoke.speech" target="idle">
       <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="failureMessage()"/>
       </send>

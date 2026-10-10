@@ -4,27 +4,6 @@
 
 // communication
 
-function isFromChild(_event) {
-  return children.indexOf(_event.invokeid) >= 0;
-}
-
-function isNotFromChild(_event) {
-  return children.indexOf(_event.invokeid) < 0;
-}
-
-function isFromConversation(_event) {
-  return _event.invokeid === 'conversation';
-}
-
-function isFromSpeaking(_event) {
-  return _event.invokeid === 'speaking';
-}
-
-// A child's own bot.ability.offers: it is ready.
-function isChildOffers(_event) {
-  return isFromChild(_event) && _event.data.ability === _event.invokeid;
-}
-
 // The sequence of the product's latest message.
 function productSequence(_event) {
   var messages = _event.data.stimulus.data.messages;
@@ -70,21 +49,8 @@ function deferredQueue(_event) {
 
 // active
 
-function isQueuedNext(eventName) {
-  return queue.length > 0 && queue[0].event === eventName;
-}
-
-// A queued bot.ability.communication.respond with non-blank text.
-function hasQueuedRespond() {
-  return isQueuedNext('bot.ability.communication.respond') && /\S/.test(queue[0].data.text);
-}
-
-function remainingQueue() {
-  return queue.slice(1);
-}
-
 function hasRespond(_event) {
-  return offering || (isNotFromChild(_event) && /\S/.test(_event.data.text));
+  return offering || /\S/.test(_event.data.text);
 }
 
 // preparing_response

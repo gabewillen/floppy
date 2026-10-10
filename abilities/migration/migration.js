@@ -14,11 +14,6 @@ function versionStatements() {
   return [{sql: version_table}, {sql: version_select}];
 }
 
-// Either engine's read.
-function isRead(_event) {
-  return _event.invokeid.startsWith('read');
-}
-
 // The revision alembic_version holds (null: base).
 function currentRevision(_event) {
   var rows = _event.data.results[1].rows;
@@ -65,13 +60,8 @@ function appliedStatements() {
   return [guard].concat(plan.steps.flatMap(function (step) { return step.statements; }));
 }
 
-// Either engine's transaction.
-function isApply(_event) {
-  return _event.invokeid.startsWith('apply');
-}
-
 // Another migration moved the row first, or holds the database: read again,
 // once.
 function canRetry(_event) {
-  return isApply(_event) && retryable.includes(_event.data.code) && !retried;
+  return retryable.includes(_event.data.code) && !retried;
 }
