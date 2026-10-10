@@ -106,7 +106,7 @@ fn all_routed(records: &[Json], output: Option<&Json>) -> bool {
 }
 
 fn model() -> String {
-    std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "Qwen/Qwen3.8-Flash-Next".into())
+    support::live_model()
 }
 
 /// One question turn through the full cascade: autonomy's seam leaves it

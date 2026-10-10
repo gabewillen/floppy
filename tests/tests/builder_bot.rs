@@ -1420,14 +1420,13 @@ fn a_blank_spec_is_answered_with_builder_failed() {
 
 /// Builds the spec with the real `generate` (and `decision`) backends on the
 /// wall clock (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, default
-/// `Qwen/Qwen3.8-Flash-Next`). Writes the produced bot under `target/builder-live/` and
+/// [`support::DEFAULT_MODEL`]). Writes the produced bot under `target/builder-live/` and
 /// prints only pass or fail and counts.
 #[test]
 #[ignore = "makes real model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_builder_through_an_env_file() {
     let env_files = support::live_env_files();
-    let model =
-        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "Qwen/Qwen3.8-Flash-Next".into());
+    let model = support::live_model();
     let finished = start(
         &builder_document(),
         "wall",

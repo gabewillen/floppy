@@ -752,8 +752,7 @@ fn live_generate_through_an_env_file() {
         .iter()
         .flat_map(|path| args(path))
         .collect();
-    let model =
-        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "Qwen/Qwen3.8-Flash-Next".into());
+    let model = support::live_model();
     let params = format!(
         r#"<param name="model" expr="'{model}'"/>
       <param name="system" expr="'Answer in JSON only.'"/>

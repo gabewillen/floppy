@@ -66,6 +66,9 @@ preopens the host directory `HOST` (here `memory/`, created first with
 imports `wasi:filesystem` too (it reads the images a message names), so
 the run grants it a media directory the same way (create `media/` first;
 it is ignored by git).
+[`.env.example`](../../.env.example) names the variables, and the README's
+[Defaults](../../README.md#defaults) lists the model, the timeouts and the
+bounds this bot ships with.
 
 The root has no parent, so each event the body emits is a `log` record
 labelled with its name, its text the event's data as JSON: `bot.activated`,

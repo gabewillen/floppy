@@ -47,6 +47,15 @@ pub const GRANTED: [&str; 4] = [
     "TYPESAFE_BASE_URL",
 ];
 
+/// The model floppy ships (README.md, "Defaults"): every document's `model`
+/// `<data>`, checked by `tests/tests/defaults.rs`.
+pub const DEFAULT_MODEL: &str = "Qwen/Qwen3.8-Flash-Next";
+
+/// The model of a live test: `FLOPPY_LIVE_MODEL`, else [`DEFAULT_MODEL`].
+pub fn live_model() -> String {
+    std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_owned())
+}
+
 /// The env files of a live test: `FLOPPY_LIVE_ENV_FILE`, one path or
 /// several joined like `PATH` (`:` on Unix), each given to `scx run` as an
 /// `--env-file` in order (a variable takes its last file's entry), so keys
