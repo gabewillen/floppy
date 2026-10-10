@@ -157,7 +157,7 @@ fn other_local_names_are_not_handled() {
 }
 
 #[test]
-fn an_inbound_message_is_keyed_by_its_sorted_sources_and_carries_its_relationship() {
+fn an_inbound_message_is_keyed_by_its_relationship_and_carries_its_reference() {
     let (key, message) = commit_of(
         "inbound",
         &json!({
@@ -169,7 +169,10 @@ fn an_inbound_message_is_keyed_by_its_sorted_sources_and_carries_its_relationshi
         }),
         &Json::Null,
     );
-    assert_eq!(key, r#"["alice","zed",[0.5,1]]"#);
+    assert_eq!(
+        key,
+        r#"{"identity_groups":[["a\"b","bot"],["alice","zed",[0.447213595499958,0.894427190999916]]]}"#
+    );
     assert_eq!(
         message,
         json!({
@@ -184,7 +187,7 @@ fn an_inbound_message_is_keyed_by_its_sorted_sources_and_carries_its_relationshi
                 "id": null,
                 "source": null,
                 "target": null,
-                "session_ref": r#"relationship-["alice","zed",[0.5,1]]["a\"b","bot"]"#,
+                "session_ref": r#"relationship-{"identity_groups":[["a\"b","bot"],["alice","zed",[0.447213595499958,0.894427190999916]]]}"#,
                 "turn_ref": null
             }
         })
@@ -199,12 +202,12 @@ fn inbound_audio_content_is_dropped_whatever_the_case_of_its_type() {
             &json!({"source_ids": ["alice"], "target_ids": [], "content": "AAAA", "content_type": content_type}),
             &Json::Null,
         );
-        assert_eq!(key, r#"["alice"]"#);
+        assert_eq!(key, r#"{"identity_groups":[[],["alice"]]}"#);
         assert_eq!(message["content"], Json::Null, "{content_type}");
         assert_eq!(message["content_type"], json!(content_type));
         assert_eq!(
             message["provenance"]["session_ref"],
-            json!(r#"relationship-["alice"][]"#)
+            json!(r#"relationship-{"identity_groups":[[],["alice"]]}"#)
         );
     }
     // Structured and other media content is kept; outbound audio is kept.
@@ -235,9 +238,9 @@ fn an_outbound_message_takes_its_provenance_references() {
             "content_type": "text/plain",
             "provenance": {"event": "x.y"}
         }),
-        &json!({"event": "x.y", "id": "r-1", "session_ref": "s1", "turn_ref": "t1", "source": "q"}),
+        &json!({"event": "x.y", "id": "r-1", "session_ref": "s1", "turn_ref": "t1", "source": "q", "target": 2}),
     );
-    assert_eq!(key, r#"["bot"]"#);
+    assert_eq!(key, r#"{"identity_groups":[["alice","zed"],["bot"]]}"#);
     assert_eq!(
         message,
         json!({
@@ -250,7 +253,7 @@ fn an_outbound_message_takes_its_provenance_references() {
             "provenance": {
                 "event": "bot.ability.conversation.input",
                 "id": "r-1",
-                "source": null,
+                "source": "q",
                 "target": null,
                 "session_ref": "s1",
                 "turn_ref": "t1"
@@ -266,14 +269,14 @@ fn missing_references_and_content_are_null_and_a_non_string_id_is_null() {
         &json!({"source_ids": [], "target_ids": [], "content_type": "text/plain"}),
         &json!({"id": 7}),
     );
-    assert_eq!(key, "[]");
+    assert_eq!(key, r#"{"identity_groups":[[],[]]}"#);
     assert_eq!(message["content"], Json::Null);
     assert_eq!(
         message["provenance"],
         json!({"event": "bot.ability.conversation.input", "id": null, "source": null, "target": null, "session_ref": null, "turn_ref": null})
     );
     // An undefined provenance, or none, is no provenance; an inbound
-    // message ignores a given session_ref.
+    // message takes a given session_ref (its relationship's).
     let mut host = host(
         &json!({"source_ids": ["a"], "target_ids": [], "content_type": "text/plain"}),
         &Json::Null,
@@ -289,10 +292,7 @@ fn missing_references_and_content_are_null_and_a_non_string_id_is_null() {
         &json!({"source_ids": ["a"], "target_ids": [], "content_type": "text/plain"}),
         &json!({"session_ref": "given", "turn_ref": "t"}),
     );
-    assert_eq!(
-        inbound["provenance"]["session_ref"],
-        json!(r#"relationship-["a"][]"#)
-    );
+    assert_eq!(inbound["provenance"]["session_ref"], json!("given"));
     assert_eq!(inbound["provenance"]["turn_ref"], json!("t"));
 }
 
@@ -312,42 +312,73 @@ fn the_key_location_is_optional() {
     assert_eq!(host.assigned[0].0, "committed");
 }
 
+/// `relationship_context_ref` against mosfet's own (`_stable_context_ref`
+/// of each input, computed by mosfet.py e305580).
 #[test]
-fn identities_sort_by_their_ecmascript_json_text() {
-    // Strings before embeddings ('"' < '['), UTF-16 order (U+FFFF sorts
-    // after an astral character's lead surrogate), ECMAScript numbers.
+fn the_relationship_context_reference_is_mosfets() {
+    for (source_ids, target_ids, expected) in [
+        (
+            json!(["zed", "alice", [0.5, 1]]),
+            json!(["bot", "a\"b"]),
+            r#"{"identity_groups":[["a\"b","bot"],["alice","zed",[0.447213595499958,0.894427190999916]]]}"#,
+        ),
+        (
+            json!(["bot", "a\"b"]),
+            json!(["zed", "alice", [0.5, 1]]),
+            r#"{"identity_groups":[["a\"b","bot"],["alice","zed",[0.447213595499958,0.894427190999916]]]}"#,
+        ),
+        (
+            json!(["alice"]),
+            json!([]),
+            r#"{"identity_groups":[[],["alice"]]}"#,
+        ),
+        (
+            json!(["\u{e9}", "\u{1f600}", "\u{ffff}", "a\nb", "\u{7f}", "b"]),
+            json!(["bot"]),
+            r#"{"identity_groups":[["a\nb","b","\u007f","\u00e9","\uffff","\ud83d\ude00"],["bot"]]}"#,
+        ),
+        (
+            json!([[1e-6, 1, -0.5, 2], [3, 4], [1e-7, 123_456.75], [-0.0, 1]]),
+            json!(["x"]),
+            r#"{"identity_groups":[["x"],[[0.0,1.0],[0.6,0.8],[4.364357804719432e-07,0.4364357804719432,-0.2182178902359716,0.8728715609438864],[8.100002632500855e-13,1.0]]]}"#,
+        ),
+        (
+            json!([[1e300, 1e300]]),
+            json!([[0.1, 0.2, 0.3]]),
+            r#"{"identity_groups":[[[0.26726124191242445,0.5345224838248489,0.8017837257372732]],[[0.7071067811865476,0.7071067811865476]]]}"#,
+        ),
+    ] {
+        let (Json::Array(source_ids), Json::Array(target_ids)) = (source_ids, target_ids) else {
+            panic!("identity lists are arrays");
+        };
+        assert_eq!(relationship_context_ref(&source_ids, &target_ids), expected);
+    }
+    // Repeated identities are one; a vector without a unit vector is kept.
     assert_eq!(
-        sorted_ids(&[
-            json!([1e-6, 1e21, -0.5, 2]),
-            json!("\u{ffff}"),
-            json!("\u{1f600}"),
-            json!("b"),
-            json!("a\nb"),
-            json!([1e-7, 123_456.75]),
-        ]),
-        "[\"a\\nb\",\"b\",\"\u{1f600}\",\"\u{ffff}\",[0.000001,1e+21,-0.5,2],[1e-7,123456.75]]"
+        relationship_context_ref(&[json!("a"), json!("a"), json!([0, 0]), json!([])], &[]),
+        r#"{"identity_groups":[[],["a",[0.0,0.0],[]]]}"#
     );
-    assert_eq!(sorted_ids(&[]), "[]");
 }
 
 #[test]
-fn numbers_print_as_ecmascript_prints_them() {
+fn numbers_print_as_python_prints_a_float() {
     for (value, text) in [
-        (0.0, "0"),
-        (-0.0, "0"),
-        (1.0, "1"),
+        (0.0, "0.0"),
+        (-0.0, "-0.0"),
+        (1.0, "1.0"),
         (-2.5, "-2.5"),
         (0.1, "0.1"),
-        (1e-6, "0.000001"),
-        (1.5e-7, "1.5e-7"),
-        (1e20, "100000000000000000000"),
-        (1e21, "1e+21"),
+        (1e-4, "0.0001"),
+        (1e-5, "1e-05"),
+        (1.5e-7, "1.5e-07"),
+        (1e15, "1000000000000000.0"),
+        (1e16, "1e+16"),
         (1.2345e25, "1.2345e+25"),
         (123_456.789, "123456.789"),
         (f64::MAX, "1.7976931348623157e+308"),
         (5e-324, "5e-324"),
     ] {
-        assert_eq!(js_number(value), text, "{value:e}");
+        assert_eq!(python_float(value), text, "{value:e}");
     }
 }
 

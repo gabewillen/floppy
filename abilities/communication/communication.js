@@ -35,6 +35,12 @@ function historyLength(_event) {
   return String(_event.data.messages.length);
 }
 
+// A product: the history's latest message is inbound.
+function isInboundProduct(_event) {
+  var messages = _event.data.messages;
+  return messages.length > 0 && messages[messages.length - 1].direction === 'inbound';
+}
+
 // A failed conversation input, as stage: message.
 function conversationFailedLog(_event) {
   return _event.data.stage + ': ' + _event.data.message;

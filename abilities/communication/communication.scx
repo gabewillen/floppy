@@ -25,9 +25,11 @@
   the active conversation; parent is the input event as an envelope). The
   conversation hands a text product over as bot.ability.cognition.input
   {stimulus}, which goes on to the body unchanged (the body grants it a
-  turn); its bot.ability.conversation.output is history only, and its
+  turn); its bot.ability.conversation.output goes on to the body unchanged
+  when its latest message is inbound (a product that is not text; mosfet
+  _has_conversation_product) and is history only otherwise; and its
   bot.ability.conversation.failed {stage, message} goes on to the body
-  unchanged (mosfet forwards both terminals).
+  unchanged (mosfet forwards these terminals).
 
   Responding: bot.ability.communication.respond {text} (non-blank) in
   active numbers the response (preparing_response), sends
@@ -109,7 +111,9 @@
                 cond="isChildOffers(_event)">
       <assign location="ready[_event.invokeid]" expr="true"/>
     </transition>
-    <!-- Conversation products go on to the body; the rest is history. -->
+    <!-- Conversation products go on to the body: a text product as its
+         stimulus handoff, any other whose latest message is inbound as
+         the output itself; the rest is history. -->
     <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json"
                 cond="isFromConversation(_event)">
       <log label="communication.product" expr="productSequence(_event)"/>
@@ -120,6 +124,17 @@
     <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
                 cond="isFromConversation(_event)">
       <log label="communication.history" expr="historyLength(_event)"/>
+      <if cond="isInboundProduct(_event)">
+        <send event="bot.ability.conversation.output" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
+      </if>
+    </transition>
+    <!-- A snapshot of the conversation's participants (the communication
+         requests none). -->
+    <transition event="bot.ability.conversation.snapshot.output" event:schema="schemas/bot.ability.conversation.snapshot.output.json"
+                cond="isFromConversation(_event)">
+      <log label="communication.snapshot" expr="_event.data.request_ref"/>
     </transition>
     <!-- A conversation that could not take an input fails it (mosfet's
          conversation failed terminal, forwarded unchanged). -->

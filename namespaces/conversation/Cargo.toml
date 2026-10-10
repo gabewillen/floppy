@@ -1,6 +1,6 @@
 [package]
 name = "floppy-conversation"
-description = "The `conversation` namespace: `<conversation:commit>`, one committed conversation message (sequence, model-safe content, provenance, relationship reference) and its transcript key, as a Wasm extension component"
+description = "The `conversation` namespace: `<conversation:commit>`, one committed conversation message (sequence, model-safe content, provenance, relationship reference) and its relationship context reference, as a Wasm extension component"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

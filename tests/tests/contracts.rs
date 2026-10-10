@@ -90,7 +90,7 @@ const BODY_EVENTS: [&str; 13] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 74] = [
+const ABILITY_EVENTS: [&str; 76] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -118,6 +118,8 @@ const ABILITY_EVENTS: [&str; 74] = [
     "bot.ability.conversation.append",
     "bot.ability.conversation.output",
     "bot.ability.conversation.failed",
+    "bot.ability.conversation.snapshot.request",
+    "bot.ability.conversation.snapshot.output",
     "bot.ability.speaking.input",
     "bot.ability.speaking.output",
     "bot.ability.speaking.apply.failed",
@@ -215,7 +217,7 @@ const RUNTIME_ONLY: [&str; 8] = [
 const NAMES_FILE: &str = "mosfet-event-names.json";
 
 /// The ability events the body takes, twinned into `bots/floppy/schemas/`.
-const BODY_TWINS: [&str; 14] = [
+const BODY_TWINS: [&str; 15] = [
     "bot.reboot",
     "bot.ability.offers",
     "bot.ability.communication.input",
@@ -228,6 +230,7 @@ const BODY_TWINS: [&str; 14] = [
     "bot.ability.processing.cancelled",
     "bot.ability.failed",
     "bot.ability.cognition.input",
+    "bot.ability.conversation.output",
     "bot.ability.conversation.failed",
     "bot.ability.listening.failed",
 ];

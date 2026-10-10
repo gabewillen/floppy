@@ -8,15 +8,16 @@
   conversation:commit  location (required): receives the committed message
                        {sequence, direction, source_ids, target_ids,
                        content, content_type, provenance}.
-                       keylocation (optional): receives its transcript key,
-                       the sorted source ids.
+                       keylocation (optional): receives its relationship
+                       context reference, mosfet's relationship_context_ref
+                       of its source and target ids.
                        direction (required): the literal inbound or
                        outbound.
                        event, message, sequence (required), provenance
                        (optional): expressions of the committing event's
                        name, the message, its position in the history, and
-                       the provenance whose id, session_ref and turn_ref
-                       it takes.
+                       the provenance whose id, source, target,
+                       session_ref and turn_ref it takes.
                        It takes no other attribute and no content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"

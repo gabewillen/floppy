@@ -108,6 +108,19 @@ Last updated: 2026-10-10.
   `absent`. Every bot turn with memory now ends with reflection's select
   call and the turn's episode.
 
+## Conversation memory (2026-10-10)
+
+- **Done** on branch `wt-conversation`: the conversation keeps mosfet's
+  relationships (matched in either direction, targetless input in the
+  ambient one) and keys its memory by mosfet's `relationship_context_ref`
+  (`{"identity_groups":[...]}`, written by `<conversation:commit
+  keylocation>`), recalls before the turns and remembers after them (each
+  its own 5 s operation), and remembers mosfet's `Memory.to_json`. It
+  answers `bot.ability.conversation.snapshot.request` and a repeated
+  append; the communication forwards a non-text product whose latest
+  message is inbound. Memories kept by earlier floppy runs, under the old
+  `relationship-<ids>` key, are not recalled.
+
 ## Turn detectors (2026-10-10)
 
 - **Done** on branch `claude/project-thread-fubdvs`: mosfet's TurnDetector
@@ -412,10 +425,11 @@ inlines the browser `validate` options type so no unapproved
   direction event message sequence provenance?>` (mosfet
   `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`,
   `_stable_context_ref`, `MessageProvenance`) builds one committed message
-  and its transcript key; it never holds the history (the extension
+  and its relationship key; it never holds the history (the extension
   boundary's values are bounded at 64 KiB on wasm), so the conversation
   appends with `history.concat([message])` and
-  `transcripts[participants]`. The communication builds its outbound record
+  `relationships[participants]` (since 2026-10-10 the key is mosfet's
+  relationship context reference). The communication builds its outbound record
   with it (the append's provenance now carries explicit `null` source,
   target, session_ref and turn_ref; the committed history is unchanged).
   `the_conversation_commits_each_message_into_its_history` pins the
