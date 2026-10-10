@@ -1637,12 +1637,15 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
     let double =
         std::fs::read_to_string(workspace().join("tests/fixtures/phase4/behavior_double.scx"))
             .expect("the double is readable");
-    let grant = inventory(&[Learned {
-        name: "Double",
-        trigger: SPEECH,
-        status: "ACTIVE",
-        source: &double,
-    }]);
+    let grant = inventory(
+        DATABASE,
+        &[Learned {
+            name: "Double",
+            trigger: SPEECH,
+            status: "ACTIVE",
+            source: &double,
+        }],
+    );
     let harness = autonomy_harness(&format!("'{DATABASE}'"));
     let mut args = grant.clone();
     args.push(harness.display().to_string());
@@ -1679,5 +1682,5 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
         &finished.all,
         &[],
     );
-    assert_eq!(usage(&grant), json!([["Double", "1", "0"]]));
+    assert_eq!(usage(&grant, DATABASE), json!([["Double", "1", "0"]]));
 }
