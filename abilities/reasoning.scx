@@ -7,7 +7,7 @@
     recalling -> applying (an invoked generate service) -> retaining -> done
 
   Memory (mosfet Reasoning._recall_activity and _retain_activity): with a
-  database (the <param> memory, the memory database file), recalling
+  database (the <param> database, the memory database file), recalling
   invokes the memory ability (abilities/memory.scx) with one
   transaction of mosfet's two selects, prior cognitive episodes
   (query_tags cognitive_episode) and standing directives (query_tags
@@ -39,7 +39,7 @@
   schema-mismatch. With no choices the stage fails without a model call.
 
   Input: the <param>s turn, stimulus, focus, focus_candidates, choices,
-  model and memory. Output: <donedata>, received by the cognition as
+  model and database. Output: <donedata>, received by the cognition as
   done.invoke.reasoning:
 
     {turn, handled: true, selected: [{event, data, reason, target?}]}
@@ -78,11 +78,11 @@
     <data id="selected" expr="null"/>
     <data id="gen_failure" expr="null"/>
     <data id="result" expr="null"/>
-    <!-- Memory: the database file (memory; null: no memory) and mosfet's
+    <!-- Memory: the database file (null: no memory) and mosfet's
          statements (episodes.py, directives.py), with ?2 the context. A memory id is the next
          rowid as 32 hex digits: the sql service's randomblob is not
          unique across invocations. -->
-    <data id="memory" expr="null"/>
+    <data id="database" expr="null"/>
     <data id="context_ref" expr="null"/>
     <data id="prior_episodes" expr="[]"/>
     <data id="standing_directives" expr="[]"/>
@@ -99,7 +99,7 @@
       <assign location="context_ref" expr="typeof Object(Object(stimulus).data).target_device === 'string' ? stimulus.data.target_device : null"/>
     </onentry>
     <state id="recalling_from">
-      <transition cond="memory === null" target="recalling_nothing"/>
+      <transition cond="database === null" target="recalling_nothing"/>
       <transition target="recalling_memory"/>
     </state>
     <state id="recalling_nothing">
@@ -120,7 +120,7 @@
         <assign location="statements" expr="statements.concat([{sql: episode_select, parameters: ['standing_directive', context_ref]}])"/>
       </onentry>
       <invoke id="recall" type="scxml" src="memory.scx">
-        <param name="database" expr="memory"/>
+        <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
       <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
@@ -189,7 +189,7 @@
   <!-- Retain the turn's episode, or nothing without a database. -->
   <state id="retaining" initial="retaining_from">
     <state id="retaining_from">
-      <transition cond="memory === null" target="retaining_nothing"/>
+      <transition cond="database === null" target="retaining_nothing"/>
       <transition target="retaining_memory"/>
     </state>
     <state id="retaining_nothing">
@@ -209,7 +209,7 @@
         <assign location="episode" expr="JSON.stringify({focus: context_ref, focus_candidates: [], stimulus_name: stimulus.event, output: selected, behavior: null})"/>
       </onentry>
       <invoke id="retain" type="scxml" src="memory.scx">
-        <param name="database" expr="memory"/>
+        <param name="database" expr="database"/>
         <param name="statements" expr="[{sql: episode_insert, parameters: ['memory', context_ref, 'task', 'standard', 'retain', episode, 'application/json', 'cognitive_episode']}]"/>
       </invoke>
       <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"

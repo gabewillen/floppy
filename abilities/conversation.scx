@@ -11,7 +11,7 @@
     append (inactive or active): commit the outbound message
 
   Inputs: recalling (mosfet Conversation's memory stage): with a database
-  (the <param> memory, the memory database file) it invokes the memory
+  (the <param> database, the memory database file) it invokes the memory
   ability (abilities/memory.scx) with one transaction that recalls
   the relationship's memories (content where query_tags
   conversation_memory and context_ref is the relationship, oldest first,
@@ -69,11 +69,11 @@
     <!-- The message in hand, and the provenance ids committed so far. -->
     <data id="message" expr="null"/>
     <data id="appended" expr="[]"/>
-    <!-- Memory: the database file (memory; null: no memory) and mosfet's
+    <!-- Memory: the database file (null: no memory) and mosfet's
          statements (conversation/memory.py). A memory id is the next
          rowid as 32 hex digits: the sql service's randomblob is not
          unique across invocations. -->
-    <data id="memory" expr="null"/>
+    <data id="database" expr="null"/>
     <data id="memory_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND context_ref = ?2 ORDER BY created_at, memory_id LIMIT 50'"/>
     <data id="memory_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT printf(\'%032x\', coalesce(max(rowid), 0) + 1) FROM bot_memory), ?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
     <data id="statements" expr="[]"/>
@@ -112,7 +112,7 @@
                                event="parent.event" message="input" sequence="history.length"/>
         </onentry>
         <state id="recalling_from">
-          <transition cond="memory === null" target="committing">
+          <transition cond="database === null" target="committing">
             <log label="memory" expr="'absent'"/>
           </transition>
           <transition target="recalling_memory"/>
@@ -124,16 +124,16 @@
             <assign location="statements" expr="statements.concat([{sql: memory_insert, parameters: ['memory', message.provenance.session_ref, 'conversation']}])"/>
             <assign location="statements[1].parameters" expr="statements[1].parameters.concat(['standard', 'retain', remembered, 'application/json', 'conversation_memory'])"/>
           </onentry>
-          <invoke id="remember" type="scxml" src="memory.scx">
-            <param name="database" expr="memory"/>
+          <invoke id="memory" type="scxml" src="memory.scx">
+            <param name="database" expr="database"/>
             <param name="statements" expr="statements"/>
           </invoke>
           <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                      cond="_event.invokeid === 'remember'" target="committing">
+                      cond="_event.invokeid === 'memory'" target="committing">
             <log label="conversation.memories" expr="'recalled ' + _event.data.results[0].rowcount + ', remembered ' + _event.data.results[1].rowcount"/>
           </transition>
           <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                      cond="_event.invokeid === 'remember'" target="waiting">
+                      cond="_event.invokeid === 'memory'" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
               <param name="message" expr="'Conversation memory failed: ' + _event.data.message"/>

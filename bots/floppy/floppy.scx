@@ -115,7 +115,7 @@
   Memory (mosfet's sqlite_memory): the body passes its database (a file in
   the directory the run grants the sql service at /memory, scx run's
   dir option) to the cognition, the communication and the identity as
-  <param name="memory">; reasoning recalls and retains cognitive
+  <param name="database">; reasoning recalls and retains cognitive
   episodes, the identity its adopted names, and the conversation its
   relationship memories (abilities/memory.scx over services/sql, one
   SQLite transaction per invocation). A run without the grant is refused
@@ -131,7 +131,7 @@
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <!-- The memory database file (mosfet's sqlite_memory
          database), in the directory the run grants the service at /memory. -->
-    <data id="memory" expr="'/memory/floppy.sqlite'"/>
+    <data id="database" expr="'/memory/floppy.sqlite'"/>
     <data id="activation_timeout_ms" expr="30000"/>
     <data id="processing_timeout_ms" expr="300000"/>
     <data id="cancel_timeout_ms" expr="5000"/>
@@ -190,13 +190,13 @@
     </onexit>
     <invoke id="cognition" type="scxml" src="../../abilities/cognition.scx">
       <param name="model" expr="model"/>
-      <param name="memory" expr="memory"/>
+      <param name="database" expr="database"/>
     </invoke>
     <invoke id="communication" type="scxml" src="../../abilities/communication.scx">
-      <param name="memory" expr="memory"/>
+      <param name="database" expr="database"/>
     </invoke>
     <invoke id="identity" type="scxml" src="../../abilities/identity.scx">
-      <param name="memory" expr="memory"/>
+      <param name="database" expr="database"/>
     </invoke>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
