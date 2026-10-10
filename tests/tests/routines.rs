@@ -126,8 +126,10 @@ fn a_failed_inventory_load_keeps_the_running_set() {
     std::fs::write(
         &harness,
         text.replace(
-            r#"<param name="database" expr="database"/>"#,
-            r#"<param name="database" expr="'relative.sqlite'"/>"#,
+            r#"src="routines.scx">
+        <param name="database" expr="database"/>"#,
+            r#"src="routines.scx">
+        <param name="database" expr="'relative.sqlite'"/>"#,
         ),
     )
     .expect("the harness is writable");
