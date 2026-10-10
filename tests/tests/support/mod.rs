@@ -337,6 +337,16 @@ impl Run {
         self.stdin = None;
     }
 
+    /// The number of records read so far (by [`Run::until`]) for which
+    /// `matches` holds.
+    pub fn count(&self, matches: impl Fn(&Json) -> bool) -> usize {
+        self.journal
+            .borrow()
+            .iter()
+            .filter(|record| matches(record))
+            .count()
+    }
+
     /// Records until `done` holds for one, at most `limit`; panics on a
     /// timeout.
     pub fn until(&self, limit: Duration, done: impl Fn(&Json) -> bool) -> Vec<Json> {

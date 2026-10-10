@@ -101,10 +101,12 @@ Last updated: 2026-10-10.
   SpeechHeard seed); reflection selects through its enabled transitions,
   revises behaviors with the builder bot and stores episodes; routines run
   as a chain of runners passing `bot.behavior.tick` up. Decisions D60 to
-  D64 and D73 to D75 (the plan's D48, D49 and D55, renumbered past clashes).
+  D64, D73 to D76 (the plan's D48, D49 and D55, renumbered past clashes).
   Plan: [plans/phase5-behaviors.mdscript.md](plans/phase5-behaviors.mdscript.md).
-- **Open:** the plan's "Turn The Seams On": the cognition's
-  `reflection_enabled` and `routines_enabled` are still `false`.
+- **Seams on (2026-10-10, D76):** the cognition always runs reflection and
+  routines (no gates, as mosfet composes them); with no database each logs
+  `absent`. Every bot turn with memory now ends with reflection's select
+  call and the turn's episode.
 
 ## Phase 6 (2026-10-10): speech and vision
 

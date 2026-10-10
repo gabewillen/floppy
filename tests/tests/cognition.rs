@@ -171,6 +171,22 @@ fn decided_with(body: &Json, chosen: &str, share: f64, other: Option<f64>) -> Op
     Some(json!({"model": "fake", "answers": answers, "usage": {"input_tokens": 1, "output_tokens": 1}}).to_string())
 }
 
+/// Whether `body` is reflection's select call (mosfet
+/// `SELECT_INSTRUCTIONS` as its system message).
+fn is_reflection(body: &Json) -> bool {
+    body["messages"].as_array().is_some_and(|messages| {
+        messages.iter().any(|message| {
+            message["role"] == "system"
+                && message["content"]
+                    .as_str()
+                    .is_some_and(|text| text.starts_with(REFLECTION_SELECT))
+        })
+    })
+}
+
+/// The start of reflection's select instructions.
+const REFLECTION_SELECT: &str = "Select at most one offered behavior inventory event";
+
 /// The scripted answer to one request, or `None` to never answer.
 fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
     let ok = |text: String| Some(("200 OK", text));
@@ -181,6 +197,11 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
         ))
     };
     let selection = |events: Json| ok(completion(&json!({ "events": events }).to_string()));
+    // Reflection's select after each output: an empty selection (no
+    // behavior to revise), so reflection stores the turn's episode.
+    if is_reflection(body) {
+        return selection(json!([]));
+    }
     match target {
         "/ignore/v1/systemone" => ok(decided(body, IGNORE, 0.8)?),
         "/abstain/v1/systemone" => ok(decided(body, "none of these", 0.8)?),
@@ -456,9 +477,30 @@ fn pinned(target: &str) -> bool {
         && !target.starts_with(&format!("/{}/", Generation::Hang.path()))
 }
 
+/// Whether `record` is the cognition's log of a settled reflection (its
+/// output or its failure).
+fn reflection_settled(record: &Json) -> bool {
+    record["type"] == "log"
+        && matches!(
+            record["label"].as_str(),
+            Some("bot.ability.reflection.output" | "cognition.reflection.failed")
+        )
+}
+
+/// Waits until reflection has settled every output read so far: it runs
+/// beside the next turn, so a run closed before it settles would cut it
+/// short at a load-dependent point.
+fn settle_reflection(run: &Run) {
+    let outputs = run.count(label_is("bot.output"));
+    while run.count(reflection_settled) < outputs {
+        run.until(WAIT, reflection_settled);
+    }
+}
+
 /// Closes the run and asserts its pinned trace, with every pinned request
 /// the mock received.
 fn close(run: Run, mock: &Mock, test: &str) -> Finished {
+    settle_reflection(&run);
     let finished = run.close(WAIT);
     mock.settle(trace::pinned_requests(test));
     let requests: Vec<(String, Json)> = mock
@@ -469,6 +511,21 @@ fn close(run: Run, mock: &Mock, test: &str) -> Finished {
         .collect();
     trace::assert_trace(test, &finished.all, &requests);
     finished
+}
+
+/// The generate requests other than reflection's select calls (reasoning's).
+fn reasoning_requests(mock: &Mock) -> Vec<Received> {
+    mock.received("/chat/completions")
+        .into_iter()
+        .filter(|request| !is_reflection(&request.body))
+        .collect()
+}
+
+/// Whether every request the backends received was reflection's select.
+fn asked_only_reflection(mock: &Mock) -> bool {
+    mock.received("")
+        .iter()
+        .all(|request| is_reflection(&request.body))
 }
 
 /// The labels of the one decision's selection question, sorted.
@@ -509,10 +566,6 @@ fn intuition_handles_an_ignore_without_reasoning() {
         texts(&records, "autonomy"),
         strings(&["turn 1: 0 matched for bot.input"])
     );
-    assert_eq!(
-        texts(&records, "reflection"),
-        strings(&["absent (phase 5)"])
-    );
     // The body routed the selection to the only ability offering it.
     assert_eq!(
         texts(&records, "bot.route"),
@@ -520,10 +573,18 @@ fn intuition_handles_an_ignore_without_reasoning() {
     );
     assert_eq!(texts(&records, "cognition.ignore"), strings(&["idle"]));
     // The decision offered the turn's choices it could fill (respond's
-    // text and adopt's name have no grounded value); no model was asked.
+    // text and adopt's name have no grounded value); reasoning asked no
+    // model.
     assert_eq!(selection_labels(&mock), strings(&[IGNORE, "none of these"]));
-    assert!(mock.received("/chat/completions").is_empty());
+    assert!(reasoning_requests(&mock).is_empty());
     let finished = close(run, &mock, "intuition_handles_an_ignore_without_reasoning");
+    // Reflection reflected on the turn after its output (the backend's
+    // empty selection) and asked the model once.
+    assert_eq!(
+        texts(&finished.all, "bot.ability.reflection.output"),
+        strings(&["turn 1"])
+    );
+    assert_eq!(mock.received("/chat/completions").len(), 1);
     // The cognition offers ignore from each idle entry (the activation's
     // and the turn's end).
     let mut all = records;
@@ -681,9 +742,11 @@ fn postgres_autonomy_runs_the_learned_behaviors_the_stimulus_triggers() {
 /// Closes the run, asserting the pinned trace of `test` when there is one
 /// (a Postgres run's trace carries its server's address).
 fn close_as(run: Run, mock: &Mock, test: Option<&str>) {
-    match test {
-        Some(test) => drop(close(run, mock, test)),
-        None => drop(run.close(WAIT)),
+    if let Some(test) = test {
+        drop(close(run, mock, test));
+    } else {
+        settle_reflection(&run);
+        drop(run.close(WAIT));
     }
 }
 
@@ -776,9 +839,10 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
         json_text(&records, "bot.output"),
         json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "behavior: nothing to do", "target": "cognition"}]})
     );
-    // Neither intuition nor reasoning ran: no backend was asked.
+    // Neither intuition nor reasoning ran: no backend but reflection's
+    // was asked.
     assert!(texts(&records, "intuition").is_empty(), "{records:?}");
-    assert!(mock.received("").is_empty());
+    assert!(asked_only_reflection(&mock));
     close_as(run, &mock, test);
     assert_eq!(
         usage(&grant, database),
@@ -868,16 +932,12 @@ fn reasoning_selects_from_the_turns_choices() {
         ])
     );
     // The body gives the cognition a database: reasoning recalls from and
-    // retains to memory (no seam logs absent); reflection is absent.
+    // retains to memory (no seam logs absent).
     assert!(texts(&records, "memory").is_empty(), "{records:?}");
-    assert_eq!(
-        texts(&records, "reflection"),
-        strings(&["absent (phase 5)"])
-    );
     // The model request: the dispatch schema of the choices, strict, and
     // a prompt that carries the stimulus and what memory recalled (a fresh
     // database holds nothing).
-    let requests = mock.received("/chat/completions");
+    let requests = reasoning_requests(&mock);
     assert_eq!(requests.len(), 1);
     let body = &requests[0].body;
     let format = &body["response_format"]["json_schema"];
@@ -935,7 +995,11 @@ fn reasoning_selects_from_the_turns_choices() {
     );
     assert_eq!(prompt["prior_episodes"], json!([]));
     assert_eq!(prompt["standing_directives"], json!([]));
-    close(run, &mock, "reasoning_selects_from_the_turns_choices");
+    let finished = close(run, &mock, "reasoning_selects_from_the_turns_choices");
+    assert_eq!(
+        texts(&finished.all, "bot.ability.reflection.output"),
+        strings(&["turn 1"])
+    );
 }
 
 /// The whole text path on fake backends: "say hi" escalates to reasoning,
@@ -983,9 +1047,9 @@ fn a_reasoned_response_is_said_through_the_communication() {
     );
 }
 
-/// The user message of each model request, parsed.
+/// The user message of each reasoning request, parsed.
 fn prompts(mock: &Mock) -> Vec<Json> {
-    mock.received("/chat/completions")
+    reasoning_requests(mock)
         .iter()
         .map(|request| {
             let prompt = request.body["messages"]
@@ -1024,21 +1088,25 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
     let mut run = start(&bot);
     say(&mut run, "remember this");
     run.until(WAIT, turn_ended);
+    // Reflection stores the turn's episode too, beside the next turn
+    // (mosfet's Reasoning `_retain_activity` and Reflection
+    // `_store_activity` both insert one); the next turn waits for it so
+    // that its recall is fixed.
+    settle_reflection(&run);
     say(&mut run, "and this");
     run.until(WAIT, turn_ended);
     let prompts = prompts(&mock);
     assert_eq!(prompts.len(), 2, "{prompts:?}");
     assert_eq!(prompts[0]["prior_episodes"], json!([]));
-    assert_eq!(
-        prompts[1]["prior_episodes"],
-        json!([{
-            "focus": null,
-            "focus_candidates": [],
-            "stimulus_name": "bot.input",
-            "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}],
-            "behavior": null
-        }])
-    );
+    let episode = json!({
+        "focus": null,
+        "focus_candidates": [],
+        "stimulus_name": "bot.input",
+        "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}],
+        "behavior": null
+    });
+    // Reasoning's episode, then reflection's.
+    assert_eq!(prompts[1]["prior_episodes"], json!([episode, episode]));
     close_as(run, &mock, test);
 }
 
@@ -1338,28 +1406,22 @@ fn a_cancel_during_reasoning_is_acknowledged() {
     );
 }
 
-/// The phase 5 seams' gates, on.
-const GATES_ON: &[(&str, &str)] = &[("reflection_enabled", "true"), ("routines_enabled", "true")];
-
-/// A body without a database: the seams' gate tests watch the seams, not
-/// memory (with one, reflection asks the model; `tests/tests/reflection.rs`
-/// covers it).
+/// A body without a database: the seam tests watch reflection and the
+/// routines, not memory (with one, reflection asks the model;
+/// `tests/tests/reflection.rs` covers it).
 const NO_DATABASE: &[(&str, &str)] = &[("database", "null")];
 
-/// With both gates on, the routines start (finding no routines), each
-/// output is followed by the reflection seam, and a settled reflection
-/// asks the routines to reconcile.
+/// The routines start (finding no routines, without a database), each
+/// output is followed by reflection, and a settled reflection asks the
+/// routines to reconcile.
 #[test]
-fn with_its_gates_on_the_cognition_reflects_and_reconciles_the_routines() {
+fn the_cognition_reflects_and_reconciles_the_routines() {
     let mock = Mock::start();
     let bot = layout(
         &mock,
         Decision::Abstain,
         Generation::Ignore,
-        &[
-            ("abilities/cognition/cognition.scx", GATES_ON),
-            ("bots/floppy/floppy.scx", NO_DATABASE),
-        ],
+        &[("bots/floppy/floppy.scx", NO_DATABASE)],
     );
     let mut run = start(&bot);
     say(&mut run, "hmm");
@@ -1375,7 +1437,7 @@ fn with_its_gates_on_the_cognition_reflects_and_reconciles_the_routines() {
     let finished = close(
         run,
         &mock,
-        "with_its_gates_on_the_cognition_reflects_and_reconciles_the_routines",
+        "the_cognition_reflects_and_reconciles_the_routines",
     );
     // Once when the routines start, once for the reconcile.
     assert_eq!(
@@ -1393,10 +1455,7 @@ fn a_routine_tick_becomes_a_turn() {
         &mock,
         Decision::Abstain,
         Generation::Ignore,
-        &[
-            ("abilities/cognition/cognition.scx", GATES_ON),
-            ("bots/floppy/floppy.scx", NO_DATABASE),
-        ],
+        &[("bots/floppy/floppy.scx", NO_DATABASE)],
     );
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/routines_double.scx"),
@@ -1419,28 +1478,6 @@ fn a_routine_tick_becomes_a_turn() {
     assert_eq!(texts(&first, "routines.double"), strings(&["tick"]));
     assert_eq!(texts(&second, "bot.output").len(), 1, "{second:?}");
     close(run, &mock, "a_routine_tick_becomes_a_turn");
-}
-
-/// With both gates off (phase 4), nothing is invoked for them: the output
-/// is followed only by the reflection's absence.
-#[test]
-fn with_its_gates_off_the_cognition_invokes_no_seam() {
-    let mock = Mock::start();
-    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
-    let mut run = start(&bot);
-    say(&mut run, "hmm");
-    run.until(WAIT, turn_ended);
-    let finished = close(
-        run,
-        &mock,
-        "with_its_gates_off_the_cognition_invokes_no_seam",
-    );
-    assert_eq!(
-        texts(&finished.all, "reflection"),
-        strings(&["absent (phase 5)"])
-    );
-    assert!(texts(&finished.all, "routines").is_empty());
-    assert!(texts(&finished.all, "bot.ability.reflection.output").is_empty());
 }
 
 // ---------------------------------------------------------------------------

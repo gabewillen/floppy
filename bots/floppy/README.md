@@ -7,11 +7,16 @@ its lifecycle and processing turns, and its abilities are the
 [cognition](../../abilities/cognition/cognition.scx), mosfet's cascade of stages
 invoked per turn: [autonomy](../../abilities/autonomy/autonomy.scx) (mosfet's
 SpeechHeard seed, then the learned turn behaviors the stimulus triggers,
-kept by memory; reflection and routines are gated off), [intuition](../../abilities/intuition/intuition.scx) (the
+kept by memory), [intuition](../../abilities/intuition/intuition.scx) (the
 decision service picks ignore or hands the turn on, with mosfet's
 self-tuning confidence gate), and [reasoning](../../abilities/reasoning/reasoning.scx)
 (one structured model call over the turn's choices; it recalls and
-retains cognitive episodes through memory), and the [communication](../../abilities/communication/communication.scx),
+retains cognitive episodes through memory), with
+[reflection](../../abilities/reflection/reflection.scx) (after each output it
+creates, changes or breaks a learned behavior through the builder bot and
+stores the turn's episode) and [routines](../../abilities/routines/routines.scx)
+(the ACTIVE persistent behaviors, whose ticks become turns) running beside
+the turns, and the [communication](../../abilities/communication/communication.scx),
 which holds the [conversation](../../abilities/conversation/conversation.scx) (the
 committed text history, one transcript per participant set; it recalls
 and remembers a relationship's memories, and inferring participants and relationships from

@@ -6,8 +6,8 @@
   select at most one of bot.behavior.create, bot.behavior.change or
   bot.behavior.break, applies it, and stores the turn's CognitiveEpisode.
   The cognition (abilities/cognition/cognition.scx) invokes it as its long-lived
-  child "reflection" when its reflection gate is on, with the <param>s
-  database (the memory database; null keeps the phase 4 seam) and
+  child "reflection" (mosfet composes Reflection), with the <param>s
+  database (the memory database; null: no memory) and
   model, and sends it bot.ability.reflection.input {turn,
   cognition_input, cognition_output} after each turn's output.
 

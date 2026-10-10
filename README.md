@@ -181,9 +181,10 @@ encoder defaults, which it passes to vocal for the speech service
 | `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage (mosfet's 30 s) |
 | `abilities/interpretation/interpretation.scx` | `product_threshold_db` | `3.0` | the perceived level a listening product needs (mosfet's 3 dB) |
 
-The cognition's phase 5 gates are off (`reflection_enabled`,
-`routines_enabled`). The floppy bot's `database` is `/memory/floppy.sqlite`,
-so its runs grant the `sql` service a memory directory.
+The cognition always runs reflection and routines beside its turns, as
+mosfet's bots compose them. The floppy bot's `database` is
+`/memory/floppy.sqlite`, so its runs grant the `sql` service a memory
+directory; without a database reflection and routines log `absent`.
 
 Contributor rules are in [AGENTS.md](AGENTS.md).
 

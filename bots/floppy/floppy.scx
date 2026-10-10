@@ -32,8 +32,7 @@
   bot.ability.communication.failed, which the body logs. The same input
   goes to the identity, which answers bot.ability.identity.addressed
   {name} when the text names the bot; that too is a stimulus, as is a
-  routine's bot.behavior.tick the cognition forwards (phase 5 routines,
-  gated off in phase 4).
+  routine's bot.behavior.tick the cognition forwards (its routines).
 
   Speaking: the communication relays speaking's playout, the efference
   copy bot.ability.speaking.efference (sent on to each Listening ability
