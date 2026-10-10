@@ -141,3 +141,169 @@ fn a_failed_inventory_load_keeps_the_running_set() {
     );
     finished.close(WAIT);
 }
+
+/// The text of reflection's `next_after` (mosfet `At.next_after`) on one
+/// line, as the persistent routine contract gives it for a routine's
+/// `<data id="next_after">`.
+fn next_after() -> String {
+    let script = std::fs::read_to_string(workspace().join("abilities/reflection/reflection.js"))
+        .expect("reflection.js is readable");
+    let marker = "var next_after = ";
+    let start = script
+        .find(marker)
+        .expect("reflection.js defines next_after")
+        + marker.len();
+    let end = start + script[start..].find("\n};").expect("next_after ends") + 2;
+    script[start..end]
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// `text` as an XML attribute value between double quotes.
+fn attribute(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('"', "&quot;")
+}
+
+/// mosfet `At.next_after` computes occurrences with stdlib `zoneinfo`; the
+/// data model has no time zone database, so `next_after` reads the zone's
+/// POSIX TZ rule. On `tests/fixtures/phase5/at_cases.json` (zoneinfo's
+/// answers, from Python 3, for a spring-forward gap, a fall-back overlap,
+/// the 1 s firing tolerance, southern and negative-DST zones, and random
+/// zones, times and weekdays) it finds the same instant and wall time.
+#[test]
+fn next_after_finds_the_occurrences_zoneinfo_finds() {
+    let helper = next_after();
+    assert!(
+        !helper.contains(['<', '&', '"', '\'']),
+        "a routine carries it in an attribute as given: {helper}"
+    );
+    let cases = std::fs::read_to_string(workspace().join("tests/fixtures/phase5/at_cases.json"))
+        .expect("the cases are readable");
+    let document = format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="checking">
+  <datamodel>
+    <data id="next_after" expr="{helper}"/>
+    <data id="cases" expr="{cases}"/>
+  </datamodel>
+  <state id="checking">
+    <onentry>
+      <log label="cases" expr="cases.length"/>
+      <log label="mismatches" expr="JSON.stringify(cases.filter(c =&gt; JSON.stringify(next_after(c, c.now)) !== JSON.stringify({{ms: c.ms, iso: c.iso}})).map(c =&gt; [c.tz, next_after(c, c.now), c.iso]))"/>
+    </onentry>
+    <transition target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>"#,
+        cases = attribute(cases.trim())
+    );
+    let finished = support::run_document("next_after.scx", &document, &[], &[], WAIT);
+    assert!(support::finished(&finished.records), "{}", finished.stderr);
+    assert_eq!(texts(&finished, "cases"), strings(&["50"]));
+    assert_eq!(texts(&finished, "mismatches"), strings(&["[]"]));
+}
+
+/// A routine on an `at` schedule (mosfet `hsm.at`), written as the
+/// persistent routine contract says: its data model computes the next
+/// weekday 08:00 in America/New_York with `next_after` and ticks there with
+/// `scheduled_at` that occurrence. A routine whose tick selects nothing has
+/// its send refused by the tick's schema (mosfet's runtime fails that
+/// tick), so nothing reaches the runner's parent.
+#[test]
+fn an_at_routine_ticks_at_its_occurrence_and_an_empty_tick_is_refused() {
+    let dir = unique_scratch("routines-at");
+    support::copy_ability("routines_runner", &dir.join("abilities"));
+    let at = format!(
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="MorningBriefing" initial="waiting">
+  <datamodel>
+    <data id="at" expr="({{time: '08:00', days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], tz: 'America/New_York', rule: 'EST5EDT,M3.2.0,M11.1.0'}})"/>
+    <data id="next_after" expr="{helper}"/>
+    <data id="due" expr="null"/>
+  </datamodel>
+  <state id="waiting">
+    <onentry>
+      <assign location="due" expr="next_after(at, Date.now())"/>
+      <send id="briefing-at" event="briefing.at" delayexpr="(due.ms - Date.now()) + 'ms'"/>
+    </onentry>
+    <onexit><cancel sendid="briefing-at"/></onexit>
+    <transition event="briefing.at" target="waiting">
+      <send event="bot.behavior.tick" target="#_parent">
+        <content expr="({{name: 'MorningBriefing', trigger: 'at', scheduled_at: due.iso, fired_at: new Date().toISOString(), output: [{{event: 'bot.speaking.say', data: {{text: 'Good morning.'}}}}]}})"/>
+      </send>
+    </transition>
+  </state>
+</scxml>"##,
+        helper = next_after()
+    );
+    let silent = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="Silent" initial="waiting">
+  <state id="waiting">
+    <onentry><send event="silent.every" delay="500ms"/></onentry>
+    <transition event="silent.every">
+      <send event="bot.behavior.tick" target="#_parent">
+        <content expr="({name: 'Silent', trigger: 'every', scheduled_at: new Date().toISOString(), fired_at: new Date().toISOString(), output: []})"/>
+      </send>
+    </transition>
+    <transition event="error.execution">
+      <log label="silent.refused" expr="_event.name"/>
+    </transition>
+  </state>
+</scxml>"##;
+    let routines = serde_json::json!([
+        {"name": "Silent", "source": silent},
+        {"name": "MorningBriefing", "source": at},
+    ]);
+    let harness = format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="live">
+  <datamodel>
+    <data id="ticks" expr="[]"/>
+  </datamodel>
+  <state id="live">
+    <invoke id="runner" type="scxml" src="routines_runner/routines_runner.scx">
+      <param name="routines" expr="{routines}"/>
+    </invoke>
+    <transition event="bot.behavior.tick" cond="ticks.length &lt; 2">
+      <assign location="ticks" expr="ticks.concat([_event.data])"/>
+    </transition>
+    <transition event="bot.behavior.tick" target="done">
+      <log label="harness.ticks" expr="JSON.stringify(ticks.concat([_event.data]))"/>
+    </transition>
+  </state>
+  <final id="done"/>
+</scxml>"#,
+        routines = attribute(&routines.to_string())
+    );
+    let path = dir.join("abilities/harness.scx");
+    std::fs::write(&path, harness).expect("the harness is writable");
+    let finished = run(&path);
+    assert!(support::finished(&finished.records), "{}", finished.stderr);
+    assert_eq!(
+        texts(&finished, "silent.refused"),
+        strings(&["error.execution"])
+    );
+    let ticks: serde_json::Value = serde_json::from_str(
+        texts(&finished, "harness.ticks")
+            .first()
+            .expect("the harness logs the ticks"),
+    )
+    .expect("the ticks are JSON");
+    let ticks = ticks.as_array().expect("a list of ticks");
+    assert_eq!(ticks.len(), 3);
+    // On the logical clock the data model's Date follows the session's
+    // clock, so each tick fires exactly at its occurrence: 08:00 in New
+    // York (EDT on the logical clock's dates) is 12:00 UTC, on
+    // successive days.
+    let mut previous = String::new();
+    for tick in ticks {
+        assert_eq!(tick["name"], "MorningBriefing", "{tick}");
+        assert_eq!(tick["trigger"], "at", "{tick}");
+        let scheduled = tick["scheduled_at"].as_str().expect("scheduled_at");
+        let fired = tick["fired_at"].as_str().expect("fired_at");
+        assert_eq!(scheduled.get(10..), Some("T08:00:00-04:00"), "{tick}");
+        assert_eq!(fired.get(10..), Some("T12:00:00.000Z"), "{tick}");
+        assert_eq!(scheduled.get(..10), fired.get(..10), "{tick}");
+        assert!(scheduled > previous.as_str(), "{tick}");
+        scheduled.clone_into(&mut previous);
+    }
+}

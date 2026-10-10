@@ -212,21 +212,97 @@ function changeWriteInputWithIntent() {
   return Object.assign(write, {intent: intent, existing_behavior: existing_behavior});
 }
 
-// mosfet CHANGE_INSTRUCTIONS with the ChangeWriteInput, for the builder.
+// mosfet CHANGE_INSTRUCTIONS with the ChangeWriteInput, for the builder,
+// which checks the document it builds against mosfet check()'s lifetime
+// bounds (min_every, turn_after_bound).
 function builderRequest() {
-  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), model: model});
+  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms});
 }
 
 function builderConstraints() {
-  return [turn_contract, routine_contract, no_schema_files];
+  return [turn_contract, routineContract(), no_schema_files];
 }
 
-function hasWrittenScxml(_event) {
-  return typeof _event.data.scxml === 'string' && _event.data.scxml.length > 0;
+// mosfet schedule.At.next_after for an at schedule {time: 'HH:MM', days,
+// tz, rule}: the first occurrence later than now (ms since the epoch) by
+// more than OCCURRENCE_TOLERANCE (1 s) within 8 days, as {ms, iso} (iso
+// the wall time with its offset), or null when days name no weekday. The
+// data model has no time zone database (no Intl), so the zone is its
+// POSIX TZ rule, the rule its zoneinfo file ends with; a wall time in a
+// spring-forward gap resolves past the gap and one in a fall-back overlap
+// is the first of its two instants (zoneinfo fold=0). A routine carries it
+// as data (routineContract), so its text has no <, &, or quotes.
+var next_after = (at, now) => {
+  const hms = s => {
+    const m = /^([+-]?)(\d+)(?::(\d+))?(?::(\d+))?$/.exec(s);
+    return (m[1] == `-` ? -1 : 1) * (m[2] * 3600 + (m[3] || 0) * 60 + (m[4] || 0) * 1) * 1000;
+  };
+  const r = /^(\x3c[^\x3e]+\x3e|[A-Za-z]+)([+-]?[\d:]+)(?:(\x3c[^\x3e]+\x3e|[A-Za-z]+)([+-]?[\d:]+)?,M(\d+)\.(\d)\.(\d)(?:\/([+-]?[\d:]+))?,M(\d+)\.(\d)\.(\d)(?:\/([+-]?[\d:]+))?)?$/.exec(at.rule);
+  const std = -hms(r[2]);
+  const dst = r[3] ? (r[4] ? -hms(r[4]) : std + 3600000) : std;
+  const change = (y, m, w, d, t, o) => {
+    let day = 1 + (d - new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 7) % 7 + (w - 1) * 7;
+    while (day > new Date(Date.UTC(y, m, 0)).getUTCDate()) {
+      day -= 7;
+    }
+    return Date.UTC(y, m - 1, day) + (t ? hms(t) : 7200000) - o;
+  };
+  const offset = u => {
+    if (!r[3]) {
+      return std;
+    }
+    const y = new Date(u).getUTCFullYear();
+    const s = change(y, +r[5], +r[6], +r[7], r[8], std);
+    const e = change(y, +r[9], +r[10], +r[11], r[12], dst);
+    return (s > e ? (u >= s || e > u) : !(s > u || u >= e)) ? dst : std;
+  };
+  const hi = Math.max(std, dst);
+  const lo = Math.min(std, dst);
+  const hm = at.time.split(`:`);
+  const today = new Date(now + offset(now));
+  for (let k = 0; 8 > k; k += 1) {
+    const local = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + k, +hm[0], +hm[1]);
+    const u = offset(local - hi) == hi ? local - hi : local - lo;
+    const day = [`sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat`][new Date(local).getUTCDay()];
+    if (at.days.indexOf(day) >= 0 ? u > now + 1000 : false) {
+      const o = (local - u) / 60000;
+      const a = Math.abs(o);
+      return {ms: u, iso: new Date(local).toISOString().slice(0, 19) + (o >= 0 ? `+` : `-`) + String(Math.floor(a / 60)).padStart(2, `0`) + `:` + String(a % 60).padStart(2, `0`)};
+    }
+  }
+  return null;
+};
+
+// The persistent routine contract with next_after's text on one line.
+function routineContract() {
+  return routine_contract.replace('NEXT_AFTER', function () { return String(next_after).replace(/\s+/g, ' '); });
 }
 
+// The builder's done: a document that validated and passed its simulation.
+function isBuilt(_event) {
+  return typeof Object(_event.data).reason !== 'string' && typeof Object(_event.data).scxml === 'string' && _event.data.scxml.length > 0;
+}
+
+// The builder's failed with the last draft it rejected (mosfet: a failed
+// check, which drafts the rejected source).
+function hasRejectedDraft(_event) {
+  return typeof Object(_event.data).reason === 'string' && typeof _event.data.scxml === 'string' && _event.data.scxml.length > 0;
+}
+
+// mosfet diagnostic.Report.render of the builder's diagnostics.
+function renderedReport(diagnostics) {
+  return 'behavior validation failed:' + (Array.isArray(diagnostics) ? diagnostics : []).map(function (d) { return '\n  error[' + d.code + '] ' + d.kind + ': ' + d.message; }).join('');
+}
+
+// mosfet Revision._abandon: the same diagnostics after a fix.
 function abandonedMessage(_event) {
-  return 'Reflection change abandoned: ' + _event.data.reason + '.';
+  return _event.data.reason === 'no-progress' ? 'Reflection change abandoned: same diagnostic message after fix:\n' + renderedReport(_event.data.diagnostics) : 'Reflection change abandoned: ' + _event.data.reason + '.';
+}
+
+// mosfet _fail_child: the change call failed, with no draft.
+function builderFailedMessage(_event) {
+  var d = Array.isArray(Object(_event.data).diagnostics) ? _event.data.diagnostics[0] : undefined;
+  return revisionFailedMessage(String(Object(_event.data).reason) + (d === undefined ? '' : ': ' + d.message));
 }
 
 // accepting
@@ -301,9 +377,9 @@ function acceptedLog() {
 
 // abandoning
 
-// mosfet storage.mark_draft(reason=validation).
+// mosfet Revision._persist_draft: the rejected source, DRAFT validation.
 function draftBehaviorStatements() {
-  return [{sql: draft_behavior, parameters: [intent.name]}];
+  return [{sql: draft_behavior, parameters: [written, intent.name]}];
 }
 
 function draftLog() {

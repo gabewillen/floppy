@@ -113,7 +113,7 @@ fn break_selection(name: &str) -> Json {
 fn selection(route: &str) -> Option<Json> {
     match route {
         "none" => Some(json!([])),
-        "create" | "buildfail" => Some(create_selection()),
+        "create" | "buildfail" | "genfail" => Some(create_selection()),
         "break" => Some(break_selection("GreetOnKnock")),
         "breakunknown" => Some(break_selection("Nobody")),
         "two" => Some(json!([
@@ -138,12 +138,17 @@ fn answer(target: &str, body: &Json) -> Option<String> {
             &json!({"events": selection(route)?}).to_string(),
         )),
         "topology_plan" => Some(completion(PLAN)),
-        "scxml_draft" if route == "buildfail" => Some(completion(&draft(
-            &BEHAVIOR.replace("target=\"answered\"", "target=\"nowhere\""),
-        ))),
+        "scxml_draft" if route == "buildfail" => Some(completion(&draft(&rejected_behavior()))),
+        "scxml_draft" if route == "genfail" => None,
         "scxml_draft" => Some(completion(&draft(BEHAVIOR))),
         _ => None,
     }
+}
+
+/// The draft the `buildfail` route answers: its transition targets a state
+/// that does not exist, so it never validates.
+fn rejected_behavior() -> String {
+    BEHAVIOR.replace("target=\"answered\"", "target=\"nowhere\"")
 }
 
 #[derive(Clone, Debug)]
@@ -581,10 +586,22 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     );
     assert!(spec.contains(r#""status":"DRAFT""#), "{spec}");
     assert!(spec.contains(r#""name":"GreetOnKnock""#), "{spec}");
+    // The persistent routine contract carries the at schedule's
+    // next_after (mosfet hsm.at) for the routine's data model.
+    let prompt: Json =
+        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
+    assert!(
+        prompt["constraints"][1]
+            .as_str()
+            .is_some_and(|routine| routine
+                .contains(r#"<data id="next_after" expr="(at, now) => { const hms"#)),
+        "{prompt}"
+    );
 }
 
-/// A build that fails keeps the create's stub as DRAFT with
-/// `status_reason` validation, and the turn fails (mosfet `_abandon`).
+/// A build that fails its checks drafts the rejected source as DRAFT with
+/// `status_reason` validation, and the turn fails with mosfet's abandon
+/// message and rendered report (mosfet `_abandon`, `_persist_draft`).
 #[test]
 fn a_failed_build_leaves_a_validation_draft() {
     a_failed_build_leaves_a_validation_draft_on(SQLITE);
@@ -603,9 +620,57 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
     let mut run = start(&harness, &env);
     let records = reflect(&mut run, 1);
     drop(run.close(WAIT));
+    let failed = texts(&records, "harness.failed");
+    assert_eq!(failed.len(), 1, "{records:?}");
+    assert!(
+        failed[0].starts_with(
+            "Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[SCXML005] validate: "
+        ),
+        "{failed:?}"
+    );
     assert_eq!(
-        texts(&records, "harness.failed"),
-        ["Reflection change abandoned: no-progress."],
+        json_log(&records, "inventory"),
+        json!([{
+            "name": "GreetOnKnock", "source": rejected_behavior(),
+            "description": "Say hello when a knock sound arrives.",
+            "lifetime": "turn", "status": "DRAFT", "status_reason": "validation",
+            "used_count": "0", "failed_count": "0",
+            "triggers": ["environment.sound", "phone.incoming_call"],
+        }])
+    );
+    assert_eq!(json_log(&records, "episodes"), json!([]));
+}
+
+/// A change call that fails without a draft to check (every generation
+/// fails) fails the turn and drafts nothing: the create's stub stays as
+/// mosfet's `_prepare` stored it (mosfet `_fail_child`).
+#[test]
+fn a_failed_change_call_drafts_nothing() {
+    a_failed_change_call_drafts_nothing_on(SQLITE);
+}
+
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_a_failed_change_call_drafts_nothing() {
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    a_failed_change_call_drafts_nothing_on(&server.database());
+}
+
+fn a_failed_change_call_drafts_nothing_on(database: &str) {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "genfail", "[]", database);
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    let failed = texts(&records, "harness.failed");
+    assert_eq!(failed.len(), 1, "{records:?}");
+    assert!(
+        failed[0]
+            .starts_with("Reflection revision failed: no-progress: the author generation failed"),
+        "{failed:?}"
+    );
+    assert!(
+        texts(&records, "reflection.inventory").is_empty(),
         "{records:?}"
     );
     assert_eq!(
@@ -613,7 +678,7 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
         json!([{
             "name": "GreetOnKnock", "source": "",
             "description": "Say hello when a knock sound arrives.",
-            "lifetime": "turn", "status": "DRAFT", "status_reason": "validation",
+            "lifetime": "turn", "status": "DRAFT", "status_reason": "",
             "used_count": "0", "failed_count": "0",
             "triggers": ["environment.sound", "phone.incoming_call"],
         }])

@@ -340,6 +340,39 @@ fn two_ping_draft() -> String {
     .to_string()
 }
 
+/// A persistent routine (it sends `bot.behavior.tick`) whose schedule is
+/// `hourly.every`, armed with `delay` on entry of `waiting` and taken back
+/// into it with a tick whose output is `output`, and one test that drives
+/// nothing and expects no output (the builder forces the first tick).
+fn routine_draft(delay: &str, output: &str) -> String {
+    json!({
+        "scxml": format!(
+            r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="Hourly" initial="waiting">
+  <state id="waiting">
+    <onentry><send id="every" event="hourly.every" delay="{delay}"/></onentry>
+    <onexit><cancel sendid="every"/></onexit>
+    <transition event="hourly.every" target="waiting">
+      <send event="bot.behavior.tick" target="#_parent">
+        <content expr="({{name: 'Hourly', trigger: 'every', scheduled_at: new Date().toISOString(), fired_at: new Date().toISOString(), output: {output}}})"/>
+      </send>
+    </transition>
+  </state>
+</scxml>"##
+        ),
+        "schemas": [],
+        "tests": [{"name": "waits", "events": [], "settle_ms": 1000, "expect_events": [], "expect_done": false}],
+    })
+    .to_string()
+}
+
+const CHIME: &str = "[{event: 'bot.speaking.say', data: {text: 'Hourly chime.'}}]";
+
+/// The request with mosfet check()'s lifetime bounds (`ROUTINE_MIN_EVERY`,
+/// `TURN_SILENCE_BOUND`), as reflection sends it.
+fn lifetime_request() -> Json {
+    json!({"spec": "chime every hour", "min_every_ms": 60000, "turn_after_bound_ms": 1000})
+}
+
 /// A non-streamed Chat Completions answer carrying `content`, as the
 /// generate service asks for one by default.
 fn completion(content: &str) -> String {
@@ -407,7 +440,10 @@ fn mock_reply(
             | "/impostor/v1/chat/completions"
             | "/stale/v1/chat/completions"
             | "/pings/v1/chat/completions"
-            | "/progress/v1/chat/completions",
+            | "/progress/v1/chat/completions"
+            | "/lifetime/v1/chat/completions"
+            | "/emptytick/v1/chat/completions"
+            | "/afterbound/v1/chat/completions",
             Some("topology_plan"),
         ) => Some(completion(PLAN)),
         ("/flaky/v1/chat/completions", Some("topology_plan")) => {
@@ -434,6 +470,18 @@ fn mock_reply(
             _ => draft(&traffic_light(&green_separate(), "red")),
         })),
         ("/pings/v1/chat/completions", Some("scxml_draft")) => Some(completion(&two_ping_draft())),
+        ("/lifetime/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&match authors {
+                1 => routine_draft("30s", CHIME),
+                _ => routine_draft("3600s", CHIME),
+            }))
+        }
+        ("/emptytick/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&routine_draft("3600s", "[]")))
+        }
+        ("/afterbound/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&draft(&traffic_light(&green_separate(), "red"))))
+        }
         ("/repair/v1/chat/completions", Some("scxml_draft")) => Some(completion(&match authors {
             1 => invalid_draft(),
             2 => fixable_draft(),
@@ -1006,6 +1054,13 @@ fn the_same_diagnostic_twice_ends_the_build_with_no_progress() {
     assert_eq!(failed["reason"], "no-progress");
     assert_eq!(failed["diagnostics"][0]["kind"], "validate");
     assert_eq!(failed["diagnostics"][0]["code"], "SCXML005");
+    // The last draft the validator rejected (mosfet drafts the rejected
+    // source).
+    assert_eq!(
+        failed["scxml"].as_str(),
+        Some(traffic_light(&green_separate(), "amber").as_str()),
+        "{failed}"
+    );
     let received = mock.received();
     assert_eq!(chat_requests(&received, "topology_plan").len(), 1);
     assert_eq!(chat_requests(&received, "scxml_draft").len(), 2);
@@ -1042,6 +1097,10 @@ fn without_a_model_base_url_the_build_fails_fast_unconfigured() {
         "{failed}"
     );
     assert_eq!(failed["history"], json!([]), "no retry: {failed}");
+    assert!(
+        failed.get("scxml").is_none(),
+        "no draft was rejected: {failed}"
+    );
     let logs: Vec<String> = records
         .iter()
         .filter(|record| record.get("parent").is_none() && record["type"] == "log")
@@ -1058,6 +1117,110 @@ fn without_a_model_base_url_the_build_fails_fast_unconfigured() {
         "nothing is sent: {:?}",
         mock.received().len()
     );
+}
+
+/// mosfet check() (E0009): with the request's lifetime bounds, a routine
+/// whose schedule is shorter than the minimum interval is rejected and
+/// repaired; the repaired routine is verified by one forced tick (mosfet
+/// verify_apply), its schedule's event delivered at once, whose output
+/// selects an event.
+#[test]
+fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced() {
+    let mock = Mock::start();
+    let records = run(&mock, "lifetime", "lifetime", &ALL, &lifetime_request());
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let report = &done["report"];
+    let rejected = &report["history"][0]["diagnostics"][0];
+    assert_eq!(rejected["kind"], "lifetime", "{report}");
+    assert_eq!(rejected["code"], "E0009", "{report}");
+    assert!(
+        rejected["message"]
+            .as_str()
+            .is_some_and(|message| message.starts_with(
+                "every (the hourly.every delay of 30s) is shorter than the 60-second minimum routine interval."
+            )),
+        "{report}"
+    );
+    let simulation = report["simulation"].as_array().expect("simulation results");
+    assert_eq!(
+        simulation.len(),
+        2,
+        "the draft's test and the forced tick: {report}"
+    );
+    assert_eq!(simulation[1]["name"], "first tick", "{report}");
+    assert_eq!(
+        simulation[1]["observed"],
+        json!(["bot.behavior.tick"]),
+        "{report}"
+    );
+    assert_eq!(simulation[1]["apply"], json!([]), "{report}");
+    assert!(
+        simulation.iter().all(|result| result["passed"] == true),
+        "{report}"
+    );
+    // The draft's own tests are what it carried.
+    assert_eq!(done["tests"].as_array().map(Vec::len), Some(1), "{done}");
+}
+
+/// mosfet runtime and verify: a routine tick that selects nothing fails
+/// (E0008), and the build ends with that draft in its failed data.
+#[test]
+fn a_routine_tick_with_no_selection_is_rejected_with_its_draft() {
+    let mock = Mock::start();
+    let records = run(&mock, "emptytick", "emptytick", &ALL, &lifetime_request());
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "failed", "{failed}");
+    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    assert_eq!(
+        failed["diagnostics"],
+        json!([{"kind": "apply", "code": "E0008", "message": "behavior output must select at least one event for the observed pattern."}]),
+        "{failed}"
+    );
+    assert!(
+        failed["scxml"]
+            .as_str()
+            .is_some_and(|scxml| scxml.contains("output: []")),
+        "{failed}"
+    );
+}
+
+/// mosfet check() (E0009): with the request's lifetime bounds, a turn
+/// behavior's delayed send longer than the silence bound never fires, so
+/// the traffic light (a turn machine with 30 s, 3 s and 20 s timers) is
+/// rejected each time; without the bounds the same draft is built (the
+/// repair test).
+#[test]
+fn a_turn_behaviors_delayed_send_beyond_the_silence_bound_is_rejected() {
+    let mock = Mock::start();
+    let records = run(&mock, "afterbound", "afterbound", &ALL, &lifetime_request());
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "failed", "{failed}");
+    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    let diagnostics = failed["diagnostics"].as_array().expect("diagnostics");
+    assert_eq!(diagnostics.len(), 3, "{failed}");
+    assert!(
+        diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic["kind"] == "lifetime"
+                && diagnostic["code"] == "E0009"
+                && diagnostic["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains(
+                        "never fires in a turn behavior, which is silenced 1s after it starts"
+                    ))),
+        "{failed}"
+    );
+    assert!(
+        diagnostics[0]["message"]
+            .as_str()
+            .is_some_and(|message| message.starts_with("after (the light.timer delay of 30s)")),
+        "{failed}"
+    );
+    assert!(failed["scxml"].is_string(), "{failed}");
 }
 
 /// A failure that differs from the one before it is progress: the builder
