@@ -142,13 +142,13 @@
             <cancel sendidexpr="stage_timer"/>
           </onexit>
           <transition event="bot.ability.vision.classification.output"
-                      event:schema="schemas/bot.ability.vision.classification.output.json" cond="isVision(_event)">
+                      event:schema="schemas/bot.ability.vision.classification.output.json">
             <send event="bot.ability.reading.classification.completed" target="#_internal">
               <param name="input" expr="input"/>
               <param name="classification" expr="_event.data"/>
             </send>
           </transition>
-          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isVision(_event)">
+          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
             <send event="bot.ability.reading.stage.failed" target="#_internal">
               <param name="stage" expr="'classification'"/>
               <param name="message" expr="_event.data.message"/>

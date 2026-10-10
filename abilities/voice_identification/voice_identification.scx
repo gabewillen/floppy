@@ -78,8 +78,7 @@
         <param name="end_seconds" expr="end_seconds"/>
         <param name="output" expr="output"/>
       </invoke>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                  cond="isFromClipper(_event)" target="applied">
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
         <assign location="result" expr="clipFailedResult(_event)"/>
       </transition>
       <transition event="done.invoke.clipper" cond="isClippedSegment(_event)" target="applying">
@@ -98,14 +97,22 @@
         <param name="segments" expr="segments"/>
       </invoke>
       <transition event="bot.ability.hearing.voice.identification.output"
-                  cond="isIdentifierOutput(_event)" target="applied">
+                  cond="hasEmbeddings(_event)" target="applied">
         <assign location="result" expr="identifiedResult(_event)"/>
-      </transition>
-      <transition event="*" cond="isOtherIdentifierEvent(_event)" target="applied">
-        <assign location="result" expr="mismatchedResult()"/>
       </transition>
       <transition event="done.invoke.identifier" target="applied">
         <assign location="result" expr="unidentifiedResult()"/>
+      </transition>
+      <!-- Failures here, as in identifying, before the catch-all below. -->
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
+        <assign location="result" expr="failedResult(_event)"/>
+      </transition>
+      <transition event="error.*" target="applied">
+        <assign location="result" expr="errorResult(_event)"/>
+      </transition>
+      <!-- Anything else the identifier sends. -->
+      <transition event="*" target="applied">
+        <assign location="result" expr="mismatchedResult()"/>
       </transition>
     </state>
   </state>

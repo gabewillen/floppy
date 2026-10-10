@@ -259,12 +259,10 @@
             <param name="database" expr="database"/>
             <param name="statements" expr="memoryRecallStatements()"/>
           </invoke>
-          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                      cond="isFromRecall(_event)" target="turn_exchange">
+          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="turn_exchange">
             <assign location="recalled" expr="recalledCount(_event)"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                      cond="isFromRecall(_event)" target="waiting">
+          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
               <param name="message" expr="memoryFailedMessage(_event)"/>
@@ -290,8 +288,7 @@
             <onexit>
               <cancel sendidexpr="timer"/>
             </onexit>
-            <transition event="bot.ability.turn_detector.ready" event:schema="schemas/bot.ability.turn_detector.ready.json"
-                        cond="isFromTurnDetector(_event)" target="exchange">
+            <transition event="bot.ability.turn_detector.ready" event:schema="schemas/bot.ability.turn_detector.ready.json" target="exchange">
               <if cond="isNewParticipant()">
                 <assign location="added" expr="addedWithSource()"/>
                 <assign location="relationships" expr="relationshipsWithParticipant()"/>
@@ -333,8 +330,7 @@
           </state>
           <!-- Every source has its turn: on to memory. -->
           <transition cond="hasAllTurns()" target="remembering_from"/>
-          <transition event="bot.ability.turn_detector.failed" event:schema="schemas/bot.ability.turn_detector.failed.json"
-                      cond="isFromTurnDetector(_event)" target="waiting">
+          <transition event="bot.ability.turn_detector.failed" event:schema="schemas/bot.ability.turn_detector.failed.json" target="waiting">
             <assign location="relationships" expr="relationshipsWithoutSource()"/>
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'turn_detector'"/>
@@ -365,12 +361,10 @@
             <param name="database" expr="database"/>
             <param name="statements" expr="memoryInsertStatements()"/>
           </invoke>
-          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                      cond="isFromRemember(_event)" target="committing">
+          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="committing">
             <log label="conversation.memories" expr="memoriesLog(_event)"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                      cond="isFromRemember(_event)" target="waiting">
+          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="waiting">
             <assign location="relationships" expr="relationshipsWithoutAdded()"/>
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>

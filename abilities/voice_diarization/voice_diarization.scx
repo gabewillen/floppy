@@ -59,21 +59,21 @@
       <param name="output" expr="output"/>
     </invoke>
     <transition event="bot.ability.hearing.voice.diarization.output"
-                cond="isDiarizerOutput(_event)" target="applied">
+                cond="hasSegments(_event)" target="applied">
       <assign location="result" expr="diarizedResult(_event)"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                cond="isFromDiarizer(_event)" target="applied">
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
       <assign location="result" expr="failedResult(_event)"/>
     </transition>
-    <transition event="*" cond="isOtherDiarizerEvent(_event)" target="applied">
-      <assign location="result" expr="mismatchedResult()"/>
-    </transition>
-    <transition event="done.invoke" cond="isFromDiarizer(_event)" target="applied">
+    <transition event="done.invoke.diarizer" target="applied">
       <assign location="result" expr="undiarizedResult()"/>
     </transition>
     <transition event="error.*" target="applied">
       <assign location="result" expr="errorResult(_event)"/>
+    </transition>
+    <!-- Anything else the diarizer sends (the transitions above come first). -->
+    <transition event="*" target="applied">
+      <assign location="result" expr="mismatchedResult()"/>
     </transition>
   </state>
 

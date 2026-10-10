@@ -25,18 +25,15 @@ function unnormalizedResult() {
 
 // applying
 
-function isDetectorOutput(_event) {
-  return _event.invokeid === 'detector' && Array.isArray(Object(_event.data).segments);
+// A detection output with its segments (D41: the service's events are
+// unchecked).
+function hasSegments(_event) {
+  return Array.isArray(Object(_event.data).segments);
 }
 
 // The normalized sound and mosfet's ApplyData.
 function detectedResult(_event) {
   return ({sound: sound, voice_detection: {segments: _event.data.segments}});
-}
-
-// Anything else the detector sends but its done event and bot.ability.failed.
-function isOtherDetectorEvent(_event) {
-  return _event.invokeid === 'detector' && _event.name.indexOf('done.') !== 0 && _event.name !== 'bot.ability.failed';
 }
 
 function mismatchedResult() {

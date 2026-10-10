@@ -21,13 +21,9 @@ function decisionState() {
   return ({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates});
 }
 
-// An event from the decision service invoked for this turn.
-function isDecisionEvent(_event) {
-  return decision_id !== null && _event.invokeid === decision_id;
-}
-
-function isDecisionAbstain(_event) {
-  return isDecisionEvent(_event) && ['no-candidates', 'declined', 'below-threshold'].indexOf(Object(_event.data).reason) >= 0;
+// An abstain with one of its reasons (the service's events are unchecked).
+function isAbstainReason(_event) {
+  return ['no-candidates', 'declined', 'below-threshold'].indexOf(Object(_event.data).reason) >= 0;
 }
 
 // mosfet's low_confidence: a below-threshold abstain with its probability.
@@ -59,18 +55,8 @@ function decisionFailedResult() {
   return ({handled: false, failed: true, reason: 'the decision failed (' + failed_code + ')', turn: turn, tuner: tuner});
 }
 
-// The event the decision service chose: any of its events but done.*.
-function isChosenEvent(_event) {
-  return isDecisionEvent(_event) && _event.name.indexOf('done.') !== 0;
-}
-
 function chosenLog(_event) {
   return 'turn ' + turn + ': ' + _event.name;
-}
-
-// mosfet's deliberate handoff event: the turn goes on to reasoning.
-function isDeliberativeInput(_event) {
-  return _event.name === 'bot.ability.reasoning.input';
 }
 
 function deliberativeInputResult() {
@@ -80,10 +66,6 @@ function deliberativeInputResult() {
 // The turn's one selection {event, data} (mosfet's escalation reason none).
 function selectionResult(_event) {
   return ({handled: true, selected: [{event: _event.name, data: Object(_event.data)}], reason: 'none', turn: turn, tuner: tuner});
-}
-
-function isDecisionTimeout(_event) {
-  return _event.sendid === decision_timer;
 }
 
 function timedOutResult() {

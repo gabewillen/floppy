@@ -128,21 +128,18 @@
       <param name="voice" expr="voice"/>
       <param name="media_type" expr="media_type"/>
     </invoke>
-    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json"
-                cond="isFromVocal(_event)">
+    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json">
       <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal">
         <param name="text" expr="text"/>
       </send>
     </transition>
-    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="schemas/bot.ability.vocal.speech.encoding.output.json"
-                cond="isFromVocal(_event)" target="playing">
+    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="schemas/bot.ability.vocal.speech.encoding.output.json" target="playing">
       <assign location="encoded" expr="encodedSpeech(_event)"/>
       <assign location="encoded.sample_rate_hz" expr="encodedSampleRate()"/>
       <assign location="encoded.channels" expr="encodedChannels()"/>
       <assign location="encoded.media_type" expr="encodedMediaType()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                cond="isFromVocal(_event)" target="idle">
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="idle">
       <assign location="message" expr="_event.data.message"/>
       <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="message"/>
@@ -155,7 +152,7 @@
         <param name="message" expr="_event.data.message"/>
       </send>
     </transition>
-    <transition event="error.* done.invoke" cond="isFromVocalOrStart(_event)" target="idle">
+    <transition event="error.* done.invoke.vocal" target="idle">
       <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="encodingRunFailure(_event)"/>
       </send>

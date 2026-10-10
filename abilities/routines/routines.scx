@@ -76,8 +76,7 @@
             <param name="database" expr="database"/>
             <param name="statements" expr="routinesSelectStatements()"/>
           </invoke>
-          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                      cond="isFromInvoke(_event, 'recall')">
+          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json">
             <assign location="desired" expr="routinesFromMemoryOutput(_event)"/>
           </transition>
           <transition event="done.invoke.recall" target="running">
@@ -85,8 +84,7 @@
             <assign location="routines" expr="desired"/>
             <raise event="bot.ability.routines.reconciled"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                      cond="isFromInvoke(_event, 'recall')" target="running">
+          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="running">
             <log label="bot.ability.routines.reconcile.failed" expr="reconcileFailedLog(_event.data.message)"/>
           </transition>
           <transition event="error.*" target="running">
@@ -125,17 +123,16 @@
           <param name="routines" expr="routines"/>
         </invoke>
         <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
-                    cond="isFromInvoke(_event, 'runner') &amp;&amp; In('reconciling')">
+                    cond="In('reconciling')">
           <assign location="ticks" expr="ticks.concat([_event.data])"/>
           <log label="routines.deferred" expr="_event.data.name"/>
         </transition>
-        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
-                    cond="isFromInvoke(_event, 'runner')">
+        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json">
           <send event="bot.behavior.tick" target="#_parent">
             <content expr="_event.data"/>
           </send>
         </transition>
-        <transition event="error.*" cond="isFromInvoke(_event, 'runner')" target="chain_off">
+        <transition event="error.*" cond="isRunnerError(_event)" target="chain_off">
           <log label="routines.failed" expr="_event.name"/>
         </transition>
       </state>

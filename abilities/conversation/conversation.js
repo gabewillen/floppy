@@ -303,10 +303,6 @@ function isTimer(_event) {
   return _event.sendid === timer;
 }
 
-function isFromTurnDetector(_event) {
-  return _event.invokeid === 'turn_detector';
-}
-
 function timedOutMessage(what) {
   return what + ' timed out after ' + turn_timeout_ms / 1000 + ' seconds.';
 }
@@ -351,7 +347,7 @@ function turnEnd() {
 // The detector's completed turn for the source in hand.
 function isExchangedTurn(_event) {
   var turn = _event.data;
-  return isFromTurnDetector(_event) && turn.turn_ref === turnRef() && turn.conversation_ref === relationshipRef() && turn.participant_ref === trackRef(turnSource()) && JSON.stringify(turn.source_participant_ref) === JSON.stringify(turnSource());
+  return turn.turn_ref === turnRef() && turn.conversation_ref === relationshipRef() && turn.participant_ref === trackRef(turnSource()) && JSON.stringify(turn.source_participant_ref) === JSON.stringify(turnSource());
 }
 
 function turnsWith(_event) {
@@ -376,10 +372,6 @@ function memoryTimeoutDelay() {
 // conversation_memory_recall_input), kept under its context_ref.
 function memoryRecallStatements() {
   return [{sql: memory_select, parameters: ['conversation_memory', relationship().context_ref]}];
-}
-
-function isFromRecall(_event) {
-  return _event.invokeid === 'recall';
 }
 
 function recalledCount(_event) {
@@ -421,7 +413,7 @@ function memoryContent(value) {
 // Python's json.dumps(text) (ensure_ascii): every character outside
 // printable ASCII escaped.
 function asciiJson(text) {
-  return JSON.stringify(text).replace(/[\u007f-￿]/g, function (character) {
+  return JSON.stringify(text).replace(/[\u007f-\uffff]/g, function (character) {
     return '\\u' + ('000' + character.charCodeAt(0).toString(16)).slice(-4);
   });
 }
@@ -439,10 +431,6 @@ function pythonJson(value) {
     return pythonFloat(value);
   }
   return JSON.stringify(value);
-}
-
-function isFromRemember(_event) {
-  return _event.invokeid === 'remember';
 }
 
 function memoriesLog(_event) {
