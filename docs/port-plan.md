@@ -265,7 +265,8 @@ D33 to D43.
 | `hearing` SpeechDecoding, SoundClassification, VoiceDetection, VoiceDiarization, VoiceIdentification | `abilities/speech_decoding/`, `sound_classification/`, `voice_detection/`, `voice_diarization/`, `voice_identification/` (the interpretation's children; all but sound classification invoke `services/speech`) | stage `.scx` child and service |
 | `communication/behaviors.py` SpeechHeard seed | `abilities/behaviors/speech_heard/speech_heard.scx`, which autonomy runs before the learned behaviors | turn behavior `.scx` |
 | `vision` VisualClassification, `reading` Reading | `abilities/vision/vision.scx` (reading's child), `abilities/reading/reading.scx` (image decoding through `services/generate`); nothing invokes reading, as in mosfet | ability `.scx` child and service |
-| Conversation's turn detectors, devices | not ported: the phase 6 plan has no turn detector slice, and devices are out of scope | open |
+| `conversation/turn_detector` TurnDetector | `abilities/turn_detector/turn_detector.scx`, which the conversation invokes once per source of each input (its `turn_exchange`; decisions D76 to D79, [conventions](#turn-detector-conventions)) | ability `.scx` child |
+| Conversation's voice-centroid participant matching, devices | not ported: each embedding source is its own participant (D79), and devices are out of scope | open |
 | payload validators | `event:schema` on the receiving transition plus a short correlation cond | `event:schema` |
 
 ### Builder output
@@ -369,6 +370,49 @@ are D52, D57 to D59, D66 and D67
   diarization, identification, failures, timeouts, the efference window),
   `reading.rs` (reading against a generate double), and
   `communication.rs` (a response spoken through the real speech service).
+
+## Turn detector conventions
+
+How mosfet's TurnDetector (`abilities/communication/conversation/turn_detector`)
+and the Conversation's `turn_detector` stage are written as SCXML; the
+decisions are D76 to D79.
+
+- **The machine.** `abilities/turn_detector/turn_detector.scx` is mosfet's
+  `idle`, `open`, `paused`, `closing` and `normalizing` with mosfet's
+  guards: a start addressed to its `participant_ref` opens a turn, an
+  update, pause, end or start for the open turn (its `turn_ref`,
+  `conversation_ref` and `source_participant_ref`) is taken, anything for
+  another turn is ignored, and heard speech
+  (`bot.ability.listening.speech.output`) with voice spans opens or feeds
+  a turn while speech without them pauses it. `open` and `paused` each
+  arm `<state>.after` for `end_of_turn_silence_seconds` (0.5 s, at least
+  0.01 s) on entry; its expiry closes the turn through `closing`. The
+  attachment states are not ported (D14), and the detector announces
+  `bot.ability.turn_detector.ready` on start (D76).
+- **The product.** `normalizing` answers `bot.ability.turn_detector.turn.complete`
+  (texts stripped and joined; audio by reference, in order, D77; the
+  modality-neutral content of a content, image or event stimulus) or
+  `bot.ability.turn_detector.failed` (`stage` `turn`, D78), then clears
+  the turn. There is no decoder (D77).
+- **The conversation's turns.** Each input is one turn per source, in
+  mosfet's identity order: `turn_exchange` invokes the detector for the
+  source's track, waits for its readiness (`readiness`), sends the start
+  carrying mosfet's `_content_for_detector` stimulus and the end
+  (`exchange`), and takes the completed turn; each wait is bounded by
+  mosfet's 5 s (`turn_timeout_ms`). A failure, a timeout, or a start the
+  detector's schema refuses answers `bot.ability.conversation.failed`
+  `{stage: "turn_detector"}` and commits nothing. Memory follows, and the
+  committed message is the turns' product with the first turn's
+  `turn_ref` (D79). Input that arrives while one is in hand waits in the
+  conversation's queue and is taken, in order, on the return to `waiting`
+  (mosfet defers it); before the turns every input without memory was
+  committed in the macrostep it arrived in, so none could arrive.
+- **Tests.** `tests/tests/turn_detector.rs` runs the detector under
+  `tests/fixtures/turn_detector/turn_detector_harness.scx` (assembly,
+  ignored turns, failures, heard speech and the end-of-turn silence);
+  `tests/tests/communication.rs` runs the conversation's turns
+  (`the_conversation_commits_each_message_into_its_history`,
+  `a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing`).
 
 ## Known gaps carried from phase 0
 

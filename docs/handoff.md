@@ -106,6 +106,18 @@ Last updated: 2026-10-10.
 - **Open:** the plan's "Turn The Seams On": the cognition's
   `reflection_enabled` and `routines_enabled` are still `false`.
 
+## Turn detectors (2026-10-10)
+
+- **Done** on branch `claude/project-thread-fubdvs`: mosfet's TurnDetector
+  as `abilities/turn_detector/turn_detector.scx` (its seven events'
+  schemas in `abilities/schemas/`), and the conversation's
+  `turn_exchange`, which runs one turn per source of each input through it
+  before memory and commits the turns' product. Decisions D76 to D79;
+  conventions: [port-plan.md](port-plan.md#turn-detector-conventions).
+- **For the maintainer (D79):** mosfet commits a multi-source text input
+  once per source (`hello hello hello`); floppy keeps mosfet's behavior
+  until told otherwise. The detector has no decoder (D77).
+
 ## Phase 6 (2026-10-10): speech and vision
 
 - **Done on `main`** (`d569318`): `services/speech` (decode, encode, and the
@@ -125,7 +137,9 @@ Last updated: 2026-10-10.
   (LocalAI: every sound goes through voice detection). Without them a
   response fails and every sound is `bot.ability.listening.failed`.
 - **Not ported:** devices (phone, LiveKit, audio hardware; out of scope)
-  and the conversation's turn detectors (no slice in the phase 6 plan).
+  and the Conversation's matching of embedding sources to earlier
+  participants' voice centroids. The turn detectors are ported (see
+  below).
   ElevenLabs encoding exists in the service (`provider` `elevenlabs`), but
   no document selects it.
 - **Live:** `speech_service`'s `live_speech_round_trip_through_an_env_file`
