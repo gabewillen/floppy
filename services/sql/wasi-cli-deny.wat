@@ -1,5 +1,5 @@
 ;; Deny-all `wasi:cli` (and monotonic-clock) provider composed into the
-;; memory service before release (see scripts/build-components.sh).
+;; sql service before release (see scripts/build-components.sh).
 ;;
 ;; Adapted from scxml.rs's files example service
 ;; (scxml.rs/components/scxml-service-files/wasi-cli-deny.wat): the same
@@ -9,7 +9,7 @@
 ;; packages raise the standard library's 0.2.9 imports to 0.2.12 when the
 ;; component is encoded).
 ;;
-;; The memory service keeps `wasi:filesystem` (and the `wasi:io` and
+;; The sql service keeps `wasi:filesystem` (and the `wasi:io` and
 ;; `wasi:clocks/wall-clock` interfaces SQLite reaches through it) for the
 ;; host, which links them only under a `--dir` grant; a wasi-virt adapter
 ;; would virtualize the filesystem too (its `--allow-fs` drops the

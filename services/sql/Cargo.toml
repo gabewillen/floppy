@@ -1,6 +1,6 @@
 [package]
-name = "floppy-service-memory"
-description = "The `memory` invoked service: mosfet's Memory ability, one SQLite transaction of parameterized statements per `<invoke>` against a database file in a directory the run grants, as a Wasm component whose `invoke` export is an `async func`"
+name = "floppy-service-sql"
+description = "The `sql` invoked service: one SQLite transaction of parameterized statements per `<invoke>` against a database file in a directory the run grants, as a Wasm component whose `invoke` export is an `async func`"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

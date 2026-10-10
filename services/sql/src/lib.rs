@@ -1,18 +1,19 @@
-//! The `memory` invoked service: mosfet's Memory ability
-//! (`mosfet/abilities/memory/store.py`) as a
-//! `stateforward:scxml/invoked-service` Wasm component, backed by SQLite.
+//! The `sql` invoked service: one SQLite transaction of parameterized
+//! statements per `<invoke>`, as a `stateforward:scxml/invoked-service` Wasm
+//! component. It is the engine under mosfet's Memory ability
+//! (`mosfet/abilities/memory/store.py` on `providers/sqlite_memory`), which
+//! floppy runs as `abilities/memory.scx`; it knows no schema of its own.
 //!
 //! Storage is I/O, so it is a service, never executable content: the
 //! invoking session keeps processing events and timers while a transaction
 //! runs in another session's component, a `<send delay>` in the invoking
 //! state bounds it, and leaving that state cancels it. One invocation is one
 //! transaction of ordered, parameterized statements that all commit or all
-//! roll back, exactly mosfet's `InputData`; the invoking document owns its
-//! SQL, as mosfet's domain code owns its `SQLAlchemy` clauses. Documents name
-//! [`SERVICE_URI`]:
+//! roll back, mosfet's `InputData`; the invoking document owns its SQL.
+//! Documents name [`SERVICE_URI`]:
 //!
 //! ```xml
-//! <invoke idlocation="mem" type="https://github.com/stateforward/floppy/services/memory">
+//! <invoke id="sql" type="https://github.com/stateforward/floppy/services/sql">
 //!   <param name="database" expr="'/memory/floppy.sqlite'"/>
 //!   <param name="statements" expr="[{sql: recall_sql, parameters: ['self_name']}]"/>
 //! </invoke>
@@ -23,7 +24,7 @@
 //! * `database` (required): the database file's absolute guest path, a
 //!   non-empty string that starts with `/`, does not end with `/`, and holds
 //!   no NUL. Its directory is one the run grants with
-//!   `--dir https://github.com/stateforward/floppy/services/memory=HOST::GUEST`;
+//!   `--dir https://github.com/stateforward/floppy/services/sql=HOST::GUEST`;
 //!   the file is created on first use.
 //! * `statements` (required): a non-empty JSON array of objects with `sql`
 //!   (a non-empty string holding exactly one SQL statement with positional
@@ -38,17 +39,16 @@
 //!
 //! # The transaction
 //!
-//! The service opens the file (read-write, created when missing), brings it
-//! to the head schema ([`migrate`]: mosfet's Alembic revisions `0001` and
-//! `0002` as `PRAGMA user_version` 1 and 2, the same tables, columns,
-//! defaults, and indexes), then runs the statements in order inside one
-//! `BEGIN IMMEDIATE` transaction ([`apply`]) and commits. A statement that
-//! returns columns yields its rows; any other yields the rows it changed.
-//! A statement that would end or widen the transaction (`BEGIN`, `COMMIT`,
-//! `ROLLBACK`, `ATTACH`, `DETACH`) is refused before it runs and fails it. On any failure nothing is committed. The connection is closed
-//! when the invocation ends: the service keeps no state between
-//! invocations, and an invocation cancelled before it commits leaves at
-//! most a journal that SQLite rolls back on the next open.
+//! The service opens the file (read-write, created when missing) and runs
+//! the statements in order inside one `BEGIN IMMEDIATE` transaction
+//! ([`apply`]) and commits. A statement that returns columns yields its
+//! rows; any other yields the rows it changed. A statement that would end
+//! or widen the transaction (`BEGIN`, `COMMIT`, `ROLLBACK`, `ATTACH`,
+//! `DETACH`) is refused before it runs and fails it. On any failure nothing
+//! is committed. The connection is closed when the invocation ends: the
+//! service keeps no state between invocations, and an invocation cancelled
+//! before it commits leaves at most a journal that SQLite rolls back on the
+//! next open.
 //!
 //! SQLite is the amalgamation compiled into the component with SQLite's own
 //! WASI port (`SQLITE_WASI`: single-threaded, no extension loading, the
@@ -60,10 +60,10 @@
 //!
 //! `invoke` writes exactly one event to the stream it returns, then
 //! resolves its result future with no data (the invoking session receives
-//! `done.invoke.<id>` after the event). The names are mosfet's Memory
-//! ability's:
+//! `done.invoke.<id>` after the event), named like floppy's other services
+//! (`generate.result`, `generate.failed`):
 //!
-//! * [`OUTPUT_EVENT`] `{"results": [{"rowcount": N, "rows": [{"columns":
+//! * [`RESULT_EVENT`] `{"results": [{"rowcount": N, "rows": [{"columns":
 //!   [...], "values": [...]}]}]}`: one result per statement, in order
 //!   (mosfet's `OutputData`). A cell is its SQLite value as JSON (`NULL` as
 //!   `null`, an integer or a real as a number, text as a string, a blob as
@@ -115,21 +115,18 @@ use serde_json::{Map, Value as Json};
 
 /// The service's name: the last path segment of its repository service URI
 /// before the tag.
-pub const SERVICE_NAME: &str = "memory";
+pub const SERVICE_NAME: &str = "sql";
 
 /// The exact service type URI documents name: tagless, so it names the
 /// repository's latest release (decision D19); the manifest names it too.
-pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/memory";
+pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/sql";
 
 /// The event that carries a committed transaction's results (mosfet's
-/// `Memory.output_event`).
-pub const OUTPUT_EVENT: &str = "bot.ability.memory.output";
+/// `OutputData`).
+pub const RESULT_EVENT: &str = "sql.result";
 /// The event that reports a transaction that did not commit (mosfet's
-/// `Ability.failed_event`).
-pub const FAILED_EVENT: &str = "bot.ability.failed";
-
-/// The head schema version ([`migrate`]).
-pub const SCHEMA_VERSION: i64 = 2;
+/// `FailureData`).
+pub const FAILED_EVENT: &str = "sql.failed";
 
 /// Upper bound on the statements of one transaction (wasm builds only).
 pub const MAX_STATEMENTS: usize = wasm_bound(64);
@@ -182,7 +179,7 @@ pub struct Transaction {
 /// The one event an invocation returns: its name and canonical JSON data.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Returned {
-    /// [`OUTPUT_EVENT`] or [`FAILED_EVENT`].
+    /// [`RESULT_EVENT`] or [`FAILED_EVENT`].
     pub name: &'static str,
     /// Canonical JSON object text.
     pub data: String,
@@ -221,13 +218,13 @@ pub fn parse_parameters<'a>(
         let slot = match name {
             "database" => &mut database,
             "statements" => &mut statements,
-            _ => return Err("memory takes no parameter of that name"),
+            _ => return Err("sql takes no parameter of that name"),
         };
         if slot.replace(value).is_some() {
-            return Err("memory takes each parameter once");
+            return Err("sql takes each parameter once");
         }
     }
-    let database = match database.ok_or("memory requires a database parameter")? {
+    let database = match database.ok_or("sql requires a database parameter")? {
         Data::String(path)
             if path.starts_with('/')
                 && !path.ends_with('/')
@@ -236,11 +233,11 @@ pub fn parse_parameters<'a>(
         {
             path.clone()
         }
-        _ => return Err("memory database must be an absolute file path within its bound"),
+        _ => return Err("sql database must be an absolute file path within its bound"),
     };
-    let statements = match statements.ok_or("memory requires a statements parameter")? {
+    let statements = match statements.ok_or("sql requires a statements parameter")? {
         Data::JsonArray(text) => statements_from_json(text)?,
-        _ => return Err("memory statements must be a JSON array of statements"),
+        _ => return Err("sql statements must be a JSON array of statements"),
     };
     Ok(Transaction {
         database,
@@ -249,45 +246,45 @@ pub fn parse_parameters<'a>(
 }
 
 fn statements_from_json(text: &str) -> Result<Vec<Statement>, &'static str> {
-    let malformed = "memory statements must be a JSON array of statements";
+    let malformed = "sql statements must be a JSON array of statements";
     let Ok(Json::Array(items)) = serde_json::from_str::<Json>(text) else {
         return Err(malformed);
     };
     if items.is_empty() {
-        return Err("memory statements must hold at least one statement");
+        return Err("sql statements must hold at least one statement");
     }
     if exceeds_wasm_bound(items.len(), MAX_STATEMENTS) {
-        return Err("memory statements exceed their bound");
+        return Err("sql statements exceed their bound");
     }
     items.iter().map(statement_from_json).collect()
 }
 
 fn statement_from_json(item: &Json) -> Result<Statement, &'static str> {
     let Json::Object(fields) = item else {
-        return Err("memory statement must be an object with sql and parameters");
+        return Err("sql statement must be an object with sql and parameters");
     };
     if fields.keys().any(|key| key != "sql" && key != "parameters") {
-        return Err("memory statement takes only sql and parameters");
+        return Err("sql statement takes only sql and parameters");
     }
     let sql = match fields.get("sql") {
         Some(Json::String(sql)) if !sql.trim().is_empty() => sql.clone(),
-        _ => return Err("memory statement sql must be a non-empty string"),
+        _ => return Err("sql statement sql must be a non-empty string"),
     };
     if exceeds_wasm_bound(sql.len(), MAX_SQL_BYTES) {
-        return Err("memory statement sql exceeds its bound");
+        return Err("sql statement sql exceeds its bound");
     }
     let parameters = match fields.get("parameters") {
         None => Vec::new(),
         Some(Json::Array(values)) => {
             if exceeds_wasm_bound(values.len(), MAX_PARAMETERS) {
-                return Err("memory statement parameters exceed their bound");
+                return Err("sql statement parameters exceed their bound");
             }
             values
                 .iter()
                 .map(parameter_from_json)
                 .collect::<Result<_, _>>()?
         }
-        Some(_) => return Err("memory statement parameters must be an array"),
+        Some(_) => return Err("sql statement parameters must be an array"),
     };
     Ok(Statement { sql, parameters })
 }
@@ -310,113 +307,14 @@ fn parameter_from_json(value: &Json) -> Result<Parameter, &'static str> {
                     Parameter::Integer(real as i64)
                 }
                 Some(real) if real.is_finite() => Parameter::Real(real),
-                _ => return Err("memory statement parameters must be finite numbers"),
+                _ => return Err("sql statement parameters must be finite numbers"),
             },
         },
         Json::String(text) => Parameter::Text(text.clone()),
         Json::Array(_) | Json::Object(_) => {
-            return Err("memory statement parameters must be strings, numbers, booleans, or nulls");
+            return Err("sql statement parameters must be strings, numbers, booleans, or nulls");
         }
     })
-}
-
-/// mosfet's revision `0001` (the create_all-era schema, SQLite DDL).
-const MIGRATION_0001: &str = "
-CREATE TABLE bot_memory (
-    memory_id TEXT NOT NULL,
-    scope TEXT DEFAULT 'memory' NOT NULL,
-    context_ref TEXT,
-    subject_ref TEXT,
-    kind TEXT,
-    sensitivity TEXT,
-    retention TEXT,
-    content TEXT NOT NULL,
-    content_format TEXT DEFAULT 'text/plain' NOT NULL,
-    query_tags TEXT,
-    metadata_json TEXT DEFAULT '{}' NOT NULL,
-    created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    PRIMARY KEY (memory_id)
-);
-CREATE INDEX bot_memory_context_idx ON bot_memory (context_ref, subject_ref);
-CREATE INDEX bot_memory_query_idx ON bot_memory (query_tags);
-CREATE INDEX bot_memory_scope_idx ON bot_memory (scope, created_at);
-CREATE TABLE bot_behavior (
-    name TEXT NOT NULL,
-    source TEXT NOT NULL,
-    description TEXT DEFAULT '' NOT NULL,
-    examples_json TEXT DEFAULT '[]' NOT NULL,
-    status TEXT DEFAULT 'ACTIVE' NOT NULL,
-    status_reason TEXT DEFAULT '' NOT NULL,
-    status_updated_at TEXT DEFAULT '' NOT NULL,
-    used_count TEXT DEFAULT '0' NOT NULL,
-    last_used_at TEXT DEFAULT '' NOT NULL,
-    failed_count TEXT DEFAULT '0' NOT NULL,
-    last_failed_at TEXT DEFAULT '' NOT NULL,
-    created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    updated_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-    PRIMARY KEY (name)
-);
-CREATE TABLE bot_behavior_trigger (
-    behavior_name TEXT NOT NULL,
-    \"trigger\" TEXT NOT NULL,
-    PRIMARY KEY (behavior_name, \"trigger\"),
-    FOREIGN KEY(behavior_name) REFERENCES bot_behavior (name) ON DELETE CASCADE
-);
-CREATE INDEX bot_behavior_trigger_event_idx ON bot_behavior_trigger (\"trigger\");
-CREATE TABLE bot_stm_memory (
-    stm_id TEXT NOT NULL,
-    stimulus_name TEXT NOT NULL,
-    payload_json TEXT DEFAULT '{}' NOT NULL,
-    event_id TEXT,
-    source TEXT,
-    target TEXT,
-    created_at TEXT NOT NULL,
-    last_accessed_at TEXT,
-    PRIMARY KEY (stm_id)
-);
-CREATE INDEX bot_stm_memory_recent_idx ON bot_stm_memory (stimulus_name, created_at);
-CREATE INDEX bot_stm_memory_created_idx ON bot_stm_memory (created_at);
-";
-
-/// mosfet's revision `0002` (behavior lifetime: turn behaviors versus
-/// persistent routines).
-const MIGRATION_0002: &str =
-    "ALTER TABLE bot_behavior ADD COLUMN lifetime TEXT DEFAULT 'turn' NOT NULL;";
-
-/// The revisions, in order: revision `n` brings `user_version` `n - 1` to
-/// `n`.
-const MIGRATIONS: [&str; 2] = [MIGRATION_0001, MIGRATION_0002];
-
-/// Brings `connection`'s database to [`SCHEMA_VERSION`] in one transaction
-/// (`PRAGMA user_version` records the revision).
-///
-/// # Errors
-///
-/// SQLite's message, or a refusal of a database whose version is newer than
-/// this service's or negative.
-pub fn migrate(connection: &mut Connection) -> Result<(), String> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|error| error.to_string())?;
-    let version: i64 = transaction
-        .query_row("PRAGMA user_version", [], |row| row.get(0))
-        .map_err(|error| error.to_string())?;
-    if !(0..=SCHEMA_VERSION).contains(&version) {
-        return Err("the memory database's schema version is not one this service knows".into());
-    }
-    for (index, migration) in MIGRATIONS.iter().enumerate() {
-        let revision = i64::try_from(index).map_err(|error| error.to_string())? + 1;
-        if revision <= version {
-            continue;
-        }
-        transaction
-            .execute_batch(migration)
-            .map_err(|error| error.to_string())?;
-        transaction
-            .pragma_update(None, "user_version", revision)
-            .map_err(|error| error.to_string())?;
-    }
-    transaction.commit().map_err(|error| error.to_string())
 }
 
 /// Runs `statements` in one `BEGIN IMMEDIATE` transaction on `connection`
@@ -478,7 +376,7 @@ fn execute(connection: &Connection, statements: &[Statement]) -> Result<Json, St
             while let Some(row) = rows.next().map_err(|error| error.to_string())? {
                 rows_returned += 1;
                 if exceeds_wasm_bound(rows_returned, MAX_ROWS) {
-                    return Err("the memory transaction returns more rows than its bound".into());
+                    return Err("the sql transaction returns more rows than its bound".into());
                 }
                 let values = (0..width)
                     .map(|index| {
@@ -502,7 +400,7 @@ fn execute(connection: &Connection, statements: &[Statement]) -> Result<Json, St
     output.insert("results".into(), Json::Array(results));
     let output = Json::Object(output);
     if exceeds_wasm_bound(canonical_json(&output).len(), MAX_RESULT_BYTES) {
-        return Err("the memory transaction's result exceeds its bound".into());
+        return Err("the sql transaction's result exceeds its bound".into());
     }
     Ok(output)
 }
@@ -514,10 +412,10 @@ fn cell(value: ValueRef<'_>) -> Result<Json, String> {
         ValueRef::Integer(value) => Json::from(value),
         ValueRef::Real(value) => serde_json::Number::from_f64(value)
             .map(Json::Number)
-            .ok_or("a memory cell holds a non-finite real")?,
+            .ok_or("an sql cell holds a non-finite real")?,
         ValueRef::Text(bytes) => Json::String(
             std::str::from_utf8(bytes)
-                .map_err(|_| "a memory cell holds text that is not UTF-8")?
+                .map_err(|_| "an sql cell holds text that is not UTF-8")?
                 .to_owned(),
         ),
         ValueRef::Blob(bytes) => {
@@ -530,8 +428,8 @@ fn cell(value: ValueRef<'_>) -> Result<Json, String> {
     })
 }
 
-/// Opens the transaction's database (read-write, created when missing),
-/// migrates it, and applies the transaction: [`OUTPUT_EVENT`] with the
+/// Opens the transaction's database (read-write, created when missing) and
+/// applies the transaction: [`RESULT_EVENT`] with the
 /// results, or [`FAILED_EVENT`] with why nothing was committed.
 #[must_use]
 pub fn run(transaction: &Transaction) -> Returned {
@@ -545,11 +443,9 @@ pub fn run(transaction: &Transaction) -> Returned {
         Ok(connection) => connection,
         Err(error) => return Returned::failed(&error.to_string()),
     };
-    let applied =
-        migrate(&mut connection).and_then(|()| apply(&mut connection, &transaction.statements));
-    match applied {
+    match apply(&mut connection, &transaction.statements) {
         Ok(output) => Returned {
-            name: OUTPUT_EVENT,
+            name: RESULT_EVENT,
             data: canonical_json(&output),
         },
         Err(message) => Returned::failed(&message),
@@ -672,7 +568,7 @@ mod guest {
                 let reply = super::run(&transaction);
                 telemetry::event(
                     Operation::Send,
-                    if reply.name == super::OUTPUT_EVENT {
+                    if reply.name == super::RESULT_EVENT {
                         SignalEvent::TransformationCompleted
                     } else {
                         SignalEvent::InputRejected

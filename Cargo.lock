@@ -311,7 +311,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "floppy-service-memory"
+name = "floppy-service-sql"
 version = "0.1.0"
 dependencies = [
  "rusqlite",

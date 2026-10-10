@@ -78,7 +78,7 @@ const BODY_EVENTS: [&str; 15] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 41] = [
+const ABILITY_EVENTS: [&str; 42] = [
     "bot.ability.failed",
     "bot.ability.cognition.input",
     "bot.ability.cognition.output",
@@ -120,6 +120,9 @@ const ABILITY_EVENTS: [&str; 41] = [
     "bot.ability.reflection.output",
     "bot.ability.routines.reconcile",
     "bot.ability.offers",
+    // Phase 3: the memory service's committed transaction (mosfet's
+    // Memory.output_event), described where the abilities take it.
+    "bot.ability.memory.output",
 ];
 
 /// The correlated events of one processing turn: each requires `turn`.
