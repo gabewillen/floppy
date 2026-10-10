@@ -12,6 +12,22 @@
 
     {turn, handled: false, candidates: [], reason: "no-behaviors"}
 
+  Builder seam: behavior is the URI of one builder-produced behavior
+  document, null here (no behaviors are installed until phase 5; only the
+  tests set it). When set, autonomy invokes it as an SCXML child by
+  <invoke id="matched" srcexpr> with the same turn and input, and answers
+  with the child's <donedata> handled and selected:
+
+    {turn, handled, selected, candidates: [], reason: "behavior"}
+
+  or, when the child cannot run (an error.* for it),
+  {turn, handled: false, failed: true, reason}. A srcexpr child gets no
+  schema files (docs/port-plan.md, "Builder output"), so a behavior
+  document carries no event:schema reference.
+  behavior is an absolute URI: scxml.rs resolves a relative srcexpr in an
+  invoked child against the root document, not this one (docs/plans,
+  "Proposed scxml.rs Names").
+
   Phase 5 replaces this with mosfet's behavior inventory (Autonomy
   behaviors, Routines and Learning); nothing is recalled or fabricated here.
 -->
@@ -20,19 +36,52 @@
   <datamodel>
     <data id="turn" expr="0"/>
     <data id="input" expr="null"/>
+    <data id="behavior" expr="null"/>
+    <data id="answer" expr="null"/>
   </datamodel>
 
-  <!-- No behaviors exist yet: nothing matches. -->
+  <!-- No behaviors are installed: nothing matches. -->
   <state id="matching">
     <onentry>
-      <log label="autonomy" expr="'turn ' + turn + ': no behaviors (phase 5)'"/>
+      <if cond="behavior === null">
+        <log label="autonomy" expr="'turn ' + turn + ': no behaviors (phase 5)'"/>
+      <else/>
+        <log label="autonomy" expr="'turn ' + turn + ': one behavior'"/>
+      </if>
     </onentry>
-    <transition target="done"/>
+    <transition cond="behavior === null" target="done"/>
+    <transition target="behaving"/>
+  </state>
+
+  <!-- One builder-produced behavior handles the turn, or not. -->
+  <state id="behaving">
+    <invoke id="matched" type="scxml" srcexpr="behavior">
+      <param name="turn" expr="turn"/>
+      <param name="input" expr="input"/>
+    </invoke>
+    <transition event="done.invoke.matched" cond="_event.data.turn === turn" target="answered">
+      <assign location="answer" expr="_event.data"/>
+    </transition>
+    <transition event="error.*" target="failed">
+      <assign location="answer" expr="'the behavior could not run (' + _event.name + ')'"/>
+    </transition>
   </state>
 
   <final id="done">
     <donedata>
       <content expr="({turn: turn, handled: false, candidates: [], reason: 'no-behaviors'})"/>
+    </donedata>
+  </final>
+
+  <final id="answered">
+    <donedata>
+      <content expr="({turn: turn, handled: answer.handled === true, selected: answer.selected, candidates: [], reason: 'behavior'})"/>
+    </donedata>
+  </final>
+
+  <final id="failed">
+    <donedata>
+      <content expr="({turn: turn, handled: false, failed: true, reason: answer})"/>
     </donedata>
   </final>
 </scxml>

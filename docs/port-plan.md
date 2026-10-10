@@ -253,6 +253,25 @@ D33 to D43.
 | Listening, reading, turn detectors, devices | phase 6 `.scx` children and Wasm services | out of phase 4 |
 | payload validators | `event:schema` on the receiving transition plus a short correlation cond | `event:schema` |
 
+### Builder output
+
+A builder-produced behavior or routine document runs as an SCXML child
+that its host names at run time (`<invoke id srcexpr>`), the one exception
+to the literal relative `src` rule. scxml.rs reads `event:schema` files
+only for a literal `<invoke src>` child; a `srcexpr` child gets none, and a
+schema-file reference rejects it when it is invoked (`error.execution`).
+So builder output carries no `event:schema` reference (and, like every
+floppy document, no inline schema and no `<script>`): its host checks what
+it answers. The seam is `abilities/autonomy.scx`'s `behavior` data (null
+until phase 5 installs behaviors): when set, autonomy invokes it with
+`turn` and `input` and answers with the child's `<donedata>` `handled` and
+`selected`. A relative `srcexpr` in an invoked child resolves against the
+root document today (a scxml.rs defect, in the phase 4 plan's proposed
+names), so the seam takes an absolute URI.
+`tests/fixtures/phase4/behavior_double.scx` stands in for one;
+`tests/tests/contracts.rs` checks the rule on it and
+`tests/tests/cognition.rs` runs it through a turn.
+
 ## Known gaps carried from phase 0
 
 - By rule (decision D13), not as a gap: extension components get no WASI
