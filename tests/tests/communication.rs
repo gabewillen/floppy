@@ -453,26 +453,26 @@ fn conversation_event(name: &str, data: &Json) -> (String, Json) {
     (name.to_owned(), data.clone())
 }
 
-#[test]
-fn the_conversation_commits_each_message_into_its_history() {
-    let dir = unique_scratch("conversation");
-    support::copy_ability("conversation", &dir.join("abilities"));
-    let harness = dir.join("abilities/harness.scx");
-    std::fs::copy(
-        workspace().join("tests/fixtures/phase4/conversation_harness.scx"),
-        &harness,
-    )
-    .expect("the harness is copyable");
+/// The relationships' references in
+/// [`the_conversation_commits_each_message_into_its_history`]: mosfet's
+/// `relationship_context_ref`, the same in either direction.
+const FIRST: &str = r#"relationship-{"identity_groups":[["a\"b","bot"],["alice","zed",[0.447213595499958,0.894427190999916]]]}"#;
+const AMBIENT: &str = r#"relationship-{"identity_groups":[[],["alice"]]}"#;
+const THIRD: &str =
+    r#"relationship-{"identity_groups":[["bob",[0.847998304005088,0.52999894000318]],["bot"]]}"#;
+
+/// The events of [`the_conversation_commits_each_message_into_its_history`]:
+/// unsorted string and embedding identities, an escaped quote, audio in
+/// mixed case (dropped), structured content (kept), outbound references,
+/// the same provenance id from another source (committed) and from the
+/// same one (not committed again, still answered), a record without
+/// content or id, the first participants again, then in the other
+/// direction, another targetless source (the ambient relationship), and
+/// input addressed to an ambient participant.
+fn conversation_history_events() -> [(String, Json); 11] {
     let input = "bot.ability.conversation.input";
     let append = "bot.ability.conversation.append";
-    // Unsorted string and embedding identities, an escaped quote, audio in
-    // mixed case (dropped), structured content (kept), outbound references,
-    // the same provenance id from another source (committed) and from the
-    // same one (not committed again, still answered), a record without
-    // content or id, the first participants again, then in the other
-    // direction, another targetless source (the ambient relationship), and
-    // input addressed to an ambient participant.
-    let events = [
+    [
         conversation_event(
             input,
             &json!({"source_ids": ["zed", "alice", [0.5, 1]], "target_ids": ["bot", "a\"b"], "content": "hello", "content_type": "text/plain"}),
@@ -517,7 +517,35 @@ fn the_conversation_commits_each_message_into_its_history() {
             input,
             &json!({"source_ids": ["carol"], "target_ids": ["alice"], "content": "to alice", "content_type": "text/plain"}),
         ),
-    ];
+    ]
+}
+
+/// The snapshot after [`the_conversation_commits_each_message_into_its_history`]:
+/// each relationship's participants, by relationship and then identity.
+fn assert_snapshot(all: &[Json], first: &str, ambient: &str, third: &str) {
+    let snapshot: Json =
+        serde_json::from_str(&texts(all, "harness.snapshot")[0]).expect("the snapshot is JSON");
+    assert_eq!(
+        snapshot,
+        json!({"request_ref": "s-1", "detector_refs": [
+            [first, "a\"b"], [first, "alice"], [first, "bot"], [first, "zed"], [first, [0.5, 1]],
+            [third, "bob"], [third, [2, 1.25]],
+            [ambient, "alice"], [ambient, "bob"], [ambient, "carol"],
+        ]})
+    );
+}
+
+#[test]
+fn the_conversation_commits_each_message_into_its_history() {
+    let dir = unique_scratch("conversation");
+    support::copy_ability("conversation", &dir.join("abilities"));
+    let harness = dir.join("abilities/harness.scx");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/conversation_harness.scx"),
+        &harness,
+    )
+    .expect("the harness is copyable");
+    let events = conversation_history_events();
     let mut run = Run::start(&[harness.display().to_string()], &[]);
     let mut all = Vec::new();
     for (name, data) in &events {
@@ -557,34 +585,20 @@ fn the_conversation_commits_each_message_into_its_history() {
             r#"inbound 9 from ["carol"] (3 in its relationship)"#,
         ])
     );
-    // The relationships' references: mosfet's relationship_context_ref,
-    // the same in either direction.
-    let first = r#"relationship-{"identity_groups":[["a\"b","bot"],["alice","zed",[0.447213595499958,0.894427190999916]]]}"#;
-    let ambient = r#"relationship-{"identity_groups":[[],["alice"]]}"#;
-    let third = r#"relationship-{"identity_groups":[["bob",[0.847998304005088,0.52999894000318]],["bot"]]}"#;
-    let snapshot: Json =
-        serde_json::from_str(&texts(&all, "harness.snapshot")[0]).expect("the snapshot is JSON");
-    assert_eq!(
-        snapshot,
-        json!({"request_ref": "s-1", "detector_refs": [
-            [first, "a\"b"], [first, "alice"], [first, "bot"], [first, "zed"], [first, [0.5, 1]],
-            [third, "bob"], [third, [2, 1.25]],
-            [ambient, "alice"], [ambient, "bob"], [ambient, "carol"],
-        ]})
-    );
+    assert_snapshot(&all, FIRST, AMBIENT, THIRD);
     let finished = run.close(WAIT);
     let outputs = texts(&finished.all, "harness.output");
     assert_eq!(outputs.len(), 11, "{outputs:?}");
     let last: Json = serde_json::from_str(&outputs[10]).expect("the output is JSON");
     let messages = &last["messages"];
     for (sequence, session_ref) in [
-        (0, first),
-        (1, ambient),
-        (2, third),
-        (6, first),
-        (7, first),
-        (8, ambient),
-        (9, ambient),
+        (0, FIRST),
+        (1, AMBIENT),
+        (2, THIRD),
+        (6, FIRST),
+        (7, FIRST),
+        (8, AMBIENT),
+        (9, AMBIENT),
     ] {
         assert_eq!(
             messages[sequence]["provenance"]["session_ref"],
