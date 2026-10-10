@@ -76,7 +76,9 @@ the network too (`--wasi
 https://github.com/stateforward/floppy/services/pgsql=inherit-network`),
 though it is used only when the database is a Postgres connection URI
 (`postgresql://USER@IP:PORT/DBNAME`, for example PGlite served by
-`pglite-server` from `@electric-sql/pglite-socket`). The `generate` service
+`pglite-server` from `@electric-sql/pglite-socket`); the body's `database`
+`<data>` names the engine, and Postgres support is tested on Postgres 16
+([Memory engines](../../README.md#memory-engines)). The `generate` service
 imports `wasi:filesystem` too (it reads the images a message names), so
 the run grants it a media directory the same way (create `media/` first;
 it is ignored by git).

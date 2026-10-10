@@ -7,10 +7,35 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-09.
+Last updated: 2026-10-10.
 
 ## Current state (2026-10-09) — resume here
 
+- **Phase 7 (2026-10-10):** done except publishing
+  ([plan](plans/phase7-pglite-defaults.mdscript.md), decisions D48 to D51
+  and D69 to D72). Memory runs on two engines behind the unchanged Memory
+  ability, picked by its `database`: `services/sql` (SQLite, a file in the
+  directory the run grants) and `services/pgsql` (the Postgres wire
+  protocol over `wasi:sockets/tcp`, a `postgresql://USER@IP:PORT/DBNAME`
+  URI, granted `inherit-network`), with the same `sql.result`/`sql.failed`
+  contract, `rowcount` guards and open transactions. Migrations are
+  Alembic's: `<migration:plan>` (`namespaces/migration`) and
+  `abilities/migration/migration.scx`, with mosfet's revisions per engine
+  in `abilities/memory/{sqlite,postgresql}/` and the version in
+  `alembic_version`. Every ability's SQL is portable to both. Postgres
+  support is tested on Postgres 16 (`FLOPPY_POSTGRES_BIN=<bin dir>` runs the
+  ignored `postgres_*` tests on a fresh cluster each); running them on
+  PGlite through pglite-socket (`FLOPPY_PGLITE_SERVER`) waits on the
+  user's approval. PGlite inside a component waits on `scx` admitting
+  exception handling (D71). Defaults are in README.md's "Defaults" and
+  `.env.example` (`tests/tests/defaults.rs`). Releases are prepared, not
+  published: [release.md](release.md); its open decisions (where the
+  release lives, a release job, the scxml.rs release it follows) wait for
+  going public.
+- **Building and testing (2026-10-10):** `WASI_SDK_PATH` must name wasi-sdk
+  25 (the sql service compiles SQLite). Live calls (CPA, TypeSafe) from a
+  cloud session go through the session's proxy by a local relay, since
+  `scx` ignores proxies.
 - **Layout (2026-10-10, D65):** every bot and ability is
   `<name>/<name>.scx` with its ECMAScript in `<name>/<name>.js` beside it
   (one root `<script src="<name>.js"/>`; conds and exprs call its
@@ -408,17 +433,15 @@ The remaining mosfet port runs as one ultracode run with these grants:
   `<log>` on stderr, exit code from the final state.
 - Exporter components for session outputs (`<log>`, `<donedata>`, trace):
   stdout default, file/WebSocket/OTLP packages. Low priority.
-- Canonical (Docker Linux) builds of floppy's components so pinned digests
-  reproduce (D27).
-- Rest of the mosfet port: bot core and abilities (phase 4), behaviors and
-  routines (5), memory service SQLite then PGlite (3), speech/vision/devices
-  as services (6).
+- PGlite compiled into a component (D71: needs `scx`'s wasmtime with the
+  `gc` and `gc-null` features, a proposed scxml.rs change not made).
 - Website (after the port): mosfet's animated robot (`mosfet/web/src/face`),
   web components + hsm.ts, marketplace of packages, a Mindstorms-style
   workshop whose pieces are inferred from element XSDs, live highlighting
   of running bots.
-- Going public: push, CI, releases with `SHA256SUMS`, per-platform `scx`
-  binaries, IRP identity regeneration on Linux CI.
+- Going public: CI, publishing the prepared releases with `SHA256SUMS`
+  ([release.md](release.md)), per-platform `scx` binaries, IRP identity
+  regeneration on Linux CI.
 
 ## Known stale docs
 

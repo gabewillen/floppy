@@ -70,8 +70,8 @@ component code.
 | `gemini` (text) | `services/generate` through an OpenAI-compatible base URL | any (by `FLOPPY_BASE_URL`) |
 | `typesafe` (`system_one` Choice/Score) | `services/decision`, TypeSafe backend (`TYPESAFE_API_KEY`) | 1 |
 | `needle` (local tool-calling reflex model) | `services/decision` backend (the `Backend` trait) | later |
-| `sqlite_memory` | `services/sql`, SQLite (a service declaring `wasi:filesystem`) under `abilities/memory/memory.scx` | 3 |
-| `postgres_memory` | PGlite behind the same sql contract | 7 |
+| `sqlite_memory` | `services/sql`, SQLite compiled into the component (it imports `wasi:filesystem`; the run grants a directory) under `abilities/memory/memory.scx`, migrated by `abilities/migration/migration.scx` (decisions D44 to D51) | 3 |
+| `postgres_memory` | `services/pgsql`, the Postgres wire protocol over `wasi:sockets/tcp` (the run grants `inherit-network`) to PGlite served beside `scx` (pglite-socket) or any Postgres, behind the same sql contract and the same Memory ability, which picks it for a `postgresql://` `database`; tested on Postgres 16 (decisions D51, D69 to D72) | 7 |
 | `elevenlabs`, `moonshine`, `mlx_audio`, `pyannote` | `services/speech` (text-to-speech, speech-to-text, diarization backends) | 6 |
 | `livekit` | the `phone` device service | 6 |
 | `mlx_vlm` | a `vision` (reading) service | 6 |
@@ -92,7 +92,7 @@ in the gitignored `.env`), and `decision` uses TypeSafe through its own
 | 4 | Bot core: body and cognition as SCXML, abilities as invoked children, mosfet's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | Done through the script-validator cutover: the body `bots/floppy/floppy.scx`; `abilities/` cognition (autonomy seam, intuition, reasoning), communication (conversation, speaking in text mode); the `bot` and `conversation` namespaces and the decision elements; event contracts and runtime `event:schema` checks; no `<script>` (decisions D33 to D43, [Phase 4 conventions](#phase-4-conventions)). Identity, the phase 5 seams, and the saved live examples finish it ([plan](plans/phase4-bot-core.mdscript.md)) |
 | 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Not started |
 | 6 | Speech, vision, and devices as services (`speech`, `vision`, `phone`, audio) | Not started |
-| 7 | Defaults and release: PGlite memory, tagged releases with `SHA256SUMS` for repository namespaces and services (releases wait for going public) | Not started. There is no default backend: every run names its endpoint with `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (decision D31) |
+| 7 | Defaults and release: PGlite memory, tagged releases with `SHA256SUMS` for repository namespaces and services (releases wait for going public) | Done except publishing. Memory on Postgres: `services/pgsql` behind the unchanged Memory ability, selected by its `database` (a `postgresql://` URI), migrating mosfet's full head schema in the Postgres dialect through the Alembic-style migration ability, with every ability's SQL portable to both engines and tested on Postgres 16; PGlite is reached over its socket server, not compiled into a component (decisions D48 to D51, D69 to D72). Defaults: README.md's [Defaults](../README.md#defaults) and `.env.example`, checked by `tests/tests/defaults.rs`; there is no default backend, so every run names its endpoint with `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (decision D31). Releases: canonical Linux builds, `SHA256SUMS` and a dry run of the release layout, prepared and checked locally ([release.md](release.md)); no tag, release or upload until the repositories are public ([plan](plans/phase7-pglite-defaults.mdscript.md)) |
 
 ## Phase 4 event contracts
 
@@ -254,7 +254,7 @@ D33 to D43.
 | `identity/identity.py` Identity | `abilities/identity/identity.scx`; text name match `<bot:recognize>`; adoption and recall through `abilities/memory/memory.scx` (decisions D43, D44) | ability `.scx` child |
 | Reflection, Routines | `abilities/reflection/reflection.scx`, `abilities/routines/routines.scx` seams; routines are builder-built `.scx` children (phase 5) | ability `.scx` child |
 | Behaviors (Starlark) | builder-built `.scx` documents | generated `.scx` |
-| Memory and its providers | `abilities/memory/memory.scx` over `services/sql` (phase 3) | ability `.scx` child + service |
+| Memory and its providers | `abilities/memory/memory.scx` over `services/sql` (SQLite, phase 3) or `services/pgsql` (Postgres, phase 7), migrated by `abilities/migration/migration.scx` with `<migration:plan>` | ability `.scx` child + service |
 | Listening, reading, turn detectors, devices | phase 6 `.scx` children and Wasm services | out of phase 4 |
 | payload validators | `event:schema` on the receiving transition plus a short correlation cond | `event:schema` |
 
@@ -293,7 +293,8 @@ runs the ACTIVE turn behaviors the stimulus triggers with `turn` and
 - floppy publishes no GitHub release yet, so its tagless repository URIs
   resolve only from the dev cache `scripts/build-components.sh` publishes
   into (`scx run --offline --cache-dir target/components/package-cache`);
-  phase 7 publishes releases, and the same documents then resolve the
+  phase 7 prepared releases ([release.md](release.md)), published once
+  the repositories are public, and the same documents then resolve the
   latest one unedited. A release's manifests name the tagless URIs, and a
   document that pins `@<tag>` binds that release under the same tagless
   namespace (decision D21: scxml.rs splits the tag off when it parses the

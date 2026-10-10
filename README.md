@@ -17,11 +17,16 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | Path | What |
 | --- | --- |
 | `scxml.rs/` | scxml.rs as a squashed git subtree (see [docs/decisions.md](docs/decisions.md) for the source commit) |
-| `namespaces/decision/` | the canonical extension namespace (a Wasm component; synchronous executable content: `decision:choice`); the builder's `scx:validate` is scxml.rs's embedded `scx` namespace |
-| `namespaces/bot/` | the bot body's extension namespace (a Wasm component; synchronous executable content: `bot:attention`, `bot:stimulus`) |
+| `namespaces/decision/` | the canonical extension namespace (a Wasm component; synchronous executable content: `decision:choice` and the choice elements); the builder's `scx:validate` is scxml.rs's embedded `scx` namespace |
+| `namespaces/bot/` | the bot body's extension namespace (a Wasm component; synchronous executable content: `bot:attention`, `bot:stimulus`, `bot:recognize`) |
 | `namespaces/conversation/` | the conversation's extension namespace (a Wasm component; synchronous executable content: `conversation:commit`) |
+| `namespaces/migration/` | Alembic's revision walk as an extension namespace (a Wasm component; synchronous executable content: `migration:plan`) |
 | `services/{generate,decision}/` | canonical invoked services (Wasm components: model generation, decisions) |
+| `services/{sql,pgsql}/` | the memory engines (Wasm components: one SQLite or Postgres transaction per `<invoke>`, [sql](services/sql/README.md), [pgsql](services/pgsql/README.md)) |
+| `services/speech/` | speech decoding and encoding, voice detection, diarization and identification (a Wasm component) |
 | `bots/builder/` | the builder bot: its SCXML document (`builder.scx`), schemas, and saved live examples |
+| `bots/floppy/` | the floppy bot: the body (`floppy.scx`, mosfet's Bot) and its event contracts |
+| `abilities/` | the abilities and stages the bots invoke, each `<name>/<name>.scx` with `<name>/<name>.js` (memory, migration, cognition, communication, listening, ...) |
 | `tests/` | `floppy-tests`: integration tests that run the bots, namespaces, and services through `scx run` |
 | `scripts/` | build and proof scripts |
 
@@ -71,6 +76,31 @@ memory is a file in the directory the run grants the `sql` service (create
 `memory/` first). Each bot's README gives its input events and output
 ([bots/builder/README.md](bots/builder/README.md#running),
 [bots/floppy/README.md](bots/floppy/README.md#running)).
+
+## Memory engines
+
+The floppy bot's memory is mosfet's Memory ability,
+[`abilities/memory/memory.scx`](abilities/memory/memory.scx), on one of two
+engines with the same contract, picked by the `database` it is given
+(decisions D51, D69 to D72):
+
+| `database` | Engine | The run grants |
+| --- | --- | --- |
+| a file path, such as the bot's `/memory/floppy.sqlite` | [`services/sql`](services/sql/README.md), SQLite | `--dir https://github.com/stateforward/floppy/services/sql=HOST::/memory` |
+| a connection URI, `postgresql://USER@IP:PORT/DBNAME` | [`services/pgsql`](services/pgsql/README.md), Postgres over its wire protocol: PGlite served beside `scx` (pglite-socket) or any Postgres that accepts the user without a password | `--wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network` |
+
+`scx` binds every service a document names, so a run that binds the Memory
+ability grants both, as the quick start does. Before its statements, the
+Memory ability brings the database to the head revision through the
+migration ability
+([`abilities/migration/migration.scx`](abilities/migration/migration.scx),
+Alembic's `command.upgrade` with `<migration:plan>`), with mosfet's
+revisions `0001` and `0002` in the engine's dialect
+([`abilities/memory/sqlite/`](abilities/memory/sqlite/),
+[`abilities/memory/postgresql/`](abilities/memory/postgresql/)), and records
+the version in Alembic's `alembic_version`, so a mosfet database is used in
+place. The bot ships with SQLite (the body's `database` `<data>`); Postgres
+support is tested on Postgres 16.
 
 ## Defaults
 
