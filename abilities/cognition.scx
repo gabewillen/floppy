@@ -89,6 +89,8 @@
        version="1.0" datamodel="ecmascript" name="cognition" initial="alive">
   <datamodel>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <!-- The memory database file, for reasoning (null: no memory). -->
+    <data id="database" expr="null"/>
     <data id="hop_timeout_ms" expr="30000"/>
     <!-- The phase 5 seams' gates (off in phase 4). -->
     <data id="reflection_enabled" expr="false"/>
@@ -257,6 +259,7 @@
         <param name="focus_candidates" expr="focus_candidates"/>
         <param name="choices" expr="choices"/>
         <param name="model" expr="model"/>
+        <param name="database" expr="database"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
                   cond="_event.data.turn === turn" target="cancelling_reasoning"/>
