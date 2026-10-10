@@ -46,17 +46,12 @@ created: 2026-10-10
 
 * mosfet's inventory events are contracts already (phase 4): `abilities/schemas/bot.behavior.{create,change,break,tick}.json`, listed in `tests/tests/contracts.rs`
 
+* Match Turn Behaviors In Autonomy: `abilities/autonomy.scx` loads the ACTIVE turn behaviors whose trigger is the stimulus's event name (one memory transaction, by name) and runs each source as the child `candidate` by `<content expr>` with a 1 s silence bound; handled persists `used_count`/`last_used_at`, a source that cannot run persists `failed_count`/`last_failed_at`; the cognition passes `stimulus` and `memory` (`<data id="memory">`, null until the body passes it); tests `autonomy_runs_the_learned_behaviors_the_stimulus_triggers`, `when_no_learned_behavior_handles_the_turn_intuition_runs`. A source that does not compile fails the invocation with an `error.execution` that carries no invokeid (SCXML 3.12.2), so the candidate state takes any `error.*`
+
 ## Slices
 
 Autonomy, routines, and reflection with revision are independent and can run in parallel threads; each takes the database path as `<param name="memory">` from the cognition, which the phase 3 thread is wiring for reasoning.
 
-
-### Match Turn Behaviors In Autonomy
-
-* goal: autonomy recalls the ACTIVE `turn` behaviors whose trigger is the stimulus name and runs them as candidates in inventory order; the first handled one answers the turn (mosfet `_prepare_match`, `_CandidateRun`)
-* autonomy takes `<param name="memory">` (the database path; null keeps today's "no behaviors" answer) and replaces the `behavior` URI seam
-* each candidate: `<invoke><content expr>` with the turn behavior contract, a 1 s silence timer, outcomes `handled`, `unhandled`, `silent`, `failed`; `handled` and `failed` persist `used_count`/`last_used_at` or `failed_count`/`last_failed_at`
-* tests: a stored behavior handles a matching turn; non-matching, unhandled, silent and failing candidates advance; usage is counted
 
 ### Reconcile Routines
 

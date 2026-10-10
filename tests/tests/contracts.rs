@@ -33,11 +33,12 @@
 //! * every `cond`, and every `expr` outside `<data>`, is at most 160
 //!   characters [floppy rule];
 //! * every `<invoke type="scxml">` has a literal `id` and either a
-//!   literal relative `src` or a `srcexpr` (the builder seam: autonomy
-//!   invokes a builder-produced behavior document it names at run time).
+//!   literal relative `src`, a `srcexpr`, or a `<content expr>` (autonomy
+//!   invokes a builder-produced behavior from its inventory row's source).
 //!
-//! Builder output, the documents a `srcexpr` invokes, gets no schema files
-//! (scxml.rs reads them only for a literal `src` child), so it carries no
+//! Builder output, the documents a `srcexpr` or `<content expr>` invokes,
+//! gets no schema files (scxml.rs reads them only for a literal `src`
+//! child), so it carries no
 //! `event:schema` reference; it meets the rest of the structure rule.
 //! `tests/fixtures/phase4/behavior_double.scx`, the stand-in for one, is
 //! checked here.
@@ -674,8 +675,8 @@ fn unknown_domain_names(document: &Parsed, known: &BTreeSet<String>) -> Vec<Stri
 /// `function` token, a `cond` or (outside `<data>`) `expr` over
 /// [`MAX_EXPRESSION_CHARS`], a transition taking one contract event without
 /// an `event:schema`, or an SCXML `<invoke>` without a literal `id` and
-/// either a literal relative `src` or a `srcexpr` (builder output; see
-/// [`builder_output_problems`]).
+/// either a literal relative `src`, a `srcexpr` (builder output; see
+/// [`builder_output_problems`]) or a `<content expr>` (a stored behavior).
 fn structure_problems(document: &Parsed, contract: &BTreeSet<String>) -> Vec<String> {
     let mut problems = Vec::new();
     if document.source.contains("function") {
@@ -720,9 +721,17 @@ fn structure_problems(document: &Parsed, contract: &BTreeSet<String>) -> Vec<Str
                     .is_some_and(|src| !src.value.contains(':') && !src.value.starts_with('/'));
                 let srcexpr =
                     element.attribute("src").is_none() && element.attribute("srcexpr").is_some();
-                if element.attribute("id").is_none() || !(literal_src || srcexpr) {
+                // A stored behavior's source (phase 5): `<content expr>`.
+                let content = element.attribute("src").is_none()
+                    && element.attribute("srcexpr").is_none()
+                    && element.children.iter().any(|child| {
+                        matches!(child, scxml_syntax::Node::Element(content)
+                            if content.name.local_name == "content"
+                                && content.attribute("expr").is_some())
+                    });
+                if element.attribute("id").is_none() || !(literal_src || srcexpr || content) {
                     problems.push(
-                        "an SCXML <invoke> without a literal id and a relative src or a srcexpr"
+                        "an SCXML <invoke> without a literal id and a relative src, a srcexpr or a <content expr>"
                             .to_owned(),
                     );
                 }
@@ -866,7 +875,7 @@ fn builder_output_carries_no_event_schema_and_meets_the_structure_rule() {
 }
 
 #[test]
-fn an_scxml_invoke_needs_a_literal_id_and_a_relative_src_or_a_srcexpr() {
+fn an_scxml_invoke_needs_a_literal_id_and_a_relative_src_a_srcexpr_or_content() {
     let dir = support::unique_scratch("contracts-invoke");
     let problems = |invoke: &str| {
         let text = format!(
@@ -880,17 +889,21 @@ fn an_scxml_invoke_needs_a_literal_id_and_a_relative_src_or_a_srcexpr() {
     for allowed in [
         r#"<invoke id="child" type="scxml" src="child.scx"/>"#,
         r#"<invoke id="behavior" type="scxml" srcexpr="behavior"/>"#,
+        r#"<invoke id="candidate" type="scxml"><content expr="source"/></invoke>"#,
     ] {
         assert!(problems(allowed).is_empty(), "{allowed}");
     }
     for refused in [
         r#"<invoke type="scxml" srcexpr="behavior"/>"#,
+        r#"<invoke id="candidate" type="scxml"><content>text</content></invoke>"#,
         r#"<invoke id="child" type="scxml" src="/abs/child.scx"/>"#,
         r#"<invoke id="child" type="scxml" src="https://example.com/child.scx"/>"#,
     ] {
         assert_eq!(
             problems(refused),
-            ["an SCXML <invoke> without a literal id and a relative src or a srcexpr"],
+            [
+                "an SCXML <invoke> without a literal id and a relative src, a srcexpr or a <content expr>"
+            ],
             "{refused}"
         );
     }

@@ -240,7 +240,7 @@ D33 to D43.
 | `ConfidenceTuner` | `<decision:tuner>` | `namespaces/decision` element |
 | `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`, `_stable_context_ref`, `MessageProvenance` | `<conversation:commit>` | `namespaces/conversation` element |
 | `cognition.py` Cognition | `abilities/cognition.scx` | ability `.scx` child |
-| `autonomy.py` Autonomy | `abilities/autonomy.scx` (phase 5 seam: candidate behaviors are builder-built `.scx` children) | stage `.scx` child |
+| `autonomy.py` Autonomy | `abilities/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<content expr>` children) | stage `.scx` child |
 | `intuition.py` Intuition | `abilities/intuition.scx` invoking `services/decision` | stage `.scx` child and service |
 | `reasoning.py` Reasoning | `abilities/reasoning.scx` invoking `services/generate` | stage `.scx` child and service |
 | `communication.py` Communication | `abilities/communication.scx` | ability `.scx` child |
@@ -255,22 +255,21 @@ D33 to D43.
 
 ### Builder output
 
-A builder-produced behavior or routine document runs as an SCXML child
-that its host names at run time (`<invoke id srcexpr>`), the one exception
-to the literal relative `src` rule. scxml.rs reads `event:schema` files
-only for a literal `<invoke src>` child; a `srcexpr` child gets none, and a
-schema-file reference rejects it when it is invoked (`error.execution`).
-So builder output carries no `event:schema` reference (and, like every
-floppy document, no inline schema and no `<script>`): its host checks what
-it answers. The seam is `abilities/autonomy.scx`'s `behavior` data (null
-until phase 5 installs behaviors): when set, autonomy invokes it with
-`turn` and `input` and answers with the child's `<donedata>` `handled` and
-`selected`. A relative `srcexpr` in an invoked child resolves against the
-root document today (a scxml.rs defect, in the phase 4 plan's proposed
-names), so the seam takes an absolute URI.
+A builder-produced behavior or routine document is stored as its
+inventory row's `bot_behavior.source` and runs as an SCXML child invoked
+from that text (`<invoke id><content expr="source"/></invoke>`, phase 5),
+the one exception to the literal relative `src` rule. scxml.rs reads
+`event:schema` files only for a literal `<invoke src>` child; an invoked
+source gets none, and a schema-file reference rejects it when it is
+invoked (`error.execution`). So builder output carries no `event:schema`
+reference (and, like every floppy document, no inline schema and no
+`<script>`): its host checks what it answers. `abilities/autonomy.scx`
+runs the ACTIVE turn behaviors the stimulus triggers with `turn` and
+`input` and answers with the first one's `<donedata>` `handled` and
+`selected` (the phase 5 plan's "Turn Behavior Contract").
 `tests/fixtures/phase4/behavior_double.scx` stands in for one;
 `tests/tests/contracts.rs` checks the rule on it and
-`tests/tests/cognition.rs` runs it through a turn.
+`tests/tests/cognition.rs` runs it from a memory inventory.
 
 ## Known gaps carried from phase 0
 

@@ -1,69 +1,208 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Autonomy stage (mosfet abilities/cognition/autonomy), as an
-  honest seam until phase 5: the cognition (abilities/cognition.scx)
-  invokes it first in each turn, and it answers at once that no learned
-  behavior handles the turn, so the cascade goes on to intuition.
+  floppy's Autonomy stage (mosfet abilities/cognition/autonomy): the
+  cognition (abilities/cognition.scx) invokes it first in each turn. It
+  recalls the learned turn behaviors whose triggers name the turn's
+  stimulus and runs them one at a time as candidates; the first that
+  handles the turn answers it, and otherwise the cascade goes on to
+  intuition.
 
-  Input: the <param>s turn and input, the fields of mosfet's
-  bot.ability.autonomy.input (schemas/bot.ability.autonomy.input.json).
-  Output: its top-level final state's <donedata>, which the cognition
-  receives as done.invoke.autonomy (SCXML 6.4):
+    matching -> loading -> matched -> running <-> advancing
+                                        |            |
+                                        v            v
+                                      using       unhandled
+                                        |
+                                        v
+                                     answered
 
-    {turn, handled: false, candidates: [], reason: "no-behaviors"}
+  Input: the <param>s turn, input (focus and focus_candidates, mosfet's
+  bot.ability.autonomy.input, schemas/bot.ability.autonomy.input.json),
+  stimulus (the turn's stimulus envelope) and memory (the memory service's
+  database path; null means no inventory, so nothing matches).
 
-  Builder seam: behavior is the URI of one builder-produced behavior
-  document, null here (no behaviors are installed until phase 5; only the
-  tests set it). When set, autonomy invokes it as an SCXML child by
-  <invoke id="matched" srcexpr> with the same turn and input, and answers
-  with the child's <donedata> handled and selected:
+  Matching (mosfet _prepare_match, _match_activity): one memory
+  transaction selects the ACTIVE behaviors of lifetime 'turn' that have a
+  trigger equal to the stimulus's event name, in inventory order (by name).
+  No match answers {turn, handled: false, candidates: [], reason:
+  "no-behaviors"}.
 
-    {turn, handled, selected, candidates: [], reason: "behavior"}
+  Candidates (mosfet _CandidateRun): each behavior's source is an SCXML
+  document (phase 5 plan, "Turn Behavior Contract"), run as the child
+  "candidate" by <invoke><content expr>, with the <param>s turn and input
+  (the stimulus's data, or {event: data} when it is not an object, plus
+  focus and focus_candidates: mosfet behavior_input_payload). It answers by
+  its final state's <donedata> {turn, handled, selected}:
+    * handled with selections: its used_count and last_used_at are
+      persisted, then autonomy answers {turn, handled: true, selected,
+      candidates, reason: "behavior"};
+    * not handled (mosfet candidate.advance), or no answer within
+      silence_ms (TURN_SILENCE_BOUND, candidate.silent): the next one runs;
+    * an error.* for it (candidate.failed): its failed_count and
+      last_failed_at are persisted, then the next one runs.
+  When none handles the turn: {turn, handled: false, candidates, reason:
+  "unhandled"}. candidates names the behaviors tried, in order.
 
-  or, when the child cannot run (an error.* for it),
-  {turn, handled: false, failed: true, reason}. A srcexpr child gets no
-  schema files (docs/port-plan.md, "Builder output"), so a behavior
-  document carries no event:schema reference.
-  behavior is an absolute URI: scxml.rs resolves a relative srcexpr in an
-  invoked child against the root document, not this one (docs/plans,
-  "Proposed scxml.rs Names").
+  Failure: a memory transaction that fails or outlasts memory_timeout_ms
+  answers {turn, handled: false, failed: true, reason}.
 
-  Phase 5 replaces this with mosfet's behavior inventory (Autonomy
-  behaviors, Routines and Learning); nothing is recalled or fabricated here.
+  Contracts: the memory service's events reference abilities/schemas/ by
+  event:schema. A candidate is builder output and gets no schema files.
+
+  Bindings: the memory service (https://github.com/stateforward/floppy/services/memory).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="autonomy" initial="matching">
   <datamodel>
     <data id="turn" expr="0"/>
     <data id="input" expr="null"/>
-    <data id="behavior" expr="null"/>
+    <data id="stimulus" expr="null"/>
+    <data id="memory" expr="null"/>
+    <data id="silence_ms" expr="1000"/>
+    <data id="memory_timeout_ms" expr="10000"/>
+    <data id="rows" expr="[]"/>
+    <data id="index" expr="0"/>
+    <data id="tried" expr="[]"/>
+    <data id="behavior_input" expr="null"/>
     <data id="answer" expr="null"/>
+    <data id="timer" expr="null"/>
+    <data id="select_sql">SELECT b.name, b.source FROM bot_behavior AS b JOIN bot_behavior_trigger AS t ON t.behavior_name = b.name WHERE b.status = 'ACTIVE' AND b.lifetime = 'turn' AND t."trigger" = ? ORDER BY b.name</data>
+    <data id="used_sql">UPDATE bot_behavior SET used_count = CAST(CAST(used_count AS INTEGER) + 1 AS TEXT), last_used_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE name = ?</data>
+    <data id="failed_sql">UPDATE bot_behavior SET failed_count = CAST(CAST(failed_count AS INTEGER) + 1 AS TEXT), last_failed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE name = ?</data>
   </datamodel>
 
-  <!-- No behaviors are installed: nothing matches. -->
   <state id="matching">
     <onentry>
-      <if cond="behavior === null">
+      <if cond="memory === null">
         <log label="autonomy" expr="'turn ' + turn + ': no behaviors (phase 5)'"/>
-      <else/>
-        <log label="autonomy" expr="'turn ' + turn + ': one behavior'"/>
       </if>
     </onentry>
-    <transition cond="behavior === null" target="done"/>
-    <transition target="behaving"/>
+    <transition cond="memory === null" target="done"/>
+    <transition target="loading"/>
   </state>
 
-  <!-- One builder-produced behavior handles the turn, or not. -->
-  <state id="behaving">
-    <invoke id="matched" type="scxml" srcexpr="behavior">
-      <param name="turn" expr="turn"/>
-      <param name="input" expr="input"/>
+  <!-- The inventory: the ACTIVE turn behaviors the stimulus triggers. -->
+  <state id="loading">
+    <onentry>
+      <send idlocation="timer" event="bot.ability.autonomy.behaviors.load.failed" delayexpr="memory_timeout_ms + 'ms'"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="timer"/>
+    </onexit>
+    <invoke id="load" type="https://github.com/stateforward/floppy/services/memory">
+      <param name="database" expr="memory"/>
+      <param name="statements" expr="[{sql: select_sql, parameters: [stimulus.event]}]"/>
     </invoke>
-    <transition event="done.invoke.matched" cond="_event.data.turn === turn" target="answered">
-      <assign location="answer" expr="_event.data"/>
+    <transition event="bot.ability.memory.output" cond="_event.invokeid === 'load'">
+      <assign location="rows" expr="_event.data.results[0].rows"/>
     </transition>
-    <transition event="error.*" target="failed">
-      <assign location="answer" expr="'the behavior could not run (' + _event.name + ')'"/>
+    <transition event="done.invoke.load" target="matched"/>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="_event.invokeid === 'load'" target="failed">
+      <assign location="answer" expr="'Autonomy behavior load failed: ' + _event.data.message"/>
+    </transition>
+    <transition event="error.*" cond="_event.invokeid === 'load'" target="failed">
+      <assign location="answer" expr="'Autonomy behavior load failed: ' + _event.name"/>
+    </transition>
+    <transition event="bot.ability.autonomy.behaviors.load.failed" cond="_event.sendid === timer" target="failed">
+      <assign location="answer" expr="'Autonomy behavior load timed out after ' + memory_timeout_ms + ' ms'"/>
+    </transition>
+  </state>
+
+  <state id="matched">
+    <onentry>
+      <log label="autonomy" expr="'turn ' + turn + ': ' + rows.length + ' matched for ' + stimulus.event"/>
+    </onentry>
+    <transition cond="rows.length === 0" target="done"/>
+    <transition target="running"/>
+  </state>
+
+  <!-- One candidate: the behavior at index. -->
+  <state id="running">
+    <onentry>
+      <assign location="tried" expr="tried.concat([rows[index].values[0]])"/>
+      <assign location="behavior_input" expr="(stimulus.data !== null &amp;&amp; typeof stimulus.data === 'object' ? Object.assign({}, stimulus.data) : {event: stimulus.data})"/>
+      <assign location="behavior_input.focus" expr="input.focus"/>
+      <assign location="behavior_input.focus_candidates" expr="input.focus_candidates"/>
+      <log label="autonomy.candidate" expr="rows[index].values[0]"/>
+      <send idlocation="timer" event="bot.ability.autonomy.candidate.silent" delayexpr="silence_ms + 'ms'"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="timer"/>
+    </onexit>
+    <invoke id="candidate" type="scxml">
+      <content expr="rows[index].values[1]"/>
+      <param name="turn" expr="turn"/>
+      <param name="input" expr="behavior_input"/>
+    </invoke>
+    <transition event="done.invoke.candidate" cond="_event.data.turn === turn &amp;&amp; _event.data.handled === true &amp;&amp; Array.isArray(_event.data.selected)" target="using">
+      <assign location="answer" expr="_event.data.selected"/>
+    </transition>
+    <transition event="done.invoke.candidate" target="advancing">
+      <log label="autonomy.candidate.advance" expr="rows[index].values[0]"/>
+    </transition>
+    <transition event="bot.ability.autonomy.candidate.silent" cond="_event.sendid === timer" target="advancing">
+      <log label="autonomy.candidate.silent" expr="rows[index].values[0] + ' after ' + silence_ms + ' ms'"/>
+    </transition>
+    <!-- A source that does not compile fails the invocation with no
+         invokeid (SCXML 3.12.2); nothing else here raises one. -->
+    <transition event="error.*" target="recording_failure">
+      <log label="autonomy.candidate.failed" expr="rows[index].values[0] + ' (' + _event.name + ')'"/>
+    </transition>
+  </state>
+
+  <state id="advancing">
+    <onentry>
+      <assign location="index" expr="index + 1"/>
+    </onentry>
+    <transition cond="index &lt; rows.length" target="running"/>
+    <transition target="unhandled"/>
+  </state>
+
+  <!-- mosfet behavior_usage: the handled behavior's use is persisted. -->
+  <state id="using">
+    <onentry>
+      <send idlocation="timer" event="bot.ability.autonomy.behavior_usage.persistence_failed" delayexpr="memory_timeout_ms + 'ms'"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="timer"/>
+    </onexit>
+    <invoke id="usage" type="https://github.com/stateforward/floppy/services/memory">
+      <param name="database" expr="memory"/>
+      <param name="statements" expr="[{sql: used_sql, parameters: [rows[index].values[0]]}]"/>
+    </invoke>
+    <transition event="done.invoke.usage" target="answered"/>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="_event.invokeid === 'usage'" target="failed">
+      <assign location="answer" expr="'Autonomy behavior usage failed: ' + _event.data.message"/>
+    </transition>
+    <transition event="error.*" cond="_event.invokeid === 'usage'" target="failed">
+      <assign location="answer" expr="'Autonomy behavior usage failed: ' + _event.name"/>
+    </transition>
+    <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="_event.sendid === timer" target="failed">
+      <assign location="answer" expr="'Autonomy behavior usage timed out after ' + memory_timeout_ms + ' ms'"/>
+    </transition>
+  </state>
+
+  <!-- A failed candidate's failure is persisted, then the next one runs. -->
+  <state id="recording_failure">
+    <onentry>
+      <send idlocation="timer" event="bot.ability.autonomy.behavior_usage.persistence_failed" delayexpr="memory_timeout_ms + 'ms'"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="timer"/>
+    </onexit>
+    <invoke id="failure" type="https://github.com/stateforward/floppy/services/memory">
+      <param name="database" expr="memory"/>
+      <param name="statements" expr="[{sql: failed_sql, parameters: [rows[index].values[0]]}]"/>
+    </invoke>
+    <transition event="done.invoke.failure" target="advancing"/>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="_event.invokeid === 'failure'" target="failed">
+      <assign location="answer" expr="'Autonomy behavior usage failed: ' + _event.data.message"/>
+    </transition>
+    <transition event="error.*" cond="_event.invokeid === 'failure'" target="failed">
+      <assign location="answer" expr="'Autonomy behavior usage failed: ' + _event.name"/>
+    </transition>
+    <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="_event.sendid === timer" target="failed">
+      <assign location="answer" expr="'Autonomy behavior usage timed out after ' + memory_timeout_ms + ' ms'"/>
     </transition>
   </state>
 
@@ -73,15 +212,21 @@
     </donedata>
   </final>
 
+  <final id="unhandled">
+    <donedata>
+      <content expr="({turn: turn, handled: false, candidates: tried, reason: 'unhandled'})"/>
+    </donedata>
+  </final>
+
   <final id="answered">
     <donedata>
-      <content expr="({turn: turn, handled: answer.handled === true, selected: answer.selected, candidates: [], reason: 'behavior'})"/>
+      <content expr="({turn: turn, handled: true, selected: answer, candidates: tried, reason: 'behavior'})"/>
     </donedata>
   </final>
 
   <final id="failed">
     <donedata>
-      <content expr="({turn: turn, handled: false, failed: true, reason: answer})"/>
+      <content expr="({turn: turn, handled: false, failed: true, candidates: tried, reason: answer})"/>
     </donedata>
   </final>
 </scxml>
