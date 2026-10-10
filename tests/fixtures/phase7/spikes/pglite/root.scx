@@ -1,0 +1,27 @@
+<!-- Phase 7 spike: an invoked service reaches PGlite over the Postgres
+     wire protocol on wasi:sockets/tcp and runs one simple query. The test
+     sets the server's address and the query through <data> (it rewrites
+     the two expressions) and reads the result from the log. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" initial="querying">
+  <datamodel>
+    <data id="address" expr="'127.0.0.1:5432'"/>
+    <data id="sql" expr="'SELECT 1'"/>
+  </datamodel>
+  <state id="querying">
+    <invoke id="pglite" type="https://github.com/stateforward/floppy/services/pglite-spike">
+      <param name="address" expr="address"/>
+      <param name="sql" expr="sql"/>
+    </invoke>
+    <transition event="spike.pglite.result" target="done">
+      <log label="result" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="spike.pglite.failed" target="done">
+      <log label="failed" expr="_event.data.message"/>
+    </transition>
+    <transition event="error.*" target="done">
+      <log label="error" expr="_event.name"/>
+    </transition>
+  </state>
+  <final id="done"/>
+</scxml>
