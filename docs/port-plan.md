@@ -265,9 +265,8 @@ floppy document, no inline schema and no `<script>`): its host checks what
 it answers. The seam is `abilities/autonomy.scx`'s `behavior` data (null
 until phase 5 installs behaviors): when set, autonomy invokes it with
 `turn` and `input` and answers with the child's `<donedata>` `handled` and
-`selected`. A relative `srcexpr` in an invoked child resolves against the
-root document today (a scxml.rs defect, in the phase 4 plan's proposed
-names), so the seam takes an absolute URI.
+`selected`. A relative `behavior` URI resolves against
+`abilities/autonomy.scx`, the document that evaluates it.
 `tests/fixtures/phase4/behavior_double.scx` stands in for one;
 `tests/tests/contracts.rs` checks the rule on it and
 `tests/tests/cognition.rs` runs it through a turn.

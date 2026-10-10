@@ -23,10 +23,8 @@
   or, when the child cannot run (an error.* for it),
   {turn, handled: false, failed: true, reason}. A srcexpr child gets no
   schema files (docs/port-plan.md, "Builder output"), so a behavior
-  document carries no event:schema reference.
-  behavior is an absolute URI: scxml.rs resolves a relative srcexpr in an
-  invoked child against the root document, not this one (docs/plans,
-  "Proposed scxml.rs Names").
+  document carries no event:schema reference. A relative behavior URI
+  resolves against this document.
 
   Phase 5 replaces this with mosfet's behavior inventory (Autonomy
   behaviors, Routines and Learning); nothing is recalled or fabricated here.

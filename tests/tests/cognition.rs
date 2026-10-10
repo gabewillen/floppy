@@ -598,12 +598,10 @@ fn a_behavior_double_handles_a_turn_through_autonomy() {
         &double,
     )
     .expect("the double is copyable");
-    // An absolute URI: scxml.rs resolves a relative srcexpr in an invoked
-    // child against the root document (bots/floppy/), not autonomy's.
-    let uri = format!("'file://{}'", double.display());
+    // Relative to autonomy, the invoked document that evaluates it.
     rewrite(
         &abilities.join("autonomy.scx"),
-        &[("behavior", uri.as_str())],
+        &[("behavior", "'behavior_double.scx'")],
     );
     let mut run = start(&bot);
     say(&mut run, "background noise");
