@@ -50,7 +50,8 @@
 //!   backends), and `provider` (optional, exactly `elevenlabs`: mosfet's
 //!   `elevenlabs` provider instead of the `OpenAI`-compatible API).
 //!
-//! Any other parameter, a parameter given twice, one the operation does
+//! A parameter whose value is `null` is not given. Any other parameter, a
+//! parameter given twice, one the operation does
 //! not take, or a malformed value rejects the start: the `<invoke>` raises
 //! `error.execution` and nothing is read, sent, or written.
 //!
@@ -82,10 +83,12 @@
 //! * [`DECODING_OUTPUT_EVENT`] `{"text": T}`: the decoded speech (empty when
 //!   the backend heard none).
 //! * [`ENCODING_OUTPUT_EVENT`] `{"audio": R, "media_type": M,
-//!   "sample_rate_hz": N, "channels": C}`: `R` is the `output` reference, the
-//!   audio is in its file, and `N` and `C` are numbers only when known (a
-//!   WAV file's header, or the `ElevenLabs` format that was asked for), else
-//!   `null`.
+//!   "sample_rate_hz": N, "channels": C, "duration": D}`: `R` is the
+//!   `output` reference, the audio is in its file, and `N`, `C`, and `D`
+//!   are numbers only when known ([`sound`]: raw `pcm` is 24 kHz mono
+//!   16-bit, a WAV file declares its own, and `ElevenLabs` names its `mp3`
+//!   rate), else `null`. `D` is the seconds of sound measured from the bytes
+//!   of linear PCM, mosfet's `Speaking._playout_duration`.
 //! * [`FAILED_EVENT`] `{"message": M}` (mosfet's `FailureData`), `M` one
 //!   closed message per [`FailureCode`] and direction.
 //!
@@ -499,6 +502,11 @@ pub fn parse_parameters<'a>(
     let mut output = None;
     let mut provider = None;
     for (name, value) in parameters {
+        // A null value is a parameter not given (an invoker passes its
+        // unset data as null).
+        if matches!(value, Data::Null) {
+            continue;
+        }
         let slot = match name {
             "operation" => &mut operation,
             "model" => &mut model,
@@ -832,25 +840,113 @@ pub fn decoding_outcome(
     }
 }
 
-/// The sample rate and channels a WAV file's `fmt ` chunk declares.
+/// The sound fields of encoded audio, each only when known.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Sound {
+    /// Samples per second.
+    pub sample_rate_hz: Option<u32>,
+    /// Channels.
+    pub channels: Option<u16>,
+    /// Seconds of sound, measured from the bytes of linear PCM (mosfet's
+    /// `Speaking._playout_duration`).
+    pub duration: Option<f64>,
+}
+
+impl Sound {
+    const UNKNOWN: Self = Self {
+        sample_rate_hz: None,
+        channels: None,
+        duration: None,
+    };
+
+    /// Linear PCM of `bytes` sample bytes: its duration is the byte count
+    /// over the frame rate.
+    fn linear(rate: u32, channels: u16, bytes_per_sample: u16, bytes: usize) -> Self {
+        let frame_rate = f64::from(rate) * f64::from(channels) * f64::from(bytes_per_sample);
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "audio byte counts are far below 2^52"
+        )]
+        let duration = bytes as f64 / frame_rate;
+        Self {
+            sample_rate_hz: Some(rate),
+            channels: Some(channels),
+            duration: (duration > 0.0 && duration.is_finite()).then_some(duration),
+        }
+    }
+}
+
+/// The rate of raw `pcm`: 16-bit signed little-endian mono samples at
+/// 24 kHz, as the `OpenAI` speech API documents its `pcm` and `ElevenLabs`
+/// names `pcm_24000`.
+pub const PCM_SAMPLE_RATE_HZ: u32 = 24_000;
+
+/// The sound a WAV file declares: its `fmt ` chunk's rate and channels, and,
+/// for integer PCM (format 1), the duration of its `data` chunk (a streamed
+/// file's unknown `data` size counts the bytes present).
 #[must_use]
-pub fn wav_header(audio: &[u8]) -> Option<(u32, u16)> {
+pub fn wav_sound(audio: &[u8]) -> Option<Sound> {
     if audio.get(..4)? != b"RIFF" || audio.get(8..12)? != b"WAVE" {
         return None;
     }
+    let mut format = None;
     let mut offset = 12_usize;
-    loop {
-        let id = audio.get(offset..offset + 4)?;
+    while let Some(id) = audio.get(offset..offset + 4) {
         let size = u32::from_le_bytes(audio.get(offset + 4..offset + 8)?.try_into().ok()?);
         let body = offset + 8;
+        let size = usize::try_from(size).ok()?;
         if id == b"fmt " {
-            let channels = u16::from_le_bytes(audio.get(body + 2..body + 4)?.try_into().ok()?);
+            let field = |at: usize| -> Option<u16> {
+                Some(u16::from_le_bytes(
+                    audio.get(body + at..body + at + 2)?.try_into().ok()?,
+                ))
+            };
+            let tag = field(0)?;
+            let channels = field(2)?;
             let rate = u32::from_le_bytes(audio.get(body + 4..body + 8)?.try_into().ok()?);
-            return (channels > 0 && rate > 0).then_some((rate, channels));
+            let bits = field(14)?;
+            if channels == 0 || rate == 0 {
+                return None;
+            }
+            format = Some((tag, rate, channels, bits));
+        } else if id == b"data" {
+            let (tag, rate, channels, bits) = format?;
+            let present = audio.len().saturating_sub(body).min(size);
+            return Some(if tag == 1 && bits > 0 && bits % 8 == 0 {
+                Sound::linear(rate, channels, bits / 8, present)
+            } else {
+                Sound {
+                    sample_rate_hz: Some(rate),
+                    channels: Some(channels),
+                    duration: None,
+                }
+            });
         }
         // Chunks are padded to an even size.
-        let size = usize::try_from(size).ok()?;
         offset = body.checked_add(size)?.checked_add(size % 2)?;
+    }
+    format.map(|(_, rate, channels, _)| Sound {
+        sample_rate_hz: Some(rate),
+        channels: Some(channels),
+        duration: None,
+    })
+}
+
+/// The sound of encoded audio in `format` from `provider`: raw `pcm` is
+/// [`PCM_SAMPLE_RATE_HZ`] mono 16-bit, a WAV file declares its own, and
+/// `ElevenLabs`' `mp3` names its rate; anything else is unknown.
+#[must_use]
+pub fn sound(provider: Provider, format: Format, audio: &[u8]) -> Sound {
+    match format.response_format {
+        "pcm" => Sound::linear(PCM_SAMPLE_RATE_HZ, 1, 2, audio.len()),
+        "wav" => wav_sound(audio).unwrap_or(Sound::UNKNOWN),
+        _ => match (provider, format.elevenlabs) {
+            (Provider::Elevenlabs, Some((_, rate))) => Sound {
+                sample_rate_hz: Some(rate),
+                ..Sound::UNKNOWN
+            },
+            _ => Sound::UNKNOWN,
+        },
     }
 }
 
@@ -874,32 +970,15 @@ pub fn encoding_outcome(
     if write(&encoding.output.path, &audio).is_err() {
         return Returned::failed(operation, FailureCode::Unwritable);
     }
-    let (sample_rate_hz, channels) = match (encoding.provider, encoding.format) {
-        (
-            _,
-            Format {
-                response_format: "wav",
-                ..
-            },
-        ) => wav_header(&audio).map_or((Json::Null, Json::Null), |(rate, channels)| {
-            (rate.into(), channels.into())
-        }),
-        (
-            Provider::Elevenlabs,
-            Format {
-                elevenlabs: Some((_, rate)),
-                ..
-            },
-        ) => (rate.into(), Json::Null),
-        _ => (Json::Null, Json::Null),
-    };
+    let sound = sound(encoding.provider, encoding.format, &audio);
     Returned {
         name: ENCODING_OUTPUT_EVENT,
         data: canonical_json(&serde_json::json!({
             "audio": encoding.output.reference,
             "media_type": encoding.format.media_type,
-            "sample_rate_hz": sample_rate_hz,
-            "channels": channels,
+            "sample_rate_hz": sound.sample_rate_hz,
+            "channels": sound.channels,
+            "duration": sound.duration,
         })),
     }
 }

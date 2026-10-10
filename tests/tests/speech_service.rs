@@ -51,13 +51,17 @@ fn speech() -> String {
     service_uri("speech")
 }
 
-/// A minimal WAV file declaring `rate` and `channels`.
+/// A minimal 16-bit PCM WAV file of a tenth of a second declaring `rate`
+/// and `channels`.
 fn wav(rate: u32, channels: u16) -> Vec<u8> {
+    let data = usize::try_from(rate / 10).expect("small") * usize::from(channels) * 2;
     let mut audio = b"RIFF\x24\0\0\0WAVEfmt \x10\0\0\0\x01\0".to_vec();
     audio.extend_from_slice(&channels.to_le_bytes());
     audio.extend_from_slice(&rate.to_le_bytes());
     audio.extend_from_slice(&[0, 0, 0, 0, 2, 0, 16, 0]);
-    audio.extend_from_slice(b"data\x02\0\0\0\0\0");
+    audio.extend_from_slice(b"data");
+    audio.extend_from_slice(&u32::try_from(data).expect("small").to_le_bytes());
+    audio.resize(audio.len() + data, 0);
     audio
 }
 
@@ -316,7 +320,7 @@ fn an_encoding_writes_the_audio_and_answers_its_reference() {
         labelled(&[
             (
                 "event",
-                r#"bot.ability.vocal.speech.encoding.output {"audio":"media/said.mp3","channels":null,"media_type":"audio/mpeg","sample_rate_hz":null}"#
+                r#"bot.ability.vocal.speech.encoding.output {"audio":"media/said.mp3","channels":null,"duration":null,"media_type":"audio/mpeg","sample_rate_hz":null}"#
             ),
             ("final", "done"),
         ]),
@@ -353,7 +357,7 @@ fn a_wav_encoding_names_the_rate_and_channels_its_header_declares() {
         labelled(&[
             (
                 "event",
-                r#"bot.ability.vocal.speech.encoding.output {"audio":"/media/said.wav","channels":1,"media_type":"audio/wav","sample_rate_hz":22050}"#
+                r#"bot.ability.vocal.speech.encoding.output {"audio":"/media/said.wav","channels":1,"duration":0.1,"media_type":"audio/wav","sample_rate_hz":22050}"#
             ),
             ("final", "done"),
         ]),
@@ -383,7 +387,7 @@ fn an_elevenlabs_encoding_uses_its_text_to_speech_api() {
         labelled(&[
             (
                 "event",
-                r#"bot.ability.vocal.speech.encoding.output {"audio":"file:///media/said.mp3","channels":null,"media_type":"audio/mpeg","sample_rate_hz":44100}"#
+                r#"bot.ability.vocal.speech.encoding.output {"audio":"file:///media/said.mp3","channels":null,"duration":null,"media_type":"audio/mpeg","sample_rate_hz":44100}"#
             ),
             ("final", "done"),
         ]),

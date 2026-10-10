@@ -47,15 +47,19 @@ fn ok(body: &[u8]) -> Result<Response, TransportFailure> {
     })
 }
 
-/// A minimal WAV file: a `fmt ` chunk after a padded odd-sized chunk.
+/// A minimal 16-bit PCM WAV file of a tenth of a second: a `fmt ` chunk
+/// after a padded odd-sized chunk, then its `data`.
 fn wav(rate: u32, channels: u16) -> Vec<u8> {
+    let data = usize::try_from(rate / 10).expect("small") * usize::from(channels) * 2;
     let mut audio = b"RIFF\0\0\0\0WAVE".to_vec();
     audio.extend_from_slice(b"LIST\x03\0\0\0abc\0");
     audio.extend_from_slice(b"fmt \x10\0\0\0\x01\0");
     audio.extend_from_slice(&channels.to_le_bytes());
     audio.extend_from_slice(&rate.to_le_bytes());
-    audio.extend_from_slice(&[0; 8]);
-    audio.extend_from_slice(b"data\x02\0\0\0\0\0");
+    audio.extend_from_slice(&[0, 0, 0, 0, 0, 0, 16, 0]);
+    audio.extend_from_slice(b"data");
+    audio.extend_from_slice(&u32::try_from(data).expect("small").to_le_bytes());
+    audio.resize(audio.len() + data, 0);
     audio
 }
 
@@ -415,7 +419,7 @@ fn encoded_audio_is_written_before_the_output_names_it() {
     assert_eq!(returned.name, ENCODING_OUTPUT_EVENT);
     assert_eq!(
         returned.data,
-        r#"{"audio":"/media/said.mp3","channels":null,"media_type":"audio/mpeg","sample_rate_hz":null}"#
+        r#"{"audio":"/media/said.mp3","channels":null,"duration":null,"media_type":"audio/mpeg","sample_rate_hz":null}"#
     );
     let failed = encoding_outcome(&operation, ok(b"ID3-mp3"), |_, _| {
         Err(std::io::Error::other("denied"))
@@ -434,24 +438,52 @@ fn encoded_audio_is_written_before_the_output_names_it() {
 }
 
 #[test]
-fn the_rate_and_channels_are_named_only_when_known() {
+fn the_rate_channels_and_duration_are_named_only_when_known() {
     let wav_encoding = encode(&[("media_type", text("audio/wav"))]);
     let returned = encoding_outcome(&wav_encoding, ok(&wav(22_050, 2)), |_, _| Ok(()));
     assert_eq!(data(&returned)["sample_rate_hz"], 22_050);
     assert_eq!(data(&returned)["channels"], 2);
+    assert_eq!(data(&returned)["duration"], 0.1);
     let unreadable = encoding_outcome(&wav_encoding, ok(b"RIFF"), |_, _| Ok(()));
     assert_eq!(data(&unreadable)["sample_rate_hz"], Json::Null);
-    let elevenlabs = encode(&[
-        ("provider", text("elevenlabs")),
-        ("media_type", text("audio/pcm")),
-    ]);
-    let returned = encoding_outcome(&elevenlabs, ok(&[0, 0, 1, 0]), |_, _| Ok(()));
-    assert_eq!(data(&returned)["sample_rate_hz"], 24_000);
-    assert_eq!(data(&returned)["channels"], Json::Null);
-    // An OpenAI-compatible server's raw PCM declares nothing.
-    let pcm = encode(&[("media_type", text("audio/pcm"))]);
-    let returned = encoding_outcome(&pcm, ok(&[0, 0, 1, 0]), |_, _| Ok(()));
-    assert_eq!(data(&returned)["sample_rate_hz"], Json::Null);
+    assert_eq!(data(&unreadable)["duration"], Json::Null);
+    // A streamed WAV's unknown data size counts the bytes present.
+    let mut streamed = wav(24_000, 1);
+    let at = streamed.len() - 4800 - 4;
+    streamed[at..at + 4].copy_from_slice(&[0xff; 4]);
+    assert_eq!(
+        wav_sound(&streamed).and_then(|sound| sound.duration),
+        Some(0.1)
+    );
+    // Raw PCM is 24 kHz mono 16-bit from both backends.
+    for provider in [vec![("provider", text("elevenlabs"))], vec![]] {
+        let mut parameters = vec![("media_type", text("audio/pcm"))];
+        parameters.extend(provider);
+        let pcm = encode(&parameters);
+        let returned = encoding_outcome(&pcm, ok(&[0; 4800]), |_, _| Ok(()));
+        assert_eq!(data(&returned)["sample_rate_hz"], 24_000);
+        assert_eq!(data(&returned)["channels"], 1);
+        assert_eq!(data(&returned)["duration"], 0.1);
+    }
+    let elevenlabs = encode(&[("provider", text("elevenlabs"))]);
+    let returned = encoding_outcome(&elevenlabs, ok(b"ID3"), |_, _| Ok(()));
+    assert_eq!(data(&returned)["sample_rate_hz"], 44_100);
+    assert_eq!(data(&returned)["duration"], Json::Null);
+}
+
+#[test]
+fn a_null_parameter_is_not_given() {
+    assert_eq!(
+        parse(&[
+            ("operation", text("encode")),
+            ("model", Data::Null),
+            ("text", text("hi")),
+            ("voice", text("alloy")),
+            ("output", text("o.pcm")),
+        ]),
+        Err("speech requires a model parameter")
+    );
+    assert_eq!(encode(&[("media_type", Data::Null)]), encode(&[]));
 }
 
 #[test]

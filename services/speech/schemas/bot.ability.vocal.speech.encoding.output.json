@@ -65,6 +65,24 @@
         2
       ],
       "title": "Channels"
+    },
+    "duration": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Seconds of sound, measured from the encoded audio rather than estimated (mosfet's EfferenceData.duration, which Speaking measures from linear PCM); null when the form does not say [floppy field].",
+      "examples": [
+        3.6,
+        null
+      ],
+      "title": "Duration"
     }
   },
   "required": [
@@ -75,12 +93,14 @@
     {
       "audio": "media/speech-1.mp3",
       "channels": null,
+      "duration": null,
       "media_type": "audio/mpeg",
       "sample_rate_hz": null
     },
     {
       "audio": "media/speech-1.pcm",
       "channels": 1,
+      "duration": 3.6,
       "media_type": "audio/pcm",
       "sample_rate_hz": 24000
     }
