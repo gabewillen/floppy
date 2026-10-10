@@ -153,6 +153,59 @@ fn a_schema_asks_for_structured_output_with_its_name_and_strictness() {
 }
 
 #[test]
+fn a_strict_schema_is_sent_with_every_property_required() {
+    let schema = r#"{"type":"object","title":"t","properties":{"event":{"type":"string"},"data":{"type":"object","properties":{"name":{"type":"string","title":"Name"},"reason":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"examples":["x"]}},"required":["name"]},"items":{"oneOf":[{"type":"object","properties":{"a":{"type":"integer"}}},{"type":"null"}]}},"required":["event"]}"#;
+    let strict = parse(&[
+        ("model", text("m")),
+        ("prompt", text("Decide.")),
+        ("schema", text(schema)),
+        ("strict", Data::Bool(true)),
+    ])
+    .expect("valid parameters");
+    let body: Json = serde_json::from_slice(&build_request(2, 1, &strict).body).expect("JSON");
+    assert_eq!(
+        body["response_format"]["json_schema"]["schema"],
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "event": {"type": "string"},
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "reason": {"anyOf": [{"type": "string"}, {"type": "null"}]}
+                    },
+                    "required": ["name", "reason"],
+                    "additionalProperties": false
+                },
+                "items": {"anyOf": [
+                    {"type": "object", "properties": {"a": {"type": "integer"}}, "required": ["a"], "additionalProperties": false},
+                    {"type": "null"}
+                ]}
+            },
+            "required": ["event", "data", "items"],
+            "additionalProperties": false
+        })
+    );
+    // Not strict, the schema is sent as given.
+    let loose = parse(&[
+        ("model", text("m")),
+        ("prompt", text("Decide.")),
+        ("schema", text(schema)),
+    ])
+    .expect("valid parameters");
+    let body: Json = serde_json::from_slice(&build_request(2, 1, &loose).body).expect("JSON");
+    assert_eq!(
+        body["response_format"]["json_schema"]["schema"]["title"],
+        "t"
+    );
+    assert_eq!(
+        body["response_format"]["json_schema"]["schema"]["properties"]["data"]["required"],
+        serde_json::json!(["name"])
+    );
+}
+
+#[test]
 fn reasoning_effort_is_sent_as_given() {
     let generation = parse(&[
         ("model", text("m")),

@@ -254,11 +254,11 @@ impl Run {
     /// Starts `scx run` with `args` (the document among them) and the
     /// extra environment `env`.
     ///
-    /// A run whose document tree binds the sql or the generate service
-    /// (decided by [`binds`]) and that grants it no directory gets a fresh
-    /// one ([`memory_grant`], [`media_grant`]): both services import
-    /// `wasi:filesystem`, and a run that binds one without a `--dir` grant
-    /// is refused. One that binds the pgsql service gets the network
+    /// A run whose document tree binds the sql, the generate or the speech
+    /// service (decided by [`binds`]) and that grants it no directory gets
+    /// a fresh one ([`memory_grant`], [`media_grant`],
+    /// [`speech_media_grant`]): each imports `wasi:filesystem`, and a run
+    /// that binds one without a `--dir` grant is refused. One that binds the pgsql service gets the network
     /// ([`pgsql_grant`]).
     pub fn start(args: &[String], env: &[(&str, &str)]) -> Self {
         let mut full = vec!["run".to_owned()];
@@ -266,6 +266,7 @@ impl Run {
         for (name, grant) in [
             ("sql", memory_grant as fn() -> Vec<String>),
             ("generate", media_grant),
+            ("speech", speech_media_grant),
             ("pgsql", pgsql_grant),
         ] {
             let uri = service_uri(name);
@@ -476,6 +477,19 @@ pub fn media_grant() -> Vec<String> {
             "{}={}::/media",
             service_uri("generate"),
             unique_scratch("media").display()
+        ),
+    ]
+}
+
+/// `--dir` granting the speech service a fresh scratch directory at
+/// `/media`, where the audio it decodes and encodes is read and written.
+pub fn speech_media_grant() -> Vec<String> {
+    vec![
+        "--dir".to_owned(),
+        format!(
+            "{}={}::/media",
+            service_uri("speech"),
+            unique_scratch("speech-media").display()
         ),
     ]
 }
