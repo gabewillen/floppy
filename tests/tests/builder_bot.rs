@@ -714,8 +714,10 @@ fn builder_validates_clean_with_its_repository_packages() {
     let validated = validate(&builder_dir().join("builder.scx"), &[]);
     assert!(validated.status.success(), "{}", validated.stderr);
     assert!(
-        support::validates_but_for_script_src(&validated.stderr),
-        "builder.scx validates without an error, a note, or a warning but LINT019 for builder.js: {}",
+        validated
+            .stderr
+            .contains("diagnostic summary: 0 error(s), 0 warning(s), 0 note(s)"),
+        "builder.scx validates without an error, a warning, or a note: {}",
         validated.stderr
     );
 }
