@@ -85,10 +85,6 @@ function hasRespond(_event) {
   return offering || (isNotFromChild(_event) && /\S/.test(_event.data.text));
 }
 
-function hasActivate(_event) {
-  return offering || isNotFromChild(_event);
-}
-
 // preparing_response
 
 function nextOperation() {

@@ -1,4 +1,4 @@
-{"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
+{"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}
 {"label":"identity.name","parent":"session","session":"session.5","text":"recalled \"Pip\"","type":"log"}
 {"label":"identity.offers","parent":"session","session":"session.5","text":"bot.ability.identity.adopt","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
