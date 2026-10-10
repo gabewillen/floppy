@@ -15,8 +15,13 @@
   <datamodel>
     <data id="database" expr="'/memory/floppy.sqlite'"/>
     <data id="seed" expr="[]"/>
-    <data id="inspect_inventory">SELECT json_group_array(json_object('name', name, 'source', source, 'description', description, 'lifetime', lifetime, 'status', status, 'status_reason', status_reason, 'used_count', used_count, 'failed_count', failed_count, 'triggers', json((SELECT json_group_array("trigger") FROM (SELECT "trigger" FROM bot_behavior_trigger WHERE behavior_name = b.name ORDER BY "trigger"))))) FROM (SELECT * FROM bot_behavior ORDER BY name) AS b</data>
-    <data id="inspect_episodes">SELECT json_group_array(json_object('context_ref', context_ref, 'scope', scope, 'kind', kind, 'content', json(content))) FROM (SELECT * FROM bot_memory WHERE query_tags = 'cognitive_episode' ORDER BY created_at, rowid)</data>
+    <!-- SQL both engines run; the logged values are assembled here. -->
+    <data id="inspect_inventory">SELECT name, source, description, lifetime, status, status_reason, used_count, failed_count FROM bot_behavior ORDER BY name</data>
+    <data id="inspect_triggers">SELECT behavior_name, "trigger" FROM bot_behavior_trigger ORDER BY behavior_name, "trigger"</data>
+    <data id="inspect_episodes">SELECT context_ref, scope, kind, content FROM bot_memory WHERE query_tags = 'cognitive_episode' ORDER BY created_at, memory_id</data>
+    <data id="inventory" expr="[]"/>
+    <data id="triggers" expr="[]"/>
+    <data id="episodes" expr="[]"/>
   </datamodel>
 
   <state id="seeding">
@@ -52,12 +57,17 @@
     <state id="inspecting">
       <invoke id="inspector" type="scxml" src="memory/memory.scx">
         <param name="database" expr="database"/>
-        <param name="statements" expr="[{sql: inspect_inventory}, {sql: inspect_episodes}]"/>
+        <param name="statements" expr="[{sql: inspect_inventory}, {sql: inspect_triggers}, {sql: inspect_episodes}]"/>
       </invoke>
       <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
                   cond="_event.invokeid === 'inspector'" target="waiting">
-        <log label="inventory" expr="_event.data.results[0].rows[0].values[0]"/>
-        <log label="episodes" expr="_event.data.results[1].rows[0].values[0]"/>
+        <assign location="triggers" expr="_event.data.results[1].rows"/>
+        <assign location="inventory" expr="_event.data.results[0].rows.map(r =&gt; Object.fromEntries(r.columns.map((c, i) =&gt; [c, r.values[i]])))"/>
+        <assign location="inventory" expr="inventory.map(b =&gt; Object.assign(b, {triggers: triggers.filter(t =&gt; t.values[0] === b.name).map(t =&gt; t.values[1])}))"/>
+        <assign location="episodes" expr="_event.data.results[2].rows.map(r =&gt; Object.fromEntries(r.columns.map((c, i) =&gt; [c, r.values[i]])))"/>
+        <assign location="episodes" expr="episodes.map(e =&gt; Object.assign(e, {content: JSON.parse(e.content)}))"/>
+        <log label="inventory" expr="JSON.stringify(inventory)"/>
+        <log label="episodes" expr="JSON.stringify(episodes)"/>
       </transition>
     </state>
   </state>

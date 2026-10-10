@@ -23,7 +23,10 @@
   one transaction of the memory ability (abilities/memory/memory.scx, a child per
   transaction answering bot.ability.memory.output or bot.ability.failed)
   on the database the <param> database names; the SQL lives in the <data>
-  below (mosfet behavior/storage.py and cognition/episodes.py). With
+  below (mosfet behavior/storage.py and cognition/episodes.py), SQL both
+  engines (SQLite and Postgres) run: the rows come back plain and the
+  datamodel assembles the episodes and behaviors from them, and a
+  timestamp is UTC in mosfet's form, YYYY-MM-DDTHH:MM:SSZ. With
   database null, recalling logs <log label="reflection" expr="'absent'"> and
   answers at once, as the phase 4 seam did.
 
@@ -128,29 +131,34 @@
     <data id="routine_contract" expr="'Or, for a recurring need, write a persistent routine: it takes no params and never finishes; each schedule is a delayed send to itself of at least 60s that, when it fires, sends bot.behavior.tick to #_parent with data {name, trigger, scheduled_at, fired_at, output}, output a non-empty list of selections, and schedules itself again.'"/>
     <data id="no_schema_files" expr="'It is loaded from text, so it gets no schema files: any event:schema it carries is inline.'"/>
 
-    <!-- mosfet episodes.episode_select_input (statement 0) and
-         storage.select_all_behaviors_clauses (statement 1), each one JSON
-         value. -->
-    <data id="select_episodes">SELECT json_group_array(json(content)) FROM (SELECT content FROM bot_memory WHERE query_tags = 'cognitive_episode' AND json_valid(content) AND (? IS NULL OR context_ref IS NULL OR context_ref = ?) ORDER BY created_at LIMIT 50)</data>
-    <data id="select_behaviors">SELECT json_group_array(json_object('name', name, 'source', source, 'description', description, 'examples', json(examples_json), 'lifetime', lifetime, 'status', status, 'status_reason', status_reason, 'status_updated_at', status_updated_at, 'used_count', CAST(used_count AS INTEGER), 'last_used_at', last_used_at, 'failed_count', CAST(failed_count AS INTEGER), 'last_failed_at', last_failed_at, 'triggers', json((SELECT json_group_array("trigger") FROM (SELECT "trigger" FROM bot_behavior_trigger WHERE behavior_name = b.name ORDER BY "trigger"))))) FROM (SELECT * FROM bot_behavior WHERE ? IS NULL OR name = ? ORDER BY name) AS b</data>
+    <!-- mosfet episodes.episode_select_input and
+         storage.select_all_behaviors_clauses (the behavior rows, named as
+         the inventory's fields, then their triggers), each optionally for
+         one name. -->
+    <data id="select_episodes">SELECT content FROM bot_memory WHERE query_tags = 'cognitive_episode' AND content_format = 'application/json' AND (CAST(? AS TEXT) IS NULL OR context_ref IS NULL OR context_ref = ?) ORDER BY created_at, memory_id LIMIT 50</data>
+    <data id="select_behaviors">SELECT name, source, description, examples_json AS examples, lifetime, status, status_reason, status_updated_at, used_count, last_used_at, failed_count, last_failed_at FROM bot_behavior WHERE CAST(? AS TEXT) IS NULL OR name = ? ORDER BY name</data>
+    <data id="select_triggers">SELECT behavior_name, "trigger" FROM bot_behavior_trigger WHERE CAST(? AS TEXT) IS NULL OR behavior_name = ? ORDER BY behavior_name, "trigger"</data>
+    <data id="behavior_rows" expr="[]"/>
+    <data id="trigger_rows" expr="[]"/>
+    <data id="found" expr="[]"/>
     <!-- mosfet storage.mark_broken + inventory.store_behavior. -->
-    <data id="break_behavior">UPDATE bot_behavior SET status = 'BROKEN', status_reason = ?, status_updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
-    <!-- mosfet revision._draft: the create stub, only for a new name; its
-         triggers only when the stub was just inserted. -->
-    <data id="insert_draft">INSERT INTO bot_behavior (name, source, description, status, status_reason, status_updated_at) SELECT ?, '', ?, 'DRAFT', '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE NOT EXISTS (SELECT 1 FROM bot_behavior WHERE name = ?)</data>
-    <data id="insert_draft_triggers">INSERT INTO bot_behavior_trigger (behavior_name, "trigger") SELECT DISTINCT ?, value FROM json_each(?) WHERE changes() = 1</data>
+    <data id="break_behavior">UPDATE bot_behavior SET status = 'BROKEN', status_reason = ?, status_updated_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
+    <!-- mosfet revision._draft: the create stub and its triggers, only for
+         a name the recalled inventory does not hold. -->
+    <data id="insert_draft">INSERT INTO bot_behavior (name, source, description, status, status_reason, status_updated_at) VALUES (?, '', ?, 'DRAFT', '', replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z')</data>
     <!-- mosfet inventory.store_behavior (storage.replace_behavior_clauses):
-         delete triggers, delete row, insert row, insert triggers. -->
+         delete triggers, delete row, insert row, insert each distinct
+         trigger. -->
     <data id="delete_triggers">DELETE FROM bot_behavior_trigger WHERE behavior_name = ?</data>
     <data id="delete_behavior">DELETE FROM bot_behavior WHERE name = ?</data>
-    <data id="insert_behavior">INSERT INTO bot_behavior (name, source, description, examples_json, lifetime, status, status_reason, status_updated_at, used_count, last_used_at, failed_count, last_failed_at) VALUES (?, ?, ?, ?, ?, 'ACTIVE', '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), ?, ?, ?, ?)</data>
-    <data id="insert_triggers">INSERT INTO bot_behavior_trigger (behavior_name, "trigger") SELECT DISTINCT ?, value FROM json_each(?)</data>
+    <data id="insert_behavior">INSERT INTO bot_behavior (name, source, description, examples_json, lifetime, status, status_reason, status_updated_at, used_count, last_used_at, failed_count, last_failed_at) VALUES (?, ?, ?, ?, ?, 'ACTIVE', '', replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', ?, ?, ?, ?)</data>
+    <data id="insert_trigger">INSERT INTO bot_behavior_trigger (behavior_name, "trigger") VALUES (?, ?)</data>
     <!-- mosfet storage.mark_draft(reason=validation), usage kept. -->
-    <data id="draft_behavior">UPDATE bot_behavior SET status = 'DRAFT', status_reason = 'validation', status_updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
-    <!-- mosfet episodes.episode_insert_input; the memory id is the
-         next rowid in hex, since SQLite in Wasm has no entropy and
-         randomblob repeats across the sql service's invocations. -->
-    <data id="insert_episode">INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT printf('%032x', coalesce(max(rowid), 0) + 1) FROM bot_memory), 'short_term', ?, NULL, 'task', 'standard', 'retain', ?, 'application/json', 'cognitive_episode')</data>
+    <data id="draft_behavior">UPDATE bot_behavior SET status = 'DRAFT', status_reason = 'validation', status_updated_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
+    <!-- mosfet episodes.episode_insert_input; the memory id is the next
+         row count as 32 zero-padded digits, since neither engine's
+         randomness is unique across invocations in Wasm. -->
+    <data id="insert_episode">INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr('00000000000000000000000000000000', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), 'short_term', ?, NULL, 'task', 'standard', 'retain', ?, 'application/json', 'cognitive_episode')</data>
   </datamodel>
   <script src="reflection.js"/>
 
@@ -177,6 +185,7 @@
         <assign location="results" expr="null"/>
         <assign location="statements" expr="episodeSelectStatements()"/>
         <assign location="statements" expr="behaviorSelectStatements()"/>
+        <assign location="statements" expr="triggerSelectStatements()"/>
       </if>
     </onentry>
     <transition cond="hasNoDatabase()" target="idle"/>
@@ -186,8 +195,10 @@
     </invoke>
     <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
                 cond="isFromInvoke(_event, 'recalling_memory')" target="processing">
-      <assign location="prior_episodes" expr="resultValue(_event, 0)"/>
-      <assign location="behaviors" expr="resultValue(_event, 1)"/>
+      <assign location="prior_episodes" expr="recalledEpisodes(_event)"/>
+      <assign location="behavior_rows" expr="resultRows(_event, 1)"/>
+      <assign location="trigger_rows" expr="resultRows(_event, 2)"/>
+      <assign location="behaviors" expr="assembledBehaviors(behavior_rows, trigger_rows)"/>
       <log label="reflection" expr="recalledLog()"/>
     </transition>
     <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
@@ -298,9 +309,11 @@
         <assign location="statements" expr="[]"/>
         <if cond="isCreate()">
           <assign location="statements" expr="insertDraftStatements()"/>
+          <assign location="triggers" expr="distinctIntentTriggers()"/>
           <assign location="statements" expr="insertDraftTriggersStatements()"/>
         </if>
         <assign location="statements" expr="intentBehaviorSelectStatements()"/>
+        <assign location="statements" expr="intentTriggerSelectStatements()"/>
       </onentry>
       <invoke id="preparing_memory" type="scxml" src="../memory/memory.scx">
         <param name="database" expr="database"/>
@@ -308,7 +321,10 @@
       </invoke>
       <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
                 cond="isFromInvoke(_event, 'preparing_memory')" target="authoring">
-        <assign location="existing_behavior" expr="preparedBehavior(_event)"/>
+        <assign location="behavior_rows" expr="resultRows(_event, -2)"/>
+        <assign location="trigger_rows" expr="resultRows(_event, -1)"/>
+        <assign location="found" expr="assembledBehaviors(behavior_rows, trigger_rows)"/>
+        <assign location="existing_behavior" expr="preparedBehavior()"/>
       </transition>
       <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
                 cond="isFromInvoke(_event, 'preparing_memory')" target="failing">

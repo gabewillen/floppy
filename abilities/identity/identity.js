@@ -65,9 +65,9 @@ function nameInsertParameters() {
   return ['long_term', 'self', 'fact', 'standard', 'retain', JSON.stringify({text: adopting_name, kind: 'fact'})];
 }
 
-// The insert's parameters ?7 to ?10 appended.
+// The insert's parameters ?7 and ?8 appended.
 function nameInsertParametersCompleted() {
-  return name_parameters.concat(['application/json', 'self_name', '%Y-%m-%dT%H:%M:%f', 'now']);
+  return name_parameters.concat(['application/json', 'self_name']);
 }
 
 function nameInsertStatements() {
