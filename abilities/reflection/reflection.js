@@ -8,18 +8,28 @@ function isFromInvoke(_event, invokeid) {
   return _event.invokeid === invokeid;
 }
 
-// The rows of a memory result's statement (a negative index counts from
-// the last).
-function resultRows(_event, index) {
-  return _event.data.results.at(index).rows;
+// The behaviors of select_behaviors' rows (named as the inventory's
+// fields) with their triggers from select_triggers' rows: the SQL both
+// engines run returns plain rows, assembled here.
+function assembledBehaviors(behaviorRows, triggerRows) {
+  return behaviorRows.map(function (r) {
+    var b = Object.fromEntries(r.columns.map(function (c, i) { return [c, r.values[i]]; }));
+    return Object.assign(b, {
+      examples: JSON.parse(b.examples),
+      used_count: Number(b.used_count),
+      failed_count: Number(b.failed_count),
+      triggers: triggerRows.filter(function (t) { return t.values[0] === b.name; }).map(function (t) { return t.values[1]; })
+    });
+  });
 }
 
-// The behavior rows, named as the inventory's fields, assembled with their
-// triggers (mosfet storage.select_all_behaviors_clauses).
-function assembledBehaviors(behaviorRows, triggerRows) {
-  return behaviorRows.map(r => Object.fromEntries(r.columns.map((c, i) => [c, r.values[i]])))
-    .map(b => Object.assign(b, {examples: JSON.parse(b.examples), used_count: Number(b.used_count), failed_count: Number(b.failed_count)}))
-    .map(b => Object.assign(b, {triggers: triggerRows.filter(t => t.values[0] === b.name).map(t => t.values[1])}));
+// The intent's triggers, each once.
+function distinctIntentTriggers(list) {
+  return list.filter(function (t, i, a) { return a.indexOf(t) === i; });
+}
+
+function triggerInserts(list) {
+  return distinctIntentTriggers(list).map(function (t) { return {sql: insert_trigger, parameters: [intent.name, t]}; });
 }
 
 // recalling
@@ -35,17 +45,15 @@ function episodeSelectStatements() {
 
 // mosfet storage.select_all_behaviors_clauses appended: every behavior.
 function behaviorSelectStatements() {
-  return statements.concat([{sql: select_behaviors, parameters: [null, null]}]);
+  return statements.concat([{sql: select_behaviors, parameters: [null, null]}, {sql: select_triggers, parameters: [null, null]}]);
 }
 
-// Their triggers appended.
-function triggerSelectStatements() {
-  return statements.concat([{sql: select_triggers, parameters: [null, null]}]);
-}
-
-// The recalled episodes, one JSON row each.
 function recalledEpisodes(_event) {
-  return resultRows(_event, 0).map(r => JSON.parse(r.values[0]));
+  return _event.data.results[0].rows.map(function (r) { return JSON.parse(r.values[0]); });
+}
+
+function recalledBehaviors(_event) {
+  return assembledBehaviors(_event.data.results[1].rows, _event.data.results[2].rows);
 }
 
 function recalledLog() {
@@ -142,9 +150,9 @@ function breakFailedMessage(detail) {
 
 // preparing
 
-// A create for a name the recalled inventory does not hold.
+// A create whose name the recalled inventory does not hold.
 function isCreate() {
-  return create_intent !== null && !behaviors.some(b => b.name === intent.name);
+  return create_intent !== null && !behaviors.some(function (b) { return b.name === intent.name; });
 }
 
 // mosfet revision._draft: the create stub.
@@ -152,28 +160,18 @@ function insertDraftStatements() {
   return [{sql: insert_draft, parameters: [intent.name, intent.description || '']}];
 }
 
-function distinctIntentTriggers() {
-  return (intent.triggers || []).filter((t, i, a) => a.indexOf(t) === i);
-}
-
-// One insert per distinct trigger appended.
 function insertDraftTriggersStatements() {
-  return statements.concat(triggers.map(t => ({sql: insert_trigger, parameters: [intent.name, t]})));
+  return statements.concat(triggerInserts(intent.triggers || []));
 }
 
 // The intent's behavior row appended.
 function intentBehaviorSelectStatements() {
-  return statements.concat([{sql: select_behaviors, parameters: [intent.name, intent.name]}]);
-}
-
-// Its triggers appended.
-function intentTriggerSelectStatements() {
-  return statements.concat([{sql: select_triggers, parameters: [intent.name, intent.name]}]);
+  return statements.concat([{sql: select_behaviors, parameters: [intent.name, intent.name]}, {sql: select_triggers, parameters: [intent.name, intent.name]}]);
 }
 
 // The intent's row, from the last two statements (undefined: unknown).
-function preparedBehavior() {
-  return found[0];
+function preparedBehavior(_event) {
+  return assembledBehaviors(_event.data.results.at(-2).rows, _event.data.results.at(-1).rows)[0];
 }
 
 // Shared by preparing, authoring and accepting.
@@ -284,9 +282,8 @@ function replaceBehaviorWithRow() {
   return statements.concat([{sql: insert_behavior, parameters: row}]);
 }
 
-// One insert per distinct trigger.
 function replaceBehaviorWithTriggers() {
-  return statements.concat(triggers.filter((t, i, a) => a.indexOf(t) === i).map(t => ({sql: insert_trigger, parameters: [intent.name, t]})));
+  return statements.concat(triggerInserts(triggers));
 }
 
 function acceptedLog() {
