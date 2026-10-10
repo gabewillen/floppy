@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.cognition.ignore",
+  "additionalProperties": false,
+  "description": "Deliberately ignore this stimulus: no device command, no focus change, no speech. Required when no other offered event should run. Do not use a device command, focus, or clear_focus as a stand-in for ignore. Put why on the selection envelope reason field, not on this empty payload.",
+  "properties": {},
+  "type": "object",
+  "examples": [
+    {}
+  ]
+}

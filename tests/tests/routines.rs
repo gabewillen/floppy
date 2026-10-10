@@ -1,4 +1,4 @@
-//! floppy's Routines ability (`abilities/routines.scx`, mosfet
+//! floppy's Routines ability (`abilities/routines/routines.scx`, mosfet
 //! `abilities/cognition/routines.py`), run through `scx run` on the logical
 //! clock under `tests/fixtures/phase5/routines_harness.scx`, which stands in
 //! for the cognition.
@@ -26,32 +26,13 @@ use support::{Finished, Run, logs, unique_scratch, workspace};
 /// Bounded wait for the whole run (scx startup included).
 const WAIT: Duration = Duration::from_secs(120);
 
-fn copy_dir(from: &Path, to: &Path) {
-    std::fs::create_dir_all(to).expect("the directory is creatable");
-    for entry in std::fs::read_dir(from).expect("the directory is readable") {
-        let path = entry.expect("a directory entry").path();
-        if path.is_file() {
-            std::fs::copy(&path, to.join(path.file_name().expect("a file name")))
-                .expect("the file is copyable");
-        }
-    }
-}
-
 /// Lays out the routines, their runner and the ability schemas with the
 /// harness beside them; `database` (an ECMAScript expression) replaces the
 /// harness's database path. Returns the harness.
 fn layout(database: &str) -> PathBuf {
     let dir = unique_scratch("routines");
-    copy_dir(
-        &workspace().join("abilities/schemas"),
-        &dir.join("abilities/schemas"),
-    );
     for name in ["memory", "routines", "routines_runner"] {
-        std::fs::copy(
-            workspace().join(format!("abilities/{name}.scx")),
-            dir.join(format!("abilities/{name}.scx")),
-        )
-        .expect("the ability is copyable");
+        support::copy_ability(name, &dir.join("abilities"));
     }
     let harness =
         std::fs::read_to_string(workspace().join("tests/fixtures/phase5/routines_harness.scx"))
@@ -126,9 +107,9 @@ fn a_failed_inventory_load_keeps_the_running_set() {
     std::fs::write(
         &harness,
         text.replace(
-            r#"src="routines.scx">
+            r#"src="routines/routines.scx">
         <param name="database" expr="database"/>"#,
-            r#"src="routines.scx">
+            r#"src="routines/routines.scx">
         <param name="database" expr="'relative.sqlite'"/>"#,
         ),
     )

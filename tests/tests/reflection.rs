@@ -1,4 +1,4 @@
-//! The Reflection ability (`abilities/reflection.scx`) with its Revision
+//! The Reflection ability (`abilities/reflection/reflection.scx`) with its Revision
 //! through the builder bot, run through `scx run` on the wall clock.
 //!
 //! Each test lays out a scratch copy of `abilities/` (documents and
@@ -268,11 +268,7 @@ const SQLITE: &str = "/memory/floppy.sqlite";
 /// returns the harness's path and the env file's.
 fn layout(mock: &Mock, route: &str, seed: &str, database: &str) -> (PathBuf, PathBuf) {
     let dir = unique_scratch("reflection");
-    copy_dir(&workspace().join("abilities"), &dir.join("abilities"));
-    copy_dir(
-        &workspace().join("abilities/schemas"),
-        &dir.join("abilities/schemas"),
-    );
+    support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
     copy_dir(&workspace().join("bots/builder"), &dir.join("bots/builder"));
     copy_dir(
         &workspace().join("bots/builder/schemas"),

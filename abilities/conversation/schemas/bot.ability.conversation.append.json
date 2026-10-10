@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.conversation.append",
+  "additionalProperties": false,
+  "description": "Trusted outbound message record submitted by an effector to Conversation.",
+  "properties": {
+    "message": {
+      "additionalProperties": false,
+      "description": "Immutable bot message and its typed effector provenance.",
+      "examples": [
+        {
+          "content": "Hello",
+          "content_type": "text/plain",
+          "direction": "inbound",
+          "provenance": {
+            "event": "bot.ability.conversation.input",
+            "id": "turn-1",
+            "source": "caller",
+            "target": "conversation"
+          },
+          "sequence": 0,
+          "source_ids": [
+            "caller"
+          ],
+          "target_ids": [
+            "bot"
+          ]
+        }
+      ],
+      "properties": {
+        "sequence": {
+          "description": "Zero-based position in committed conversation history.",
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "direction": {
+          "description": "Whether the message came from a participant or the bot.",
+          "enum": [
+            "inbound",
+            "outbound"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "source_ids": {
+          "description": "Opaque source identities associated with the message.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "title": "Source Ids",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "target_ids": {
+          "description": "Opaque target identities associated with the message.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "title": "Target Ids",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "content": {
+          "default": null,
+          "description": "Decoded text or JSON-safe structured content; raw media bytes are never accepted here."
+        },
+        "content_type": {
+          "description": "Media type of the model-safe message content.",
+          "minLength": 1,
+          "title": "Content Type",
+          "type": "string"
+        },
+        "provenance": {
+          "additionalProperties": false,
+          "description": "Typed event provenance for this committed message.",
+          "examples": [
+            {
+              "event": "bot.ability.conversation.append",
+              "id": "append-1",
+              "source": "speaking",
+              "target": "conversation"
+            }
+          ],
+          "properties": {
+            "event": {
+              "description": "Canonical event that committed this message.",
+              "minLength": 1,
+              "title": "Event",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Correlation id of the committing event.",
+              "title": "Id"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "HSM source identity of the committing event.",
+              "title": "Source"
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "HSM target identity of the committing event.",
+              "title": "Target"
+            },
+            "session_ref": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Conversation relationship reference, when known.",
+              "title": "Session Ref"
+            },
+            "turn_ref": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Turn detector reference, when known.",
+              "title": "Turn Ref"
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "title": "MessageProvenance",
+          "type": "object"
+        }
+      },
+      "required": [
+        "sequence",
+        "direction",
+        "source_ids",
+        "target_ids",
+        "content_type",
+        "provenance"
+      ],
+      "title": "Message",
+      "type": "object"
+    }
+  },
+  "required": [
+    "message"
+  ],
+  "type": "object"
+}

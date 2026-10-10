@@ -2,7 +2,7 @@
 //! statements per `<invoke>`, as a `stateforward:scxml/invoked-service` Wasm
 //! component. It is the engine under mosfet's Memory ability
 //! (`mosfet/abilities/memory/store.py` on `providers/sqlite_memory`), which
-//! floppy runs as `abilities/memory.scx`; it knows no schema of its own.
+//! floppy runs as `abilities/memory/memory.scx`; it knows no schema of its own.
 //!
 //! Storage is I/O, so it is a service, never executable content: the
 //! invoking session keeps processing events and timers while a transaction

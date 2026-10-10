@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Test harness of the Reflection ability (abilities/reflection.scx), laid
+  Test harness of the Reflection ability (abilities/reflection/reflection.scx), laid
   out beside it in a scratch copy of abilities/ (tests/tests/reflection.rs).
   It seeds the database with the statements in seed (none by default),
   invokes the reflection as the cognition does (the <param>s memory and
@@ -26,7 +26,7 @@
 
   <state id="seeding">
     <transition cond="seed.length === 0" target="running"/>
-    <invoke id="seeder" type="scxml" src="memory.scx">
+    <invoke id="seeder" type="scxml" src="memory/memory.scx">
       <param name="database" expr="database"/>
       <param name="statements" expr="seed"/>
     </invoke>
@@ -35,7 +35,7 @@
   </state>
 
   <state id="running" initial="waiting">
-    <invoke id="reflection" type="scxml" src="reflection.scx">
+    <invoke id="reflection" type="scxml" src="reflection/reflection.scx">
       <param name="database" expr="database"/>
       <param name="model" expr="'fake-model'"/>
     </invoke>
@@ -55,7 +55,7 @@
 
     <state id="waiting"/>
     <state id="inspecting">
-      <invoke id="inspector" type="scxml" src="memory.scx">
+      <invoke id="inspector" type="scxml" src="memory/memory.scx">
         <param name="database" expr="database"/>
         <param name="statements" expr="[{sql: inspect_inventory}, {sql: inspect_triggers}, {sql: inspect_episodes}]"/>
       </invoke>

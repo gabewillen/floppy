@@ -1,5 +1,5 @@
-//! The floppy bot's cognition cascade (`abilities/cognition.scx` with its
-//! stages `abilities/autonomy.scx`, `intuition.scx`, and `reasoning.scx`),
+//! The floppy bot's cognition cascade (`abilities/cognition/cognition.scx` with its
+//! stages `abilities/autonomy/autonomy.scx`, `intuition.scx`, and `reasoning.scx`),
 //! run as the body's child through `scx run` on the wall clock.
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
@@ -358,15 +358,7 @@ fn layout(
         &workspace().join("bots/floppy/schemas"),
         &dir.join("bots/floppy/schemas"),
     );
-    copy_dir(&workspace().join("abilities"), &dir.join("abilities"));
-    copy_dir(
-        &workspace().join("abilities/behaviors"),
-        &dir.join("abilities/behaviors"),
-    );
-    copy_dir(
-        &workspace().join("abilities/schemas"),
-        &dir.join("abilities/schemas"),
-    );
+    support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
     for (path, data) in edits {
         rewrite(&dir.join(path), data);
     }
@@ -613,14 +605,14 @@ fn attribute(text: &str) -> String {
 }
 
 /// Runs `statements` (mosfet `Statement`s) in one transaction of the
-/// Memory ability (`abilities/memory.scx`) against `database` (a file in
+/// Memory ability (`abilities/memory/memory.scx`) against `database` (a file in
 /// `grant`'s directory, or a Postgres connection URI); returns its output.
 fn transact(grant: &[String], database: &str, statements: &Json) -> Json {
     let document = format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="applying">
   <datamodel><data id="statements" expr="{}"/></datamodel>
   <state id="applying">
-    <invoke id="memory" type="scxml" src="memory.scx">
+    <invoke id="memory" type="scxml" src="memory/memory.scx">
       <param name="database" expr="'{database}'"/>
       <param name="statements" expr="statements"/>
     </invoke>
@@ -632,11 +624,7 @@ fn transact(grant: &[String], database: &str, statements: &Json) -> Json {
         attribute(&statements.to_string()),
     );
     let dir = unique_scratch("inventory");
-    std::fs::copy(
-        workspace().join("abilities/memory.scx"),
-        dir.join("memory.scx"),
-    )
-    .expect("the ability is copyable");
+    support::copy_ability("memory", &dir);
     let path = support::write(&dir, "inventory.scx", &document);
     let mut args = grant.to_vec();
     args.extend([
@@ -797,7 +785,10 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
         &mock,
         Decision::Fail,
         Generation::Fail,
-        &[("abilities/cognition.scx", &[("database", memory.as_str())])],
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[("database", memory.as_str())],
+        )],
     );
     support::use_database(&bot.body, database);
     let mut run = start_with(&bot, &grant);
@@ -865,7 +856,10 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
         &mock,
         Decision::Ignore,
         Generation::Fail,
-        &[("abilities/cognition.scx", &[("database", memory.as_str())])],
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[("database", memory.as_str())],
+        )],
     );
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
@@ -1157,7 +1151,7 @@ fn after_the_warmup_the_threshold_follows_the_tuner() {
         Decision::Low,
         Generation::Ignore,
         &[(
-            "abilities/cognition.scx",
+            "abilities/cognition/cognition.scx",
             &[("tuner", "({mean: 70, variance: 100, n: 8})")],
         )],
     );
@@ -1245,7 +1239,10 @@ fn an_intuition_that_does_not_decide_in_time_fails_the_turn() {
         &mock,
         Decision::Hang,
         Generation::Ignore,
-        &[("abilities/intuition.scx", &[("decision_timeout_ms", "300")])],
+        &[(
+            "abilities/intuition/intuition.scx",
+            &[("decision_timeout_ms", "300")],
+        )],
     );
     let mut run = start(&bot);
     say(&mut run, "hello");
@@ -1275,7 +1272,10 @@ fn reboots_on_a_silent_stage(
         &mock,
         decision,
         generation,
-        &[("abilities/cognition.scx", &[("hop_timeout_ms", hop_ms)])],
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[("hop_timeout_ms", hop_ms)],
+        )],
     );
     let mut run = start(&bot);
     say(&mut run, "hello");
@@ -1405,7 +1405,7 @@ fn with_its_gates_on_the_cognition_reflects_and_reconciles_the_routines() {
         Decision::Abstain,
         Generation::Ignore,
         &[
-            ("abilities/cognition.scx", GATES_ON),
+            ("abilities/cognition/cognition.scx", GATES_ON),
             ("bots/floppy/floppy.scx", NO_DATABASE),
         ],
     );
@@ -1442,7 +1442,7 @@ fn a_routine_tick_becomes_a_turn() {
         Decision::Abstain,
         Generation::Ignore,
         &[
-            ("abilities/cognition.scx", GATES_ON),
+            ("abilities/cognition/cognition.scx", GATES_ON),
             ("bots/floppy/floppy.scx", NO_DATABASE),
         ],
     );
@@ -1453,7 +1453,7 @@ fn a_routine_tick_becomes_a_turn() {
             .and_then(Path::parent)
             .and_then(Path::parent)
             .expect("the scratch root")
-            .join("abilities/routines.scx"),
+            .join("abilities/routines/routines.scx"),
     )
     .expect("the double is copyable");
     let mut run = start(&bot);
@@ -1492,7 +1492,7 @@ fn with_its_gates_off_the_cognition_invokes_no_seam() {
 }
 
 // ---------------------------------------------------------------------------
-// The SpeechHeard seed (abilities/behaviors/speech_heard.scx), run by
+// The SpeechHeard seed (abilities/behaviors/speech_heard/speech_heard.scx), run by
 // autonomy under `tests/fixtures/phase6/autonomy_harness.scx`, which stands
 // in for the cognition: the body cannot take a listening product yet, so
 // each stimulus is a double of `bot.ability.listening.speech.output`.
@@ -1504,15 +1504,7 @@ const COMMUNICATION_INPUT: &str = "bot.ability.communication.input";
 /// and the harness beside them, its `<data id="database">` set to `database`.
 fn autonomy_harness(database: &str) -> PathBuf {
     let dir = unique_scratch("autonomy");
-    copy_dir(&workspace().join("abilities"), &dir.join("abilities"));
-    copy_dir(
-        &workspace().join("abilities/behaviors"),
-        &dir.join("abilities/behaviors"),
-    );
-    copy_dir(
-        &workspace().join("abilities/schemas"),
-        &dir.join("abilities/schemas"),
-    );
+    support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
     let harness = dir.join("abilities/harness.scx");
     std::fs::copy(
         workspace().join("tests/fixtures/phase6/autonomy_harness.scx"),
