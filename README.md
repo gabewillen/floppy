@@ -175,6 +175,8 @@ encoder defaults, which it passes to vocal for the speech service
 | `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (mosfet's 30 s) |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (mosfet's 30 s) |
 | `abilities/conversation/conversation.scx` | `max_messages` | `20` | the history that reaches one turn |
+| `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input (mosfet's 5 s) |
+| `abilities/turn_detector/turn_detector.scx` | `end_of_turn_silence_seconds` | `0.5` | the silence that closes an open or paused turn (mosfet's 0.5 s; at least 0.01 s) |
 | `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `5000` | one speech synthesis (mosfet's 5 s) |
 | `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation (mosfet's 5 s) |
 | `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound (mosfet's 30 s stage operation timeout) |
