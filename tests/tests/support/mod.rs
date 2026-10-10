@@ -41,11 +41,15 @@ use sha2::{Digest as _, Sha256};
 /// The variables the bots' documents name. The child process never inherits
 /// them, so a test supplies values only through its env file (or an
 /// explicit `--env NAME=VALUE`).
-pub const GRANTED: [&str; 4] = [
+pub const GRANTED: [&str; 8] = [
     "FLOPPY_API_KEY",
     "FLOPPY_BASE_URL",
     "TYPESAFE_API_KEY",
     "TYPESAFE_BASE_URL",
+    "FLOPPY_SPEECH_API_KEY",
+    "FLOPPY_SPEECH_BASE_URL",
+    "FLOPPY_VOICE_API_KEY",
+    "FLOPPY_VOICE_BASE_URL",
 ];
 
 /// The model floppy ships (README.md, "Defaults"): every document's `model`
@@ -258,7 +262,7 @@ impl Run {
     /// A run whose document tree binds the sql, the generate or the speech
     /// service (decided by [`binds`]) and that grants it no directory gets
     /// a fresh one ([`memory_grant`], [`media_grant`],
-    /// [`speech_media_grant`]): those services import `wasi:filesystem`,
+    /// [`speech_grant`]): those services import `wasi:filesystem`,
     /// and a run that binds one without a `--dir` grant is refused. One
     /// that binds the pgsql service gets the network ([`pgsql_grant`]).
     pub fn start(args: &[String], env: &[(&str, &str)]) -> Self {
@@ -268,7 +272,7 @@ impl Run {
             ("sql", memory_grant as fn() -> Vec<String>),
             ("generate", media_grant),
             ("pgsql", pgsql_grant),
-            ("speech", || speech_media_grant(&unique_scratch("media"))),
+            ("speech", || speech_grant(&unique_scratch("media"))),
         ] {
             let uri = service_uri(name);
             let granted = args.iter().any(|arg| arg.starts_with(&format!("{uri}=")));
@@ -494,7 +498,7 @@ pub fn pgsql_grant() -> Vec<String> {
 
 /// `--dir` granting the speech service `media` at `/media`, where the
 /// audio references (`media/<file>`) of `environment.sound` resolve.
-pub fn speech_media_grant(media: &Path) -> Vec<String> {
+pub fn speech_grant(media: &Path) -> Vec<String> {
     vec![
         "--dir".to_owned(),
         format!("{}={}::/media", service_uri("speech"), media.display()),

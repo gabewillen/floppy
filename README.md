@@ -91,6 +91,10 @@ values. No package has a default model endpoint (decision D31).
 | `FLOPPY_API_KEY` | the `generate` service (`env:apikey`), as above | yes, as above |
 | `TYPESAFE_BASE_URL` | the `decision` service (`env:baseurl`): the builder's triage, the floppy bot's intuition | no: the service's declared origin, `https://api.typesafe.ai` |
 | `TYPESAFE_API_KEY` | the `decision` service (`env:apikey`), as above | for the floppy bot: without it every turn fails (`unconfigured`); the builder triages with its fallback |
+| `FLOPPY_SPEECH_BASE_URL` | the `speech` service (`env:baseurl`): the floppy bot's speech decoding (listening) and speech encoding (speaking) | yes: without it decoding and speaking fail `unconfigured` |
+| `FLOPPY_SPEECH_API_KEY` | the `speech` service (`env:apikey`), as above | yes, as above |
+| `FLOPPY_VOICE_BASE_URL` | the `speech` service (`env:baseurl`): the floppy bot's voice detection, diarization and voice identification (listening), on LocalAI's voice APIs | yes: without it every sound the bot hears fails voice detection |
+| `FLOPPY_VOICE_API_KEY` | the `speech` service (`env:apikey`), as above | yes, as above |
 
 The live tests read `FLOPPY_LIVE_ENV_FILE` (the env files, joined like
 `PATH`) and `FLOPPY_LIVE_MODEL` (default: the model below); the trace tests
@@ -105,6 +109,18 @@ the `model` `<data>` of `bots/builder/builder.scx` (a `builder.request`'s
 overrides it), `abilities/cognition/cognition.scx`, `abilities/reasoning/reasoning.scx` and
 `abilities/reflection/reflection.scx` (each takes its invoker's by `<param>`), and
 `abilities/reading/reading.scx` (mosfet's image decoder).
+
+### Speech and voice models
+
+The listening's hearing leaves name the speech service's models:
+`abilities/voice_detection/voice_detection.scx`'s `model` is
+`silero-vad`, `abilities/voice_diarization/voice_diarization.scx`'s is
+`pyannote-diarization`,
+`abilities/voice_identification/voice_identification.scx`'s is
+`voice-detect-wespeaker-resnet34` (LocalAI's names for the models mosfet runs
+locally), and `abilities/speech_decoding/speech_decoding.scx`'s `model`
+is `whisper-1`. Speaking and vocal pass the speech service no model of
+their own (`null`: the backend's default voice model).
 
 ### Timeouts and bounds
 
@@ -125,6 +141,11 @@ overrides it), `abilities/cognition/cognition.scx`, `abilities/reasoning/reasoni
 | `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (mosfet's 30 s) |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (mosfet's 30 s) |
 | `abilities/conversation/conversation.scx` | `max_messages` | `20` | the history that reaches one turn |
+| `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `5000` | one speech synthesis (mosfet's 5 s) |
+| `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation (mosfet's 5 s) |
+| `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound (mosfet's 30 s stage operation timeout) |
+| `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage (mosfet's 30 s) |
+| `abilities/interpretation/interpretation.scx` | `product_threshold_db` | `3.0` | the perceived level a listening product needs (mosfet's 3 dB) |
 
 The cognition's phase 5 gates are off (`reflection_enabled`,
 `routines_enabled`). The floppy bot's `database` is `/memory/floppy.sqlite`,

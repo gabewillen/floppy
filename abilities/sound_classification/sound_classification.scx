@@ -3,7 +3,7 @@
   floppy's SoundClassification (mosfet abilities/hearing/sound/
   classification.py) with mosfet's KindSoundClassifier: non-speech sound
   labelled from the sound's kind, with no model. The interpretation
-  (abilities/interpretation.scx) invokes it once per sound from
+  (abilities/interpretation/interpretation.scx) invokes it once per sound from
   ClassifyingSound.
 
     applying -> applied (final)
@@ -31,11 +31,12 @@
     <data id="label" expr="''"/>
     <data id="output" expr="null"/>
   </datamodel>
+  <script src="sound_classification.js"/>
 
   <state id="applying">
     <onentry>
-      <assign location="label" expr="typeof kind === 'string' ? kind.trim() : ''"/>
-      <assign location="output" expr="label === '' ? ({labels: []}) : ({labels: [label], confidence: confidence})"/>
+      <assign location="label" expr="trimmedKind()"/>
+      <assign location="output" expr="classifiedOutput()"/>
     </onentry>
     <transition target="applied"/>
   </state>

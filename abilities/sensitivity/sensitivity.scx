@@ -3,7 +3,7 @@
   floppy's Sensitivity (mosfet abilities/listening/sensitivity.py): the
   front of listening, which holds the body's prediction of its own sound
   and scores every arrival against it. The listening
-  (abilities/listening.scx) invokes it as its long-lived child
+  (abilities/listening/listening.scx) invokes it as its long-lived child
   "sensitivity".
 
     quiet -bot.ability.speaking.efference-> producing
@@ -55,6 +55,7 @@
     <data id="observed" expr="null"/>
     <data id="perceived" expr="null"/>
   </datamodel>
+  <script src="sensitivity.js"/>
 
   <state id="Sensitivity" initial="quiet">
     <onentry>
@@ -69,9 +70,9 @@
       <transition event="bot.ability.listening.sensitivity.score" event:schema="schemas/bot.ability.listening.sensitivity.score.json">
         <assign location="stimulus" expr="_event.data.stimulus"/>
         <assign location="sound" expr="stimulus.data"/>
-        <assign location="perceived" expr="sound.received_level_db === undefined ? null : sound.received_level_db"/>
+        <assign location="perceived" expr="receivedLevel(sound)"/>
         <send event="bot.ability.listening.sensitivity.output" target="#_parent">
-          <content expr="({sound: sound, parent: stimulus, perceived_level_db: perceived})"/>
+          <content expr="scoreOutput(sound, stimulus, perceived)"/>
         </send>
       </transition>
       <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json"
@@ -86,7 +87,7 @@
     <state id="producing">
       <onentry>
         <send id="playout" event="floppy.sensitivity.playout"
-              delayexpr="Math.round(sensitivity_playout_seconds * 1000) + 'ms'"/>
+              delayexpr="playoutDelay(sensitivity_playout_seconds)"/>
       </onentry>
       <onexit>
         <cancel sendid="playout"/>
@@ -94,21 +95,21 @@
       <transition event="bot.ability.listening.sensitivity.score" event:schema="schemas/bot.ability.listening.sensitivity.score.json">
         <assign location="stimulus" expr="_event.data.stimulus"/>
         <assign location="sound" expr="stimulus.data"/>
-        <if cond="stimulus.source !== sensitivity_producing_mouth">
-          <assign location="perceived" expr="sound.received_level_db === undefined ? null : sound.received_level_db"/>
+        <if cond="isOffProducingMouth(stimulus, sensitivity_producing_mouth)">
+          <assign location="perceived" expr="receivedLevel(sound)"/>
         <else/>
-          <assign location="observed" expr="sound.amplitude_db == null || sound.received_level_db == null ? null : sound.received_level_db - sound.amplitude_db"/>
-          <if cond="observed === null">
+          <assign location="observed" expr="observedGain(sound)"/>
+          <if cond="hasNoObservedGain(observed)">
             <assign location="perceived" expr="0"/>
-          <elseif cond="sensitivity_path_gain_db === null"/>
+          <elseif cond="hasNoLearnedGain(sensitivity_path_gain_db)"/>
             <assign location="sensitivity_path_gain_db" expr="observed"/>
             <assign location="perceived" expr="0"/>
           <else/>
-            <assign location="perceived" expr="Math.abs(observed - sensitivity_path_gain_db)"/>
+            <assign location="perceived" expr="perceivedLevel(observed, sensitivity_path_gain_db)"/>
           </if>
         </if>
         <send event="bot.ability.listening.sensitivity.output" target="#_parent">
-          <content expr="({sound: sound, parent: stimulus, perceived_level_db: perceived})"/>
+          <content expr="scoreOutput(sound, stimulus, perceived)"/>
         </send>
       </transition>
       <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json"
@@ -116,7 +117,7 @@
         <assign location="sensitivity_playout_seconds" expr="_event.data.duration"/>
         <assign location="sensitivity_producing_mouth" expr="_event.data.mouth"/>
       </transition>
-      <transition event="floppy.sensitivity.playout" cond="_event.sendid === 'playout'" target="quiet"/>
+      <transition event="floppy.sensitivity.playout" cond="isPlayoutTimer(_event)" target="quiet"/>
     </state>
   </state>
 </scxml>

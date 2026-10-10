@@ -5,7 +5,7 @@
   diarize operation (mosfet's VoiceDiarizer providers: pyannote's and MLX
   Audio's pipelines; here LocalAI's POST {base}/audio/diarization, which
   serves pyannote segmentation and Sortformer models). The interpretation
-  (abilities/interpretation.scx) invokes it once per utterance from
+  (abilities/interpretation/interpretation.scx) invokes it once per utterance from
   DiarizingVoice; the interpretation's stage timer bounds it, and leaving
   DiarizingVoice cancels it and the service call (SCXML 6.4).
 
@@ -45,6 +45,7 @@
     <!-- The result. -->
     <data id="result" expr="null"/>
   </datamodel>
+  <script src="voice_diarization.js"/>
 
   <state id="applying">
     <invoke id="diarizer" type="https://github.com/stateforward/floppy/services/speech"
@@ -58,21 +59,21 @@
       <param name="output" expr="output"/>
     </invoke>
     <transition event="bot.ability.hearing.voice.diarization.output"
-                cond="_event.invokeid === 'diarizer' &amp;&amp; Array.isArray(Object(_event.data).segments)" target="applied">
-      <assign location="result" expr="({segments: _event.data.segments})"/>
+                cond="isDiarizerOutput(_event)" target="applied">
+      <assign location="result" expr="diarizedResult(_event)"/>
     </transition>
     <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                cond="_event.invokeid === 'diarizer'" target="applied">
-      <assign location="result" expr="({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceDiarization failed.'})"/>
+                cond="isFromDiarizer(_event)" target="applied">
+      <assign location="result" expr="failedResult(_event)"/>
     </transition>
-    <transition event="*" cond="_event.invokeid === 'diarizer' &amp;&amp; _event.name.indexOf('done.') !== 0" target="applied">
-      <assign location="result" expr="({message: 'Voice diarization produced output that does not match its apply schema.'})"/>
+    <transition event="*" cond="isOtherDiarizerEvent(_event)" target="applied">
+      <assign location="result" expr="mismatchedResult()"/>
     </transition>
-    <transition event="done.invoke" cond="_event.invokeid === 'diarizer'" target="applied">
-      <assign location="result" expr="({message: 'VoiceDiarization ended without diarizing.'})"/>
+    <transition event="done.invoke" cond="isFromDiarizer(_event)" target="applied">
+      <assign location="result" expr="undiarizedResult()"/>
     </transition>
     <transition event="error.*" target="applied">
-      <assign location="result" expr="({message: 'VoiceDiarization could not run (' + _event.name + ')'})"/>
+      <assign location="result" expr="errorResult(_event)"/>
     </transition>
   </state>
 

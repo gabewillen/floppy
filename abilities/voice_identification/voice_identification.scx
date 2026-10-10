@@ -5,7 +5,7 @@
   speech service's identify operation (mosfet's voice classifier: pyannote
   speaker embeddings, WeSpeaker ResNet34; here LocalAI's
   POST {base}/voice/embed, which serves the same WeSpeaker model). The
-  interpretation (abilities/interpretation.scx) invokes it from
+  interpretation (abilities/interpretation/interpretation.scx) invokes it from
   IdentifyingVoice (the diarized segments) and IdentifyingVoiceDirect (the
   opening voice span of a sound, mosfet's direct identification); the
   interpretation's stage timer bounds it, and leaving the state cancels it
@@ -56,18 +56,19 @@
     <!-- The result. -->
     <data id="result" expr="null"/>
   </datamodel>
+  <script src="voice_identification.js"/>
 
   <state id="identifying" initial="clipping">
     <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
-      <assign location="result" expr="({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceIdentification failed.'})"/>
+      <assign location="result" expr="failedResult(_event)"/>
     </transition>
     <transition event="error.*" target="applied">
-      <assign location="result" expr="({message: 'VoiceIdentification could not run (' + _event.name + ')'})"/>
+      <assign location="result" expr="errorResult(_event)"/>
     </transition>
 
     <!-- Direct identification clips the opening voice span first. -->
     <state id="clipping">
-      <transition cond="Array.isArray(segments)" target="applying"/>
+      <transition cond="hasSegments()" target="applying"/>
       <invoke id="clipper" type="https://github.com/stateforward/floppy/services/speech">
         <param name="operation" expr="'clip'"/>
         <param name="audio" expr="audio"/>
@@ -78,14 +79,14 @@
         <param name="output" expr="output"/>
       </invoke>
       <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                  cond="_event.invokeid === 'clipper'" target="applied">
-        <assign location="result" expr="({message: 'Voice identification opening segment conversion failed: ' + Object(_event.data).message})"/>
+                  cond="isFromClipper(_event)" target="applied">
+        <assign location="result" expr="clipFailedResult(_event)"/>
       </transition>
-      <transition event="done.invoke.clipper" cond="typeof Object(_event.data).audio === 'string'" target="applying">
-        <assign location="segments" expr="[_event.data]"/>
+      <transition event="done.invoke.clipper" cond="isClippedSegment(_event)" target="applying">
+        <assign location="segments" expr="clippedSegments(_event)"/>
       </transition>
       <transition event="done.invoke.clipper" target="applied">
-        <assign location="result" expr="({message: 'Voice identification requires a first voiced VAD segment.'})"/>
+        <assign location="result" expr="unclippedResult()"/>
       </transition>
     </state>
 
@@ -97,14 +98,14 @@
         <param name="segments" expr="segments"/>
       </invoke>
       <transition event="bot.ability.hearing.voice.identification.output"
-                  cond="_event.invokeid === 'identifier' &amp;&amp; Array.isArray(Object(_event.data).embeddings)" target="applied">
-        <assign location="result" expr="({segments: segments, embeddings: _event.data.embeddings})"/>
+                  cond="isIdentifierOutput(_event)" target="applied">
+        <assign location="result" expr="identifiedResult(_event)"/>
       </transition>
-      <transition event="*" cond="_event.invokeid === 'identifier' &amp;&amp; _event.name.indexOf('done.') !== 0 &amp;&amp; _event.name !== 'bot.ability.failed'" target="applied">
-        <assign location="result" expr="({message: 'Voice identification produced output that does not match its apply schema.'})"/>
+      <transition event="*" cond="isOtherIdentifierEvent(_event)" target="applied">
+        <assign location="result" expr="mismatchedResult()"/>
       </transition>
       <transition event="done.invoke.identifier" target="applied">
-        <assign location="result" expr="({message: 'VoiceIdentification ended without identifying.'})"/>
+        <assign location="result" expr="unidentifiedResult()"/>
       </transition>
     </state>
   </state>

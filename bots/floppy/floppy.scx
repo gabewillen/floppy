@@ -299,18 +299,18 @@
            there, to every input ability; the efference copy goes only to
            Listening, before the sound. -->
       <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json"
-                  cond="_event.invokeid === 'communication'">
+                  cond="isFromCommunication(_event)">
         <foreach array="listening_abilities" item="ability">
-          <send event="bot.ability.speaking.efference" targetexpr="'#_' + ability">
+          <send event="bot.ability.speaking.efference" targetexpr="abilityTarget(ability)">
             <content expr="_event.data"/>
           </send>
         </foreach>
       </transition>
       <transition event="environment.sound" event:schema="schemas/environment.sound.json"
-                  cond="_event.invokeid === 'communication'">
-        <log label="environment.sound" expr="JSON.stringify(_event.data)"/>
+                  cond="isFromCommunication(_event)">
+        <log label="environment.sound" expr="eventDataJson(_event)"/>
         <foreach array="input" item="ability">
-          <send event="environment.sound" targetexpr="'#_' + ability">
+          <send event="environment.sound" targetexpr="abilityTarget(ability)">
             <content expr="_event.data"/>
           </send>
         </foreach>
@@ -323,8 +323,8 @@
         <log label="bot.ability.communication.failed" expr="eventDataJson(_event)"/>
       </transition>
       <!-- What the listening could not hear. -->
-      <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json" cond="_event.invokeid === 'listening'">
-        <log label="bot.ability.listening.failed" expr="JSON.stringify(_event.data)"/>
+      <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json" cond="isFromListening(_event)">
+        <log label="bot.ability.listening.failed" expr="eventDataJson(_event)"/>
       </transition>
       <!-- The body's own choices (mosfet: focus on active, clear only while
            a device is focused), offered on processing entry and taken only
@@ -362,11 +362,11 @@
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
         <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json"
-                    cond="_event.invokeid === 'listening'" target="processing">
+                    cond="isFromListening(_event)" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
         <transition event="environment.sound" event:schema="schemas/environment.sound.json"
-                    cond="_event.invokeid === 'listening'" target="processing">
+                    cond="isFromListening(_event)" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
       </state>
@@ -393,11 +393,11 @@
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
         <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json"
-                    cond="_event.invokeid === 'listening'" target="processing">
+                    cond="isFromListening(_event)" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
         <transition event="environment.sound" event:schema="schemas/environment.sound.json"
-                    cond="_event.invokeid === 'listening'" target="processing">
+                    cond="isFromListening(_event)" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
       </state>
@@ -479,16 +479,16 @@
           <log label="bot.deferred" expr="deferredCount()"/>
         </transition>
         <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json"
-                    cond="_event.invokeid === 'listening'">
+                    cond="isFromListening(_event)">
           <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
-          <assign location="queue" expr="queue.concat([pending])"/>
-          <log label="bot.deferred" expr="String(queue.length)"/>
+          <assign location="queue" expr="queueWithPending()"/>
+          <log label="bot.deferred" expr="deferredCount()"/>
         </transition>
         <transition event="environment.sound" event:schema="schemas/environment.sound.json"
-                    cond="_event.invokeid === 'listening'">
+                    cond="isFromListening(_event)">
           <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
-          <assign location="queue" expr="queue.concat([pending])"/>
-          <log label="bot.deferred" expr="String(queue.length)"/>
+          <assign location="queue" expr="queueWithPending()"/>
+          <log label="bot.deferred" expr="deferredCount()"/>
         </transition>
       </state>
 
@@ -542,16 +542,16 @@
           <log label="bot.deferred" expr="deferredCount()"/>
         </transition>
         <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json"
-                    cond="_event.invokeid === 'listening'">
+                    cond="isFromListening(_event)">
           <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
-          <assign location="queue" expr="queue.concat([pending])"/>
-          <log label="bot.deferred" expr="String(queue.length)"/>
+          <assign location="queue" expr="queueWithPending()"/>
+          <log label="bot.deferred" expr="deferredCount()"/>
         </transition>
         <transition event="environment.sound" event:schema="schemas/environment.sound.json"
-                    cond="_event.invokeid === 'listening'">
+                    cond="isFromListening(_event)">
           <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
-          <assign location="queue" expr="queue.concat([pending])"/>
-          <log label="bot.deferred" expr="String(queue.length)"/>
+          <assign location="queue" expr="queueWithPending()"/>
+          <log label="bot.deferred" expr="deferredCount()"/>
         </transition>
       </state>
 

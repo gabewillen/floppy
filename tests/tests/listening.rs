@@ -1,5 +1,5 @@
-//! The floppy bot's listening (`abilities/listening.scx` with its children
-//! `abilities/sensitivity.scx` and `abilities/interpretation.scx`, and the
+//! The floppy bot's listening (`abilities/listening/listening.scx` with its children
+//! `abilities/sensitivity/sensitivity.scx` and `abilities/interpretation/interpretation.scx`, and the
 //! interpretation's hearing leaves), run through `scx run` on the wall
 //! clock.
 //!
@@ -365,7 +365,10 @@ fn speech_with_no_sample_rate_cannot_be_placed_on_a_timeline() {
 
 #[test]
 fn a_hanging_stage_times_out() {
-    let harness = layout(&[("interpretation.scx", &[("stage_timeout_ms", "3000")])]);
+    let harness = layout(&[(
+        "interpretation/interpretation.scx",
+        &[("stage_timeout_ms", "3000")],
+    )]);
     let (mut run, backend) = started(
         &harness,
         "a_hanging_stage_times_out",
@@ -498,7 +501,7 @@ fn malformed_sound_is_refused_before_the_listening() {
 #[test]
 fn without_a_decoder_or_classifier_a_sound_without_voice_is_an_acoustic_product() {
     let harness = layout(&[(
-        "interpretation.scx",
+        "interpretation/interpretation.scx",
         &[("sound_classifier", "false"), ("speech_decoder", "false")],
     )]);
     let (mut run, backend) = started(
@@ -556,7 +559,7 @@ fn segment(index: usize, text: &str, opened: &Json, embedding: Option<&Json>) ->
 #[test]
 fn a_diarized_utterance_is_one_speech_product_per_segment() {
     let harness = layout(&[(
-        "interpretation.scx",
+        "interpretation/interpretation.scx",
         &[("speech_decoder", "false"), ("diarizer", "true")],
     )]);
     let (mut run, backend) = started(
@@ -585,7 +588,7 @@ fn a_diarized_utterance_is_one_speech_product_per_segment() {
 #[test]
 fn diarized_segments_are_identified_by_their_voice_embedding() {
     let harness = layout(&[(
-        "interpretation.scx",
+        "interpretation/interpretation.scx",
         &[
             ("speech_decoder", "false"),
             ("diarizer", "true"),
@@ -619,7 +622,7 @@ fn diarized_segments_are_identified_by_their_voice_embedding() {
 #[test]
 fn without_diarization_the_opening_voice_is_identified_directly() {
     let harness = layout(&[(
-        "interpretation.scx",
+        "interpretation/interpretation.scx",
         &[("speech_decoder", "false"), ("voice_classifier", "true")],
     )]);
     let (mut run, backend) = started(
@@ -671,7 +674,10 @@ fn without_diarization_the_opening_voice_is_identified_directly() {
 
 #[test]
 fn voice_identification_with_speech_decoding_degrades_the_listening() {
-    let harness = layout(&[("interpretation.scx", &[("voice_classifier", "true")])]);
+    let harness = layout(&[(
+        "interpretation/interpretation.scx",
+        &[("voice_classifier", "true")],
+    )]);
     let backend = Backend::start();
     let mut args = hearing::granted(
         "voice_identification_with_speech_decoding_degrades_the_listening",

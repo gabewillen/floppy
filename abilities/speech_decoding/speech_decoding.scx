@@ -4,7 +4,7 @@
   speech to words through the speech service (services/speech, operation
   decode: OpenAI-compatible POST {base}/audio/transcriptions, Whisper on
   the Sparks), mosfet's SpeechDecoder providers. The interpretation
-  (abilities/interpretation.scx) invokes it once per utterance from
+  (abilities/interpretation/interpretation.scx) invokes it once per utterance from
   DecodingSpeech; the interpretation's stage timer bounds it, and leaving
   DecodingSpeech cancels it and the service call (SCXML 6.4).
 
@@ -40,6 +40,7 @@
     <!-- The result. -->
     <data id="output" expr="null"/>
   </datamodel>
+  <script src="speech_decoding.js"/>
 
   <state id="applying">
     <invoke id="decoder" type="https://github.com/stateforward/floppy/services/speech"
@@ -50,21 +51,21 @@
       <param name="media_type" expr="media_type"/>
     </invoke>
     <transition event="bot.ability.hearing.speech.decoding.output"
-                cond="_event.invokeid === 'decoder' &amp;&amp; typeof Object(_event.data).text === 'string'" target="applied">
-      <assign location="output" expr="({text: _event.data.text})"/>
+                cond="isDecoderOutput(_event)" target="applied">
+      <assign location="output" expr="decodedOutput(_event)"/>
     </transition>
     <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                cond="_event.invokeid === 'decoder'" target="applied">
-      <assign location="output" expr="({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'SpeechDecoding failed.'})"/>
+                cond="isFromDecoder(_event)" target="applied">
+      <assign location="output" expr="failedOutput(_event)"/>
     </transition>
-    <transition event="*" cond="_event.invokeid === 'decoder' &amp;&amp; _event.name.indexOf('done.') !== 0" target="applied">
-      <assign location="output" expr="({message: 'SpeechDecoding produced output that does not match its output schema.'})"/>
+    <transition event="*" cond="isOtherDecoderEvent(_event)" target="applied">
+      <assign location="output" expr="mismatchedOutput()"/>
     </transition>
-    <transition event="done.invoke" cond="_event.invokeid === 'decoder'" target="applied">
-      <assign location="output" expr="({message: 'SpeechDecoding ended without decoding.'})"/>
+    <transition event="done.invoke" cond="isFromDecoder(_event)" target="applied">
+      <assign location="output" expr="undecodedOutput()"/>
     </transition>
     <transition event="error.*" target="applied">
-      <assign location="output" expr="({message: 'SpeechDecoding could not run (' + _event.name + ')'})"/>
+      <assign location="output" expr="errorOutput(_event)"/>
     </transition>
   </state>
 

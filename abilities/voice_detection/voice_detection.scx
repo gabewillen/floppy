@@ -3,7 +3,7 @@
   floppy's VoiceDetection (mosfet abilities/hearing/voice/detection.py) as
   the interpretation applies it (mosfet Interpretation._run_voice_detection):
   the sound normalized to PCM, then its voice spans. The interpretation
-  (abilities/interpretation.scx) invokes it once per scored sound from
+  (abilities/interpretation/interpretation.scx) invokes it once per scored sound from
   DetectingVoice and FeedingSpeech; the interpretation's stage timer bounds
   it, and leaving the state cancels it and its service call (SCXML 6.4).
 
@@ -63,14 +63,15 @@
     <data id="sound" expr="null"/>
     <data id="result" expr="null"/>
   </datamodel>
+  <script src="voice_detection.js"/>
 
   <!-- Any failure ends the detection with mosfet's FailureData. -->
   <state id="detecting" initial="normalizing">
     <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
-      <assign location="result" expr="({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceDetection failed.'})"/>
+      <assign location="result" expr="failedResult(_event)"/>
     </transition>
     <transition event="error.*" target="applied">
-      <assign location="result" expr="({message: 'VoiceDetection could not run (' + _event.name + ')'})"/>
+      <assign location="result" expr="errorResult(_event)"/>
     </transition>
 
     <state id="normalizing">
@@ -82,11 +83,11 @@
         <param name="channels" expr="channels"/>
         <param name="output" expr="output"/>
       </invoke>
-      <transition event="done.invoke.normalizer" cond="typeof Object(_event.data).audio === 'string'" target="applying">
+      <transition event="done.invoke.normalizer" cond="isNormalizedSound(_event)" target="applying">
         <assign location="sound" expr="_event.data"/>
       </transition>
       <transition event="done.invoke.normalizer" target="applied">
-        <assign location="result" expr="({message: 'VoiceDetection could not normalize the sound.'})"/>
+        <assign location="result" expr="unnormalizedResult()"/>
       </transition>
     </state>
 
@@ -101,14 +102,14 @@
         <param name="channels" expr="channels"/>
       </invoke>
       <transition event="bot.ability.hearing.voice.detection.output"
-                  cond="_event.invokeid === 'detector' &amp;&amp; Array.isArray(Object(_event.data).segments)" target="applied">
-        <assign location="result" expr="({sound: sound, voice_detection: {segments: _event.data.segments}})"/>
+                  cond="isDetectorOutput(_event)" target="applied">
+        <assign location="result" expr="detectedResult(_event)"/>
       </transition>
-      <transition event="*" cond="_event.invokeid === 'detector' &amp;&amp; _event.name.indexOf('done.') !== 0 &amp;&amp; _event.name !== 'bot.ability.failed'" target="applied">
-        <assign location="result" expr="({message: 'Voice detection produced output that does not match its apply schema.'})"/>
+      <transition event="*" cond="isOtherDetectorEvent(_event)" target="applied">
+        <assign location="result" expr="mismatchedResult()"/>
       </transition>
       <transition event="done.invoke.detector" target="applied">
-        <assign location="result" expr="({message: 'VoiceDetection ended without detecting.'})"/>
+        <assign location="result" expr="undetectedResult()"/>
       </transition>
     </state>
   </state>

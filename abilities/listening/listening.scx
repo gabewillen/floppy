@@ -10,9 +10,10 @@
              Listening -environment.sound-> Sensing
              Sensing -sensitivity output or failure-> Listening } }
 
-  Children: live holds <invoke id="sensitivity"> (abilities/
-  sensitivity.scx, the body's prediction) and <invoke
-  id="interpretation"> (abilities/interpretation.scx, the slow half). Each
+  Children: live holds <invoke id="sensitivity">
+  (abilities/sensitivity/sensitivity.scx, the body's prediction) and
+  <invoke id="interpretation">
+  (abilities/interpretation/interpretation.scx, the slow half). Each
   is ready with its first bot.ability.offers; initializing waits for both.
   A child that cannot start, or ends, ends this ability in its final state
   degraded (the body then degrades the bot).
@@ -67,32 +68,33 @@
     <!-- The sound being scored. -->
     <data id="sound" expr="null"/>
   </datamodel>
+  <script src="listening.js"/>
 
   <state id="live" initial="initializing">
     <invoke id="sensitivity" type="scxml" src="../sensitivity/sensitivity.scx"/>
     <invoke id="interpretation" type="scxml" src="../interpretation/interpretation.scx"/>
 
     <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json"
-                cond="children.indexOf(_event.invokeid) &gt;= 0 &amp;&amp; _event.data.ability === _event.invokeid">
+                cond="isChildOffers(_event, children)">
       <assign location="ready[_event.invokeid]" expr="true"/>
     </transition>
     <!-- A child that cannot run, or ends, degrades the ability. -->
-    <transition event="error.*" cond="children.indexOf(_event.invokeid) &gt;= 0" target="degraded">
-      <log label="listening.degraded" expr="'the ' + _event.invokeid + ' child could not run (' + _event.name + ')'"/>
+    <transition event="error.*" cond="isChild(_event, children)" target="degraded">
+      <log label="listening.degraded" expr="childCouldNotRunLog(_event)"/>
     </transition>
-    <transition event="done.invoke" cond="children.indexOf(_event.invokeid) &gt;= 0" target="degraded">
-      <log label="listening.degraded" expr="'the ' + _event.invokeid + ' child ended'"/>
+    <transition event="done.invoke" cond="isChild(_event, children)" target="degraded">
+      <log label="listening.degraded" expr="childEndedLog(_event)"/>
     </transition>
 
     <!-- Waits for the sensitivity and the interpretation. A child that
          cannot start raises its error with no invokeid (SCXML 6.4.2). -->
     <state id="initializing">
-      <transition cond="ready.sensitivity === true &amp;&amp; ready.interpretation === true" target="Perceiving"/>
+      <transition cond="everyChildReady(ready)" target="Perceiving"/>
       <transition event="error.*" target="degraded">
-        <log label="listening.degraded" expr="'a child could not start (' + _event.name + ')'"/>
+        <log label="listening.degraded" expr="childCouldNotStartLog(_event)"/>
       </transition>
-      <transition event="environment.sound" event:schema="schemas/environment.sound.json" cond="!_event.invokeid">
-        <assign location="queue" expr="queue.concat([_event.data])"/>
+      <transition event="environment.sound" event:schema="schemas/environment.sound.json" cond="isFromOutside(_event)">
+        <assign location="queue" expr="queueWithSound(_event, queue)"/>
       </transition>
     </state>
 
@@ -106,7 +108,7 @@
       <!-- The body's report of what it is producing reaches the
            prediction from wherever perception happens to be. -->
       <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json"
-                  cond="children.indexOf(_event.invokeid) &lt; 0">
+                  cond="isNotFromChild(_event, children)">
         <send event="bot.ability.speaking.efference" target="#_sensitivity">
           <content expr="_event.data"/>
         </send>
@@ -114,30 +116,31 @@
       <!-- The interpretation's products and failures, out through this
            ability's own. -->
       <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json"
-                  cond="_event.invokeid === 'interpretation'">
+                  cond="isFromInterpretation(_event)">
         <send event="bot.ability.listening.speech.output" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
       <transition event="environment.sound" event:schema="schemas/environment.sound.json"
-                  cond="_event.invokeid === 'interpretation'">
+                  cond="isFromInterpretation(_event)">
         <send event="environment.sound" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
       <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json"
-                  cond="_event.invokeid === 'interpretation'">
+                  cond="isFromInterpretation(_event)">
         <send event="bot.ability.listening.failed" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
 
       <state id="Listening">
-        <transition cond="queue.length &gt; 0" target="Sensing">
-          <assign location="sound" expr="queue.shift()"/>
+        <transition cond="hasQueuedSound(queue)" target="Sensing">
+          <assign location="sound" expr="queuedSound(queue)"/>
+          <assign location="queue" expr="queueRest(queue)"/>
         </transition>
         <transition event="environment.sound" event:schema="schemas/environment.sound.json"
-                    cond="!_event.invokeid" target="Sensing">
+                    cond="isFromOutside(_event)" target="Sensing">
           <assign location="sound" expr="_event.data"/>
         </transition>
       </state>
@@ -146,26 +149,26 @@
       <state id="Sensing">
         <onentry>
           <send event="bot.ability.listening.sensitivity.score" target="#_sensitivity">
-            <content expr="({stimulus: {event: 'environment.sound', data: sound}})"/>
+            <content expr="scoreRequest(sound)"/>
           </send>
-          <send id="sensing-timer" event="bot.ability.listening.sensitivity.failed" delayexpr="sensitivity_timeout_ms + 'ms'">
-            <content expr="({stage: 'sensitivity', message: 'Listening sensitivity timed out.'})"/>
+          <send id="sensing-timer" event="bot.ability.listening.sensitivity.failed" delayexpr="delay(sensitivity_timeout_ms)">
+            <content expr="sensitivityTimedOut()"/>
           </send>
         </onentry>
         <onexit>
           <cancel sendid="sensing-timer"/>
         </onexit>
-        <transition event="environment.sound" event:schema="schemas/environment.sound.json" cond="!_event.invokeid">
-          <assign location="queue" expr="queue.concat([_event.data])"/>
+        <transition event="environment.sound" event:schema="schemas/environment.sound.json" cond="isFromOutside(_event)">
+          <assign location="queue" expr="queueWithSound(_event, queue)"/>
         </transition>
         <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json"
-                    cond="_event.invokeid === 'sensitivity'" target="Listening">
+                    cond="isFromSensitivity(_event)" target="Listening">
           <send event="bot.ability.listening.sensitivity.output" target="#_interpretation">
             <content expr="_event.data"/>
           </send>
         </transition>
         <transition event="bot.ability.listening.sensitivity.failed" event:schema="schemas/bot.ability.listening.sensitivity.failed.json"
-                    cond="_event.sendid === 'sensing-timer'" target="Listening">
+                    cond="isSensingTimer(_event)" target="Listening">
           <send event="bot.ability.listening.failed" target="#_parent">
             <content expr="_event.data"/>
           </send>

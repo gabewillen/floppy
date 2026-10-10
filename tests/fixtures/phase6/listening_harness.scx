@@ -11,7 +11,7 @@
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="run">
   <state id="run">
-    <invoke id="listening" type="scxml" src="listening.scx"/>
+    <invoke id="listening" type="scxml" src="listening/listening.scx"/>
     <transition event="bot.ability.offers" cond="_event.invokeid === 'listening'">
       <log label="harness.ready" expr="JSON.stringify(_event.data)"/>
     </transition>
