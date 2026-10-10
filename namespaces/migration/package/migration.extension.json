@@ -1,0 +1,10 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://github.com/stateforward/floppy/namespaces/migration",
+  "package-version": "0.1.0",
+  "extension-artifact": "floppy_migration.virtualized.wasm",
+  "schema-artifact": "migration.xsd",
+  "schema-sha256": "5a8532c9d7942a2ee01e9f15636814885411e34f8c88f7ede35adb81c5972a26",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0"
+}

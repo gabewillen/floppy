@@ -576,13 +576,17 @@ pub fn copy_tree(from: &Path, to: &Path) {
 }
 
 /// Copies the ability `name` (`abilities/<name>/`: its document, its
-/// script, and its schema twins) into `abilities`, and returns the path of
-/// its copied document.
+/// script, its schema twins, and any data beside them) into `abilities`,
+/// and returns the path of its copied document. The memory ability comes
+/// with the migration ability it invokes.
 pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
     copy_tree(
         &workspace().join("abilities").join(name),
         &abilities.join(name),
     );
+    if name == "memory" {
+        copy_ability("migration", abilities);
+    }
     abilities.join(name).join(format!("{name}.scx"))
 }
 
@@ -602,20 +606,34 @@ pub fn use_database(path: &Path, database: &str) {
     std::fs::write(path, text).expect("the document copy is writable");
 }
 
-/// One `PGlite` server for a Postgres-engine test: `node
-/// $FLOPPY_PGLITE_SERVER --port 0` (the `pglite-server` script of
-/// `@electric-sql/pglite-socket`, `dist/scripts/server.js`), a fresh
-/// in-memory database on a free loopback port, stopped when dropped.
+/// One Postgres server for a Postgres-engine test, fresh for the test and
+/// stopped when dropped: `PGlite` (`node $FLOPPY_PGLITE_SERVER --port 0`,
+/// the `pglite-server` script of `@electric-sql/pglite-socket`,
+/// `dist/scripts/server.js`: a fresh in-memory database on a free loopback
+/// port), or, when only `FLOPPY_POSTGRES_BIN` is set (a directory holding
+/// Postgres's `initdb` and `postgres`), a Postgres cluster made for the
+/// test in a scratch directory with `trust` authentication (run as the
+/// `postgres` user when the tests run as root, which Postgres refuses).
 pub struct Pglite {
     child: Child,
+    /// A Postgres cluster's data directory (its `postmaster.pid`).
+    data: Option<PathBuf>,
     /// Its `IP:PORT`.
     pub address: String,
 }
 
 impl Pglite {
-    /// Starts a server; `None` when `FLOPPY_PGLITE_SERVER` is unset.
+    /// Starts a server; `None` when neither `FLOPPY_PGLITE_SERVER` nor
+    /// `FLOPPY_POSTGRES_BIN` is set.
     pub fn start() -> Option<Self> {
-        let script = std::env::var_os("FLOPPY_PGLITE_SERVER")?;
+        if let Some(script) = std::env::var_os("FLOPPY_PGLITE_SERVER") {
+            return Some(Self::node(&script));
+        }
+        let bin = PathBuf::from(std::env::var_os("FLOPPY_POSTGRES_BIN")?);
+        Some(Self::postgres(&bin))
+    }
+
+    fn node(script: &std::ffi::OsStr) -> Self {
         let mut child = Command::new("node")
             .arg(script)
             .args(["--port", "0", "--max-connections", "8"])
@@ -644,7 +662,95 @@ impl Pglite {
         // Keep draining its output so the server never blocks on a full
         // pipe.
         std::thread::spawn(move || for _ in lines {});
-        Some(Self { child, address })
+        Self {
+            child,
+            data: None,
+            address,
+        }
+    }
+
+    fn postgres(bin: &Path) -> Self {
+        let dir = unique_scratch("postgres");
+        let data = dir.join("data");
+        // Postgres refuses to run as root: run it as `postgres` then.
+        let as_root = std::env::var("USER").is_ok_and(|user| user == "root")
+            || Command::new("id")
+                .arg("-u")
+                .output()
+                .is_ok_and(|out| out.stdout.trim_ascii() == b"0");
+        let command = |program: &str| {
+            let mut command = if as_root {
+                let mut command = Command::new("runuser");
+                command
+                    .args(["-u", "postgres", "--"])
+                    .arg(bin.join(program));
+                command
+            } else {
+                Command::new(bin.join(program))
+            };
+            command.stdin(Stdio::null());
+            command
+        };
+        if as_root {
+            let status = Command::new("chown")
+                .args(["-R", "postgres"])
+                .arg(&dir)
+                .status()
+                .expect("chown runs");
+            assert!(
+                status.success(),
+                "the scratch directory is given to postgres"
+            );
+        }
+        let initialized = command("initdb")
+            .args([
+                "-A",
+                "trust",
+                "-U",
+                "postgres",
+                "-E",
+                "UTF8",
+                "--no-sync",
+                "-D",
+            ])
+            .arg(&data)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .expect("initdb runs");
+        assert!(initialized.success(), "initdb makes the cluster");
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port")
+            .port();
+        let child = command("postgres")
+            .arg("-D")
+            .arg(&data)
+            .args([
+                "-p",
+                &port.to_string(),
+                "-c",
+                "listen_addresses=127.0.0.1",
+                "-c",
+                "fsync=off",
+            ])
+            .arg("-k")
+            .arg(&dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("postgres starts");
+        let address = format!("127.0.0.1:{port}");
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while std::net::TcpStream::connect(&address).is_err() {
+            assert!(Instant::now() < deadline, "postgres listens on {address}");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        Self {
+            child,
+            data: Some(data),
+            address,
+        }
     }
 
     /// The Postgres connection URI of its database.
@@ -655,7 +761,22 @@ impl Pglite {
 
 impl Drop for Pglite {
     fn drop(&mut self) {
-        let _killed = self.child.kill();
+        // A Postgres cluster stops on SIGINT to its postmaster (named by
+        // `postmaster.pid`, since `runuser` may stand between); PGlite's
+        // server is the child itself.
+        let postmaster = self
+            .data
+            .as_ref()
+            .and_then(|data| std::fs::read_to_string(data.join("postmaster.pid")).ok())
+            .and_then(|pid| pid.lines().next().map(str::to_owned));
+        match postmaster {
+            Some(pid) => {
+                let _stopped = Command::new("kill").args(["-INT", &pid]).status();
+            }
+            None => {
+                let _killed = self.child.kill();
+            }
+        }
         let _waited = self.child.wait();
     }
 }

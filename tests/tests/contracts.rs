@@ -92,7 +92,7 @@ const BODY_EVENTS: [&str; 15] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 54] = [
+const ABILITY_EVENTS: [&str; 55] = [
     "bot.ability.failed",
     "bot.ability.cognition.input",
     "bot.ability.cognition.output",
@@ -137,6 +137,9 @@ const ABILITY_EVENTS: [&str; 54] = [
     // Phase 3: the memory service's committed transaction (mosfet's
     // Memory.output_event), described where the abilities take it.
     "bot.ability.memory.output",
+    // The migration ability's reached revision (Alembic's upgrade or
+    // downgrade), described where the memory ability takes it.
+    "bot.ability.migration.output",
     // Phase 6: mosfet's VisualClassification and Reading.
     "bot.ability.vision.classification.input",
     "bot.ability.vision.classification.output",
@@ -427,8 +430,11 @@ fn every_event_name_is_mosfets_or_a_marked_floppy_name() {
     let floppy = floppy_names(&schemas);
     assert_eq!(
         floppy,
-        BTreeSet::from(["bot.ability.offers".to_owned()]),
-        "the one floppy-only phase 4 event"
+        BTreeSet::from([
+            "bot.ability.migration.output".to_owned(),
+            "bot.ability.offers".to_owned()
+        ]),
+        "the floppy-only events: phase 4's offers and the migration ability's output"
     );
     for event in schemas.keys() {
         assert!(

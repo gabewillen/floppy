@@ -210,7 +210,7 @@ D33 to D43.
   `<cancel>` on exit, and a sendid or turn cond. They have no document of
   their own.
 - **Memory.** Each memory step is a compound state whose first child
-  picks by `memory` (the database file's `<param>` the body passes, null without
+  picks by `database` (the `<param>` the body passes, null without
   memory): with a database it invokes the memory ability
   (`abilities/memory/memory.scx`, over `services/sql`) with mosfet's statements as
   SQL `<data>` and takes `bot.ability.memory.output` (its `event:schema`)

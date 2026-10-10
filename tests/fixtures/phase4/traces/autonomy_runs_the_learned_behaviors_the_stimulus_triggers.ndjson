@@ -5,15 +5,15 @@
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
 {"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition","parent":"session","session":"session.1","text":"turn 1: bot.input","type":"log"}
-{"label":"autonomy","parent":"session.1","session":"session.7","text":"turn 1: 4 matched for bot.input","type":"log"}
-{"label":"autonomy.candidate","parent":"session.1","session":"session.7","text":"Asilent","type":"log"}
-{"label":"autonomy.candidate.silent","parent":"session.1","session":"session.7","text":"Asilent after 1000 ms","type":"log"}
-{"label":"autonomy.candidate","parent":"session.1","session":"session.7","text":"Bdeclines","type":"log"}
-{"label":"autonomy.candidate.advance","parent":"session.1","session":"session.7","text":"Bdeclines","type":"log"}
-{"label":"autonomy.candidate","parent":"session.1","session":"session.7","text":"Cbroken","type":"log"}
-{"label":"autonomy.candidate.failed","parent":"session.1","session":"session.7","text":"Cbroken (error.execution)","type":"log"}
-{"label":"autonomy.candidate","parent":"session.1","session":"session.7","text":"Ddouble","type":"log"}
-{"label":"behavior.double","parent":"session.7","session":"session.12","text":"turn 1","type":"log"}
+{"label":"autonomy","parent":"session.1","session":"session.8","text":"turn 1: 4 matched for bot.input","type":"log"}
+{"label":"autonomy.candidate","parent":"session.1","session":"session.8","text":"Asilent","type":"log"}
+{"label":"autonomy.candidate.silent","parent":"session.1","session":"session.8","text":"Asilent after 1000 ms","type":"log"}
+{"label":"autonomy.candidate","parent":"session.1","session":"session.8","text":"Bdeclines","type":"log"}
+{"label":"autonomy.candidate.advance","parent":"session.1","session":"session.8","text":"Bdeclines","type":"log"}
+{"label":"autonomy.candidate","parent":"session.1","session":"session.8","text":"Cbroken","type":"log"}
+{"label":"autonomy.candidate.failed","parent":"session.1","session":"session.8","text":"Cbroken (error.execution)","type":"log"}
+{"label":"autonomy.candidate","parent":"session.1","session":"session.8","text":"Ddouble","type":"log"}
+{"label":"behavior.double","parent":"session.8","session":"session.15","text":"turn 1","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy handled","type":"log"}
 {"label":"reflection","parent":"session","session":"session.1","text":"absent (phase 5)","type":"log"}
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}

@@ -1,7 +1,8 @@
 //! The memory ability (`abilities/memory/memory.scx`, mosfet's Memory) run as a
 //! harness document's child through `scx run`: it migrates the database to
 //! mosfet's head schema and applies one transaction of statements through
-//! the sql service, answering its parent with `bot.ability.memory.output`
+//! the sql service (the migration ability, `abilities/migration/migration.scx`,
+//! brings it to mosfet's Alembic head first), answering its parent with `bot.ability.memory.output`
 //! (the statements' results only) or `bot.ability.failed`.
 //!
 //! The `postgres_` tests run the same cases on the Postgres engine (the
@@ -102,7 +103,7 @@ fn a_fresh_database_is_migrated_to_mosfets_head_schema() {
         &directory,
         &harness(
             None,
-            "[{sql: 'SELECT group_concat(name) FROM pragma_table_info(\\'bot_memory\\')'}, {sql: 'SELECT name FROM pragma_table_info(\\'bot_behavior\\') ORDER BY cid DESC LIMIT 1'}, {sql: 'PRAGMA user_version'}]",
+            "[{sql: 'SELECT group_concat(name) FROM pragma_table_info(\\'bot_memory\\')'}, {sql: 'SELECT name FROM pragma_table_info(\\'bot_behavior\\') ORDER BY cid DESC LIMIT 1'}, {sql: 'SELECT version_num FROM alembic_version'}]",
         ),
     );
     let columns = "memory_id,scope,context_ref,subject_ref,kind,sensitivity,retention,content,content_format,query_tags,metadata_json,created_at";
@@ -111,7 +112,7 @@ fn a_fresh_database_is_migrated_to_mosfets_head_schema() {
         [(
             "output".to_owned(),
             format!(
-                r#"{{"results":[{{"rowcount":1,"rows":[{{"columns":["group_concat(name)"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["name"],"values":["lifetime"]}}]}},{{"rowcount":1,"rows":[{{"columns":["user_version"],"values":[2]}}]}}]}}"#
+                r#"{{"results":[{{"rowcount":1,"rows":[{{"columns":["group_concat(name)"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["name"],"values":["lifetime"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0002"]}}]}}]}}"#
             )
         )],
         "{}",
@@ -140,7 +141,9 @@ fn a_database_newer_than_the_ability_is_refused_untouched() {
     let finished = run(
         &directory,
         &harness(
-            Some("[{sql: 'PRAGMA user_version = 3'}]"),
+            Some(
+                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0003\\')'}]",
+            ),
             "[{sql: 'SELECT 1'}]",
         ),
     );
@@ -148,7 +151,7 @@ fn a_database_newer_than_the_ability_is_refused_untouched() {
         logs(&finished.records),
         [(
             "failed".to_owned(),
-            "the memory database's schema version is not one this ability knows".to_owned()
+            "Migration could not plan from 0003 to head".to_owned()
         )],
         "{}",
         finished.stderr
@@ -256,7 +259,7 @@ fn postgres_a_database_newer_than_the_ability_is_refused_untouched() {
         logs(&finished.records),
         [(
             "failed".to_owned(),
-            "the memory database's schema version is not one this ability knows".to_owned()
+            "Migration could not plan from 0003 to head".to_owned()
         )],
         "{}",
         finished.stderr

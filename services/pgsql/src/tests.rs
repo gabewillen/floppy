@@ -196,12 +196,19 @@ fn transactions_commit_or_roll_back_on_a_server() {
             .is_some_and(|message| message.contains("duplicate key")),
         "{data}"
     );
+    assert_eq!(data["code"], "23505", "the server's SQLSTATE");
     let (name, data) = apply(serde_json::json!([{"sql": "COMMIT"}]));
     assert_eq!(name, FAILED_EVENT);
     assert_eq!(
         data["message"],
         "a pgsql statement may not end or start a transaction"
     );
+    assert_eq!(data["code"], "statement");
+    let (name, data) = apply(serde_json::json!([
+        {"sql": format!("UPDATE {table} SET n = 9 WHERE id = ?"), "parameters": ["zz"], "rowcount": 1},
+    ]));
+    assert_eq!(name, FAILED_EVENT);
+    assert_eq!(data["code"], "rowcount");
     let (name, data) = apply(serde_json::json!([
         {"sql": format!("SELECT count(*) AS n FROM {table}")},
         {"sql": format!("DROP TABLE {table}")},
@@ -211,4 +218,77 @@ fn transactions_commit_or_roll_back_on_a_server() {
         data["results"][0]["rows"][0]["values"],
         serde_json::json!([1])
     );
+}
+
+/// Against a running server (`FLOPPY_PGLITE_ADDRESS`): an open transaction
+/// reads its own writes, commits them on `sql.commit`, and fails with
+/// `changed` when another writer changed what it read.
+#[test]
+#[ignore = "needs a running PGlite server: FLOPPY_PGLITE_ADDRESS"]
+fn an_open_transaction_commits_or_fails_changed_on_a_server() {
+    let address = std::env::var("FLOPPY_PGLITE_ADDRESS").expect("FLOPPY_PGLITE_ADDRESS is set");
+    let uri = format!("postgresql://postgres@{address}/postgres");
+    let table = format!("pgsql_open_{}", std::process::id());
+    let opened = parse(&[("database", text(&uri)), ("transaction", text("open"))])
+        .expect("an open transaction needs no statements");
+    assert!(opened.open);
+    let batch = |statements: Json| {
+        let transaction = parse(&[("database", text(&uri)), ("statements", array(&statements))])
+            .expect("well-formed");
+        serde_json::from_str::<Json>(&run(&transaction).data).expect("JSON")
+    };
+    let execute = |open: &mut Open, statements: Json| {
+        let (returned, ended) = open.receive(
+            EXECUTE_EVENT,
+            &Data::JsonObject(canonical_json(
+                &serde_json::json!({ "statements": statements }),
+            )),
+        );
+        (
+            returned.name,
+            serde_json::from_str::<Json>(&returned.data).expect("JSON"),
+            ended,
+        )
+    };
+    batch(serde_json::json!([{"sql": format!("CREATE TABLE {table} (id TEXT PRIMARY KEY)")}]));
+    let count = || {
+        batch(serde_json::json!([{"sql": format!("SELECT count(*) AS n FROM {table}")}]))["results"]
+            [0]["rows"][0]["values"][0]
+            .clone()
+    };
+    let mut open = Open::new(opened.database.clone());
+    let (name, _, ended) = execute(
+        &mut open,
+        serde_json::json!([{"sql": format!("INSERT INTO {table} (id) VALUES (?)"), "parameters": ["a"]}]),
+    );
+    assert_eq!((name, ended), (RESULT_EVENT, false));
+    let (_, data, _) = execute(
+        &mut open,
+        serde_json::json!([{"sql": format!("SELECT id FROM {table}")}]),
+    );
+    assert_eq!(
+        data["results"][0]["rows"][0]["values"],
+        serde_json::json!(["a"])
+    );
+    assert_eq!(
+        count(),
+        Json::from(0),
+        "nothing is committed before sql.commit"
+    );
+    let (committed, ended) = open.receive(COMMIT_EVENT, &Data::Null);
+    assert_eq!((committed.name, ended), (COMMITTED_EVENT, true));
+    assert_eq!(count(), Json::from(1));
+    let mut stale = Open::new(opened.database.clone());
+    let _ = execute(
+        &mut stale,
+        serde_json::json!([{"sql": format!("SELECT count(*) AS n FROM {table}")}]),
+    );
+    batch(serde_json::json!([{"sql": format!("INSERT INTO {table} (id) VALUES ('b')")}]));
+    let (failed, ended) = stale.receive(COMMIT_EVENT, &Data::Null);
+    assert!(ended);
+    assert_eq!(
+        serde_json::from_str::<Json>(&failed.data).expect("JSON")["code"],
+        "changed"
+    );
+    batch(serde_json::json!([{"sql": format!("DROP TABLE {table}")}]));
 }
