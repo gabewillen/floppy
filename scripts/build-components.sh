@@ -187,6 +187,7 @@ expected_imports() {
                 'wasi:io/streams@0.2.12' \
                 'wasi:filesystem/types@0.2.12' \
                 'wasi:filesystem/preopens@0.2.12'
+            ;;
         # The pgsql service: one async `invoke` export and the Postgres wire
         # protocol on a TCP connection the run grants. It keeps exactly the
         # sockets it imports for the host (which links them only under
