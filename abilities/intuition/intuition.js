@@ -33,13 +33,10 @@ function decisionState() {
   return ({turn: {envelope: {name: stimulus.event}, data: stimulus.data === undefined ? null : stimulus.data}});
 }
 
-// An event from the decision service invoked for this turn.
-function isDecisionEvent(_event) {
-  return decision_id !== null && _event.invokeid === decision_id;
-}
-
-function isDecisionSelected(_event) {
-  return isDecisionEvent(_event) && Array.isArray(Object(_event.data).selections) && _event.data.selections.length > 0;
+// A selected event with at least one selection (the service's events are
+// unchecked).
+function hasSelections(_event) {
+  return Array.isArray(Object(_event.data).selections) && _event.data.selections.length > 0;
 }
 
 // mosfet normalize_confidence: a probability in (0, 1] as a whole number
@@ -96,8 +93,9 @@ function escalatedResult(reason, _event) {
   return ({handled: false, selected: actions, reason: reason, turn: turn, tuner: tuner});
 }
 
-function isDecisionAbstain(_event) {
-  return isDecisionEvent(_event) && ['no-candidates', 'declined'].indexOf(Object(_event.data).reason) >= 0;
+// An abstain with one of its reasons (the service's events are unchecked).
+function isAbstainReason(_event) {
+  return ['no-candidates', 'declined'].indexOf(Object(_event.data).reason) >= 0;
 }
 
 function abstainedLog(_event) {
@@ -115,10 +113,6 @@ function failedCode(_event) {
 
 function decisionFailedResult() {
   return ({handled: false, failed: true, reason: 'the decision failed (' + failed_code + ')', turn: turn, tuner: tuner});
-}
-
-function isDecisionTimeout(_event) {
-  return _event.sendid === decision_timer;
 }
 
 function timedOutResult() {

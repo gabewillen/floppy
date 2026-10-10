@@ -3,13 +3,8 @@
 // is a global of the document's data model, callable from its cond and expr
 // attributes.
 
-// Shared: the sender of an event, the scored sound's fields, the stage
-// timer and stage failures, the done.invoke shape checks, and the speech
-// products.
-
-function isFromOutside(_event) {
-  return !_event.invokeid;
-}
+// Shared: the scored sound's fields, the stage timer and stage failures,
+// the done.invoke shape checks, and the speech products.
 
 // A field of a sound or a scored sound, null when it is absent.
 function orNull(value) {
@@ -113,9 +108,9 @@ function queueWithSound(_event) {
   return queue.concat([_event.data]);
 }
 
-// The current stage's failure, sent by this session.
+// The current stage's failure.
 function isCurrentStageFailure(_event) {
-  return !_event.invokeid && _event.data.stage === stage;
+  return _event.data.stage === stage;
 }
 
 function hasStage() {
@@ -249,10 +244,6 @@ function readsNoUtterance() {
 
 function utteranceOutput() {
   return media_dir + 'floppy-utterance-' + serial + (open_wav ? '.wav' : '.pcm');
-}
-
-function isFromOpenSpeech(_event) {
-  return _event.invokeid === 'open_speech';
 }
 
 function isUtteranceToDiarize(_event) {
