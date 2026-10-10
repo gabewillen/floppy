@@ -24,9 +24,13 @@
 //! non-conformant, and the platform MUST reject it"). Any other literal URI
 //! that cannot be fetched is not an error yet: its `<invoke>` or `<data>`
 //! raises `error.execution` when it runs, as SCXML defines. A `srcexpr` URI
-//! is fetched when its `<invoke>` runs, through the same fetcher (relative
-//! ones against the root document's base, the only base the host's
-//! `load-document` call identifies); a failure is `error.execution`.
+//! is fetched when its `<invoke>` runs, through the same fetcher; a failure
+//! is `error.execution`. A relative one is resolved against the base URI of
+//! the document whose session evaluates it: the host resolves it against
+//! an `<invoke src>` document's own URL
+//! ([`scxml_host_wasmtime::EmbeddedDocument::base_uri`]), so only the root
+//! document's sessions (and their inline `<content>` sessions) pass one
+//! here relative, resolved against the root's base.
 //! Everything is fetched once per root session and shared by every session
 //! of the tree.
 //!
@@ -485,28 +489,14 @@ impl Documents {
         lines
     }
 
-    /// The URL `uri` (as the engine passes it) names: the one its literal
-    /// sites resolved to, or, for a URI no literal names (a `srcexpr`
-    /// value), `uri` resolved against the root's base. `None` when it does
-    /// not resolve, or when literals in documents of different bases
-    /// resolve the same text to different URLs.
+    /// The URL `uri` (as the host passes it) names: `uri` resolved against
+    /// the root's base. The host passes a URI relative only from a session
+    /// of the root document (or an inline `<content>` session below one);
+    /// one a child document names arrives resolved against that child's
+    /// base URI. `None` when it does not resolve to an `https:` or `file:`
+    /// URL.
     fn url_of(&self, uri: &str) -> Option<url::Url> {
-        let authored = scxml_syntax::collapse_whitespace(uri);
-        let urls: BTreeSet<&url::Url> = self
-            .literals
-            .iter()
-            .filter(|literal| literal.authored == authored)
-            .filter_map(|literal| literal.url.as_ref())
-            .collect();
-        let named = self
-            .literals
-            .iter()
-            .any(|literal| literal.authored == authored);
-        match (urls.len(), named) {
-            (1, _) => urls.into_iter().next().cloned(),
-            (0, false) => resolve(&self.base, &authored),
-            _ => None,
-        }
+        resolve(&self.base, &scxml_syntax::collapse_whitespace(uri))
     }
 
     /// The fetched document `uri` names (fetching a `srcexpr` URI now).
@@ -663,6 +653,7 @@ mod embedder {
                 extensions,
                 services,
                 event_schemas,
+                base_uri: (kind == DocumentKind::Invocation).then(|| url.to_string()),
             })
         }
 
@@ -711,10 +702,10 @@ mod tests {
 
     #[test]
     fn relative_https_and_file_uris_resolve_and_others_do_not() {
-        let base = url::Url::parse("file:///work/bots/root.scx").expect("a URL");
+        let base = url::Url::parse("file:///work/documents/root.scx").expect("a URL");
         assert_eq!(
             resolve(&base, "child.scx").map(String::from),
-            Some("file:///work/bots/child.scx".to_owned())
+            Some("file:///work/documents/child.scx".to_owned())
         );
         assert_eq!(
             resolve(&base, "../lib/a.js").map(String::from),

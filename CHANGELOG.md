@@ -169,7 +169,7 @@ hard cutover.
   `https://github.com/stateforward/scxml.rs/namespaces/scx`, tagless and
   versioned with the toolchain): `<scx:validate>` runs the validator on a
   document held as text and assigns the canonical report, optionally with
-  the machine-applicable fixes applied. It moved from nemobot's `scxml`
+  the machine-applicable fixes applied. It replaces an earlier out-of-tree `scxml`
   namespace (`<sx:validate>`). `scx` embeds its package and its component
   (`ArtifactKind::Scx`, listed in the release manifest), so a document uses
   it with no flag or fetch; `scripts/verify-wasm-capabilities.sh` builds and
@@ -1101,6 +1101,23 @@ hard cutover.
   `<foreach>` collection is `illegal`.
 
 ### Fixed
+
+- A session snapshot an extension component reads
+  (`session-snapshot-host.snapshot`) during the entry content of a compound
+  state, before any of its children is entered, is valid: its
+  `configuration.atomic` is empty, which the snapshot decoder refused as
+  `inconsistent`, so the reading element raised `error.execution`. A
+  checkpoint document still requires an atomic state.
+
+- A relative URI that an `<invoke src>` document's session loads (an
+  `<invoke srcexpr>` value, or a literal `src`) resolves against that
+  document's own base URI, as SCXML and RFC 3986 define; a `srcexpr` URI
+  resolved against the root document's base, and a literal relative URI
+  that documents of different bases resolve to different URLs did not load.
+  The Wasmtime host resolves it against `EmbeddedDocument::base_uri` (new;
+  the CLI sets it to the URL a child was loaded from) before asking the
+  embedder, for the document's sessions and the inline `<content>`
+  sessions below them.
 
 - An SCXML `<send>` whose data and raw message each fit their bounds but
   together exceed the `types.event` bound (96 KiB) is rejected by the

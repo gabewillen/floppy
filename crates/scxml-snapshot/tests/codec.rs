@@ -350,9 +350,10 @@ fn encoder_rejects_captures_outside_a_checkpoint_or_the_invocation_shape() {
 }
 
 /// An executable-content document (`options.point = executable-content`) holds
-/// one session mid-macrostep: its internal queue may hold events and it may be
-/// an invoked session, but it must exclude `invocations` and `previews`; a
-/// checkpoint document keeps every checkpoint rule.
+/// one session mid-macrostep: its internal queue may hold events, it may be
+/// an invoked session, and it may be in no atomic state yet, but it must
+/// exclude `invocations` and `previews`; a checkpoint document keeps every
+/// checkpoint rule.
 #[test]
 fn executable_content_documents_hold_one_busy_session_without_children_or_previews() {
     let executable_content = Options {
@@ -392,6 +393,19 @@ fn executable_content_documents_hold_one_busy_session_without_children_or_previe
         point: SnapshotPoint::Checkpoint,
         ..executable_content.clone()
     };
+    // The entry content of a compound state observes it before any of its
+    // children: no atomic state yet, which only executable content may show.
+    let mut entering = invoked.clone();
+    entering.sessions[0].machine.atomic.clear();
+    entering.sessions[0].machine.configuration = vec!["s0".into()];
+    let document = decode(&encode(&entering, &executable_content).expect("encodes"))
+        .expect("an executable-content document with no atomic state decodes");
+    assert!(document.snapshot.root.configuration.atomic.is_empty());
+    assert_eq!(document.snapshot.root.configuration.full, ["s0"]);
+    assert_eq!(
+        encode(&entering, &checkpoint).map_err(|error| error.code),
+        Err(SnapshotErrorCode::Inconsistent)
+    );
     assert_eq!(
         encode(&busy, &checkpoint).map_err(|error| error.code),
         Err(SnapshotErrorCode::NotStable)

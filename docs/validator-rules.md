@@ -138,8 +138,8 @@ depends only on its input. Its diagnostics are reported with the code
 prefix of the namespace (an extension package; a namespace declared as the
 default namespace uses its last path segment), or the service URI's last
 path segment, which is a repository service's `<name>` (a service package:
-`https://github.com/stateforward/floppy/services/generate` reports
-`generate::schema_mismatch`). Labels keep their exact spans.
+`https://github.com/acme/widgets/services/echo` reports
+`echo::schema_mismatch`). Labels keep their exact spans.
 
 | Code | Severity | What it proves |
 | --- | --- | --- |
