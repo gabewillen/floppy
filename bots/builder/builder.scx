@@ -148,7 +148,7 @@
       <assign location="spec" expr="_event.data.spec"/>
       <assign location="constraints" expr="_event.data.constraints === undefined ? [] : _event.data.constraints"/>
       <assign location="max_attempts" expr="_event.data.max_attempts === undefined ? null : _event.data.max_attempts"/>
-      <assign location="model" expr="_event.data.model === undefined ? 'Qwen/Qwen3.8-Flash-Next' : _event.data.model"/>
+      <assign location="model" expr="_event.data.model === undefined ? model : _event.data.model"/>
       <assign location="generate_timeout_ms" expr="_event.data.generate_timeout_ms === undefined ? generate_timeout_ms : _event.data.generate_timeout_ms"/>
     </transition>
     <transition event="builder.request" target="failed">

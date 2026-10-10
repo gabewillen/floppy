@@ -70,6 +70,7 @@ fn with_devices(devices: &str) -> PathBuf {
         "bots/floppy",
         "bots/floppy/schemas",
         "abilities",
+        "abilities/behaviors",
         "abilities/schemas",
     ] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
@@ -106,7 +107,7 @@ fn all_routed(records: &[Json], output: Option<&Json>) -> bool {
 }
 
 fn model() -> String {
-    std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "Qwen/Qwen3.8-Flash-Next".into())
+    support::live_model()
 }
 
 /// One question turn through the full cascade: autonomy's seam leaves it
@@ -269,6 +270,7 @@ fn with_name(name: &str) -> PathBuf {
         "bots/floppy",
         "bots/floppy/schemas",
         "abilities",
+        "abilities/behaviors",
         "abilities/schemas",
     ] {
         copy_dir(&workspace().join(sub), &dir.join(sub));

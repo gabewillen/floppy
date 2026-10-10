@@ -4,9 +4,12 @@
   command.downgrade, which mosfet runs on its memory database): brings a
   database to a target revision, agnostic of the database engine. It knows
   revisions and never SQL: the revisions' statements are plain SQL for the
-  engine the database is, and the sql service (services/sql) runs them. An
+  engine the database is, and the sql or pgsql service runs them. An
   ability with a schema (the memory ability) invokes it before its own
-  statements.
+  statements. The database names the engine, as for the memory ability: a
+  file path is SQLite (the sql service), a postgresql:// URI is Postgres
+  (the pgsql service); the runner's own statements are standard SQL both
+  accept, and each engine has its own revision files.
 
     reading -> planning -> applying -> migrated (final)
 
@@ -23,16 +26,19 @@
   version row's guard and then every step's statements: the guard moves
   the row from the version read to the target and must touch exactly one
   row (the sql service's rowcount), so a migration that got there first
-  makes it fail with code rowcount (or SQLITE_BUSY while the other holds
-  the database) and nothing commits. The one that loses reads again once. At the target already, nothing is applied.
+  makes it fail with code rowcount (or SQLITE_BUSY, or Postgres's 23505,
+  40001 or 40P01, while the other holds the database) and nothing
+  commits. The one that loses reads again once. At the target already, nothing is applied.
 
   Output (to the parent): bot.ability.migration.output {from, to} (the
   revisions before and after, null for base), or bot.ability.failed
   {message} (mosfet's FailureData) when nothing was committed. Then the
   session ends.
 
-  Bindings: the migration namespace package and the sql service package (a
-  run grants it its directory: scx run's dir option).
+  Bindings: the migration namespace package and the sql and pgsql service
+  packages (a run grants sql its directory, scx run's dir option, and
+  pgsql the network, its wasi option inherit-network: scx binds every
+  service a document names, though a run uses only its database's).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:migration="https://github.com/stateforward/floppy/namespaces/migration"
@@ -49,23 +55,46 @@
     <data id="version_insert" expr="'INSERT INTO alembic_version (version_num) SELECT ?1 WHERE NOT EXISTS (SELECT 1 FROM alembic_version)'"/>
     <data id="version_update" expr="'UPDATE alembic_version SET version_num = ?1 WHERE version_num = ?2'"/>
     <data id="version_delete" expr="'DELETE FROM alembic_version WHERE version_num = ?1'"/>
+    <!-- The engine: Postgres for a postgresql:// URI (the pgsql service),
+         else SQLite (the sql service). -->
+    <data id="postgres" expr="false"/>
+    <!-- The failure codes of a lost race: the guard's rowcount, SQLite's
+         busy database, Postgres's unique violation, serialization failure
+         and deadlock. -->
+    <data id="retryable" expr="['rowcount', 'SQLITE_BUSY', '23505', '40001', '40P01']"/>
     <data id="current" expr="null"/>
     <data id="plan" expr="null"/>
     <data id="guard" expr="null"/>
+    <data id="steps" expr="[]"/>
     <data id="retried" expr="false"/>
     <data id="failure" expr="null"/>
   </datamodel>
 
-  <!-- Read the database's current revision. -->
-  <state id="reading">
-    <invoke id="read" type="https://github.com/stateforward/floppy/services/sql">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="[{sql: version_table}, {sql: version_select}]"/>
-    </invoke>
-    <transition event="sql.result" cond="_event.invokeid === 'read'" target="planning">
+  <!-- Read the database's current revision, on the engine its URI names. -->
+  <state id="reading" initial="reading_from">
+    <onentry>
+      <assign location="postgres" expr="/^postgres(ql)?:\/\//.test(database)"/>
+    </onentry>
+    <state id="reading_from">
+      <transition cond="postgres" target="reading_postgres"/>
+      <transition target="reading_sqlite"/>
+    </state>
+    <state id="reading_sqlite">
+      <invoke id="read" type="https://github.com/stateforward/floppy/services/sql">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="[{sql: version_table}, {sql: version_select}]"/>
+      </invoke>
+    </state>
+    <state id="reading_postgres">
+      <invoke id="read_postgres" type="https://github.com/stateforward/floppy/services/pgsql">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="[{sql: version_table}, {sql: version_select}]"/>
+      </invoke>
+    </state>
+    <transition event="sql.result" cond="_event.invokeid.startsWith('read')" target="planning">
       <assign location="current" expr="_event.data.results[1].rows.length &gt; 0 ? _event.data.results[1].rows[0].values[0] : null"/>
     </transition>
-    <transition event="sql.failed" cond="_event.invokeid === 'read'" target="failing">
+    <transition event="sql.failed" cond="_event.invokeid.startsWith('read')" target="failing">
       <assign location="failure" expr="_event.data.message"/>
     </transition>
     <transition event="error.*" target="failing">
@@ -91,7 +120,7 @@
   </state>
 
   <!-- Move the version row and run the steps, in one transaction. -->
-  <state id="applying">
+  <state id="applying" initial="applying_from">
     <onentry>
       <if cond="plan.from === null">
         <assign location="guard" expr="({sql: version_insert, parameters: [plan.to], rowcount: 1})"/>
@@ -100,12 +129,25 @@
       <else/>
         <assign location="guard" expr="({sql: version_update, parameters: [plan.to, plan.from], rowcount: 1})"/>
       </if>
+      <assign location="steps" expr="[guard].concat(plan.steps.flatMap(step =&gt; step.statements))"/>
     </onentry>
-    <invoke id="apply" type="https://github.com/stateforward/floppy/services/sql">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="[guard].concat(plan.steps.flatMap(step =&gt; step.statements))"/>
-    </invoke>
-    <transition event="sql.result" cond="_event.invokeid === 'apply'" target="migrated">
+    <state id="applying_from">
+      <transition cond="postgres" target="applying_postgres"/>
+      <transition target="applying_sqlite"/>
+    </state>
+    <state id="applying_sqlite">
+      <invoke id="apply" type="https://github.com/stateforward/floppy/services/sql">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="steps"/>
+      </invoke>
+    </state>
+    <state id="applying_postgres">
+      <invoke id="apply_postgres" type="https://github.com/stateforward/floppy/services/pgsql">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="steps"/>
+      </invoke>
+    </state>
+    <transition event="sql.result" cond="_event.invokeid.startsWith('apply')" target="migrated">
       <send event="bot.ability.migration.output" target="#_parent">
         <param name="from" expr="plan.from"/>
         <param name="to" expr="plan.to"/>
@@ -113,11 +155,11 @@
     </transition>
     <!-- Another migration moved the row first, or holds the database:
          read again, once. -->
-    <transition event="sql.failed" cond="_event.invokeid === 'apply' &amp;&amp; ['rowcount', 'SQLITE_BUSY'].includes(_event.data.code) &amp;&amp; !retried" target="reading">
+    <transition event="sql.failed" cond="_event.invokeid.startsWith('apply') &amp;&amp; retryable.includes(_event.data.code) &amp;&amp; !retried" target="reading">
       <assign location="retried" expr="true"/>
       <assign location="plan" expr="null"/>
     </transition>
-    <transition event="sql.failed" cond="_event.invokeid === 'apply'" target="failing">
+    <transition event="sql.failed" cond="_event.invokeid.startsWith('apply')" target="failing">
       <assign location="failure" expr="_event.data.message"/>
     </transition>
     <transition event="error.*" target="failing">

@@ -66,7 +66,7 @@ created: 2026-10-09
 
 * goal: every floppy run has a memory directory, and the documents can describe the service's events
 * files: `abilities/schemas/bot.ability.memory.output.json` (generated from mosfet's `OutputData`), `bots/floppy/README.md` (the `--dir` grant), `tests/tests/support/mod.rs` (a per-run memory directory granted to floppy runs), `tests/tests/contracts.rs` (the new schema)
-* the body holds the guest database path `/memory/floppy.sqlite` as a `<data>` and passes it by `<param name="memory">` to the abilities that remember; nothing else in the body changes
+* the body holds the guest database path `/memory/floppy.sqlite` as a `<data>` and passes it by `<param name="database">` to the abilities that remember; nothing else in the body changes
 * done when: the full proof is green and the phase 4 traces are unchanged
 
 ### Recall And Retain Reasoning Episodes

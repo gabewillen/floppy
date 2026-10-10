@@ -1,0 +1,28 @@
+[package]
+name = "floppy-service-speech"
+description = "The `speech` invoked service: one speech decoding (speech to text) or encoding (text to speech) per `<invoke>` on an OpenAI-compatible audio API, with media read from and written to a directory the run grants, as a Wasm component whose `invoke` export is an `async func`"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Canonical JSON (deterministic request bodies and returned event data).
+scxml-event-schema.workspace = true
+scxml-types.workspace = true
+serde_json.workspace = true
+# The WASI 0.3 async ABI: `invoke` is an `async func`.
+wit-bindgen = { workspace = true, features = ["async", "async-spawn"] }
+
+[dev-dependencies]
+# The package test reads the manifest with the parser every host uses.
+scxml-validator-core.workspace = true
+
+[lints]
+workspace = true

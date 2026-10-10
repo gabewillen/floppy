@@ -6,7 +6,10 @@
 //! `--dir URI=HOST::GUEST`. Each invocation is one SQLite transaction of
 //! mosfet's `Statement`s; the service answers `sql.result` (mosfet's
 //! `OutputData`) or `sql.failed` (mosfet's `FailureData`), then completes.
-//! The file outlives the invocation and the run.
+//! The file outlives the invocation and the run. The `postgres_` test runs
+//! an open transaction on the pgsql service against a fresh Postgres server
+//! ([`support::Pglite`], ignored unless `FLOPPY_PGLITE_SERVER` or
+//! `FLOPPY_POSTGRES_BIN` is set).
 
 #![allow(
     missing_docs,
@@ -247,6 +250,32 @@ const OPEN_TRANSACTION: &str = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml
 fn an_open_transaction_spans_events_and_a_cancelled_one_commits_nothing() {
     let (_, grant) = granted();
     let finished = open(&grant, OPEN_TRANSACTION);
+    assert_eq!(
+        logs(&finished.records),
+        support::labelled(&[
+            ("read", r#"["greet"]"#),
+            ("committed", "{}"),
+            ("abandoned", "1"),
+            ("counted", r#"["greet"]"#),
+        ]),
+        "{}",
+        finished.stderr
+    );
+    assert!(support::finished(&finished.records));
+}
+
+#[test]
+#[ignore = "needs a Postgres server: FLOPPY_PGLITE_SERVER or FLOPPY_POSTGRES_BIN"]
+fn postgres_an_open_transaction_spans_events_and_a_cancelled_one_commits_nothing() {
+    let server =
+        support::Pglite::start().expect("FLOPPY_PGLITE_SERVER or FLOPPY_POSTGRES_BIN is set");
+    let document = OPEN_TRANSACTION
+        .replace(&sql(), &service_uri("pgsql"))
+        .replace(
+            "'/memory/floppy.sqlite'",
+            &format!("'{}'", server.database()),
+        );
+    let finished = open(&[], &document);
     assert_eq!(
         logs(&finished.records),
         support::labelled(&[

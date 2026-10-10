@@ -86,7 +86,7 @@ const BODY_EVENTS: [&str; 15] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 43] = [
+const ABILITY_EVENTS: [&str; 55] = [
     "bot.ability.failed",
     "bot.ability.cognition.input",
     "bot.ability.cognition.output",
@@ -134,6 +134,19 @@ const ABILITY_EVENTS: [&str; 43] = [
     // The migration ability's reached revision (Alembic's upgrade or
     // downgrade), described where the memory ability takes it.
     "bot.ability.migration.output",
+    // Phase 6: mosfet's VisualClassification and Reading.
+    "bot.ability.vision.classification.input",
+    "bot.ability.vision.classification.output",
+    "bot.ability.vision.classification.apply.completed",
+    "bot.ability.reading.input",
+    "bot.ability.reading.output",
+    "bot.ability.reading.failed",
+    "bot.ability.reading.stage.failed",
+    "bot.ability.reading.classification.completed",
+    "bot.ability.reading.text.decoded",
+    "bot.ability.reading.image.decoded",
+    "bot.ability.reading.unreadable.output.ready",
+    "bot.ability.reading.output.encoded",
 ];
 
 /// The correlated events of one processing turn: each requires `turn`.

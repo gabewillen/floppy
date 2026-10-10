@@ -47,6 +47,15 @@ pub const GRANTED: [&str; 4] = [
     "TYPESAFE_BASE_URL",
 ];
 
+/// The model floppy ships (README.md, "Defaults"): every document's `model`
+/// `<data>`, checked by `tests/tests/defaults.rs`.
+pub const DEFAULT_MODEL: &str = "Qwen/Qwen3.8-Flash-Next";
+
+/// The model of a live test: `FLOPPY_LIVE_MODEL`, else [`DEFAULT_MODEL`].
+pub fn live_model() -> String {
+    std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_owned())
+}
+
 /// The env files of a live test: `FLOPPY_LIVE_ENV_FILE`, one path or
 /// several joined like `PATH` (`:` on Unix), each given to `scx run` as an
 /// `--env-file` in order (a variable takes its last file's entry), so keys
@@ -245,17 +254,27 @@ impl Run {
     /// Starts `scx run` with `args` (the document among them) and the
     /// extra environment `env`.
     ///
-    /// A run whose document tree binds the sql service (decided by
-    /// [`binds_sql`]) and that grants it no directory gets a fresh one
-    /// ([`memory_grant`]): the service imports `wasi:filesystem`, and a run
-    /// that binds it without a `--dir` grant is refused.
+    /// A run whose document tree binds the sql or the generate service
+    /// (decided by [`binds`]) and that grants it no directory gets a fresh
+    /// one ([`memory_grant`], [`media_grant`]): both services import
+    /// `wasi:filesystem`, and a run that binds one without a `--dir` grant
+    /// is refused. One that binds the pgsql service gets the network
+    /// ([`pgsql_grant`]).
     pub fn start(args: &[String], env: &[(&str, &str)]) -> Self {
         let mut full = vec!["run".to_owned()];
         full.extend_from_slice(args);
-        let sql = service_uri("sql");
-        let granted = args.iter().any(|arg| arg.starts_with(&format!("{sql}=")));
-        if !granted && args.iter().any(|arg| binds_sql(Path::new(arg))) {
-            full.splice(1..1, memory_grant());
+        for (name, grant) in [
+            ("sql", memory_grant as fn() -> Vec<String>),
+            ("generate", media_grant),
+            ("pgsql", pgsql_grant),
+        ] {
+            let uri = service_uri(name);
+            let granted = args.iter().any(|arg| arg.starts_with(&format!("{uri}=")));
+            // `scx` runs from the workspace root, so a relative document
+            // path is relative to it.
+            if !granted && args.iter().any(|arg| binds(&workspace().join(arg), name)) {
+                full.splice(1..1, grant());
+            }
         }
         let mut command = command(&full);
         for (name, value) in env {
@@ -450,13 +469,18 @@ pub fn memory_grant() -> Vec<String> {
 
 /// Copies the memory ability into `abilities` (a layout's `abilities/`):
 /// `memory.scx`, the migration ability it invokes (`migration.scx`), its
-/// revisions (`memory/*.json`), and every ability schema (`schemas/`).
+/// revisions (`memory/sqlite/*.json`, `memory/postgresql/*.json`), and
+/// every ability schema (`schemas/`).
 pub fn copy_memory(abilities: &Path) {
     for (from, to) in [
         (workspace().join("abilities"), abilities.to_path_buf()),
         (
-            workspace().join("abilities/memory"),
-            abilities.join("memory"),
+            workspace().join("abilities/memory/sqlite"),
+            abilities.join("memory/sqlite"),
+        ),
+        (
+            workspace().join("abilities/memory/postgresql"),
+            abilities.join("memory/postgresql"),
         ),
         (
             workspace().join("abilities/schemas"),
@@ -477,11 +501,34 @@ pub fn copy_memory(abilities: &Path) {
     }
 }
 
+/// `--dir` granting the generate service a fresh scratch directory at
+/// `/media`, where the images its messages name are read.
+pub fn media_grant() -> Vec<String> {
+    vec![
+        "--dir".to_owned(),
+        format!(
+            "{}={}::/media",
+            service_uri("generate"),
+            unique_scratch("media").display()
+        ),
+    ]
+}
+
+/// `--wasi` letting the pgsql service connect (`inherit-network`): the
+/// memory ability names it beside the sql service, so a run that binds one
+/// binds both.
+pub fn pgsql_grant() -> Vec<String> {
+    vec![
+        "--wasi".to_owned(),
+        format!("{}=inherit-network", service_uri("pgsql")),
+    ]
+}
+
 /// Whether the `.scx` document at `path`, or a document it loads by a
-/// literal relative `<invoke src>` (recursively), names the sql service's
+/// literal relative `<invoke src>` (recursively), names the service `name`'s
 /// URI. Anything that is not a readable `.scx` file names none.
-pub fn binds_sql(path: &Path) -> bool {
-    fn visit(path: &Path, seen: &mut Vec<PathBuf>) -> bool {
+pub fn binds(path: &Path, name: &str) -> bool {
+    fn visit(path: &Path, uri: &str, seen: &mut Vec<PathBuf>) -> bool {
         let Ok(path) = path.canonicalize() else {
             return false;
         };
@@ -492,7 +539,7 @@ pub fn binds_sql(path: &Path) -> bool {
         let Ok(text) = std::fs::read_to_string(&path) else {
             return false;
         };
-        if text.contains(&service_uri("sql")) {
+        if text.contains(&format!("{uri}\"")) {
             return true;
         }
         let dir = path.parent().unwrap_or(Path::new("/")).to_owned();
@@ -500,9 +547,9 @@ pub fn binds_sql(path: &Path) -> bool {
             .skip(1)
             .filter_map(|rest| rest.split('"').next())
             .filter(|src| !src.contains(':'))
-            .any(|src| visit(&dir.join(src), seen))
+            .any(|src| visit(&dir.join(src), uri, seen))
     }
-    visit(path, &mut Vec::new())
+    visit(path, &service_uri(name), &mut Vec::new())
 }
 
 /// A scratch directory of its own for each call (tests run in parallel).
@@ -532,4 +579,179 @@ pub fn run_document(
     let mut run = Run::start(&full, env);
     run.end_input();
     run.finish(limit)
+}
+
+/// One Postgres server for a Postgres-engine test, fresh for the test and
+/// stopped when dropped: `PGlite` (`node $FLOPPY_PGLITE_SERVER --port 0`,
+/// the `pglite-server` script of `@electric-sql/pglite-socket`,
+/// `dist/scripts/server.js`: a fresh in-memory database on a free loopback
+/// port), or, when only `FLOPPY_POSTGRES_BIN` is set (a directory holding
+/// Postgres's `initdb` and `postgres`), a Postgres cluster made for the
+/// test in a scratch directory with `trust` authentication (run as the
+/// `postgres` user when the tests run as root, which Postgres refuses).
+pub struct Pglite {
+    child: Child,
+    /// A Postgres cluster's data directory (its `postmaster.pid`).
+    data: Option<PathBuf>,
+    /// Its `IP:PORT`.
+    pub address: String,
+}
+
+impl Pglite {
+    /// Starts a server; `None` when neither `FLOPPY_PGLITE_SERVER` nor
+    /// `FLOPPY_POSTGRES_BIN` is set.
+    pub fn start() -> Option<Self> {
+        if let Some(script) = std::env::var_os("FLOPPY_PGLITE_SERVER") {
+            return Some(Self::node(&script));
+        }
+        let bin = PathBuf::from(std::env::var_os("FLOPPY_POSTGRES_BIN")?);
+        Some(Self::postgres(&bin))
+    }
+
+    fn node(script: &std::ffi::OsStr) -> Self {
+        let mut child = Command::new("node")
+            .arg(script)
+            .args(["--port", "0", "--max-connections", "8"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("node runs the PGlite server");
+        let stdout = child.stdout.take().expect("stdout is piped");
+        let mut lines = BufReader::new(stdout).lines();
+        let address = loop {
+            let line = lines
+                .next()
+                .expect("the PGlite server reports where it listens")
+                .expect("the PGlite server's output is text");
+            if let Some(listening) = line.split_once("listening on ") {
+                let listening: Json =
+                    serde_json::from_str(listening.1).expect("the address is JSON");
+                break format!(
+                    "{}:{}",
+                    listening["host"].as_str().expect("a host"),
+                    listening["port"]
+                );
+            }
+        };
+        // Keep draining its output so the server never blocks on a full
+        // pipe.
+        std::thread::spawn(move || for _ in lines {});
+        Self {
+            child,
+            data: None,
+            address,
+        }
+    }
+
+    fn postgres(bin: &Path) -> Self {
+        let dir = unique_scratch("postgres");
+        let data = dir.join("data");
+        // Postgres refuses to run as root: run it as `postgres` then.
+        let as_root = std::env::var("USER").is_ok_and(|user| user == "root")
+            || Command::new("id")
+                .arg("-u")
+                .output()
+                .is_ok_and(|out| out.stdout.trim_ascii() == b"0");
+        let command = |program: &str| {
+            let mut command = if as_root {
+                let mut command = Command::new("runuser");
+                command
+                    .args(["-u", "postgres", "--"])
+                    .arg(bin.join(program));
+                command
+            } else {
+                Command::new(bin.join(program))
+            };
+            command.stdin(Stdio::null());
+            command
+        };
+        if as_root {
+            let status = Command::new("chown")
+                .args(["-R", "postgres"])
+                .arg(&dir)
+                .status()
+                .expect("chown runs");
+            assert!(
+                status.success(),
+                "the scratch directory is given to postgres"
+            );
+        }
+        let initialized = command("initdb")
+            .args([
+                "-A",
+                "trust",
+                "-U",
+                "postgres",
+                "-E",
+                "UTF8",
+                "--no-sync",
+                "-D",
+            ])
+            .arg(&data)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .expect("initdb runs");
+        assert!(initialized.success(), "initdb makes the cluster");
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port")
+            .port();
+        let child = command("postgres")
+            .arg("-D")
+            .arg(&data)
+            .args([
+                "-p",
+                &port.to_string(),
+                "-c",
+                "listen_addresses=127.0.0.1",
+                "-c",
+                "fsync=off",
+            ])
+            .arg("-k")
+            .arg(&dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("postgres starts");
+        let address = format!("127.0.0.1:{port}");
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while std::net::TcpStream::connect(&address).is_err() {
+            assert!(Instant::now() < deadline, "postgres listens on {address}");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        Self {
+            child,
+            data: Some(data),
+            address,
+        }
+    }
+
+    /// The Postgres connection URI of its database.
+    pub fn database(&self) -> String {
+        format!("postgresql://postgres@{}/postgres", self.address)
+    }
+}
+
+impl Drop for Pglite {
+    fn drop(&mut self) {
+        // A Postgres cluster stops on SIGINT to its postmaster (named by
+        // `postmaster.pid`, since `runuser` may stand between); PGlite's
+        // server is the child itself.
+        let postmaster = self
+            .data
+            .as_ref()
+            .and_then(|data| std::fs::read_to_string(data.join("postmaster.pid")).ok())
+            .and_then(|pid| pid.lines().next().map(str::to_owned));
+        match postmaster {
+            Some(pid) => {
+                let _stopped = Command::new("kill").args(["-INT", &pid]).status();
+            }
+            None => {
+                let _killed = self.child.kill();
+            }
+        }
+        let _waited = self.child.wait();
+    }
 }

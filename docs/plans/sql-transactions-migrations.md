@@ -1,6 +1,7 @@
 # SQL service: transactions and migrations in the SCXML pattern
 
-Status: built (2026-10-10, decisions D48, D49 and D50).
+Status: built on both engines (2026-10-10, decisions D48 to D51): SQLite
+through `services/sql` and Postgres through `services/pgsql`.
 As built, the migration ability answers `bot.ability.migration.output
 {from, to}` and `bot.ability.failed {message}` (mosfet's ability events)
 rather than `<donedata>` and `migration.failed`, and the version guard's
@@ -119,23 +120,23 @@ Revisions are data, like Alembic's script directory. One file per revision
   databases already carry, and an existing mosfet SQLite file migrates in
   place.
 
-Postgres (the PGlite spike's engine over a TCP socket, which another thread
-is adding to Memory):
+Postgres (built, D51):
 
-* The runner and `<migration:plan>` never parse SQL, so they serve any engine
-  service that takes the sql service's contract (`database`, `statements`
-  with `rowcount`, `sql.result`, `sql.failed {code}`): the runner's own
-  statements are standard SQL (`CREATE TABLE IF NOT EXISTS alembic_version`,
-  `INSERT ... SELECT ... WHERE NOT EXISTS`, `UPDATE`, `DELETE`), with `?N`
-  placeholders the engine binds positionally.
-* The runner names its engine by the sql service's literal URI today (scx
-  binds a repository service only from a literal `<invoke type>`). For
-  Postgres it gains a `<param name="engine">` choosing between two literal
-  invokes, one per engine, until scx binds `typeexpr`.
-* Revision files hold the engine's SQL. mosfet's 0001 and 0002 are SQLite
-  DDL; a Postgres memory carries its own revision files, or a revision
-  holds per-engine statements, with the same revision ids so
-  `alembic_version` means the same thing on both.
+* The runner and `<migration:plan>` never parse SQL. The runner picks the
+  engine from `database` as the memory ability does (a `postgresql://` URI
+  is the pgsql service, a file path the sql service), with one literal
+  `<invoke>` per engine, since scx binds a repository service only from a
+  literal `<invoke type>`.
+* Its own statements are standard SQL both engines accept (`CREATE TABLE IF
+  NOT EXISTS alembic_version`, `INSERT ... SELECT ?1 WHERE NOT EXISTS`,
+  `UPDATE`, `DELETE`); the pgsql service rewrites `?N` to `$N`.
+* Revision files hold each engine's SQL, with the same revision ids:
+  `abilities/memory/sqlite/` and `abilities/memory/postgresql/` (Postgres's
+  defaulted timestamps are `TIMESTAMPTZ DEFAULT NOW()`).
+* The pgsql service takes the whole contract: `rowcount`, `sql.failed
+  {code, message}` with the server's `SQLSTATE`, and open transactions by
+  replay. A lost race on Postgres is `23505` (the version row's key),
+  `40001` or `40P01`, which the runner retries once like `rowcount`.
 
 Transactions:
 
