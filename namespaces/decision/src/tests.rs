@@ -1633,9 +1633,9 @@ fn the_tuner_keeps_mosfets_confidence_baseline() {
     // During the warmup the threshold is the floor; a malformed state is
     // the initial one.
     for state in [
-        json!({"mean": 70, "variance": 100, "n": 0}),
-        json!({"mean": "70", "variance": 100, "n": 0}),
-        json!({"mean": 70, "variance": 100, "n": -1}),
+        json!({"mean": 70, "var": 100, "n": 0}),
+        json!({"mean": "70", "var": 100, "n": 0}),
+        json!({"mean": 70, "var": 100, "n": -1}),
         json!([]),
     ] {
         let mut host = tuner_host(state, None);
@@ -1643,69 +1643,66 @@ fn the_tuner_keeps_mosfets_confidence_baseline() {
         assert_eq!(assigned(&host, "threshold"), real(0.35));
         assert_eq!(
             assigned(&host, "tuner"),
-            Data::JsonObject(r#"{"mean":70,"n":0,"variance":100}"#.into())
+            Data::JsonObject(r#"{"mean":70,"n":0,"var":100}"#.into())
         );
         assert_eq!(host.assigned[0].0, "threshold");
     }
     // The first observation sets the mean; an equal one keeps it.
-    let mut host = tuner_host(json!({"mean": 70, "variance": 100, "n": 0}), Some(34.0));
+    let mut host = tuner_host(json!({"mean": 70, "var": 100, "n": 0}), Some(34.0));
     run_tuner(&mut host, true);
     assert_eq!(
         assigned_any(&host, "tuner"),
-        json!({"mean": 34, "variance": 100, "n": 1})
+        json!({"mean": 34, "var": 100, "n": 1})
     );
-    let mut host = tuner_host(json!({"mean": 34, "variance": 100, "n": 1}), Some(34.0));
+    let mut host = tuner_host(json!({"mean": 34, "var": 100, "n": 1}), Some(34.0));
     run_tuner(&mut host, true);
     assert_eq!(
         assigned_any(&host, "tuner"),
-        json!({"mean": 34, "variance": 100, "n": 2})
+        json!({"mean": 34, "var": 100, "n": 2})
     );
     // After the warmup: max(35 / 2, 70 - 1 * sqrt(100)) = 60.
-    let mut host = tuner_host(json!({"mean": 70, "variance": 100, "n": 8}), None);
+    let mut host = tuner_host(json!({"mean": 70, "var": 100, "n": 8}), None);
     run_tuner(&mut host, false);
     assert_eq!(assigned(&host, "threshold"), real(0.6));
     // The EMA, byte for byte as the document computed it.
-    let mut host = tuner_host(json!({"mean": 70, "variance": 100, "n": 8}), Some(34.0));
+    let mut host = tuner_host(json!({"mean": 70, "var": 100, "n": 8}), Some(34.0));
     run_tuner(&mut host, true);
     assert_eq!(
         assigned(&host, "tuner"),
-        Data::JsonObject(r#"{"mean":67.12,"n":9,"variance":195.68}"#.into())
+        Data::JsonObject(r#"{"mean":67.12,"n":9,"var":195.68}"#.into())
     );
     assert_eq!(
         assigned(&host, "threshold"),
         real((67.12 - 195.68_f64.sqrt()) / 100.0)
     );
-    let mut host = tuner_host(
-        json!({"mean": 67.12, "variance": 195.68, "n": 9}),
-        Some(34.0),
-    );
+    let mut host = tuner_host(json!({"mean": 67.12, "var": 195.68, "n": 9}), Some(34.0));
     run_tuner(&mut host, true);
     assert_eq!(
         assigned(&host, "tuner"),
-        Data::JsonObject(r#"{"mean":64.4704,"n":10,"variance":267.78035200000005}"#.into())
+        Data::JsonObject(r#"{"mean":64.4704,"n":10,"var":267.78035200000005}"#.into())
     );
     // The soft floor, and observations clamped to 0-100.
-    let mut host = tuner_host(json!({"mean": 10, "variance": 100, "n": 9}), Some(250.0));
+    let mut host = tuner_host(json!({"mean": 10, "var": 100, "n": 9}), Some(250.0));
     run_tuner(&mut host, true);
     assert_eq!(
         assigned_any(&host, "tuner"),
-        json!({"mean": 17.2, "variance": 740, "n": 10})
+        json!({"mean": 17.2, "var": 740, "n": 10})
     );
-    let mut host = tuner_host(json!({"mean": 10, "variance": 100, "n": 9}), None);
+    let mut host = tuner_host(json!({"mean": 10, "var": 100, "n": 9}), None);
     run_tuner(&mut host, false);
     assert_eq!(assigned(&host, "threshold"), real(0.175));
-    let mut host = tuner_host(json!({"mean": 70, "variance": 100, "n": 0}), Some(-5.0));
+    let mut host = tuner_host(json!({"mean": 70, "var": 100, "n": 0}), Some(-5.0));
     run_tuner(&mut host, true);
     assert_eq!(
         assigned_any(&host, "tuner"),
-        json!({"mean": 0, "variance": 100, "n": 1})
+        json!({"mean": 0, "var": 100, "n": 1})
     );
 }
 
 #[test]
 fn malformed_tuners_raise_error_execution() {
     let mut host = with_values(&[
-        ("tuner", json!({"mean": 70, "variance": 100, "n": 0})),
+        ("tuner", json!({"mean": 70, "var": 100, "n": 0})),
         ("confidence", json!([])),
     ]);
     assert_eq!(
@@ -1737,7 +1734,7 @@ fn malformed_tuners_raise_error_execution() {
             detail
         );
     }
-    let mut host = tuner_host(json!({"mean": 70, "variance": 100, "n": 0}), None);
+    let mut host = tuner_host(json!({"mean": 70, "var": 100, "n": 0}), None);
     host.fail_assign = true;
     assert_eq!(
         execution(execute("tuner", &[location("tuner")], &[], &mut host)),

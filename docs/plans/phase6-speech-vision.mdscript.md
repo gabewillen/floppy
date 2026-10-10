@@ -85,6 +85,9 @@ The slices below run in parallel. Each depends only on what is already on `main`
 
 ## Decisions Made Under Delegation
 
-* D50: one speech service holds both directions (mosfet's decoder and encoder providers are one OpenAI-compatible audio API), chosen by `operation`; ElevenLabs is a second encode backend selected by the run
-* D51: image reading is the generate service with an image part, not a new service: the Sparks' vision model speaks Chat Completions
-* D52: stages mosfet runs only on local models (voice activity, diarization, voice identification) are seams in phase 6
+* D57 (planned as D50; renumbered, since D50 records the sql service's open transactions): one speech service holds both directions (mosfet's decoder and encoder providers are one OpenAI-compatible audio API), chosen by `operation`; ElevenLabs is a second encode backend selected by the run
+* D58 (planned as D51; renumbered, since D51 records the two SQL engines): image reading is the generate service with an image part, not a new service: the Sparks' vision model speaks Chat Completions
+* D52 (superseded by D66): stages mosfet runs only on local models (voice activity, diarization, voice identification) are seams in phase 6
+* D59: speaking speaks audio, superseding D38: mosfet's `idle` → `encoding` → `playing` → `recording` with mosfet's encoder defaults (`gemini-3.1-flash-tts-preview`, `Kore`), every terminal failure answered as `bot.ability.failed`
+* D66: voice detection, diarization and voice identification are ported in full as operations of the speech service (`detect`, `diarize`, `identify`) on LocalAI's voice APIs (`/vad`, `/audio/diarization`, `/voice/embed`, its Silero VAD, pyannote and WeSpeaker models), selected by the run through `FLOPPY_VOICE_BASE_URL`; the steps mosfet's interpretation takes on bytes in memory (normalizing to PCM, joining the open speech, clipping a voice span) are the service's media steps on files, and the interpretation is mosfet's full machine, open-speech window included
+* D67: floppy's interpretation is configured with voice detection, sound classification and speech decoding (the phase 6 plan decodes speech in listening), where mosfet's example bots configure voice identification and leave speech decoding to Conversation; every stage is a `<data>` switch named as mosfet's constructor names it

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Test harness of abilities/listening.scx (tests/tests/listening.rs): it
+  invokes the listening as its child "listening" (the body's place),
+  forwards each external environment.sound and
+  bot.ability.speaking.efference to it, and logs what the listening
+  answers: harness.ready (its readiness offers), harness.speech and
+  harness.sound (the data of a bot.ability.cognition.input stimulus that
+  carries a bot.ability.listening.speech.output or a passed-through
+  environment.sound) and harness.failed (bot.ability.listening.failed),
+  each with its data as JSON.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="run">
+  <state id="run">
+    <invoke id="listening" type="scxml" src="listening/listening.scx"/>
+    <transition event="bot.ability.offers" cond="_event.invokeid === 'listening'">
+      <log label="harness.ready" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="bot.ability.cognition.input" cond="_event.invokeid === 'listening' &amp;&amp; _event.data.stimulus.event === 'bot.ability.listening.speech.output'">
+      <log label="harness.speech" expr="JSON.stringify(_event.data.stimulus.data)"/>
+    </transition>
+    <transition event="bot.ability.cognition.input" cond="_event.invokeid === 'listening' &amp;&amp; _event.data.stimulus.event === 'environment.sound'">
+      <log label="harness.sound" expr="JSON.stringify(_event.data.stimulus.data)"/>
+    </transition>
+    <transition event="bot.ability.listening.failed" cond="_event.invokeid === 'listening'">
+      <log label="harness.failed" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="environment.sound bot.ability.speaking.efference" cond="_event.invokeid === undefined">
+      <send eventexpr="_event.name" target="#_listening">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+  </state>
+</scxml>

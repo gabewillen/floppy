@@ -10,7 +10,7 @@
 //! or a conversation product's last text). No backend is involved: the
 //! communication path makes no service call.
 //!
-//! The speaking child logs `bot.say`, the conversation each commit
+//! The speaking child logs `floppy.say`, the conversation each commit
 //! (`conversation`) and what memory recalled (`conversation.memories`),
 //! the communication what it forwards (`communication.product`,
 //! `communication.history`, `communication.deferred`), and the body each
@@ -111,12 +111,14 @@ fn layout(speaking: &Speaking, edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
     ] {
         support::copy_ability(name, &abilities);
     }
+    support::copy_listening(&abilities);
     std::fs::create_dir_all(abilities.join("cognition")).expect("creatable");
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/cognition_double.scx"),
         abilities.join("cognition/cognition.scx"),
     )
     .expect("the double is copyable");
+    support::double_speech(&abilities, "'encode'");
     let speaking_path = abilities.join("speaking/speaking.scx");
     match speaking {
         Speaking::Real => {}
@@ -197,13 +199,27 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
         &["communication.history", "bot.ability.speaking.output"],
     );
     assert_eq!(
-        texts(&records, "bot.route"),
+        texts(&records, "floppy.route"),
         strings(&["bot.ability.communication.respond -> communication"])
     );
-    assert_eq!(texts(&records, "bot.say"), strings(&["reply 1"]));
+    assert_eq!(texts(&records, "floppy.say"), strings(&["reply 1"]));
+    // Encoded by the speech service (its double), played out into the
+    // environment by reference, then said.
+    assert_eq!(
+        texts(&records, "speech.encode"),
+        strings(&["encode reply 1 -> media/speaking-1.pcm"])
+    );
+    assert_eq!(
+        texts(&records, "environment.sound"),
+        strings(&[
+            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
+        ])
+    );
     assert_eq!(
         texts(&records, "bot.ability.speaking.output"),
-        strings(&[r#"{"text":"reply 1"}"#])
+        strings(&[
+            r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 1"}"#
+        ])
     );
     // The outbound message is history only: no product, no new turn.
     assert_eq!(texts(&records, "conversation"), strings(&["outbound 0"]));
@@ -272,9 +288,9 @@ fn history_carrying_turns(body: &Path) -> Run {
     assert_eq!(
         texts(&all, "conversation"),
         strings(&[
-            r#"inbound 0 from ["gabe"] (1 in its transcript)"#,
+            r#"inbound 0 from ["gabe"] (1 in its relationship)"#,
             "outbound 1",
-            r#"inbound 2 from ["gabe"] (2 in its transcript)"#,
+            r#"inbound 2 from ["gabe"] (2 in its relationship)"#,
             "outbound 3",
         ])
     );
@@ -286,33 +302,8 @@ fn history_carrying_turns(body: &Path) -> Run {
         strings(&["recalled 0, remembered 1", "recalled 1, remembered 1"])
     );
     assert_eq!(texts(&all, "communication.product"), strings(&["0", "2"]));
-    assert_eq!(texts(&all, "bot.say"), strings(&["reply 1", "reply 2"]));
+    assert_eq!(texts(&all, "floppy.say"), strings(&["reply 1", "reply 2"]));
     run
-}
-
-#[test]
-fn the_history_reaching_a_turn_is_bounded_to_the_latest_messages() {
-    let body = layout(
-        &Speaking::Real,
-        &[(
-            "abilities/conversation/conversation.scx",
-            &[("max_messages", "2")],
-        )],
-    );
-    let mut run = started(&body);
-    for _ in 0..2 {
-        run.event("bot.ability.communication.input", &said("reply"));
-        run.until(WAIT, label_is("communication.history"));
-    }
-    run.event("bot.ability.communication.input", &said("ignore"));
-    let records = run.until(WAIT, label_is("double.ignore"));
-    // The third input is sequence 4; the double sees its last 2 messages.
-    assert_eq!(texts(&records, "double.input"), strings(&["3 ignore 2"]));
-    assert_eq!(texts(&records, "communication.product"), strings(&["4"]));
-    close(
-        run,
-        "the_history_reaching_a_turn_is_bounded_to_the_latest_messages",
-    );
 }
 
 #[test]
@@ -325,11 +316,11 @@ fn a_blank_response_fails_without_speaking() {
         texts(&records, "bot.ability.communication.failed"),
         strings(&[r#"{"message":"Communication response text must be non-blank."}"#])
     );
-    assert!(texts(&records, "bot.say").is_empty(), "{records:?}");
+    assert!(texts(&records, "floppy.say").is_empty(), "{records:?}");
     // Still active: the next response is said.
     run.event("bot.input", &input("reply"));
     let records = run.until(WAIT, label_is("bot.ability.speaking.output"));
-    assert_eq!(texts(&records, "bot.say"), strings(&["reply 2"]));
+    assert_eq!(texts(&records, "floppy.say"), strings(&["reply 2"]));
     close(run, "a_blank_response_fails_without_speaking");
 }
 
@@ -347,11 +338,11 @@ fn a_blank_response_that_waited_fails_without_speaking() {
         texts(&records, "bot.ability.communication.failed"),
         strings(&[r#"{"message":"Communication response text must be non-blank."}"#])
     );
-    assert_eq!(texts(&records, "bot.say"), strings(&["first 1"]));
+    assert_eq!(texts(&records, "floppy.say"), strings(&["first 1"]));
     // Still active: the next response is said.
     run.event("bot.input", &input("reply"));
     let records = run.until(WAIT, label_is("bot.ability.speaking.output"));
-    assert_eq!(texts(&records, "bot.say"), strings(&["reply 2"]));
+    assert_eq!(texts(&records, "floppy.say"), strings(&["reply 2"]));
     close(run, "a_blank_response_that_waited_fails_without_speaking");
 }
 
@@ -405,7 +396,7 @@ fn malformed_communication_input_is_refused_before_the_body() {
     let records = run.until(WAIT, |record| {
         record["type"] == "error" && record["code"] == "machine-invalid-input"
     });
-    assert!(texts(&records, "bot.rejected").is_empty(), "{records:?}");
+    assert!(texts(&records, "floppy.rejected").is_empty(), "{records:?}");
     assert!(texts(&records, "conversation").is_empty(), "{records:?}");
     close(
         run,
@@ -426,7 +417,7 @@ fn a_communication_whose_speaking_cannot_start_fails_the_activation() {
         "{degraded:?}"
     );
     assert_eq!(
-        texts(&records, "bot.diagnostic"),
+        texts(&records, "floppy.diagnostic"),
         strings(&["the ability communication ended while activating"])
     );
     close(
@@ -507,13 +498,13 @@ fn the_conversation_commits_each_message_into_its_history() {
     assert_eq!(
         texts(&all, "conversation"),
         strings(&[
-            r#"inbound 0 from ["alice","zed",[0.5,1]] (1 in its transcript)"#,
-            r#"inbound 1 from ["alice"] (1 in its transcript)"#,
-            r#"inbound 2 from ["bob",[2,1.25]] (1 in its transcript)"#,
+            r#"inbound 0 from ["alice","zed",[0.5,1]] (1 in its relationship)"#,
+            r#"inbound 1 from ["alice"] (1 in its relationship)"#,
+            r#"inbound 2 from ["bob",[2,1.25]] (1 in its relationship)"#,
             "outbound 3",
             "outbound r-1 already committed",
             "outbound 4",
-            r#"inbound 5 from ["alice","zed",[0.5,1]] (2 in its transcript)"#,
+            r#"inbound 5 from ["alice","zed",[0.5,1]] (2 in its relationship)"#,
         ])
     );
     let finished = run.close(WAIT);
@@ -525,9 +516,337 @@ fn the_conversation_commits_each_message_into_its_history() {
         json!(r#"relationship-["alice","zed",[0.5,1]]["a\"b","bot"]"#)
     );
     assert_eq!(last["messages"][1]["content"], Json::Null);
+    // Each source's turn (mosfet's identity order: names, then
+    // embeddings) is exchanged with its turn detector, and the turns'
+    // texts are committed joined, as mosfet's _complete_turn joins them.
+    assert_eq!(last["messages"][0]["content"], json!("hello hello hello"));
+    assert_eq!(
+        last["messages"][0]["provenance"]["turn_ref"],
+        json!("input-1:turn:alice")
+    );
+    assert_eq!(
+        last["messages"][1]["provenance"]["turn_ref"],
+        json!("input-2:turn:alice")
+    );
+    assert_eq!(
+        last["messages"][2]["content"],
+        json!({"b": 1, "a": [true, null]})
+    );
+    assert_eq!(
+        last["messages"][2]["provenance"]["turn_ref"],
+        json!("input-3:turn:bob")
+    );
+    assert_eq!(last["messages"][5]["content"], json!("again again again"));
     trace::assert_trace(
         "the_conversation_commits_each_message_into_its_history",
         &finished.all,
         &[],
     );
+}
+
+#[test]
+fn a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing() {
+    let dir = unique_scratch("conversation");
+    support::copy_ability("conversation", &dir.join("abilities"));
+    let harness = dir.join("abilities/harness.scx");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/conversation_harness.scx"),
+        &harness,
+    )
+    .expect("the harness is copyable");
+    let input = "bot.ability.conversation.input";
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    // Sent in one macrostep, so the second and third wait for the first (mosfet
+    // defers them). White space only: the detector closes the turn with
+    // nothing to show. Empty text: the start's text stimulus is refused
+    // before the detector. Then text, stripped by the detector before it
+    // is committed, once per source.
+    let inputs: Vec<Json> = ["   ", "", "  hi  "]
+        .iter()
+        .map(|content| {
+            json!({"source_ids": ["alice", [3, 4]], "target_ids": [], "content": content, "content_type": "text/plain"})
+        })
+        .collect();
+    run.event("harness.burst", &json!({ "inputs": inputs }));
+    let seen = std::cell::Cell::new(0);
+    let all = run.until(WAIT, |record| {
+        if label_is("harness.failed")(record) || label_is("harness.output")(record) {
+            seen.set(seen.get() + 1);
+        }
+        seen.get() == 3
+    });
+    assert_eq!(
+        texts(&all, "conversation.deferred"),
+        strings(&[input, input])
+    );
+    let finished = run.close(WAIT);
+    let failures: Vec<Json> = texts(&all, "harness.failed")
+        .iter()
+        .map(|text| serde_json::from_str(text).expect("a failure is JSON"))
+        .collect();
+    assert_eq!(
+        failures,
+        vec![
+            json!({"stage": "turn_detector", "message": "Turn closed with neither text, audio, nor modality-neutral content."}),
+            json!({"stage": "turn_detector", "message": "The turn detector could not take the turn (error.execution)"}),
+        ]
+    );
+    let outputs = texts(&finished.all, "harness.output");
+    assert_eq!(outputs.len(), 1, "{outputs:?}");
+    let output: Json = serde_json::from_str(&outputs[0]).expect("the output is JSON");
+    assert_eq!(output["messages"].as_array().map(Vec::len), Some(1));
+    assert_eq!(output["messages"][0]["sequence"], json!(0));
+    assert_eq!(output["messages"][0]["content"], json!("hi hi"));
+    assert_eq!(
+        output["messages"][0]["provenance"]["turn_ref"],
+        json!("input-3:turn:alice")
+    );
+}
+
+/// The body's input and Listening abilities are `['identity']`, and the
+/// identity is `tests/fixtures/phase4/input_double.scx`, which logs what it
+/// hears (`input.sound`) and its efference copies (`input.efference`).
+fn with_listening(body: &Path) {
+    let root = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the body is under bots/floppy/");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/input_double.scx"),
+        root.join("abilities/identity/identity.scx"),
+    )
+    .expect("the input double is copyable");
+    rewrite(
+        body,
+        &[
+            ("input", "['identity']"),
+            ("listening_abilities", "['identity']"),
+        ],
+    );
+}
+
+#[test]
+fn a_spoken_response_reaches_listening_as_its_efference_copy_before_its_sound() {
+    let body = layout(&Speaking::Real, &[]);
+    with_listening(&body);
+    let mut run = started(&body);
+    run.event("bot.input", &input("reply"));
+    let records = until_all(&run, &["input.sound", "bot.ability.speaking.output"]);
+    // "reply 1" is 7 characters: the double measures 0.7 s.
+    assert_eq!(
+        texts(&records, "input.efference"),
+        strings(&[
+            r#"{"channels":1,"duration":0.7,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
+        ])
+    );
+    assert_eq!(
+        texts(&records, "input.sound"),
+        strings(&[
+            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
+        ])
+    );
+    let order: Vec<String> = logs(&records)
+        .into_iter()
+        .map(|(label, _)| label)
+        .filter(|label| ["input.efference", "input.sound"].contains(&label.as_str()))
+        .collect();
+    assert_eq!(order, strings(&["input.efference", "input.sound"]));
+    close(
+        run,
+        "a_spoken_response_reaches_listening_as_its_efference_copy_before_its_sound",
+    );
+}
+
+#[test]
+fn unmeasured_speech_sends_no_efference_copy_and_takes_speakings_format() {
+    let body = layout(
+        &Speaking::Real,
+        &[(
+            "abilities/vocal/speech_double.scx",
+            &[("mode", "'unmeasured'")],
+        )],
+    );
+    with_listening(&body);
+    let mut run = started(&body);
+    run.event("bot.input", &input("reply"));
+    let records = until_all(&run, &["input.sound", "bot.ability.speaking.output"]);
+    assert!(texts(&records, "input.efference").is_empty(), "{records:?}");
+    assert_eq!(
+        texts(&records, "bot.ability.speaking.output"),
+        strings(&[
+            r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 1"}"#
+        ])
+    );
+    close(
+        run,
+        "unmeasured_speech_sends_no_efference_copy_and_takes_speakings_format",
+    );
+}
+
+#[test]
+fn a_speech_service_failure_fails_the_response_unsaid_and_unrecorded() {
+    let body = layout(
+        &Speaking::Real,
+        &[("abilities/vocal/speech_double.scx", &[("mode", "'fail'")])],
+    );
+    let mut run = started(&body);
+    run.event("bot.input", &input("reply"));
+    let records = run.until(WAIT, label_is("bot.ability.communication.failed"));
+    assert_eq!(
+        texts(&records, "bot.ability.communication.failed"),
+        strings(&[r#"{"message":"unconfigured"}"#])
+    );
+    assert!(texts(&records, "floppy.say").is_empty());
+    assert!(texts(&records, "environment.sound").is_empty());
+    assert!(texts(&records, "conversation").is_empty());
+    close(
+        run,
+        "a_speech_service_failure_fails_the_response_unsaid_and_unrecorded",
+    );
+}
+
+#[test]
+fn speech_encoding_is_bounded_by_its_timeout() {
+    let body = layout(
+        &Speaking::Real,
+        &[
+            ("abilities/vocal/speech_double.scx", &[("mode", "'silent'")]),
+            (
+                "abilities/speaking/speaking.scx",
+                &[("encoding_timeout_ms", "300")],
+            ),
+        ],
+    );
+    let mut run = started(&body);
+    run.event("bot.input", &input("reply"));
+    let records = run.until(WAIT, label_is("bot.ability.communication.failed"));
+    assert_eq!(
+        texts(&records, "speaking.timed_out"),
+        strings(&["encoding 1 after 300 ms"])
+    );
+    assert_eq!(
+        texts(&records, "bot.ability.communication.failed"),
+        strings(&[r#"{"message":"Speech encoding timed out."}"#])
+    );
+    assert!(texts(&records, "floppy.say").is_empty());
+    close(run, "speech_encoding_is_bounded_by_its_timeout");
+}
+
+/// A fake `OpenAI`-compatible speech backend on 127.0.0.1: every
+/// `POST /v1/audio/speech` answers a tenth of a second of raw 24 kHz mono
+/// 16-bit PCM (4800 bytes), and its request bodies are recorded.
+fn speech_backend() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Json>>>) {
+    use std::io::{BufRead as _, BufReader, Read as _, Write as _};
+    let listener =
+        std::net::TcpListener::bind("127.0.0.1:0").expect("the backend binds a loopback port");
+    let origin = format!(
+        "http://{}",
+        listener.local_addr().expect("the backend has an address")
+    );
+    let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = std::sync::Arc::clone(&requests);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
+            let mut line = String::new();
+            let mut length = 0;
+            while reader.read_line(&mut line).is_ok() && line != "\r\n" && !line.is_empty() {
+                if let Some((name, value)) = line.trim_end().split_once(':')
+                    && name.eq_ignore_ascii_case("content-length")
+                {
+                    length = value.trim().parse().unwrap_or(0);
+                }
+                line.clear();
+            }
+            let mut body = vec![0; length];
+            if reader.read_exact(&mut body).is_err() {
+                continue;
+            }
+            log.lock()
+                .expect("the request log")
+                .push(serde_json::from_slice(&body).unwrap_or(Json::Null));
+            let audio = vec![0_u8; 4800];
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                audio.len()
+            );
+            let _ = stream.write_all(&audio);
+        }
+    });
+    (origin, requests)
+}
+
+#[test]
+fn a_response_is_spoken_through_the_speech_service() {
+    let body = layout(&Speaking::Real, &[]);
+    with_listening(&body);
+    let abilities = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the body is under bots/floppy/")
+        .join("abilities");
+    // The real vocal ability, which invokes the speech service.
+    std::fs::copy(
+        workspace().join("abilities/vocal/vocal.scx"),
+        abilities.join("vocal/vocal.scx"),
+    )
+    .expect("the vocal ability is copyable");
+    std::fs::remove_file(abilities.join("vocal/speech_double.scx"))
+        .expect("the double is removable");
+    let (origin, requests) = speech_backend();
+    let media = unique_scratch("speaking-media");
+    let env = media.join("speech.env");
+    std::fs::write(
+        &env,
+        format!(
+            "FLOPPY_SPEECH_BASE_URL={origin}/v1\nFLOPPY_SPEECH_API_KEY=sk-floppy-speech-fake\n"
+        ),
+    )
+    .expect("the env file is writable");
+    let mut run = Run::start(
+        &[
+            "--env-file".to_owned(),
+            env.display().to_string(),
+            "--dir".to_owned(),
+            format!(
+                "{}={}::/media",
+                support::service_uri("speech"),
+                media.display()
+            ),
+            body.display().to_string(),
+        ],
+        &[],
+    );
+    run.event("bot.activate", &json!({}));
+    run.until(WAIT, label_is("bot.activated"));
+    run.event("bot.input", &input("reply"));
+    let records = until_all(&run, &["input.sound", "bot.ability.speaking.output"]);
+    // 4800 bytes of 24 kHz mono 16-bit PCM: a tenth of a second, measured.
+    assert_eq!(
+        texts(&records, "input.efference"),
+        strings(&[
+            r#"{"channels":1,"duration":0.1,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
+        ])
+    );
+    assert_eq!(
+        texts(&records, "input.sound"),
+        strings(&[
+            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
+        ])
+    );
+    assert_eq!(texts(&records, "floppy.say"), strings(&["reply 1"]));
+    let written = std::fs::read(media.join("speaking-1.pcm")).expect("the audio was written");
+    assert_eq!(written.len(), 4800);
+    let requests = requests.lock().expect("the request log").clone();
+    assert_eq!(requests.len(), 1, "{requests:?}");
+    // speaking's defaults, mosfet's speech encoder model and voice.
+    assert_eq!(requests[0]["model"], "gemini-3.1-flash-tts-preview");
+    assert_eq!(requests[0]["input"], "reply 1");
+    assert_eq!(requests[0]["voice"], "Kore");
+    assert_eq!(requests[0]["response_format"], "pcm");
+    close(run, "a_response_is_spoken_through_the_speech_service");
 }

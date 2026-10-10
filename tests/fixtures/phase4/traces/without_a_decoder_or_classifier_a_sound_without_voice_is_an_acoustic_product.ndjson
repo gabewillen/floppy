@@ -1,0 +1,2 @@
+{"label":"harness.ready","session":"session","text":"{\"ability\":\"listening\",\"choices\":[]}","type":"log"}
+{"label":"harness.speech","session":"session","text":"{\"channels\":1,\"content\":\"media/floppy-sound-1.pcm\",\"content_type\":\"audio/pcm\",\"media_type\":\"audio/pcm\",\"parent\":{\"data\":{\"audio\":\"media/hum.wav\",\"channels\":1,\"media_type\":\"audio/wav\",\"sample_rate_hz\":16000},\"event\":\"environment.sound\"},\"sample_rate_hz\":16000,\"source_ids\":[],\"voice_detection\":{\"segments\":[]}}","type":"log"}

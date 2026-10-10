@@ -73,10 +73,9 @@ const FLOPPY_NAME: &str = "[floppy name]";
 const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// The body's events (`bots/floppy/schemas/`).
-const BODY_EVENTS: [&str; 15] = [
+const BODY_EVENTS: [&str; 13] = [
     "bot.activate",
     "bot.deactivate",
-    "bot.reboot",
     "bot.input",
     "bot.focus_device",
     "bot.clear_focus",
@@ -87,13 +86,13 @@ const BODY_EVENTS: [&str; 15] = [
     "bot.processing.failed",
     "bot.processing.timed_out",
     "bot.processing.cancel.timed_out",
-    "environment.sound",
     "environment.visual",
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 55] = [
+const ABILITY_EVENTS: [&str; 74] = [
     "bot.ability.failed",
+    "bot.reboot",
     "bot.ability.cognition.input",
     "bot.ability.cognition.output",
     "bot.ability.cognition.cancel",
@@ -115,12 +114,18 @@ const ABILITY_EVENTS: [&str; 55] = [
     "bot.ability.communication.failed",
     "bot.ability.communication.response.hop.timed_out",
     "bot.ability.conversation.input",
+    "bot.ability.conversation.routed_input",
     "bot.ability.conversation.append",
     "bot.ability.conversation.output",
     "bot.ability.conversation.failed",
     "bot.ability.speaking.input",
     "bot.ability.speaking.output",
     "bot.ability.speaking.apply.failed",
+    "bot.ability.speaking.efference",
+    "bot.ability.vocal.speech.encoding.input",
+    "bot.ability.vocal.speech.encoding.output",
+    // Speaking's playout, which the body puts into the environment.
+    "environment.sound",
     "bot.ability.identity.adopt",
     "bot.ability.identity.adopted",
     "bot.ability.identity.adopt.failed",
@@ -140,6 +145,14 @@ const ABILITY_EVENTS: [&str; 55] = [
     // The migration ability's reached revision (Alembic's upgrade or
     // downgrade), described where the memory ability takes it.
     "bot.ability.migration.output",
+    // Phase 6: listening (mosfet's Listening, Sensitivity and
+    // Interpretation) and the efference copy it takes from speaking.
+    "bot.ability.listening.speech.output",
+    "bot.ability.listening.failed",
+    "bot.ability.listening.stage.failed",
+    "bot.ability.listening.sensitivity.score",
+    "bot.ability.listening.sensitivity.output",
+    "bot.ability.listening.sensitivity.failed",
     // Phase 6: mosfet's VisualClassification and Reading.
     "bot.ability.vision.classification.input",
     "bot.ability.vision.classification.output",
@@ -153,17 +166,24 @@ const ABILITY_EVENTS: [&str; 55] = [
     "bot.ability.reading.image.decoded",
     "bot.ability.reading.unreadable.output.ready",
     "bot.ability.reading.output.encoded",
+    // mosfet's TurnDetector (the conversation's turn_detector stage).
+    "bot.ability.turn_detector.turn.start",
+    "bot.ability.turn_detector.turn.update",
+    "bot.ability.turn_detector.turn.pause",
+    "bot.ability.turn_detector.turn.end",
+    "bot.ability.turn_detector.turn.complete",
+    "bot.ability.turn_detector.failed",
+    "bot.ability.turn_detector.ready",
 ];
 
 /// The correlated events of one processing turn: each requires `turn`.
 /// Tool events (the ones a model chooses, such as
 /// `bot.ability.cognition.ignore`) never do: their data is the model's.
-const CORRELATED: [&str; 18] = [
+const CORRELATED: [&str; 17] = [
     "bot.processing.completed",
     "bot.processing.failed",
     "bot.processing.timed_out",
     "bot.processing.cancel.timed_out",
-    "bot.ability.cognition.input",
     "bot.ability.cognition.output",
     "bot.ability.cognition.cancel",
     "bot.ability.cognition.cancelled",
@@ -195,18 +215,21 @@ const RUNTIME_ONLY: [&str; 8] = [
 const NAMES_FILE: &str = "mosfet-event-names.json";
 
 /// The ability events the body takes, twinned into `bots/floppy/schemas/`.
-const BODY_TWINS: [&str; 11] = [
+const BODY_TWINS: [&str; 14] = [
+    "bot.reboot",
     "bot.ability.offers",
     "bot.ability.communication.input",
     "bot.ability.communication.failed",
     "bot.ability.speaking.output",
+    "bot.ability.speaking.efference",
+    "environment.sound",
     "bot.ability.cognition.output",
     "bot.ability.cognition.cancelled",
     "bot.ability.processing.cancelled",
     "bot.ability.failed",
-    "bot.ability.conversation.output",
-    "bot.ability.identity.addressed",
-    "bot.behavior.tick",
+    "bot.ability.cognition.input",
+    "bot.ability.conversation.failed",
+    "bot.ability.listening.failed",
 ];
 
 /// The longest `cond` or (outside `<data>`) `expr` a phase 4 document may

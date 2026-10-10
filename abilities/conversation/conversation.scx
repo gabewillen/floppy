@@ -4,13 +4,43 @@
   abilities/communication/conversation): the committed history of one
   conversation. The communication (abilities/communication/communication.scx) invokes it
   as its child "conversation", routes each admitted input to it as
-  bot.ability.conversation.input, and records each spoken response with
-  bot.ability.conversation.append.
+  bot.ability.conversation.routed_input {parent} (parent: the
+  communication's input event as an envelope {event, data}), and records
+  each spoken response with bot.ability.conversation.append. A direct
+  bot.ability.conversation.input is taken too, as in mosfet.
 
-    inactive -input-> active { waiting -input-> recalling -> waiting }
+    inactive -input-> active { waiting -input-> running -> waiting }
+    running { turn_exchange { readiness -> exchange } (per source)
+              -> recalling_from -> recalling_memory? -> committing }
     append (inactive or active): commit the outbound message
 
-  Inputs: recalling (mosfet Conversation's memory stage): with a database
+  Turns (mosfet Conversation's turn_detector stage): each input is first
+  one turn per source identity, in mosfet's identity order (names sorted,
+  then embeddings by their JSON), each exchanged with a turn detector
+  (abilities/turn_detector/turn_detector.scx) invoked as "turn_detector"
+  for that participant: its participant_ref is the participant's track
+  (the name itself, or for an embedding "track-" and its unit vector as
+  JSON) and its conversation_ref the relationship. Once it is ready
+  (bot.ability.turn_detector.ready) the conversation sends it
+  bot.ability.turn_detector.turn.start {conversation_ref, turn_ref,
+  self_participant_ref, source_participant_ref, content} and
+  bot.ability.turn_detector.turn.end; turn_ref is
+  "input-<n>:turn:<track>", n counting this conversation's inputs. The
+  content is mosfet's _content_for_detector: text/plain text as a text
+  stimulus, audio/* content as an audio stimulus with its rate and
+  channels, anything else as a content stimulus. Readiness and the turn
+  are each bounded by mosfet's 5 s (turn_timeout_ms). A detector failure
+  (bot.ability.turn_detector.failed), a timeout, or a turn the detector
+  cannot take (an error.* here: a start its schema refuses) answers
+  bot.ability.conversation.failed {stage: "turn_detector", message} and
+  commits nothing. The turns' product is what is committed (mosfet
+  _complete_turn): the turns' texts joined by spaces as text/plain when
+  any has text; else no content for audio; else the input's content. The
+  committed provenance's turn_ref is the first turn's. Input that arrives
+  while one is in hand waits in the data model queue, in order, and is
+  taken on the return to waiting (mosfet defers it).
+
+  Inputs: running (mosfet Conversation's memory stage): with a database
   (the <param> database, the memory database file) it invokes the memory
   ability (abilities/memory/memory.scx) with one transaction that recalls
   the relationship's memories (content where query_tags
@@ -20,49 +50,70 @@
   conversation, mosfet conversation_memory_insert_input); the
   relationship is the message's session_ref. The recalled memories are
   host-only (mosfet excludes them from the output) and are logged by
-  count only. A memory failure answers bot.ability.conversation.failed
-  {stage: "memory", message} and commits nothing. Without a database it
+  count only. The memory step is bounded by memory_timeout_ms (mosfet's
+  5 s turn stage timeout); a memory failure or that timeout answers
+  bot.ability.conversation.failed {stage: "memory", message} and commits
+  nothing. Without a database it
   logs <log label="memory" expr="'absent'">. The inbound message is then
   committed with
   the next sequence: text/* content as given, audio/* content dropped
   (media never enters the model-facing history), any other content as
   given; its provenance is the input event, with session_ref the
   relationship of its sorted source and target identities. Each message is
-  also indexed in transcripts, keyed by its sorted source identities (one
-  transcript per participant set; inference of participants and
-  relationships from voice embeddings, mosfet's turn detectors, is phase 6).
+  also indexed in relationships, keyed by its sorted source identities (one
+  relationship per participant set). mosfet also matches an embedding
+  source to an earlier participant's voice centroid; that inference is not
+  ported, so each embedding is its own participant.
 
   Appends: outbound messages only, committed with the next sequence and
   provenance event bot.ability.conversation.append; an append whose
   provenance id was already committed is not committed again.
 
-  Output: every commit answers the parent with
-  bot.ability.conversation.output {parent, messages}: parent is the input
-  that caused the latest inbound commit (an envelope {event, data}), and
-  messages is the committed history in causal order, its last
-  max_messages messages only (a bound on what reaches the model per turn;
-  sequences stay the history's).
+  Output: every commit's product is bot.ability.conversation.output
+  {parent, messages}: parent is the input that caused the latest inbound
+  commit (an envelope {event, data}), and messages is the committed
+  history in causal order. An inbound commit of text (string content,
+  content_type text/*) hands it to the parent as a stimulus,
+  bot.ability.cognition.input {stimulus} (the product's envelope with
+  source "conversation", mosfet's text contribution handoff); every other
+  commit sends the product itself, history only.
 
   Readiness: the session's start sends bot.ability.offers
   {ability: "conversation", choices: []} to the parent; it offers nothing
   (mosfet's conversation input is not a tool event).
 
   Commits: <conversation:commit> (the conversation namespace) builds each
-  committed message and its transcript key (its sorted source ids); the
-  document appends it to history and transcripts and remembers each
+  committed message and its relationship key (its sorted source ids); the
+  document appends it to history and relationships and remembers each
   committed outbound provenance id in appended.
 
-  Bindings: the conversation namespace package and the memory ability's
+  Bindings: the bot and conversation namespace packages and the memory ability's
   sql service package (a run grants it its directory: scx run's dir option).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="conversation" initial="conversation">
   <datamodel>
-    <data id="max_messages" expr="20"/>
+    <data id="memory_timeout_ms" expr="5000"/>
+    <!-- Turns: mosfet's 5 s turn detector bound, the inputs taken so far,
+         this input's sources in order, the one in hand, the completed
+         turns, the turn timer, and the turns' product to commit. -->
+    <data id="turn_timeout_ms" expr="5000"/>
+    <data id="inputs" expr="0"/>
+    <data id="turn_sources" expr="[]"/>
+    <data id="turn_index" expr="0"/>
+    <data id="turns" expr="[]"/>
+    <data id="timer" expr="null"/>
+    <data id="turn_product" expr="null"/>
+    <!-- Input that arrived while one was in hand ({input, parent}), in
+         order. -->
+    <data id="queue" expr="[]"/>
     <data id="history" expr="[]"/>
-    <data id="transcripts" expr="({})"/>
+    <data id="relationships" expr="({})"/>
+    <!-- The product's stimulus envelope, for the handoff. -->
+    <data id="product" expr="null"/>
     <data id="parent" expr="null"/>
     <data id="input" expr="null"/>
     <data id="participants" expr="null"/>
@@ -92,28 +143,123 @@
     </onentry>
 
     <state id="inactive">
+      <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json"
+                  target="running">
+        <assign location="input" expr="_event.data.parent.data"/>
+        <assign location="parent" expr="_event.data.parent"/>
+      </transition>
       <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json"
-                  target="recalling">
+                  target="running">
         <assign location="input" expr="_event.data"/>
+        <assign location="parent" expr="inputEnvelope()"/>
       </transition>
     </state>
 
     <state id="active" initial="waiting">
       <state id="waiting">
+        <!-- What waited, in order. -->
+        <transition cond="hasQueuedInput()" target="running">
+          <assign location="input" expr="queue[0].input"/>
+          <assign location="parent" expr="queue[0].parent"/>
+          <assign location="queue" expr="remainingQueue()"/>
+        </transition>
+        <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json"
+                    target="running">
+          <assign location="input" expr="_event.data.parent.data"/>
+          <assign location="parent" expr="_event.data.parent"/>
+        </transition>
         <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json"
-                    target="recalling">
+                    target="running">
           <assign location="input" expr="_event.data"/>
+          <assign location="parent" expr="inputEnvelope()"/>
         </transition>
       </state>
 
       <!-- Recall the relationship's memories and remember the input, or
            nothing without a database; then commit the inbound message. -->
-      <state id="recalling" initial="recalling_from">
+      <state id="running" initial="turn_exchange">
         <onentry>
-          <assign location="parent" expr="inputEnvelope()"/>
           <conversation:commit location="message" keylocation="participants" direction="inbound"
                                event="parent.event" message="input" sequence="history.length"/>
+          <assign location="inputs" expr="inputs + 1"/>
+          <assign location="turn_sources" expr="sortedIdentities(input.source_ids)"/>
+          <assign location="turn_index" expr="0"/>
+          <assign location="turns" expr="[]"/>
         </onentry>
+        <!-- Input that arrives meanwhile waits (mosfet defers it). -->
+        <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json">
+          <assign location="queue" expr="queuedWith(_event.data.parent.data, _event.data.parent)"/>
+          <log label="conversation.deferred" expr="_event.name"/>
+        </transition>
+        <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json">
+          <assign location="queue" expr="queuedWith(_event.data, inputEnvelopeOf(_event.data))"/>
+          <log label="conversation.deferred" expr="_event.name"/>
+        </transition>
+        <!-- One turn per source, each with its own detector. -->
+        <state id="turn_exchange" initial="readiness">
+          <invoke id="turn_detector" type="scxml" src="../turn_detector/turn_detector.scx">
+            <param name="participant_ref" expr="trackRef(turn_sources[turn_index])"/>
+            <param name="conversation_ref" expr="message.provenance.session_ref"/>
+          </invoke>
+          <state id="readiness">
+            <onentry>
+              <send idlocation="timer" event="readiness.after" delayexpr="turnDelay()"/>
+            </onentry>
+            <onexit>
+              <cancel sendidexpr="timer"/>
+            </onexit>
+            <transition event="bot.ability.turn_detector.ready" event:schema="schemas/bot.ability.turn_detector.ready.json"
+                        cond="isFromTurnDetector(_event)" target="exchange">
+              <send event="bot.ability.turn_detector.turn.start" target="#_turn_detector">
+                <content expr="turnStart()"/>
+              </send>
+              <send event="bot.ability.turn_detector.turn.end" target="#_turn_detector">
+                <content expr="turnEnd()"/>
+              </send>
+            </transition>
+            <transition event="readiness.after" cond="isTimer(_event)" target="waiting">
+              <send event="bot.ability.conversation.failed" target="#_parent">
+                <param name="stage" expr="'turn_detector'"/>
+                <param name="message" expr="timedOutMessage('Turn detector readiness')"/>
+              </send>
+            </transition>
+          </state>
+          <state id="exchange">
+            <onentry>
+              <send idlocation="timer" event="exchange.after" delayexpr="turnDelay()"/>
+            </onentry>
+            <onexit>
+              <cancel sendidexpr="timer"/>
+            </onexit>
+            <transition event="bot.ability.turn_detector.turn.complete"
+                        event:schema="schemas/bot.ability.turn_detector.turn.complete.json"
+                        cond="isExchangedTurn(_event)" target="turn_exchange">
+              <assign location="turns" expr="turnsWith(_event)"/>
+              <assign location="turn_index" expr="turn_index + 1"/>
+            </transition>
+            <transition event="exchange.after" cond="isTimer(_event)" target="waiting">
+              <send event="bot.ability.conversation.failed" target="#_parent">
+                <param name="stage" expr="'turn_detector'"/>
+                <param name="message" expr="timedOutMessage('Turn detector turn')"/>
+              </send>
+            </transition>
+          </state>
+          <!-- Every source has its turn: on to memory. -->
+          <transition cond="hasAllTurns()" target="recalling_from"/>
+          <transition event="bot.ability.turn_detector.failed" event:schema="schemas/bot.ability.turn_detector.failed.json"
+                      cond="isFromTurnDetector(_event)" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'turn_detector'"/>
+              <param name="message" expr="_event.data.message"/>
+            </send>
+          </transition>
+          <transition event="error.*" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'turn_detector'"/>
+              <param name="message" expr="turnErrorMessage(_event)"/>
+            </send>
+          </transition>
+        </state>
         <state id="recalling_from">
           <transition cond="isMemoryAbsent()" target="committing">
             <log label="memory" expr="'absent'"/>
@@ -122,11 +268,15 @@
         </state>
         <state id="recalling_memory">
           <onentry>
+            <send id="memory-after" event="recalling_memory.after" delayexpr="memoryTimeoutDelay()"/>
             <assign location="remembered" expr="rememberedInput()"/>
             <assign location="statements" expr="memoryRecallStatements()"/>
             <assign location="statements" expr="statementsWithMemoryInsert()"/>
             <assign location="statements[1].parameters" expr="memoryInsertParameters()"/>
           </onentry>
+          <onexit>
+            <cancel sendid="memory-after"/>
+          </onexit>
           <invoke id="remember" type="scxml" src="../memory/memory.scx">
             <param name="database" expr="database"/>
             <param name="statements" expr="statements"/>
@@ -142,16 +292,37 @@
               <param name="message" expr="memoryFailedMessage(_event)"/>
             </send>
           </transition>
+          <transition event="recalling_memory.after" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'memory'"/>
+              <param name="message" expr="'Conversation memory recall timed out.'"/>
+            </send>
+          </transition>
         </state>
         <state id="committing">
+          <!-- The turns' product, committed in place of the input. -->
+          <onentry>
+            <assign location="turn_product" expr="turnProduct()"/>
+            <conversation:commit location="message" keylocation="participants" direction="inbound"
+                                 event="parent.event" message="turn_product" provenance="turnProvenance()"
+                                 sequence="history.length"/>
+          </onentry>
           <transition target="waiting">
             <assign location="history" expr="historyWithMessage()"/>
-            <assign location="transcripts[participants]" expr="transcriptWithMessage()"/>
+            <assign location="relationships[participants]" expr="relationshipWithMessage()"/>
             <log label="conversation" expr="inboundCommitLog()"/>
-            <send event="bot.ability.conversation.output" target="#_parent">
-              <param name="parent" expr="parent"/>
-              <param name="messages" expr="outputMessages()"/>
-            </send>
+            <if cond="isTextMessage()">
+              <bot:stimulus location="product" event="'bot.ability.conversation.output'"
+                            data="({parent: parent, messages: history})" source="'conversation'"/>
+              <send event="bot.ability.cognition.input" target="#_parent">
+                <param name="stimulus" expr="product"/>
+              </send>
+            <else/>
+              <send event="bot.ability.conversation.output" target="#_parent">
+                <param name="parent" expr="parent"/>
+                <param name="messages" expr="history"/>
+              </send>
+            </if>
           </transition>
         </state>
       </state>
@@ -164,14 +335,14 @@
                            event="_event.name" message="_event.data.message"
                            provenance="_event.data.message.provenance" sequence="history.length"/>
       <assign location="history" expr="historyWithMessage()"/>
-      <assign location="transcripts[participants]" expr="transcriptWithMessage()"/>
+      <assign location="relationships[participants]" expr="relationshipWithMessage()"/>
       <if cond="hasProvenanceId()">
         <assign location="appended" expr="appendedWithProvenance()"/>
       </if>
       <log label="conversation" expr="outboundCommitLog()"/>
       <send event="bot.ability.conversation.output" target="#_parent">
         <param name="parent" expr="parent"/>
-        <param name="messages" expr="outputMessages()"/>
+        <param name="messages" expr="history"/>
       </send>
     </transition>
     <transition event="bot.ability.conversation.append" event:schema="schemas/bot.ability.conversation.append.json"

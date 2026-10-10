@@ -10,9 +10,10 @@
 //!   `{"type":"request","target":…,"body":…}` (the choices, strict
 //!   schemas and prompts the services sent).
 //!
-//! Paths that differ per run are normalized: the test's scratch directory
-//! (`target/test-scratch/<pid>-<name>-<n>`) becomes `<scratch>` and the
-//! workspace root `<workspace>`. Each record is written with its keys
+//! Values that differ per run are normalized: the test's scratch directory
+//! (`target/test-scratch/<pid>-<name>-<n>`) becomes `<scratch>`, the
+//! workspace root `<workspace>`, and a UTC timestamp
+//! (`YYYY-MM-DDTHH:MM:SSZ`) `<timestamp>`. Each record is written with its keys
 //! sorted (`serde_json` without `preserve_order`).
 //!
 //! [`assert_trace`] rewrites the file instead of comparing when
@@ -51,7 +52,38 @@ fn normalized(text: &str) -> String {
         rest = &after[end..];
     }
     out.push_str(rest);
-    out.replace(&super::workspace().display().to_string(), "<workspace>")
+    timestamps_normalized(&out.replace(&super::workspace().display().to_string(), "<workspace>"))
+}
+
+/// `text` with each UTC timestamp in mosfet's form
+/// (`YYYY-MM-DDTHH:MM:SSZ`, the rows' `last_used_at` and the like, which
+/// the wall clock sets) replaced by `<timestamp>`.
+fn timestamps_normalized(text: &str) -> String {
+    const SHAPE: &[u8] = b"dddd-dd-ddTdd:dd:ddZ";
+    let bytes = text.as_bytes();
+    let matches_at = |at: usize| {
+        bytes.get(at..at + SHAPE.len()).is_some_and(|window| {
+            window.iter().zip(SHAPE).all(|(byte, shape)| match shape {
+                b'd' => byte.is_ascii_digit(),
+                other => byte == other,
+            })
+        })
+    };
+    let mut out = String::with_capacity(text.len());
+    let mut copied = 0;
+    let mut at = 0;
+    while at < bytes.len() {
+        if matches_at(at) {
+            out.push_str(&text[copied..at]);
+            out.push_str("<timestamp>");
+            at += SHAPE.len();
+            copied = at;
+        } else {
+            at += 1;
+        }
+    }
+    out.push_str(&text[copied..]);
+    out
 }
 
 /// The trace of `records` (a run's records, in order) and `requests`

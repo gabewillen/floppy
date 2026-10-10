@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.turn_detector.turn.complete",
+  "description": "Participant-scoped turn product. participant_ref identifies the owning turn detector; source_participant_ref identifies the participant whose content was assembled.",
+  "examples": [
+    {
+      "audio": [],
+      "conversation_ref": "support-call",
+      "participant_ref": "bot-a",
+      "self_participant_ref": "bot-a",
+      "source_participant_ref": "caller",
+      "text": "hello",
+      "turn_ref": "turn-1"
+    }
+  ],
+  "properties": {
+    "conversation_ref": {
+      "default": "conversation",
+      "minLength": 1,
+      "title": "Conversation Ref",
+      "type": "string"
+    },
+    "turn_ref": {
+      "description": "Stable reference for the completed active turn.",
+      "minLength": 1,
+      "title": "Turn Ref",
+      "type": "string"
+    },
+    "participant_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        }
+      ],
+      "default": "bot",
+      "description": "Owning participant ability.",
+      "title": "Participant Ref"
+    },
+    "self_participant_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        }
+      ],
+      "default": "bot",
+      "description": "Owner in conversation terms.",
+      "title": "Self Participant Ref"
+    },
+    "source_participant_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        }
+      ],
+      "default": "caller",
+      "title": "Source Participant Ref"
+    },
+    "text": {
+      "default": "",
+      "description": "Joined readable turn text.",
+      "title": "Text",
+      "type": "string"
+    },
+    "audio": {
+      "default": [],
+      "description": "The turn's audio chunks in arrival order, each a reference (a URI reference) to its audio; mosfet concatenates the raw bytes, floppy passes media by reference and leaves joining them to the reader (the speech service's append step) [floppy field].",
+      "items": {
+        "format": "uri-reference",
+        "type": "string"
+      },
+      "title": "Audio",
+      "type": "array"
+    },
+    "content": {
+      "anyOf": [
+        {},
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Original modality-neutral turn content.",
+      "title": "Content"
+    },
+    "content_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Original turn content modality.",
+      "title": "Content Type"
+    },
+    "sample_rate_hz": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Sample rate of raw PCM audio in hertz when audio is present.",
+      "title": "Sample Rate Hz"
+    },
+    "channels": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Channel count of raw PCM audio when audio is present.",
+      "title": "Channels"
+    }
+  },
+  "required": [
+    "turn_ref"
+  ],
+  "type": "object"
+}

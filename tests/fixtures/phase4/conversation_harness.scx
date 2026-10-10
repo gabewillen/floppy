@@ -4,14 +4,31 @@
   the_conversation_commits_each_message_into_its_history): it invokes the
   conversation as its child "conversation", forwards each external
   bot.ability.conversation.input and .append to it, and logs every
-  bot.ability.conversation.output it answers (harness.output, its JSON), so
-  the pinned trace holds each committed message field by field.
+  bot.ability.conversation.output it answers, and the product of each
+  bot.ability.cognition.input handoff (harness.output, its JSON), so
+  the pinned trace holds each committed message field by field, and every
+  bot.ability.conversation.failed (harness.failed, its JSON). An external
+  harness.burst {inputs} sends each of its inputs to the conversation in
+  one macrostep, so the later ones arrive while the first is in hand.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="run">
   <state id="run">
     <invoke id="conversation" type="scxml" src="conversation/conversation.scx"/>
     <transition event="bot.ability.conversation.output" cond="_event.invokeid === 'conversation'">
       <log label="harness.output" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="bot.ability.cognition.input" cond="_event.invokeid === 'conversation'">
+      <log label="harness.output" expr="JSON.stringify(_event.data.stimulus.data)"/>
+    </transition>
+    <transition event="bot.ability.conversation.failed" cond="_event.invokeid === 'conversation'">
+      <log label="harness.failed" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="harness.burst" cond="_event.invokeid === undefined">
+      <foreach array="_event.data.inputs" item="each">
+        <send event="bot.ability.conversation.input" target="#_conversation">
+          <content expr="each"/>
+        </send>
+      </foreach>
     </transition>
     <transition event="bot.ability.conversation.input bot.ability.conversation.append" cond="_event.invokeid === undefined">
       <send eventexpr="_event.name" target="#_conversation">

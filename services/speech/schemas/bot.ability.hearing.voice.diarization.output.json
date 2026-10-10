@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.voice.diarization.output",
+  "description": "Provider-neutral diarization result for voice input.",
+  "properties": {
+    "segments": {
+      "description": "Clipped audio segments ordered by ascending start time in the voice input. Each segment retains its timing and optional diarization confidence.",
+      "examples": [
+        [
+          {
+            "audio": "media/voice-1",
+            "channels": 1,
+            "confidence": 0.87,
+            "end_seconds": 0.25,
+            "media_type": "audio/pcm",
+            "sample_rate_hz": 4,
+            "start_seconds": 0.0
+          }
+        ]
+      ],
+      "items": {
+        "description": "One clipped, time-bounded audio segment produced by voice diarization.",
+        "examples": [
+          {
+            "audio": "media/voice-1",
+            "channels": 1,
+            "confidence": 0.87,
+            "end_seconds": 0.25,
+            "media_type": "audio/pcm",
+            "sample_rate_hz": 4,
+            "start_seconds": 0.0
+          }
+        ],
+        "properties": {
+          "audio": {
+            "description": "Raw signed 16-bit PCM audio clipped to this voice segment. floppy passes media by reference, never as bytes: audio is a reference (a URI reference) to a file in the directory the run grants [floppy field].",
+            "examples": [
+              "media/voice-1"
+            ],
+            "format": "uri-reference",
+            "title": "Audio",
+            "type": "string",
+            "minLength": 1
+          },
+          "media_type": {
+            "const": "audio/pcm",
+            "description": "Media type of the raw PCM bytes in this voice segment.",
+            "examples": [
+              "audio/pcm"
+            ],
+            "title": "Media Type",
+            "type": "string"
+          },
+          "sample_rate_hz": {
+            "description": "Sample rate of the raw PCM bytes in this voice segment, in hertz.",
+            "examples": [
+              48000
+            ],
+            "minimum": 1,
+            "title": "Sample Rate Hz",
+            "type": "integer"
+          },
+          "channels": {
+            "description": "Channel count of the interleaved raw PCM bytes in this voice segment.",
+            "examples": [
+              1
+            ],
+            "minimum": 1,
+            "title": "Channels",
+            "type": "integer"
+          },
+          "start_seconds": {
+            "description": "Inclusive start time of this voice segment, measured from the beginning of the source audio.",
+            "examples": [
+              0.0
+            ],
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "end_seconds": {
+            "description": "Exclusive end time of this voice segment, measured from the beginning of the source audio.",
+            "examples": [
+              0.25
+            ],
+            "minimum": 0.0,
+            "title": "End Seconds",
+            "type": "number"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional provider confidence for this speaker attribution, normalized from 0.0 to 1.0.",
+            "examples": [
+              0.87
+            ],
+            "title": "Confidence"
+          }
+        },
+        "required": [
+          "audio",
+          "media_type",
+          "sample_rate_hz",
+          "channels",
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "VoiceDiarizationSegment",
+        "type": "object"
+      },
+      "minItems": 1,
+      "title": "Segments",
+      "type": "array"
+    }
+  },
+  "required": [
+    "segments"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "segments": [
+        {
+          "audio": "media/voice-1",
+          "channels": 1,
+          "confidence": 0.87,
+          "end_seconds": 0.25,
+          "media_type": "audio/pcm",
+          "sample_rate_hz": 4,
+          "start_seconds": 0.0
+        },
+        {
+          "audio": "media/voice-2",
+          "channels": 1,
+          "confidence": 0.82,
+          "end_seconds": 0.75,
+          "media_type": "audio/pcm",
+          "sample_rate_hz": 4,
+          "start_seconds": 0.25
+        }
+      ]
+    }
+  ]
+}

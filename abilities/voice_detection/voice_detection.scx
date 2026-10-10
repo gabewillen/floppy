@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's VoiceDetection (mosfet abilities/hearing/voice/detection.py) as
+  the interpretation applies it (mosfet Interpretation._run_voice_detection):
+  the sound normalized to PCM, then its voice spans. The interpretation
+  (abilities/interpretation/interpretation.scx) invokes it once per scored sound from
+  DetectingVoice and FeedingSpeech; the interpretation's stage timer bounds
+  it, and leaving the state cancels it and its service call (SCXML 6.4).
+
+    detecting { normalizing -> applying } -> applied (final)
+
+  Input: the <param>s audio (a reference to the sound's audio, as
+  environment.sound carries it), media_type, sample_rate_hz and channels
+  (the sound's), output (where the sound's PCM is written when it is a WAV
+  container), and model (the voice activity model; LocalAI's silero-vad,
+  the Silero VAD mosfet runs on MLX Audio, by default).
+
+  normalizing: the speech service's normalize step (mosfet's
+  _pcm_sound_data: a WAV container's signed 16-bit PCM written to output;
+  raw, audio/l16 or unnamed audio with a rate and channels is audio/pcm;
+  anything else, or a container that cannot be read, is unchanged). Its
+  done data is the sound as the rest of the interpretation reads it.
+
+  applying: the speech service's detect operation on the original sound
+  (a WAV container keeps its true rate, as mosfet prefers; raw PCM is read
+  in the sound's format, mosfet's 16 kHz mono when it names none): LocalAI's
+  POST {base}/vad, answered bot.ability.hearing.voice.detection.output
+  {segments} (mosfet's ApplyData: clip-local voice spans, empty for no
+  voice).
+
+  Output: <donedata>, received by the interpretation as
+  done.invoke.voice_detection: {sound, voice_detection} (the normalized
+  sound fields and the ApplyData), or {message} (mosfet's FailureData)
+  when a step answers bot.ability.failed, answers something else, or
+  cannot run.
+
+  Sticky presence: mosfet's VoiceDetection also emits Start and End when
+  voice opens and closes across clips. Nothing in mosfet's listening path
+  listens for them (the interpretation reads ApplyData only); the
+  interpretation's own open-speech window (HearingSpeech) is that presence
+  here, and each invocation judges one clip.
+
+  Bindings: the speech service package; env scopes FLOPPY_VOICE_BASE_URL
+  and FLOPPY_VOICE_API_KEY to the detect <invoke> (no default backend,
+  decision D31: without them the service answers bot.ability.failed). The
+  run grants the service the media directory (scx run's dir option). An
+  invoked service's events are not checked against event:schema, so their
+  shape is checked by cond.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="voice_detection" initial="detecting">
+  <datamodel>
+    <!-- The invoker's <param>s. -->
+    <data id="audio" expr="null"/>
+    <data id="media_type" expr="null"/>
+    <data id="sample_rate_hz" expr="null"/>
+    <data id="channels" expr="null"/>
+    <data id="output" expr="null"/>
+    <data id="model" expr="'silero-vad'"/>
+    <!-- The normalized sound, and the result. -->
+    <data id="sound" expr="null"/>
+    <data id="result" expr="null"/>
+  </datamodel>
+  <script src="voice_detection.js"/>
+
+  <!-- Any failure ends the detection with mosfet's FailureData. -->
+  <state id="detecting" initial="normalizing">
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
+      <assign location="result" expr="failedResult(_event)"/>
+    </transition>
+    <transition event="error.*" target="applied">
+      <assign location="result" expr="errorResult(_event)"/>
+    </transition>
+
+    <state id="normalizing">
+      <invoke id="normalizer" type="https://github.com/stateforward/floppy/services/speech">
+        <param name="operation" expr="'normalize'"/>
+        <param name="audio" expr="audio"/>
+        <param name="media_type" expr="media_type"/>
+        <param name="sample_rate_hz" expr="sample_rate_hz"/>
+        <param name="channels" expr="channels"/>
+        <param name="output" expr="output"/>
+      </invoke>
+      <transition event="done.invoke.normalizer" cond="isNormalizedSound(_event)" target="applying">
+        <assign location="sound" expr="_event.data"/>
+      </transition>
+      <transition event="done.invoke.normalizer" target="applied">
+        <assign location="result" expr="unnormalizedResult()"/>
+      </transition>
+    </state>
+
+    <state id="applying">
+      <invoke id="detector" type="https://github.com/stateforward/floppy/services/speech"
+              env:baseurl="FLOPPY_VOICE_BASE_URL" env:apikey="FLOPPY_VOICE_API_KEY">
+        <param name="operation" expr="'detect'"/>
+        <param name="model" expr="model"/>
+        <param name="audio" expr="audio"/>
+        <param name="media_type" expr="media_type"/>
+        <param name="sample_rate_hz" expr="sample_rate_hz"/>
+        <param name="channels" expr="channels"/>
+      </invoke>
+      <transition event="bot.ability.hearing.voice.detection.output"
+                  cond="isDetectorOutput(_event)" target="applied">
+        <assign location="result" expr="detectedResult(_event)"/>
+      </transition>
+      <transition event="*" cond="isOtherDetectorEvent(_event)" target="applied">
+        <assign location="result" expr="mismatchedResult()"/>
+      </transition>
+      <transition event="done.invoke.detector" target="applied">
+        <assign location="result" expr="undetectedResult()"/>
+      </transition>
+    </state>
+  </state>
+
+  <final id="applied">
+    <donedata>
+      <content expr="result"/>
+    </donedata>
+  </final>
+</scxml>

@@ -18,7 +18,10 @@
   carries (stimulus.data.observation.event), or, for a conversation
   product (stimulus.event bot.ability.conversation.output), the first word
   of its last message's text, whose observed data is then the number of messages, or,
-  for bot.ability.identity.addressed, "addressed" with the name observed:
+  for bot.ability.identity.addressed, "addressed" with the name observed, or,
+  for the listening's bot.ability.listening.speech.output, the first word
+  of its content, with the content observed, or, for its environment.sound,
+  "ignore" with the sound's kind observed:
 
   * reply: answers the turn with one bot.ability.communication.respond
     selection naming no target (the communication offers it);
@@ -29,6 +32,9 @@
   * unoffered: selects bot.ability.reasoning.input (offered by no ability
     the body invokes);
   * adopt: selects bot.ability.identity.adopt for the observation's data;
+  * admit: selects bot.ability.communication.input naming no target, the
+    speech's words after the first from source "caller" (as mosfet's
+    SpeechHeard seed admits heard speech);
   * ignore: selects bot.ability.cognition.ignore for target cognition;
   * focus: selects bot.focus_device for the observation's data;
   * elsewhere: selects bot.ability.cognition.ignore for target speaking;
@@ -78,8 +84,8 @@
       <transition event="bot.ability.cognition.input" target="working">
         <assign location="turn" expr="_event.data.turn"/>
         <assign location="stimulus" expr="_event.data.stimulus"/>
-        <assign location="action" expr="stimulus.event === 'bot.ability.identity.addressed' ? 'addressed' : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages[stimulus.data.messages.length - 1].content.split(' ')[0] : stimulus.data.observation.event"/>
-        <assign location="observed" expr="stimulus.event === 'bot.ability.identity.addressed' ? stimulus.data.name : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages.length : stimulus.data.observation.data"/>
+        <assign location="action" expr="stimulus.event === 'bot.ability.listening.speech.output' ? stimulus.data.content.split(' ')[0] : stimulus.event === 'environment.sound' ? 'ignore' : stimulus.event === 'bot.ability.identity.addressed' ? 'addressed' : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages[stimulus.data.messages.length - 1].content.split(' ')[0] : stimulus.data.observation.event"/>
+        <assign location="observed" expr="stimulus.event === 'bot.ability.listening.speech.output' ? stimulus.data.content : stimulus.event === 'environment.sound' ? stimulus.data.kind : stimulus.event === 'bot.ability.identity.addressed' ? stimulus.data.name : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages.length : stimulus.data.observation.data"/>
         <log label="double.input" expr="turn + ' ' + action + ' ' + JSON.stringify(observed)"/>
         <log label="double.choices" expr="JSON.stringify(_event.data.choices)"/>
       </transition>
@@ -134,6 +140,12 @@
             <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {text: 'I am ' + observed}}]"/>
           </send>
         </if>
+        <if cond="action === 'admit'">
+          <send event="bot.ability.cognition.output" target="#_parent">
+            <param name="turn" expr="turn"/>
+            <param name="output" expr="[{event: 'bot.ability.communication.input', data: {source_ids: ['caller'], target_ids: [], content: observed.split(' ').slice(1).join(' '), content_type: 'text/plain', sample_rate_hz: stimulus.data.sample_rate_hz, channels: stimulus.data.channels}}]"/>
+          </send>
+        </if>
         <if cond="action === 'ignore'">
           <send event="bot.ability.cognition.output" target="#_parent">
             <param name="turn" expr="turn"/>
@@ -173,7 +185,7 @@
           <send event="bot.reboot" target="#_parent"><content>{"reason": "cognition_child_teardown_failed"}</content></send>
         </if>
       </onentry>
-      <transition cond="['reply', 'blank', 'twice', 'then_blank', 'unoffered', 'adopt', 'addressed', 'ignore', 'elsewhere', 'focus', 'fail', 'stale'].indexOf(action) &gt;= 0" target="idle"/>
+      <transition cond="['reply', 'blank', 'twice', 'then_blank', 'unoffered', 'adopt', 'admit', 'addressed', 'ignore', 'elsewhere', 'focus', 'fail', 'stale'].indexOf(action) &gt;= 0" target="idle"/>
       <transition event="bot.ability.cognition.cancel" cond="action !== 'deaf'" target="idle">
         <send event="bot.ability.cognition.cancelled" target="#_parent"><param name="turn" expr="turn"/></send>
       </transition>

@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.conversation.routed_input",
+  "description": "Internal typed handoff preserving Communication's original input event envelope.",
+  "properties": {
+    "parent": {
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "description": "Canonical HSM event name that emitted this upstream payload.",
+          "examples": [
+            "environment.sound",
+            "bot.ability.listening.speech.output"
+          ],
+          "minLength": 1,
+          "title": "Event",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": false,
+          "description": "Complete typed payload emitted by the upstream event.",
+          "examples": [
+            {
+              "channels": null,
+              "content": "What is the weather like?",
+              "content_type": "text/plain",
+              "sample_rate_hz": null,
+              "source_ids": [
+                "caller"
+              ],
+              "target_ids": []
+            }
+          ],
+          "properties": {
+            "source_ids": {
+              "description": "One or more opaque identities that produced this content.",
+              "examples": [
+                [
+                  "caller"
+                ],
+                [
+                  "left-speaker",
+                  "right-speaker"
+                ]
+              ],
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  }
+                ]
+              },
+              "minItems": 1,
+              "title": "Source Ids",
+              "type": "array",
+              "uniqueItems": true
+            },
+            "target_ids": {
+              "description": "Zero or more opaque identities addressed by this content; an empty set means the addressee is unknown or the input is ambient.",
+              "examples": [
+                [],
+                [
+                  "bot"
+                ]
+              ],
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  }
+                ]
+              },
+              "title": "Target Ids",
+              "type": "array",
+              "uniqueItems": true
+            },
+            "content": {
+              "description": "Modality-specific content carried without interpretation by Conversation. text/* uses str; audio/* uses bytes (base64 on JSON wires); other modalities may use structured objects.",
+              "examples": [
+                "What is the weather like?",
+                "AAECAw=="
+              ],
+              "title": "Content"
+            },
+            "content_type": {
+              "description": "Content media type or modality label; it is data, not an event route.",
+              "examples": [
+                "text/plain",
+                "audio/pcm",
+                "audio/raw",
+                "application/x-sign-language"
+              ],
+              "minLength": 1,
+              "title": "Content Type",
+              "type": "string"
+            },
+            "sample_rate_hz": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Sample rate of raw PCM audio content in hertz. Required for correct STT packaging when content_type is audio/pcm, audio/raw, or similar non-container audio. Omit for text and WAV.",
+              "examples": [
+                16000,
+                48000
+              ],
+              "title": "Sample Rate Hz"
+            },
+            "channels": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Channel count of raw PCM audio content. Omit for text and self-describing containers.",
+              "examples": [
+                1
+              ],
+              "title": "Channels"
+            }
+          },
+          "required": [
+            "source_ids",
+            "target_ids",
+            "content",
+            "content_type"
+          ],
+          "title": "TurnData",
+          "type": "object"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upstream HSM event correlation id, when the emitter stamped one.",
+          "examples": [
+            "turn-123"
+          ],
+          "title": "Id"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upstream HSM event source identity, when stamped by its producer.",
+          "examples": [
+            "phone-1"
+          ],
+          "title": "Source"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upstream HSM event target identity, when stamped for delivery.",
+          "examples": [
+            "listening-1"
+          ],
+          "title": "Target"
+        }
+      },
+      "required": [
+        "event",
+        "data"
+      ],
+      "title": "StimulusData[TurnData]",
+      "type": "object"
+    }
+  },
+  "required": [
+    "parent"
+  ],
+  "type": "object"
+}

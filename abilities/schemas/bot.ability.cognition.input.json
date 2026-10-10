@@ -39,7 +39,7 @@
       "type": "array"
     },
     "turn": {
-      "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",
+      "description": "The body's processing turn this event belongs to, counted from 1: present on the body's input to the cognition, absent on an ability's handoff of a stimulus to the body [floppy field].",
       "minimum": 1,
       "type": "integer"
     },
@@ -143,7 +143,6 @@
     }
   ],
   "required": [
-    "turn",
     "stimulus"
   ]
 }

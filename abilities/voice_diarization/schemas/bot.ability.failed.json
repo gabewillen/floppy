@@ -1,0 +1,948 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.failed",
+  "anyOf": [
+    {
+      "description": "FailureData signal produced when an ability operation cannot complete.",
+      "properties": {
+        "message": {
+          "description": "Human-readable failure message for the ability operation.",
+          "examples": [
+            "Provider request failed."
+          ],
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "FailureData",
+      "type": "object"
+    },
+    {
+      "description": "FailureData signal produced when an ability operation cannot complete.",
+      "properties": {
+        "message": {
+          "description": "Human-readable failure message for the ability operation.",
+          "examples": [
+            "Provider request failed."
+          ],
+          "title": "Message",
+          "type": "string"
+        },
+        "input": {
+          "additionalProperties": false,
+          "description": "Exact typed processing request that failed.",
+          "examples": [
+            {
+              "input": "incoming speech",
+              "schemas": [
+                "bot.ability.cognition.ignore"
+              ]
+            }
+          ],
+          "properties": {
+            "input": {
+              "description": "Incoming stimulus event or payload.",
+              "examples": [
+                "incoming speech"
+              ],
+              "title": "Input"
+            },
+            "instructions": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional system policy stamped by Processing for model-facing processors. Not part of the stimulus; providers use this as the system prompt when present.",
+              "examples": [
+                "Return an immediate typed result only when the input is already unambiguous."
+              ],
+              "title": "Instructions"
+            }
+          },
+          "required": [
+            "input"
+          ],
+          "title": "InputData",
+          "type": "object"
+        }
+      },
+      "required": [
+        "message",
+        "input"
+      ],
+      "title": "FailureData",
+      "type": "object"
+    },
+    {
+      "description": "FailureData signal produced when an ability operation cannot complete.",
+      "properties": {
+        "message": {
+          "description": "Human-readable failure message for the ability operation.",
+          "examples": [
+            "Provider request failed."
+          ],
+          "title": "Message",
+          "type": "string"
+        },
+        "turn": {
+          "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "input": {
+          "additionalProperties": false,
+          "description": "Live body input for this turn: the stimulus plus the abilities, named actors, and focus candidates the stage may select from. Built by the Cognition host from live body context.",
+          "examples": [
+            {
+              "focus": "device-a",
+              "focus_candidates": [
+                "device-a"
+              ]
+            }
+          ],
+          "properties": {
+            "focus": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Instance name the bot is looking at, if any.",
+              "examples": [
+                "device-a"
+              ],
+              "title": "Focus"
+            },
+            "focus_candidates": {
+              "default": [],
+              "description": "Instance names that may become focus for this turn (body attention policy).",
+              "examples": [
+                [
+                  "device-a"
+                ],
+                [
+                  "device-a",
+                  "device-b"
+                ]
+              ],
+              "items": {
+                "type": "string"
+              },
+              "title": "Focus Candidates",
+              "type": "array"
+            }
+          },
+          "title": "InputData",
+          "type": "object"
+        }
+      },
+      "required": [
+        "message",
+        "turn",
+        "input"
+      ],
+      "title": "FailureData",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "description": "Revision failure with the immutable input that identifies its parent turn.",
+      "properties": {
+        "input": {
+          "additionalProperties": false,
+          "description": "Immutable revision input and parent-turn correlation.",
+          "properties": {
+            "cognition_output": {
+              "description": "Already-handled cognition output associated with the reflected turn.",
+              "items": {
+                "additionalProperties": false,
+                "description": "One selected modeled HSM event. Processing dispatches it to the resolved target fire-and-forget; hosts do not re-apply OutputData. Put selection rationale on reason here — not on the event payload.",
+                "examples": [
+                  {
+                    "data": {
+                      "device": "device-a"
+                    },
+                    "event": "bot.focus_device",
+                    "reason": "Attention should move to that device for this turn.",
+                    "target": "bot"
+                  }
+                ],
+                "properties": {
+                  "target": {
+                    "anyOf": [
+                      {
+                        "description": "Stable reference used by a cognition host to resolve a target or modeled event.",
+                        "examples": [
+                          "runtime"
+                        ],
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Stable reference for the host-local receiver of the modeled event. Hosts may omit this when the event resolves relative to focus or a single actor.",
+                    "examples": [
+                      "bot",
+                      "device-a"
+                    ],
+                    "title": "Target"
+                  },
+                  "event": {
+                    "description": "Canonical modeled HSM event name selected by cognition.",
+                    "examples": [
+                      "bot.focus_device"
+                    ],
+                    "minLength": 1,
+                    "title": "Event",
+                    "type": "string"
+                  },
+                  "data": {
+                    "anyOf": [
+                      {},
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Optional typed domain payload for the selected event. Trusted native abilities may retain a typed Pydantic payload through internal dispatch; model and learned-behavior JSON projections omit raw media. Do not put selection rationale here — use reason on this envelope.",
+                    "examples": [
+                      {
+                        "device": "device-a"
+                      }
+                    ],
+                    "title": "Data"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Optional reason this event was selected.",
+                    "examples": [
+                      "Attention should move to that device for this turn."
+                    ],
+                    "title": "Reason"
+                  }
+                },
+                "required": [
+                  "event"
+                ],
+                "title": "EventData",
+                "type": "object"
+              },
+              "title": "Cognition Output",
+              "type": "array"
+            },
+            "instruction": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "description": "Instruction material behind this authoring request, when taught rather than observed.",
+                  "examples": [
+                    {
+                      "kind": "instruction",
+                      "text": "When you hear a knock, say hello."
+                    }
+                  ],
+                  "properties": {
+                    "text": {
+                      "description": "Instruction text to author against.",
+                      "examples": [
+                        "When you hear a knock, say hello."
+                      ],
+                      "minLength": 1,
+                      "title": "Text",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Optional material kind assigned by whichever ability decoded it.",
+                      "examples": [
+                        "instruction",
+                        "transcript",
+                        "correction"
+                      ],
+                      "title": "Kind"
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ],
+                  "title": "InstructionData",
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Instruction material behind this request when it was taught rather than observed."
+            },
+            "prior_episodes": {
+              "default": [],
+              "description": "Prior similar episodes available as authoring evidence.",
+              "items": {
+                "additionalProperties": false,
+                "description": "Recallable cognition episode (JSON in memory, query_tags=cognitive_episode). Used when reflection chooses bot.behavior.create / change / break.",
+                "properties": {
+                  "focus": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "examples": [
+                      "device-a"
+                    ],
+                    "title": "Focus"
+                  },
+                  "focus_candidates": {
+                    "default": [],
+                    "examples": [
+                      [
+                        "device-a"
+                      ]
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Focus Candidates",
+                    "type": "array"
+                  },
+                  "stimulus_name": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "examples": [
+                      "environment.sound"
+                    ],
+                    "title": "Stimulus Name"
+                  },
+                  "output": {
+                    "description": "Typed cognitive output from that prior turn.",
+                    "items": {
+                      "additionalProperties": false,
+                      "description": "One selected modeled HSM event. Processing dispatches it to the resolved target fire-and-forget; hosts do not re-apply OutputData. Put selection rationale on reason here — not on the event payload.",
+                      "examples": [
+                        {
+                          "data": {
+                            "device": "device-a"
+                          },
+                          "event": "bot.focus_device",
+                          "reason": "Attention should move to that device for this turn.",
+                          "target": "bot"
+                        }
+                      ],
+                      "properties": {
+                        "target": {
+                          "anyOf": [
+                            {
+                              "description": "Stable reference used by a cognition host to resolve a target or modeled event.",
+                              "examples": [
+                                "runtime"
+                              ],
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Stable reference for the host-local receiver of the modeled event. Hosts may omit this when the event resolves relative to focus or a single actor.",
+                          "examples": [
+                            "bot",
+                            "device-a"
+                          ],
+                          "title": "Target"
+                        },
+                        "event": {
+                          "description": "Canonical modeled HSM event name selected by cognition.",
+                          "examples": [
+                            "bot.focus_device"
+                          ],
+                          "minLength": 1,
+                          "title": "Event",
+                          "type": "string"
+                        },
+                        "data": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Optional typed domain payload for the selected event. Trusted native abilities may retain a typed Pydantic payload through internal dispatch; model and learned-behavior JSON projections omit raw media. Do not put selection rationale here — use reason on this envelope.",
+                          "examples": [
+                            {
+                              "device": "device-a"
+                            }
+                          ],
+                          "title": "Data"
+                        },
+                        "reason": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Optional reason this event was selected.",
+                          "examples": [
+                            "Attention should move to that device for this turn."
+                          ],
+                          "title": "Reason"
+                        }
+                      },
+                      "required": [
+                        "event"
+                      ],
+                      "title": "EventData",
+                      "type": "object"
+                    },
+                    "title": "Output",
+                    "type": "array"
+                  },
+                  "behavior": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "description": "Create a new executable behavior. Select may omit source (intent only); the create write step must author full Starlark HSM source from the behavior Starlark API and the observed pattern — not by copying canned examples. The source's lifetime decides how it runs: a turn behavior (default) answers one matching turn; a persistent routine (lifetime = \"persistent\") keeps running on hsm.every / hsm.at schedules across turns and restarts, for recurring or time-based needs or when the user asked for something recurring.",
+                        "examples": [
+                          {
+                            "description": "Say hello when a knock sound arrives.",
+                            "event": "bot.behavior.create",
+                            "name": "GreetOnKnock",
+                            "reason": "Same knock→greeting pattern across recent episodes.",
+                            "triggers": [
+                              "environment.sound"
+                            ]
+                          },
+                          {
+                            "description": "Persistent routine: brief the user at 08:00 on weekdays.",
+                            "event": "bot.behavior.create",
+                            "name": "MorningBriefing",
+                            "reason": "The user asked to hear a briefing every weekday morning."
+                          }
+                        ],
+                        "properties": {
+                          "event": {
+                            "const": "bot.behavior.create",
+                            "default": "bot.behavior.create",
+                            "description": "Behavior create event name (discriminator).",
+                            "title": "Event",
+                            "type": "string"
+                          },
+                          "name": {
+                            "description": "Stable PascalCase behavior / HSM model name to install.",
+                            "minLength": 1,
+                            "title": "Name",
+                            "type": "string"
+                          },
+                          "triggers": {
+                            "default": [],
+                            "description": "External environment event names that may propose this behavior to fast intuition. Installed on the inventory instance alongside the Starlark program's own triggers.",
+                            "examples": [
+                              [
+                                "environment.sound"
+                              ]
+                            ],
+                            "items": {
+                              "type": "string"
+                            },
+                            "title": "Triggers",
+                            "type": "array"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null,
+                            "description": "Human-readable summary of what the behavior does, shown in inventory and reflection. The install keeps the caller-supplied description when present.",
+                            "examples": [
+                              "Say hello when a knock sound arrives."
+                            ],
+                            "title": "Description"
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null,
+                            "description": "Why this behavior is being installed now: the observed pattern across recent episodes that justifies it. Recorded for reflection, never dispatched.",
+                            "examples": [
+                              "Same knock→greeting pattern across recent episodes."
+                            ],
+                            "title": "Reason"
+                          },
+                          "source": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null,
+                            "description": "Starlark HSM behavior source authored for this install. Required on the create write step. Must declare input_event, output_event, and behavior = hsm.define(Name, ...) (or behavior_program(...)) with string-named callbacks. Invent names, schemas, guards, and effects from the observed pattern using the Starlark behavior API. A persistent routine also sets lifetime = \"persistent\" and schedules transitions with hsm.every / hsm.at. Select intent may omit this field.",
+                            "title": "Source"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "title": "CreateData",
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "description": "Change an existing executable behavior. Select may omit source (intent only); the change write step must author full revised Starlark HSM source from the behavior Starlark API, the existing behavior, and the observed pattern. Changing a persistent routine (for example its schedule) restarts it with the revised source; the lifetime global may also turn a behavior into a routine or back.",
+                        "examples": [
+                          {
+                            "event": "bot.behavior.change",
+                            "name": "GreetOnKnock",
+                            "reason": "Also clear focus before greeting."
+                          }
+                        ],
+                        "properties": {
+                          "event": {
+                            "const": "bot.behavior.change",
+                            "default": "bot.behavior.change",
+                            "description": "Behavior change event name (discriminator).",
+                            "title": "Event",
+                            "type": "string"
+                          },
+                          "name": {
+                            "description": "Stable name of the behavior to revise.",
+                            "minLength": 1,
+                            "title": "Name",
+                            "type": "string"
+                          },
+                          "triggers": {
+                            "default": [],
+                            "description": "Replacement external event names that may propose this behavior to fast intuition. Installed on the inventory instance alongside the revised Starlark program.",
+                            "examples": [
+                              [
+                                "environment.sound",
+                                "conversation.greeting.recognized"
+                              ]
+                            ],
+                            "items": {
+                              "type": "string"
+                            },
+                            "title": "Triggers",
+                            "type": "array"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null,
+                            "description": "Revised human-readable summary of what the behavior does, shown in inventory and reflection. The install keeps the caller-supplied description when present.",
+                            "examples": [
+                              "Say hello when a knock sound arrives, after clearing focus."
+                            ],
+                            "title": "Description"
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null,
+                            "description": "Why this behavior is being revised now: the observed gap or regression the revision fixes. Recorded for reflection, never dispatched.",
+                            "examples": [
+                              "Also clear focus before greeting."
+                            ],
+                            "title": "Reason"
+                          },
+                          "source": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null,
+                            "description": "Revised Starlark HSM behavior source. Required on the change write step. Must remain a valid executable behavior declaration whose model name matches this behavior name. Author revisions from the Starlark behavior API and existing_behavior.source — do not paste unrelated canned source. Keep lifetime = \"persistent\" and its hsm.every / hsm.at schedules for a routine.",
+                            "title": "Source"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "title": "ChangeData",
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "description": "Break a behavior that no longer improves (or harms) robot behavior. Sets inventory status=BROKEN so Autonomy will not run it and a persistent routine stops; the row remains for a later bot.behavior.change repair. Optional reason becomes status_reason.",
+                        "examples": [
+                          {
+                            "event": "bot.behavior.break",
+                            "name": "GreetOnKnock",
+                            "reason": "Greeted while the bot was already mid-conversation."
+                          }
+                        ],
+                        "properties": {
+                          "event": {
+                            "const": "bot.behavior.break",
+                            "default": "bot.behavior.break",
+                            "description": "Behavior break event name (discriminator).",
+                            "title": "Event",
+                            "type": "string"
+                          },
+                          "name": {
+                            "description": "Stable name of the behavior to set status=BROKEN.",
+                            "minLength": 1,
+                            "title": "Name",
+                            "type": "string"
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null,
+                            "description": "Why this behavior is being retired: the observed harm or staleness. Becomes the inventory status_reason so a later change can repair it.",
+                            "examples": [
+                              "Greeted while the bot was already mid-conversation."
+                            ],
+                            "title": "Reason"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "title": "BreakData",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Behavior create/change/break payload recorded with this episode, if any.",
+                    "title": "Behavior"
+                  }
+                },
+                "required": [
+                  "output"
+                ],
+                "title": "CognitiveEpisode",
+                "type": "object"
+              },
+              "title": "Prior Episodes",
+              "type": "array"
+            },
+            "intent": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "description": "Create a new executable behavior. Select may omit source (intent only); the create write step must author full Starlark HSM source from the behavior Starlark API and the observed pattern — not by copying canned examples. The source's lifetime decides how it runs: a turn behavior (default) answers one matching turn; a persistent routine (lifetime = \"persistent\") keeps running on hsm.every / hsm.at schedules across turns and restarts, for recurring or time-based needs or when the user asked for something recurring.",
+                  "examples": [
+                    {
+                      "description": "Say hello when a knock sound arrives.",
+                      "event": "bot.behavior.create",
+                      "name": "GreetOnKnock",
+                      "reason": "Same knock→greeting pattern across recent episodes.",
+                      "triggers": [
+                        "environment.sound"
+                      ]
+                    },
+                    {
+                      "description": "Persistent routine: brief the user at 08:00 on weekdays.",
+                      "event": "bot.behavior.create",
+                      "name": "MorningBriefing",
+                      "reason": "The user asked to hear a briefing every weekday morning."
+                    }
+                  ],
+                  "properties": {
+                    "event": {
+                      "const": "bot.behavior.create",
+                      "default": "bot.behavior.create",
+                      "description": "Behavior create event name (discriminator).",
+                      "title": "Event",
+                      "type": "string"
+                    },
+                    "name": {
+                      "description": "Stable PascalCase behavior / HSM model name to install.",
+                      "minLength": 1,
+                      "title": "Name",
+                      "type": "string"
+                    },
+                    "triggers": {
+                      "default": [],
+                      "description": "External environment event names that may propose this behavior to fast intuition. Installed on the inventory instance alongside the Starlark program's own triggers.",
+                      "examples": [
+                        [
+                          "environment.sound"
+                        ]
+                      ],
+                      "items": {
+                        "type": "string"
+                      },
+                      "title": "Triggers",
+                      "type": "array"
+                    },
+                    "description": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Human-readable summary of what the behavior does, shown in inventory and reflection. The install keeps the caller-supplied description when present.",
+                      "examples": [
+                        "Say hello when a knock sound arrives."
+                      ],
+                      "title": "Description"
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Why this behavior is being installed now: the observed pattern across recent episodes that justifies it. Recorded for reflection, never dispatched.",
+                      "examples": [
+                        "Same knock→greeting pattern across recent episodes."
+                      ],
+                      "title": "Reason"
+                    },
+                    "source": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Starlark HSM behavior source authored for this install. Required on the create write step. Must declare input_event, output_event, and behavior = hsm.define(Name, ...) (or behavior_program(...)) with string-named callbacks. Invent names, schemas, guards, and effects from the observed pattern using the Starlark behavior API. A persistent routine also sets lifetime = \"persistent\" and schedules transitions with hsm.every / hsm.at. Select intent may omit this field.",
+                      "title": "Source"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "title": "CreateData",
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "description": "Change an existing executable behavior. Select may omit source (intent only); the change write step must author full revised Starlark HSM source from the behavior Starlark API, the existing behavior, and the observed pattern. Changing a persistent routine (for example its schedule) restarts it with the revised source; the lifetime global may also turn a behavior into a routine or back.",
+                  "examples": [
+                    {
+                      "event": "bot.behavior.change",
+                      "name": "GreetOnKnock",
+                      "reason": "Also clear focus before greeting."
+                    }
+                  ],
+                  "properties": {
+                    "event": {
+                      "const": "bot.behavior.change",
+                      "default": "bot.behavior.change",
+                      "description": "Behavior change event name (discriminator).",
+                      "title": "Event",
+                      "type": "string"
+                    },
+                    "name": {
+                      "description": "Stable name of the behavior to revise.",
+                      "minLength": 1,
+                      "title": "Name",
+                      "type": "string"
+                    },
+                    "triggers": {
+                      "default": [],
+                      "description": "Replacement external event names that may propose this behavior to fast intuition. Installed on the inventory instance alongside the revised Starlark program.",
+                      "examples": [
+                        [
+                          "environment.sound",
+                          "conversation.greeting.recognized"
+                        ]
+                      ],
+                      "items": {
+                        "type": "string"
+                      },
+                      "title": "Triggers",
+                      "type": "array"
+                    },
+                    "description": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Revised human-readable summary of what the behavior does, shown in inventory and reflection. The install keeps the caller-supplied description when present.",
+                      "examples": [
+                        "Say hello when a knock sound arrives, after clearing focus."
+                      ],
+                      "title": "Description"
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Why this behavior is being revised now: the observed gap or regression the revision fixes. Recorded for reflection, never dispatched.",
+                      "examples": [
+                        "Also clear focus before greeting."
+                      ],
+                      "title": "Reason"
+                    },
+                    "source": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Revised Starlark HSM behavior source. Required on the change write step. Must remain a valid executable behavior declaration whose model name matches this behavior name. Author revisions from the Starlark behavior API and existing_behavior.source — do not paste unrelated canned source. Keep lifetime = \"persistent\" and its hsm.every / hsm.at schedules for a routine.",
+                      "title": "Source"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "title": "ChangeData",
+                  "type": "object"
+                }
+              ],
+              "description": "Selected create or change intent that Revision must author and validate.",
+              "title": "Intent"
+            }
+          },
+          "required": [
+            "cognition_output",
+            "intent"
+          ],
+          "title": "InputData",
+          "type": "object"
+        },
+        "message": {
+          "description": "Actionable revision failure suitable for the parent ability terminal.",
+          "examples": [
+            "Reflection change abandoned: same diagnostic message after fix."
+          ],
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input",
+        "message"
+      ],
+      "title": "FailureData",
+      "type": "object"
+    }
+  ],
+  "description": "FailureData signal produced when an ability operation cannot complete."
+}

@@ -7,10 +7,35 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-09.
+Last updated: 2026-10-10.
 
 ## Current state (2026-10-09) — resume here
 
+- **Phase 7 (2026-10-10):** done except publishing
+  ([plan](plans/phase7-pglite-defaults.mdscript.md), decisions D48 to D51
+  and D69 to D72). Memory runs on two engines behind the unchanged Memory
+  ability, picked by its `database`: `services/sql` (SQLite, a file in the
+  directory the run grants) and `services/pgsql` (the Postgres wire
+  protocol over `wasi:sockets/tcp`, a `postgresql://USER@IP:PORT/DBNAME`
+  URI, granted `inherit-network`), with the same `sql.result`/`sql.failed`
+  contract, `rowcount` guards and open transactions. Migrations are
+  Alembic's: `<migration:plan>` (`namespaces/migration`) and
+  `abilities/migration/migration.scx`, with mosfet's revisions per engine
+  in `abilities/memory/{sqlite,postgresql}/` and the version in
+  `alembic_version`. Every ability's SQL is portable to both. Postgres
+  support is tested on Postgres 16 (`FLOPPY_POSTGRES_BIN=<bin dir>` runs the
+  ignored `postgres_*` tests on a fresh cluster each); running them on
+  PGlite through pglite-socket (`FLOPPY_PGLITE_SERVER`) waits on the
+  user's approval. PGlite inside a component waits on `scx` admitting
+  exception handling (D71). Defaults are in README.md's "Defaults" and
+  `.env.example` (`tests/tests/defaults.rs`). Releases are prepared, not
+  published: [release.md](release.md); its open decisions (where the
+  release lives, a release job, the scxml.rs release it follows) wait for
+  going public.
+- **Building and testing (2026-10-10):** `WASI_SDK_PATH` must name wasi-sdk
+  25 (the sql service compiles SQLite). Live calls (CPA, TypeSafe) from a
+  cloud session go through the session's proxy by a local relay, since
+  `scx` ignores proxies.
 - **Layout (2026-10-10, D65):** every bot and ability is
   `<name>/<name>.scx` with its ECMAScript in `<name>/<name>.js` beside it
   (one root `<script src="<name>.js"/>`; conds and exprs call its
@@ -41,7 +66,7 @@ Last updated: 2026-10-09.
   it; a snapshot read in a compound state's entry content is valid).
   floppy's subtree is at `c5da80c`.
 - **Plan:** [plans/phase4-bot-core.mdscript.md](plans/phase4-bot-core.mdscript.md).
-  Next slice: "Add Identity Text Ability", then Phase 5 seams, live
+  Next slice: "Add Identity Text Ability", then the phase 5 abilities, live
   examples, docs, and the phase-end catch-up (doc tests once, deferred live
   runs via CPA; `.env.cpa` is not present in cloud sessions).
 - **Open for the user:** harden
@@ -68,6 +93,63 @@ Last updated: 2026-10-09.
   own. Each `scx run` takes 15 to 25 s of CPU to start (component
   compilation, no cache), so the behavior tests' per-record bound is 300 s.
 - **Next:** phase 5 (behaviors and routines, stored in memory), 6, 7.
+
+## Phase 5 (2026-10-10): behaviors and routines
+
+- **Done on `main`:** autonomy matches the ACTIVE turn behaviors the
+  stimulus triggers and runs each source by `<content expr>` (after the
+  SpeechHeard seed); reflection selects through its enabled transitions,
+  revises behaviors with the builder bot and stores episodes; routines run
+  as a chain of runners passing `bot.behavior.tick` up. Decisions D60 to
+  D64, D73 to D75, D80 (the plan's D48, D49 and D55, renumbered past clashes).
+  Plan: [plans/phase5-behaviors.mdscript.md](plans/phase5-behaviors.mdscript.md).
+- **Seams on (2026-10-10, D80):** the cognition always runs reflection and
+  routines (no gates, as mosfet composes them); with no database each logs
+  `absent`. Every bot turn with memory now ends with reflection's select
+  call and the turn's episode.
+
+## Turn detectors (2026-10-10)
+
+- **Done** on branch `claude/project-thread-fubdvs`: mosfet's TurnDetector
+  as `abilities/turn_detector/turn_detector.scx` (its seven events'
+  schemas in `abilities/schemas/`), and the conversation's
+  `turn_exchange`, which runs one turn per source of each input through it
+  before memory and commits the turns' product. Decisions D76 to D79;
+  conventions: [port-plan.md](port-plan.md#turn-detector-conventions).
+- **For the maintainer (D79):** mosfet commits a multi-source text input
+  once per source (`hello hello hello`); floppy keeps mosfet's behavior
+  until told otherwise. The detector has no decoder (D77).
+
+## Phase 6 (2026-10-10): speech and vision
+
+- **Done on `main`** (`d569318`): `services/speech` (decode, encode, and the
+  voice operations `detect`, `diarize`, `identify` with the media steps
+  `normalize`, `append`, `clip`); mosfet's hearing leaves, sensitivity,
+  interpretation (open-speech window included) and listening, which the
+  body invokes as its input ability; the SpeechHeard seed in autonomy;
+  vocal and speaking in audio mode; image parts in the generate service;
+  vision and reading (invoked by nothing yet, as in mosfet). Decisions
+  D52, D57 to D59, D66, D67; D38 is superseded.
+  Plan: [plans/phase6-speech-vision.mdscript.md](plans/phase6-speech-vision.mdscript.md);
+  conventions: [port-plan.md](port-plan.md#phase-6-conventions).
+- **Running:** the floppy bot's run also grants the speech service the
+  media directory (`--dir https://github.com/stateforward/floppy/services/speech=HOST::/media`)
+  and needs `FLOPPY_SPEECH_BASE_URL`/`FLOPPY_SPEECH_API_KEY` (speaking,
+  speech decoding) and `FLOPPY_VOICE_BASE_URL`/`FLOPPY_VOICE_API_KEY`
+  (LocalAI: every sound goes through voice detection). Without them a
+  response fails and every sound is `bot.ability.listening.failed`.
+- **Not ported:** devices (phone, LiveKit, audio hardware; out of scope)
+  and the Conversation's matching of embedding sources to earlier
+  participants' voice centroids. The turn detectors are ported (see
+  below).
+  ElevenLabs encoding exists in the service (`provider` `elevenlabs`), but
+  no document selects it.
+- **Live:** `speech_service`'s `live_speech_round_trip_through_an_env_file`
+  is the one live speech test (ignored; it needs a speech backend in
+  `FLOPPY_LIVE_ENV_FILE`). Reading passed live on the CPA gateway
+  (2026-10-10, [live-proof.md](live-proof.md)); hearing, listening and
+  speaking have not run live, because neither the CPA gateway nor TypeSafe
+  serves `/audio/speech` or `/audio/transcriptions`.
 
 ## Repositories
 
@@ -213,11 +295,11 @@ inlines the browser `validate` options type so no unapproved
   `live_cascade`).
 
 - Phase 4 cognition cascade (floppy `b8964ae9`): `abilities/cognition/cognition.scx`
-  invokes per turn `abilities/autonomy/autonomy.scx` (phase 5 seam, always
-  unhandled), `abilities/intuition/intuition.scx` (`<decision:choice>` of ignore or
+  invokes per turn `abilities/autonomy/autonomy.scx` (always unhandled without
+  memory), `abilities/intuition/intuition.scx` (`<decision:choice>` of ignore or
   the reasoning handoff, decided by the decision service on TypeSafe, with
   mosfet's ConfidenceTuner passed by `<param>` and returned in
-  `<donedata>`), and `abilities/reasoning/reasoning.scx` (memory seams around one
+  `<donedata>`), and `abilities/reasoning/reasoning.scx` (memory steps around one
   strict structured `generate` call whose schema is built from
   `<decision:choice>`: respond and ignore until the body assembles
   choices). Stages answer by `done.invoke.<stage>`; hop timers (30 s) ask
@@ -236,7 +318,7 @@ inlines the browser `validate` options type so no unapproved
   sends them as `bot.ability.cognition.input.choices` (`[floppy field]`).
   Reasoning selects only from them (a `target` enum per event). A
   completed turn passes through `routing`, which sends each selection to
-  `#_internal` or `#_<target>` and logs `bot.route`/`bot.route.dropped`;
+  `#_internal` or `#_<target>` and logs `floppy.route`/`floppy.route.dropped`;
   `floppy.routed` ends it. Focus is taken only as a routed selection. No
   ability offers `bot.ability.communication.respond` until communication
   lands, so the bot does not speak yet. Live: `live_choices` and
@@ -249,13 +331,15 @@ inlines the browser `validate` options type so no unapproved
   `abilities/conversation/conversation.scx` and `abilities/speaking/speaking.scx` as invoked
   children, offers `bot.ability.communication.respond` and `.activate`,
   says a routed response through speaking (text mode, `<log
-  label="bot.say">`; the body logs `bot.ability.speaking.output`) within a
+  label="floppy.say">`; the body logs `bot.ability.speaking.output`) within a
   6 s hop timer, records it as an outbound
   `bot.ability.conversation.append`, and defers input and responses while
   one is in flight; a waiting one passes the same checks when replayed
   (a blank waiting response fails and is not said). External `bot.ability.communication.input` goes
-  through the body to the conversation, whose product (output with an
-  inbound last message, at most `max_messages` 20) is a turn's stimulus.
+  through the body to the conversation (as mosfet's
+  `bot.ability.conversation.routed_input`), whose text product (its whole
+  history, as in mosfet) comes back as a `bot.ability.cognition.input`
+  handoff the body grants a turn.
   Tests: `tests/tests/communication.rs` (8), the fake-backend end-to-end
   `a_reasoned_response_is_said_through_the_communication` in
   `cognition.rs`; live `live_chat` passed on the CPA gateway
@@ -291,7 +375,7 @@ inlines the browser `validate` options type so no unapproved
   the body keeps only the visible `<foreach>`/`<send>` that delivers each
   placed selection. `<decision:route>` writes one ordered list of
   `{event, data, target}` or `{dropped}` entries (not separate routed and
-  dropped lists) so the `bot.route`/`bot.route.dropped` log order stays
+  dropped lists) so the `floppy.route`/`floppy.route.dropped` log order stays
   byte-identical. The body's choice/route script functions are gone,
   traces unchanged. Still scripted in the body: validators,
   `attentionBias`, `envelope` (later slices).
@@ -408,17 +492,15 @@ The remaining mosfet port runs as one ultracode run with these grants:
   `<log>` on stderr, exit code from the final state.
 - Exporter components for session outputs (`<log>`, `<donedata>`, trace):
   stdout default, file/WebSocket/OTLP packages. Low priority.
-- Canonical (Docker Linux) builds of floppy's components so pinned digests
-  reproduce (D27).
-- Rest of the mosfet port: bot core and abilities (phase 4), behaviors and
-  routines (5), memory service SQLite then PGlite (3), speech/vision/devices
-  as services (6).
+- PGlite compiled into a component (D71: needs `scx`'s wasmtime with the
+  `gc` and `gc-null` features, a proposed scxml.rs change not made).
 - Website (after the port): mosfet's animated robot (`mosfet/web/src/face`),
   web components + hsm.ts, marketplace of packages, a Mindstorms-style
   workshop whose pieces are inferred from element XSDs, live highlighting
   of running bots.
-- Going public: push, CI, releases with `SHA256SUMS`, per-platform `scx`
-  binaries, IRP identity regeneration on Linux CI.
+- Going public: CI, publishing the prepared releases with `SHA256SUMS`
+  ([release.md](release.md)), per-platform `scx` binaries, IRP identity
+  regeneration on Linux CI.
 
 ## Known stale docs
 

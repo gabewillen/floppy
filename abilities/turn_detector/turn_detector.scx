@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's TurnDetector (mosfet abilities/communication/conversation/
+  turn_detector): one participant's turn lifecycle and content assembler.
+  The conversation (abilities/conversation/conversation.scx) invokes it as
+  its child "turn_detector" once per source participant of each input
+  (mosfet Conversation's turn_detector stage) and exchanges one
+  start/end pair with it; any parent may drive it the same way, or stream
+  heard speech to it.
+
+    idle -start or voiced speech-> open ⇄ paused
+    open, paused -end-> normalizing -> idle
+    open, paused -open.after, paused.after (end of turn silence)-> closing
+      -silence.expired-> normalizing -> idle
+
+  Configuration: the <param>s participant_ref (mosfet's default "bot"),
+  conversation_ref ("conversation") and end_of_turn_silence_seconds (0.5;
+  each timer waits at least 0.01 s, as mosfet's does).
+
+  Readiness: on start it sends bot.ability.turn_detector.ready
+  {participant_ref, conversation_ref} to the parent, which may then send
+  it turns (an SCXML child cannot be sent to before it starts). mosfet
+  answers a ready.request once its attachment group is live; floppy has no
+  attachment, so the request is not ported and the detector announces
+  itself, as floppy's abilities announce their offers.
+
+  Turns (mosfet's guards and effects):
+  * bot.ability.turn_detector.turn.start opens a turn when its
+    self_participant_ref is this detector's participant_ref and no turn is
+    open, taking its turn_ref, conversation_ref and source_participant_ref;
+    a start for the open turn adds its content. update adds content to the
+    open turn, pause moves it to paused, and end adds its content and
+    closes it. A start, update, pause or end for another turn (turn_ref,
+    conversation_ref and source_participant_ref) is ignored.
+  * bot.ability.listening.speech.output with voice spans
+    (voice_detection.segments) opens a turn when none is open (its
+    turn_ref the next "turn-<n>", the detector's conversation_ref) and adds
+    the observation's audio while its content_type is audio/pcm (decoded
+    words carry no frames); without voice spans it moves open to paused.
+  * open and paused each wait end_of_turn_silence_seconds from their
+    entry (mosfet's hsm.after, re-armed on every re-entry); the timer
+    closes the turn through closing, which raises mosfet's
+    bot.ability.turn_detector.turn.silence.expired to itself.
+  * Content (mosfet _ingest_content): text is stripped and kept when not
+    empty; audio chunks are kept in order by reference (the first chunk's
+    sample_rate_hz and channels win); content, image and event stimuli
+    replace the modality-neutral content (content_type the stimulus's,
+    image/*, application/event).
+
+  Output (normalizing): the closed turn answers the parent with
+  bot.ability.turn_detector.turn.complete (mosfet's TurnCompleteData): text
+  the kept texts joined by spaces, audio the chunk references, content the
+  text, else the audio, else the modality-neutral content, with
+  content_type text/plain, audio/pcm or the content's. A turn closed with
+  none of them, or with both text and audio (mosfet's TurnCompleteData
+  refuses them), answers bot.ability.turn_detector.failed {stage: "turn",
+  message, participant_ref, conversation_ref, turn_ref,
+  source_participant_ref}. Either way the turn is cleared and the detector
+  is idle again. floppy's detector has no decoder (mosfet's Conversation
+  builds its detectors without one; floppy decodes speech in listening), so
+  normalizing hands the turn on as assembled.
+
+  Contracts: the turn events reference abilities/schemas/ by event:schema
+  (never inline); a send whose data a schema rejects is never routed here
+  and raises error.execution in the sender. Fields a sender leaves out take
+  mosfet's defaults. Conds only correlate (which turn, which timer).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="turn_detector" initial="turn_detector">
+  <datamodel>
+    <!-- The invoker's <param>s (mosfet's constructor defaults). -->
+    <data id="participant_ref" expr="'bot'"/>
+    <data id="conversation_ref" expr="'conversation'"/>
+    <data id="end_of_turn_silence_seconds" expr="0.5"/>
+    <!-- The open turn (mosfet's instance state). -->
+    <data id="turn_ref" expr="null"/>
+    <data id="active_conversation_ref" expr="null"/>
+    <data id="source_participant_ref" expr="'caller'"/>
+    <data id="text_parts" expr="[]"/>
+    <data id="audio" expr="[]"/>
+    <data id="audio_sample_rate_hz" expr="null"/>
+    <data id="audio_channels" expr="null"/>
+    <data id="content" expr="null"/>
+    <data id="content_type" expr="null"/>
+    <!-- Turns opened by voice so far, the timer in hand, and the closed
+         turn's product (mosfet's TurnCompleteData or FailedEventData). -->
+    <data id="voice_turns" expr="0"/>
+    <data id="timer" expr="null"/>
+    <data id="closed" expr="null"/>
+  </datamodel>
+  <script src="turn_detector.js"/>
+
+  <state id="turn_detector" initial="idle">
+    <onentry>
+      <send event="bot.ability.turn_detector.ready" target="#_parent">
+        <param name="participant_ref" expr="participant_ref"/>
+        <param name="conversation_ref" expr="conversation_ref"/>
+      </send>
+    </onentry>
+
+    <!-- idle holds no turn (mosfet _clear_open). -->
+    <state id="idle">
+      <onentry>
+        <assign location="turn_ref" expr="null"/>
+        <assign location="active_conversation_ref" expr="null"/>
+        <assign location="source_participant_ref" expr="'caller'"/>
+        <assign location="text_parts" expr="[]"/>
+        <assign location="audio" expr="[]"/>
+        <assign location="audio_sample_rate_hz" expr="null"/>
+        <assign location="audio_channels" expr="null"/>
+        <assign location="content" expr="null"/>
+        <assign location="content_type" expr="null"/>
+        <assign location="closed" expr="null"/>
+      </onentry>
+      <transition event="bot.ability.listening.speech.output"
+                  event:schema="schemas/bot.ability.listening.speech.output.json"
+                  cond="hasVoice(_event)" target="open">
+        <assign location="voice_turns" expr="voice_turns + 1"/>
+        <assign location="turn_ref" expr="voiceTurnRef()"/>
+        <assign location="active_conversation_ref" expr="conversation_ref"/>
+        <assign location="audio" expr="audioWithVoice(_event)"/>
+        <assign location="audio_sample_rate_hz" expr="voiceSampleRate(_event)"/>
+        <assign location="audio_channels" expr="voiceChannels(_event)"/>
+      </transition>
+      <transition event="bot.ability.turn_detector.turn.start"
+                  event:schema="schemas/bot.ability.turn_detector.turn.start.json"
+                  cond="hasStart(_event)" target="open">
+        <assign location="turn_ref" expr="_event.data.turn_ref"/>
+        <assign location="active_conversation_ref" expr="conversationRef(_event)"/>
+        <assign location="conversation_ref" expr="active_conversation_ref"/>
+        <assign location="source_participant_ref" expr="sourceRef(_event)"/>
+        <assign location="text_parts" expr="textPartsWith(_event.data.content)"/>
+        <assign location="audio" expr="audioWith(_event.data.content)"/>
+        <assign location="audio_sample_rate_hz" expr="sampleRateWith(_event.data.content)"/>
+        <assign location="audio_channels" expr="channelsWith(_event.data.content)"/>
+        <assign location="content_type" expr="contentTypeWith(_event.data.content)"/>
+        <assign location="content" expr="contentWith(_event.data.content)"/>
+      </transition>
+    </state>
+
+    <!-- open and paused: the open turn, each waiting the end-of-turn
+         silence from its entry (mosfet's hsm.after). -->
+    <state id="open">
+      <onentry>
+        <send idlocation="timer" event="open.after" delayexpr="silenceDelay()"/>
+      </onentry>
+      <onexit>
+        <cancel sendidexpr="timer"/>
+      </onexit>
+      <transition event="bot.ability.listening.speech.output"
+                  event:schema="schemas/bot.ability.listening.speech.output.json"
+                  cond="hasVoice(_event)" target="open">
+        <assign location="audio" expr="audioWithVoice(_event)"/>
+        <assign location="audio_sample_rate_hz" expr="voiceSampleRate(_event)"/>
+        <assign location="audio_channels" expr="voiceChannels(_event)"/>
+      </transition>
+      <transition event="bot.ability.listening.speech.output"
+                  event:schema="schemas/bot.ability.listening.speech.output.json"
+                  target="paused"/>
+      <transition event="bot.ability.turn_detector.turn.update"
+                  event:schema="schemas/bot.ability.turn_detector.turn.update.json"
+                  cond="isActiveTurn(_event)" target="open">
+        <assign location="source_participant_ref" expr="sourceRef(_event)"/>
+        <assign location="text_parts" expr="textPartsWith(_event.data.content)"/>
+        <assign location="audio" expr="audioWith(_event.data.content)"/>
+        <assign location="audio_sample_rate_hz" expr="sampleRateWith(_event.data.content)"/>
+        <assign location="audio_channels" expr="channelsWith(_event.data.content)"/>
+      </transition>
+      <transition event="bot.ability.turn_detector.turn.start"
+                  event:schema="schemas/bot.ability.turn_detector.turn.start.json"
+                  cond="hasStart(_event)" target="open">
+        <assign location="source_participant_ref" expr="sourceRef(_event)"/>
+        <assign location="text_parts" expr="textPartsWith(_event.data.content)"/>
+        <assign location="audio" expr="audioWith(_event.data.content)"/>
+        <assign location="audio_sample_rate_hz" expr="sampleRateWith(_event.data.content)"/>
+        <assign location="audio_channels" expr="channelsWith(_event.data.content)"/>
+        <assign location="content_type" expr="contentTypeWith(_event.data.content)"/>
+        <assign location="content" expr="contentWith(_event.data.content)"/>
+      </transition>
+      <transition event="bot.ability.turn_detector.turn.end"
+                  event:schema="schemas/bot.ability.turn_detector.turn.end.json"
+                  cond="isActiveTurn(_event)" target="normalizing">
+        <assign location="source_participant_ref" expr="sourceRef(_event)"/>
+        <assign location="text_parts" expr="textPartsWith(_event.data.content)"/>
+        <assign location="audio" expr="audioWith(_event.data.content)"/>
+        <assign location="audio_sample_rate_hz" expr="sampleRateWith(_event.data.content)"/>
+        <assign location="audio_channels" expr="channelsWith(_event.data.content)"/>
+        <assign location="content_type" expr="contentTypeWith(_event.data.content)"/>
+        <assign location="content" expr="contentWith(_event.data.content)"/>
+        <assign location="closed" expr="closedTurn()"/>
+      </transition>
+      <transition event="bot.ability.turn_detector.turn.pause"
+                  event:schema="schemas/bot.ability.turn_detector.turn.pause.json"
+                  cond="isActiveTurn(_event)" target="paused"/>
+      <transition event="open.after" cond="isTimer(_event)" target="closing"/>
+    </state>
+
+    <state id="paused">
+      <onentry>
+        <send idlocation="timer" event="paused.after" delayexpr="silenceDelay()"/>
+      </onentry>
+      <onexit>
+        <cancel sendidexpr="timer"/>
+      </onexit>
+      <transition event="bot.ability.listening.speech.output"
+                  event:schema="schemas/bot.ability.listening.speech.output.json"
+                  cond="hasVoice(_event)" target="open">
+        <assign location="audio" expr="audioWithVoice(_event)"/>
+        <assign location="audio_sample_rate_hz" expr="voiceSampleRate(_event)"/>
+        <assign location="audio_channels" expr="voiceChannels(_event)"/>
+      </transition>
+      <transition event="bot.ability.turn_detector.turn.update"
+                  event:schema="schemas/bot.ability.turn_detector.turn.update.json"
+                  cond="isActiveTurn(_event)" target="open">
+        <assign location="source_participant_ref" expr="sourceRef(_event)"/>
+        <assign location="text_parts" expr="textPartsWith(_event.data.content)"/>
+        <assign location="audio" expr="audioWith(_event.data.content)"/>
+        <assign location="audio_sample_rate_hz" expr="sampleRateWith(_event.data.content)"/>
+        <assign location="audio_channels" expr="channelsWith(_event.data.content)"/>
+      </transition>
+      <transition event="bot.ability.turn_detector.turn.start"
+                  event:schema="schemas/bot.ability.turn_detector.turn.start.json"
+                  cond="hasStart(_event)" target="open">
+        <assign location="source_participant_ref" expr="sourceRef(_event)"/>
+        <assign location="text_parts" expr="textPartsWith(_event.data.content)"/>
+        <assign location="audio" expr="audioWith(_event.data.content)"/>
+        <assign location="audio_sample_rate_hz" expr="sampleRateWith(_event.data.content)"/>
+        <assign location="audio_channels" expr="channelsWith(_event.data.content)"/>
+        <assign location="content_type" expr="contentTypeWith(_event.data.content)"/>
+        <assign location="content" expr="contentWith(_event.data.content)"/>
+      </transition>
+      <transition event="bot.ability.turn_detector.turn.end"
+                  event:schema="schemas/bot.ability.turn_detector.turn.end.json"
+                  cond="isActiveTurn(_event)" target="normalizing">
+        <assign location="source_participant_ref" expr="sourceRef(_event)"/>
+        <assign location="text_parts" expr="textPartsWith(_event.data.content)"/>
+        <assign location="audio" expr="audioWith(_event.data.content)"/>
+        <assign location="audio_sample_rate_hz" expr="sampleRateWith(_event.data.content)"/>
+        <assign location="audio_channels" expr="channelsWith(_event.data.content)"/>
+        <assign location="content_type" expr="contentTypeWith(_event.data.content)"/>
+        <assign location="content" expr="contentWith(_event.data.content)"/>
+        <assign location="closed" expr="closedTurn()"/>
+      </transition>
+      <transition event="bot.ability.turn_detector.turn.pause"
+                  event:schema="schemas/bot.ability.turn_detector.turn.pause.json"
+                  cond="isActiveTurn(_event)" target="paused"/>
+      <transition event="paused.after" cond="isTimer(_event)" target="closing"/>
+    </state>
+
+    <!-- The end-of-turn silence expired: mosfet's closing raises its
+         provenance to itself and ends the turn on it. -->
+    <state id="closing">
+      <onentry>
+        <send event="bot.ability.turn_detector.turn.silence.expired" target="#_internal">
+          <content expr="silenceExpired()"/>
+        </send>
+      </onentry>
+      <transition event="bot.ability.turn_detector.turn.silence.expired"
+                  cond="isTurnSilenceExpired(_event)" target="normalizing">
+        <assign location="closed" expr="closedTurn()"/>
+      </transition>
+    </state>
+
+    <!-- The closed turn goes to the parent, and the detector is idle. -->
+    <state id="normalizing">
+      <transition cond="isFailedTurn()" target="idle">
+        <send event="bot.ability.turn_detector.failed" target="#_parent">
+          <content expr="closed.failure"/>
+        </send>
+      </transition>
+      <transition target="idle">
+        <send event="bot.ability.turn_detector.turn.complete" target="#_parent">
+          <content expr="closed.turn"/>
+        </send>
+      </transition>
+    </state>
+  </state>
+</scxml>

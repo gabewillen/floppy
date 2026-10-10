@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Test harness of abilities/turn_detector/turn_detector.scx
+  (tests/tests/turn_detector.rs): it invokes the detector as its child
+  "turn_detector" with the end-of-turn silence in silence (seconds; the
+  tests rewrite it), forwards each external turn event and heard speech
+  to it, and logs what it answers: harness.ready, harness.complete and
+  harness.failed (their data as JSON), and harness.refused for a forward
+  the detector's schemas refuse.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="run">
+  <datamodel>
+    <data id="silence" expr="60"/>
+  </datamodel>
+  <state id="run">
+    <invoke id="turn_detector" type="scxml" src="turn_detector/turn_detector.scx">
+      <param name="participant_ref" expr="'bot'"/>
+      <param name="end_of_turn_silence_seconds" expr="silence"/>
+    </invoke>
+    <transition event="bot.ability.turn_detector.ready" cond="_event.invokeid === 'turn_detector'">
+      <log label="harness.ready" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="bot.ability.turn_detector.turn.complete" cond="_event.invokeid === 'turn_detector'">
+      <log label="harness.complete" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="bot.ability.turn_detector.failed" cond="_event.invokeid === 'turn_detector'">
+      <log label="harness.failed" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="bot.ability.turn_detector.turn.* bot.ability.listening.speech.output" cond="_event.invokeid === undefined">
+      <send eventexpr="_event.name" target="#_turn_detector">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="error.*">
+      <log label="harness.refused" expr="_event.name"/>
+    </transition>
+  </state>
+</scxml>

@@ -17,11 +17,16 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | Path | What |
 | --- | --- |
 | `scxml.rs/` | scxml.rs as a squashed git subtree (see [docs/decisions.md](docs/decisions.md) for the source commit) |
-| `namespaces/decision/` | the canonical extension namespace (a Wasm component; synchronous executable content: `decision:choice`); the builder's `scx:validate` is scxml.rs's embedded `scx` namespace |
-| `namespaces/bot/` | the bot body's extension namespace (a Wasm component; synchronous executable content: `bot:attention`, `bot:stimulus`) |
+| `namespaces/decision/` | the canonical extension namespace (a Wasm component; synchronous executable content: `decision:choice` and the choice elements); the builder's `scx:validate` is scxml.rs's embedded `scx` namespace |
+| `namespaces/bot/` | the bot body's extension namespace (a Wasm component; synchronous executable content: `bot:attention`, `bot:stimulus`, `bot:recognize`) |
 | `namespaces/conversation/` | the conversation's extension namespace (a Wasm component; synchronous executable content: `conversation:commit`) |
+| `namespaces/migration/` | Alembic's revision walk as an extension namespace (a Wasm component; synchronous executable content: `migration:plan`) |
 | `services/{generate,decision}/` | canonical invoked services (Wasm components: model generation, decisions) |
+| `services/{sql,pgsql}/` | the memory engines (Wasm components: one SQLite or Postgres transaction per `<invoke>`, [sql](services/sql/README.md), [pgsql](services/pgsql/README.md)) |
+| `services/speech/` | the speech service (a Wasm component: speech decoding and encoding on OpenAI-compatible audio APIs, voice detection, diarization and identification on LocalAI's voice APIs; decisions D57, D66; [speech](services/speech/README.md)) |
 | `bots/builder/` | the builder bot: its SCXML document (`builder.scx`), schemas, and saved live examples |
+| `bots/floppy/` | the floppy bot: the body (`floppy.scx`, mosfet's Bot) and its event contracts |
+| `abilities/` | the abilities and stages the bots invoke, each `<name>/<name>.scx` with `<name>/<name>.js` (memory, migration, cognition, communication, listening, ...) |
 | `tests/` | `floppy-tests`: integration tests that run the bots, namespaces, and services through `scx run` |
 | `scripts/` | build and proof scripts |
 
@@ -51,7 +56,7 @@ echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestria
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" \
-    bots/floppy/floppy.scx
+    --dir "https://github.com/stateforward/floppy/services/speech=$PWD/media::/media" bots/floppy/floppy.scx
 # A bot, with the packages of floppy's latest GitHub release (once one is
 # published: docs/release.md).
 scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
@@ -66,11 +71,38 @@ attributes decide which `<invoke>` receives which variable of the env file,
 and an `<invoke src>` loads by URI (relative to its document, `file:`, or
 `https:`) with no flag. The `generate` service reads the images a message
 names from a directory the run grants, so every run that binds it gives one
-`--dir` (create `media/` first; it is ignored by git), and the floppy bot's
+`--dir` (create `media/` first; it is ignored by git). The floppy bot's
+runs grant the `speech` service the same directory, where it reads what
+the bot hears and writes what it says, and the floppy bot's
 memory is a file in the directory the run grants the `sql` service (create
 `memory/` first). Each bot's README gives its input events and output
 ([bots/builder/README.md](bots/builder/README.md#running),
 [bots/floppy/README.md](bots/floppy/README.md#running)).
+
+## Memory engines
+
+The floppy bot's memory is mosfet's Memory ability,
+[`abilities/memory/memory.scx`](abilities/memory/memory.scx), on one of two
+engines with the same contract, picked by the `database` it is given
+(decisions D51, D69 to D72):
+
+| `database` | Engine | The run grants |
+| --- | --- | --- |
+| a file path, such as the bot's `/memory/floppy.sqlite` | [`services/sql`](services/sql/README.md), SQLite | `--dir https://github.com/stateforward/floppy/services/sql=HOST::/memory` |
+| a connection URI, `postgresql://USER@IP:PORT/DBNAME` | [`services/pgsql`](services/pgsql/README.md), Postgres over its wire protocol: PGlite served beside `scx` (pglite-socket) or any Postgres that accepts the user without a password | `--wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network` |
+
+`scx` binds every service a document names, so a run that binds the Memory
+ability grants both, as the quick start does. Before its statements, the
+Memory ability brings the database to the head revision through the
+migration ability
+([`abilities/migration/migration.scx`](abilities/migration/migration.scx),
+Alembic's `command.upgrade` with `<migration:plan>`), with mosfet's
+revisions `0001` and `0002` in the engine's dialect
+([`abilities/memory/sqlite/`](abilities/memory/sqlite/),
+[`abilities/memory/postgresql/`](abilities/memory/postgresql/)), and records
+the version in Alembic's `alembic_version`, so a mosfet database is used in
+place. The bot ships with SQLite (the body's `database` `<data>`); Postgres
+support is tested on Postgres 16.
 
 ## Defaults
 
@@ -91,6 +123,10 @@ values. No package has a default model endpoint (decision D31).
 | `FLOPPY_API_KEY` | the `generate` service (`env:apikey`), as above | yes, as above |
 | `TYPESAFE_BASE_URL` | the `decision` service (`env:baseurl`): the builder's triage, the floppy bot's intuition | no: the service's declared origin, `https://api.typesafe.ai` |
 | `TYPESAFE_API_KEY` | the `decision` service (`env:apikey`), as above | for the floppy bot: without it every turn fails (`unconfigured`); the builder triages with its fallback |
+| `FLOPPY_SPEECH_BASE_URL` | the `speech` service (`env:baseurl`): the floppy bot's speech decoding (listening) and speech encoding (speaking) | yes: without it decoding and speaking fail `unconfigured` |
+| `FLOPPY_SPEECH_API_KEY` | the `speech` service (`env:apikey`), as above | yes, as above |
+| `FLOPPY_VOICE_BASE_URL` | the `speech` service (`env:baseurl`): the floppy bot's voice detection, diarization and voice identification (listening), on LocalAI's voice APIs | yes: without it every sound the bot hears fails voice detection |
+| `FLOPPY_VOICE_API_KEY` | the `speech` service (`env:apikey`), as above | yes, as above |
 
 The live tests read `FLOPPY_LIVE_ENV_FILE` (the env files, joined like
 `PATH`) and `FLOPPY_LIVE_MODEL` (default: the model below); the trace tests
@@ -106,6 +142,20 @@ overrides it), `abilities/cognition/cognition.scx`, `abilities/reasoning/reasoni
 `abilities/reflection/reflection.scx` (each takes its invoker's by `<param>`), and
 `abilities/reading/reading.scx` (mosfet's image decoder).
 
+### Speech and voice models
+
+The listening's hearing leaves name the speech service's models:
+`abilities/voice_detection/voice_detection.scx`'s `model` is
+`silero-vad`, `abilities/voice_diarization/voice_diarization.scx`'s is
+`pyannote-diarization`,
+`abilities/voice_identification/voice_identification.scx`'s is
+`voice-detect-wespeaker-resnet34` (LocalAI's names for the models mosfet runs
+locally), and `abilities/speech_decoding/speech_decoding.scx`'s `model`
+is `whisper-1`. `abilities/speaking/speaking.scx`'s `model` is
+`gemini-3.1-flash-tts-preview` and its `voice` is `Kore`, mosfet's speech
+encoder defaults, which it passes to vocal for the speech service
+(vocal's own are `null`: its invoker names them).
+
 ### Timeouts and bounds
 
 | Document | `<data>` | Default | What it bounds |
@@ -116,19 +166,27 @@ overrides it), `abilities/cognition/cognition.scx`, `abilities/reasoning/reasoni
 | `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
 | `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (mosfet's 30 s attachment timeout) |
 | `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (mosfet's 5 min processing timeout) |
-| `bots/floppy/floppy.scx` | `cancel_timeout_ms` | `5000` | a timed-out turn's cancel acknowledgement (clamped to 100 to 5000) |
-| `abilities/cognition/cognition.scx` | `hop_timeout_ms` | `30000` | each cascade stage (mosfet's 30 s) |
+| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage (mosfet's 30 s) |
 | `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
 | `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (mosfet's `TURN_SILENCE_BOUND`) |
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
+| `abilities/conversation/conversation.scx` | `memory_timeout_ms` | `5000` | the conversation's memory step (mosfet's 5 s turn stage timeout) |
 | `abilities/communication/communication.scx` | `response_timeout_ms` | `6000` | saying one response (mosfet's 6 s) |
 | `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (mosfet's 30 s) |
+| `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `30000` | reflection's revising through the builder (mosfet's 30 s) |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (mosfet's 30 s) |
-| `abilities/conversation/conversation.scx` | `max_messages` | `20` | the history that reaches one turn |
+| `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input (mosfet's 5 s) |
+| `abilities/turn_detector/turn_detector.scx` | `end_of_turn_silence_seconds` | `0.5` | the silence that closes an open or paused turn (mosfet's 0.5 s; at least 0.01 s) |
+| `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `5000` | one speech synthesis (mosfet's 5 s) |
+| `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation (mosfet's 5 s) |
+| `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound (mosfet's 30 s stage operation timeout) |
+| `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage (mosfet's 30 s) |
+| `abilities/interpretation/interpretation.scx` | `product_threshold_db` | `3.0` | the perceived level a listening product needs (mosfet's 3 dB) |
 
-The cognition's phase 5 gates are off (`reflection_enabled`,
-`routines_enabled`). The floppy bot's `database` is `/memory/floppy.sqlite`,
-so its runs grant the `sql` service a memory directory.
+The cognition always runs reflection and routines beside its turns, as
+mosfet's bots compose them. The floppy bot's `database` is
+`/memory/floppy.sqlite`, so its runs grant the `sql` service a memory
+directory; without a database reflection and routines log `absent`.
 
 Contributor rules are in [AGENTS.md](AGENTS.md).
 
