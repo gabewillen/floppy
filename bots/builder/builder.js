@@ -43,7 +43,17 @@ function firstDiagnosticSummary() {
 
 // Whether the builder.request data satisfies schemas/builder.request.json.
 function satisfiesBuilderRequest(_event) {
-  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms'].indexOf(k) >= 0; }) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && (_event.data.generate_timeout_ms === undefined || (Number.isInteger(_event.data.generate_timeout_ms) && _event.data.generate_timeout_ms >= 1 && _event.data.generate_timeout_ms <= 3600000));
+  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'min_every_ms', 'turn_after_bound_ms'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && (_event.data.generate_timeout_ms === undefined || (Number.isInteger(_event.data.generate_timeout_ms) && _event.data.generate_timeout_ms >= 1 && _event.data.generate_timeout_ms <= 3600000));
+}
+
+// An absent lifetime bound, or one of 1 ms to 1 day.
+function isOptionalBound(value) {
+  return value === undefined || (Number.isInteger(value) && value >= 1 && value <= 86400000);
+}
+
+// A lifetime bound of the request, else null (not checked).
+function requestBound(value) {
+  return value === undefined ? null : value;
 }
 
 function requestConstraints(_event) {
@@ -197,10 +207,105 @@ function validatorFailedDiagnostics() {
   return [{kind: 'draft', code: 'validator-failed', message: 'the validator could not check the draft (an oversized or unreadable document)'}];
 }
 
+// validate: mosfet check()'s lifetime bounds (instance._lifetime_errors,
+// E0009), checked only when the request names them.
+
+// The start tags <name ...> of text: their attributes, where they start
+// and end, and whether they close themselves.
+function startTags(text, name) {
+  var tags = [];
+  var pattern = new RegExp('<' + name + '\\b((?:[^>"\']|"[^"]*"|\'[^\']*\')*)>', 'g');
+  var match = pattern.exec(text);
+  while (match !== null) {
+    var attributes = {};
+    var attribute = /([A-Za-z_][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+    var found = attribute.exec(match[1]);
+    while (found !== null) {
+      attributes[found[1]] = found[2] !== undefined ? found[2] : found[3];
+      found = attribute.exec(match[1]);
+    }
+    tags.push({attributes: attributes, start: match.index, end: match.index + match[0].length, empty: /\/\s*$/.test(match[1])});
+    match = pattern.exec(text);
+  }
+  return tags;
+}
+
+// A CSS2 time (SCXML delay) in ms, or null.
+function delayMs(value) {
+  var match = /^\s*(\d*\.?\d+)\s*(ms|s)\s*$/.exec(value);
+  return match === null ? null : Number(match[1]) * (match[2] === 's' ? 1000 : 1);
+}
+
+// mosfet lifetime: persistent when the document sends bot.behavior.tick
+// (the persistent routine contract, decision D61), else turn.
+function draftLifetime(text) {
+  return text.indexOf('bot.behavior.tick') >= 0 ? 'persistent' : 'turn';
+}
+
+// Each delayed send of text: a send of an event that a transition sending
+// bot.behavior.tick takes is a schedule (every, at), any other an after.
+function delayedSends(text) {
+  var ticking = startTags(text, 'transition').filter(function (t) { return !t.empty && text.slice(t.end, text.indexOf('</transition>', t.end)).indexOf('bot.behavior.tick') >= 0; }).map(function (t) { return (t.attributes.event || '').split(/\s+/); }).reduce(function (all, e) { return all.concat(e); }, []);
+  return startTags(text, 'send').filter(function (s) { return s.attributes.delay !== undefined || s.attributes.delayexpr !== undefined; }).map(function (s) {
+    return {event: s.attributes.event, delay: s.attributes.delay === undefined ? null : delayMs(s.attributes.delay), schedule: ticking.indexOf(s.attributes.event) >= 0};
+  });
+}
+
+// The events of text's schedules, in document order, each once.
+function scheduleEvents(text) {
+  return delayedSends(text).filter(function (s) { return s.schedule; }).map(function (s) { return s.event; }).filter(function (e, i, all) { return all.indexOf(e) === i; });
+}
+
+function isLifetimeChecked() {
+  return min_every_ms !== null || turn_after_bound_ms !== null;
+}
+
+function seconds(ms) {
+  return (ms / 1000) + 's';
+}
+
+// mosfet diagnostic help for E0009.
+function lifetimeHelp() {
+  return ' Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine\'s every interval must be at least the minimum the check names.';
+}
+
+// mosfet instance._lifetime_errors on the draft, as diagnostics.
+function lifetimeErrors(text) {
+  if (!isLifetimeChecked()) {
+    return [];
+  }
+  var lifetime = draftLifetime(text);
+  var sends = delayedSends(text);
+  var errors = [];
+  sends.forEach(function (s) {
+    if (s.delay !== null && s.schedule && min_every_ms !== null && min_every_ms > s.delay) {
+      errors.push({kind: 'lifetime', code: 'E0009', message: 'every (the ' + s.event + ' delay of ' + seconds(s.delay) + ') is shorter than the ' + (min_every_ms / 1000) + '-second minimum routine interval.' + lifetimeHelp()});
+    }
+    if (s.delay !== null && !s.schedule && lifetime === 'turn' && turn_after_bound_ms !== null && s.delay > turn_after_bound_ms) {
+      errors.push({kind: 'lifetime', code: 'E0009', message: 'after (the ' + s.event + ' delay of ' + seconds(s.delay) + ') never fires in a turn behavior, which is silenced ' + seconds(turn_after_bound_ms) + ' after it starts; shorten it or make the behavior a persistent routine.' + lifetimeHelp()});
+    }
+  });
+  if (lifetime === 'persistent' && !sends.some(function (s) { return s.schedule; })) {
+    errors.push({kind: 'lifetime', code: 'E0009', message: 'a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick.' + lifetimeHelp()});
+  }
+  return errors.slice(0, 20);
+}
+
+function hasLifetimeErrors() {
+  return isReadyToSimulate() && lifetime_errors.length > 0;
+}
+
 // simulate
 
+// mosfet verify_apply: a persistent routine is checked by one tick,
+// forced by delivering its first schedule's event at once (mosfet's timer
+// clock fires its first schedule wait at once), within mosfet's 2 s.
+function simTests() {
+  return isLifetimeChecked() && draftLifetime(scxml_text) === 'persistent' && schedules.length > 0 ? draft.tests.concat([{name: 'first tick', events: [{name: schedules[0], data: '', delay_ms: 0}], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true}]) : draft.tests;
+}
+
 function simulateLog() {
-  return draft.tests.length + ' test script(s)';
+  return sim_tests.length + ' test script(s)';
 }
 
 // The longest simulation validate admits plus a margin.
@@ -215,13 +320,13 @@ function simulateTimeoutDiagnostics() {
 // sim_next
 
 function allTestsRun() {
-  return sim_index >= draft.tests.length;
+  return sim_index >= sim_tests.length;
 }
 
 // sim_run
 
 function currentTest() {
-  return draft.tests[sim_index];
+  return sim_tests[sim_index];
 }
 
 function currentTestEvents() {
@@ -254,7 +359,40 @@ function isOwnOrCandidateEvent(_event) {
 // sim_results with the current test's result: expect_events in order
 // (other outputs may come between), and expect_done.
 function nextSimResults() {
-  return sim_results.concat([(function (t) { var next = 0; observed.forEach(function (name) { if (next < t.expect_events.length && name === t.expect_events[next]) { next += 1; } }); return {name: t.name, invokeid: candidate_id, passed: sim_error === null && next === t.expect_events.length && child_done === t.expect_done, observed: observed, expected: t.expect_events, done: child_done, expect_done: t.expect_done, error: sim_error}; })(currentTest())]);
+  return sim_results.concat([(function (t) { var next = 0; var apply = applyErrors(t); observed.forEach(function (name) { if (next < t.expect_events.length && name === t.expect_events[next]) { next += 1; } }); return {name: t.name, invokeid: candidate_id, passed: sim_error === null && next === t.expect_events.length && child_done === t.expect_done && apply.length === 0, observed: observed, expected: t.expect_events, done: child_done, expect_done: t.expect_done, error: sim_error, apply: apply}; })(currentTest())]);
+}
+
+// mosfet verify._verify_tick on the forced tick: the routine ticked, and
+// its output selects at least one event whose data reads the tick's own
+// values (mosfet _selection_binding_errors), else E0008 messages.
+function applyErrors(test) {
+  if (test.tick !== true) {
+    return [];
+  }
+  if (ticks.length === 0) {
+    return ['persistent routine did not emit a tick for its first schedule.'];
+  }
+  var tick = Object(ticks[0]);
+  if (typeof tick.name !== 'string' || tick.name.length === 0 || ['every', 'at'].indexOf(tick.trigger) < 0 || typeof tick.scheduled_at !== 'string' || typeof tick.fired_at !== 'string') {
+    return ['persistent routine tick must carry name, trigger (every or at), scheduled_at and fired_at.'];
+  }
+  if (!Array.isArray(tick.output) || !tick.output.every(function (s) { return s !== null && typeof s === 'object' && typeof s.event === 'string'; })) {
+    return ['behavior output must be a cognition event selection object (or list of them).'];
+  }
+  if (tick.output.length === 0) {
+    return ['behavior output must select at least one event for the observed pattern.'];
+  }
+  var live = {name: tick.name, trigger: tick.trigger, scheduled_at: tick.scheduled_at, fired_at: tick.fired_at};
+  var errors = [];
+  tick.output.forEach(function (s) {
+    var data = s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : {};
+    Object.keys(data).forEach(function (key) {
+      if (live[key] !== undefined && data[key] !== live[key]) {
+        errors.push('selection data[' + JSON.stringify(key) + ']=' + JSON.stringify(data[key]) + ' does not match live event value ' + JSON.stringify(live[key]) + '; read identifiers from the tick at runtime.');
+      }
+    });
+  });
+  return errors;
 }
 
 // sim_verdict
@@ -264,7 +402,7 @@ function allTestsPassed() {
 }
 
 function simulateDiagnostics() {
-  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return {kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + r.error)}; });
+  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + r.error)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
 }
 
 // retry_gate
@@ -272,6 +410,12 @@ function simulateDiagnostics() {
 // The sorted, distinct kind|code|identity of the diagnostics.
 function diagnosticsFingerprint() {
   return JSON.stringify(diagnostics.map(function (d) { return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message); }).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; }));
+}
+
+// The last draft a check rejected (validate, lifetime, simulate, apply),
+// else rejected unchanged: mosfet drafts the rejected source.
+function rejectedDraft() {
+  return diagnostics.length > 0 && ['draft', 'validate', 'lifetime', 'simulate', 'apply'].indexOf(diagnostics[0].kind) >= 0 && typeof scxml_text === 'string' ? scxml_text : rejected;
 }
 
 function nextAttemptLog() {
@@ -320,6 +464,11 @@ function failedLog() {
   return failure_reason + firstDiagnosticSummary();
 }
 
+// With the last draft a check rejected, when there is one.
 function failedData() {
-  return {reason: failure_reason, diagnostics: diagnostics.map(function (d) { return {kind: d.kind, code: d.code, message: d.message}; }), history: attempt_log};
+  var data = {reason: failure_reason, diagnostics: diagnostics.map(function (d) { return {kind: d.kind, code: d.code, message: d.message}; }), history: attempt_log};
+  if (rejected !== null) {
+    data.scxml = rejected;
+  }
+  return data;
 }

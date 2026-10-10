@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "failed",
-  "description": "The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation.",
+  "description": "The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation, and the last draft a check rejected, when there is one.",
   "type": "object",
   "properties": {
     "reason": {"enum": ["invalid-request", "unconfigured", "no-progress", "attempts-exhausted", "abandoned"]},
@@ -10,7 +10,7 @@
       "items": {
         "type": "object",
         "properties": {
-          "kind": {"enum": ["request", "generate", "draft", "validate", "simulate", "timeout"]},
+          "kind": {"enum": ["request", "generate", "draft", "validate", "lifetime", "simulate", "apply", "timeout"]},
           "code": {"type": "string"},
           "message": {"type": "string"}
         },
@@ -18,7 +18,8 @@
         "additionalProperties": false
       }
     },
-    "history": {"type": "array", "items": {"type": "object"}}
+    "history": {"type": "array", "items": {"type": "object"}},
+    "scxml": {"type": "string", "minLength": 1}
   },
   "required": ["reason", "diagnostics", "history"],
   "additionalProperties": false

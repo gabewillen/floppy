@@ -19,7 +19,7 @@
       <assign location="ticked" expr="true"/>
       <log label="routines.double" expr="'tick'"/>
       <send event="bot.behavior.tick" target="#_parent">
-        <content expr="({name: 'MorningBriefing', trigger: 'at', scheduled_at: '2026-10-05T08:00:00-04:00', fired_at: '2026-10-05T08:00:00.012000-04:00'})"/>
+        <content expr="({name: 'MorningBriefing', trigger: 'at', scheduled_at: '2026-10-05T08:00:00-04:00', fired_at: '2026-10-05T08:00:00.012000-04:00', output: [{event: 'bot.speaking.say', data: {text: 'Good morning.'}, reason: 'Weekday morning briefing routine.', target: 'speaker'}]})"/>
       </send>
     </transition>
     <transition event="bot.ability.routines.reconcile">

@@ -10,7 +10,8 @@
 
   It ends in exactly one of two top-level final states, whose <donedata>
   carries the result: done {scxml, schemas, tests, report} or failed
-  {reason, diagnostics, history}. Run directly, scx run prints that data in its done
+  {reason, diagnostics, history, scxml?} (scxml: the last draft a check
+  rejected, when there is one). Run directly, scx run prints that data in its done
   record; invoked, the parent receives it as done.invoke.<id> (SCXML 6.4).
   Progress goes to <log>, labelled with the stage. The event:schema
   contracts below are inline copies of schemas/*.json (an invoked child is
@@ -24,9 +25,13 @@
   intake -> design (an invoked generate service: topology plan) -> author
   (an invoked generate service: draft SCXML + event schemas + test scripts)
   -> validate (scx:validate; machine-applicable
-  fixes through apply_fixes, at most 2 passes per draft) -> simulate (each
-  test script drives the draft as an invoked child with its own invoke id)
-  -> done. Every failure goes through retry_gate, which takes its
+  fixes through apply_fixes, at most 2 passes per draft; with the request's
+  min_every_ms and turn_after_bound_ms, mosfet check()'s lifetime bounds,
+  E0009) -> simulate (each test script drives the draft as an invoked
+  child with its own invoke id; with those bounds, a persistent routine,
+  a draft that sends bot.behavior.tick, also gets its first schedule's
+  event at once and must tick with a selection, mosfet verify_apply,
+  E0008) -> done. Every failure goes through retry_gate, which takes its
   fingerprint and gives up (no-progress) when it equals the previous
   failure's, or at the request's optional max_attempts; triage then reads its enabled
   event:schema transitions with decision:choice and invokes the decision
@@ -77,6 +82,10 @@
     <data id="max_attempts" expr="null"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <data id="generate_timeout_ms" expr="300000"/>
+    <!-- mosfet check()'s lifetime bounds (min_every, turn_after_bound),
+         null (not checked) unless the request names them. -->
+    <data id="min_every_ms" expr="null"/>
+    <data id="turn_after_bound_ms" expr="null"/>
     <data id="decision_timeout_ms" expr="60000"/>
     <!-- The work. -->
     <data id="plan" expr="null"/>
@@ -89,6 +98,11 @@
     <data id="fixed" expr="null"/>
     <data id="mode" expr="'author'"/>
     <data id="schema_errors" expr="[]"/>
+    <data id="lifetime_errors" expr="[]"/>
+    <!-- A persistent routine's schedule events, in document order. -->
+    <data id="schedules" expr="[]"/>
+    <!-- The last draft a check rejected (the failed donedata's scxml). -->
+    <data id="rejected" expr="null"/>
     <!-- Model calls: the invocation in flight, its failure code, and the
          stage run its builder.timeout carries. -->
     <data id="gen_id" expr="null"/>
@@ -131,6 +145,10 @@
     <data id="simulation" expr="0"/>
     <data id="sim_run_seq" expr="0"/>
     <data id="sim_results" expr="[]"/>
+    <!-- The draft's tests and, for a routine, its forced tick. -->
+    <data id="sim_tests" expr="[]"/>
+    <!-- The data of each bot.behavior.tick the candidate sent. -->
+    <data id="ticks" expr="[]"/>
     <data id="observed" expr="[]"/>
     <data id="child_done" expr="false"/>
     <data id="sim_error" expr="null"/>
@@ -143,7 +161,7 @@
 
   <!-- Waits for builder.request; no timeout: the invoker owns the lifetime. -->
   <state id="intake">
-    <transition event="builder.request" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"builder.request","description":"Ask the builder bot to build one SCXML machine from a natural-language specification.","type":"object","properties":{"spec":{"type":"string","minLength":1},"constraints":{"type":"array","items":{"type":"string"},"maxItems":32},"max_attempts":{"type":"integer","minimum":1,"maximum":8},"model":{"type":"string","minLength":1},"generate_timeout_ms":{"type":"integer","minimum":1,"maximum":3600000}},"required":["spec"],"additionalProperties":false}'
+    <transition event="builder.request" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"builder.request","description":"Ask the builder bot to build one SCXML machine from a natural-language specification.","type":"object","properties":{"spec":{"type":"string","minLength":1},"constraints":{"type":"array","items":{"type":"string"},"maxItems":32},"max_attempts":{"type":"integer","minimum":1,"maximum":8},"model":{"type":"string","minLength":1},"generate_timeout_ms":{"type":"integer","minimum":1,"maximum":3600000},"min_every_ms":{"type":"integer","minimum":1,"maximum":86400000},"turn_after_bound_ms":{"type":"integer","minimum":1,"maximum":86400000}},"required":["spec"],"additionalProperties":false}'
                 cond="satisfiesBuilderRequest(_event)"
                 target="design">
       <assign location="spec" expr="_event.data.spec"/>
@@ -151,6 +169,8 @@
       <assign location="max_attempts" expr="requestMaxAttempts(_event)"/>
       <assign location="model" expr="requestModel(_event)"/>
       <assign location="generate_timeout_ms" expr="requestGenerateTimeoutMs(_event)"/>
+      <assign location="min_every_ms" expr="requestBound(_event.data.min_every_ms)"/>
+      <assign location="turn_after_bound_ms" expr="requestBound(_event.data.turn_after_bound_ms)"/>
     </transition>
     <transition event="builder.request" target="failed">
       <assign location="failure_reason" expr="'invalid-request'"/>
@@ -280,11 +300,17 @@
       <assign location="fixed" expr="null"/>
       <assign location="schema_errors" expr="schemaErrors(draft.schemas)"/>
       <assign location="parsed_schemas" expr="parsedSchemas(draft.schemas)"/>
+      <assign location="lifetime_errors" expr="lifetimeErrors(scxml_text)"/>
+      <assign location="schedules" expr="scheduleEvents(scxml_text)"/>
       <scx:validate location="report" expr="scxml_text" name="draft.scx"
                    applyfixes="machine-applicable" fixedlocation="fixed"/>
     </onentry>
     <transition cond="hasSchemaErrors()" target="retry_gate">
       <assign location="diagnostics" expr="schemaErrorDiagnostics()"/>
+    </transition>
+    <!-- mosfet check(): E0009 when the request names the bounds. -->
+    <transition cond="hasLifetimeErrors()" target="retry_gate">
+      <assign location="diagnostics" expr="lifetime_errors"/>
     </transition>
     <transition cond="isReadyToSimulate()"
                 target="simulate">
@@ -319,6 +345,7 @@
   <state id="simulate" initial="sim_next">
     <onentry>
       <assign location="simulation" expr="increment(simulation)"/>
+      <assign location="sim_tests" expr="simTests()"/>
       <log label="simulate" expr="simulateLog()"/>
       <send id="simulate-timeout" event="builder.timeout" delayexpr="simulateTimeoutDelay()">
         <param name="run" expr="simulation"/>
@@ -350,6 +377,7 @@
         <assign location="child_done" expr="false"/>
         <assign location="sim_error" expr="null"/>
         <assign location="sim_sends" expr="[]"/>
+        <assign location="ticks" expr="[]"/>
         <assign location="sim_run_seq" expr="increment(sim_run_seq)"/>
         <!-- Processed after the invocation starts (external queue). A run
              whose invocation fails to start ends on error.execution before
@@ -390,6 +418,10 @@
       <transition event="error.*" cond="isOwnOrCandidateEvent(_event)" target="sim_check">
         <assign location="sim_error" expr="_event.name"/>
       </transition>
+      <transition event="bot.behavior.tick" cond="isFrom(_event, candidate_id)">
+        <assign location="observed" expr="appended(observed, _event.name)"/>
+        <assign location="ticks" expr="appended(ticks, _event.data)"/>
+      </transition>
       <transition event="*" cond="isFrom(_event, candidate_id)">
         <assign location="observed" expr="appended(observed, _event.name)"/>
       </transition>
@@ -420,6 +452,7 @@
     <onentry>
       <assign location="failures" expr="increment(failures)"/>
       <assign location="fingerprint" expr="diagnosticsFingerprint()"/>
+      <assign location="rejected" expr="rejectedDraft()"/>
       <assign location="attempt_log" expr="nextAttemptLog()"/>
       <log label="retry_gate" expr="retryGateLog()"/>
     </onentry>
@@ -512,7 +545,7 @@
     <onentry>
       <log label="failed" expr="failedLog()"/>
     </onentry>
-    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"failed","description":"The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation.","type":"object","properties":{"reason":{"enum":["invalid-request","unconfigured","no-progress","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","simulate","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}},"history":{"type":"array","items":{"type":"object"}}},"required":["reason","diagnostics","history"],"additionalProperties":false}'>
+    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"failed","description":"The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation, and the last draft a check rejected, when there is one.","type":"object","properties":{"reason":{"enum":["invalid-request","unconfigured","no-progress","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","lifetime","simulate","apply","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}},"history":{"type":"array","items":{"type":"object"}},"scxml":{"type":"string","minLength":1}},"required":["reason","diagnostics","history"],"additionalProperties":false}'>
       <content expr="failedData()"/>
     </donedata>
   </final>

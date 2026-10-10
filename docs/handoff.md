@@ -103,6 +103,15 @@ Last updated: 2026-10-10.
   as a chain of runners passing `bot.behavior.tick` up. Decisions D60 to
   D64, D73 to D75, D80 (the plan's D48, D49 and D55, renumbered past clashes).
   Plan: [plans/phase5-behaviors.mdscript.md](plans/phase5-behaviors.mdscript.md).
+- **Routines and revision, mosfet's behavior (2026-10-10):** a routine's
+  `at` schedule computes its next occurrence in its own data model with
+  `next_after` (reflection.js, mosfet `At.next_after` over the zone's POSIX
+  TZ rule: the ECMAScript data model has no `Intl` or time zone database);
+  the builder, given `min_every_ms`/`turn_after_bound_ms`, rejects drafts
+  outside mosfet `check()`'s lifetime bounds (E0009) and forces a
+  routine's first tick (E0008); the tick schema refuses an empty `output`;
+  reflection drafts the builder's last rejected source and drafts nothing
+  when the change call itself failed.
 - **Seams on (2026-10-10, D80):** the cognition always runs reflection and
   routines (no gates, as mosfet composes them); with no database each logs
   `absent`. Every bot turn with memory now ends with reflection's select

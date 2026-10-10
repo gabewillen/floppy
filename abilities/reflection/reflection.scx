@@ -62,9 +62,16 @@
   document replaces the row ACTIVE (delete triggers, delete row, insert
   row, insert triggers, mosfet inventory.store_behavior), keeping the
   usage counters, with mosfet's _grounded_triggers and lifetime
-  persistent when the document sends bot.behavior.tick, else turn. Its
-  failed is abandoning: the row is marked DRAFT with status_reason
-  validation, and the turn fails. revising is bounded by
+  persistent when the document sends bot.behavior.tick, else turn. The
+  request carries mosfet check()'s lifetime bounds (min_every_ms,
+  turn_after_bound_ms), which the builder checks, and it forces a
+  routine's first tick (mosfet verify_apply). Its failed with the last
+  draft it rejected is abandoning (mosfet _abandon): the row keeps that
+  source as DRAFT with status_reason validation, and the turn fails with
+  mosfet's "Reflection change abandoned: same diagnostic message after
+  fix:" and the rendered diagnostics after no progress. Its failed with no
+  draft (no backend, generation failures) fails the turn with no draft,
+  as mosfet's failed change call. revising is bounded by
   revising_timeout_ms (mosfet's 30 s child operation timeout): when it
   fires, leaving revising cancels the revision and the turn fails with
   mosfet's "Reflection child cancellation timed out.".
@@ -134,14 +141,23 @@
     <!-- Inputs deferred while a reflection is in hand (mosfet hsm.defer). -->
     <data id="deferred" expr="[]"/>
 
-    <!-- mosfet SELECT_INSTRUCTIONS, with a routine's schedules as SCXML
-         delayed sends. -->
-    <data id="select_instructions" expr="'Select at most one offered behavior inventory event (bot.behavior.create, change, or break) when a clear repeated pattern across this turn and prior_episodes should improve future behavior, or when this turn shows a recurring or time-based need, including the user explicitly asking for something to happen on a schedule or repeatedly, that a persistent routine would serve. Otherwise return an empty selection. Use only offered events; data must match the event schema. behaviors lists installed inventory with lifetime (turn: Autonomy runs it for one matching turn; persistent: a routine that keeps running on delayed-send schedules across turns and restarts), status (ACTIVE|DRAFT|BROKEN), status_reason, status_updated_at, and usage: used_count / last_used_at (handled Autonomy runs) and failed_count / last_failed_at. Prefer change over break when used_count is low (not enough practice evidence). Prefer break when failures or harm outweigh practice value; include reason. create delegates a DRAFT behavior revision; change revises an existing behavior; break sets status=BROKEN (keeps inventory for later change; Autonomy will not run it and a broken routine stops); change a routine to reschedule or revise it, break it to stop it. Select intent may omit source; do not invent source here.'"/>
+    <!-- mosfet SELECT_INSTRUCTIONS, with a routine's hsm.every / hsm.at
+         schedules as SCXML delayed sends. -->
+    <data id="select_instructions" expr="'Select at most one offered behavior inventory event (bot.behavior.create, change, or break) when a clear repeated pattern across this turn and prior_episodes should improve future behavior, or when this turn shows a recurring or time-based need, including the user explicitly asking for something to happen on a schedule or repeatedly, that a persistent routine would serve. Otherwise return an empty selection. Use only offered events; data must match the event schema. behaviors lists installed inventory with lifetime (turn: Autonomy runs it for one matching turn; persistent: a routine that keeps running on every / at schedules, as delayed sends, across turns and restarts), status (ACTIVE|DRAFT|BROKEN), status_reason, status_updated_at, and usage: used_count / last_used_at (handled Autonomy runs) and failed_count / last_failed_at. Prefer change over break when used_count is low (not enough practice evidence). Prefer break when failures or harm outweigh practice value; include reason. create delegates a DRAFT behavior revision; change revises an existing behavior; break sets status=BROKEN (keeps inventory for later change; Autonomy will not run it and a broken routine stops); change a routine to reschedule or revise it, break it to stop it. Select intent may omit source; do not invent source here.'"/>
     <!-- mosfet CHANGE_INSTRUCTIONS, for the builder: the program is an
          SCXML document. -->
-    <data id="change_instructions" expr="'Author or revise the SCXML program of the stored behavior. existing_behavior is the current inventory row (source may be empty for a new create stub; status may be DRAFT or BROKEN for unfinished or retired behaviors). If existing_behavior.source is empty, write a full new program from this turn, prior_episodes, and intent: invent event contracts, guards, and effects from the observed pattern only. If source is non-empty, rewrite or patch it so it better fits this turn and prior_episodes. The output is a cognition event selection object (keys: event, target?, data?, reason?) or a list of such objects, matching the shape of prior episode and this-turn outputs. Derive input fields, guards, and selection field names from the observed pattern. At runtime, fill selection data from the live input; never hardcode identifier values copied from episode examples. A turn behavior (default) answers one matching turn. When the intent or the turn calls for something recurring or time-based (or the user asked for it), write a persistent routine instead.'"/>
+    <data id="change_instructions" expr="'Author or revise the SCXML program of the stored behavior. existing_behavior is the current inventory row (source may be empty for a new create stub; status may be DRAFT or BROKEN for unfinished or retired behaviors). If existing_behavior.source is empty, write a full new program from this turn, prior_episodes, and intent: invent event contracts, guards, and effects from the observed pattern only. If source is non-empty, rewrite or patch it so it better fits this turn and prior_episodes. The output is a cognition event selection object (keys: event, target?, data?, reason?) or a list of such objects, matching the shape of prior episode and this-turn outputs. Derive input fields, guards, and selection field names from the observed pattern. At runtime, fill selection data from the live input; never hardcode identifier values copied from episode examples. A turn behavior (default) answers one matching turn. When the intent or the turn calls for something recurring or time-based (or the user asked for it), write a persistent routine instead, scheduled by every or at delayed sends whose transitions send bot.behavior.tick with its selections: a persistent routine is checked by one forced tick, not the live turn, and needs no triggers.'"/>
     <data id="turn_contract" expr="'Write a turn behavior: its datamodel declares turn and input, which its invoker sets with param elements (input is an object with focus, focus_candidates and the stimulus); it sends nothing to its invoker and ends within one second in a top-level final state whose donedata content is the object {turn, handled, selected}: handled true with selected the list of selections, or handled false with selected an empty list. Its tests drive no input events and expect it to finish.'"/>
-    <data id="routine_contract" expr="'Or, for a recurring need, write a persistent routine: it takes no params and never finishes; each schedule is a delayed send to itself of at least 60s that, when it fires, sends bot.behavior.tick to #_parent with data {name, trigger, scheduled_at, fired_at, output}, output a non-empty list of selections, and schedules itself again.'"/>
+    <!-- mosfet's persistent routine (lifetime persistent, hsm.every and
+         hsm.at, behavior/schedule.py): an at schedule's occurrences are
+         computed in the routine's data model by next_after (reflection.js,
+         mosfet At.next_after), which routineContract() puts where
+         NEXT_AFTER stands. -->
+    <data id="routine_contract" expr="'Or, for a recurring need, write a persistent routine: it takes no params and never finishes. Each schedule is a delayed send of an event to the routine itself, armed with an id (unique in the document, so not a data id) on entry of the state that waits and cancelled on its exit, and a transition on that event back into the state that sends bot.behavior.tick to #_parent with data {name, trigger, scheduled_at, fired_at, output}, output a non-empty list of selections. every (trigger every): a fixed delay of at least 60s; scheduled_at and fired_at are both new Date().toISOString(). at (trigger at): a wall-clock time of day on chosen weekdays in one IANA time zone; declare &lt;data id=&quot;at&quot; expr=&quot;({time: \'HH:MM\', days: [\'mon\', \'tue\'], tz: \'Area/City\', rule: \'POSIX TZ rule\'})&quot;/&gt;, where days are among mon tue wed thu fri sat sun and rule is the POSIX TZ rule of tz (the last line of its zoneinfo file: EST5EDT,M3.2.0,M11.1.0 for America/New_York, CET-1CEST,M3.5.0,M10.5.0/3 for Europe/Berlin, UTC0 for UTC), and &lt;data id=&quot;next_after&quot; expr=&quot;NEXT_AFTER&quot;/&gt; exactly as given, and &lt;data id=&quot;due&quot; expr=&quot;null&quot;/&gt;; on entry assign due the value of next_after(at, Date.now()), its next occurrence {ms, iso}, before the send, whose delayexpr is (due.ms - Date.now()) + \'ms\'; scheduled_at is due.iso and fired_at new Date().toISOString(). The builder forces the first schedule\'s tick itself, so the routine\'s tests drive no input events, expect no outputs, and settle within 2000 ms.'"/>
+    <!-- mosfet check(): ROUTINE_MIN_EVERY and TURN_SILENCE_BOUND, which
+         the builder checks the document it builds against (E0009). -->
+    <data id="min_every_ms" expr="60000"/>
+    <data id="turn_after_bound_ms" expr="1000"/>
     <data id="no_schema_files" expr="'It is loaded from text, so it gets no schema files: any event:schema it carries is inline.'"/>
 
     <!-- mosfet episodes.episode_select_input and
@@ -163,8 +179,9 @@
     <data id="delete_behavior">DELETE FROM bot_behavior WHERE name = ?</data>
     <data id="insert_behavior">INSERT INTO bot_behavior (name, source, description, examples_json, lifetime, status, status_reason, status_updated_at, used_count, last_used_at, failed_count, last_failed_at) VALUES (?, ?, ?, ?, ?, 'ACTIVE', '', replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', ?, ?, ?, ?)</data>
     <data id="insert_trigger">INSERT INTO bot_behavior_trigger (behavior_name, "trigger") VALUES (?, ?)</data>
-    <!-- mosfet storage.mark_draft(reason=validation), usage kept. -->
-    <data id="draft_behavior">UPDATE bot_behavior SET status = 'DRAFT', status_reason = 'validation', status_updated_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
+    <!-- mosfet Revision._persist_draft: the rejected source,
+         storage.mark_draft(reason=validation), usage kept. -->
+    <data id="draft_behavior">UPDATE bot_behavior SET source = ?, status = 'DRAFT', status_reason = 'validation', status_updated_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
     <!-- mosfet episodes.episode_insert_input; the memory id is the next
          row count as 32 zero-padded digits, since neither engine's
          randomness is unique across invocations in Wasm. -->
@@ -391,11 +408,17 @@
           <content expr="request"/>
         </send>
       </transition>
-      <transition event="done.invoke.builder" cond="hasWrittenScxml(_event)" target="accepting">
+      <transition event="done.invoke.builder" cond="isBuilt(_event)" target="accepting">
         <assign location="written" expr="_event.data.scxml"/>
       </transition>
-      <transition event="done.invoke.builder" target="abandoning">
+      <!-- mosfet _abandon: a failed check drafts the rejected source. -->
+      <transition event="done.invoke.builder" cond="hasRejectedDraft(_event)" target="abandoning">
+        <assign location="written" expr="_event.data.scxml"/>
         <assign location="failure" expr="abandonedMessage(_event)"/>
+      </transition>
+      <!-- mosfet _fail_child: a failed change call fails with no draft. -->
+      <transition event="done.invoke.builder" target="failing">
+        <assign location="failure" expr="builderFailedMessage(_event)"/>
       </transition>
       <transition event="error.*" target="failing">
         <assign location="failure" expr="revisionFailedMessage(_event.name)"/>
@@ -436,8 +459,8 @@
       </transition>
     </state>
 
-    <!-- mosfet Revision._abandon: the row kept as DRAFT (validation), and
-         the turn fails. -->
+    <!-- mosfet Revision._abandon (_persist_draft): the row keeps the
+         rejected source as DRAFT (validation), and the turn fails. -->
     <state id="abandoning">
       <onentry>
         <assign location="statements" expr="draftBehaviorStatements()"/>
