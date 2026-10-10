@@ -311,6 +311,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "floppy-service-pgsql"
+version = "0.1.0"
+dependencies = [
+ "scxml-event-schema",
+ "scxml-types",
+ "scxml-validator-core",
+ "serde_json",
+ "wasip2",
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
 name = "floppy-service-speech"
 version = "0.1.0"
 dependencies = [

@@ -8,10 +8,9 @@
 //!   before the session starts.
 //! * `pglite_answers_over_the_socket` (ignored): against a running `PGlite`
 //!   server, `SELECT 1` returns its row, an error comes back as
-//!   `spike.pglite.failed`, and the next invocation still answers. Start
-//!   one with `npx -p @electric-sql/pglite-socket pglite-server --port
-//!   54329` and run
-//!   `FLOPPY_PGLITE_ADDRESS=127.0.0.1:54329 cargo test -p floppy-tests
+//!   `spike.pglite.failed`, and the next invocation still answers. The test
+//!   starts the server ([`support::Pglite`]): `FLOPPY_PGLITE_SERVER=<path
+//!   to pglite-socket's dist/scripts/server.js> cargo test -p floppy-tests
 //!   --test phase7_spikes -- --ignored`.
 
 #![allow(
@@ -126,9 +125,10 @@ fn ungranted_network_is_refused() {
 }
 
 #[test]
-#[ignore = "needs a running PGlite server: FLOPPY_PGLITE_ADDRESS"]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
 fn pglite_answers_over_the_socket() {
-    let address = std::env::var("FLOPPY_PGLITE_ADDRESS").expect("FLOPPY_PGLITE_ADDRESS is set");
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    let address = server.address.clone();
     let finished = run(&address, "SELECT 1", true);
     assert_eq!(
         logs(&finished.records),

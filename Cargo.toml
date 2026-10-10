@@ -9,6 +9,7 @@ members = [
     "services/decision",
     "services/sql",
     "services/speech",
+    "services/pgsql",
     "tests/spikes/pglite",
 ]
 # scxml.rs is a squashed subtree with its own workspace, lockfile, and proof
