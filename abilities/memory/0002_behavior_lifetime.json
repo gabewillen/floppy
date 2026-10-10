@@ -1,0 +1,15 @@
+{
+  "revision": "0002",
+  "down_revision": "0001",
+  "doc": "Behavior lifetime: turn behaviors versus persistent routines (mosfet 0002_behavior_lifetime.py). Existing rows take the turn server default.",
+  "upgrade": [
+    {
+      "sql": "ALTER TABLE bot_behavior ADD COLUMN lifetime TEXT DEFAULT 'turn' NOT NULL"
+    }
+  ],
+  "downgrade": [
+    {
+      "sql": "ALTER TABLE bot_behavior DROP COLUMN lifetime"
+    }
+  ]
+}

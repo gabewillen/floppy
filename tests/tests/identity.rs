@@ -59,13 +59,7 @@ fn layout(name: Option<&str>) -> PathBuf {
         &workspace().join("abilities/schemas"),
         &dir.join("abilities/schemas"),
     );
-    for name in [
-        "communication",
-        "conversation",
-        "speaking",
-        "identity",
-        "memory",
-    ] {
+    for name in ["communication", "conversation", "speaking", "identity"] {
         let name = format!("{name}.scx");
         std::fs::copy(
             workspace().join("abilities").join(&name),
@@ -73,6 +67,7 @@ fn layout(name: Option<&str>) -> PathBuf {
         )
         .expect("the ability is copyable");
     }
+    support::copy_memory(&dir.join("abilities"));
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/cognition_double.scx"),
         dir.join("abilities/cognition.scx"),

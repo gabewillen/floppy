@@ -95,13 +95,7 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
     }
     let body_path = body_dir.join("floppy.scx");
     std::fs::write(&body_path, body).expect("the body copy is writable");
-    for name in [
-        "communication",
-        "conversation",
-        "speaking",
-        "identity",
-        "memory",
-    ] {
+    for name in ["communication", "conversation", "speaking", "identity"] {
         let name = format!("{name}.scx");
         std::fs::copy(
             workspace().join("abilities").join(&name),
@@ -109,6 +103,7 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
         )
         .expect("the ability is copyable");
     }
+    support::copy_memory(&dir.join("abilities"));
     let ability = dir.join("abilities/cognition.scx");
     match cognition {
         Cognition::Double(mode) => {

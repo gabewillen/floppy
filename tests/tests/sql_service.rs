@@ -118,7 +118,7 @@ fn the_database_outlives_the_run() {
         logs(&second.records),
         [(
             "failed".to_owned(),
-            r#"sql.failed {"message":"UNIQUE constraint failed: bot_memory.memory_id"}"#.to_owned()
+            r#"sql.failed {"code":"SQLITE_CONSTRAINT","message":"UNIQUE constraint failed: bot_memory.memory_id"}"#.to_owned()
         )],
         "{}",
         second.stderr

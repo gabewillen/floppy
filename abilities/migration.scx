@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Migration ability (Alembic's command.upgrade and
+  command.downgrade, which mosfet runs on its memory database): brings a
+  database to a target revision, agnostic of the database engine. It knows
+  revisions and never SQL: the revisions' statements are plain SQL for the
+  engine the database is, and the sql service (services/sql) runs them. An
+  ability with a schema (the memory ability) invokes it before its own
+  statements.
+
+    reading -> planning -> applying -> migrated (final)
+
+  Input: the <param>s database (the database file, in the directory the run
+  grants the sql service), revisions (Alembic's script directory as data:
+  [{revision, down_revision, upgrade, downgrade}], upgrade and downgrade
+  being sql statements [{sql, parameters?}]) and target (Alembic's target:
+  'head', the default, 'base', a revision, or a relative '+N' or '-N').
+
+  reading creates Alembic's alembic_version table when the database lacks
+  it (as Alembic does) and reads its version_num (null: base). planning
+  orders the steps with <migration:plan> (a linear history walked by
+  revision and down_revision). applying runs, in one transaction, the
+  version row's guard and then every step's statements: the guard moves
+  the row from the version read to the target and must touch exactly one
+  row (the sql service's rowcount), so a migration that got there first
+  makes it fail with code rowcount (or SQLITE_BUSY while the other holds
+  the database) and nothing commits. The one that loses reads again once. At the target already, nothing is applied.
+
+  Output (to the parent): bot.ability.migration.output {from, to} (the
+  revisions before and after, null for base), or bot.ability.failed
+  {message} (mosfet's FailureData) when nothing was committed. Then the
+  session ends.
+
+  Bindings: the migration namespace package and the sql service package (a
+  run grants it its directory: scx run's dir option).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:migration="https://github.com/stateforward/floppy/namespaces/migration"
+       version="1.0" datamodel="ecmascript" name="migration" initial="reading">
+  <datamodel>
+    <!-- The invoker's <param>s. -->
+    <data id="database" expr="null"/>
+    <data id="revisions" expr="[]"/>
+    <data id="target" expr="'head'"/>
+    <!-- Alembic's version table and its read. -->
+    <data id="version_table" expr="'CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL, CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))'"/>
+    <data id="version_select" expr="'SELECT version_num FROM alembic_version'"/>
+    <!-- The version row's guards: from base, between revisions, to base. -->
+    <data id="version_insert" expr="'INSERT INTO alembic_version (version_num) SELECT ?1 WHERE NOT EXISTS (SELECT 1 FROM alembic_version)'"/>
+    <data id="version_update" expr="'UPDATE alembic_version SET version_num = ?1 WHERE version_num = ?2'"/>
+    <data id="version_delete" expr="'DELETE FROM alembic_version WHERE version_num = ?1'"/>
+    <data id="current" expr="null"/>
+    <data id="plan" expr="null"/>
+    <data id="guard" expr="null"/>
+    <data id="retried" expr="false"/>
+    <data id="failure" expr="null"/>
+  </datamodel>
+
+  <!-- Read the database's current revision. -->
+  <state id="reading">
+    <invoke id="read" type="https://github.com/stateforward/floppy/services/sql">
+      <param name="database" expr="database"/>
+      <param name="statements" expr="[{sql: version_table}, {sql: version_select}]"/>
+    </invoke>
+    <transition event="sql.result" cond="_event.invokeid === 'read'" target="planning">
+      <assign location="current" expr="_event.data.results[1].rows.length &gt; 0 ? _event.data.results[1].rows[0].values[0] : null"/>
+    </transition>
+    <transition event="sql.failed" cond="_event.invokeid === 'read'" target="failing">
+      <assign location="failure" expr="_event.data.message"/>
+    </transition>
+    <transition event="error.*" target="failing">
+      <assign location="failure" expr="'Migration could not run (' + _event.name + ')'"/>
+    </transition>
+  </state>
+
+  <!-- Order the steps from the current revision to the target. -->
+  <state id="planning">
+    <onentry>
+      <migration:plan location="plan" revisions="revisions" current="current" target="target"/>
+    </onentry>
+    <transition event="error.execution" target="failing">
+      <assign location="failure" expr="'Migration could not plan from ' + current + ' to ' + target"/>
+    </transition>
+    <transition cond="plan !== null &amp;&amp; plan.steps.length === 0" target="migrated">
+      <send event="bot.ability.migration.output" target="#_parent">
+        <param name="from" expr="plan.from"/>
+        <param name="to" expr="plan.to"/>
+      </send>
+    </transition>
+    <transition cond="plan !== null" target="applying"/>
+  </state>
+
+  <!-- Move the version row and run the steps, in one transaction. -->
+  <state id="applying">
+    <onentry>
+      <if cond="plan.from === null">
+        <assign location="guard" expr="({sql: version_insert, parameters: [plan.to], rowcount: 1})"/>
+      <elseif cond="plan.to === null"/>
+        <assign location="guard" expr="({sql: version_delete, parameters: [plan.from], rowcount: 1})"/>
+      <else/>
+        <assign location="guard" expr="({sql: version_update, parameters: [plan.to, plan.from], rowcount: 1})"/>
+      </if>
+    </onentry>
+    <invoke id="apply" type="https://github.com/stateforward/floppy/services/sql">
+      <param name="database" expr="database"/>
+      <param name="statements" expr="[guard].concat(plan.steps.flatMap(step =&gt; step.statements))"/>
+    </invoke>
+    <transition event="sql.result" cond="_event.invokeid === 'apply'" target="migrated">
+      <send event="bot.ability.migration.output" target="#_parent">
+        <param name="from" expr="plan.from"/>
+        <param name="to" expr="plan.to"/>
+      </send>
+    </transition>
+    <!-- Another migration moved the row first, or holds the database:
+         read again, once. -->
+    <transition event="sql.failed" cond="_event.invokeid === 'apply' &amp;&amp; ['rowcount', 'SQLITE_BUSY'].includes(_event.data.code) &amp;&amp; !retried" target="reading">
+      <assign location="retried" expr="true"/>
+      <assign location="plan" expr="null"/>
+    </transition>
+    <transition event="sql.failed" cond="_event.invokeid === 'apply'" target="failing">
+      <assign location="failure" expr="_event.data.message"/>
+    </transition>
+    <transition event="error.*" target="failing">
+      <assign location="failure" expr="'Migration could not run (' + _event.name + ')'"/>
+    </transition>
+  </state>
+
+  <state id="failing">
+    <onentry>
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="failure"/>
+      </send>
+    </onentry>
+    <transition target="migrated"/>
+  </state>
+
+  <final id="migrated"/>
+</scxml>

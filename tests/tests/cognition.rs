@@ -359,6 +359,7 @@ fn layout(
         &dir.join("bots/floppy/schemas"),
     );
     copy_dir(&workspace().join("abilities"), &dir.join("abilities"));
+    support::copy_memory(&dir.join("abilities"));
     copy_dir(
         &workspace().join("abilities/schemas"),
         &dir.join("abilities/schemas"),
@@ -628,11 +629,7 @@ fn transact(grant: &[String], statements: &Json) -> Json {
         attribute(&statements.to_string()),
     );
     let dir = unique_scratch("inventory");
-    std::fs::copy(
-        workspace().join("abilities/memory.scx"),
-        dir.join("memory.scx"),
-    )
-    .expect("the ability is copyable");
+    support::copy_memory(&dir);
     let path = support::write(&dir, "inventory.scx", &document);
     let mut args = grant.to_vec();
     args.extend([

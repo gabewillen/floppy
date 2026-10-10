@@ -1,6 +1,11 @@
 # SQL service: transactions and migrations in the SCXML pattern
 
-Status: proposal (2026-10-10), for the user's review before building.
+Status: sections 1, 3 and 4 built (2026-10-10, decisions D48 and D49);
+section 2 (interactive transactions) is proposed, awaiting the user's call.
+As built, the migration ability answers `bot.ability.migration.output
+{from, to}` and `bot.ability.failed {message}` (mosfet's ability events)
+rather than `<donedata>` and `migration.failed`, and the version guard's
+failure code is the sql service's `rowcount`.
 Context: `services/sql` today runs one transaction per `<invoke>` and knows
 no schema. `abilities/memory.scx` reads `PRAGMA user_version` in one
 invocation and migrates in a second, so a race between two fresh migrations

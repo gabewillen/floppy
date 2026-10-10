@@ -31,7 +31,11 @@
 //!   `?` placeholders) and optionally `parameters` (an array of its bind
 //!   values: strings, finite numbers, booleans, and nulls; an integral
 //!   number within 64 bits binds as an integer, a boolean as 1 or 0), and
-//!   nothing else (mosfet's `Statement`, `extra="forbid"`).
+//!   optionally `rowcount` (a non-negative integer: the rowcount the
+//!   statement must have, else the whole transaction fails with code
+//!   `rowcount`; a guard such as a version row that must still be the one
+//!   read), and nothing else (mosfet's `Statement`, `extra="forbid"`, with
+//!   its `StatementResult.rowcount` as the guard).
 //!
 //! Any other parameter, a parameter given twice, or a malformed value
 //! rejects the start: the `<invoke>` raises `error.execution` and the
@@ -73,9 +77,12 @@
 //!   (mosfet's `OutputData`). A cell is its SQLite value as JSON (`NULL` as
 //!   `null`, an integer or a real as a number, text as a string, a blob as
 //!   its lowercase hex text).
-//! * [`FAILED_EVENT`] `{"message": M}` (mosfet's `FailureData`): SQLite's
-//!   message, or the bound that was exceeded. Messages never carry a value
-//!   or a path.
+//! * [`FAILED_EVENT`] `{"code": C, "message": M}` (mosfet's `FailureData`
+//!   and a code a document can branch on): `code` is SQLite's primary
+//!   result-code name (`SQLITE_CONSTRAINT`, `SQLITE_BUSY`, ...), `rowcount`
+//!   (a statement's expected rowcount differed), or `bound`; `message` is
+//!   SQLite's message or the rule that was broken. Messages never carry a
+//!   bound value or a path.
 //!
 //! The invoking document describes both with `event:schema` on the
 //! transitions that take them (`abilities/schemas/`). The service reads no
@@ -170,6 +177,73 @@ pub struct Statement {
     pub sql: String,
     /// Its bind values, in order.
     pub parameters: Vec<Parameter>,
+    /// The `rowcount` it must have, else the transaction fails (a guard,
+    /// for example a version row that must still be the one read).
+    pub rowcount: Option<u64>,
+}
+
+/// Why a transaction did not commit: a closed code and a message.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Failed {
+    /// SQLite's primary result-code name (`SQLITE_CONSTRAINT`,
+    /// `SQLITE_BUSY`, ...), or `rowcount` (a statement's expected rowcount
+    /// differed), or `bound` (a bound was exceeded).
+    pub code: &'static str,
+    /// SQLite's message, or the rule that was broken.
+    pub message: String,
+}
+
+impl Failed {
+    fn bound(message: &str) -> Self {
+        Self {
+            code: "bound",
+            message: message.into(),
+        }
+    }
+}
+
+impl From<rusqlite::Error> for Failed {
+    fn from(error: rusqlite::Error) -> Self {
+        let code = match &error {
+            rusqlite::Error::SqliteFailure(failure, _) => sqlite_code(failure.code),
+            _ => "SQLITE_ERROR",
+        };
+        Self {
+            code,
+            message: error.to_string(),
+        }
+    }
+}
+
+/// SQLite's name of a primary result code.
+const fn sqlite_code(code: rusqlite::ErrorCode) -> &'static str {
+    use rusqlite::ErrorCode as Code;
+    match code {
+        Code::InternalMalfunction => "SQLITE_INTERNAL",
+        Code::PermissionDenied => "SQLITE_PERM",
+        Code::OperationAborted => "SQLITE_ABORT",
+        Code::DatabaseBusy => "SQLITE_BUSY",
+        Code::DatabaseLocked => "SQLITE_LOCKED",
+        Code::OutOfMemory => "SQLITE_NOMEM",
+        Code::ReadOnly => "SQLITE_READONLY",
+        Code::OperationInterrupted => "SQLITE_INTERRUPT",
+        Code::SystemIoFailure => "SQLITE_IOERR",
+        Code::DatabaseCorrupt => "SQLITE_CORRUPT",
+        Code::NotFound => "SQLITE_NOTFOUND",
+        Code::DiskFull => "SQLITE_FULL",
+        Code::CannotOpen => "SQLITE_CANTOPEN",
+        Code::FileLockingProtocolFailed => "SQLITE_PROTOCOL",
+        Code::SchemaChanged => "SQLITE_SCHEMA",
+        Code::TooBig => "SQLITE_TOOBIG",
+        Code::ConstraintViolation => "SQLITE_CONSTRAINT",
+        Code::TypeMismatch => "SQLITE_MISMATCH",
+        Code::ApiMisuse => "SQLITE_MISUSE",
+        Code::NoLargeFileSupport => "SQLITE_NOLFS",
+        Code::AuthorizationForStatementDenied => "SQLITE_AUTH",
+        Code::ParameterOutOfRange => "SQLITE_RANGE",
+        Code::NotADatabase => "SQLITE_NOTADB",
+        _ => "SQLITE_ERROR",
+    }
 }
 
 /// One validated invocation: the database and its transaction.
@@ -191,10 +265,11 @@ pub struct Returned {
 }
 
 impl Returned {
-    /// [`FAILED_EVENT`] with `message`, cut to a bounded length on a
-    /// character boundary.
+    /// [`FAILED_EVENT`] with the failure's code and its message, cut to a
+    /// bounded length on a character boundary.
     #[must_use]
-    pub fn failed(message: &str) -> Self {
+    pub fn failed(failed: &Failed) -> Self {
+        let message = &failed.message;
         let mut end = message.len().min(MAX_MESSAGE_BYTES);
         while !message.is_char_boundary(end) {
             end -= 1;
@@ -202,7 +277,7 @@ impl Returned {
         let message = message.get(..end).unwrap_or_default();
         Self {
             name: FAILED_EVENT,
-            data: canonical_json(&serde_json::json!({ "message": message })),
+            data: canonical_json(&serde_json::json!({ "code": failed.code, "message": message })),
         }
     }
 }
@@ -268,8 +343,11 @@ fn statement_from_json(item: &Json) -> Result<Statement, &'static str> {
     let Json::Object(fields) = item else {
         return Err("sql statement must be an object with sql and parameters");
     };
-    if fields.keys().any(|key| key != "sql" && key != "parameters") {
-        return Err("sql statement takes only sql and parameters");
+    if fields
+        .keys()
+        .any(|key| !matches!(key.as_str(), "sql" | "parameters" | "rowcount"))
+    {
+        return Err("sql statement takes only sql, parameters and rowcount");
     }
     let sql = match fields.get("sql") {
         Some(Json::String(sql)) if !sql.trim().is_empty() => sql.clone(),
@@ -291,7 +369,36 @@ fn statement_from_json(item: &Json) -> Result<Statement, &'static str> {
         }
         Some(_) => return Err("sql statement parameters must be an array"),
     };
-    Ok(Statement { sql, parameters })
+    let rowcount = match fields.get("rowcount") {
+        None | Some(Json::Null) => None,
+        Some(Json::Number(number)) => Some(
+            number
+                .as_u64()
+                .or_else(|| {
+                    number
+                        .as_f64()
+                        .filter(|real| {
+                            real.fract() == 0.0 && (0.0..9.007_199_254_740_992e15).contains(real)
+                        })
+                        .map(|real| {
+                            #[expect(
+                                clippy::cast_possible_truncation,
+                                clippy::cast_sign_loss,
+                                reason = "integral, non-negative and within 2^53, so exact"
+                            )]
+                            let whole = real as u64;
+                            whole
+                        })
+                })
+                .ok_or("sql statement rowcount must be a non-negative integer")?,
+        ),
+        Some(_) => return Err("sql statement rowcount must be a non-negative integer"),
+    };
+    Ok(Statement {
+        sql,
+        parameters,
+        rowcount,
+    })
 }
 
 fn parameter_from_json(value: &Json) -> Result<Parameter, &'static str> {
@@ -328,11 +435,9 @@ fn parameter_from_json(value: &Json) -> Result<Parameter, &'static str> {
 ///
 /// # Errors
 ///
-/// SQLite's message, or the bound or rule that was broken.
-pub fn apply(connection: &mut Connection, statements: &[Statement]) -> Result<Json, String> {
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|error| error.to_string())?;
+/// SQLite's code and message, or the bound or rule that was broken.
+pub fn apply(connection: &mut Connection, statements: &[Statement]) -> Result<Json, Failed> {
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     // A statement may not end or widen the one transaction: SQLite refuses
     // to prepare `BEGIN`, `COMMIT`, `ROLLBACK`, `ATTACH`, and `DETACH`
     // (savepoints nest inside it and stay allowed). The authorizer is
@@ -346,18 +451,16 @@ pub fn apply(connection: &mut Connection, statements: &[Statement]) -> Result<Js
     let output = execute(&transaction, statements);
     transaction.authorizer(None::<fn(AuthContext<'_>) -> Authorization>);
     let output = output?;
-    transaction.commit().map_err(|error| error.to_string())?;
+    transaction.commit()?;
     Ok(output)
 }
 
 /// Runs each statement in the open transaction and builds the results.
-fn execute(connection: &Connection, statements: &[Statement]) -> Result<Json, String> {
+fn execute(connection: &Connection, statements: &[Statement]) -> Result<Json, Failed> {
     let mut results = Vec::with_capacity(statements.len());
     let mut rows_returned = 0_usize;
     for statement in statements {
-        let mut prepared = connection
-            .prepare(&statement.sql)
-            .map_err(|error| error.to_string())?;
+        let mut prepared = connection.prepare(&statement.sql)?;
         let parameters = statement
             .parameters
             .iter()
@@ -367,60 +470,73 @@ fn execute(connection: &Connection, statements: &[Statement]) -> Result<Json, St
                 Parameter::Real(value) => Cell::Real(*value),
                 Parameter::Text(value) => Cell::Text(value.clone()),
             });
-        let result = if prepared.column_count() > 0 {
+        let (rowcount, rows) = if prepared.column_count() > 0 {
             let columns: Vec<Json> = prepared
                 .column_names()
                 .into_iter()
                 .map(|name| Json::String(name.to_owned()))
                 .collect();
             let width = columns.len();
-            let mut rows = prepared
-                .query(rusqlite::params_from_iter(parameters))
-                .map_err(|error| error.to_string())?;
+            let mut rows = prepared.query(rusqlite::params_from_iter(parameters))?;
             let mut out = Vec::new();
-            while let Some(row) = rows.next().map_err(|error| error.to_string())? {
+            while let Some(row) = rows.next()? {
                 rows_returned += 1;
                 if exceeds_wasm_bound(rows_returned, MAX_ROWS) {
-                    return Err("the sql transaction returns more rows than its bound".into());
+                    return Err(Failed::bound(
+                        "the sql transaction returns more rows than its bound",
+                    ));
                 }
                 let values = (0..width)
-                    .map(|index| {
-                        row.get_ref(index)
-                            .map_err(|error| error.to_string())
-                            .and_then(cell)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .map(|index| cell(row.get_ref(index)?))
+                    .collect::<Result<Vec<_>, Failed>>()?;
                 out.push(serde_json::json!({ "columns": columns, "values": values }));
             }
-            serde_json::json!({ "rowcount": out.len(), "rows": out })
+            (out.len(), out)
         } else {
-            let changed = prepared
-                .execute(rusqlite::params_from_iter(parameters))
-                .map_err(|error| error.to_string())?;
-            serde_json::json!({ "rowcount": changed, "rows": [] })
+            (
+                prepared.execute(rusqlite::params_from_iter(parameters))?,
+                Vec::new(),
+            )
         };
-        results.push(result);
+        if statement
+            .rowcount
+            .is_some_and(|expected| u64::try_from(rowcount).ok() != Some(expected))
+        {
+            return Err(Failed {
+                code: "rowcount",
+                message: "a statement's rowcount is not the one it expects".into(),
+            });
+        }
+        results.push(serde_json::json!({ "rowcount": rowcount, "rows": rows }));
     }
     let mut output = Map::new();
     output.insert("results".into(), Json::Array(results));
     let output = Json::Object(output);
     if exceeds_wasm_bound(canonical_json(&output).len(), MAX_RESULT_BYTES) {
-        return Err("the sql transaction's result exceeds its bound".into());
+        return Err(Failed::bound(
+            "the sql transaction's result exceeds its bound",
+        ));
     }
     Ok(output)
 }
 
 /// One cell as JSON.
-fn cell(value: ValueRef<'_>) -> Result<Json, String> {
+fn cell(value: ValueRef<'_>) -> Result<Json, Failed> {
     Ok(match value {
         ValueRef::Null => Json::Null,
         ValueRef::Integer(value) => Json::from(value),
         ValueRef::Real(value) => serde_json::Number::from_f64(value)
             .map(Json::Number)
-            .ok_or("an sql cell holds a non-finite real")?,
+            .ok_or_else(|| Failed {
+                code: "SQLITE_MISMATCH",
+                message: "an sql cell holds a non-finite real".into(),
+            })?,
         ValueRef::Text(bytes) => Json::String(
             std::str::from_utf8(bytes)
-                .map_err(|_| "an sql cell holds text that is not UTF-8")?
+                .map_err(|_| Failed {
+                    code: "SQLITE_MISMATCH",
+                    message: "an sql cell holds text that is not UTF-8".into(),
+                })?
                 .to_owned(),
         ),
         ValueRef::Blob(bytes) => {
@@ -446,14 +562,14 @@ pub fn run(transaction: &Transaction) -> Returned {
     );
     let mut connection = match opened {
         Ok(connection) => connection,
-        Err(error) => return Returned::failed(&error.to_string()),
+        Err(error) => return Returned::failed(&error.into()),
     };
     match apply(&mut connection, &transaction.statements) {
         Ok(output) => Returned {
             name: RESULT_EVENT,
             data: canonical_json(&output),
         },
-        Err(message) => Returned::failed(&message),
+        Err(failed) => Returned::failed(&failed),
     }
 }
 

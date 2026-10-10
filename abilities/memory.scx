@@ -15,65 +15,46 @@
   grants the sql service) and statements (mosfet's InputData.statements:
   [{sql, parameters?}], at least one).
 
-  migrating reads PRAGMA user_version. applying runs, in one transaction,
-  the migrations the database lacks (mosfet's Alembic revisions 0001 and
-  0002 as user_version 1 and 2: the same tables, columns, defaults and
-  indexes, each recorded by its user_version) and then the statements. A
-  database whose version is newer than 2 is refused untouched. Two
-  invocations that migrate one fresh database at once are serialized by
-  SQLite; the one that loses retries once from migrating.
+  migrating invokes the migration ability (abilities/migration.scx, Alembic's
+  upgrade head) with mosfet's revisions 0001 and 0002 (abilities/memory/,
+  the same tables, columns, defaults and indexes as mosfet's Alembic
+  scripts), so the database carries Alembic's alembic_version as mosfet's
+  does and a mosfet database is used in place. A database at a revision the
+  history does not hold is refused untouched. applying then runs the
+  statements in one transaction.
 
   Output (to the parent, as mosfet's Memory answers): bot.ability.memory.output
-  {results} (mosfet's OutputData: one result per statement, in order,
-  without the migrations'), or bot.ability.failed {message} (mosfet's
-  FailureData) when nothing was committed. Then the session ends.
+  {results} (mosfet's OutputData: one result per statement, in order), or
+  bot.ability.failed {message} (mosfet's FailureData) when nothing was
+  committed. Then the session ends.
 
-  Bindings: the sql service package (a run grants it its directory: scx
+  Bindings: the migration namespace package (through the migration
+  ability) and the sql service package (a run grants it its directory: scx
   run's dir option).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="memory" initial="migrating">
   <datamodel>
     <!-- The invoker's <param>s. -->
     <data id="database" expr="null"/>
     <data id="statements" expr="[]"/>
-    <!-- The schema: the head version and each revision's statements. -->
-    <data id="head" expr="2"/>
-    <data id="version" expr="0"/>
-    <data id="revision_0001" expr="[
-      'CREATE TABLE IF NOT EXISTS bot_memory (memory_id TEXT NOT NULL, scope TEXT DEFAULT \'memory\' NOT NULL, context_ref TEXT, subject_ref TEXT, kind TEXT, sensitivity TEXT, retention TEXT, content TEXT NOT NULL, content_format TEXT DEFAULT \'text/plain\' NOT NULL, query_tags TEXT, metadata_json TEXT DEFAULT \'{}\' NOT NULL, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, PRIMARY KEY (memory_id))',
-      'CREATE INDEX IF NOT EXISTS bot_memory_context_idx ON bot_memory (context_ref, subject_ref)',
-      'CREATE INDEX IF NOT EXISTS bot_memory_query_idx ON bot_memory (query_tags)',
-      'CREATE INDEX IF NOT EXISTS bot_memory_scope_idx ON bot_memory (scope, created_at)',
-      'CREATE TABLE IF NOT EXISTS bot_behavior (name TEXT NOT NULL, source TEXT NOT NULL, description TEXT DEFAULT \'\' NOT NULL, examples_json TEXT DEFAULT \'[]\' NOT NULL, status TEXT DEFAULT \'ACTIVE\' NOT NULL, status_reason TEXT DEFAULT \'\' NOT NULL, status_updated_at TEXT DEFAULT \'\' NOT NULL, used_count TEXT DEFAULT \'0\' NOT NULL, last_used_at TEXT DEFAULT \'\' NOT NULL, failed_count TEXT DEFAULT \'0\' NOT NULL, last_failed_at TEXT DEFAULT \'\' NOT NULL, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, updated_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, PRIMARY KEY (name))',
-      'CREATE TABLE IF NOT EXISTS bot_behavior_trigger (behavior_name TEXT NOT NULL, &quot;trigger&quot; TEXT NOT NULL, PRIMARY KEY (behavior_name, &quot;trigger&quot;), FOREIGN KEY(behavior_name) REFERENCES bot_behavior (name) ON DELETE CASCADE)',
-      'CREATE INDEX IF NOT EXISTS bot_behavior_trigger_event_idx ON bot_behavior_trigger (&quot;trigger&quot;)',
-      'CREATE TABLE IF NOT EXISTS bot_stm_memory (stm_id TEXT NOT NULL, stimulus_name TEXT NOT NULL, payload_json TEXT DEFAULT \'{}\' NOT NULL, event_id TEXT, source TEXT, target TEXT, created_at TEXT NOT NULL, last_accessed_at TEXT, PRIMARY KEY (stm_id))',
-      'CREATE INDEX IF NOT EXISTS bot_stm_memory_recent_idx ON bot_stm_memory (stimulus_name, created_at)',
-      'CREATE INDEX IF NOT EXISTS bot_stm_memory_created_idx ON bot_stm_memory (created_at)',
-      'PRAGMA user_version = 1'
-    ]"/>
-    <data id="revision_0002" expr="[
-      'ALTER TABLE bot_behavior ADD COLUMN lifetime TEXT DEFAULT \'turn\' NOT NULL',
-      'PRAGMA user_version = 2'
-    ]"/>
-    <data id="migrations" expr="[]"/>
-    <data id="retried" expr="false"/>
+    <!-- The schema: mosfet's Alembic revisions, one file each. -->
+    <data id="revision_0001" src="memory/0001_initial_memory_schema.json"/>
+    <data id="revision_0002" src="memory/0002_behavior_lifetime.json"/>
     <data id="failure" expr="null"/>
   </datamodel>
 
-  <!-- Read the database's schema version. -->
+  <!-- Bring the database to the head revision. -->
   <state id="migrating">
-    <invoke id="reading" type="https://github.com/stateforward/floppy/services/sql">
+    <invoke id="migration" type="scxml" src="migration.scx">
       <param name="database" expr="database"/>
-      <param name="statements" expr="[{sql: 'PRAGMA user_version'}]"/>
+      <param name="revisions" expr="[revision_0001, revision_0002]"/>
     </invoke>
-    <transition event="sql.result" cond="_event.invokeid === 'reading'" target="applying">
-      <assign location="version" expr="_event.data.results[0].rows[0].values[0]"/>
-      <assign location="migrations" expr="version &lt; 1 ? revision_0001.concat(revision_0002) : version &lt; 2 ? revision_0002 : []"/>
-      <assign location="migrations" expr="migrations.map(sql =&gt; ({sql: sql}))"/>
-    </transition>
-    <transition event="sql.failed" cond="_event.invokeid === 'reading'" target="failing">
+    <transition event="bot.ability.migration.output" event:schema="schemas/bot.ability.migration.output.json"
+                cond="_event.invokeid === 'migration'" target="applying"/>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                cond="_event.invokeid === 'migration'" target="failing">
       <assign location="failure" expr="_event.data.message"/>
     </transition>
     <transition event="error.*" target="failing">
@@ -81,23 +62,16 @@
     </transition>
   </state>
 
-  <!-- Migrate what is missing and apply the statements, in one
-       transaction. -->
+  <!-- Apply the statements, in one transaction. -->
   <state id="applying">
-    <transition cond="version &gt; head || version &lt; 0" target="failing">
-      <assign location="failure" expr="'the memory database\'s schema version is not one this ability knows'"/>
-    </transition>
     <invoke id="apply" type="https://github.com/stateforward/floppy/services/sql">
       <param name="database" expr="database"/>
-      <param name="statements" expr="migrations.concat(statements)"/>
+      <param name="statements" expr="statements"/>
     </invoke>
     <transition event="sql.result" cond="_event.invokeid === 'apply'" target="applied">
       <send event="bot.ability.memory.output" target="#_parent">
-        <param name="results" expr="_event.data.results.slice(migrations.length)"/>
+        <param name="results" expr="_event.data.results"/>
       </send>
-    </transition>
-    <transition event="sql.failed" cond="_event.invokeid === 'apply' &amp;&amp; migrations.length &gt; 0 &amp;&amp; !retried" target="migrating">
-      <assign location="retried" expr="true"/>
     </transition>
     <transition event="sql.failed" cond="_event.invokeid === 'apply'" target="failing">
       <assign location="failure" expr="_event.data.message"/>

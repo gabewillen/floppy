@@ -53,7 +53,7 @@ expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 # pinned wasi-sdk release, checked by its VERSION file.
 expected_wasi_sdk='25.0'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
-namespace_components='floppy_decision floppy_bot floppy_conversation'
+namespace_components='floppy_decision floppy_bot floppy_conversation floppy_migration'
 service_components='floppy_service_generate floppy_service_decision floppy_service_sql'
 # Package validator components (stateforward:scxml-validator/package-validator),
 # each named by its package's manifest (`validator-artifact`).
@@ -118,7 +118,10 @@ expected_imports() {
         # <conversation:commit>: evaluates its expressions and assigns the
         # committed message through the data model; no session snapshot,
         # execution-host, or outbound-http.
-        floppy_conversation)
+        # <migration:plan>: evaluates its expressions and assigns the plan
+        # through the data model; no session snapshot, execution-host, or
+        # outbound-http.
+        floppy_migration|floppy_conversation)
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0' \

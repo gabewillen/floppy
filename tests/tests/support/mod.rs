@@ -448,6 +448,35 @@ pub fn memory_grant() -> Vec<String> {
     ]
 }
 
+/// Copies the memory ability into `abilities` (a layout's `abilities/`):
+/// `memory.scx`, the migration ability it invokes (`migration.scx`), its
+/// revisions (`memory/*.json`), and every ability schema (`schemas/`).
+pub fn copy_memory(abilities: &Path) {
+    for (from, to) in [
+        (workspace().join("abilities"), abilities.to_path_buf()),
+        (
+            workspace().join("abilities/memory"),
+            abilities.join("memory"),
+        ),
+        (
+            workspace().join("abilities/schemas"),
+            abilities.join("schemas"),
+        ),
+    ] {
+        std::fs::create_dir_all(&to).expect("the directory is creatable");
+        for entry in std::fs::read_dir(&from).expect("the directory is readable") {
+            let path = entry.expect("a directory entry").path();
+            let name = path.file_name().expect("a file name");
+            let wanted = from != workspace().join("abilities")
+                || name == "memory.scx"
+                || name == "migration.scx";
+            if path.is_file() && wanted {
+                std::fs::copy(&path, to.join(name)).expect("the file is copyable");
+            }
+        }
+    }
+}
+
 /// Whether the `.scx` document at `path`, or a document it loads by a
 /// literal relative `<invoke src>` (recursively), names the sql service's
 /// URI. Anything that is not a readable `.scx` file names none.

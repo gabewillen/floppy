@@ -60,7 +60,7 @@ fn the_parameters_are_the_database_and_mosfets_statements() {
             "statements",
             array(&serde_json::json!([
                 {"sql": "SELECT ?, ?, ?, ?, ?, ?", "parameters": ["a", 1, 2.5, true, null, 3.0]},
-                {"sql": "SELECT 1"}
+                {"sql": "SELECT 1", "rowcount": 1}
             ])),
         ),
     ])
@@ -79,10 +79,12 @@ fn the_parameters_are_the_database_and_mosfets_statements() {
                     Parameter::Null,
                     Parameter::Integer(3),
                 ],
+                rowcount: None,
             },
             Statement {
                 sql: "SELECT 1".into(),
                 parameters: vec![],
+                rowcount: Some(1),
             },
         ]
     );
@@ -130,7 +132,7 @@ fn malformed_parameters_reject_the_start() {
                     array(&serde_json::json!([{"sql": "SELECT 1", "extra": 1}])),
                 ),
             ],
-            "sql statement takes only sql and parameters",
+            "sql statement takes only sql, parameters and rowcount",
         ),
         (
             vec![
@@ -209,7 +211,7 @@ fn any_failing_statement_rolls_back_the_whole_transaction() {
     assert_eq!(failed.name, FAILED_EVENT);
     assert_eq!(
         data(&failed),
-        serde_json::json!({"message": "UNIQUE constraint failed: bot_memory.memory_id"})
+        serde_json::json!({"code": "SQLITE_CONSTRAINT", "message": "UNIQUE constraint failed: bot_memory.memory_id"})
     );
     let counted = run(&transaction(
         &database,
@@ -296,11 +298,38 @@ fn defaults_fill_what_a_statement_leaves_out() {
 #[test]
 fn a_failure_message_is_bounded_on_a_character_boundary() {
     let long = "é".repeat(MAX_MESSAGE_BYTES);
-    let failed = Returned::failed(&long);
+    let failed = Returned::failed(&Failed {
+        code: "bound",
+        message: long,
+    });
     let message = data(&failed)["message"]
         .as_str()
         .expect("a message")
         .to_owned();
     assert!(message.len() <= MAX_MESSAGE_BYTES);
     assert!(message.chars().all(|character| character == 'é'));
+}
+
+#[test]
+fn a_statement_whose_rowcount_differs_fails_the_transaction() {
+    let database = created("guard");
+    let failed = run(&transaction(
+        &database,
+        &serde_json::json!([
+            {"sql": INSERT_NAME, "parameters": ["n1", "{}", "t1"]},
+            {"sql": "UPDATE bot_memory SET content = 'x' WHERE memory_id = 'nope'", "rowcount": 1}
+        ]),
+    ));
+    assert_eq!(
+        data(&failed),
+        serde_json::json!({"code": "rowcount", "message": "a statement's rowcount is not the one it expects"})
+    );
+    let guarded = run(&transaction(
+        &database,
+        &serde_json::json!([
+            {"sql": INSERT_NAME, "parameters": ["n1", "{}", "t1"], "rowcount": 1},
+            {"sql": "SELECT count(*) FROM bot_memory", "rowcount": 1}
+        ]),
+    ));
+    assert_eq!(guarded.name, RESULT_EVENT, "{}", guarded.data);
 }
