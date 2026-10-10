@@ -71,14 +71,20 @@ test('validator reports equal the scx validate snapshots byte for byte', async (
       if (invokedDocuments.some((document) => document.src === src)) continue;
       invokedDocuments.push({ src, text: await readFile(join(ui, src), 'utf8') });
     }
-    const { report } = await validator.validate(source, { sourceName: `tests/ui/${name}.scx`, eventSchemas, invokedDocuments });
+    // The files under tests/ui/scripts/ its `<script src>` elements name.
+    const scripts = [];
+    for (const [, src] of source.matchAll(/src="(scripts\/[^"]*)"/g)) {
+      if (scripts.some((script) => script.src === src)) continue;
+      scripts.push({ src, text: await readFile(join(ui, src), 'utf8') });
+    }
+    const { report } = await validator.validate(source, { sourceName: `tests/ui/${name}.scx`, eventSchemas, invokedDocuments, scripts });
     const actual = decode(report).trimEnd();
     if (actual !== expected) mismatches.push(name);
     compared.push(name);
   }
   assert.deepEqual(mismatches, []);
   assert.ok(compared.length > 20, `compared ${compared.length} cases`);
-  for (const required of ['scxml038-expression-syntax-error', 'scxml038-xpath-mixed-habits', 'scxml074-log-side-effects', 'event011-incompatible-invoked-event-data']) {
+  for (const required of ['scxml038-expression-syntax-error', 'scxml038-xpath-mixed-habits', 'scxml074-log-side-effects', 'event011-incompatible-invoked-event-data', 'scxml074-script-src-side-effect', 'valid-lint019-script-src-read']) {
     assert.ok(compared.includes(required), required);
   }
 });
@@ -113,6 +119,8 @@ test('malformed arguments are invalid-argument and the instance stays usable', a
     ['<scxml/>', { eventSchemas: [{ uri: 'x' }] }],
     ['<scxml/>', { invokedDocuments: [{ src: 'x' }] }],
     ['<scxml/>', { invokedDocuments: [{ src: 'x', text: '', eventSchemas: [{ uri: 'x' }] }] }],
+    ['<scxml/>', { scripts: [{ src: 'x' }] }],
+    ['<scxml/>', { scripts: {} }],
   ]) {
     await assert.rejects(ecmascript.validate(source, options), (error) => error instanceof ScxmlHostError && error.code === 'invalid-argument');
   }

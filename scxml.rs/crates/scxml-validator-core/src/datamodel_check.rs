@@ -119,6 +119,7 @@ pub enum ExpressionCheck {
 
 pub use effects::{
     EffectCause, EffectCheck, EffectFinding, EffectFragment, EffectKind, EffectRole, EffectSpan,
+    ScriptResources,
 };
 pub use scxml_types::ExternalScripts;
 
@@ -891,6 +892,21 @@ pub fn validate_expressions_with(
     document: &Document,
     checkers: &[&dyn ExpressionSyntaxChecker],
 ) -> Report {
+    validate_expressions_with_scripts(document, checkers, &ScriptResources::new())
+}
+
+/// [`validate_expressions_with`], with the text of the `<script src>` files
+/// the caller read, keyed by the `src` value as authored with its XML white
+/// space collapsed: the side-effect analysis reads the functions each one
+/// declares, so a condition or `<log expr>` that calls one is judged by
+/// its body. A `<script src>` with no entry stays unread (`LINT019` on the
+/// calls it may define or replace). The validator itself performs no I/O.
+#[must_use]
+pub fn validate_expressions_with_scripts(
+    document: &Document,
+    checkers: &[&dyn ExpressionSyntaxChecker],
+    scripts: &ScriptResources,
+) -> Report {
     let document = &*crate::schema_values::schema_values(document);
     let mut report = Report::new();
     let mut fragments = 0_usize;
@@ -990,7 +1006,7 @@ pub fn validate_expressions_with(
                 }
             })
             .collect();
-        effects::report_effects(document, *checker, machine, &parsed, &mut report);
+        effects::report_effects(document, *checker, machine, &parsed, scripts, &mut report);
     }
     report.sort();
     report
