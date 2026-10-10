@@ -104,13 +104,42 @@ fn env_names(text: &str) -> BTreeSet<String> {
     names
 }
 
+/// The documents whose `model` is the speech service's (an audio or voice
+/// model, mosfet's speech decoder, speech encoder and voice classifiers'
+/// own), not the generation model: each `model` `<data>` is `null` (the
+/// service's request names none of floppy's) or a model README.md's
+/// "Speech and voice models" names.
+const SPEECH_DOCUMENTS: [&str; 6] = [
+    "abilities/speaking/speaking.scx",
+    "abilities/vocal/vocal.scx",
+    "abilities/speech_decoding/speech_decoding.scx",
+    "abilities/voice_detection/voice_detection.scx",
+    "abilities/voice_diarization/voice_diarization.scx",
+    "abilities/voice_identification/voice_identification.scx",
+];
+
 #[test]
 fn every_model_data_is_the_default_model_and_the_name_appears_nowhere_else() {
     let quoted = format!("'{}'", support::DEFAULT_MODEL);
+    let readme = read(Path::new("README.md"));
     let mut models = 0;
     for path in documents() {
         let text = read(&path);
         let data = data(&text);
+        if SPEECH_DOCUMENTS
+            .iter()
+            .any(|document| path == Path::new(document))
+        {
+            let model = data
+                .get("model")
+                .unwrap_or_else(|| panic!("{}: a model <data>", path.display()));
+            assert!(
+                model == "null" || readme.contains(&format!("`{}`", model.trim_matches('\''))),
+                "{}: the speech model {model} is README.md's",
+                path.display()
+            );
+            continue;
+        }
         if let Some(model) = data.get("model") {
             assert_eq!(model, &quoted, "{}: the model <data>", path.display());
             models += 1;

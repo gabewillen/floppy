@@ -64,12 +64,14 @@ fn layout(name: Option<&str>) -> PathBuf {
     ] {
         support::copy_ability(name, &dir.join("abilities"));
     }
+    support::copy_listening(&dir.join("abilities"));
     std::fs::create_dir_all(dir.join("abilities/cognition")).expect("creatable");
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/cognition_double.scx"),
         dir.join("abilities/cognition/cognition.scx"),
     )
     .expect("the double is copyable");
+    support::double_speech(&dir.join("abilities"), "'encode'");
     if let Some(name) = name {
         let path = dir.join("abilities/identity/identity.scx");
         let text = std::fs::read_to_string(&path).expect("the identity is readable");

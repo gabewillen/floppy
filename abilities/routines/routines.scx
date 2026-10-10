@@ -98,11 +98,13 @@
       <state id="running">
         <transition cond="hasRunningTick()">
           <send event="bot.behavior.tick" target="#_parent">
-            <content expr="ticks.shift()"/>
+            <content expr="ticks[0]"/>
           </send>
+          <assign location="ticks" expr="ticks.slice(1)"/>
         </transition>
         <transition cond="ticks.length &gt; 0">
-          <log label="routines.stale" expr="ticks.shift().name"/>
+          <log label="routines.stale" expr="ticks[0].name"/>
+          <assign location="ticks" expr="ticks.slice(1)"/>
         </transition>
       </state>
     </state>

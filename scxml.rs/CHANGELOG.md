@@ -129,6 +129,20 @@ hard cutover.
   own schema files; a remote `src` is not judged, nothing is fetched), and
   `snapshot run` and `run` pass the documents they loaded before the
   session.
+- The side-effect analysis (`SCXML074`, `LINT020`, `LINT019`) reads a
+  `<script src>` file the caller supplies: the functions it declares are
+  judged by their bodies like an inline `<script>`'s, so a `cond` or
+  `<log expr>` calling a pure one is clean, an effect in one is labeled at
+  the `src` value (`(in `<src>`)`), and only a `<script src>` with no file
+  stays unread. The caller reads the files:
+  `Validator::with_script_resources` and
+  `scxml_validator_core::ScriptResources` (text keyed by `src` as authored,
+  its XML white space collapsed), `validate_expressions_with_scripts`, the
+  validator WIT `validation-request` field `scripts` (`script-resource`),
+  and the browser `validate` option `scripts`. `scx validate`, `compile`,
+  `snapshot run`, and `run` read the `file:` scripts a document's
+  `<script src>` elements name (a remote script stays unread; nothing is
+  fetched for validation).
 - Browser host parity, slice 1: `createValidator` runs the bundled validator
   component (the `scx validate` report, byte for byte); the validator and
   compiler take the page's extension packages and `event:schema` files
@@ -599,6 +613,14 @@ hard cutover.
   (`EXTENSION_PACKAGE_FORMAT`).
 
 ### Changed
+
+- The Wasmtime session host compiles each document its embedder serves
+  (an `<invoke src>` document) once per run, on a fuel budget of its own
+  (`DEFAULT_FUEL`), instead of on the budget of the command that first
+  invokes it: a tree of invoked documents no longer has to compile within
+  one command's fuel, and a document invoked again is not compiled again.
+  Inline `<content>`, which an expression may write, is still compiled on
+  the invoking command's budget each time.
 
 - Attributes and elements from other namespaces are accepted on and in
   SCXML elements, as SCXML 1.0 and its schema allow, instead of rejected
@@ -1087,6 +1109,12 @@ hard cutover.
   `<foreach>` collection is `illegal`.
 
 ### Fixed
+
+- A live session's send whose processing trapped (out of fuel, for one)
+  fails with that trap: the host asked the trapped root's status to
+  classify the failure, and Wasmtime refuses to enter a trapped instance,
+  so the send failed with "cannot enter component instance" and hid the
+  cause.
 
 - A session snapshot an extension component reads
   (`session-snapshot-host.snapshot`) during the entry content of a compound

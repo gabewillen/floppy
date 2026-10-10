@@ -73,7 +73,7 @@ const FLOPPY_NAME: &str = "[floppy name]";
 const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// The body's events (`bots/floppy/schemas/`).
-const BODY_EVENTS: [&str; 14] = [
+const BODY_EVENTS: [&str; 13] = [
     "bot.activate",
     "bot.deactivate",
     "bot.input",
@@ -86,12 +86,11 @@ const BODY_EVENTS: [&str; 14] = [
     "bot.processing.failed",
     "bot.processing.timed_out",
     "bot.processing.cancel.timed_out",
-    "environment.sound",
     "environment.visual",
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 56] = [
+const ABILITY_EVENTS: [&str; 67] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -122,6 +121,11 @@ const ABILITY_EVENTS: [&str; 56] = [
     "bot.ability.speaking.input",
     "bot.ability.speaking.output",
     "bot.ability.speaking.apply.failed",
+    "bot.ability.speaking.efference",
+    "bot.ability.vocal.speech.encoding.input",
+    "bot.ability.vocal.speech.encoding.output",
+    // Speaking's playout, which the body puts into the environment.
+    "environment.sound",
     "bot.ability.identity.adopt",
     "bot.ability.identity.adopted",
     "bot.ability.identity.adopt.failed",
@@ -138,6 +142,17 @@ const ABILITY_EVENTS: [&str; 56] = [
     // Phase 3: the memory service's committed transaction (mosfet's
     // Memory.output_event), described where the abilities take it.
     "bot.ability.memory.output",
+    // The migration ability's reached revision (Alembic's upgrade or
+    // downgrade), described where the memory ability takes it.
+    "bot.ability.migration.output",
+    // Phase 6: listening (mosfet's Listening, Sensitivity and
+    // Interpretation) and the efference copy it takes from speaking.
+    "bot.ability.listening.speech.output",
+    "bot.ability.listening.failed",
+    "bot.ability.listening.stage.failed",
+    "bot.ability.listening.sensitivity.score",
+    "bot.ability.listening.sensitivity.output",
+    "bot.ability.listening.sensitivity.failed",
     // Phase 6: mosfet's VisualClassification and Reading.
     "bot.ability.vision.classification.input",
     "bot.ability.vision.classification.output",
@@ -192,18 +207,21 @@ const RUNTIME_ONLY: [&str; 8] = [
 const NAMES_FILE: &str = "mosfet-event-names.json";
 
 /// The ability events the body takes, twinned into `bots/floppy/schemas/`.
-const BODY_TWINS: [&str; 11] = [
+const BODY_TWINS: [&str; 14] = [
     "bot.reboot",
     "bot.ability.offers",
     "bot.ability.communication.input",
     "bot.ability.communication.failed",
     "bot.ability.speaking.output",
+    "bot.ability.speaking.efference",
+    "environment.sound",
     "bot.ability.cognition.output",
     "bot.ability.cognition.cancelled",
     "bot.ability.processing.cancelled",
     "bot.ability.failed",
     "bot.ability.cognition.input",
     "bot.ability.conversation.failed",
+    "bot.ability.listening.failed",
 ];
 
 /// The longest `cond` or (outside `<data>`) `expr` a phase 4 document may
@@ -427,8 +445,11 @@ fn every_event_name_is_mosfets_or_a_marked_floppy_name() {
     let floppy = floppy_names(&schemas);
     assert_eq!(
         floppy,
-        BTreeSet::from(["bot.ability.offers".to_owned()]),
-        "the one floppy-only phase 4 event"
+        BTreeSet::from([
+            "bot.ability.migration.output".to_owned(),
+            "bot.ability.offers".to_owned()
+        ]),
+        "the floppy-only events: phase 4's offers and the migration ability's output"
     );
     for event in schemas.keys() {
         assert!(
@@ -900,11 +921,13 @@ fn known_names() -> BTreeSet<String> {
     known
 }
 
-/// `scx validate` reports nothing but `LINT019` for the document's own
-/// `<script src>` functions ([`support::validates_but_for_script_src`]).
 fn validates_clean(path: &Path) -> Result<(), String> {
     let validated = output(&["validate".to_owned(), path.display().to_string()]);
-    if validated.status.success() && support::validates_but_for_script_src(&validated.stderr) {
+    if validated.status.success()
+        && validated
+            .stderr
+            .contains("diagnostic summary: 0 error(s), 0 warning(s), 0 note(s)")
+    {
         Ok(())
     } else {
         Err(validated.stderr)

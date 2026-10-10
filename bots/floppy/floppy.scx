@@ -14,8 +14,9 @@
 
   Abilities: live holds <invoke id="cognition">, <invoke
   id="communication"> (abilities/communication/communication.scx, which holds the
-  conversation and speaking) and <invoke id="identity">
-  (abilities/identity/identity.scx, the bot's name); leaving live cancels every ability (SCXML
+  conversation and speaking), <invoke id="identity">
+  (abilities/identity/identity.scx, the bot's name) and <invoke id="listening">
+  (abilities/listening/listening.scx, the ear); leaving live cancels every ability (SCXML
   6.4), which replaces mosfet's cleanup states: an SCXML invoke cancel is
   synchronous, so there is nothing for mosfet's 5 min deactivation
   timeout or its reboot preserve/reset cleanup to wait on, and every
@@ -38,11 +39,21 @@
   when the text names the bot, as the cognition hands over a routine's
   bot.behavior.tick (phase 5 routines, gated off in phase 4).
 
+  Speaking: the communication relays speaking's playout, the efference
+  copy bot.ability.speaking.efference (sent on to each Listening ability
+  in listening, mosfet's Speaking listening peers) and then
+  environment.sound, which the body puts into the environment: a log
+  record labelled environment.sound (the root has no parent), and, as any
+  sound there, a stimulus for each input ability (the bot hears itself).
+
   Environment: environment.sound and environment.visual from outside,
   while active, go to each input ability (input, mosfet's Bot input: the invoke ids
-  of the abilities that perceive raw stimuli; none until phase 6), in
+  of the abilities that perceive raw stimuli; the listening), in
   order, by <foreach>; never to the cognition, which hears of a stimulus
-  only as an input ability's product.
+  only as an input ability's product: the listening hands its decoded
+  speech or labelled non-speech over as bot.ability.cognition.input, which
+  starts a turn like any handoff. The listening's
+  bot.ability.listening.failed is logged.
 
   Turns: bot.input, or an ability's bot.ability.cognition.input handoff
   (mosfet grants any ability product the turn, blind to its content), in
@@ -78,7 +89,9 @@
   bound, so its send raises error.execution in the sender) every description is
   dropped too, and if they are still over the turn fails without reaching
   the cognition. The routing table routes maps each offered event to the
-  targets offering it.
+  targets offering it, and routes a selected
+  bot.ability.communication.input to the body itself, which takes it as
+  outside communication input.
 
   Routing: a completed turn goes through routing, where <decision:route>
   places each selected event of the output, in order, and the body sends it
@@ -98,7 +111,8 @@
   bot.activating.failed, bot.deactivated, bot.processing.completed,
   bot.processing.failed, and bot.output (the turn's selected events, one
   record per completed turn), plus the communication's
-  bot.ability.speaking.output and bot.ability.communication.failed;
+  bot.ability.speaking.output and bot.ability.communication.failed and the
+  listening's bot.ability.listening.failed;
   bot.choices logs each turn's assembled
   choices as event@target, bot.route each routed selection, and bot.focus
   each focus change.
@@ -147,14 +161,16 @@
     <!-- Lifecycle: each entry into live is one run; the abilities expected
          and the offers each has sent this run. -->
     <data id="live_run" expr="0"/>
-    <data id="expected" expr="['cognition', 'communication', 'identity']"/>
+    <data id="expected" expr="['cognition', 'communication', 'identity', 'listening']"/>
     <data id="offers" expr="({})"/>
     <data id="waiting" expr="[]"/>
     <!-- The input abilities each environment.* stimulus fans out to
-         (mosfet's Bot input, as invoke ids; none until phase 6), and the
-         one being sent to. -->
-    <data id="input" expr="[]"/>
+         (mosfet's Bot input, as invoke ids), and the one being sent to. -->
+    <data id="input" expr="['listening']"/>
     <data id="ability" expr="null"/>
+    <!-- The Listening abilities that receive speaking's efference copy
+         (mosfet's Speaking listening peers, as invoke ids). -->
+    <data id="listening_abilities" expr="['listening']"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
     <data id="focused_device" expr="null"/>
@@ -204,6 +220,7 @@
     <invoke id="identity" type="scxml" src="../../abilities/identity/identity.scx">
       <param name="database" expr="database"/>
     </invoke>
+    <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx"/>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
     <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json"
@@ -286,6 +303,27 @@
           </send>
         </foreach>
       </transition>
+      <!-- Speaking's playout: the sound goes into the environment (the
+           root has no parent, so it is a log record) and, as any sound
+           there, to every input ability; the efference copy goes only to
+           Listening, before the sound. -->
+      <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json"
+                  cond="isFromCommunication(_event)">
+        <foreach array="listening_abilities" item="ability">
+          <send event="bot.ability.speaking.efference" targetexpr="abilityTarget(ability)">
+            <content expr="_event.data"/>
+          </send>
+        </foreach>
+      </transition>
+      <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+                  cond="isFromCommunication(_event)">
+        <log label="environment.sound" expr="eventDataJson(_event)"/>
+        <foreach array="input" item="ability">
+          <send event="environment.sound" targetexpr="abilityTarget(ability)">
+            <content expr="_event.data"/>
+          </send>
+        </foreach>
+      </transition>
       <!-- What the communication said, and its failures. -->
       <transition event="bot.ability.speaking.output" event:schema="schemas/bot.ability.speaking.output.json" cond="isFromCommunication(_event)">
         <log label="bot.ability.speaking.output" expr="eventDataJson(_event)"/>
@@ -295,6 +333,10 @@
       </transition>
       <transition event="bot.ability.conversation.failed" event:schema="schemas/bot.ability.conversation.failed.json" cond="isFromCommunication(_event)">
         <log label="bot.ability.conversation.failed" expr="eventDataJson(_event)"/>
+      </transition>
+      <!-- What the listening could not hear. -->
+      <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json" cond="isFromListening(_event)">
+        <log label="bot.ability.listening.failed" expr="eventDataJson(_event)"/>
       </transition>
       <!-- The body's own choices (mosfet: focus on active, clear only while
            a device is focused), offered on processing entry and taken only
@@ -353,6 +395,10 @@
           <!-- bound: 32 KiB, the failure message below names it. -->
           <decision:assemble location="choices" routeslocation="routes" choices="body_choices" offers="offers"
                              bound="32768" overlocation="choices_over" sizelocation="choices_size"/>
+          <!-- A selected bot.ability.communication.input (mosfet's
+               SpeechHeard seed admits heard speech this way) is the body's
+               own: it goes through active's transition for outside input. -->
+          <assign location="routes['bot.ability.communication.input']" expr="[null]"/>
           <decision:names location="choice_names" choices="choices"/>
           <log label="bot.choices" expr="choice_names"/>
           <if cond="choicesFit()">

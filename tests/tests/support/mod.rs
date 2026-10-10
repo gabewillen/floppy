@@ -24,6 +24,7 @@
     reason = "each test binary uses the part of the shared support it needs"
 )]
 
+pub mod hearing;
 pub mod trace;
 
 use std::cell::RefCell;
@@ -40,11 +41,15 @@ use sha2::{Digest as _, Sha256};
 /// The variables the bots' documents name. The child process never inherits
 /// them, so a test supplies values only through its env file (or an
 /// explicit `--env NAME=VALUE`).
-pub const GRANTED: [&str; 4] = [
+pub const GRANTED: [&str; 8] = [
     "FLOPPY_API_KEY",
     "FLOPPY_BASE_URL",
     "TYPESAFE_API_KEY",
     "TYPESAFE_BASE_URL",
+    "FLOPPY_SPEECH_API_KEY",
+    "FLOPPY_SPEECH_BASE_URL",
+    "FLOPPY_VOICE_API_KEY",
+    "FLOPPY_VOICE_BASE_URL",
 ];
 
 /// The model floppy ships (README.md, "Defaults"): every document's `model`
@@ -504,6 +509,15 @@ pub fn pgsql_grant() -> Vec<String> {
     ]
 }
 
+/// `--dir` granting the speech service `media` at `/media`, where the
+/// audio references (`media/<file>`) of `environment.sound` resolve.
+pub fn speech_grant(media: &Path) -> Vec<String> {
+    vec![
+        "--dir".to_owned(),
+        format!("{}={}::/media", service_uri("speech"), media.display()),
+    ]
+}
+
 /// Whether the `.scx` document at `path`, or a document it loads by a
 /// literal relative `<invoke src>` (recursively), names the service `name`'s
 /// URI. Anything that is not a readable `.scx` file names none.
@@ -561,6 +575,96 @@ pub fn run_document(
     run.finish(limit)
 }
 
+/// Copies the directory `from` to `to`, recursively.
+pub fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).expect("the directory is creatable");
+    for entry in std::fs::read_dir(from).expect("the directory is readable") {
+        let path = entry.expect("a directory entry").path();
+        let target = to.join(path.file_name().expect("a file name"));
+        if path.is_dir() {
+            copy_tree(&path, &target);
+        } else {
+            std::fs::copy(&path, &target).expect("the file is copyable");
+        }
+    }
+}
+
+/// Copies the ability `name` (`abilities/<name>/`: its document, its
+/// script, its schema twins, and any data beside them) into `abilities`,
+/// and returns the path of its copied document. The memory ability comes
+/// with the migration ability it invokes.
+pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
+    copy_tree(
+        &workspace().join("abilities").join(name),
+        &abilities.join(name),
+    );
+    if name == "memory" {
+        copy_ability("migration", abilities);
+    }
+    abilities.join(name).join(format!("{name}.scx"))
+}
+
+/// The listening's abilities (abilities/listening/, its children and its
+/// hearing leaves).
+pub const LISTENING: [&str; 8] = [
+    "listening",
+    "sensitivity",
+    "interpretation",
+    "voice_detection",
+    "voice_diarization",
+    "voice_identification",
+    "sound_classification",
+    "speech_decoding",
+];
+
+/// Copies the listening's abilities into the layout's `abilities`
+/// directory.
+pub fn copy_listening(abilities: &Path) {
+    for name in LISTENING {
+        copy_ability(name, abilities);
+    }
+}
+
+/// The speech service `<invoke>` opening tag in `abilities/vocal/vocal.scx`.
+const SPEECH_INVOKE: &str = r#"<invoke id="speech" type="https://github.com/stateforward/floppy/services/speech"
+            env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">"#;
+
+/// Copies the vocal ability into the laid-out `abilities` directory
+/// with its speech service `<invoke>` rewritten to invoke
+/// `tests/fixtures/phase6/speech_double.scx` (copied beside it, its `mode`
+/// set to the ECMAScript expression `mode`): the double of the speech
+/// service's encoding events, until the service lands.
+pub fn double_speech(abilities: &Path, mode: &str) {
+    let path = copy_ability("vocal", abilities);
+    let vocal = std::fs::read_to_string(&path).expect("the vocal ability is readable");
+    assert!(
+        vocal.contains(SPEECH_INVOKE),
+        "abilities/vocal/vocal.scx invokes the speech service"
+    );
+    std::fs::write(
+        &path,
+        vocal.replacen(
+            SPEECH_INVOKE,
+            r#"<invoke id="speech" type="scxml" src="speech_double.scx">"#,
+            1,
+        ),
+    )
+    .expect("the vocal copy is writable");
+    let double =
+        std::fs::read_to_string(workspace().join("tests/fixtures/phase6/speech_double.scx"))
+            .expect("the speech double is readable");
+    let declared = r#"<data id="mode" expr="'encode'"/>"#;
+    assert!(
+        double.contains(declared),
+        "the speech double declares its mode"
+    );
+    std::fs::write(
+        abilities.join("vocal/speech_double.scx"),
+        double.replacen(declared, &format!(r#"<data id="mode" expr="{mode}"/>"#), 1),
+    )
+    .expect("the speech double copy is writable");
+}
+
 /// Points the `<data id="database">` of the document at `path` at
 /// `database` (a file path or a Postgres connection URI), so the bot or
 /// ability keeps its memory there.
@@ -577,62 +681,34 @@ pub fn use_database(path: &Path, database: &str) {
     std::fs::write(path, text).expect("the document copy is writable");
 }
 
-/// Copies the directory `from` to `to`, recursively.
-pub fn copy_tree(from: &Path, to: &Path) {
-    std::fs::create_dir_all(to).expect("the directory is creatable");
-    for entry in std::fs::read_dir(from).expect("the directory is readable") {
-        let path = entry.expect("a directory entry").path();
-        let target = to.join(path.file_name().expect("a file name"));
-        if path.is_dir() {
-            copy_tree(&path, &target);
-        } else {
-            std::fs::copy(&path, &target).expect("the file is copyable");
-        }
-    }
-}
-
-/// Copies the ability `name` (`abilities/<name>/`: its document, its
-/// script, and its schema twins) into `abilities`, and returns the path of
-/// its copied document.
-pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
-    copy_tree(
-        &workspace().join("abilities").join(name),
-        &abilities.join(name),
-    );
-    abilities.join(name).join(format!("{name}.scx"))
-}
-
-/// Whether `scx validate`'s standard error reports no error and no note,
-/// and only warnings that are `LINT019` for a function of the document's
-/// own `<script src>`: the validator reads inline scripts only, so it
-/// cannot prove that a cond or expr calling a function of `<name>.js` has
-/// no side effect (decision D65).
-pub fn validates_but_for_script_src(stderr: &str) -> bool {
-    let warnings =
-        stderr.matches("\nwarning[").count() + usize::from(stderr.starts_with("warning["));
-    stderr.contains(&format!(
-        "diagnostic summary: 0 error(s), {warnings} warning(s), 0 note(s)"
-    )) && stderr.matches("warning[LINT019]").count() == warnings
-        && stderr
-            .matches("which a `<script src>` may define or replace")
-            .count()
-            == warnings
-}
-
-/// One `PGlite` server for a Postgres-engine test: `node
-/// $FLOPPY_PGLITE_SERVER --port 0` (the `pglite-server` script of
-/// `@electric-sql/pglite-socket`, `dist/scripts/server.js`), a fresh
-/// in-memory database on a free loopback port, stopped when dropped.
+/// One Postgres server for a Postgres-engine test, fresh for the test and
+/// stopped when dropped: `PGlite` (`node $FLOPPY_PGLITE_SERVER --port 0`,
+/// the `pglite-server` script of `@electric-sql/pglite-socket`,
+/// `dist/scripts/server.js`: a fresh in-memory database on a free loopback
+/// port), or, when only `FLOPPY_POSTGRES_BIN` is set (a directory holding
+/// Postgres's `initdb` and `postgres`), a Postgres cluster made for the
+/// test in a scratch directory with `trust` authentication (run as the
+/// `postgres` user when the tests run as root, which Postgres refuses).
 pub struct Pglite {
     child: Child,
+    /// A Postgres cluster's data directory (its `postmaster.pid`).
+    data: Option<PathBuf>,
     /// Its `IP:PORT`.
     pub address: String,
 }
 
 impl Pglite {
-    /// Starts a server; `None` when `FLOPPY_PGLITE_SERVER` is unset.
+    /// Starts a server; `None` when neither `FLOPPY_PGLITE_SERVER` nor
+    /// `FLOPPY_POSTGRES_BIN` is set.
     pub fn start() -> Option<Self> {
-        let script = std::env::var_os("FLOPPY_PGLITE_SERVER")?;
+        if let Some(script) = std::env::var_os("FLOPPY_PGLITE_SERVER") {
+            return Some(Self::node(&script));
+        }
+        let bin = PathBuf::from(std::env::var_os("FLOPPY_POSTGRES_BIN")?);
+        Some(Self::postgres(&bin))
+    }
+
+    fn node(script: &std::ffi::OsStr) -> Self {
         let mut child = Command::new("node")
             .arg(script)
             .args(["--port", "0", "--max-connections", "8"])
@@ -661,7 +737,95 @@ impl Pglite {
         // Keep draining its output so the server never blocks on a full
         // pipe.
         std::thread::spawn(move || for _ in lines {});
-        Some(Self { child, address })
+        Self {
+            child,
+            data: None,
+            address,
+        }
+    }
+
+    fn postgres(bin: &Path) -> Self {
+        let dir = unique_scratch("postgres");
+        let data = dir.join("data");
+        // Postgres refuses to run as root: run it as `postgres` then.
+        let as_root = std::env::var("USER").is_ok_and(|user| user == "root")
+            || Command::new("id")
+                .arg("-u")
+                .output()
+                .is_ok_and(|out| out.stdout.trim_ascii() == b"0");
+        let command = |program: &str| {
+            let mut command = if as_root {
+                let mut command = Command::new("runuser");
+                command
+                    .args(["-u", "postgres", "--"])
+                    .arg(bin.join(program));
+                command
+            } else {
+                Command::new(bin.join(program))
+            };
+            command.stdin(Stdio::null());
+            command
+        };
+        if as_root {
+            let status = Command::new("chown")
+                .args(["-R", "postgres"])
+                .arg(&dir)
+                .status()
+                .expect("chown runs");
+            assert!(
+                status.success(),
+                "the scratch directory is given to postgres"
+            );
+        }
+        let initialized = command("initdb")
+            .args([
+                "-A",
+                "trust",
+                "-U",
+                "postgres",
+                "-E",
+                "UTF8",
+                "--no-sync",
+                "-D",
+            ])
+            .arg(&data)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .expect("initdb runs");
+        assert!(initialized.success(), "initdb makes the cluster");
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port")
+            .port();
+        let child = command("postgres")
+            .arg("-D")
+            .arg(&data)
+            .args([
+                "-p",
+                &port.to_string(),
+                "-c",
+                "listen_addresses=127.0.0.1",
+                "-c",
+                "fsync=off",
+            ])
+            .arg("-k")
+            .arg(&dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("postgres starts");
+        let address = format!("127.0.0.1:{port}");
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while std::net::TcpStream::connect(&address).is_err() {
+            assert!(Instant::now() < deadline, "postgres listens on {address}");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        Self {
+            child,
+            data: Some(data),
+            address,
+        }
     }
 
     /// The Postgres connection URI of its database.
@@ -672,7 +836,22 @@ impl Pglite {
 
 impl Drop for Pglite {
     fn drop(&mut self) {
-        let _killed = self.child.kill();
+        // A Postgres cluster stops on SIGINT to its postmaster (named by
+        // `postmaster.pid`, since `runuser` may stand between); PGlite's
+        // server is the child itself.
+        let postmaster = self
+            .data
+            .as_ref()
+            .and_then(|data| std::fs::read_to_string(data.join("postmaster.pid")).ok())
+            .and_then(|pid| pid.lines().next().map(str::to_owned));
+        match postmaster {
+            Some(pid) => {
+                let _stopped = Command::new("kill").args(["-INT", &pid]).status();
+            }
+            None => {
+                let _killed = self.child.kill();
+            }
+        }
         let _waited = self.child.wait();
     }
 }

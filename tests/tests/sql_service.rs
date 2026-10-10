@@ -6,7 +6,10 @@
 //! `--dir URI=HOST::GUEST`. Each invocation is one SQLite transaction of
 //! mosfet's `Statement`s; the service answers `sql.result` (mosfet's
 //! `OutputData`) or `sql.failed` (mosfet's `FailureData`), then completes.
-//! The file outlives the invocation and the run.
+//! The file outlives the invocation and the run. The `postgres_` test runs
+//! an open transaction on the pgsql service against a fresh Postgres server
+//! ([`support::Pglite`], ignored unless `FLOPPY_PGLITE_SERVER` or
+//! `FLOPPY_POSTGRES_BIN` is set).
 
 #![allow(
     missing_docs,
@@ -118,7 +121,7 @@ fn the_database_outlives_the_run() {
         logs(&second.records),
         [(
             "failed".to_owned(),
-            r#"sql.failed {"message":"UNIQUE constraint failed: bot_memory.memory_id"}"#.to_owned()
+            r#"sql.failed {"code":"SQLITE_CONSTRAINT","message":"UNIQUE constraint failed: bot_memory.memory_id"}"#.to_owned()
         )],
         "{}",
         second.stderr
@@ -179,4 +182,110 @@ fn a_malformed_parameter_raises_error_execution() {
         finished.stderr
     );
     assert!(!Path::new(&directory.join("floppy.sqlite")).exists());
+}
+
+/// An open transaction (`transaction` `open`): it creates a table and
+/// inserts, reads its own write, then commits; a second open transaction
+/// inserts and is cancelled by leaving its state; a batch then counts the
+/// rows the first committed and the second did not.
+const OPEN_TRANSACTION: &str = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="editing">
+  <datamodel>
+    <data id="create">CREATE TABLE IF NOT EXISTS bot_behavior (name TEXT PRIMARY KEY, source TEXT NOT NULL)</data>
+    <data id="insert">INSERT INTO bot_behavior (name, source) VALUES (?, ?)</data>
+    <data id="select">SELECT name FROM bot_behavior ORDER BY name</data>
+  </datamodel>
+  <state id="editing">
+    <invoke id="edit" type="https://github.com/stateforward/floppy/services/sql">
+      <param name="database" expr="'/memory/floppy.sqlite'"/>
+      <param name="transaction" expr="'open'"/>
+      <param name="statements" expr="[{sql: create}, {sql: insert, parameters: ['greet', 'x']}]"/>
+    </invoke>
+    <transition event="sql.result" cond="_event.data.results.length === 2">
+      <send event="sql.execute" target="#_edit">
+        <param name="statements" expr="[{sql: select}]"/>
+      </send>
+    </transition>
+    <transition event="sql.result">
+      <log label="read" expr="JSON.stringify(_event.data.results[0].rows.map(r =&gt; r.values[0]))"/>
+      <send event="sql.commit" target="#_edit"/>
+    </transition>
+    <transition event="sql.committed">
+      <log label="committed" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="done.invoke.edit" target="abandoning"/>
+    <transition event="*" target="failed">
+      <log label="failed" expr="_event.name + ' ' + JSON.stringify(_event.data)"/>
+    </transition>
+  </state>
+  <state id="abandoning">
+    <invoke id="abandon" type="https://github.com/stateforward/floppy/services/sql">
+      <param name="database" expr="'/memory/floppy.sqlite'"/>
+      <param name="transaction" expr="'open'"/>
+      <param name="statements" expr="[{sql: insert, parameters: ['wave', 'y']}]"/>
+    </invoke>
+    <transition event="sql.result" target="counting">
+      <log label="abandoned" expr="String(_event.data.results[0].rowcount)"/>
+    </transition>
+    <transition event="*" target="failed">
+      <log label="failed" expr="_event.name + ' ' + JSON.stringify(_event.data)"/>
+    </transition>
+  </state>
+  <state id="counting">
+    <invoke id="count" type="https://github.com/stateforward/floppy/services/sql">
+      <param name="database" expr="'/memory/floppy.sqlite'"/>
+      <param name="statements" expr="[{sql: select}]"/>
+    </invoke>
+    <transition event="sql.result" target="done">
+      <log label="counted" expr="JSON.stringify(_event.data.results[0].rows.map(r =&gt; r.values[0]))"/>
+    </transition>
+    <transition event="*" target="failed">
+      <log label="failed" expr="_event.name + ' ' + JSON.stringify(_event.data)"/>
+    </transition>
+  </state>
+  <final id="done"/>
+  <final id="failed"/>
+</scxml>"##;
+
+#[test]
+fn an_open_transaction_spans_events_and_a_cancelled_one_commits_nothing() {
+    let (_, grant) = granted();
+    let finished = open(&grant, OPEN_TRANSACTION);
+    assert_eq!(
+        logs(&finished.records),
+        support::labelled(&[
+            ("read", r#"["greet"]"#),
+            ("committed", "{}"),
+            ("abandoned", "1"),
+            ("counted", r#"["greet"]"#),
+        ]),
+        "{}",
+        finished.stderr
+    );
+    assert!(support::finished(&finished.records));
+}
+
+#[test]
+#[ignore = "needs a Postgres server: FLOPPY_PGLITE_SERVER or FLOPPY_POSTGRES_BIN"]
+fn postgres_an_open_transaction_spans_events_and_a_cancelled_one_commits_nothing() {
+    let server =
+        support::Pglite::start().expect("FLOPPY_PGLITE_SERVER or FLOPPY_POSTGRES_BIN is set");
+    let document = OPEN_TRANSACTION
+        .replace(&sql(), &service_uri("pgsql"))
+        .replace(
+            "'/memory/floppy.sqlite'",
+            &format!("'{}'", server.database()),
+        );
+    let finished = open(&[], &document);
+    assert_eq!(
+        logs(&finished.records),
+        support::labelled(&[
+            ("read", r#"["greet"]"#),
+            ("committed", "{}"),
+            ("abandoned", "1"),
+            ("counted", r#"["greet"]"#),
+        ]),
+        "{}",
+        finished.stderr
+    );
+    assert!(support::finished(&finished.records));
 }

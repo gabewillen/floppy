@@ -887,6 +887,7 @@ pub(crate) mod host {
 
         let bytes = crate::read_source(document)?;
         let event_schemas = crate::event_schemas::load(document, &bytes);
+        let script_files = crate::documents::local_script_files(document, &bytes);
         let source = crate::utf8_source(document, bytes)?;
         let (manifests, package_schemas) = crate::extensions::compile_inputs(packages);
         let mut validator = Validator::new(
@@ -900,6 +901,7 @@ pub(crate) mod host {
         .with_services(crate::services::bound_services(services))
         .with_data_models(data_models)
         .with_invoked_documents(invoked_documents)
+        .with_script_resources(script_files)
         .with_expression_checker(std::sync::Arc::new(crate::expression::EcmaScriptSyntax))
         .with_expression_checker(std::sync::Arc::new(crate::expression::XPathSyntax));
         if let Some(linked) = crate::package_validators::linked(packages, services)? {

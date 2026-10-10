@@ -17,6 +17,10 @@ function isFromCommunication(_event) {
   return _event.invokeid === 'communication';
 }
 
+function isFromListening(_event) {
+  return _event.invokeid === 'listening';
+}
+
 function eventDataJson(_event) {
   return JSON.stringify(_event.data);
 }

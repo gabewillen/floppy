@@ -1,0 +1,69 @@
+{
+  "revision": "0001",
+  "down_revision": null,
+  "doc": "Initial memory schema in SQLite (mosfet abilities/memory/migrations/versions/0001_initial_memory_schema.py).",
+  "upgrade": [
+    {
+      "sql": "CREATE TABLE bot_memory (memory_id TEXT NOT NULL, scope TEXT DEFAULT 'memory' NOT NULL, context_ref TEXT, subject_ref TEXT, kind TEXT, sensitivity TEXT, retention TEXT, content TEXT NOT NULL, content_format TEXT DEFAULT 'text/plain' NOT NULL, query_tags TEXT, metadata_json TEXT DEFAULT '{}' NOT NULL, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, PRIMARY KEY (memory_id))"
+    },
+    {
+      "sql": "CREATE INDEX bot_memory_context_idx ON bot_memory (context_ref, subject_ref)"
+    },
+    {
+      "sql": "CREATE INDEX bot_memory_query_idx ON bot_memory (query_tags)"
+    },
+    {
+      "sql": "CREATE INDEX bot_memory_scope_idx ON bot_memory (scope, created_at)"
+    },
+    {
+      "sql": "CREATE TABLE bot_behavior (name TEXT NOT NULL, source TEXT NOT NULL, description TEXT DEFAULT '' NOT NULL, examples_json TEXT DEFAULT '[]' NOT NULL, status TEXT DEFAULT 'ACTIVE' NOT NULL, status_reason TEXT DEFAULT '' NOT NULL, status_updated_at TEXT DEFAULT '' NOT NULL, used_count TEXT DEFAULT '0' NOT NULL, last_used_at TEXT DEFAULT '' NOT NULL, failed_count TEXT DEFAULT '0' NOT NULL, last_failed_at TEXT DEFAULT '' NOT NULL, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, updated_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, PRIMARY KEY (name))"
+    },
+    {
+      "sql": "CREATE TABLE bot_behavior_trigger (behavior_name TEXT NOT NULL, \"trigger\" TEXT NOT NULL, PRIMARY KEY (behavior_name, \"trigger\"), FOREIGN KEY(behavior_name) REFERENCES bot_behavior (name) ON DELETE CASCADE)"
+    },
+    {
+      "sql": "CREATE INDEX bot_behavior_trigger_event_idx ON bot_behavior_trigger (\"trigger\")"
+    },
+    {
+      "sql": "CREATE TABLE bot_stm_memory (stm_id TEXT NOT NULL, stimulus_name TEXT NOT NULL, payload_json TEXT DEFAULT '{}' NOT NULL, event_id TEXT, source TEXT, target TEXT, created_at TEXT NOT NULL, last_accessed_at TEXT, PRIMARY KEY (stm_id))"
+    },
+    {
+      "sql": "CREATE INDEX bot_stm_memory_recent_idx ON bot_stm_memory (stimulus_name, created_at)"
+    },
+    {
+      "sql": "CREATE INDEX bot_stm_memory_created_idx ON bot_stm_memory (created_at)"
+    }
+  ],
+  "downgrade": [
+    {
+      "sql": "DROP INDEX bot_stm_memory_created_idx"
+    },
+    {
+      "sql": "DROP INDEX bot_stm_memory_recent_idx"
+    },
+    {
+      "sql": "DROP TABLE bot_stm_memory"
+    },
+    {
+      "sql": "DROP INDEX bot_behavior_trigger_event_idx"
+    },
+    {
+      "sql": "DROP TABLE bot_behavior_trigger"
+    },
+    {
+      "sql": "DROP TABLE bot_behavior"
+    },
+    {
+      "sql": "DROP INDEX bot_memory_scope_idx"
+    },
+    {
+      "sql": "DROP INDEX bot_memory_query_idx"
+    },
+    {
+      "sql": "DROP INDEX bot_memory_context_idx"
+    },
+    {
+      "sql": "DROP TABLE bot_memory"
+    }
+  ]
+}

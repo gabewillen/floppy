@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.vocal.speech.encoding.input",
+  "additionalProperties": false,
+  "description": "A request to encode text as verbal speech (mosfet's SpeechEncoding input, the text's UTF-8 bytes; floppy carries the text itself).",
+  "properties": {
+    "text": {
+      "description": "The words to synthesize, verbatim [floppy field].",
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "type": "object"
+}

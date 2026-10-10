@@ -84,6 +84,15 @@ interface types {
     /// relative to that document.
     event-schemas: list<event-schema-resource>,
   }
+  /// The text of one file a `<script src>` of the validated document
+  /// names, read by the caller as its host would load it (nothing is
+  /// fetched).
+  record script-resource {
+    /// The `src` value exactly as authored, its XML white space collapsed.
+    src: string,
+    /// The file's text.
+    text: string,
+  }
   /// Request bounds (checked before any parsing; violations fail with
   /// `invalid-request` and produce no report): `source` at most 16777216
   /// bytes; at most 64 `schemas` and 64 `packages`; each schema's `bytes` at
@@ -104,6 +113,12 @@ interface types {
   /// bounded separately like `event-schemas`. With them, a `<send>` between
   /// the document and an invoked document whose literal data the receiving
   /// document's transition schema rejects is an `EVENT011` diagnostic.
+  /// `scripts` holds at most 64 files, their `src` values non-empty, at most
+  /// 16384 bytes, and unique (exact byte comparison), and their text at most
+  /// 16777216 bytes together, bounded separately like `event-schemas`. The
+  /// side-effect analysis of conditions and `<log expr>` reads the
+  /// functions each one declares; a `<script src>` with no file stays
+  /// unread, so a call it may define or replace is a `LINT019` diagnostic.
   record validation-request {
     source-name: string,
     source: string,
@@ -112,6 +127,7 @@ interface types {
     packages: list<extension-package>,
     event-schemas: list<event-schema-resource>,
     invoked-documents: list<invoked-document>,
+    scripts: list<script-resource>,
     trace-context: option<trace-context>,
   }
   /// Diagnostic severity (the canonical report's `severity`).

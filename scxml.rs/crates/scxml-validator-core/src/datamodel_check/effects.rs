@@ -168,34 +168,95 @@ fn role<'s>(site: &'s Site<'_>) -> EffectRole<'s> {
     }
 }
 
-/// Whether the machine has a `<script src>` the analysis cannot read.
-fn external_scripts(machine: &Element) -> ExternalScripts {
-    let mut scripts = ExternalScripts::Absent;
-    visit_machine(machine, &mut |element| {
-        if is_scxml(element, "script") && element.attribute("src").is_some() {
-            scripts = ExternalScripts::Present;
-        }
-    });
-    scripts
+/// The text of each `<script src>` file, keyed by the `src` value as
+/// authored with its XML white space collapsed
+/// ([`crate::Validator::with_script_resources`]).
+pub type ScriptResources = std::collections::BTreeMap<String, String>;
+
+/// One `<script src>` of the machine whose file the caller supplied.
+struct ReadScript<'a> {
+    /// Its `src` attribute.
+    src: &'a scxml_syntax::Attribute,
+    /// The file's text.
+    text: &'a str,
 }
 
-/// Runs the checker's analysis over the machine's parsed `sites` and
-/// reports `SCXML074`/`LINT019`.
+/// The machine's `<script src>` elements whose files `scripts` holds, in
+/// document order and each file once, and whether any other `<script src>`
+/// is left unread.
+fn read_scripts<'a>(
+    machine: &'a Element,
+    scripts: &'a ScriptResources,
+) -> (Vec<ReadScript<'a>>, ExternalScripts) {
+    let mut read = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut unread = ExternalScripts::Absent;
+    visit_machine(machine, &mut |element| {
+        if !is_scxml(element, "script") {
+            return;
+        }
+        let Some(src) = element.attribute("src") else {
+            return;
+        };
+        let key = scxml_syntax::collapse_whitespace(&src.value);
+        match scripts.get_key_value(key.as_ref()) {
+            Some((key, text)) => {
+                if seen.insert(key.as_str()) {
+                    read.push(ReadScript { src, text });
+                }
+            }
+            None => unread = ExternalScripts::Present,
+        }
+    });
+    (read, unread)
+}
+
+/// Where one fragment of the request came from.
+#[derive(Clone, Copy)]
+enum Origin<'s, 'd> {
+    /// A fragment of the document.
+    Site(&'s Site<'d>),
+    /// The file a `<script src>` names: findings in it are reported at its
+    /// `src` value.
+    Script(&'s scxml_syntax::Attribute),
+}
+
+impl Origin<'_, '_> {
+    /// The document span of bytes `start..end` of the fragment.
+    fn span_of(self, start: usize, end: usize) -> scxml_syntax::Span {
+        match self {
+            Self::Site(site) => site.span_of(start, end),
+            Self::Script(src) => src.value_span,
+        }
+    }
+}
+
+/// Runs the checker's analysis over the machine's parsed `sites`, and the
+/// text of each `<script src>` file `scripts` holds, and reports
+/// `SCXML074`/`LINT019`.
 pub(super) fn report_effects(
     document: &Document,
     checker: &dyn ExpressionSyntaxChecker,
     machine: &Element,
     sites: &[&Site<'_>],
+    scripts: &ScriptResources,
     report: &mut Report,
 ) {
+    let (read, unread) = read_scripts(machine, scripts);
+    let mut origins: Vec<Origin<'_, '_>> = sites.iter().map(|site| Origin::Site(site)).collect();
+    origins.extend(read.iter().map(|script| Origin::Script(script.src)));
     let fragments: Vec<EffectFragment<'_>> = sites
         .iter()
         .map(|site| EffectFragment {
             role: role(site),
             source: &site.source,
         })
+        .chain(read.iter().map(|script| EffectFragment {
+            role: EffectRole::Script,
+            source: script.text,
+        }))
         .collect();
-    let answer = match checker.check_effects(&fragments, external_scripts(machine)) {
+    let answer = match checker.check_effects(&fragments, unread) {
         EffectCheck::Checked(findings) if trustworthy(&fragments, &findings) => {
             EffectCheck::Checked(findings)
         }
@@ -204,7 +265,7 @@ pub(super) fn report_effects(
     match answer {
         EffectCheck::Checked(findings) => {
             for finding in findings {
-                if let Some(diagnostic) = diagnostic(document, sites, &finding) {
+                if let Some(diagnostic) = diagnostic(document, &origins, &finding) {
                     report.push(diagnostic);
                 }
             }
@@ -356,17 +417,17 @@ fn cause_label(cause: &EffectCause) -> String {
 
 /// `SCXML077`: a fragment assigns, updates, or deletes a system variable
 /// itself.
-fn system_variable_write(site: &Site<'_>, finding: &EffectFinding) -> Diagnostic {
-    let what = if site.kind == ExpressionKind::Script {
-        "`<script>`".to_owned()
-    } else {
-        format!("`{}` on `<{}>`", site.what, site.element.name.local_name)
+fn system_variable_write(origin: Origin<'_, '_>, finding: &EffectFinding) -> Diagnostic {
+    let what = match origin {
+        Origin::Site(site) if site.kind == ExpressionKind::Script => "`<script>`".to_owned(),
+        Origin::Site(site) => format!("`{}` on `<{}>`", site.what, site.element.name.local_name),
+        Origin::Script(src) => format!("the `<script src>` file `{}`", src.value),
     };
     let name = &finding.subject;
     Diagnostic::warning(
         "SCXML077",
         format!("{what} changes the system variable `{name}`"),
-        site.span_of(finding.span.start, finding.span.end),
+        origin.span_of(finding.span.start, finding.span.end),
     )
     .with_primary_message(format!("`{name}` is a read-only system variable"))
     .with_note("SCXML 1.0 §5.10: \"The Processor MUST cause any attempt to change the value of a system variable to fail and MUST place the error 'error.execution' on the internal event queue when such an attempt is made.\" The change fails at run time with `error.execution`; a non-strict `delete` or a reflective deletion through the global object returns `false` without one (a known limitation, docs/spec-errata.md). Variable names beginning with '_' are reserved for system use, and '_x' is the root of platform-specific system variables.")
@@ -377,13 +438,18 @@ fn system_variable_write(site: &Site<'_>, finding: &EffectFinding) -> Diagnostic
 
 fn diagnostic(
     document: &Document,
-    sites: &[&Site<'_>],
+    origins: &[Origin<'_, '_>],
     finding: &EffectFinding,
 ) -> Option<Diagnostic> {
-    let site = sites.get(finding.span.fragment)?;
+    let origin = *origins.get(finding.span.fragment)?;
     if finding.kind == EffectKind::SystemVariableWrite {
-        return Some(system_variable_write(site, finding));
+        return Some(system_variable_write(origin, finding));
     }
+    // Every other finding is in a checked fragment (`trustworthy`), which
+    // is always the document's own.
+    let Origin::Site(site) = origin else {
+        return None;
+    };
     let log = role(site) == EffectRole::Log;
     let what = format!("`{}` on `<{}>`", site.what, site.element.name.local_name);
     let scope = if log {
@@ -441,11 +507,15 @@ fn diagnostic(
         .with_spec_reference(SPEC_DATA_MODELS)
         .with_spec_reference(SPEC_ECMASCRIPT);
     if let Some(cause) = &finding.cause
-        && let Some(cause_site) = sites.get(cause.span.fragment)
+        && let Some(cause_origin) = origins.get(cause.span.fragment)
     {
+        let message = match cause_origin {
+            Origin::Site(_) => cause_label(cause),
+            Origin::Script(src) => format!("{} (in `{}`)", cause_label(cause), src.value),
+        };
         diagnostic = diagnostic.with_secondary(
-            Label::new(cause_site.span_of(cause.span.start, cause.span.end))
-                .with_message(cause_label(cause)),
+            Label::new(cause_origin.span_of(cause.span.start, cause.span.end))
+                .with_message(message),
         );
     }
     if let Some(operator) = operator

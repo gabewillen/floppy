@@ -66,8 +66,9 @@
 //! [`SessionHost::with_invoke_limits`]; an invocation beyond them fails as
 //! that `<invoke>`'s `error.execution`), the run's command budget, the
 //! configured fuel of one host call (one budget shared by every store the
-//! call reaches, see `call_budget`), and the per-store memory, table, and
-//! instance limits of each component.
+//! call reaches, see `call_budget`; compiling a document the embedder
+//! served runs on a budget of its own, once per run), and the per-store
+//! memory, table, and instance limits of each component.
 //!
 //! # Telemetry
 //!
