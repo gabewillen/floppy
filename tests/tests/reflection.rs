@@ -377,7 +377,7 @@ fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(databas
     });
     assert_eq!(
         json_log(&first, "episodes"),
-        json!([{"context_ref": "door", "scope": "short_term", "kind": "task", "content": episode}])
+        json!([{"context_ref": "door", "scope": "memory", "kind": "task", "content": episode}])
     );
     let second = reflect(&mut run, 2);
     assert_eq!(texts(&second, "harness.output"), ["answered"], "{second:?}");

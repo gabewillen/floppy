@@ -45,7 +45,7 @@
                    each branch {event, data, reason, target?}) of the
                    choices. choices (required): an expression.
   decision:tuner   location (required): the confidence tuner state
-                   {mean, variance, n} it keeps (reset when malformed).
+                   {mean, var, n} it keeps (reset when malformed).
                    observe (optional): an expression of a reported 0-100
                    confidence the state observes.
                    thresholdlocation (optional): receives the threshold as

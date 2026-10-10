@@ -7,7 +7,7 @@
   bot.behavior.break, applies it, and stores the turn's CognitiveEpisode.
   The cognition (abilities/cognition/cognition.scx) invokes it as its long-lived
   child "reflection" when its reflection gate is on, with the <param>s
-  database (the memory database; null keeps the phase 4 seam) and
+  database (the memory database; null: no memory) and
   model, and sends it bot.ability.reflection.input {turn,
   cognition_input, cognition_output} after each turn's output.
 
@@ -28,7 +28,7 @@
   datamodel assembles the episodes and behaviors from them, and a
   timestamp is UTC in mosfet's form, YYYY-MM-DDTHH:MM:SSZ. With
   database null, recalling logs <log label="reflection" expr="'absent'"> and
-  answers at once, as the phase 4 seam did.
+  answers at once.
 
   recalling (mosfet _recall_activity, _load_all_behaviors): the prior
   episodes (query_tags cognitive_episode, the turn's focus or none, oldest
@@ -62,7 +62,15 @@
   usage counters, with mosfet's _grounded_triggers and lifetime
   persistent when the document sends bot.behavior.tick, else turn. Its
   failed is abandoning: the row is marked DRAFT with status_reason
-  validation, and the turn fails.
+  validation, and the turn fails. revising is bounded by
+  revising_timeout_ms (mosfet's 30 s child operation timeout): when it
+  fires, leaving revising cancels the revision and the turn fails with
+  mosfet's "Reflection child cancellation timed out.".
+
+  Reboots: mosfet's reflection asks for bot.reboot when a cancel does not
+  finish in time or its revision asks for one. An SCXML invoke cancel is
+  synchronous and the builder never asks, so this document has no reboot
+  source; the cognition still forwards one from it to the body.
 
   storing (mosfet _store_activity): one CognitiveEpisode {focus,
   focus_candidates, stimulus_name, output, behavior} inserted with
@@ -86,6 +94,7 @@
     <data id="database" expr="null"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <data id="select_timeout_ms" expr="30000"/>
+    <data id="revising_timeout_ms" expr="30000"/>
     <!-- The turn in hand (mosfet InputData). -->
     <data id="turn" expr="0"/>
     <data id="cognition_input" expr="null"/>
@@ -155,7 +164,7 @@
     <!-- mosfet episodes.episode_insert_input; the memory id is the next
          row count as 32 zero-padded digits, since neither engine's
          randomness is unique across invocations in Wasm. -->
-    <data id="insert_episode">INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr('00000000000000000000000000000000', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), 'short_term', ?, NULL, 'task', 'standard', 'retain', ?, 'application/json', 'cognitive_episode')</data>
+    <data id="insert_episode">INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr('00000000000000000000000000000000', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), 'memory', ?, NULL, 'task', 'standard', 'retain', ?, 'application/json', 'cognitive_episode')</data>
   </datamodel>
   <script src="reflection.js"/>
 
@@ -297,6 +306,17 @@
   <!-- mosfet Revision: author and check one create or change with the
        builder bot, then store the result. -->
   <state id="revising" initial="preparing">
+    <onentry>
+      <send id="revising-after" event="revising.after" delayexpr="revisingTimeoutDelay()"/>
+    </onentry>
+    <onexit>
+      <cancel sendid="revising-after"/>
+    </onexit>
+    <!-- mosfet's child operation bound: leaving revising cancels the
+         revision, and the turn fails as mosfet's timing_out does. -->
+    <transition event="revising.after" target="failing">
+      <assign location="failure" expr="'Reflection child cancellation timed out.'"/>
+    </transition>
     <!-- mosfet Revision._prepare: a create's DRAFT stub, then the row. -->
     <state id="preparing">
       <onentry>

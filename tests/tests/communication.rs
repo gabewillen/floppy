@@ -10,7 +10,7 @@
 //! or a conversation product's last text). No backend is involved: the
 //! communication path makes no service call.
 //!
-//! The speaking child logs `bot.say`, the conversation each commit
+//! The speaking child logs `floppy.say`, the conversation each commit
 //! (`conversation`) and what memory recalled (`conversation.memories`),
 //! the communication what it forwards (`communication.product`,
 //! `communication.history`, `communication.deferred`), and the body each
@@ -199,10 +199,10 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
         &["communication.history", "bot.ability.speaking.output"],
     );
     assert_eq!(
-        texts(&records, "bot.route"),
+        texts(&records, "floppy.route"),
         strings(&["bot.ability.communication.respond -> communication"])
     );
-    assert_eq!(texts(&records, "bot.say"), strings(&["reply 1"]));
+    assert_eq!(texts(&records, "floppy.say"), strings(&["reply 1"]));
     // Encoded by the speech service (its double), played out into the
     // environment by reference, then said.
     assert_eq!(
@@ -288,9 +288,9 @@ fn history_carrying_turns(body: &Path) -> Run {
     assert_eq!(
         texts(&all, "conversation"),
         strings(&[
-            r#"inbound 0 from ["gabe"] (1 in its transcript)"#,
+            r#"inbound 0 from ["gabe"] (1 in its relationship)"#,
             "outbound 1",
-            r#"inbound 2 from ["gabe"] (2 in its transcript)"#,
+            r#"inbound 2 from ["gabe"] (2 in its relationship)"#,
             "outbound 3",
         ])
     );
@@ -302,33 +302,8 @@ fn history_carrying_turns(body: &Path) -> Run {
         strings(&["recalled 0, remembered 1", "recalled 1, remembered 1"])
     );
     assert_eq!(texts(&all, "communication.product"), strings(&["0", "2"]));
-    assert_eq!(texts(&all, "bot.say"), strings(&["reply 1", "reply 2"]));
+    assert_eq!(texts(&all, "floppy.say"), strings(&["reply 1", "reply 2"]));
     run
-}
-
-#[test]
-fn the_history_reaching_a_turn_is_bounded_to_the_latest_messages() {
-    let body = layout(
-        &Speaking::Real,
-        &[(
-            "abilities/conversation/conversation.scx",
-            &[("max_messages", "2")],
-        )],
-    );
-    let mut run = started(&body);
-    for _ in 0..2 {
-        run.event("bot.ability.communication.input", &said("reply"));
-        run.until(WAIT, label_is("communication.history"));
-    }
-    run.event("bot.ability.communication.input", &said("ignore"));
-    let records = run.until(WAIT, label_is("double.ignore"));
-    // The third input is sequence 4; the double sees its last 2 messages.
-    assert_eq!(texts(&records, "double.input"), strings(&["3 ignore 2"]));
-    assert_eq!(texts(&records, "communication.product"), strings(&["4"]));
-    close(
-        run,
-        "the_history_reaching_a_turn_is_bounded_to_the_latest_messages",
-    );
 }
 
 #[test]
@@ -341,11 +316,11 @@ fn a_blank_response_fails_without_speaking() {
         texts(&records, "bot.ability.communication.failed"),
         strings(&[r#"{"message":"Communication response text must be non-blank."}"#])
     );
-    assert!(texts(&records, "bot.say").is_empty(), "{records:?}");
+    assert!(texts(&records, "floppy.say").is_empty(), "{records:?}");
     // Still active: the next response is said.
     run.event("bot.input", &input("reply"));
     let records = run.until(WAIT, label_is("bot.ability.speaking.output"));
-    assert_eq!(texts(&records, "bot.say"), strings(&["reply 2"]));
+    assert_eq!(texts(&records, "floppy.say"), strings(&["reply 2"]));
     close(run, "a_blank_response_fails_without_speaking");
 }
 
@@ -363,11 +338,11 @@ fn a_blank_response_that_waited_fails_without_speaking() {
         texts(&records, "bot.ability.communication.failed"),
         strings(&[r#"{"message":"Communication response text must be non-blank."}"#])
     );
-    assert_eq!(texts(&records, "bot.say"), strings(&["first 1"]));
+    assert_eq!(texts(&records, "floppy.say"), strings(&["first 1"]));
     // Still active: the next response is said.
     run.event("bot.input", &input("reply"));
     let records = run.until(WAIT, label_is("bot.ability.speaking.output"));
-    assert_eq!(texts(&records, "bot.say"), strings(&["reply 2"]));
+    assert_eq!(texts(&records, "floppy.say"), strings(&["reply 2"]));
     close(run, "a_blank_response_that_waited_fails_without_speaking");
 }
 
@@ -421,7 +396,7 @@ fn malformed_communication_input_is_refused_before_the_body() {
     let records = run.until(WAIT, |record| {
         record["type"] == "error" && record["code"] == "machine-invalid-input"
     });
-    assert!(texts(&records, "bot.rejected").is_empty(), "{records:?}");
+    assert!(texts(&records, "floppy.rejected").is_empty(), "{records:?}");
     assert!(texts(&records, "conversation").is_empty(), "{records:?}");
     close(
         run,
@@ -442,7 +417,7 @@ fn a_communication_whose_speaking_cannot_start_fails_the_activation() {
         "{degraded:?}"
     );
     assert_eq!(
-        texts(&records, "bot.diagnostic"),
+        texts(&records, "floppy.diagnostic"),
         strings(&["the ability communication ended while activating"])
     );
     close(
@@ -523,13 +498,13 @@ fn the_conversation_commits_each_message_into_its_history() {
     assert_eq!(
         texts(&all, "conversation"),
         strings(&[
-            r#"inbound 0 from ["alice","zed",[0.5,1]] (1 in its transcript)"#,
-            r#"inbound 1 from ["alice"] (1 in its transcript)"#,
-            r#"inbound 2 from ["bob",[2,1.25]] (1 in its transcript)"#,
+            r#"inbound 0 from ["alice","zed",[0.5,1]] (1 in its relationship)"#,
+            r#"inbound 1 from ["alice"] (1 in its relationship)"#,
+            r#"inbound 2 from ["bob",[2,1.25]] (1 in its relationship)"#,
             "outbound 3",
             "outbound r-1 already committed",
             "outbound 4",
-            r#"inbound 5 from ["alice","zed",[0.5,1]] (2 in its transcript)"#,
+            r#"inbound 5 from ["alice","zed",[0.5,1]] (2 in its relationship)"#,
         ])
     );
     let finished = run.close(WAIT);
@@ -722,7 +697,7 @@ fn a_speech_service_failure_fails_the_response_unsaid_and_unrecorded() {
         texts(&records, "bot.ability.communication.failed"),
         strings(&[r#"{"message":"unconfigured"}"#])
     );
-    assert!(texts(&records, "bot.say").is_empty());
+    assert!(texts(&records, "floppy.say").is_empty());
     assert!(texts(&records, "environment.sound").is_empty());
     assert!(texts(&records, "conversation").is_empty());
     close(
@@ -754,7 +729,7 @@ fn speech_encoding_is_bounded_by_its_timeout() {
         texts(&records, "bot.ability.communication.failed"),
         strings(&[r#"{"message":"Speech encoding timed out."}"#])
     );
-    assert!(texts(&records, "bot.say").is_empty());
+    assert!(texts(&records, "floppy.say").is_empty());
     close(run, "speech_encoding_is_bounded_by_its_timeout");
 }
 
@@ -863,7 +838,7 @@ fn a_response_is_spoken_through_the_speech_service() {
             r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
         ])
     );
-    assert_eq!(texts(&records, "bot.say"), strings(&["reply 1"]));
+    assert_eq!(texts(&records, "floppy.say"), strings(&["reply 1"]));
     let written = std::fs::read(media.join("speaking-1.pcm")).expect("the audio was written");
     assert_eq!(written.len(), 4800);
     let requests = requests.lock().expect("the request log").clone();

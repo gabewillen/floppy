@@ -320,3 +320,9 @@ function storedLog() {
 function episodeStoreFailedMessage(detail) {
   return 'Reflection episode store failed: ' + detail;
 }
+
+// revising
+
+function revisingTimeoutDelay() {
+  return revising_timeout_ms + 'ms';
+}

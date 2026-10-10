@@ -29,7 +29,7 @@ invoked service). The decisions behind this plan are in
 | pydantic event data models | JSON Schema files referenced by `event:schema` on the transitions that take the event; scxml.rs checks them where the event is created (`<send>`, `<raise>`, a send between sessions) and on host input (decision D41) |
 | Hand-written payload validators (`model_validate`, field checks) | `event:schema` only; a `cond` correlates (which child, which turn, which timer) and never checks a payload's shape (decision D42) |
 | Helper functions (attention bias, envelopes, choice assembly and compaction, routing, confidence tuner, message commit) | floppy namespace elements that write to a `location` (`namespaces/bot`, `namespaces/conversation`, `namespaces/decision`; decision D40) |
-| Model-facing event choice lists and payload filling (Intuition, Processor) | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as a canonical choices; the `decision` service, invoked with it, asks a backend, fills the chosen event's data to its schema, validates it, and emits it |
+| Model-facing event choice lists and payload filling (Intuition, Processor) | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices; the `decision` service, invoked with it, asks a backend, fills the chosen event's data to its schema, validates it, and emits it |
 | Event names `bot.*`, `bot.ability.*`, `phone.*` | Unchanged, byte for byte |
 | Telemetry (`mosfet.telemetry`) | scxml.rs's OpenTelemetry facade (guests through the telemetry WIT; the native runtime, `scx`, through scxml.rs's own) |
 
@@ -111,11 +111,13 @@ schema reference is relative to its document and cannot leave the
 document's directory (no `..`), so an ability document lives directly in
 `abilities/` (`abilities/<ability>.scx`) and the body in `bots/floppy/`.
 The ability events the body receives (`bot.ability.offers`,
-`bot.ability.cognition.{output,cancelled}`, `bot.ability.failed`,
+`bot.ability.cognition.{input,output,cancelled}`, `bot.ability.failed`,
 `bot.ability.processing.cancelled`,
 `bot.ability.communication.{input,failed}`,
-`bot.ability.conversation.output`, `bot.ability.speaking.output`) are
-copied byte for byte into `bots/floppy/schemas/` as twins (decision D37).
+`bot.ability.conversation.failed`, `bot.ability.speaking.output`,
+`bot.reboot`) are copied byte for byte into `bots/floppy/schemas/` as
+twins (decision D37); `bot.reboot` lives with the abilities' events
+because the cognition takes it from the reflection too.
 
 The extraction script runs with mosfet's interpreter; it is kept outside
 this repository, with the floppy plans, as
@@ -137,7 +139,10 @@ Mapping rules (the byte-for-byte rule covers event names, not data shapes):
   appear.
 - Correlated, non-tool events of a processing turn (the body's
   `bot.processing.*` results and the cognition cascade) require
-  `turn`, a positive integer the body counts. mosfet's cognition
+  `turn`, a positive integer the body counts. `bot.ability.cognition.input`
+  carries it only on the body's input to the cognition: an ability's
+  handoff of a stimulus to the body (mosfet's `cognition.InputEvent`
+  terminal) has no turn yet. mosfet's cognition
   `TurnData` object collapses into `turn` plus its `input`; a bare list
   payload (`bot.ability.cognition.output`) becomes `{turn, output}`. Tool
   events, whose data a model fills, carry no `turn`.
@@ -196,7 +201,7 @@ D33 to D43.
   `bot.ability.cognition.input.choices` [floppy field]. Reasoning selects
   only from them; the body's `routing` state delivers each selection to
   `#_internal` or `#_<target>` with a visible `<foreach>`/`<send>` and logs
-  `bot.route`/`bot.route.dropped`.
+  `floppy.route`/`floppy.route.dropped`.
 - **Per-turn stage children.** The cognition invokes each stage (autonomy,
   intuition, reasoning) per turn with `<param>`s named after the mosfet
   input event's fields and takes its result as `done.invoke.<stage>`
@@ -218,15 +223,15 @@ D33 to D43.
   memory): with a database it invokes the memory ability
   (`abilities/memory/memory.scx`, over `services/sql`) with mosfet's statements as
   SQL `<data>` and takes `bot.ability.memory.output` (its `event:schema`)
-  or `bot.ability.failed` by invoke id; without one it is
-  the phase 4 seam, which answers itself at once through `#_internal` with
+  or `bot.ability.failed` by invoke id; without one it
+  answers itself at once through `#_internal` with
   mosfet's event and logs `<log label="memory" expr="'absent'">`. Either
   way the step ends with mosfet's event (`bot.ability.reasoning.recalled`,
   `.retained`, `bot.ability.identity.recalled`, `.adopted`), so the
   topology does not change (decision D44).
 - **Speaking.** Phase 4 spoke in text mode (decision D38); phase 6
   speaks audio (decision D59, [Phase 6 conventions](#phase-6-conventions)),
-  and the words are still logged as `<log label="bot.say">`.
+  and the words are still logged as `<log label="floppy.say">`.
 - **Traces.** Each deterministic test in `body.rs`, `cognition.rs` and
   `communication.rs` compares its whole run with
   `tests/fixtures/phase4/traces/<test>.ndjson` byte for byte; rewrite them
@@ -354,7 +359,7 @@ are D52, D57 to D59, D66 and D67
   24 kHz mono `audio/pcm`), the efference copy
   `bot.ability.speaking.efference` leaves before the sound (the body
   carries it to each of `listening_abilities`), the words are logged as
-  `bot.say`, the audio is broadcast as `environment.sound` by reference,
+  `floppy.say`, the audio is broadcast as `environment.sound` by reference,
   and the outbound message is recorded in the conversation. Every terminal
   failure is `bot.ability.failed {message}`.
 - **Vision and reading.** Reading is mosfet's `Reading{Unfocused,

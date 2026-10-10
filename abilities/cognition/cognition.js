@@ -32,13 +32,13 @@ function isChildHopTimeout(_event) {
 }
 
 function hopTimeoutLog() {
-  return 'turn ' + turn + ': ' + stage + ' after ' + hop_timeout_ms + ' ms';
+  return 'turn ' + turn + ': ' + stage + ' after ' + child_operation_timeout_ms + ' ms';
 }
 
 // running_autonomy, running_intuition, running_reasoning
 
 function hopDelay() {
-  return hop_timeout_ms + 'ms';
+  return child_operation_timeout_ms + 'ms';
 }
 
 // The stage's input param, and bot.ability.failed's input (mosfet _build_processing_input).
@@ -70,9 +70,10 @@ function stageLog(outcome, _event) {
   return outcome + ' (' + _event.data.reason + ')';
 }
 
-// The failure of a stage that failed: its reason, else 'the stage failed'.
+// The failure of a stage that failed: its reason, else mosfet's
+// 'Cognition ability failed.' (_fail_child).
 function stageFailure(_event) {
-  return (typeof _event.data.reason === 'string' && _event.data.reason.length > 0 ? _event.data.reason : 'the stage failed');
+  return (typeof _event.data.reason === 'string' && _event.data.reason.length > 0 ? _event.data.reason : 'Cognition ability failed.');
 }
 
 function isFromChild(_event, invokeid) {
@@ -96,7 +97,7 @@ function tunerLog() {
 }
 
 function intuitionFailure(_event) {
-  return 'the intuition failed: ' + stageFailure(_event);
+  return stageFailure(_event);
 }
 
 // completing

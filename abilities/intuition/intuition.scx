@@ -24,7 +24,7 @@
   selection to its single enabler).
 
   Confidence (mosfet ConfidenceTuner, 0-100 scale): the tuner state
-  {mean, variance, n} comes in as a <param> and goes back in <donedata>, so
+  {mean, var, n} comes in as a <param> and goes back in <donedata>, so
   it lives in the cognition across turns. <decision:tuner> keeps it (mosfet's
   defaults: the floor 35 during the warmup of 8 observations, then
   max(floor / 2, mean - k_sigma * std); EMA alpha 0.08, variance floor 100)
@@ -35,7 +35,12 @@
   service reports no probability with a chosen event, so such a turn adds
   no observation (mosfet observes only a reported score). declined (the
   abstain label won) and no-candidates (nothing could be filled) escalate
-  too (mosfet's unhandled pass).
+  too, with mosfet's reason empty_product (an empty product). A chosen
+  bot.ability.reasoning.input (mosfet's deliberate handoff event) escalates
+  with reason deliberative_input. mosfet's per-event confidence_gate is off
+  by default and the decision service reports no per-event confidence, so
+  there is no gate_dropped_all here. The decision
+  timer is deciding.after (floppy's own bound; mosfet's intuition has none).
 
   Output: <donedata>, received by the cognition as done.invoke.intuition:
 
@@ -67,7 +72,7 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="choices" expr="[]"/>
-    <data id="tuner" expr="({mean: 70, variance: 100, n: 0})"/>
+    <data id="tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <data id="decision_timeout_ms" expr="20000"/>
     <data id="instructions" expr="'You decide what a small companion robot does with one stimulus it observed. Choose the offered event the robot should take for it. Abstain when none of them fits, so slower reasoning handles it.'"/>
     <!-- The decision in flight. -->
@@ -85,7 +90,7 @@
       <assign location="stimulus_data" expr="stimulusData()"/>
       <decision:tuner location="tuner" thresholdlocation="threshold"/>
       <log label="intuition" expr="thresholdLog()"/>
-      <send idlocation="decision_timer" event="floppy.intuition.timed_out" delayexpr="decisionTimeoutDelay()"/>
+      <send idlocation="decision_timer" event="deciding.after" delayexpr="decisionTimeoutDelay()"/>
     </onentry>
     <onexit>
       <cancel sendidexpr="decision_timer"/>
@@ -121,9 +126,13 @@
     <transition event="*" cond="isChosenEvent(_event)"
                 target="done">
       <log label="intuition" expr="chosenLog(_event)"/>
-      <assign location="result" expr="selectionResult(_event)"/>
+      <if cond="isDeliberativeInput(_event)">
+        <assign location="result" expr="deliberativeInputResult()"/>
+      <else/>
+        <assign location="result" expr="selectionResult(_event)"/>
+      </if>
     </transition>
-    <transition event="floppy.intuition.timed_out" cond="isDecisionTimeout(_event)" target="done">
+    <transition event="deciding.after" cond="isDecisionTimeout(_event)" target="done">
       <assign location="result" expr="timedOutResult()"/>
     </transition>
     <transition event="error.*" target="done">

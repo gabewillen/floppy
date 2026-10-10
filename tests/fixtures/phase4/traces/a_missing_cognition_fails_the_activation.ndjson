@@ -1,4 +1,4 @@
-{"label":"bot.diagnostic","session":"session","text":"error.execution while activating","type":"log"}
+{"label":"floppy.diagnostic","session":"session","text":"error.execution while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
-{"label":"bot.diagnostic","session":"session","text":"error.execution while activating","type":"log"}
+{"label":"floppy.diagnostic","session":"session","text":"error.execution while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}

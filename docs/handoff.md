@@ -66,7 +66,7 @@ Last updated: 2026-10-10.
   it; a snapshot read in a compound state's entry content is valid).
   floppy's subtree is at `c5da80c`.
 - **Plan:** [plans/phase4-bot-core.mdscript.md](plans/phase4-bot-core.mdscript.md).
-  Next slice: "Add Identity Text Ability", then Phase 5 seams, live
+  Next slice: "Add Identity Text Ability", then the phase 5 abilities, live
   examples, docs, and the phase-end catch-up (doc tests once, deferred live
   runs via CPA; `.env.cpa` is not present in cloud sessions).
 - **Open for the user:** harden
@@ -293,11 +293,11 @@ inlines the browser `validate` options type so no unapproved
   `live_cascade`).
 
 - Phase 4 cognition cascade (floppy `b8964ae9`): `abilities/cognition/cognition.scx`
-  invokes per turn `abilities/autonomy/autonomy.scx` (phase 5 seam, always
-  unhandled), `abilities/intuition/intuition.scx` (`<decision:choice>` of ignore or
+  invokes per turn `abilities/autonomy/autonomy.scx` (always unhandled without
+  memory), `abilities/intuition/intuition.scx` (`<decision:choice>` of ignore or
   the reasoning handoff, decided by the decision service on TypeSafe, with
   mosfet's ConfidenceTuner passed by `<param>` and returned in
-  `<donedata>`), and `abilities/reasoning/reasoning.scx` (memory seams around one
+  `<donedata>`), and `abilities/reasoning/reasoning.scx` (memory steps around one
   strict structured `generate` call whose schema is built from
   `<decision:choice>`: respond and ignore until the body assembles
   choices). Stages answer by `done.invoke.<stage>`; hop timers (30 s) ask
@@ -316,7 +316,7 @@ inlines the browser `validate` options type so no unapproved
   sends them as `bot.ability.cognition.input.choices` (`[floppy field]`).
   Reasoning selects only from them (a `target` enum per event). A
   completed turn passes through `routing`, which sends each selection to
-  `#_internal` or `#_<target>` and logs `bot.route`/`bot.route.dropped`;
+  `#_internal` or `#_<target>` and logs `floppy.route`/`floppy.route.dropped`;
   `floppy.routed` ends it. Focus is taken only as a routed selection. No
   ability offers `bot.ability.communication.respond` until communication
   lands, so the bot does not speak yet. Live: `live_choices` and
@@ -329,13 +329,15 @@ inlines the browser `validate` options type so no unapproved
   `abilities/conversation/conversation.scx` and `abilities/speaking/speaking.scx` as invoked
   children, offers `bot.ability.communication.respond` and `.activate`,
   says a routed response through speaking (text mode, `<log
-  label="bot.say">`; the body logs `bot.ability.speaking.output`) within a
+  label="floppy.say">`; the body logs `bot.ability.speaking.output`) within a
   6 s hop timer, records it as an outbound
   `bot.ability.conversation.append`, and defers input and responses while
   one is in flight; a waiting one passes the same checks when replayed
   (a blank waiting response fails and is not said). External `bot.ability.communication.input` goes
-  through the body to the conversation, whose product (output with an
-  inbound last message, at most `max_messages` 20) is a turn's stimulus.
+  through the body to the conversation (as mosfet's
+  `bot.ability.conversation.routed_input`), whose text product (its whole
+  history, as in mosfet) comes back as a `bot.ability.cognition.input`
+  handoff the body grants a turn.
   Tests: `tests/tests/communication.rs` (8), the fake-backend end-to-end
   `a_reasoned_response_is_said_through_the_communication` in
   `cognition.rs`; live `live_chat` passed on the CPA gateway
@@ -371,7 +373,7 @@ inlines the browser `validate` options type so no unapproved
   the body keeps only the visible `<foreach>`/`<send>` that delivers each
   placed selection. `<decision:route>` writes one ordered list of
   `{event, data, target}` or `{dropped}` entries (not separate routed and
-  dropped lists) so the `bot.route`/`bot.route.dropped` log order stays
+  dropped lists) so the `floppy.route`/`floppy.route.dropped` log order stays
   byte-identical. The body's choice/route script functions are gone,
   traces unchanged. Still scripted in the body: validators,
   `attentionBias`, `envelope` (later slices).
