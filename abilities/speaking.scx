@@ -18,7 +18,8 @@
   service). Its bot.ability.vocal.speech.encoding.output is the encoded
   speech: the audio reference with its media_type, sample_rate_hz and
   channels (speaking's own, mosfet's 24000 Hz mono audio/pcm, where the
-  encoder leaves one null) and duration. Synthesis is bounded by mosfet's
+  encoder leaves one null), and its duration when the encoder measured one
+  (the speech service does not yet). Synthesis is bounded by mosfet's
   5 s (encoding_timeout_ms); leaving encoding cancels vocal and its
   request.
 
@@ -68,7 +69,10 @@
     <data id="sample_rate_hz" expr="24000"/>
     <data id="channels" expr="1"/>
     <data id="media_type" expr="'audio/pcm'"/>
-    <data id="output_prefix" expr="'/media/speaking-'"/>
+    <!-- The speech model vocal asks the speech service for (it requires
+         one; the bot names none yet). -->
+    <data id="model" expr="null"/>
+    <data id="output_prefix" expr="'media/speaking-'"/>
     <data id="encoding_timeout_ms" expr="5000"/>
     <data id="recording_timeout_ms" expr="5000"/>
     <!-- The utterance in hand, its number, the encoded speech and timer. -->
@@ -110,6 +114,7 @@
     </onexit>
     <invoke id="vocal" type="scxml" src="vocal.scx">
       <param name="output" expr="output_prefix + operation + '.' + media_type.split('/')[1]"/>
+      <param name="model" expr="model"/>
       <param name="media_type" expr="media_type"/>
     </invoke>
     <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json"
@@ -123,6 +128,7 @@
       <assign location="encoded" expr="Object.assign({}, _event.data)"/>
       <assign location="encoded.sample_rate_hz" expr="encoded.sample_rate_hz == null ? sample_rate_hz : encoded.sample_rate_hz"/>
       <assign location="encoded.channels" expr="encoded.channels == null ? channels : encoded.channels"/>
+      <assign location="encoded.media_type" expr="encoded.media_type == null ? media_type : encoded.media_type"/>
     </transition>
     <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
                 cond="_event.invokeid === 'vocal'" target="idle">

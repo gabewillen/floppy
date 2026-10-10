@@ -1,13 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.vocal.speech.encoding.output",
-  "additionalProperties": false,
-  "description": "Encoded speech (mosfet's SpeechEncoding output, the audio bytes; floppy passes media by reference, with its format).",
+  "description": "Speech audio encoded by vocal's SpeechEncoding. mosfet carries the encoded audio as bytes; floppy carries a reference to it and the sound fields of environment.sound, so playout can broadcast it as one.",
   "properties": {
     "audio": {
-      "description": "Reference (a URI reference) to the encoded audio the speech service wrote; floppy passes media by reference, never as bytes [floppy field].",
+      "description": "Reference (a URI reference) to the encoded audio; floppy passes media by reference, never as bytes [floppy field].",
       "examples": [
-        "/media/speaking-1.pcm"
+        "media/speech-1.mp3"
       ],
       "format": "uri-reference",
       "minLength": 1,
@@ -15,79 +14,95 @@
       "type": "string"
     },
     "media_type": {
-      "description": "Media type of the encoded audio (e.g. audio/pcm, audio/wav) [floppy field].",
-      "examples": [
-        "audio/pcm",
-        "audio/wav"
-      ],
-      "minLength": 1,
-      "title": "Media Type",
-      "type": "string"
-    },
-    "sample_rate_hz": {
       "anyOf": [
         {
-          "type": "integer",
-          "minimum": 1
+          "minLength": 1,
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "description": "Sample rate of the encoded audio in hertz, when known [floppy field].",
+      "description": "Optional media type or codec label, such as audio/pcm or audio/opus.",
       "examples": [
-        24000
+        "audio/pcm",
+        "audio/opus"
+      ],
+      "title": "Media Type"
+    },
+    "sample_rate_hz": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional sample rate for raw or decoded audio, measured in hertz.",
+      "examples": [
+        48000
       ],
       "title": "Sample Rate Hz"
     },
     "channels": {
       "anyOf": [
         {
-          "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "type": "integer"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "description": "Channel count of the encoded audio, when known [floppy field].",
+      "description": "Optional number of audio channels represented by the chunk.",
       "examples": [
-        1
+        1,
+        2
       ],
       "title": "Channels"
     },
     "duration": {
       "anyOf": [
         {
-          "type": "number",
-          "exclusiveMinimum": 0.0
+          "exclusiveMinimum": 0,
+          "type": "number"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "description": "Seconds of sound the audio makes, measured from its bytes when the form is linear PCM (mosfet's Speaking playout duration), else null [floppy field].",
+      "description": "Seconds of sound, measured from the encoded audio rather than estimated (mosfet's EfferenceData.duration, which Speaking measures from linear PCM); null when the form does not say [floppy field].",
       "examples": [
-        3.6
+        3.6,
+        null
       ],
       "title": "Duration"
     }
   },
   "required": [
-    "audio",
-    "media_type"
+    "audio"
   ],
   "type": "object",
   "examples": [
     {
-      "audio": "/media/speaking-1.pcm",
-      "media_type": "audio/pcm",
-      "sample_rate_hz": 24000,
+      "audio": "media/speech-1.mp3",
+      "channels": null,
+      "duration": null,
+      "media_type": "audio/mpeg",
+      "sample_rate_hz": null
+    },
+    {
+      "audio": "media/speech-1.pcm",
       "channels": 1,
-      "duration": 3.6
+      "duration": 3.6,
+      "media_type": "audio/pcm",
+      "sample_rate_hz": 24000
     }
   ]
 }

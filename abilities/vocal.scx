@@ -11,12 +11,13 @@
 
   Input: bot.ability.vocal.speech.encoding.input {text} (mosfet's input is
   the text's UTF-8 bytes). applying invokes the speech service with the
-  <param>s operation "encode", model, text, voice, output (where the
+  <param>s operation "encode", model (the speech service requires one:
+  the invoker names it), text, voice, output (where the
   service writes the audio: a path in the media directory the run grants
   it, which the invoker names) and media_type, and answers the parent with
   the service's bot.ability.vocal.speech.encoding.output {audio,
-  media_type, sample_rate_hz, channels, duration} (the audio as a
-  reference, never bytes), or bot.ability.failed {message} (mosfet's
+  media_type, sample_rate_hz, channels} (the audio as a reference, never
+  bytes; a measured duration, when the service gives one, rides along), or bot.ability.failed {message} (mosfet's
   FailureData) when the service fails, ends without an answer, or cannot
   run. An input that arrives while applying is logged and dropped: its
   invoker sends one per invocation.

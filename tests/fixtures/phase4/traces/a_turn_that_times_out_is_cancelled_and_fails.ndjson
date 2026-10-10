@@ -14,9 +14,9 @@
 {"label":"bot.output","session":"session","text":"{\"turn\":2,\"output\":[{\"data\":{\"text\":\"reply 2\"},\"event\":\"bot.ability.communication.respond\"}]}","type":"log"}
 {"label":"bot.processing.completed","session":"session","text":"{\"output\":[{\"data\":{\"text\":\"reply 2\"},\"event\":\"bot.ability.communication.respond\"}],\"focus_candidates\":[],\"turn\":2}","type":"log"}
 {"label":"bot.route","session":"session","text":"bot.ability.communication.respond -> communication","type":"log"}
-{"label":"speech.encode","parent":"session.6","session":"session.7","text":"encode reply 2 -> /media/speaking-1.pcm","type":"log"}
+{"label":"speech.encode","parent":"session.6","session":"session.7","text":"encode reply 2 -> media/speaking-1.pcm","type":"log"}
 {"label":"bot.say","parent":"session.2","session":"session.4","text":"reply 2","type":"log"}
-{"label":"environment.sound","session":"session","text":"{\"audio\":\"/media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}","type":"log"}
+{"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}","type":"log"}
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
 {"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"text\":\"reply 2\"}","type":"log"}
 {"label":"conversation","parent":"session.2","session":"session.3","text":"outbound 0","type":"log"}

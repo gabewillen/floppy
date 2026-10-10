@@ -207,12 +207,12 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
     // environment by reference, then said.
     assert_eq!(
         texts(&records, "speech.encode"),
-        strings(&["encode reply 1 -> /media/speaking-1.pcm"])
+        strings(&["encode reply 1 -> media/speaking-1.pcm"])
     );
     assert_eq!(
         texts(&records, "environment.sound"),
         strings(&[
-            r#"{"audio":"/media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
+            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
         ])
     );
     assert_eq!(
@@ -566,7 +566,7 @@ fn a_spoken_response_reaches_listening_as_its_efference_copy_before_its_sound() 
     assert_eq!(
         texts(&records, "input.sound"),
         strings(&[
-            r#"{"audio":"/media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
+            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
         ])
     );
     let order: Vec<String> = logs(&records)
