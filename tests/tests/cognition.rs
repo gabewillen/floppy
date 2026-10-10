@@ -547,6 +547,8 @@ fn intuition_handles_an_ignore_without_reasoning() {
             "intuition handled (none)"
         ])
     );
+    // The body gives the cognition its memory: autonomy looks the
+    // stimulus's behaviors up there (a fresh database holds none).
     assert_eq!(
         texts(&records, "autonomy"),
         strings(&["turn 1: 0 matched for bot.input"])
