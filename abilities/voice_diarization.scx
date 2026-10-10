@@ -1,25 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's VoiceDiarization (mosfet abilities/hearing/voice/
-  diarization.py), as an honest seam (decision D52): mosfet's voice
-  diarizers (pyannote, MLX) run only on local models, which have no
-  OpenAI-compatible API. In mosfet the interpretation diarizes an utterance
-  only after voice detection reported voice and only when a diarizer is
-  configured; with voice detection absent (abilities/voice_detection.scx)
-  floppy's interpretation never reaches it.
+  floppy's VoiceDiarization (mosfet abilities/hearing/voice/diarization.py):
+  who spoke when in a closed utterance, through the speech service's
+  diarize operation (mosfet's VoiceDiarizer providers: pyannote's and MLX
+  Audio's pipelines; here LocalAI's POST {base}/audio/diarization, which
+  serves pyannote segmentation and Sortformer models). The interpretation
+  (abilities/interpretation.scx) invokes it once per utterance from
+  DiarizingVoice; the interpretation's stage timer bounds it, and leaving
+  DiarizingVoice cancels it and the service call (SCXML 6.4).
 
-    applying -> applied (final)
+    applying (an invoked speech service) -> applied (final)
 
-  Input: the <param>s audio (a reference to the utterance's audio),
-  media_type, sample_rate_hz and channels (mosfet's InputData).
+  Input: the <param>s audio (a reference to the utterance: raw 16-bit PCM,
+  or a WAV container), media_type, sample_rate_hz and channels (its
+  format), output (the reference each segment's file extends,
+  <output>-<index>), and model (LocalAI's pyannote-diarization by default).
 
-  applying logs <log label="voice_diarization" expr="'absent'"> and ends
-  with no <donedata>: no voice segments (mosfet's OutputData) are
-  reported, never fabricated.
+  Output: <donedata>, received by the interpretation as
+  done.invoke.voice_diarization: {segments} (mosfet's OutputData: clipped
+  PCM segments, each a reference with its format, span and optional
+  confidence, ascending by start; raw speaker labels never enter) when the
+  service answers bot.ability.hearing.voice.diarization.output, or
+  {message} (mosfet's FailureData) when it answers bot.ability.failed,
+  answers something else, or cannot run.
 
-  Bindings: none (no service, no I/O).
+  Bindings: the speech service package; env scopes FLOPPY_VOICE_BASE_URL
+  and FLOPPY_VOICE_API_KEY to the service's <invoke> (no default backend,
+  decision D31). The run grants the service the media directory. An
+  invoked service's events are not checked against event:schema, so their
+  shape is checked by cond.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="voice_diarization" initial="applying">
   <datamodel>
     <!-- The invoker's <param>s. -->
@@ -27,15 +40,45 @@
     <data id="media_type" expr="null"/>
     <data id="sample_rate_hz" expr="null"/>
     <data id="channels" expr="null"/>
+    <data id="output" expr="null"/>
+    <data id="model" expr="'pyannote-diarization'"/>
+    <!-- The result. -->
+    <data id="result" expr="null"/>
   </datamodel>
 
-  <!-- The diarizer seam: no voice diarizer. -->
   <state id="applying">
-    <onentry>
-      <log label="voice_diarization" expr="'absent'"/>
-    </onentry>
-    <transition target="applied"/>
+    <invoke id="diarizer" type="https://github.com/stateforward/floppy/services/speech"
+            env:baseurl="FLOPPY_VOICE_BASE_URL" env:apikey="FLOPPY_VOICE_API_KEY">
+      <param name="operation" expr="'diarize'"/>
+      <param name="model" expr="model"/>
+      <param name="audio" expr="audio"/>
+      <param name="media_type" expr="media_type"/>
+      <param name="sample_rate_hz" expr="sample_rate_hz"/>
+      <param name="channels" expr="channels"/>
+      <param name="output" expr="output"/>
+    </invoke>
+    <transition event="bot.ability.hearing.voice.diarization.output"
+                cond="_event.invokeid === 'diarizer' &amp;&amp; Array.isArray(Object(_event.data).segments)" target="applied">
+      <assign location="result" expr="({segments: _event.data.segments})"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                cond="_event.invokeid === 'diarizer'" target="applied">
+      <assign location="result" expr="({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceDiarization failed.'})"/>
+    </transition>
+    <transition event="*" cond="_event.invokeid === 'diarizer' &amp;&amp; _event.name.indexOf('done.') !== 0" target="applied">
+      <assign location="result" expr="({message: 'Voice diarization produced output that does not match its apply schema.'})"/>
+    </transition>
+    <transition event="done.invoke" cond="_event.invokeid === 'diarizer'" target="applied">
+      <assign location="result" expr="({message: 'VoiceDiarization ended without diarizing.'})"/>
+    </transition>
+    <transition event="error.*" target="applied">
+      <assign location="result" expr="({message: 'VoiceDiarization could not run (' + _event.name + ')'})"/>
+    </transition>
   </state>
 
-  <final id="applied"/>
+  <final id="applied">
+    <donedata>
+      <content expr="result"/>
+    </donedata>
+  </final>
 </scxml>

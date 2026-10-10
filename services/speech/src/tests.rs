@@ -151,7 +151,7 @@ fn malformed_parameters_reject_the_start() {
         ),
         (
             base("transcribe"),
-            "speech operation must be decode or encode",
+            "speech operation must be decode, encode, detect, diarize, identify, normalize, append, or clip",
         ),
         (
             vec![("operation", text("decode")), ("audio", text("a"))],

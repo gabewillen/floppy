@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.voice.detection.output",
+  "description": "Private apply result: clip-local voice spans from the voice-activity classifier (not a public product).\n\nEmpty ``segments`` means no voice in this clip. Used only to decide Start/End boundaries.\nDownstream turn assembly may still receive segment lists via Listening products, not this event.",
+  "properties": {
+    "segments": {
+      "default": [],
+      "description": "Voice spans in the inspected audio, ordered by ascending start_seconds. Empty means no voice.",
+      "examples": [
+        [
+          {
+            "confidence": 0.92,
+            "end_seconds": 0.7,
+            "start_seconds": 0.0
+          }
+        ],
+        []
+      ],
+      "items": {
+        "description": "One voice span in the inspected audio, measured from the start of that input.",
+        "examples": [
+          {
+            "confidence": 0.92,
+            "end_seconds": 0.7,
+            "start_seconds": 0.0
+          }
+        ],
+        "properties": {
+          "start_seconds": {
+            "description": "Inclusive start of this voice span, in seconds from the beginning of the inspected audio input.",
+            "examples": [
+              0.0
+            ],
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "end_seconds": {
+            "description": "Exclusive end of this voice span, in seconds from the beginning of the inspected audio input.",
+            "examples": [
+              0.7
+            ],
+            "minimum": 0.0,
+            "title": "End Seconds",
+            "type": "number"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional provider confidence for this span, normalized from 0.0 to 1.0 when available.",
+            "examples": [
+              0.92
+            ],
+            "title": "Confidence"
+          }
+        },
+        "required": [
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "VoiceDetectionSegment",
+        "type": "object"
+      },
+      "title": "Segments",
+      "type": "array"
+    }
+  },
+  "type": "object",
+  "examples": [
+    {
+      "segments": [
+        {
+          "confidence": 0.92,
+          "end_seconds": 0.7,
+          "start_seconds": 0.0
+        }
+      ]
+    },
+    {
+      "segments": []
+    }
+  ]
+}

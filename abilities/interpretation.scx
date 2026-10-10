@@ -5,53 +5,100 @@
   out to be. The listening (abilities/listening.scx) invokes it as its
   long-lived child "interpretation" and hands it each scored sound.
 
-    Idle -bot.ability.listening.sensitivity.output-> Working {
-      DetectingVoice -> ClassifyingSound | DecodingSpeech
-      ClassifyingSound -> HandingOff | DecodingSpeech
-      DecodingSpeech -> HandingOff
-      HandingOff -> Idle }
-    Working -bot.ability.listening.stage.failed-> Idle
+    initializing -> Interpretation {
+      Idle -bot.ability.listening.sensitivity.output-> Working {
+        DetectingVoice -> Idle | HandingOff | ClassifyingSound
+                        | IdentifyingVoiceDirect | HearingSpeech
+        HearingSpeech -scored sound-> FeedingSpeech
+        FeedingSpeech -> HearingSpeech | SpeechEnded
+        SpeechEnded -> DiarizingVoice | DecodingSpeech | Idle
+        ClassifyingSound -> HandingOff | Idle
+        DiarizingVoice -> IdentifyingVoice | DecodingSpeech.Diarized | HandingOff
+        IdentifyingVoiceDirect -> HearingSpeech
+        IdentifyingVoice -> HandingOff
+        DecodingSpeech { Detected, Diarized } -> HandingOff
+        HandingOff -> Idle }
+      Working -bot.ability.listening.stage.failed-> Idle }
+
+  Configuration (mosfet's constructor, as <data>): the voice activity
+  classifier is required, so voice detection always runs;
+  sound_classification (KindSoundClassifier), speech_decoding,
+  voice_diarization and voice_identification say which optional stages are
+  configured, product_threshold_db is mosfet's 3 dB, and stage_timeout_ms
+  is mosfet's 30 s stage operation timeout. floppy's bot configures voice
+  detection, sound classification and speech decoding (the phase 6 plan:
+  speech is decoded in listening). Voice identification with speech
+  decoding is refused, as mosfet's constructor refuses it (embedding
+  correlation would be lost): initializing ends in the final state
+  degraded, and the listening degrades.
 
   Input: bot.ability.listening.sensitivity.output {sound, parent,
   perceived_level_db} (mosfet's sensitivity OutputData) from the
   listening. Scored sounds that arrive while Working wait, in order, in
-  the data model queue and are taken on the return to Idle (mosfet defers
-  them): interpretation is serial, and the score was taken on arrival.
+  the data model queue and are taken by Idle and HearingSpeech (mosfet
+  defers them): interpretation is serial, and the score was taken on
+  arrival.
 
   Stages, each a child invoked from its state (leaving the state cancels
-  it, SCXML 6.4) and bounded by the stage timer, mosfet's 30 s stage
-  operation timeout (stage_timeout_ms): bot.ability.listening.stage.failed
-  {stage, message: "Listening <stage> timed out."} sent to this session
-  with that delay.
+  it, SCXML 6.4) and bounded by its own stage timer:
+  bot.ability.listening.stage.failed {stage, message: "Listening <stage>
+  timed out."} sent to this session after stage_timeout_ms.
 
-  * DetectingVoice invokes abilities/voice_detection.scx, a seam (decision
-    D52: no OpenAI-compatible voice activity model). It ends without a
-    result, so whether the sound holds voice is unknown: mosfet's
-    voice/no-voice routes, its open-speech window (HearingSpeech,
-    FeedingSpeech, SpeechEnded), diarization and direct voice
-    identification wait for a voice detection model, and each sound is one
-    utterance. A reported result fails the stage.
-  * ClassifyingSound invokes abilities/sound_classification.scx
-    (KindSoundClassifier, mosfet's sound_classifier): a labelled sound is
-    non-speech and is handed off as the original environment.sound; an
-    unlabelled one may be speech and goes to DecodingSpeech.
+  * DetectingVoice and FeedingSpeech invoke abilities/voice_detection.scx:
+    the sound normalized to PCM (mosfet's _pcm_sound_data; a WAV
+    container's PCM is written beside it as floppy-sound-<n>.pcm) and its
+    voice spans (mosfet's ApplyData). With no voice: dropped when only
+    speech decoding is configured, handed off as a silence observation
+    when nothing else is, else classified. With voice: identified directly
+    (voice identification without diarization), else the open-speech
+    window opens (mosfet's VAD Start).
+  * HearingSpeech is the open-speech window: each scored sound goes to
+    FeedingSpeech, still voiced it joins the utterance and the window stays
+    open, and the first one without voice joins it and closes it
+    (mosfet's VAD End) in SpeechEnded. The utterance is the list
+    open_frames (each frame's PCM reference and format; mosfet appends the
+    bytes), and the loudest frame is open_sensed. While the window is open and neither speech
+    decoding nor diarization owns the product, each frame is streamed as
+    an acoustic bot.ability.listening.speech.output (its PCM, its voice
+    spans, and the identity direct identification found), when audible.
+  * SpeechEnded joins the open speech into one utterance file with the
+    speech service's append step when diarization or decoding will read
+    it, then diarizes, else decodes, else returns to Idle. The utterance
+    is always a WAV container (floppy-utterance-<n>.wav): mosfet hands its
+    decoder bytes in the ingress format, but floppy hands the decoder a
+    file, and transcription APIs read a container, not raw PCM.
+  * ClassifyingSound invokes abilities/sound_classification.scx: a
+    labelled sound is non-speech and is handed off as the original
+    environment.sound; an unlabelled one is dropped when speech decoding
+    is configured, else handed off as a silence observation.
+  * DiarizingVoice invokes abilities/voice_diarization.scx on the
+    utterance (its clipped segments are floppy-diarized-<n>-<index>).
+  * IdentifyingVoiceDirect invokes abilities/voice_identification.scx on
+    the opening voice span (clipped to floppy-voice-<n>.pcm); its one
+    embedding becomes the window's source identity. IdentifyingVoice
+    embeds each diarized segment. Exactly one embedding per segment.
   * DecodingSpeech invokes abilities/speech_decoding.scx (the speech
-    service). Decoding rewrites the observation into words: the product
-    is bot.ability.listening.speech.output (mosfet's SpeechData) with
-    content the words, content_type text/plain, voice_detection
-    {segments: []} (no voice spans were reported), media_type audio/pcm,
-    the sound's sample_rate_hz and channels (1 when unknown), empty
-    source_ids (no voice identification result), and parent the
-    environment.sound envelope. A sound with no sample rate cannot be
-    placed on a timeline and fails the stage, as in mosfet.
+    service) on the utterance: decoding rewrites the observation into
+    words.
   * HandingOff is the one comparison (mosfet _is_audible_product): a
     product whose perceived_level_db is null or at least
-    product_threshold_db (mosfet's 3 dB) goes to the listening; a quieter
-    one is dropped. Either way the interpretation returns to Idle.
+    product_threshold_db goes to the listening; a quieter one is dropped.
+    The products (mosfet _dispatch_product_cognition_input): decoded
+    speech as bot.ability.listening.speech.output with content the words
+    and content_type text/plain (a sound with no sample rate fails, as in
+    mosfet); one speech product per diarized segment (its PCM, span,
+    confidence, and, after identification, its embedding as its source
+    identity); a silence observation as a speech product of the sound's
+    PCM; a labelled sound, or a sound that is not PCM, as the original
+    environment.sound.
+
+  Files are written in the directory of the sound's audio reference, the
+  directory the run grants the speech service.
 
   Failure: a stage failure (its child's failure, an error, or its timer)
   answers the listening with bot.ability.listening.failed {stage, message}
-  (mosfet's FailedEventData) and returns to Idle.
+  (mosfet's FailedEventData) and returns to Idle; Idle clears the open
+  speech.
 
   Readiness: on start it sends bot.ability.offers {ability:
   "interpretation", choices: []} to the listening; it offers nothing.
@@ -61,24 +108,55 @@
   <donedata>, which scxml.rs does not check, so their shape is checked by
   cond.
 
-  Bindings: none of its own; speech_decoding.scx binds the speech service.
+  Bindings: the speech service for the append step (no backend); the
+  stages bind their own services.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       version="1.0" datamodel="ecmascript" name="interpretation" initial="Interpretation">
+       version="1.0" datamodel="ecmascript" name="interpretation" initial="initializing">
   <datamodel>
-    <!-- Configuration (mosfet's constructor): the product threshold and
-         the stage operation timeout. -->
+    <!-- Configuration (mosfet's constructor). -->
     <data id="product_threshold_db" expr="3.0"/>
     <data id="stage_timeout_ms" expr="30000"/>
+    <data id="sound_classifier" expr="true"/>
+    <data id="speech_decoder" expr="true"/>
+    <data id="diarizer" expr="false"/>
+    <data id="voice_classifier" expr="false"/>
     <!-- Scored sounds waiting for the interpretation. -->
     <data id="queue" expr="[]"/>
-    <!-- The scored sound in hand, its stage, and what became of it. -->
+    <!-- The scored sound in hand, its stage, its directory, and a counter
+         naming the files written for it. -->
     <data id="sensed" expr="null"/>
     <data id="stage" expr="null"/>
+    <data id="media_dir" expr="''"/>
+    <data id="serial" expr="0"/>
+    <!-- The current frame's detection {sensed, voice_detection}, and what
+         HandingOff hands off {kind, sensed, voice_detection, ...}. -->
+    <data id="detection" expr="null"/>
+    <data id="completion" expr="null"/>
+    <data id="result" expr="null"/>
+    <!-- The open speech (mosfet's open utterance). -->
+    <data id="open_frames" expr="[]"/>
+    <data id="open_sensed" expr="null"/>
+    <data id="active_source_ids" expr="[]"/>
+    <data id="active_voice_embedding" expr="null"/>
+    <data id="utterance" expr="null"/>
+    <!-- HandingOff's working values. -->
+    <data id="audible" expr="false"/>
     <data id="product" expr="null"/>
-    <data id="failure" expr="null"/>
+    <data id="mismatch" expr="null"/>
+    <data id="channels" expr="1"/>
+    <data id="segment" expr="null"/>
+    <data id="index" expr="0"/>
   </datamodel>
+
+  <!-- mosfet's constructor refuses identification with decoding. -->
+  <state id="initializing">
+    <transition cond="voice_classifier &amp;&amp; speech_decoder" target="degraded">
+      <log label="interpretation.degraded" expr="'voice identification cannot be combined with speech decoding'"/>
+    </transition>
+    <transition target="Interpretation"/>
+  </state>
 
   <state id="Interpretation" initial="Idle">
     <onentry>
@@ -88,13 +166,22 @@
       </send>
     </onentry>
 
-    <!-- Scored sounds queue here, one at a time. -->
+    <!-- Scored sounds queue here, one at a time; the open speech is clear
+         whenever the interpretation is idle. -->
     <state id="Idle">
-      <transition cond="queue.length &gt; 0" target="Working">
+      <onentry>
+        <assign location="open_frames" expr="[]"/>
+        <assign location="open_sensed" expr="null"/>
+        <assign location="active_source_ids" expr="[]"/>
+        <assign location="active_voice_embedding" expr="null"/>
+        <assign location="utterance" expr="null"/>
+        <assign location="stage" expr="null"/>
+      </onentry>
+      <transition cond="queue.length &gt; 0" target="DetectingVoice">
         <assign location="sensed" expr="queue.shift()"/>
       </transition>
       <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json"
-                  cond="!_event.invokeid" target="Working">
+                  cond="!_event.invokeid" target="DetectingVoice">
         <assign location="sensed" expr="_event.data"/>
       </transition>
     </state>
@@ -102,10 +189,6 @@
     <!-- One busy region: the queue and the stage failure policy live
          once, not on every stage. -->
     <state id="Working" initial="DetectingVoice">
-      <onentry>
-        <assign location="product" expr="null"/>
-        <assign location="failure" expr="null"/>
-      </onentry>
       <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json"
                   cond="!_event.invokeid">
         <assign location="queue" expr="queue.concat([_event.data])"/>
@@ -122,11 +205,20 @@
           <content expr="({stage: stage, message: 'Listening ' + stage + ' could not run (' + _event.name + ')'})"/>
         </send>
       </transition>
+      <!-- A stage child's failure (its <donedata> {message}). -->
+      <transition event="done.invoke" cond="stage !== null &amp;&amp; typeof Object(_event.data).message === 'string'">
+        <send event="bot.ability.listening.stage.failed" target="#_internal">
+          <content expr="({stage: stage, message: _event.data.message})"/>
+        </send>
+      </transition>
 
-      <!-- Voice detection: a seam, so voice is unknown. -->
+      <!-- Voice detection on a sound with the window closed. -->
       <state id="DetectingVoice">
         <onentry>
           <assign location="stage" expr="'voice_detection'"/>
+          <assign location="detection" expr="null"/>
+          <assign location="serial" expr="serial + 1"/>
+          <assign location="media_dir" expr="sensed.sound.audio.slice(0, sensed.sound.audio.lastIndexOf('/') + 1)"/>
           <send id="voice-detection-timer" event="bot.ability.listening.stage.failed" delayexpr="stage_timeout_ms + 'ms'">
             <content expr="({stage: stage, message: 'Listening ' + stage + ' timed out.'})"/>
           </send>
@@ -139,12 +231,160 @@
           <param name="media_type" expr="sensed.sound.media_type === undefined ? null : sensed.sound.media_type"/>
           <param name="sample_rate_hz" expr="sensed.sound.sample_rate_hz === undefined ? null : sensed.sound.sample_rate_hz"/>
           <param name="channels" expr="sensed.sound.channels === undefined ? null : sensed.sound.channels"/>
+          <param name="output" expr="media_dir + 'floppy-sound-' + serial + '.pcm'"/>
         </invoke>
-        <transition event="done.invoke.voice_detection" cond="_event.data === undefined || _event.data === null" target="ClassifyingSound"/>
-        <transition event="done.invoke.voice_detection">
+        <transition event="done.invoke.voice_detection"
+                    cond="Array.isArray(Object(Object(_event.data).voice_detection).segments) &amp;&amp; Object(_event.data).sound">
+          <assign location="result" expr="_event.data"/>
+          <assign location="detection" expr="({sensed: sensed, voice_detection: result.voice_detection})"/>
+          <if cond="result.sound.audio !== sensed.sound.audio || result.sound.media_type !== (sensed.sound.media_type || null)">
+            <assign location="detection.sensed" expr="({sound: Object.assign({}, sensed.sound, result.sound), parent: sensed.parent, perceived_level_db: sensed.perceived_level_db})"/>
+          </if>
+        </transition>
+        <transition event="done.invoke.voice_detection" cond="typeof Object(_event.data).message !== 'string'">
           <send event="bot.ability.listening.stage.failed" target="#_internal">
-            <content expr="({stage: stage, message: 'Voice detection reported spans; the interpretation takes only an absent voice detection.'})"/>
+            <content expr="({stage: stage, message: 'Voice detection child produced a non-ApplyData terminal.'})"/>
           </send>
+        </transition>
+        <!-- mosfet's routes, in its order. -->
+        <transition cond="detection !== null &amp;&amp; detection.voice_detection.segments.length === 0 &amp;&amp; !sound_classifier &amp;&amp; speech_decoder"
+                    target="Idle"/>
+        <transition cond="detection !== null &amp;&amp; detection.voice_detection.segments.length === 0 &amp;&amp; !speech_decoder &amp;&amp; !sound_classifier"
+                    target="HandingOff">
+          <assign location="completion" expr="({kind: 'detection', sensed: detection.sensed, voice_detection: detection.voice_detection})"/>
+        </transition>
+        <transition cond="detection !== null &amp;&amp; detection.voice_detection.segments.length === 0 &amp;&amp; sound_classifier"
+                    target="ClassifyingSound"/>
+        <transition cond="detection !== null &amp;&amp; voice_classifier &amp;&amp; !diarizer" target="IdentifyingVoiceDirect"/>
+        <!-- VAD Start: open the window with this frame. -->
+        <transition cond="detection !== null" target="HearingSpeech">
+          <assign location="open_sensed" expr="detection.sensed"/>
+          <assign location="open_frames" expr="[detection.sensed.sound]"/>
+        </transition>
+      </state>
+
+      <!-- The open-speech window: the next scored sound is fed to voice
+           detection. -->
+      <state id="HearingSpeech">
+        <onentry>
+          <assign location="stage" expr="null"/>
+          <!-- The frame just heard, streamed when Listening owns no
+               decoder (mosfet _emit_speech_product). -->
+          <assign location="audible" expr="detection.sensed.perceived_level_db == null || detection.sensed.perceived_level_db &gt;= product_threshold_db"/>
+          <assign location="audible" expr="audible &amp;&amp; !speech_decoder &amp;&amp; !diarizer &amp;&amp; typeof detection.sensed.sound.sample_rate_hz === 'number'"/>
+          <if cond="audible &amp;&amp; detection.sensed.sound.media_type === 'audio/pcm' &amp;&amp; detection.sensed.sound.audio">
+            <assign location="product" expr="({content: detection.sensed.sound.audio, content_type: 'audio/pcm', voice_detection: detection.voice_detection})"/>
+            <assign location="product.sample_rate_hz" expr="detection.sensed.sound.sample_rate_hz"/>
+            <assign location="product.channels" expr="typeof detection.sensed.sound.channels === 'number' ? detection.sensed.sound.channels : 1"/>
+            <assign location="product.media_type" expr="'audio/pcm'"/>
+            <assign location="product.source_ids" expr="active_source_ids"/>
+            <assign location="product.voice_embedding" expr="active_voice_embedding"/>
+            <assign location="product.parent" expr="detection.sensed.parent === undefined ? null : detection.sensed.parent"/>
+            <send event="bot.ability.listening.speech.output" target="#_parent">
+              <content expr="product"/>
+            </send>
+          </if>
+        </onentry>
+        <transition cond="queue.length &gt; 0" target="FeedingSpeech">
+          <assign location="sensed" expr="queue.shift()"/>
+        </transition>
+        <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json"
+                    cond="!_event.invokeid" target="FeedingSpeech">
+          <assign location="sensed" expr="_event.data"/>
+        </transition>
+      </state>
+
+      <!-- Voice detection on a sound with the window open. -->
+      <state id="FeedingSpeech">
+        <onentry>
+          <assign location="stage" expr="'voice_detection'"/>
+          <assign location="detection" expr="null"/>
+          <assign location="serial" expr="serial + 1"/>
+          <assign location="media_dir" expr="sensed.sound.audio.slice(0, sensed.sound.audio.lastIndexOf('/') + 1)"/>
+          <send id="feeding-speech-timer" event="bot.ability.listening.stage.failed" delayexpr="stage_timeout_ms + 'ms'">
+            <content expr="({stage: stage, message: 'Listening ' + stage + ' timed out.'})"/>
+          </send>
+        </onentry>
+        <onexit>
+          <cancel sendid="feeding-speech-timer"/>
+        </onexit>
+        <invoke id="speech_voice_detection" type="scxml" src="voice_detection.scx">
+          <param name="audio" expr="sensed.sound.audio"/>
+          <param name="media_type" expr="sensed.sound.media_type === undefined ? null : sensed.sound.media_type"/>
+          <param name="sample_rate_hz" expr="sensed.sound.sample_rate_hz === undefined ? null : sensed.sound.sample_rate_hz"/>
+          <param name="channels" expr="sensed.sound.channels === undefined ? null : sensed.sound.channels"/>
+          <param name="output" expr="media_dir + 'floppy-sound-' + serial + '.pcm'"/>
+        </invoke>
+        <transition event="done.invoke.speech_voice_detection"
+                    cond="Array.isArray(Object(Object(_event.data).voice_detection).segments) &amp;&amp; Object(_event.data).sound">
+          <assign location="result" expr="_event.data"/>
+          <assign location="detection" expr="({sensed: sensed, voice_detection: result.voice_detection})"/>
+          <if cond="result.sound.audio !== sensed.sound.audio || result.sound.media_type !== (sensed.sound.media_type || null)">
+            <assign location="detection.sensed" expr="({sound: Object.assign({}, sensed.sound, result.sound), parent: sensed.parent, perceived_level_db: sensed.perceived_level_db})"/>
+          </if>
+          <!-- The frame joins the utterance, voiced or not. -->
+          <assign location="open_frames" expr="open_frames.concat([detection.sensed.sound])"/>
+        </transition>
+        <transition event="done.invoke.speech_voice_detection" cond="typeof Object(_event.data).message !== 'string'">
+          <send event="bot.ability.listening.stage.failed" target="#_internal">
+            <content expr="({stage: stage, message: 'Voice detection child produced a non-ApplyData terminal.'})"/>
+          </send>
+        </transition>
+        <!-- Still in voice: the loudest frame is remembered. -->
+        <transition cond="detection !== null &amp;&amp; detection.voice_detection.segments.length &gt; 0" target="HearingSpeech">
+          <if cond="open_sensed === null || (open_sensed.perceived_level_db == null &amp;&amp; detection.sensed.perceived_level_db != null)">
+            <assign location="open_sensed" expr="detection.sensed"/>
+          <elseif cond="open_sensed.perceived_level_db != null &amp;&amp; detection.sensed.perceived_level_db &gt; open_sensed.perceived_level_db"/>
+            <assign location="open_sensed" expr="detection.sensed"/>
+          </if>
+        </transition>
+        <!-- VAD End. -->
+        <transition cond="detection !== null" target="SpeechEnded"/>
+      </state>
+
+      <!-- After VAD End: the closing frame is streamed, then the utterance
+           is joined for diarization or decoding. -->
+      <state id="SpeechEnded">
+        <onentry>
+          <assign location="audible" expr="detection.sensed.perceived_level_db == null || detection.sensed.perceived_level_db &gt;= product_threshold_db"/>
+          <assign location="audible" expr="audible &amp;&amp; !speech_decoder &amp;&amp; !diarizer &amp;&amp; typeof detection.sensed.sound.sample_rate_hz === 'number'"/>
+          <if cond="audible &amp;&amp; detection.sensed.sound.media_type === 'audio/pcm' &amp;&amp; detection.sensed.sound.audio">
+            <assign location="product" expr="({content: detection.sensed.sound.audio, content_type: 'audio/pcm', voice_detection: detection.voice_detection})"/>
+            <assign location="product.sample_rate_hz" expr="detection.sensed.sound.sample_rate_hz"/>
+            <assign location="product.channels" expr="typeof detection.sensed.sound.channels === 'number' ? detection.sensed.sound.channels : 1"/>
+            <assign location="product.media_type" expr="'audio/pcm'"/>
+            <assign location="product.source_ids" expr="active_source_ids"/>
+            <assign location="product.voice_embedding" expr="active_voice_embedding"/>
+            <assign location="product.parent" expr="detection.sensed.parent === undefined ? null : detection.sensed.parent"/>
+            <send event="bot.ability.listening.speech.output" target="#_parent">
+              <content expr="product"/>
+            </send>
+          </if>
+          <assign location="stage" expr="diarizer ? 'voice_diarization' : 'speech_decoding'"/>
+          <send id="open-speech-timer" event="bot.ability.listening.stage.failed" delayexpr="stage_timeout_ms + 'ms'">
+            <content expr="({stage: stage, message: 'Listening ' + stage + ' timed out.'})"/>
+          </send>
+        </onentry>
+        <onexit>
+          <cancel sendid="open-speech-timer"/>
+        </onexit>
+        <transition cond="!diarizer &amp;&amp; !speech_decoder" target="Idle"/>
+        <invoke id="open_speech" type="https://github.com/stateforward/floppy/services/speech">
+          <param name="operation" expr="'append'"/>
+          <param name="frames" expr="open_frames"/>
+          <param name="output" expr="media_dir + 'floppy-utterance-' + serial + '.wav'"/>
+          <param name="wav" expr="true"/>
+        </invoke>
+        <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="_event.invokeid === 'open_speech'">
+          <send event="bot.ability.listening.stage.failed" target="#_internal">
+            <content expr="({stage: stage, message: Object(_event.data).message})"/>
+          </send>
+        </transition>
+        <transition event="done.invoke.open_speech" cond="diarizer &amp;&amp; typeof Object(_event.data).audio === 'string'" target="DiarizingVoice">
+          <assign location="utterance" expr="_event.data"/>
+        </transition>
+        <transition event="done.invoke.open_speech" cond="typeof Object(_event.data).audio === 'string'" target="DecodingSpeech">
+          <assign location="utterance" expr="_event.data"/>
         </transition>
       </state>
 
@@ -160,15 +400,19 @@
           <cancel sendid="sound-classification-timer"/>
         </onexit>
         <invoke id="sound_classification" type="scxml" src="sound_classification.scx">
-          <param name="audio" expr="sensed.sound.audio"/>
-          <param name="media_type" expr="sensed.sound.media_type === undefined ? null : sensed.sound.media_type"/>
-          <param name="kind" expr="sensed.sound.kind === undefined ? null : sensed.sound.kind"/>
+          <param name="audio" expr="detection.sensed.sound.audio"/>
+          <param name="media_type" expr="detection.sensed.sound.media_type === undefined ? null : detection.sensed.sound.media_type"/>
+          <param name="kind" expr="detection.sensed.sound.kind === undefined ? null : detection.sensed.sound.kind"/>
         </invoke>
         <transition event="done.invoke.sound_classification"
                     cond="Array.isArray(Object(_event.data).labels) &amp;&amp; _event.data.labels.length &gt; 0" target="HandingOff">
-          <assign location="product" expr="({event: 'environment.sound', data: sensed.sound})"/>
+          <assign location="completion" expr="({kind: 'labelled', sensed: detection.sensed, voice_detection: detection.voice_detection})"/>
         </transition>
-        <transition event="done.invoke.sound_classification" cond="Array.isArray(Object(_event.data).labels)" target="DecodingSpeech"/>
+        <transition event="done.invoke.sound_classification" cond="Array.isArray(Object(_event.data).labels) &amp;&amp; speech_decoder"
+                    target="Idle"/>
+        <transition event="done.invoke.sound_classification" cond="Array.isArray(Object(_event.data).labels)" target="HandingOff">
+          <assign location="completion" expr="({kind: 'detection', sensed: detection.sensed, voice_detection: detection.voice_detection})"/>
+        </transition>
         <transition event="done.invoke.sound_classification">
           <send event="bot.ability.listening.stage.failed" target="#_internal">
             <content expr="({stage: stage, message: 'Sound classification child produced invalid output.'})"/>
@@ -176,8 +420,125 @@
         </transition>
       </state>
 
+      <!-- Who spoke when in the closed utterance. -->
+      <state id="DiarizingVoice">
+        <onentry>
+          <assign location="stage" expr="'voice_diarization'"/>
+          <send id="voice-diarization-timer" event="bot.ability.listening.stage.failed" delayexpr="stage_timeout_ms + 'ms'">
+            <content expr="({stage: stage, message: 'Listening ' + stage + ' timed out.'})"/>
+          </send>
+        </onentry>
+        <onexit>
+          <cancel sendid="voice-diarization-timer"/>
+        </onexit>
+        <invoke id="voice_diarization" type="scxml" src="voice_diarization.scx">
+          <param name="audio" expr="utterance.audio"/>
+          <param name="media_type" expr="utterance.media_type"/>
+          <param name="sample_rate_hz" expr="utterance.sample_rate_hz"/>
+          <param name="channels" expr="utterance.channels"/>
+          <param name="output" expr="media_dir + 'floppy-diarized-' + serial"/>
+        </invoke>
+        <transition event="done.invoke.voice_diarization" cond="Array.isArray(Object(_event.data).segments) &amp;&amp; voice_classifier"
+                    target="IdentifyingVoice">
+          <assign location="completion" expr="({kind: 'diarization', sensed: open_sensed || detection.sensed, voice_detection: detection.voice_detection})"/>
+          <assign location="completion.segments" expr="_event.data.segments"/>
+        </transition>
+        <transition event="done.invoke.voice_diarization" cond="Array.isArray(Object(_event.data).segments) &amp;&amp; speech_decoder"
+                    target="Diarized">
+          <assign location="completion" expr="({kind: 'diarization', sensed: open_sensed || detection.sensed, voice_detection: detection.voice_detection})"/>
+          <assign location="completion.segments" expr="_event.data.segments"/>
+        </transition>
+        <transition event="done.invoke.voice_diarization" cond="Array.isArray(Object(_event.data).segments)" target="HandingOff">
+          <assign location="completion" expr="({kind: 'diarization', sensed: open_sensed || detection.sensed, voice_detection: detection.voice_detection})"/>
+          <assign location="completion.segments" expr="_event.data.segments"/>
+        </transition>
+        <transition event="done.invoke.voice_diarization" cond="typeof Object(_event.data).message !== 'string'">
+          <send event="bot.ability.listening.stage.failed" target="#_internal">
+            <content expr="({stage: stage, message: 'Voice diarization child produced invalid output.'})"/>
+          </send>
+        </transition>
+      </state>
+
+      <!-- Direct identification of the opening voice span. -->
+      <state id="IdentifyingVoiceDirect">
+        <onentry>
+          <assign location="stage" expr="'voice_identification'"/>
+          <send id="direct-identification-timer" event="bot.ability.listening.stage.failed" delayexpr="stage_timeout_ms + 'ms'">
+            <content expr="({stage: stage, message: 'Listening ' + stage + ' timed out.'})"/>
+          </send>
+          <assign location="mismatch" expr="'voice identification requires audio/pcm with sample rate and channels.'"/>
+          <if cond="detection.sensed.sound.media_type !== 'audio/pcm' || typeof detection.sensed.sound.sample_rate_hz !== 'number'">
+            <send event="bot.ability.listening.stage.failed" target="#_internal">
+              <content expr="({stage: stage, message: 'Voice identification opening segment conversion failed: ' + mismatch})"/>
+            </send>
+          </if>
+        </onentry>
+        <onexit>
+          <cancel sendid="direct-identification-timer"/>
+        </onexit>
+        <invoke id="direct_voice_identification" type="scxml" src="voice_identification.scx">
+          <param name="audio" expr="detection.sensed.sound.audio"/>
+          <param name="sample_rate_hz" expr="detection.sensed.sound.sample_rate_hz"/>
+          <param name="channels" expr="typeof detection.sensed.sound.channels === 'number' ? detection.sensed.sound.channels : 1"/>
+          <param name="start_seconds" expr="detection.voice_detection.segments[0].start_seconds"/>
+          <param name="end_seconds" expr="detection.voice_detection.segments[0].end_seconds"/>
+          <param name="output" expr="media_dir + 'floppy-voice-' + serial + '.pcm'"/>
+        </invoke>
+        <transition event="done.invoke.direct_voice_identification"
+                    cond="Array.isArray(Object(_event.data).embeddings) &amp;&amp; _event.data.embeddings.length === 0">
+          <send event="bot.ability.listening.stage.failed" target="#_internal">
+            <content expr="({stage: stage, message: 'Voice identification produced no opening embedding.'})"/>
+          </send>
+        </transition>
+        <!-- The first segment's identity is committed, then the window
+             opens with this frame. -->
+        <transition event="done.invoke.direct_voice_identification" cond="Array.isArray(Object(_event.data).embeddings)" target="HearingSpeech">
+          <assign location="active_voice_embedding" expr="_event.data.embeddings[0]"/>
+          <assign location="active_source_ids" expr="[active_voice_embedding.embedding]"/>
+          <assign location="open_sensed" expr="detection.sensed"/>
+          <assign location="open_frames" expr="[detection.sensed.sound]"/>
+        </transition>
+        <transition event="done.invoke.direct_voice_identification" cond="typeof Object(_event.data).message !== 'string'">
+          <send event="bot.ability.listening.stage.failed" target="#_internal">
+            <content expr="({stage: stage, message: 'Voice identification child produced invalid output.'})"/>
+          </send>
+        </transition>
+      </state>
+
+      <!-- One embedding per diarized segment. -->
+      <state id="IdentifyingVoice">
+        <onentry>
+          <assign location="stage" expr="'voice_identification'"/>
+          <send id="voice-identification-timer" event="bot.ability.listening.stage.failed" delayexpr="stage_timeout_ms + 'ms'">
+            <content expr="({stage: stage, message: 'Listening ' + stage + ' timed out.'})"/>
+          </send>
+        </onentry>
+        <onexit>
+          <cancel sendid="voice-identification-timer"/>
+        </onexit>
+        <invoke id="voice_identification" type="scxml" src="voice_identification.scx">
+          <param name="segments" expr="completion.segments"/>
+        </invoke>
+        <transition event="done.invoke.voice_identification"
+                    cond="Array.isArray(Object(_event.data).embeddings) &amp;&amp; _event.data.embeddings.length !== completion.segments.length">
+          <assign location="mismatch" expr="'received ' + _event.data.embeddings.length + ' for ' + completion.segments.length + ' segments.'"/>
+          <send event="bot.ability.listening.stage.failed" target="#_internal">
+            <content expr="({stage: stage, message: 'Voice identification must return exactly one embedding per voice segment; ' + mismatch})"/>
+          </send>
+        </transition>
+        <transition event="done.invoke.voice_identification" cond="Array.isArray(Object(_event.data).embeddings)" target="HandingOff">
+          <assign location="completion.kind" expr="'identification'"/>
+          <assign location="completion.embeddings" expr="_event.data.embeddings"/>
+        </transition>
+        <transition event="done.invoke.voice_identification" cond="typeof Object(_event.data).message !== 'string'">
+          <send event="bot.ability.listening.stage.failed" target="#_internal">
+            <content expr="({stage: stage, message: 'Voice identification child produced invalid output.'})"/>
+          </send>
+        </transition>
+      </state>
+
       <!-- Speech decoding rewrites the observation into words. -->
-      <state id="DecodingSpeech">
+      <state id="DecodingSpeech" initial="Detected">
         <onentry>
           <assign location="stage" expr="'speech_decoding'"/>
           <send id="speech-decoding-timer" event="bot.ability.listening.stage.failed" delayexpr="stage_timeout_ms + 'ms'">
@@ -188,49 +549,112 @@
           <cancel sendid="speech-decoding-timer"/>
         </onexit>
         <invoke id="speech_decoding" type="scxml" src="speech_decoding.scx">
-          <param name="audio" expr="sensed.sound.audio"/>
-          <param name="media_type" expr="sensed.sound.media_type === undefined ? null : sensed.sound.media_type"/>
+          <param name="audio" expr="utterance.audio"/>
+          <param name="media_type" expr="utterance.media_type"/>
         </invoke>
-        <transition event="done.invoke.speech_decoding"
-                    cond="typeof Object(_event.data).text === 'string' &amp;&amp; typeof sensed.sound.sample_rate_hz === 'number'" target="HandingOff">
-          <assign location="product" expr="({event: 'bot.ability.listening.speech.output', data: {content: _event.data.text, content_type: 'text/plain'}})"/>
-          <assign location="product.data.voice_detection" expr="({segments: []})"/>
-          <assign location="product.data.sample_rate_hz" expr="sensed.sound.sample_rate_hz"/>
-          <assign location="product.data.channels" expr="typeof sensed.sound.channels === 'number' ? sensed.sound.channels : 1"/>
-          <assign location="product.data.media_type" expr="'audio/pcm'"/>
-          <assign location="product.data.source_ids" expr="[]"/>
-          <assign location="product.data.parent" expr="sensed.parent === undefined ? null : sensed.parent"/>
+        <transition event="done.invoke.speech_decoding" cond="typeof Object(_event.data).text === 'string'" target="HandingOff">
+          <assign location="completion" expr="({kind: 'decoding', sensed: open_sensed || detection.sensed, voice_detection: detection.voice_detection, text: _event.data.text})"/>
         </transition>
-        <transition event="done.invoke.speech_decoding" cond="typeof Object(_event.data).text === 'string'">
+        <transition event="done.invoke.speech_decoding" cond="typeof Object(_event.data).message !== 'string'">
           <send event="bot.ability.listening.stage.failed" target="#_internal">
-            <content expr="({stage: stage, message: 'Speech decoding completed on sound with no sample rate to place it on a timeline.'})"/>
+            <content expr="({stage: stage, message: 'Speech decoding child produced a non-bytes terminal.'})"/>
           </send>
         </transition>
-        <transition event="done.invoke.speech_decoding">
-          <send event="bot.ability.listening.stage.failed" target="#_internal">
-            <content expr="({stage: stage, message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'Listening speech_decoding child failed.'})"/>
-          </send>
-        </transition>
+        <!-- From the window directly, or after diarization. -->
+        <state id="Detected"/>
+        <state id="Diarized"/>
       </state>
 
       <!-- The one comparison: is enough of this left for a turn? -->
       <state id="HandingOff">
         <onentry>
           <assign location="stage" expr="null"/>
+          <assign location="audible" expr="completion.sensed.perceived_level_db == null || completion.sensed.perceived_level_db &gt;= product_threshold_db"/>
+          <assign location="product" expr="null"/>
         </onentry>
-        <transition cond="sensed.perceived_level_db == null || sensed.perceived_level_db &gt;= product_threshold_db" target="Idle">
-          <if cond="product.event === 'environment.sound'">
-            <send event="environment.sound" target="#_parent">
-              <content expr="product.data"/>
+        <transition cond="!audible" target="Idle"/>
+        <transition cond="completion.kind === 'decoding' &amp;&amp; typeof completion.sensed.sound.sample_rate_hz !== 'number'" target="Idle">
+          <send event="bot.ability.listening.failed" target="#_parent">
+            <content expr="({stage: 'speech_decoding', message: 'Speech decoding completed on sound with no sample rate to place it on a timeline.'})"/>
+          </send>
+        </transition>
+        <!-- Decoding rewrites this observation: it becomes words. -->
+        <transition cond="completion.kind === 'decoding'" target="Idle">
+          <assign location="product" expr="({content: completion.text, content_type: 'text/plain', voice_detection: completion.voice_detection})"/>
+          <assign location="product.sample_rate_hz" expr="completion.sensed.sound.sample_rate_hz"/>
+          <assign location="product.channels" expr="typeof completion.sensed.sound.channels === 'number' ? completion.sensed.sound.channels : 1"/>
+          <assign location="product.media_type" expr="'audio/pcm'"/>
+          <assign location="product.source_ids" expr="[]"/>
+          <assign location="product.parent" expr="completion.sensed.parent === undefined ? null : completion.sensed.parent"/>
+          <send event="bot.ability.listening.speech.output" target="#_parent">
+            <content expr="product"/>
+          </send>
+        </transition>
+        <!-- One speech product per clipped segment, each in the format of
+             the sound it came from. -->
+        <transition cond="completion.kind === 'diarization' || completion.kind === 'identification'" target="Idle">
+          <assign location="mismatch" expr="completion.sensed.sound.media_type !== 'audio/pcm' || typeof completion.sensed.sound.sample_rate_hz !== 'number'"/>
+          <assign location="mismatch" expr="mismatch ? 'voice segment speech requires source audio/pcm with a sample rate.' : null"/>
+          <assign location="channels" expr="typeof completion.sensed.sound.channels === 'number' ? completion.sensed.sound.channels : 1"/>
+          <foreach array="completion.segments" item="product">
+            <if cond="mismatch === null &amp;&amp; product.sample_rate_hz !== completion.sensed.sound.sample_rate_hz">
+              <assign location="mismatch" expr="'voice segment audio format does not match its source audio.'"/>
+            <elseif cond="mismatch === null &amp;&amp; (product.channels !== channels || product.media_type !== 'audio/pcm')"/>
+              <assign location="mismatch" expr="'voice segment audio format does not match its source audio.'"/>
+            </if>
+          </foreach>
+          <if cond="mismatch !== null">
+            <send event="bot.ability.listening.failed" target="#_parent">
+              <content expr="({stage: 'voice_' + completion.kind, message: 'Voice ' + completion.kind + ' product conversion failed: ' + mismatch})"/>
             </send>
           <else/>
+            <foreach array="completion.segments" item="segment" index="index">
+              <assign location="result" expr="completion.kind === 'identification' ? completion.embeddings[index] : null"/>
+              <assign location="product" expr="({content: segment.audio, content_type: 'audio/pcm', media_type: 'audio/pcm'})"/>
+              <assign location="product.sample_rate_hz" expr="segment.sample_rate_hz"/>
+              <assign location="product.channels" expr="segment.channels"/>
+              <assign location="product.start_seconds" expr="segment.start_seconds"/>
+              <assign location="product.end_seconds" expr="segment.end_seconds"/>
+              <assign location="product.confidence" expr="segment.confidence === undefined ? null : segment.confidence"/>
+              <assign location="product.voice_detection" expr="({segments: [{start_seconds: 0.0, end_seconds: segment.end_seconds - segment.start_seconds}]})"/>
+              <assign location="product.voice_detection.segments[0].confidence" expr="product.confidence"/>
+              <assign location="product.source_ids" expr="result === null ? [] : [result.embedding]"/>
+              <assign location="product.voice_embedding" expr="result"/>
+              <assign location="product.parent" expr="completion.sensed.parent === undefined ? null : completion.sensed.parent"/>
+              <send event="bot.ability.listening.speech.output" target="#_parent">
+                <content expr="product"/>
+              </send>
+            </foreach>
+          </if>
+        </transition>
+        <!-- A silence observation: the sound's PCM with its spans. -->
+        <transition cond="completion.kind === 'detection' &amp;&amp; completion.sensed.sound.media_type === 'audio/pcm' &amp;&amp; completion.sensed.sound.audio"
+                    target="Idle">
+          <if cond="typeof completion.sensed.sound.sample_rate_hz === 'number'">
+            <assign location="product" expr="({content: completion.sensed.sound.audio, content_type: 'audio/pcm', voice_detection: completion.voice_detection})"/>
+            <assign location="product.sample_rate_hz" expr="completion.sensed.sound.sample_rate_hz"/>
+            <assign location="product.channels" expr="typeof completion.sensed.sound.channels === 'number' ? completion.sensed.sound.channels : 1"/>
+            <assign location="product.media_type" expr="'audio/pcm'"/>
+            <assign location="product.source_ids" expr="[]"/>
+            <assign location="product.parent" expr="completion.sensed.parent === undefined ? null : completion.sensed.parent"/>
             <send event="bot.ability.listening.speech.output" target="#_parent">
-              <content expr="product.data"/>
+              <content expr="product"/>
+            </send>
+          <else/>
+            <send event="environment.sound" target="#_parent">
+              <content expr="completion.sensed.sound"/>
             </send>
           </if>
         </transition>
-        <transition target="Idle"/>
+        <!-- Labelled non-speech, or a sound that is not PCM. -->
+        <transition target="Idle">
+          <send event="environment.sound" target="#_parent">
+            <content expr="completion.sensed.sound"/>
+          </send>
+        </transition>
       </state>
     </state>
   </state>
+
+  <final id="degraded"/>
 </scxml>

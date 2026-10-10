@@ -124,6 +124,8 @@
 
 use std::io::Read as _;
 
+pub mod voice;
+
 use scxml_event_schema::canonical_json;
 use scxml_types::{DataValue as Data, exceeds_wasm_bound, wasm_bound};
 use serde_json::{Map, Value as Json};
@@ -314,12 +316,47 @@ pub struct Encoding {
 }
 
 /// One validated invocation.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Operation {
     /// `decode`.
     Decode(Decoding),
     /// `encode`.
     Encode(Encoding),
+    /// `detect` (voice detection).
+    Detect(voice::Detection),
+    /// `diarize` (voice diarization).
+    Diarize(voice::Diarization),
+    /// `identify` (voice identification).
+    Identify(voice::Identification),
+    /// `normalize` (a sound to PCM).
+    Normalize(voice::Normalization),
+    /// `append` (open speech to one utterance).
+    Append(voice::Appending),
+    /// `clip` (a voice segment from a span).
+    Clip(voice::Clipping),
+}
+
+impl Operation {
+    /// What the operation is, as its failure message begins.
+    #[must_use]
+    pub const fn direction(&self) -> &'static str {
+        match self {
+            Self::Decode(_) => "Speech decoding",
+            Self::Encode(_) => "Speech encoding",
+            Self::Detect(_) => "Voice detection",
+            Self::Diarize(_) => "Voice diarization",
+            Self::Identify(_) => "Voice identification",
+            Self::Normalize(_) => "Sound normalization",
+            Self::Append(_) => "Open speech",
+            Self::Clip(_) => "Voice segment clipping",
+        }
+    }
+
+    /// Whether the operation calls the backend (the media steps do not).
+    #[must_use]
+    pub const fn calls_backend(&self) -> bool {
+        !matches!(self, Self::Normalize(_) | Self::Append(_) | Self::Clip(_))
+    }
 }
 
 /// The closed failures of [`FAILED_EVENT`].
@@ -342,6 +379,10 @@ pub enum FailureCode {
     Status,
     /// The answer is not a transcription or audio, or exceeds its bound.
     Malformed,
+    /// The audio is not signed 16-bit PCM with a known rate and channels.
+    Format,
+    /// The span holds no audio.
+    Span,
 }
 
 impl FailureCode {
@@ -357,6 +398,8 @@ impl FailureCode {
             Self::Transport => "the backend is unreachable",
             Self::Status => "the backend answered an error status",
             Self::Malformed => "the backend's answer is malformed",
+            Self::Format => "the audio is not signed 16-bit PCM with a known format",
+            Self::Span => "the span holds no audio",
         }
     }
 }
@@ -376,15 +419,50 @@ impl Returned {
     /// [`FAILED_EVENT`] with the closed message of `code` for `operation`.
     #[must_use]
     pub fn failed(operation: &Operation, code: FailureCode) -> Self {
-        let direction = match operation {
-            Operation::Decode(_) => "Speech decoding",
-            Operation::Encode(_) => "Speech encoding",
-        };
+        Self::failed_named(operation.direction(), code)
+    }
+
+    /// [`FAILED_EVENT`] with the closed message of `code` for `direction`.
+    #[must_use]
+    pub fn failed_named(direction: &'static str, code: FailureCode) -> Self {
         Self {
             name: FAILED_EVENT,
             data: canonical_json(&serde_json::json!({
                 "message": format!("{direction} failed: {}.", code.reason()),
             })),
+        }
+    }
+}
+
+/// How an invocation ends: the one event it returns (none for a media step
+/// that succeeded), then its done data (a media step's result).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Finished {
+    /// The event returned before completing.
+    pub event: Option<Returned>,
+    /// The canonical JSON object `done.invoke.<id>` carries.
+    pub done: Option<String>,
+}
+
+impl Finished {
+    /// One event, then no done data.
+    #[must_use]
+    pub const fn event(returned: Returned) -> Self {
+        Self {
+            event: Some(returned),
+            done: None,
+        }
+    }
+
+    /// A media step's result: no event, then its done data, or its failure.
+    #[must_use]
+    pub fn step(operation: &Operation, result: Result<String, FailureCode>) -> Self {
+        match result {
+            Ok(done) => Self {
+                event: None,
+                done: Some(done),
+            },
+            Err(code) => Self::event(Returned::failed(operation, code)),
         }
     }
 }
@@ -483,6 +561,9 @@ fn is_media_type(text: &str) -> bool {
             .is_some_and(|(kind, subtype)| name(kind) && name(subtype))
 }
 
+/// Parses one voice operation's parameters.
+type VoiceParser = fn(&voice::Given<'_>) -> Result<Operation, &'static str>;
+
 /// The validated operation of an invocation's parameters (see the crate
 /// documentation, "Parameters").
 ///
@@ -501,6 +582,7 @@ pub fn parse_parameters<'a>(
     let mut voice = None;
     let mut output = None;
     let mut provider = None;
+    let mut given = voice::Given::default();
     for (name, value) in parameters {
         // A null value is a parameter not given (an invoker passes its
         // unset data as null).
@@ -516,22 +598,65 @@ pub fn parse_parameters<'a>(
             "voice" => &mut voice,
             "output" => &mut output,
             "provider" => &mut provider,
+            "sample_rate_hz" => &mut given.sample_rate_hz,
+            "channels" => &mut given.channels,
+            "frames" => &mut given.frames,
+            "segments" => &mut given.segments,
+            "wav" => &mut given.wav,
+            "start_seconds" => &mut given.start_seconds,
+            "end_seconds" => &mut given.end_seconds,
             _ => return Err("speech takes no parameter of that name"),
         };
         if slot.replace(value).is_some() {
             return Err("speech takes each parameter once");
         }
     }
-    let model = text_parameter(
-        model.ok_or("speech requires a model parameter")?,
-        "speech model must be a non-empty string",
-    )?
-    .trim()
-    .to_owned();
-    if exceeds_wasm_bound(model.len(), MAX_MODEL_BYTES) {
+    let operation = operation.ok_or("speech requires an operation parameter")?;
+    let model = model
+        .map(|model| {
+            text_parameter(model, "speech model must be a non-empty string")
+                .map(|model| model.trim().to_owned())
+        })
+        .transpose()?;
+    if model
+        .as_ref()
+        .is_some_and(|model| exceeds_wasm_bound(model.len(), MAX_MODEL_BYTES))
+    {
         return Err("speech model exceeds its bound");
     }
-    match operation.ok_or("speech requires an operation parameter")? {
+    if let Data::String(name) = operation {
+        let voice_operation: Option<VoiceParser> = match name.as_str() {
+            "detect" => Some(|given| voice::detection(given).map(Operation::Detect)),
+            "diarize" => Some(|given| voice::diarization(given).map(Operation::Diarize)),
+            "identify" => Some(|given| voice::identification(given).map(Operation::Identify)),
+            "normalize" => Some(|given| voice::normalization(given).map(Operation::Normalize)),
+            "append" => Some(|given| voice::appending(given).map(Operation::Append)),
+            "clip" => Some(|given| voice::clipping(given).map(Operation::Clip)),
+            _ => None,
+        };
+        if let Some(parse) = voice_operation {
+            if text.is_some() || voice.is_some() || provider.is_some() {
+                return Err("speech takes text, voice, and provider only to encode");
+            }
+            given.model = model;
+            given.audio = audio;
+            given.media_type = media_type;
+            given.output = output;
+            return parse(&given);
+        }
+    }
+    if given.sample_rate_hz.is_some()
+        || given.channels.is_some()
+        || given.frames.is_some()
+        || given.segments.is_some()
+        || given.wav.is_some()
+        || given.start_seconds.is_some()
+        || given.end_seconds.is_some()
+    {
+        return Err("speech takes that parameter only for a voice operation");
+    }
+    let model = model.ok_or("speech requires a model parameter")?;
+    match operation {
         Data::String(name) if name == "decode" => {
             if text.is_some() || voice.is_some() || output.is_some() || provider.is_some() {
                 return Err("speech decode takes model, audio, and media_type only");
@@ -544,7 +669,9 @@ pub fn parse_parameters<'a>(
             }
             encoding(model, text, voice, output, media_type, provider).map(Operation::Encode)
         }
-        _ => Err("speech operation must be decode or encode"),
+        _ => Err(
+            "speech operation must be decode, encode, detect, diarize, identify, normalize, append, or clip",
+        ),
     }
 }
 
@@ -1138,16 +1265,42 @@ mod guest {
             })
     }
 
-    /// Runs the accepted operation to its one event.
-    async fn run(operation: Operation, endpoint: Option<(u32, u32)>) -> Returned {
-        let Some((base_url, api_key)) = endpoint else {
-            return Returned::failed(&operation, super::FailureCode::Unconfigured);
-        };
+    /// Runs the accepted operation to how it ends.
+    async fn run(operation: Operation, endpoint: Option<(u32, u32)>) -> super::Finished {
+        use super::{Finished, voice};
         match &operation {
+            Operation::Normalize(normalization) => {
+                return Finished::step(
+                    &operation,
+                    voice::normalized(normalization, super::read_audio, super::write_audio),
+                );
+            }
+            Operation::Append(appending) => {
+                return Finished::step(
+                    &operation,
+                    voice::appended(appending, super::read_audio, super::write_audio),
+                );
+            }
+            Operation::Clip(clipping) => {
+                return Finished::step(
+                    &operation,
+                    voice::clipped(clipping, super::read_audio, super::write_audio),
+                );
+            }
+            _ => {}
+        }
+        let Some((base_url, api_key)) = endpoint else {
+            return Finished::event(Returned::failed(
+                &operation,
+                super::FailureCode::Unconfigured,
+            ));
+        };
+        let failed = |code| Finished::event(Returned::failed(&operation, code));
+        Finished::event(match &operation {
             Operation::Decode(decoding) => {
                 let audio = match super::read_audio(&decoding.audio.path) {
                     Ok(audio) => audio,
-                    Err(code) => return Returned::failed(&operation, code),
+                    Err(code) => return failed(code),
                 };
                 let built = super::decoding_request(base_url, api_key, decoding, &audio);
                 drop(audio);
@@ -1159,7 +1312,76 @@ mod guest {
                 let answered = fetch(built).await;
                 super::encoding_outcome(&operation, answered, super::write_audio)
             }
-        }
+            _ => return run_voice(&operation, base_url, api_key).await,
+        })
+    }
+
+    /// Runs a voice classifier operation to its one event.
+    async fn run_voice(operation: &Operation, base_url: u32, api_key: u32) -> super::Finished {
+        use super::{Finished, voice};
+        let failed = |code| Finished::event(Returned::failed(operation, code));
+        Finished::event(match operation {
+            Operation::Detect(detection) => {
+                let samples = super::read_audio(&detection.audio.path)
+                    .and_then(|audio| voice::detection_samples(detection, audio));
+                let (samples, seconds) = match samples {
+                    Ok(samples) => samples,
+                    Err(code) => return failed(code),
+                };
+                let built = voice::detection_request(base_url, api_key, &detection.model, &samples);
+                drop(samples);
+                if scxml_types::exceeds_wasm_bound(built.body.len(), super::MAX_AUDIO_BYTES) {
+                    return failed(super::FailureCode::TooLarge);
+                }
+                let answered = fetch(built).await;
+                voice::detection_outcome(operation.direction(), answered, seconds)
+            }
+            Operation::Diarize(diarization) => {
+                let utterance = super::read_audio(&diarization.audio.path)
+                    .and_then(|audio| voice::utterance(diarization, audio));
+                let (rate, channels, pcm) = match utterance {
+                    Ok(utterance) => utterance,
+                    Err(code) => return failed(code),
+                };
+                let built = voice::diarization_request(
+                    base_url,
+                    api_key,
+                    &diarization.model,
+                    &voice::diarization_file_name(diarization),
+                    &voice::wav_container(&pcm, rate, channels),
+                );
+                let answered = fetch(built).await;
+                let mut write = super::write_audio;
+                voice::diarization_outcome(
+                    operation.direction(),
+                    answered,
+                    (&pcm, rate, channels),
+                    &diarization.output,
+                    &mut write,
+                )
+            }
+            Operation::Identify(identification) => {
+                let mut embeddings = Vec::with_capacity(identification.segments.len());
+                for segment in &identification.segments {
+                    let pcm = match super::read_audio(&segment.audio.path) {
+                        Ok(pcm) => pcm,
+                        Err(code) => return failed(code),
+                    };
+                    let wav = voice::wav_container(&pcm, segment.sample_rate_hz, segment.channels);
+                    let built =
+                        voice::embedding_request(base_url, api_key, &identification.model, &wav);
+                    if scxml_types::exceeds_wasm_bound(built.body.len(), super::MAX_AUDIO_BYTES) {
+                        return failed(super::FailureCode::TooLarge);
+                    }
+                    match voice::embedding_outcome(fetch(built).await, &identification.model) {
+                        Ok(embedding) => embeddings.push(embedding),
+                        Err(code) => return failed(code),
+                    }
+                }
+                voice::identification_returned(&embeddings)
+            }
+            _ => return failed(super::FailureCode::Malformed),
+        })
     }
 
     #[allow(
@@ -1187,10 +1409,14 @@ mod guest {
                 ))
             });
             wit_bindgen::spawn(async move {
-                let reply = run(operation, endpoint).await;
+                let finished = run(operation, endpoint).await;
                 telemetry::event(
                     Op::Send,
-                    if reply.name == super::FAILED_EVENT {
+                    if finished
+                        .event
+                        .as_ref()
+                        .is_some_and(|reply| reply.name == super::FAILED_EVENT)
+                    {
                         SignalEvent::InputRejected
                     } else {
                         SignalEvent::TransformationCompleted
@@ -1198,12 +1424,16 @@ mod guest {
                     None,
                 );
                 // The one event, then the result: `done.invoke.<id>` follows
-                // it.
-                if returned.write_one(event(&reply)).await.is_some() {
+                // it, carrying a media step's done data.
+                if let Some(reply) = &finished.event
+                    && returned.write_one(event(reply)).await.is_some()
+                {
                     return;
                 }
                 drop(returned);
-                let _ = done.write(Ok(None)).await;
+                let _ = done
+                    .write(Ok(finished.done.map(DataValue::JsonObject)))
+                    .await;
             });
             Ok((returned_reader, done_reader))
         }

@@ -1,40 +1,117 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   floppy's VoiceIdentification (mosfet abilities/hearing/voice/
-  identification.py), as an honest seam (decision D52): mosfet's voice
-  classifiers (pyannote embeddings) run only on local models, which have
-  no OpenAI-compatible API. In mosfet the interpretation identifies a
-  voice only after voice detection reported voice and only when a voice
-  classifier is configured; with voice detection absent
-  (abilities/voice_detection.scx) floppy's interpretation never reaches
-  it, so speech products carry empty source_ids (mosfet: listening has
-  speech evidence but no identity classifier result).
+  identification.py): one voice embedding per voice segment, through the
+  speech service's identify operation (mosfet's voice classifier: pyannote
+  speaker embeddings, WeSpeaker ResNet34; here LocalAI's
+  POST {base}/voice/embed, which serves the same WeSpeaker model). The
+  interpretation (abilities/interpretation.scx) invokes it from
+  IdentifyingVoice (the diarized segments) and IdentifyingVoiceDirect (the
+  opening voice span of a sound, mosfet's direct identification); the
+  interpretation's stage timer bounds it, and leaving the state cancels it
+  and its service call (SCXML 6.4).
 
-    applying -> applied (final)
+    identifying { clipping -> applying } -> applied (final)
 
-  Input: the <param> segments (mosfet's InputData: voice segments, each a
-  reference to its audio with its format and span).
+  Input: either the <param> segments (mosfet's InputData: voice segments,
+  each a reference to its clipped PCM with its format and span), or, for
+  direct identification, audio, sample_rate_hz and channels (the sound's
+  PCM), start_seconds and end_seconds (its first voice span) and output
+  (where the clip is written); and model (LocalAI's
+  voice-detect-wespeaker-resnet34 by default).
 
-  applying logs <log label="voice_identification" expr="'absent'"> and
-  ends with no <donedata>: no voice embeddings (mosfet's OutputData) are
-  reported, never fabricated.
+  clipping (direct identification only): the speech service's clip step
+  (mosfet's _voice_segment_from_detection: the span clamped to the sound
+  and clipped by whole frames); its done data is the one segment.
 
-  Bindings: none (no service, no I/O).
+  applying: the speech service's identify operation, answered
+  bot.ability.hearing.voice.identification.output {embeddings} (mosfet's
+  OutputData, in segment order).
+
+  Output: <donedata>, received by the interpretation as
+  done.invoke.voice_identification: {segments, embeddings}, or {message}
+  (mosfet's FailureData) when a step answers bot.ability.failed, answers
+  something else, or cannot run.
+
+  Bindings: the speech service package; env scopes FLOPPY_VOICE_BASE_URL
+  and FLOPPY_VOICE_API_KEY to the identify <invoke> (no default backend,
+  decision D31). The run grants the service the media directory. An
+  invoked service's events are not checked against event:schema, so their
+  shape is checked by cond.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       version="1.0" datamodel="ecmascript" name="voice_identification" initial="applying">
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="voice_identification" initial="identifying">
   <datamodel>
     <!-- The invoker's <param>s. -->
-    <data id="segments" expr="[]"/>
+    <data id="segments" expr="null"/>
+    <data id="audio" expr="null"/>
+    <data id="sample_rate_hz" expr="null"/>
+    <data id="channels" expr="null"/>
+    <data id="start_seconds" expr="null"/>
+    <data id="end_seconds" expr="null"/>
+    <data id="output" expr="null"/>
+    <data id="model" expr="'voice-detect-wespeaker-resnet34'"/>
+    <!-- The result. -->
+    <data id="result" expr="null"/>
   </datamodel>
 
-  <!-- The classifier seam: no voice classifier. -->
-  <state id="applying">
-    <onentry>
-      <log label="voice_identification" expr="'absent'"/>
-    </onentry>
-    <transition target="applied"/>
+  <state id="identifying" initial="clipping">
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
+      <assign location="result" expr="({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceIdentification failed.'})"/>
+    </transition>
+    <transition event="error.*" target="applied">
+      <assign location="result" expr="({message: 'VoiceIdentification could not run (' + _event.name + ')'})"/>
+    </transition>
+
+    <!-- Direct identification clips the opening voice span first. -->
+    <state id="clipping">
+      <transition cond="Array.isArray(segments)" target="applying"/>
+      <invoke id="clipper" type="https://github.com/stateforward/floppy/services/speech">
+        <param name="operation" expr="'clip'"/>
+        <param name="audio" expr="audio"/>
+        <param name="sample_rate_hz" expr="sample_rate_hz"/>
+        <param name="channels" expr="channels"/>
+        <param name="start_seconds" expr="start_seconds"/>
+        <param name="end_seconds" expr="end_seconds"/>
+        <param name="output" expr="output"/>
+      </invoke>
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                  cond="_event.invokeid === 'clipper'" target="applied">
+        <assign location="result" expr="({message: 'Voice identification opening segment conversion failed: ' + Object(_event.data).message})"/>
+      </transition>
+      <transition event="done.invoke.clipper" cond="typeof Object(_event.data).audio === 'string'" target="applying">
+        <assign location="segments" expr="[_event.data]"/>
+      </transition>
+      <transition event="done.invoke.clipper" target="applied">
+        <assign location="result" expr="({message: 'Voice identification requires a first voiced VAD segment.'})"/>
+      </transition>
+    </state>
+
+    <state id="applying">
+      <invoke id="identifier" type="https://github.com/stateforward/floppy/services/speech"
+              env:baseurl="FLOPPY_VOICE_BASE_URL" env:apikey="FLOPPY_VOICE_API_KEY">
+        <param name="operation" expr="'identify'"/>
+        <param name="model" expr="model"/>
+        <param name="segments" expr="segments"/>
+      </invoke>
+      <transition event="bot.ability.hearing.voice.identification.output"
+                  cond="_event.invokeid === 'identifier' &amp;&amp; Array.isArray(Object(_event.data).embeddings)" target="applied">
+        <assign location="result" expr="({segments: segments, embeddings: _event.data.embeddings})"/>
+      </transition>
+      <transition event="*" cond="_event.invokeid === 'identifier' &amp;&amp; _event.name.indexOf('done.') !== 0" target="applied">
+        <assign location="result" expr="({message: 'Voice identification produced output that does not match its apply schema.'})"/>
+      </transition>
+      <transition event="done.invoke.identifier" target="applied">
+        <assign location="result" expr="({message: 'VoiceIdentification ended without identifying.'})"/>
+      </transition>
+    </state>
   </state>
 
-  <final id="applied"/>
+  <final id="applied">
+    <donedata>
+      <content expr="result"/>
+    </donedata>
+  </final>
 </scxml>
