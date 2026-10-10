@@ -25,7 +25,8 @@
 //! * the conversation, exactly one of `prompt` (a non-empty string: one
 //!   `user` message, used exactly) or `messages` (a non-empty JSON array of
 //!   objects with exactly `role`, one of `system`, `user`, `assistant`, and
-//!   `content`, a string).
+//!   `content`, a string or a non-empty array of mosfet's parts, see
+//!   "Images").
 //! * `system` (optional, a non-empty string): a `system` message before the
 //!   conversation.
 //! * `schema` (optional): a JSON Schema (a JSON object, or a string holding
@@ -47,6 +48,27 @@
 //! Any other parameter, a parameter given twice, or a malformed value
 //! rejects the start: the `<invoke>` raises `error.execution` and nothing is
 //! sent.
+//!
+//! # Images
+//!
+//! A message's `content` may be an array of mosfet's parts (its reading
+//! input's `kind` and `content`): `{"kind": "text", "content": T}` and, in a
+//! `user` message, `{"kind": "image", "content": R}`, so a vision model reads
+//! an image as mosfet's `ImageDecoder` does (the document sends mosfet's
+//! prompt, "Read all visible text in this image. Return only the text.", as a
+//! text part). Media moves by reference: `R` is a path-only URI reference
+//! (no scheme, authority, query, fragment, or empty, `.`, or `..` segment),
+//! percent-decoded and resolved against the guest root ([`image_path`]), so
+//! `media/page.png` and `/media/page.png` both name `/media/page.png`. The
+//! service reads that file through `wasi:filesystem` from the directory the
+//! run grants (`--dir https://github.com/stateforward/floppy/services/generate=HOST::/media`;
+//! `scx run` refuses a run that binds the service without a `--dir` grant)
+//! and sends it as a Chat Completions `image_url` part whose URL is a
+//! `data:` URL of its bytes ([`data_url`]), a PNG, JPEG, GIF, or WebP image
+//! by its signature ([`IMAGE_MEDIA_TYPES`]). A reference that names no
+//! readable file in a granted directory, a file that is not such an image,
+//! or images over their bound reject the start like any malformed parameter:
+//! nothing is sent. Documents never hold the image's bytes.
 //!
 //! The `env` slots ([`API_KEY_SLOT`], [`BASE_URL_SLOT`]), both required at
 //! run time: `env:apikey="NAME"` (sent as a bearer token) and
@@ -140,8 +162,9 @@
 //!
 //! # Bounds
 //!
-//! The conversation's bytes ([`MAX_CONVERSATION_BYTES`]), its message count
-//! ([`MAX_MESSAGES`]), and the model name ([`MAX_MODEL_BYTES`]) are bounded on
+//! The conversation's text bytes ([`MAX_CONVERSATION_BYTES`]), its message
+//! count ([`MAX_MESSAGES`]), its content parts ([`MAX_PARTS`]), its images'
+//! bytes ([`MAX_IMAGE_BYTES`]), and the model name ([`MAX_MODEL_BYTES`]) are bounded on
 //! wasm builds only ([`scxml_types::wasm_bound`]); the schema is bounded by
 //! `scxml-event-schema`, and the reply by the host's response-body bound.
 //!
@@ -152,7 +175,8 @@
 //! `failed`, and one closed signal event), and one closed signal event
 //! (operation `send`) when it returns its event. No attribute carries the
 //! prompt, the reply, the schema, the model, or a URL, so the cardinality is
-//! the product of the closed enums. The host adds its own `service-*` and
+//! the product of the closed enums; no attribute carries an image or its
+//! reference. The host adds its own `service-*` and
 //! `service-http-*` spans with only their closed outcomes.
 
 #![cfg_attr(not(target_arch = "wasm32"), forbid(unsafe_code))]
@@ -204,6 +228,16 @@ pub const MAX_CONVERSATION_BYTES: usize = wasm_bound(512 * 1024);
 pub const MAX_MESSAGES: usize = wasm_bound(256);
 /// Upper bound on the model name's bytes (wasm builds only).
 pub const MAX_MODEL_BYTES: usize = wasm_bound(256);
+/// Upper bound on the number of content parts across the conversation
+/// (wasm builds only).
+pub const MAX_PARTS: usize = wasm_bound(256);
+/// Upper bound on the bytes of every image the conversation reads together
+/// (wasm builds only). Their base64 `data:` URLs and the conversation stay
+/// inside the host's 4 MiB request-body bound.
+pub const MAX_IMAGE_BYTES: usize = wasm_bound(2 * 1024 * 1024);
+/// The image media types the service sends, by their leading bytes
+/// ([`image_media_type`]).
+pub const IMAGE_MEDIA_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 /// One part of a URL or header value: literal text, or an opaque reference
 /// the host substitutes with the value it holds for one slot.
@@ -278,13 +312,52 @@ impl Role {
     }
 }
 
+/// One part of a message's content: mosfet's reading parts, `kind` `text`
+/// or `image`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ContentPart {
+    /// `{"kind": "text", "content": T}`: sent as a `text` part.
+    Text(String),
+    /// `{"kind": "image", "content": R}`: the image the reference `R` names,
+    /// read from the granted directory and sent as an `image_url` part.
+    Image(Image),
+}
+
+/// One image a message carries.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Image {
+    /// The guest path its reference names ([`image_path`]).
+    pub path: String,
+    /// The `data:` URL of its bytes ([`data_url`]).
+    pub url: String,
+}
+
+/// A message's content: a string, or mosfet's parts.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Content {
+    /// A string, sent as one.
+    Text(String),
+    /// Parts, sent as an array of `text` and `image_url` parts.
+    Parts(Vec<ContentPart>),
+}
+
 /// One chat message.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Message {
     /// Its role.
     pub role: Role,
-    /// Its text.
-    pub content: String,
+    /// Its content.
+    pub content: Content,
+}
+
+/// Why an image could not be read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ImageReadFailure {
+    /// No readable file at the path: missing, not a file, or outside every
+    /// directory the run grants.
+    Unreadable,
+    /// The file holds more bytes than the images' bound has left.
+    TooLarge,
 }
 
 /// The structured-output request of one invocation.
@@ -383,19 +456,31 @@ fn text_parameter(value: &Data, invalid: &'static str) -> Result<String, &'stati
     }
 }
 
-/// The messages of a JSON array: objects with exactly `role` and `content`.
+/// The messages of a JSON array: objects with exactly `role` and `content`,
+/// a string or a non-empty array of mosfet's parts (objects with exactly
+/// `kind`, `text` or `image`, and `content`, a string; an image's is a
+/// reference [`image_path`] resolves). An image part is read with `read`
+/// (its path and the bytes the images' bound has left) and is valid only in
+/// a `user` message.
 ///
 /// # Errors
 ///
-/// A static detail for anything else, or an empty array.
-pub fn messages_from_json(text: &str) -> Result<Vec<Message>, &'static str> {
-    const INVALID: &str = "generate messages must be objects with exactly a role (system, user, assistant) and a string content";
+/// A static detail for anything else, an empty array, an image that is not
+/// readable or not one of [`IMAGE_MEDIA_TYPES`], or parts or images outside
+/// their bounds.
+pub fn messages_from_json(
+    text: &str,
+    read: &mut impl FnMut(&str, usize) -> Result<Vec<u8>, ImageReadFailure>,
+) -> Result<Vec<Message>, &'static str> {
+    const INVALID: &str = "generate messages must be objects with exactly a role (system, user, assistant) and a string or parts content";
     let Ok(Json::Array(items)) = serde_json::from_str::<Json>(text) else {
         return Err("generate messages must be a JSON array of messages");
     };
     if items.is_empty() {
         return Err("generate messages must hold at least one message");
     }
+    let mut parts_left = MAX_PARTS;
+    let mut image_bytes_left = MAX_IMAGE_BYTES;
     items
         .iter()
         .map(|item| {
@@ -410,16 +495,164 @@ pub fn messages_from_json(text: &str) -> Result<Vec<Message>, &'static str> {
                 .and_then(Json::as_str)
                 .and_then(Role::parse)
                 .ok_or(INVALID)?;
-            let content = members
-                .get("content")
-                .and_then(Json::as_str)
-                .ok_or(INVALID)?;
-            Ok(Message {
-                role,
-                content: content.to_owned(),
-            })
+            let content = match members.get("content") {
+                Some(Json::String(content)) => Content::Text(content.clone()),
+                Some(Json::Array(parts)) if !parts.is_empty() => {
+                    if exceeds_wasm_bound(parts.len(), parts_left) {
+                        return Err("generate content parts exceed their bound");
+                    }
+                    parts_left = parts_left.saturating_sub(parts.len());
+                    Content::Parts(
+                        parts
+                            .iter()
+                            .map(|part| content_part(part, role, &mut image_bytes_left, read))
+                            .collect::<Result<_, _>>()?,
+                    )
+                }
+                _ => return Err(INVALID),
+            };
+            Ok(Message { role, content })
         })
         .collect()
+}
+
+/// One of mosfet's parts: `{"kind": "text", "content": T}` or
+/// `{"kind": "image", "content": R}` (in a `user` message only), its image
+/// read with `read` within the `left` bytes of the images' bound.
+fn content_part(
+    part: &Json,
+    role: Role,
+    left: &mut usize,
+    read: &mut impl FnMut(&str, usize) -> Result<Vec<u8>, ImageReadFailure>,
+) -> Result<ContentPart, &'static str> {
+    const INVALID: &str = "generate content parts must be objects with exactly a kind (text, image) and a string content";
+    let Json::Object(members) = part else {
+        return Err(INVALID);
+    };
+    if members.len() != 2 {
+        return Err(INVALID);
+    }
+    let content = members
+        .get("content")
+        .and_then(Json::as_str)
+        .ok_or(INVALID)?;
+    match members.get("kind").and_then(Json::as_str) {
+        Some("text") => Ok(ContentPart::Text(content.to_owned())),
+        Some("image") if role == Role::User => {
+            let path = image_path(content)?;
+            let bytes = read(&path, *left).map_err(|failure| match failure {
+                ImageReadFailure::Unreadable => {
+                    "generate image reference names no readable file in a directory the run grants"
+                }
+                ImageReadFailure::TooLarge => "generate images exceed their bound",
+            })?;
+            if exceeds_wasm_bound(bytes.len(), *left) {
+                return Err("generate images exceed their bound");
+            }
+            *left = left.saturating_sub(bytes.len());
+            let url =
+                data_url(&bytes).ok_or("generate image must be a PNG, JPEG, GIF, or WebP image")?;
+            Ok(ContentPart::Image(Image { path, url }))
+        }
+        Some("image") => Err("generate image parts belong in user messages only"),
+        _ => Err(INVALID),
+    }
+}
+
+/// The guest path an image reference names: a URI reference that is a path
+/// only (no scheme, authority, query, or fragment), percent-decoded, with no
+/// empty, `.`, or `..` segment, resolved against the guest root. So
+/// `media/page.png` and `/media/page.png` both name `/media/page.png`, a
+/// file in the directory a run grants with
+/// `--dir <SERVICE_URI>=HOST::/media`.
+///
+/// # Errors
+///
+/// A static detail for any other reference.
+pub fn image_path(reference: &str) -> Result<String, &'static str> {
+    const INVALID: &str = "generate image content must be a path reference with no scheme, query, fragment, or dot segments";
+    let relative = reference.strip_prefix('/').unwrap_or(reference);
+    let scheme = relative
+        .split('/')
+        .next()
+        .is_some_and(|first| first.contains(':'));
+    if relative.is_empty() || scheme || reference.contains(['?', '#', '\\']) {
+        return Err(INVALID);
+    }
+    let mut path = String::new();
+    for segment in relative.split('/') {
+        let decoded = percent_decoded(segment).ok_or(INVALID)?;
+        if decoded.is_empty() || decoded == "." || decoded == ".." || decoded.contains(['/', '\0'])
+        {
+            return Err(INVALID);
+        }
+        path.push('/');
+        path.push_str(&decoded);
+    }
+    Ok(path)
+}
+
+/// `segment` with its `%XX` escapes decoded, when they are well formed and
+/// the result is UTF-8.
+fn percent_decoded(segment: &str) -> Option<String> {
+    let bytes = segment.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while let Some(&byte) = bytes.get(index) {
+        if byte == b'%' {
+            let hex = bytes.get(index + 1..index + 3)?;
+            let hex = std::str::from_utf8(hex).ok()?;
+            decoded.push(u8::from_str_radix(hex, 16).ok()?);
+            index += 3;
+        } else {
+            decoded.push(byte);
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded).ok()
+}
+
+/// The media type of an image's bytes, one of [`IMAGE_MEDIA_TYPES`], by its
+/// leading signature (PNG, JPEG, GIF, WebP).
+#[must_use]
+pub fn image_media_type(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("image/png")
+    } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        Some("image/jpeg")
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some("image/gif")
+    } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP".as_slice()) {
+        Some("image/webp")
+    } else {
+        None
+    }
+}
+
+/// The `data:` URL of an image's bytes, `data:<media type>;base64,<bytes>`
+/// (RFC 2397, standard base64 with padding), when they are one of
+/// [`IMAGE_MEDIA_TYPES`].
+#[must_use]
+pub fn data_url(bytes: &[u8]) -> Option<String> {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let media_type = image_media_type(bytes)?;
+    let mut url = String::with_capacity(media_type.len() + 13 + bytes.len().div_ceil(3) * 4);
+    url.push_str("data:");
+    url.push_str(media_type);
+    url.push_str(";base64,");
+    for chunk in bytes.chunks(3) {
+        let [a, b, c] = [0, 1, 2].map(|index| chunk.get(index).copied().unwrap_or(0));
+        let triple = u32::from(a) << 16 | u32::from(b) << 8 | u32::from(c);
+        for (position, shift) in [18_u32, 12, 6, 0].into_iter().enumerate() {
+            if position <= chunk.len() {
+                let index = usize::try_from((triple >> shift) & 0x3f).unwrap_or(0);
+                url.push(char::from(ALPHABET.get(index).copied().unwrap_or(b'A')));
+            } else {
+                url.push('=');
+            }
+        }
+    }
+    Some(url)
 }
 
 /// Resolves and compiles one response schema from its source text.
@@ -515,15 +748,36 @@ fn reasoning_effort_parameter(value: Option<&Data>) -> Result<&'static str, &'st
     }
 }
 
+/// The bytes of the text the conversation carries; images have their own
+/// bound ([`MAX_IMAGE_BYTES`]).
+fn text_bytes(conversation: &[Message]) -> usize {
+    conversation
+        .iter()
+        .flat_map(|message| match &message.content {
+            Content::Text(text) => vec![text.len()],
+            Content::Parts(parts) => parts
+                .iter()
+                .map(|part| match part {
+                    ContentPart::Text(text) => text.len(),
+                    ContentPart::Image(_) => 0,
+                })
+                .collect(),
+        })
+        .fold(0_usize, usize::saturating_add)
+}
+
 /// The validated generation request of an invocation's parameters (see the
-/// crate documentation, "Parameters").
+/// crate documentation, "Parameters"). `read` reads an image part's file:
+/// its guest path and the bytes the images' bound has left.
 ///
 /// # Errors
 ///
 /// A static detail for an unknown or repeated parameter, a missing or
-/// malformed one, or a conversation or model outside its bound.
+/// malformed one, an image that cannot be read, or a conversation or model
+/// outside its bound.
 pub fn parse_parameters<'a>(
     parameters: impl IntoIterator<Item = (&'a str, &'a Data)>,
+    mut read: impl FnMut(&str, usize) -> Result<Vec<u8>, ImageReadFailure>,
 ) -> Result<Generation, &'static str> {
     let mut model = None;
     let mut prompt = None;
@@ -562,21 +816,27 @@ pub fn parse_parameters<'a>(
     if let Some(system) = system {
         conversation.push(Message {
             role: Role::System,
-            content: text_parameter(system, "generate system must be a non-empty string")?,
+            content: Content::Text(text_parameter(
+                system,
+                "generate system must be a non-empty string",
+            )?),
         });
     }
     match (prompt, messages) {
         (Some(prompt), None) => conversation.push(Message {
             role: Role::User,
-            content: text_parameter(prompt, "generate prompt must be a non-empty string")?,
+            content: Content::Text(text_parameter(
+                prompt,
+                "generate prompt must be a non-empty string",
+            )?),
         }),
-        (None, Some(Data::JsonArray(text))) => conversation.extend(messages_from_json(text)?),
+        (None, Some(Data::JsonArray(text))) => {
+            conversation.extend(messages_from_json(text, &mut read)?);
+        }
         (None, Some(_)) => return Err("generate messages must be a JSON array of messages"),
         _ => return Err("generate takes exactly one of prompt or messages"),
     }
-    let bytes = conversation.iter().fold(0_usize, |total, message| {
-        total.saturating_add(message.content.len())
-    });
+    let bytes = text_bytes(&conversation);
     if exceeds_wasm_bound(conversation.len(), MAX_MESSAGES)
         || exceeds_wasm_bound(bytes, MAX_CONVERSATION_BYTES)
     {
@@ -653,7 +913,7 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
             .messages
             .iter()
             .map(|message| {
-                serde_json::json!({ "role": message.role.name(), "content": message.content })
+                serde_json::json!({ "role": message.role.name(), "content": content_json(&message.content) })
             })
             .collect(),
     );
@@ -700,6 +960,24 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
             ),
         ],
         body: canonical_json(&Json::Object(body)).into_bytes(),
+    }
+}
+
+/// A message's content on the wire: a string as itself, parts as Chat
+/// Completions content parts, `{"type": "text", "text": T}` and
+/// `{"type": "image_url", "image_url": {"url": "data:…"}}`.
+fn content_json(content: &Content) -> Json {
+    match content {
+        Content::Text(text) => Json::String(text.clone()),
+        Content::Parts(parts) => parts
+            .iter()
+            .map(|part| match part {
+                ContentPart::Text(text) => serde_json::json!({ "type": "text", "text": text }),
+                ContentPart::Image(image) => {
+                    serde_json::json!({ "type": "image_url", "image_url": { "url": image.url } })
+                }
+            })
+            .collect(),
     }
 }
 
@@ -877,7 +1155,7 @@ mod guest {
         SlotReference,
     };
 
-    use super::{Generation, Part, Response, Returned, TransportFailure};
+    use super::{Generation, ImageReadFailure, Part, Response, Returned, TransportFailure};
 
     /// The invocation's result: `ok` (no done data), or its error.
     type Done = Result<Option<DataValue>, ComponentError>;
@@ -944,6 +1222,30 @@ mod guest {
             .map(|bound| bound.reference)
     }
 
+    /// The bytes of the file at the guest `path`, at most `left` of them:
+    /// a file in a directory the run grants through `wasi:filesystem` (the
+    /// host links it only under `--dir`).
+    fn read_image(path: &str, left: usize) -> Result<Vec<u8>, ImageReadFailure> {
+        use std::io::Read as _;
+        let file = std::fs::File::open(path).map_err(|_| ImageReadFailure::Unreadable)?;
+        let metadata = file.metadata().map_err(|_| ImageReadFailure::Unreadable)?;
+        if !metadata.is_file() {
+            return Err(ImageReadFailure::Unreadable);
+        }
+        let limit = u64::try_from(left).unwrap_or(u64::MAX);
+        if metadata.len() > limit {
+            return Err(ImageReadFailure::TooLarge);
+        }
+        let mut bytes = Vec::new();
+        file.take(limit.saturating_add(1))
+            .read_to_end(&mut bytes)
+            .map_err(|_| ImageReadFailure::Unreadable)?;
+        if bytes.len() > left {
+            return Err(ImageReadFailure::TooLarge);
+        }
+        Ok(bytes)
+    }
+
     /// What `invoke` found: the one event to return at once, or the request
     /// to make first.
     enum Plan {
@@ -964,6 +1266,7 @@ mod guest {
             parameters
                 .iter()
                 .map(|(name, value)| (name.as_str(), value)),
+            read_image,
         )
         .map_err(|detail| error(ErrorCode::InvalidInput, detail))?;
         let (base_url, api_key) = match super::endpoint(

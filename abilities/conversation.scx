@@ -10,9 +10,20 @@
     inactive -input-> active { waiting -input-> recalling -> waiting }
     append (inactive or active): commit the outbound message
 
-  Inputs: recalling is the memory seam (phase 3): it logs
-  <log label="memory" expr="'absent'"> and recalls nothing (no recalled
-  memory reaches the output). The inbound message is then committed with
+  Inputs: recalling (mosfet Conversation's memory stage): with a database
+  (the <param> database, the memory database file) it invokes the memory
+  ability (abilities/memory.scx) with one transaction that recalls
+  the relationship's memories (content where query_tags
+  conversation_memory and context_ref is the relationship, oldest first,
+  at most 50, mosfet conversation_memory_recall_input) and then remembers
+  the input ({source_ids, target_ids, content, content_type} as JSON, kind
+  conversation, mosfet conversation_memory_insert_input); the
+  relationship is the message's session_ref. The recalled memories are
+  host-only (mosfet excludes them from the output) and are logged by
+  count only. A memory failure answers bot.ability.conversation.failed
+  {stage: "memory", message} and commits nothing. Without a database it
+  logs <log label="memory" expr="'absent'">. The inbound message is then
+  committed with
   the next sequence: text/* content as given, audio/* content dropped
   (media never enters the model-facing history), any other content as
   given; its provenance is the input event, with session_ref the
@@ -41,7 +52,8 @@
   document appends it to history and transcripts and remembers each
   committed outbound provenance id in appended.
 
-  Bindings: the conversation namespace package (no service, no I/O).
+  Bindings: the conversation namespace package and the memory ability's
+  sql service package (a run grants it its directory: scx run's dir option).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
@@ -57,6 +69,15 @@
     <!-- The message in hand, and the provenance ids committed so far. -->
     <data id="message" expr="null"/>
     <data id="appended" expr="[]"/>
+    <!-- Memory: the database file (null: no memory) and mosfet's
+         statements (conversation/memory.py). A memory id is the next
+         rowid as 32 hex digits: the sql service's randomblob is not
+         unique across invocations. -->
+    <data id="database" expr="null"/>
+    <data id="memory_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND context_ref = ?2 ORDER BY created_at, memory_id LIMIT 50'"/>
+    <data id="memory_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT printf(\'%032x\', coalesce(max(rowid), 0) + 1) FROM bot_memory), ?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
+    <data id="statements" expr="[]"/>
+    <data id="remembered" expr="null"/>
   </datamodel>
 
   <state id="conversation" initial="inactive">
@@ -82,23 +103,54 @@
         </transition>
       </state>
 
-      <!-- Memory seam (phase 3): nothing is recalled. -->
-      <state id="recalling">
+      <!-- Recall the relationship's memories and remember the input, or
+           nothing without a database; then commit the inbound message. -->
+      <state id="recalling" initial="recalling_from">
         <onentry>
-          <log label="memory" expr="'absent'"/>
           <assign location="parent" expr="({event: 'bot.ability.conversation.input', data: input})"/>
-        </onentry>
-        <transition target="waiting">
           <conversation:commit location="message" keylocation="participants" direction="inbound"
                                event="parent.event" message="input" sequence="history.length"/>
-          <assign location="history" expr="history.concat([message])"/>
-          <assign location="transcripts[participants]" expr="(transcripts[participants] || []).concat([message.sequence])"/>
-          <log label="conversation" expr="'inbound ' + (history.length - 1) + ' from ' + participants + ' (' + transcripts[participants].length + ' in its transcript)'"/>
-          <send event="bot.ability.conversation.output" target="#_parent">
-            <param name="parent" expr="parent"/>
-            <param name="messages" expr="history.slice(Math.max(0, history.length - max_messages))"/>
-          </send>
-        </transition>
+        </onentry>
+        <state id="recalling_from">
+          <transition cond="database === null" target="committing">
+            <log label="memory" expr="'absent'"/>
+          </transition>
+          <transition target="recalling_memory"/>
+        </state>
+        <state id="recalling_memory">
+          <onentry>
+            <assign location="remembered" expr="JSON.stringify({source_ids: input.source_ids, target_ids: input.target_ids, content: input.content, content_type: input.content_type})"/>
+            <assign location="statements" expr="[{sql: memory_select, parameters: ['conversation_memory', message.provenance.session_ref]}]"/>
+            <assign location="statements" expr="statements.concat([{sql: memory_insert, parameters: ['memory', message.provenance.session_ref, 'conversation']}])"/>
+            <assign location="statements[1].parameters" expr="statements[1].parameters.concat(['standard', 'retain', remembered, 'application/json', 'conversation_memory'])"/>
+          </onentry>
+          <invoke id="remember" type="scxml" src="memory.scx">
+            <param name="database" expr="database"/>
+            <param name="statements" expr="statements"/>
+          </invoke>
+          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+                      cond="_event.invokeid === 'remember'" target="committing">
+            <log label="conversation.memories" expr="'recalled ' + _event.data.results[0].rowcount + ', remembered ' + _event.data.results[1].rowcount"/>
+          </transition>
+          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                      cond="_event.invokeid === 'remember'" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'memory'"/>
+              <param name="message" expr="'Conversation memory failed: ' + _event.data.message"/>
+            </send>
+          </transition>
+        </state>
+        <state id="committing">
+          <transition target="waiting">
+            <assign location="history" expr="history.concat([message])"/>
+            <assign location="transcripts[participants]" expr="(transcripts[participants] || []).concat([message.sequence])"/>
+            <log label="conversation" expr="'inbound ' + (history.length - 1) + ' from ' + participants + ' (' + transcripts[participants].length + ' in its transcript)'"/>
+            <send event="bot.ability.conversation.output" target="#_parent">
+              <param name="parent" expr="parent"/>
+              <param name="messages" expr="history.slice(Math.max(0, history.length - max_messages))"/>
+            </send>
+          </transition>
+        </state>
       </state>
     </state>
 

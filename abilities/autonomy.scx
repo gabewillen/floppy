@@ -2,23 +2,39 @@
 <!--
   floppy's Autonomy stage (mosfet abilities/cognition/autonomy): the
   cognition (abilities/cognition.scx) invokes it first in each turn. It
-  recalls the learned turn behaviors whose triggers name the turn's
-  stimulus and runs them one at a time as candidates; the first that
-  handles the turn answers it, and otherwise the cascade goes on to
-  intuition.
+  runs the trusted seeds the turn's stimulus triggers, then recalls the
+  learned turn behaviors whose triggers name the stimulus, and runs them
+  one at a time as candidates; the first that handles the turn answers it,
+  and otherwise the cascade goes on to intuition.
 
-    matching -> loading -> matched -> running <-> advancing
-                                        |            |
-                                        v            v
-                                      using       unhandled
-                                        |
-                                        v
-                                     answered
+    matching -> [seeding] -> inventory -> loading -> matched -> running <-> advancing
+                   |                                            |            |
+                   v                                            v            v
+                answered                                      using       unhandled
+                                                                |
+                                                                v
+                                                             answered
+
+  (seeding runs only when the stimulus triggers a seed; inventory ends at
+  once without memory.)
 
   Input: the <param>s turn, input (focus and focus_candidates, mosfet's
   bot.ability.autonomy.input, schemas/bot.ability.autonomy.input.json),
-  stimulus (the turn's stimulus envelope) and memory (the memory
-  database path; null means no inventory, so nothing matches).
+  stimulus (the turn's stimulus envelope) and database (the memory
+  database; null means no learned inventory, and only the seeds
+  run).
+
+  Seeds (mosfet _prepare_match: the seeded behaviors ride before the
+  learned inventory, with or without memory): SpeechHeard
+  (abilities/behaviors/speech_heard.scx), triggered by
+  bot.ability.listening.speech.output, runs as the child "seed" with the
+  <param>s turn, input and stimulus (its input_adapter keeps the
+  cognition's input unchanged). It answers as a candidate does: handled
+  answers {turn, handled: true, selected, candidates, reason: "behavior"}
+  with no usage persisted (a seed is not an inventory row); not handled,
+  or silent within silence_ms, goes on to the inventory; an error.* for it
+  fails autonomy ("Autonomy native seed 'SpeechHeard' failed: ...", mosfet
+  _emit_native_start_failure). candidates names it first.
 
   Matching (mosfet _prepare_match, _match_activity): one memory
   transaction selects the ACTIVE behaviors of lifetime 'turn' that have a
@@ -59,7 +75,7 @@
     <data id="turn" expr="0"/>
     <data id="input" expr="null"/>
     <data id="stimulus" expr="null"/>
-    <data id="memory" expr="null"/>
+    <data id="database" expr="null"/>
     <data id="silence_ms" expr="1000"/>
     <data id="memory_timeout_ms" expr="10000"/>
     <data id="rows" expr="[]"/>
@@ -73,13 +89,50 @@
     <data id="failed_sql">UPDATE bot_behavior SET failed_count = CAST(CAST(failed_count AS INTEGER) + 1 AS TEXT), last_failed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE name = ?</data>
   </datamodel>
 
+  <!-- The seeds the stimulus triggers run first. -->
   <state id="matching">
+    <transition cond="stimulus.event === 'bot.ability.listening.speech.output'" target="seeding"/>
+    <transition target="inventory"/>
+  </state>
+
+  <!-- The SpeechHeard seed. -->
+  <state id="seeding">
     <onentry>
-      <if cond="memory === null">
-        <log label="autonomy" expr="'turn ' + turn + ': no behaviors (phase 5)'"/>
+      <assign location="tried" expr="tried.concat(['SpeechHeard'])"/>
+      <log label="autonomy.candidate" expr="'SpeechHeard'"/>
+      <send idlocation="timer" event="bot.ability.autonomy.candidate.silent" delayexpr="silence_ms + 'ms'"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="timer"/>
+    </onexit>
+    <invoke id="seed" type="scxml" src="behaviors/speech_heard.scx">
+      <param name="turn" expr="turn"/>
+      <param name="input" expr="input"/>
+      <param name="stimulus" expr="stimulus"/>
+    </invoke>
+    <transition event="done.invoke.seed" cond="_event.data.turn === turn &amp;&amp; _event.data.handled === true &amp;&amp; Array.isArray(_event.data.selected)" target="answered">
+      <assign location="answer" expr="_event.data.selected"/>
+    </transition>
+    <transition event="done.invoke.seed" target="inventory">
+      <log label="autonomy.candidate.advance" expr="'SpeechHeard'"/>
+    </transition>
+    <transition event="bot.ability.autonomy.candidate.silent" cond="_event.sendid === timer" target="inventory">
+      <log label="autonomy.candidate.silent" expr="'SpeechHeard after ' + silence_ms + ' ms'"/>
+    </transition>
+    <transition event="error.*" target="failed">
+      <assign location="answer" expr="'Autonomy native seed \'SpeechHeard\' failed: ' + _event.name"/>
+    </transition>
+  </state>
+
+  <!-- Then the learned inventory, when there is memory. -->
+  <state id="inventory">
+    <onentry>
+      <if cond="database === null">
+        <log label="autonomy" expr="'turn ' + turn + ': no memory'"/>
       </if>
     </onentry>
-    <transition cond="memory === null" target="done"/>
+    <transition cond="database === null &amp;&amp; tried.length === 0" target="done"/>
+    <transition cond="database === null" target="unhandled"/>
     <transition target="loading"/>
   </state>
 
@@ -92,7 +145,7 @@
       <cancel sendidexpr="timer"/>
     </onexit>
     <invoke id="load" type="scxml" src="memory.scx">
-      <param name="database" expr="memory"/>
+      <param name="database" expr="database"/>
       <param name="statements" expr="[{sql: select_sql, parameters: [stimulus.event]}]"/>
     </invoke>
     <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" cond="_event.invokeid === 'load'">
@@ -114,7 +167,8 @@
     <onentry>
       <log label="autonomy" expr="'turn ' + turn + ': ' + rows.length + ' matched for ' + stimulus.event"/>
     </onentry>
-    <transition cond="rows.length === 0" target="done"/>
+    <transition cond="rows.length === 0 &amp;&amp; tried.length === 0" target="done"/>
+    <transition cond="rows.length === 0" target="unhandled"/>
     <transition target="running"/>
   </state>
 
@@ -169,7 +223,7 @@
       <cancel sendidexpr="timer"/>
     </onexit>
     <invoke id="usage" type="scxml" src="memory.scx">
-      <param name="database" expr="memory"/>
+      <param name="database" expr="database"/>
       <param name="statements" expr="[{sql: used_sql, parameters: [rows[index].values[0]]}]"/>
     </invoke>
     <transition event="done.invoke.usage" target="answered"/>
@@ -193,7 +247,7 @@
       <cancel sendidexpr="timer"/>
     </onexit>
     <invoke id="failure" type="scxml" src="memory.scx">
-      <param name="database" expr="memory"/>
+      <param name="database" expr="database"/>
       <param name="statements" expr="[{sql: failed_sql, parameters: [rows[index].values[0]]}]"/>
     </invoke>
     <transition event="done.invoke.failure" target="advancing"/>

@@ -39,7 +39,7 @@ use serde_json::{Map, Value as Json, json};
 use support::{Finished, Run, logs, trace, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup included).
-const WAIT: Duration = Duration::from_secs(90);
+const WAIT: Duration = Duration::from_secs(300);
 /// How long the mock must receive nothing before a blessing run takes its
 /// requests as complete.
 const SETTLE: Duration = Duration::from_secs(1);
@@ -207,7 +207,9 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
 fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
     let mut request_line = String::new();
-    if reader.read_line(&mut request_line).is_err() {
+    // A connection closed before its request line (a cancelled call's,
+    // under load) is no request.
+    if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
         return;
     }
     let mut length = 0;
@@ -360,6 +362,10 @@ fn layout(
     );
     copy_dir(&workspace().join("abilities"), &dir.join("abilities"));
     copy_dir(
+        &workspace().join("abilities/behaviors"),
+        &dir.join("abilities/behaviors"),
+    );
+    copy_dir(
         &workspace().join("abilities/schemas"),
         &dir.join("abilities/schemas"),
     );
@@ -509,9 +515,11 @@ fn intuition_handles_an_ignore_without_reasoning() {
             "intuition handled (none)"
         ])
     );
+    // The body gives the cognition its memory: autonomy looks the
+    // stimulus's behaviors up there (a fresh database holds none).
     assert_eq!(
         texts(&records, "autonomy"),
-        strings(&["turn 1: no behaviors (phase 5)"])
+        strings(&["turn 1: 0 matched for bot.input"])
     );
     assert_eq!(
         texts(&records, "reflection"),
@@ -714,7 +722,7 @@ fn autonomy_runs_the_learned_behaviors_the_stimulus_triggers() {
         &mock,
         Decision::Fail,
         Generation::Fail,
-        &[("abilities/cognition.scx", &[("memory", memory.as_str())])],
+        &[("abilities/cognition.scx", &[("database", memory.as_str())])],
     );
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
@@ -782,7 +790,7 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
         &mock,
         Decision::Ignore,
         Generation::Fail,
-        &[("abilities/cognition.scx", &[("memory", memory.as_str())])],
+        &[("abilities/cognition.scx", &[("database", memory.as_str())])],
     );
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
@@ -833,14 +841,16 @@ fn reasoning_selects_from_the_turns_choices() {
             "reasoning handled"
         ])
     );
-    // Both memory seams ran and recalled nothing; reflection is absent.
-    assert_eq!(texts(&records, "memory"), strings(&["absent", "absent"]));
+    // The body gives the cognition a database: reasoning recalls from and
+    // retains to memory (no seam logs absent); reflection is absent.
+    assert!(texts(&records, "memory").is_empty(), "{records:?}");
     assert_eq!(
         texts(&records, "reflection"),
         strings(&["absent (phase 5)"])
     );
     // The model request: the dispatch schema of the choices, strict, and
-    // a prompt that carries the stimulus and no recalled memory.
+    // a prompt that carries the stimulus and what memory recalled (a fresh
+    // database holds nothing).
     let requests = mock.received("/chat/completions");
     assert_eq!(requests.len(), 1);
     let body = &requests[0].body;
@@ -887,7 +897,18 @@ fn reasoning_selects_from_the_turns_choices() {
         "what is the capital of France?"
     );
     let keys: Vec<&String> = prompt.as_object().expect("an object").keys().collect();
-    assert_eq!(keys, ["focus", "focus_candidates", "stimulus"]);
+    assert_eq!(
+        keys,
+        [
+            "focus",
+            "focus_candidates",
+            "prior_episodes",
+            "standing_directives",
+            "stimulus"
+        ]
+    );
+    assert_eq!(prompt["prior_episodes"], json!([]));
+    assert_eq!(prompt["standing_directives"], json!([]));
     close(run, &mock, "reasoning_selects_from_the_turns_choices");
 }
 
@@ -932,6 +953,48 @@ fn a_reasoned_response_is_said_through_the_communication() {
         &mock,
         "a_reasoned_response_is_said_through_the_communication",
     );
+}
+
+/// The user message of each model request, parsed.
+fn prompts(mock: &Mock) -> Vec<Json> {
+    mock.received("/chat/completions")
+        .iter()
+        .map(|request| {
+            let prompt = request.body["messages"]
+                .as_array()
+                .and_then(|messages| messages.last())
+                .and_then(|message| message["content"].as_str())
+                .expect("the user message");
+            serde_json::from_str(prompt).expect("the prompt is JSON")
+        })
+        .collect()
+}
+
+/// mosfet's Reasoning recall: a reasoned turn retains its episode, and the
+/// next turn's prompt carries it.
+#[test]
+fn a_reasoned_turn_is_recalled_by_the_next() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
+    let mut run = start(&bot);
+    say(&mut run, "remember this");
+    run.until(WAIT, turn_ended);
+    say(&mut run, "and this");
+    run.until(WAIT, turn_ended);
+    let prompts = prompts(&mock);
+    assert_eq!(prompts.len(), 2, "{prompts:?}");
+    assert_eq!(prompts[0]["prior_episodes"], json!([]));
+    assert_eq!(
+        prompts[1]["prior_episodes"],
+        json!([{
+            "focus": null,
+            "focus_candidates": [],
+            "stimulus_name": "bot.input",
+            "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}],
+            "behavior": null
+        }])
+    );
+    close(run, &mock, "a_reasoned_turn_is_recalled_by_the_next");
 }
 
 #[test]
@@ -1148,7 +1211,7 @@ fn a_silent_reasoning_asks_the_body_for_a_reboot() {
         Decision::Abstain,
         Generation::Hang,
         "reasoning",
-        "6000",
+        "20000",
     );
 }
 
@@ -1227,6 +1290,11 @@ fn a_cancel_during_reasoning_is_acknowledged() {
 /// The phase 5 seams' gates, on.
 const GATES_ON: &[(&str, &str)] = &[("reflection_enabled", "true"), ("routines_enabled", "true")];
 
+/// A body without a database: the seams' gate tests watch the seams, not
+/// memory (with one, reflection asks the model; `tests/tests/reflection.rs`
+/// covers it).
+const NO_DATABASE: &[(&str, &str)] = &[("database", "null")];
+
 /// With both gates on, the routines start (finding no routines), each
 /// output is followed by the reflection seam, and a settled reflection
 /// asks the routines to reconcile.
@@ -1237,7 +1305,10 @@ fn with_its_gates_on_the_cognition_reflects_and_reconciles_the_routines() {
         &mock,
         Decision::Abstain,
         Generation::Ignore,
-        &[("abilities/cognition.scx", GATES_ON)],
+        &[
+            ("abilities/cognition.scx", GATES_ON),
+            ("bots/floppy/floppy.scx", NO_DATABASE),
+        ],
     );
     let mut run = start(&bot);
     say(&mut run, "hmm");
@@ -1271,7 +1342,10 @@ fn a_routine_tick_becomes_a_turn() {
         &mock,
         Decision::Abstain,
         Generation::Ignore,
-        &[("abilities/cognition.scx", GATES_ON)],
+        &[
+            ("abilities/cognition.scx", GATES_ON),
+            ("bots/floppy/floppy.scx", NO_DATABASE),
+        ],
     );
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/routines_double.scx"),
@@ -1316,4 +1390,195 @@ fn with_its_gates_off_the_cognition_invokes_no_seam() {
     );
     assert!(texts(&finished.all, "routines").is_empty());
     assert!(texts(&finished.all, "bot.ability.reflection.output").is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// The SpeechHeard seed (abilities/behaviors/speech_heard.scx), run by
+// autonomy under `tests/fixtures/phase6/autonomy_harness.scx`, which stands
+// in for the cognition: the body cannot take a listening product yet, so
+// each stimulus is a double of `bot.ability.listening.speech.output`.
+
+const SPEECH: &str = "bot.ability.listening.speech.output";
+const COMMUNICATION_INPUT: &str = "bot.ability.communication.input";
+
+/// A scratch `abilities/` with every ability document, seed and schema,
+/// and the harness beside them, its `<data id="database">` set to `database`.
+fn autonomy_harness(database: &str) -> PathBuf {
+    let dir = unique_scratch("autonomy");
+    copy_dir(&workspace().join("abilities"), &dir.join("abilities"));
+    copy_dir(
+        &workspace().join("abilities/behaviors"),
+        &dir.join("abilities/behaviors"),
+    );
+    copy_dir(
+        &workspace().join("abilities/schemas"),
+        &dir.join("abilities/schemas"),
+    );
+    let harness = dir.join("abilities/harness.scx");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase6/autonomy_harness.scx"),
+        &harness,
+    )
+    .expect("the harness is copyable");
+    rewrite(&harness, &[("database", database)]);
+    harness
+}
+
+/// mosfet's `SpeechData` (its interpretation example, decoded) heard from
+/// `source_ids`.
+fn speech(source_ids: &Json) -> Json {
+    json!({
+        "content": "what is the weather like?",
+        "content_type": "text/plain",
+        "voice_detection": {"segments": [{"start_seconds": 0.0, "end_seconds": 0.4, "confidence": 0.9}]},
+        "media_type": "audio/pcm",
+        "sample_rate_hz": 48000,
+        "channels": 1,
+        "source_ids": source_ids,
+    })
+}
+
+/// One turn of autonomy over `stimulus` (event, data): the cognition's
+/// input, then its answer.
+fn autonomy_turn(run: &mut Run, turn: u64, event: &str, data: &Json) -> Json {
+    run.event(
+        "bot.ability.cognition.input",
+        &json!({
+            "turn": turn,
+            "stimulus": {"event": event, "data": data, "source": "listening"},
+            "focus": null,
+            "focus_candidates": [],
+        }),
+    );
+    let records = run.until(WAIT, label_is("harness.output"));
+    json_text(&records, "harness.output")
+}
+
+/// The selection mosfet's `SpeechHeard` makes: one
+/// `bot.ability.communication.input` carrying the speech as `TurnData`.
+fn admitted(turn: u64) -> Json {
+    json!({
+        "turn": turn,
+        "handled": true,
+        "selected": [{
+            "event": COMMUNICATION_INPUT,
+            "data": {
+                "source_ids": ["caller"],
+                "target_ids": [],
+                "content": "what is the weather like?",
+                "content_type": "text/plain",
+                "sample_rate_hz": 48000,
+                "channels": 1,
+            },
+            "reason": "seeded speech admit via communication",
+        }],
+        "candidates": ["SpeechHeard"],
+        "reason": "behavior",
+    })
+}
+
+/// Whether the schema file `abilities/schemas/<event>.json` admits `data`.
+fn admits(event: &str, data: &Json) -> bool {
+    let text = std::fs::read(workspace().join(format!("abilities/schemas/{event}.json")))
+        .expect("the schema is readable");
+    let resolved = scxml_event_schema::resolve(&text, None).expect("the schema resolves");
+    let schema =
+        scxml_event_schema::CompiledSchema::new(&resolved.schema).expect("the schema compiles");
+    let canonical = scxml_event_schema::canonical_json(data);
+    let value =
+        scxml_types::DataValue::canonical_json_object(&canonical).expect("canonical JSON is data");
+    schema.admits(&value)
+}
+
+/// mosfet's `SpeechHeard` seed without memory (seed-only autonomy): speech
+/// with a source becomes a `bot.ability.communication.input` selection
+/// whose data the communication's schema admits; speech with no source is
+/// unhandled; a stimulus no seed triggers runs nothing.
+#[test]
+fn the_speech_heard_seed_admits_identified_speech_as_communication_input() {
+    let harness = autonomy_harness("null");
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    let first = autonomy_turn(&mut run, 1, SPEECH, &speech(&json!(["caller"])));
+    assert_eq!(first, admitted(1));
+    assert!(admits(COMMUNICATION_INPUT, &first["selected"][0]["data"]));
+    assert_eq!(
+        autonomy_turn(&mut run, 2, SPEECH, &speech(&json!([]))),
+        json!({"turn": 2, "handled": false, "candidates": ["SpeechHeard"], "reason": "unhandled"})
+    );
+    assert_eq!(
+        autonomy_turn(
+            &mut run,
+            3,
+            "bot.input",
+            &json!({"observation": {"event": "text", "data": "hello"}})
+        ),
+        json!({"turn": 3, "handled": false, "candidates": [], "reason": "no-behaviors"})
+    );
+    let finished = run.close(WAIT);
+    assert_eq!(
+        texts(&finished.all, "autonomy.candidate"),
+        strings(&["SpeechHeard", "SpeechHeard"])
+    );
+    assert_eq!(
+        texts(&finished.all, "autonomy.candidate.advance"),
+        strings(&["SpeechHeard"])
+    );
+    trace::assert_trace(
+        "the_speech_heard_seed_admits_identified_speech_as_communication_input",
+        &finished.all,
+        &[],
+    );
+}
+
+/// mosfet `_prepare_match`: the seeds run before the learned inventory. A
+/// learned behavior the speech triggers runs only when the seed does not
+/// handle the turn, and only its use is counted.
+#[test]
+fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
+    let double =
+        std::fs::read_to_string(workspace().join("tests/fixtures/phase4/behavior_double.scx"))
+            .expect("the double is readable");
+    let grant = inventory(&[Learned {
+        name: "Double",
+        trigger: SPEECH,
+        status: "ACTIVE",
+        source: &double,
+    }]);
+    let harness = autonomy_harness(&format!("'{DATABASE}'"));
+    let mut args = grant.clone();
+    args.push(harness.display().to_string());
+    let mut run = Run::start(&args, &[]);
+    assert_eq!(
+        autonomy_turn(&mut run, 1, SPEECH, &speech(&json!(["caller"]))),
+        admitted(1)
+    );
+    assert_eq!(
+        autonomy_turn(&mut run, 2, SPEECH, &speech(&json!([]))),
+        json!({
+            "turn": 2,
+            "handled": true,
+            "selected": [{"event": IGNORE, "data": {}, "reason": "behavior: nothing to do", "target": "cognition"}],
+            "candidates": ["SpeechHeard", "Double"],
+            "reason": "behavior",
+        })
+    );
+    let finished = run.close(WAIT);
+    assert_eq!(
+        texts(&finished.all, "autonomy.candidate"),
+        strings(&["SpeechHeard", "SpeechHeard", "Double"])
+    );
+    assert_eq!(
+        texts(&finished.all, "autonomy"),
+        strings(&[&format!("turn 2: 1 matched for {SPEECH}")])
+    );
+    assert_eq!(
+        texts(&finished.all, "behavior.double"),
+        strings(&["turn 2"])
+    );
+    trace::assert_trace(
+        "autonomy_runs_the_seeds_before_the_learned_behaviors",
+        &finished.all,
+        &[],
+    );
+    assert_eq!(usage(&grant), json!([["Double", "1", "0"]]));
 }

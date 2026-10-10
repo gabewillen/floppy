@@ -7,7 +7,41 @@ fn text(value: &str) -> Data {
 }
 
 fn parse(parameters: &[(&str, Data)]) -> Result<Generation, &'static str> {
-    parse_parameters(parameters.iter().map(|(name, value)| (*name, value)))
+    parse_with_files(parameters, &[])
+}
+
+/// A PNG's signature followed by `rest`: enough for its media type.
+fn png(rest: &[u8]) -> Vec<u8> {
+    [b"\x89PNG\r\n\x1a\n".as_slice(), rest].concat()
+}
+
+/// `parameters` parsed with a granted directory holding exactly `files`
+/// (guest path, bytes).
+fn parse_with_files(
+    parameters: &[(&str, Data)],
+    files: &[(&str, Vec<u8>)],
+) -> Result<Generation, &'static str> {
+    parse_parameters(
+        parameters.iter().map(|(name, value)| (*name, value)),
+        |path: &str, left: usize| {
+            let (_, bytes) = files
+                .iter()
+                .find(|(granted, _)| *granted == path)
+                .ok_or(ImageReadFailure::Unreadable)?;
+            if bytes.len() > left {
+                return Err(ImageReadFailure::TooLarge);
+            }
+            Ok(bytes.clone())
+        },
+    )
+}
+
+/// A `messages` parameter of one user message with `parts`.
+fn user_parts(parts: &str) -> (&'static str, Data) {
+    (
+        "messages",
+        Data::JsonArray(format!(r#"[{{"content":{parts},"role":"user"}}]"#)),
+    )
 }
 
 /// A server-sent-event stream of `chunks`, then `data: [DONE]`.
@@ -198,6 +232,141 @@ fn messages_are_sent_in_order() {
     .expect("valid parameters");
     assert_eq!(generation.messages.len(), 3);
     assert_eq!(generation.messages[1].role, Role::Assistant);
+}
+
+#[test]
+fn an_image_part_is_sent_as_an_image_url_with_its_data_url() {
+    let generation = parse_with_files(
+        &[
+            ("model", text("m")),
+            user_parts(
+                r#"[{"kind":"text","content":"Read all visible text in this image. Return only the text."},{"kind":"image","content":"media/page%201.png"}]"#,
+            ),
+        ],
+        &[("/media/page 1.png", png(b"ab"))],
+    )
+    .expect("valid parameters");
+    let request = build_request(0, 1, &generation);
+    assert_eq!(
+        String::from_utf8(request.body).expect("UTF-8"),
+        r#"{"messages":[{"content":[{"text":"Read all visible text in this image. Return only the text.","type":"text"},{"image_url":{"url":"data:image/png;base64,iVBORw0KGgphYg=="},"type":"image_url"}],"role":"user"}],"model":"m","reasoning_effort":"low","stream":true}"#,
+    );
+}
+
+#[test]
+fn an_image_reference_resolves_against_the_guest_root() {
+    for (reference, path) in [
+        ("media/page.png", "/media/page.png"),
+        ("/media/page.png", "/media/page.png"),
+        ("media/a%20b/c.png", "/media/a b/c.png"),
+    ] {
+        assert_eq!(image_path(reference).as_deref(), Ok(path), "{reference}");
+    }
+    for reference in [
+        "",
+        "/",
+        "file:///media/page.png",
+        "https://example.com/page.png",
+        "data:image/png;base64,AAAA",
+        "//host/media/page.png",
+        "media/../etc/passwd",
+        "media/%2e%2e/etc/passwd",
+        "media/./page.png",
+        "media//page.png",
+        "media/page.png?x",
+        "media/page.png#x",
+        "media/a%2Fb.png",
+        "media/%zz.png",
+        "media/%ff.png",
+        "media/a%00.png",
+    ] {
+        assert!(image_path(reference).is_err(), "{reference}");
+    }
+}
+
+#[test]
+fn image_media_types_come_from_their_signatures() {
+    assert_eq!(image_media_type(&png(b"")), Some("image/png"));
+    assert_eq!(
+        image_media_type(&[0xff, 0xd8, 0xff, 0xe0]),
+        Some("image/jpeg")
+    );
+    assert_eq!(image_media_type(b"GIF89a.."), Some("image/gif"));
+    assert_eq!(
+        image_media_type(b"RIFF\0\0\0\0WEBPVP8 "),
+        Some("image/webp")
+    );
+    assert_eq!(image_media_type(b"RIFF\0\0\0\0WAVE"), None);
+    assert_eq!(image_media_type(b"<svg/>"), None);
+    // Standard base64 with padding, RFC 4648's test vectors.
+    for (rest, encoded) in [
+        (b"".as_slice(), "iVBORw0KGgo="),
+        (b"f", "iVBORw0KGgpm"),
+        (b"fo", "iVBORw0KGgpmbw=="),
+        (b"foo", "iVBORw0KGgpmb28="),
+    ] {
+        assert_eq!(
+            data_url(&png(rest)),
+            Some(format!("data:image/png;base64,{encoded}"))
+        );
+    }
+}
+
+#[test]
+fn an_image_that_cannot_be_read_rejects_the_start() {
+    let files = [
+        ("/media/page.png", png(b"")),
+        ("/media/note.txt", b"just text".to_vec()),
+    ];
+    for (parts, why) in [
+        (
+            r#"[{"kind":"image","content":"elsewhere/page.png"}]"#,
+            "a reference outside the grant",
+        ),
+        (
+            r#"[{"kind":"image","content":"media/missing.png"}]"#,
+            "a missing file",
+        ),
+        (
+            r#"[{"kind":"image","content":"media/note.txt"}]"#,
+            "a file that is not an image",
+        ),
+        (
+            r#"[{"kind":"image","content":"../media/page.png"}]"#,
+            "a dot segment",
+        ),
+        ("[]", "no part"),
+        (
+            r#"[{"kind":"video","content":"media/page.png"}]"#,
+            "an unknown kind",
+        ),
+        (r#"[{"kind":"image"}]"#, "a part without content"),
+        (
+            r#"[{"kind":"text","content":"x","extra":1}]"#,
+            "a part with another member",
+        ),
+        (r#"[{"kind":"text","content":1}]"#, "non-string content"),
+        (r#"["text"]"#, "a part that is not an object"),
+    ] {
+        assert!(
+            parse_with_files(&[("model", text("m")), user_parts(parts)], &files).is_err(),
+            "{why}"
+        );
+    }
+    let in_system = parse_with_files(
+        &[
+            ("model", text("m")),
+            (
+                "messages",
+                Data::JsonArray(
+                    r#"[{"content":[{"kind":"image","content":"media/page.png"}],"role":"system"}]"#
+                        .into(),
+                ),
+            ),
+        ],
+        &files,
+    );
+    assert!(in_system.is_err(), "an image outside a user message");
 }
 
 #[test]

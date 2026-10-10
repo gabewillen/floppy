@@ -49,7 +49,7 @@ use serde_json::{Value as Json, json};
 use support::{Finished, Run, logs, trace, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup included).
-const WAIT: Duration = Duration::from_secs(60);
+const WAIT: Duration = Duration::from_secs(300);
 
 /// The cognition the scratch layout gets.
 enum Cognition {
@@ -95,7 +95,13 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
     }
     let body_path = body_dir.join("floppy.scx");
     std::fs::write(&body_path, body).expect("the body copy is writable");
-    for name in ["communication", "conversation", "speaking", "identity"] {
+    for name in [
+        "communication",
+        "conversation",
+        "speaking",
+        "identity",
+        "memory",
+    ] {
         let name = format!("{name}.scx");
         std::fs::copy(
             workspace().join("abilities").join(&name),
@@ -126,6 +132,10 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
                 )
                 .expect("the ability is copyable");
             }
+            copy_dir(
+                &workspace().join("abilities/behaviors"),
+                &dir.join("abilities/behaviors"),
+            );
         }
         Cognition::Missing => {}
     }

@@ -1,0 +1,33 @@
+[package]
+name = "floppy-service-pgsql"
+description = "The `pgsql` invoked service: one Postgres transaction of parameterized statements per `<invoke>`, over the Postgres wire protocol on `wasi:sockets/tcp`, as a Wasm component whose `invoke` export is an `async func`"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Canonical JSON of the returned event data.
+scxml-event-schema.workspace = true
+scxml-types.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# `wasi:sockets/tcp` directly: the standard library's sockets go through
+# wasi-libc, which also imports the filesystem and UDP.
+wasip2 = "1.0.4"
+# The WASI 0.3 async ABI: `invoke` is an `async func`.
+wit-bindgen = { workspace = true, features = ["async", "async-spawn"] }
+
+[dev-dependencies]
+# The package test reads the manifest with the parser every host uses.
+scxml-validator-core.workspace = true
+
+[lints]
+workspace = true

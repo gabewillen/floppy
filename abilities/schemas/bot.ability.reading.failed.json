@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.reading.failed",
+  "description": "Failure signal produced when a reading stage cannot complete.",
+  "properties": {
+    "stage": {
+      "description": "Reading pipeline stage that failed.",
+      "enum": [
+        "classification",
+        "text_decoding",
+        "image_decoding",
+        "output_encoding"
+      ],
+      "examples": [
+        "image_decoding"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "message": {
+      "description": "Human-readable failure message for the reading stage.",
+      "examples": [
+        "image decoder unavailable"
+      ],
+      "title": "Message",
+      "type": "string"
+    }
+  },
+  "required": [
+    "stage",
+    "message"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "stage": "image_decoding",
+      "message": "image decoder unavailable"
+    }
+  ]
+}

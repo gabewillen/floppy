@@ -70,8 +70,8 @@ component code.
 | `gemini` (text) | `services/generate` through an OpenAI-compatible base URL | any (by `FLOPPY_BASE_URL`) |
 | `typesafe` (`system_one` Choice/Score) | `services/decision`, TypeSafe backend (`TYPESAFE_API_KEY`) | 1 |
 | `needle` (local tool-calling reflex model) | `services/decision` backend (the `Backend` trait) | later |
-| `sqlite_memory` | `services/memory`, SQLite (a service declaring `wasi:filesystem`) | 3 |
-| `postgres_memory` | `services/memory`, PGlite | 7 |
+| `sqlite_memory` | `services/sql`, SQLite (a service declaring `wasi:filesystem`) under `abilities/memory.scx` | 3 |
+| `postgres_memory` | PGlite behind the same sql contract | 7 |
 | `elevenlabs`, `moonshine`, `mlx_audio`, `pyannote` | `services/speech` (text-to-speech, speech-to-text, diarization backends) | 6 |
 | `livekit` | the `phone` device service | 6 |
 | `mlx_vlm` | a `vision` (reading) service | 6 |
@@ -88,7 +88,7 @@ in the gitignored `.env`), and `decision` uses TypeSafe through its own
 | 0 | scxml.rs invoked services: slice 1 (`invoked-service` world, host and CLI binding, echo example) and slice 2 (WASI permissions and grants, event contracts, env slots on `<invoke>`, repository services), and unbound invoke types failing at invocation start; floppy repository scaffold (subtree, workspace, an embedder and its smoke test, namespace skeletons, rules, this plan; decision D14 deleted the embedder, and the smoke test now drives `scx run`) | Done. Services are now one async `invoke` export on WASI 0.3 that awaits `outbound-http.fetch` (decision D15, which deleted the `outbound-http.begin`/`take`/`wake` API), with no host time limit on their I/O: the invoking state's `<send delay>` bounds it, and leaving the state cancels the invocation and closes its connection (SCXML 6.4). Extension components get no WASI, by rule (decision D13), not as a gap |
 | 1 | Namespaces and services: `scxml` (now scxml.rs's embedded `scx` namespace, decision D17: `scx:validate` wrapping the validator component, returning canonical diagnostics and fixes), `generate` (OpenAI text and structured output), `decision` (enabled-transition candidates, TypeSafe ranking, schema fill and validation before emit) | `scxml` namespace implemented, then moved to scxml.rs as `scx` (`scx:validate`); `services/generate` implemented (one Chat Completions call per `<invoke>`, text or schema-validated structured output, `generate.result`/`generate.failed`, never blocking the session; `env:apikey`/`env:baseurl`); `decision` split per D13: the namespace's `decision:choice` (snapshot choices of `event:schema` transitions whose guards evaluate to true) and `services/decision` (request kinds `choose`, `rank`, `classify`; grounded per-member fill, validation against the choices' schema before emit, `decision.abstain`, `decision.failed`; TypeSafe `system_one` backend behind the `Backend` trait, `env:apikey`/`env:baseurl`) |
 | 2 | Builder bot: `bots/builder/` SCXML (intake, design, author, `scx:validate`, fix or regenerate with bounded retries as states, simulate the draft as an invoked child via `#_<invokeid>`, ending in the final states `done`/`failed` whose `<donedata>` carries the result), run with `scx run` | `bots/builder/builder.scx` implemented (contract schemas in `bots/builder/schemas`; design and author invoke the generate service and triage invokes the decision service on the `decision:choice` choices, each with `<finalize>`/`done.invoke` and a `builder.timeout` that preempts and cancels the call; cond-based fallback; simulation as an invoked child); runs with `scx run --env-file .env bots/builder/builder.scx` (decisions D14, D16; [bots/builder/README.md](../bots/builder/README.md#running)); deterministic harness in `tests/tests/builder_bot.rs`, which runs that command (including a timeout firing while a generation is in flight); live results in [live-proof.md](live-proof.md) |
-| 3 | Memory service on SQLite | Not started |
+| 3 | Memory service on SQLite | Done: `services/sql` (`floppy_service_sql`), one SQLite transaction of mosfet's `Statement`s per `<invoke>` on a database file in a directory the run grants (`--dir URI=HOST::/memory`), answering `sql.result` or `sql.failed`; mosfet's Memory ability as `abilities/memory.scx`, which migrates mosfet's schema and applies statements through it, answering `bot.ability.memory.output` or `bot.ability.failed`; reasoning recalls and retains cognitive episodes and standing directives, the identity recalls and remembers its adopted name, and the conversation recalls and remembers a relationship's memories (decisions D44 to D47, [plan](plans/phase3-memory.mdscript.md)). Reflection and behaviors use it in phase 5 |
 | 4 | Bot core: body and cognition as SCXML, abilities as invoked children, mosfet's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | Done through the script-validator cutover: the body `bots/floppy/floppy.scx`; `abilities/` cognition (autonomy seam, intuition, reasoning), communication (conversation, speaking in text mode); the `bot` and `conversation` namespaces and the decision elements; event contracts and runtime `event:schema` checks; no `<script>` (decisions D33 to D43, [Phase 4 conventions](#phase-4-conventions)). Identity, the phase 5 seams, and the saved live examples finish it ([plan](plans/phase4-bot-core.mdscript.md)) |
 | 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Not started |
 | 6 | Speech, vision, and devices as services (`speech`, `vision`, `phone`, audio) | Not started |
@@ -209,12 +209,17 @@ D33 to D43.
   reply operations) are a `<send delay id>` in the owning state, a
   `<cancel>` on exit, and a sendid or turn cond. They have no document of
   their own.
-- **Memory seam.** Until `services/memory` (phase 3), each memory step is a
-  state that answers itself at once through `#_internal` with mosfet's
-  event (reasoning's `recalling` sends `bot.ability.reasoning.recalled` with
-  nothing recalled, `retaining` sends `.retained` with `memory_written`
-  false), so phase 3 replaces each send with an `<invoke>` of the memory
-  service and the topology does not change.
+- **Memory.** Each memory step is a compound state whose first child
+  picks by `memory` (the database file's `<param>` the body passes, null without
+  memory): with a database it invokes the memory ability
+  (`abilities/memory.scx`, over `services/sql`) with mosfet's statements as
+  SQL `<data>` and takes `bot.ability.memory.output` (its `event:schema`)
+  or `bot.ability.failed` by invoke id; without one it is
+  the phase 4 seam, which answers itself at once through `#_internal` with
+  mosfet's event and logs `<log label="memory" expr="'absent'">`. Either
+  way the step ends with mosfet's event (`bot.ability.reasoning.recalled`,
+  `.retained`, `bot.ability.identity.recalled`, `.adopted`), so the
+  topology does not change (decision D44).
 - **Speaking in text mode.** Speaking says a response as
   `<log label="bot.say">` and answers `bot.ability.speaking.output` until
   the phase 6 speech service (decision D38).
@@ -246,10 +251,10 @@ D33 to D43.
 | `communication.py` Communication | `abilities/communication.scx` | ability `.scx` child |
 | `conversation.py` Conversation | `abilities/conversation.scx` | ability `.scx` child |
 | `speaking.py` Speaking | `abilities/speaking.scx` (text mode) | ability `.scx` child |
-| `identity/identity.py` Identity | `abilities/identity.scx`; text name match `<bot:recognize>`; adoption and recall are memory seams (decision D43) | ability `.scx` child |
+| `identity/identity.py` Identity | `abilities/identity.scx`; text name match `<bot:recognize>`; adoption and recall through `abilities/memory.scx` (decisions D43, D44) | ability `.scx` child |
 | Reflection, Routines | `abilities/reflection.scx`, `abilities/routines.scx` seams; routines are builder-built `.scx` children (phase 5) | ability `.scx` child |
 | Behaviors (Starlark) | builder-built `.scx` documents | generated `.scx` |
-| Memory and its providers | `services/memory` (phase 3) | invoked service |
+| Memory and its providers | `abilities/memory.scx` over `services/sql` (phase 3) | ability `.scx` child + service |
 | Listening, reading, turn detectors, devices | phase 6 `.scx` children and Wasm services | out of phase 4 |
 | payload validators | `event:schema` on the receiving transition plus a short correlation cond | `event:schema` |
 

@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.reading.classification.completed",
+  "description": "Private completion: the reading input with its visual classification.",
+  "properties": {
+    "input": {
+      "properties": {
+        "kind": {
+          "description": "Declared input carrier received by the reading pipeline.",
+          "enum": [
+            "image",
+            "text"
+          ],
+          "examples": [
+            "text",
+            "image"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "content": {
+          "description": "Readable source payload. Text inputs carry the text; image inputs carry a reference (a URI reference) to the image file in the media directory the run grants, never bytes [floppy field].",
+          "examples": [
+            "Read this note.",
+            "media/receipt.png"
+          ],
+          "title": "Content",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "content"
+      ],
+      "type": "object",
+      "examples": [
+        {
+          "kind": "text",
+          "content": "Read this note."
+        },
+        {
+          "kind": "image",
+          "content": "media/receipt.png"
+        }
+      ],
+      "title": "InputData",
+      "description": "The reading input being classified."
+    },
+    "classification": {
+      "properties": {
+        "kind": {
+          "description": "Reading route selected for the classified source.",
+          "enum": [
+            "image",
+            "text",
+            "unreadable"
+          ],
+          "examples": [
+            "image"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional provider confidence for the routing classification, normalized from 0.0 to 1.0.",
+          "examples": [
+            0.87
+          ],
+          "title": "Confidence"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object",
+      "examples": [
+        {
+          "kind": "text",
+          "confidence": 0.99
+        },
+        {
+          "kind": "image",
+          "confidence": 0.87
+        },
+        {
+          "kind": "unreadable",
+          "confidence": 0.76
+        }
+      ],
+      "title": "Classification",
+      "description": "The visual classification of the input."
+    }
+  },
+  "required": [
+    "input",
+    "classification"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "input": {
+        "kind": "image",
+        "content": "media/receipt.png"
+      },
+      "classification": {
+        "kind": "image",
+        "confidence": 1.0
+      }
+    }
+  ]
+}

@@ -1,16 +1,15 @@
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}
-{"label":"memory","parent":"session","session":"session.5","text":"absent","type":"log"}
+{"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
 {"label":"identity.name","parent":"session","session":"session.5","text":"recalled null","type":"log"}
 {"label":"identity.offers","parent":"session","session":"session.5","text":"bot.ability.identity.adopt","type":"log"}
-{"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
-{"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
+{"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition","parent":"session","session":"session.1","text":"turn 1: bot.input","type":"log"}
-{"label":"autonomy","parent":"session.1","session":"session.6","text":"turn 1: no behaviors (phase 5)","type":"log"}
+{"label":"autonomy","parent":"session.1","session":"session.7","text":"turn 1: 0 matched for bot.input","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.7","text":"turn 1: threshold 0.35","type":"log"}
+{"label":"intuition","parent":"session.1","session":"session.9","text":"turn 1: threshold 0.35","type":"log"}
 {"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":70,\"n\":0,\"variance\":100}","type":"log"}
 {"label":"cognition.failed","parent":"session","session":"session.1","text":"the intuition failed: the decision failed (status)","type":"log"}
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}
 {"label":"bot.processing.failed","session":"session","text":"{\"message\":\"the intuition failed: the decision failed (status)\",\"turn\":1}","type":"log"}
-{"body":{"model":"jev-latest","questions":{"selection":{"criteria":{"bot.ability.cognition.ignore":"Deliberately ignore this stimulus: no device command, no focus change, no speech. Required when no other offered event should run. Do not use a device command, focus, or clear_focus as a stand-in for ignore. Put why on the selection envelope reason field, not on this empty payload.","none of these":"None of these: take no event."},"instructions":"You decide what a small companion robot does with one stimulus it observed. Choose the offered event the robot should take for it. Abstain when none of them fits, so slower reasoning handles it.","type":"choice"}},"state":{"focus":null,"focus_candidates":[],"stimulus":{"data":{"observation":{"data":"hello","event":"text"}},"event":"bot.input","source":null}}},"target":"/dfail/v1/systemone","type":"request"}
+{"body":{"model":"jev-latest","questions":{"selection":{"criteria":{"bot.ability.cognition.ignore":"Deliberately ignore this stimulus: no device command, no focus change, no speech. Required when no other offered event should run. Do not use a device command, focus, or clear_focus as a stand-in for ignore. Put why on the selection envelope reason field, not on this empty payload.","bot.ability.communication.activate":"Select which Conversation is active for attach and routing.","none of these":"None of these: take no event."},"instructions":"You decide what a small companion robot does with one stimulus it observed. Choose the offered event the robot should take for it. Abstain when none of them fits, so slower reasoning handles it.","type":"choice"}},"state":{"focus":null,"focus_candidates":[],"stimulus":{"data":{"observation":{"data":"hello","event":"text"}},"event":"bot.input","source":null}}},"target":"/dfail/v1/systemone","type":"request"}
