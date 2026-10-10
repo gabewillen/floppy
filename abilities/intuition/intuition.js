@@ -48,7 +48,7 @@ function abstainedLog(_event) {
 }
 
 function abstainedResult(_event) {
-  return ({handled: false, reason: _event.data.reason, turn: turn, tuner: tuner});
+  return ({handled: false, reason: 'empty_product', turn: turn, tuner: tuner});
 }
 
 function failedCode(_event) {
@@ -66,6 +66,15 @@ function isChosenEvent(_event) {
 
 function chosenLog(_event) {
   return 'turn ' + turn + ': ' + _event.name;
+}
+
+// mosfet's deliberate handoff event: the turn goes on to reasoning.
+function isDeliberativeInput(_event) {
+  return _event.name === 'bot.ability.reasoning.input';
+}
+
+function deliberativeInputResult() {
+  return ({handled: false, reason: 'deliberative_input', turn: turn, tuner: tuner});
 }
 
 // The turn's one selection {event, data} (mosfet's escalation reason none).

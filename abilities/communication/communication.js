@@ -2,7 +2,7 @@
 // <script src="communication.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// attached
+// communication
 
 function isFromChild(_event) {
   return children.indexOf(_event.invokeid) >= 0;
@@ -25,13 +25,10 @@ function isChildOffers(_event) {
   return isFromChild(_event) && _event.data.ability === _event.invokeid;
 }
 
-// A conversation output whose last message is inbound.
-function hasConversationProduct(_event) {
-  return isFromConversation(_event) && _event.data.messages.length > 0 && _event.data.messages.slice(-1)[0].direction === 'inbound';
-}
-
+// The sequence of the product's latest message.
 function productSequence(_event) {
-  return String(_event.data.messages[_event.data.messages.length - 1].sequence);
+  var messages = _event.data.stimulus.data.messages;
+  return String(messages[messages.length - 1].sequence);
 }
 
 function historyLength(_event) {
@@ -59,6 +56,11 @@ function childrenReady() {
 
 function childStartFailure(_event) {
   return 'a child could not start (' + _event.name + ')';
+}
+
+// The input as the routed input's parent envelope {event, data}.
+function routedParent(_event) {
+  return {event: _event.name, data: _event.data};
 }
 
 // The queue with the event appended, as {event, data}.

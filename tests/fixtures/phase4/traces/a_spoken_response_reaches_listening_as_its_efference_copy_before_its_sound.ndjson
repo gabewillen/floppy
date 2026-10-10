@@ -1,13 +1,13 @@
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
-{"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication","type":"log"}
+{"label":"floppy.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication","type":"log"}
 {"label":"double.input","parent":"session","session":"session.1","text":"1 reply \"reply\"","type":"log"}
 {"label":"double.choices","parent":"session","session":"session.1","text":"[{\"description\":\"Deliberately ignore this stimulus.\",\"event\":\"bot.ability.cognition.ignore\",\"schema\":{\"additionalProperties\":false,\"description\":\"Deliberately ignore this stimulus.\",\"properties\":{},\"type\":\"object\"},\"target\":\"cognition\"},{\"description\":\"A response to communicate aloud. Communication routes the text through its injected Speaking ability; cognition does not select Speaking directly.\",\"event\":\"bot.ability.communication.respond\",\"schema\":{\"additionalProperties\":false,\"description\":\"A response to communicate aloud. Communication routes the text through its injected Speaking ability; cognition does not select Speaking directly.\",\"properties\":{\"text\":{\"description\":\"The complete non-blank text to communicate. It is spoken verbatim by the configured Speaking ability after this action is selected.\",\"minLength\":1,\"type\":\"string\"}},\"required\":[\"text\"],\"type\":\"object\"},\"target\":\"communication\"}]","type":"log"}
-{"label":"bot.output","session":"session","text":"{\"turn\":1,\"output\":[{\"data\":{\"text\":\"reply 1\"},\"event\":\"bot.ability.communication.respond\"}]}","type":"log"}
+{"label":"floppy.output","session":"session","text":"{\"turn\":1,\"output\":[{\"data\":{\"text\":\"reply 1\"},\"event\":\"bot.ability.communication.respond\"}]}","type":"log"}
 {"label":"bot.processing.completed","session":"session","text":"{\"output\":[{\"data\":{\"text\":\"reply 1\"},\"event\":\"bot.ability.communication.respond\"}],\"focus_candidates\":[],\"turn\":1}","type":"log"}
-{"label":"bot.route","session":"session","text":"bot.ability.communication.respond -> communication","type":"log"}
+{"label":"floppy.route","session":"session","text":"bot.ability.communication.respond -> communication","type":"log"}
 {"label":"speech.encode","parent":"session.9","session":"session.10","text":"encode reply 1 -> media/speaking-1.pcm","type":"log"}
-{"label":"bot.say","parent":"session.2","session":"session.4","text":"reply 1","type":"log"}
+{"label":"floppy.say","parent":"session.2","session":"session.4","text":"reply 1","type":"log"}
 {"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}","type":"log"}
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}
 {"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"text\":\"reply 1\"}","type":"log"}

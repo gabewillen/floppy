@@ -168,9 +168,9 @@
 //! [`TUNER_FLOOR`], EMA alpha [`TUNER_ALPHA`], `k_sigma` [`TUNER_K_SIGMA`],
 //! warmup [`TUNER_WARMUP`] observations, variance floor
 //! [`TUNER_VAR_FLOOR`]). `location` (required) holds the tuner state
-//! `{mean, variance, n}` (numbers, `n` a non-negative integer); anything
+//! `{mean, var, n}` (numbers, `n` a non-negative integer); anything
 //! else there is replaced by the initial state `{mean:`
-//! [`TUNER_MEAN`]`, variance:` [`TUNER_VAR_FLOOR`]`, n: 0}`. `observe`
+//! [`TUNER_MEAN`]`, var:` [`TUNER_VAR_FLOOR`]`, n: 0}`. `observe`
 //! (optional) is an expression of a reported confidence, a number on the
 //! 0–100 scale (clamped to it), which the state observes: the first sets
 //! the mean, later ones move the mean and variance by the EMA (variance
@@ -1094,7 +1094,7 @@ pub struct Tuner {
     /// The running mean of the observed confidences.
     pub mean: f64,
     /// Their running variance.
-    pub variance: f64,
+    pub var: f64,
     /// How many were observed.
     pub n: u64,
 }
@@ -1103,14 +1103,14 @@ impl Default for Tuner {
     fn default() -> Self {
         Self {
             mean: TUNER_MEAN,
-            variance: TUNER_VAR_FLOOR,
+            var: TUNER_VAR_FLOOR,
             n: 0,
         }
     }
 }
 
 impl Tuner {
-    /// The state `{mean, variance, n}` holds, when it is one: numbers, `n` a
+    /// The state `{mean, var, n}` holds, when it is one: numbers, `n` a
     /// non-negative integer.
     #[must_use]
     pub fn from_json(value: &Json) -> Option<Self> {
@@ -1130,7 +1130,7 @@ impl Tuner {
         })?;
         Some(Self {
             mean: value.get("mean")?.as_f64()?,
-            variance: value.get("variance")?.as_f64()?,
+            var: value.get("var")?.as_f64()?,
             n,
         })
     }
@@ -1142,15 +1142,14 @@ impl Tuner {
         if self.n == 0 {
             return Self {
                 mean: conf,
-                variance: TUNER_VAR_FLOOR,
+                var: TUNER_VAR_FLOOR,
                 n: 1,
             };
         }
         let delta = conf - self.mean;
         Self {
             mean: self.mean + TUNER_ALPHA * delta,
-            variance: TUNER_VAR_FLOOR
-                .max((1.0 - TUNER_ALPHA) * self.variance + TUNER_ALPHA * delta * delta),
+            var: TUNER_VAR_FLOOR.max((1.0 - TUNER_ALPHA) * self.var + TUNER_ALPHA * delta * delta),
             n: self.n + 1,
         }
     }
@@ -1161,11 +1160,11 @@ impl Tuner {
         if self.n < TUNER_WARMUP {
             return TUNER_FLOOR;
         }
-        let std = self.variance.max(TUNER_VAR_FLOOR).sqrt();
+        let std = self.var.max(TUNER_VAR_FLOOR).sqrt();
         (0.5 * TUNER_FLOOR).max(self.mean - TUNER_K_SIGMA * std)
     }
 
-    /// The state as `{mean, n, variance}`; an integral mean or variance is
+    /// The state as `{mean, n, var}`; an integral mean or variance is
     /// written as an integer.
     #[must_use]
     pub fn to_json(self) -> Json {
@@ -1181,7 +1180,7 @@ impl Tuner {
                 serde_json::Number::from_f64(value).map_or(Json::Null, Json::Number)
             }
         };
-        serde_json::json!({"mean": number(self.mean), "variance": number(self.variance), "n": self.n})
+        serde_json::json!({"mean": number(self.mean), "var": number(self.var), "n": self.n})
     }
 }
 

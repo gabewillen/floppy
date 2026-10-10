@@ -7,6 +7,26 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-10, reading, hearing and speaking through the CPA gateway, model `gabe-codex-1/gpt-6-luna`
+
+The run used floppy commit `9a611e48` with wasi-sdk 25. The cloud session
+reaches `cpa.willen.dev` and `api.typesafe.ai` only through its HTTPS proxy,
+which adds the keys, and `scx` sends no proxy, so a local relay forwarded
+`http://127.0.0.1:8787/v1` to the gateway. `.env.cpa` sets
+`FLOPPY_BASE_URL` to the relay and `FLOPPY_API_KEY` to a placeholder
+(`FLOPPY_LIVE_ENV_FILE=$PWD/.env.cpa
+FLOPPY_LIVE_MODEL=gabe-codex-1/gpt-6-luna cargo test -p floppy-tests --test
+generate_service live_image_reading -- --ignored --test-threads=1`).
+
+| Run | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| `live_image_reading_through_an_env_file` | `gabe-codex-1/gpt-6-luna` | pass | 1 | 401 s with the component build; the reply read "Total due: $14.21" from `tests/fixtures/total-due.png`, final state `done` |
+| `live_speech_round_trip_through_an_env_file` | none | not run | 0 | no speech backend: the CPA gateway and TypeSafe both answer 404 on `/v1/audio/speech` and `/v1/audio/transcriptions`, CPA's 260 models include no speech model, and it rejects `gemini-3.1-flash-tts-preview` (`model_not_found`) |
+
+Hearing, listening and speaking need `FLOPPY_SPEECH_BASE_URL` (and
+listening `FLOPPY_VOICE_BASE_URL`, LocalAI), which neither gateway serves,
+so none of them ran live.
+
 ## 2026-10-08, the endpoint cutover (decision D31), direct vLLM, model `Qwen/Qwen3.8-Flash-Next`
 
 The runs used floppy commit `39c3b5df` (scxml.rs subtree `92742d65`): the

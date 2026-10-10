@@ -33,7 +33,8 @@
   intuition tuner state is passed in by <param> and kept from the donedata.
 
   Hop timeouts: each stage substate arms
-  bot.ability.cognition.child.hop.timed_out (hop_timeout_ms, mosfet's 30 s)
+  bot.ability.cognition.child.hop.timed_out (child_operation_timeout_ms,
+  mosfet's child_operation_timeout, 30 s)
   and cancels it on exit; the transition takes only the timer of the stage
   in hand (_event.sendid, SCXML 5.10.1). A timeout goes to rebooting, which
   sends bot.reboot {reason: "cognition_child_teardown_failed"} to the body.
@@ -55,15 +56,18 @@
   bot.ability.reflection.output settles the turn, and its
   bot.ability.failed {message} is logged. The reflection takes the
   database path and the model by <param>; with no database (null) it
-  logs that its memory is absent and answers at once.
+  logs that its memory is absent and answers at once. A bot.reboot from
+  it goes to rebooting, which forwards it to the body (mosfet
+  _forward_reflection_reboot).
 
   Routines: the root is a parallel of the turns, the reflection region and
   a routines region that invokes abilities/routines/routines.scx as the
   long-lived child "routines" (mosfet's bots compose Routines) with the
   database as <param name="database">. A settled reflection, output or
   failure, sends it bot.ability.routines.reconcile (mosfet
-  _is_reflection_settled); each bot.behavior.tick it forwards goes on to
-  the body, which takes it as a turn's stimulus (mosfet
+  _is_reflection_settled); each bot.behavior.tick it sends is handed to
+  the body as bot.ability.cognition.input {stimulus} (the tick's envelope,
+  source "routines"), which the body grants a turn (mosfet
   _observe_routine_tick). With no database it runs no routine.
 
   Readiness: every entry into idle sends bot.ability.offers {ability,
@@ -85,13 +89,14 @@
   hop timer). The stages' donedata is not checked by scxml.rs, so the
   done.invoke conds also check its turn and shape.
 
-  Bindings: the decision namespace package; the stages bind their own
+  Bindings: the bot and decision namespace packages; the stages bind their own
   services (intuition: decision with TYPESAFE_API_KEY and
   TYPESAFE_BASE_URL; reasoning: generate with FLOPPY_API_KEY and
   FLOPPY_BASE_URL). The model is the body's (a <param> of the body's
   invoke), else the default below, and goes to reasoning.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="cognition" initial="alive">
@@ -99,7 +104,7 @@
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <!-- The memory database file, for autonomy, reasoning, reflection and routines (null: no memory). -->
     <data id="database" expr="null"/>
-    <data id="hop_timeout_ms" expr="30000"/>
+    <data id="child_operation_timeout_ms" expr="30000"/>
     <!-- The turn in hand. -->
     <data id="turn" expr="0"/>
     <data id="stimulus" expr="null"/>
@@ -107,13 +112,15 @@
     <data id="focus_candidates" expr="[]"/>
     <data id="choices" expr="[]"/>
     <!-- The intuition's confidence tuner (mosfet ConfidenceTuner). -->
-    <data id="tuner" expr="({mean: 70, variance: 100, n: 0})"/>
+    <data id="tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <!-- The stage in hand: its name, hop timer, and answer. -->
     <data id="stage" expr="null"/>
     <data id="hop_timer" expr="null"/>
     <data id="selected" expr="[]"/>
     <data id="failure" expr="null"/>
     <data id="reboot_reason" expr="null"/>
+    <!-- A routine tick's stimulus envelope, for the handoff. -->
+    <data id="tick" expr="null"/>
     <!-- The offers. -->
     <data id="offering" expr="false"/>
     <data id="offered" expr="[]"/>
@@ -360,6 +367,11 @@
           <content expr="({})"/>
         </send>
       </transition>
+      <!-- mosfet _forward_reflection_reboot: the body restarts this ability. -->
+      <transition event="bot.reboot" event:schema="schemas/bot.reboot.json"
+                  cond="isFromChild(_event, 'reflection')" target="rebooting">
+        <assign location="reboot_reason" expr="_event.data.reason"/>
+      </transition>
       <transition event="error.*" cond="isFromChild(_event, 'reflection')" target="reflection_stopped">
         <log label="cognition.reflection.failed" expr="_event.name"/>
       </transition>
@@ -376,8 +388,9 @@
       </invoke>
       <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
                   cond="isFromChild(_event, 'routines')">
-        <send event="bot.behavior.tick" target="#_parent">
-          <content expr="_event.data"/>
+        <bot:stimulus location="tick" event="_event.name" data="_event.data" source="'routines'"/>
+        <send event="bot.ability.cognition.input" target="#_parent">
+          <param name="stimulus" expr="tick"/>
         </send>
       </transition>
       <transition event="error.*" cond="isFromChild(_event, 'routines')" target="routines_stopped">

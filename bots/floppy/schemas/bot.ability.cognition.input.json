@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.cognition.input",
+  "additionalProperties": false,
+  "description": "InputData payload for the cognition. Bot supplies the stimulus, abilities, named HSM instances, and focus name; the cognition builds tools from snapshots. Selected events are dispatched by Processing.",
+  "properties": {
+    "focus": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Instance name the bot is looking at, if any.",
+      "examples": [
+        "device-a"
+      ],
+      "title": "Focus"
+    },
+    "focus_candidates": {
+      "default": [],
+      "description": "Instance names that may become focus for this turn (body attention policy).",
+      "examples": [
+        [
+          "device-a"
+        ],
+        [
+          "device-a",
+          "device-b"
+        ]
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Focus Candidates",
+      "type": "array"
+    },
+    "turn": {
+      "description": "The body's processing turn this event belongs to, counted from 1: present on the body's input to the cognition, absent on an ability's handoff of a stimulus to the body [floppy field].",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "stimulus": {
+      "additionalProperties": false,
+      "description": "The event the body took for this turn, as an envelope: its name, its data, and optionally its id, source and target. mosfet passes the live stimulus object (SkipJsonSchema); floppy passes it as data [floppy field].",
+      "properties": {
+        "event": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "data": {},
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "event",
+        "data"
+      ],
+      "type": "object"
+    },
+    "choices": {
+      "default": [],
+      "description": "The turn's choices the body assembled: its own (bot.focus_device pinned to the turn's focus candidates) and each ability's latest bot.ability.offers choices tagged with the ability's invoke id as target; the body routes a selection to its target, or to itself when the choice has none [floppy field].",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "event": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "schema": {
+            "description": "The event's offered schema, compacted."
+          },
+          "description": {
+            "type": "string"
+          },
+          "target": {
+            "description": "The invoke id of the ability offering the event; absent for the body's own.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "schema"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "type": "object",
+  "examples": [
+    {
+      "focus": "device-a",
+      "focus_candidates": [
+        "device-a"
+      ],
+      "turn": 1,
+      "stimulus": {
+        "event": "bot.input",
+        "data": {
+          "observation": {
+            "event": "text",
+            "data": "hello"
+          }
+        }
+      }
+    }
+  ],
+  "required": [
+    "stimulus"
+  ]
+}

@@ -17,10 +17,6 @@ function isFromCommunication(_event) {
   return _event.invokeid === 'communication';
 }
 
-function isFromIdentity(_event) {
-  return _event.invokeid === 'identity';
-}
-
 function isFromListening(_event) {
   return _event.invokeid === 'listening';
 }
@@ -135,11 +131,6 @@ function queueRest() {
   return queue.slice(1);
 }
 
-// A conversation output whose last message is inbound.
-function isConversationProduct(_event) {
-  return _event.invokeid === 'communication' && _event.data.messages.length > 0 && _event.data.messages.slice(-1)[0].direction === 'inbound';
-}
-
 // processing
 
 function nextTurn() {
@@ -195,9 +186,9 @@ function deferredCount() {
 
 // cancelling_processing
 
-// cancel_timeout_ms clamped to 100..5000 ms.
+// processing_timeout_ms clamped to 100..5000 ms (mosfet's cancel wait).
 function cancelDelay() {
-  return delay(Math.min(5000, Math.max(100, cancel_timeout_ms)));
+  return delay(Math.min(5000, Math.max(100, processing_timeout_ms)));
 }
 
 function cancelledFailure() {

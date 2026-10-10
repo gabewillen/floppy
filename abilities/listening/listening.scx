@@ -34,10 +34,11 @@
   Products: the interpretation's bot.ability.listening.speech.output
   (mosfet's SpeechData: decoded speech, diarized or identified voice
   segments, or the PCM of an acoustic observation), its environment.sound
-  (labelled non-speech, passed through unchanged) and its
-  bot.ability.listening.failed go on to the body unchanged, from wherever
-  perception is (mosfet re-emits them through its own terminals). The body
-  takes the products as turn stimuli.
+  (labelled non-speech, passed through unchanged) are handed to the body
+  as bot.ability.cognition.input {stimulus} (the product's envelope, source
+  "listening"; mosfet's interpretation terminal handoff), which the
+  body grants a turn; its bot.ability.listening.failed goes on to the body
+  unchanged. Either leaves from wherever perception is.
 
   Efference copy: bot.ability.speaking.efference (mosfet's EfferenceData)
   goes to the sensitivity from wherever perception is: the report
@@ -58,6 +59,7 @@
   bind the speech service).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="listening" initial="live">
   <datamodel>
@@ -67,6 +69,8 @@
     <data id="queue" expr="[]"/>
     <!-- The sound being scored. -->
     <data id="sound" expr="null"/>
+    <!-- A product's stimulus envelope, for the handoff. -->
+    <data id="product" expr="null"/>
   </datamodel>
   <script src="listening.js"/>
 
@@ -117,14 +121,16 @@
            ability's own. -->
       <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json"
                   cond="isFromInterpretation(_event)">
-        <send event="bot.ability.listening.speech.output" target="#_parent">
-          <content expr="_event.data"/>
+        <bot:stimulus location="product" event="_event.name" data="_event.data" source="'listening'"/>
+        <send event="bot.ability.cognition.input" target="#_parent">
+          <param name="stimulus" expr="product"/>
         </send>
       </transition>
       <transition event="environment.sound" event:schema="schemas/environment.sound.json"
                   cond="isFromInterpretation(_event)">
-        <send event="environment.sound" target="#_parent">
-          <content expr="_event.data"/>
+        <bot:stimulus location="product" event="_event.name" data="_event.data" source="'listening'"/>
+        <send event="bot.ability.cognition.input" target="#_parent">
+          <param name="stimulus" expr="product"/>
         </send>
       </transition>
       <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json"

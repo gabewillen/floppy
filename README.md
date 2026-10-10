@@ -166,15 +166,15 @@ encoder defaults, which it passes to vocal for the speech service
 | `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
 | `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (mosfet's 30 s attachment timeout) |
 | `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (mosfet's 5 min processing timeout) |
-| `bots/floppy/floppy.scx` | `cancel_timeout_ms` | `5000` | a timed-out turn's cancel acknowledgement (clamped to 100 to 5000) |
-| `abilities/cognition/cognition.scx` | `hop_timeout_ms` | `30000` | each cascade stage (mosfet's 30 s) |
+| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage (mosfet's 30 s) |
 | `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
 | `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (mosfet's `TURN_SILENCE_BOUND`) |
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
+| `abilities/conversation/conversation.scx` | `memory_timeout_ms` | `5000` | the conversation's memory step (mosfet's 5 s turn stage timeout) |
 | `abilities/communication/communication.scx` | `response_timeout_ms` | `6000` | saying one response (mosfet's 6 s) |
 | `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (mosfet's 30 s) |
+| `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `30000` | reflection's revising through the builder (mosfet's 30 s) |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (mosfet's 30 s) |
-| `abilities/conversation/conversation.scx` | `max_messages` | `20` | the history that reaches one turn |
 | `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `5000` | one speech synthesis (mosfet's 5 s) |
 | `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation (mosfet's 5 s) |
 | `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound (mosfet's 30 s stage operation timeout) |

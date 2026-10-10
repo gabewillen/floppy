@@ -98,7 +98,8 @@ fn all_routed(records: &[Json], output: Option<&Json>) -> bool {
     let selected = output
         .and_then(|output| output["output"].as_array())
         .map_or(usize::MAX, Vec::len);
-    texts(records, "bot.route").len() == selected && texts(records, "bot.route.dropped").is_empty()
+    texts(records, "floppy.route").len() == selected
+        && texts(records, "floppy.route.dropped").is_empty()
 }
 
 fn model() -> String {
@@ -137,7 +138,7 @@ fn live_cascade() {
         .collect();
     let output = logs(&all)
         .into_iter()
-        .find(|(label, _)| label == "bot.output")
+        .find(|(label, _)| label == "floppy.output")
         .and_then(|(_, text)| serde_json::from_str::<Json>(&text).ok());
     let responded = output.as_ref().is_some_and(|output| output["turn"] == 1)
         && all_routed(&all, output.as_ref());
@@ -179,7 +180,7 @@ fn live_choices() {
     all.extend(finished.records);
     keep("live_choices", &all);
     let choices = "bot.focus_device bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity";
-    let output = texts(&all, "bot.output")
+    let output = texts(&all, "floppy.output")
         .pop()
         .and_then(|text| serde_json::from_str::<Json>(&text).ok());
     let reasoned = texts(&all, "reasoning");
@@ -187,8 +188,8 @@ fn live_choices() {
         output["output"]
             .as_array()
             .is_some_and(|items| items.iter().any(|item| item["event"] == "bot.focus_device"))
-    }) == (texts(&all, "bot.focus") == ["lamp"]);
-    let pass = texts(&all, "bot.choices") == [choices]
+    }) == (texts(&all, "floppy.focus") == ["lamp"]);
+    let pass = texts(&all, "floppy.choices") == [choices]
         && output.as_ref().is_some_and(|output| output["turn"] == 1)
         && reasoned
             .iter()
@@ -206,7 +207,7 @@ fn live_choices() {
 /// `bot.ability.communication.input` addressed to the bot is admitted into
 /// the conversation, whose product is the turn's stimulus; the cascade
 /// selects `bot.ability.communication.respond`, which the body routes to
-/// the communication and speaking says (`bot.say`), and the spoken text is
+/// the communication and speaking says (`floppy.say`), and the spoken text is
 /// recorded in the conversation.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
@@ -237,10 +238,10 @@ fn live_chat() {
     let mut all = records;
     all.extend(finished.records);
     keep("live_chat", &all);
-    let output = texts(&all, "bot.output")
+    let output = texts(&all, "floppy.output")
         .pop()
         .and_then(|text| serde_json::from_str::<Json>(&text).ok());
-    let said = texts(&all, "bot.say");
+    let said = texts(&all, "floppy.say");
     let pass = texts(&all, "communication.product") == ["0"]
         && output.as_ref().is_some_and(|output| output["turn"] == 1)
         && all_routed(&all, output.as_ref())
@@ -310,7 +311,7 @@ fn live_identity() {
     let mut all = records;
     all.extend(finished.records);
     keep("live_identity", &all);
-    let said = texts(&all, "bot.say");
+    let said = texts(&all, "floppy.say");
     let pass = texts(&all, "identity.heard") == ["addressed as Floppy"]
         && !said.is_empty()
         && said.iter().all(|text| !text.trim().is_empty())

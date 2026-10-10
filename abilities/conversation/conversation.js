@@ -2,7 +2,7 @@
 // <script src="conversation.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// recalling
+// running
 
 // The parent envelope {event, data} of the input in hand.
 function inputEnvelope() {
@@ -13,6 +13,10 @@ function inputEnvelope() {
 
 function isMemoryAbsent() {
   return database === null;
+}
+
+function memoryTimeoutDelay() {
+  return memory_timeout_ms + 'ms';
 }
 
 // recalling_memory
@@ -47,7 +51,7 @@ function memoriesLog(_event) {
 }
 
 function memoryFailedMessage(_event) {
-  return 'Conversation memory failed: ' + _event.data.message;
+  return _event.data.message;
 }
 
 // committing
@@ -56,18 +60,18 @@ function historyWithMessage() {
   return history.concat([message]);
 }
 
-// The participants' transcript with the message's sequence appended.
-function transcriptWithMessage() {
-  return (transcripts[participants] || []).concat([message.sequence]);
+// The participants' relationship with the message's sequence appended.
+function relationshipWithMessage() {
+  return (relationships[participants] || []).concat([message.sequence]);
+}
+
+// The committed message is text: string content of a text/* type.
+function isTextMessage() {
+  return typeof message.content === 'string' && /^text\//i.test(message.content_type);
 }
 
 function inboundCommitLog() {
-  return 'inbound ' + (history.length - 1) + ' from ' + participants + ' (' + transcripts[participants].length + ' in its transcript)';
-}
-
-// The last max_messages messages of the history.
-function outputMessages() {
-  return history.slice(Math.max(0, history.length - max_messages));
+  return 'inbound ' + (history.length - 1) + ' from ' + participants + ' (' + relationships[participants].length + ' in its relationship)';
 }
 
 // conversation (append)

@@ -73,10 +73,9 @@ const FLOPPY_NAME: &str = "[floppy name]";
 const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// The body's events (`bots/floppy/schemas/`).
-const BODY_EVENTS: [&str; 14] = [
+const BODY_EVENTS: [&str; 13] = [
     "bot.activate",
     "bot.deactivate",
-    "bot.reboot",
     "bot.input",
     "bot.focus_device",
     "bot.clear_focus",
@@ -91,8 +90,9 @@ const BODY_EVENTS: [&str; 14] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 65] = [
+const ABILITY_EVENTS: [&str; 67] = [
     "bot.ability.failed",
+    "bot.reboot",
     "bot.ability.cognition.input",
     "bot.ability.cognition.output",
     "bot.ability.cognition.cancel",
@@ -114,6 +114,7 @@ const ABILITY_EVENTS: [&str; 65] = [
     "bot.ability.communication.failed",
     "bot.ability.communication.response.hop.timed_out",
     "bot.ability.conversation.input",
+    "bot.ability.conversation.routed_input",
     "bot.ability.conversation.append",
     "bot.ability.conversation.output",
     "bot.ability.conversation.failed",
@@ -170,12 +171,11 @@ const ABILITY_EVENTS: [&str; 65] = [
 /// The correlated events of one processing turn: each requires `turn`.
 /// Tool events (the ones a model chooses, such as
 /// `bot.ability.cognition.ignore`) never do: their data is the model's.
-const CORRELATED: [&str; 18] = [
+const CORRELATED: [&str; 17] = [
     "bot.processing.completed",
     "bot.processing.failed",
     "bot.processing.timed_out",
     "bot.processing.cancel.timed_out",
-    "bot.ability.cognition.input",
     "bot.ability.cognition.output",
     "bot.ability.cognition.cancel",
     "bot.ability.cognition.cancelled",
@@ -207,7 +207,8 @@ const RUNTIME_ONLY: [&str; 8] = [
 const NAMES_FILE: &str = "mosfet-event-names.json";
 
 /// The ability events the body takes, twinned into `bots/floppy/schemas/`.
-const BODY_TWINS: [&str; 15] = [
+const BODY_TWINS: [&str; 14] = [
+    "bot.reboot",
     "bot.ability.offers",
     "bot.ability.communication.input",
     "bot.ability.communication.failed",
@@ -218,10 +219,8 @@ const BODY_TWINS: [&str; 15] = [
     "bot.ability.cognition.cancelled",
     "bot.ability.processing.cancelled",
     "bot.ability.failed",
-    "bot.ability.conversation.output",
-    "bot.ability.identity.addressed",
-    "bot.behavior.tick",
-    "bot.ability.listening.speech.output",
+    "bot.ability.cognition.input",
+    "bot.ability.conversation.failed",
     "bot.ability.listening.failed",
 ];
 
