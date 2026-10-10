@@ -79,17 +79,19 @@
     <data id="gen_failure" expr="null"/>
     <data id="result" expr="null"/>
     <!-- Memory: the database file (null: no memory) and mosfet's
-         statements (episodes.py, directives.py), with ?2 the context. A memory id is the next
-         rowid as 32 hex digits: the sql service's randomblob is not
-         unique across invocations. -->
+         statements (episodes.py, directives.py), with ?2 the context. The SQL runs on both
+         engines (SQLite and Postgres). A memory id is the next row count
+         as 32 zero-padded digits (neither engine's randomness is unique
+         across invocations in Wasm); JSON rows are told by their
+         content_format, oldest first by created_at, then memory_id. -->
     <data id="database" expr="null"/>
     <data id="context_ref" expr="null"/>
     <data id="prior_episodes" expr="[]"/>
     <data id="standing_directives" expr="[]"/>
     <data id="statements" expr="[]"/>
     <data id="episode" expr="null"/>
-    <data id="episode_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND (?2 IS NULL OR context_ref IS NULL OR context_ref = ?2) AND json_valid(content) ORDER BY created_at LIMIT 50'"/>
-    <data id="episode_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT printf(\'%032x\', coalesce(max(rowid), 0) + 1) FROM bot_memory), ?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
+    <data id="episode_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR context_ref IS NULL OR context_ref = ?2) AND content_format = \'application/json\' ORDER BY created_at, memory_id LIMIT 50'"/>
+    <data id="episode_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
   </datamodel>
 
   <!-- Recall prior episodes and standing directives, or nothing without

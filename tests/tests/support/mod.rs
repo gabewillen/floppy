@@ -547,6 +547,22 @@ pub fn run_document(
     run.finish(limit)
 }
 
+/// Points the `<data id="database">` of the document at `path` at
+/// `database` (a file path or a Postgres connection URI), so the bot or
+/// ability keeps its memory there.
+pub fn use_database(path: &Path, database: &str) {
+    let mut text = std::fs::read_to_string(path).expect("the document is readable");
+    let start = text
+        .find(r#"<data id="database" expr=""#)
+        .unwrap_or_else(|| panic!("{} declares <data id=\"database\">", path.display()));
+    let end = start + text[start..].find("/>").expect("the <data> element closes");
+    text.replace_range(
+        start..end,
+        &format!(r#"<data id="database" expr="'{database}'""#),
+    );
+    std::fs::write(path, text).expect("the document copy is writable");
+}
+
 /// One `PGlite` server for a Postgres-engine test: `node
 /// $FLOPPY_PGLITE_SERVER --port 0` (the `pglite-server` script of
 /// `@electric-sql/pglite-socket`, `dist/scripts/server.js`), a fresh

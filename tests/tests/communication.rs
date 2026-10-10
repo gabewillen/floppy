@@ -239,7 +239,28 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
 #[test]
 fn communication_input_is_a_turn_whose_stimulus_carries_the_history() {
     let body = layout(&Speaking::Real, &[]);
-    let mut run = started(&body);
+    let run = history_carrying_turns(&body);
+    close(
+        run,
+        "communication_input_is_a_turn_whose_stimulus_carries_the_history",
+    );
+}
+
+/// The same on the Postgres engine: the body's database is a `PGlite`
+/// server's, so the conversation recalls and remembers there.
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_communication_input_is_a_turn_whose_stimulus_carries_the_history() {
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    let body = layout(&Speaking::Real, &[]);
+    support::use_database(&body, &server.database());
+    drop(history_carrying_turns(&body).close(WAIT));
+}
+
+/// [`communication_input_is_a_turn_whose_stimulus_carries_the_history`]
+/// up to its close: two inputs, each a turn that sees the history.
+fn history_carrying_turns(body: &Path) -> Run {
+    let mut run = started(body);
     run.event("bot.ability.communication.input", &said("reply"));
     let first = run.until(WAIT, label_is("communication.history"));
     run.event("bot.ability.communication.input", &said("reply"));
@@ -274,10 +295,7 @@ fn communication_input_is_a_turn_whose_stimulus_carries_the_history() {
     );
     assert_eq!(texts(&all, "communication.product"), strings(&["0", "2"]));
     assert_eq!(texts(&all, "bot.say"), strings(&["reply 1", "reply 2"]));
-    close(
-        run,
-        "communication_input_is_a_turn_whose_stimulus_carries_the_history",
-    );
+    run
 }
 
 #[test]
