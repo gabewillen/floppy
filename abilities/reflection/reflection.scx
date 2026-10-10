@@ -232,14 +232,12 @@
       <param name="database" expr="database"/>
       <param name="statements" expr="statements"/>
     </invoke>
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                cond="isFromInvoke(_event, 'recalling_memory')" target="processing">
+    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="processing">
       <assign location="prior_episodes" expr="recalledEpisodes(_event)"/>
       <assign location="behaviors" expr="recalledBehaviors(_event)"/>
       <log label="reflection" expr="recalledLog()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                cond="isFromInvoke(_event, 'recalling_memory')" target="failing">
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
       <assign location="failure" expr="recallFailedMessage(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="failing">
@@ -272,11 +270,15 @@
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
       <param name="strict" expr="true"/>
-      <finalize>
-        <assign location="selected" expr="generatedSelection(_event)"/>
-        <assign location="gen_failure" expr="generateFailure(_event)"/>
-      </finalize>
     </invoke>
+    <!-- The answer of this hop's call (gen_id: a late answer from an
+         earlier hop's cancelled call is not this one). -->
+    <transition event="generate.result" cond="isGenerate(_event)">
+      <assign location="selected" expr="generatedSelection(_event)"/>
+    </transition>
+    <transition event="generate.failed" cond="isGenerate(_event)">
+      <assign location="gen_failure" expr="generateFailure(_event)"/>
+    </transition>
 
     <!-- The inventory events (mosfet behavior_events()). -->
     <transition event="bot.behavior.create" event:schema="schemas/bot.behavior.create.json" target="revising">
@@ -303,7 +305,7 @@
     <transition event="done.invoke" cond="hasSelection(_event)" target="failing">
       <assign location="failure" expr="'Reflection select must return at most one behavior event.'"/>
     </transition>
-    <transition event="done.invoke" cond="isGenerateDone(_event)" target="failing">
+    <transition event="done.invoke" cond="isGenerate(_event)" target="failing">
       <assign location="failure" expr="generateFailedMessage()"/>
     </transition>
     <transition event="bot.ability.reflection.select.hop.timed_out" cond="isSelectHopTimeout(_event)" target="failing">
@@ -330,12 +332,10 @@
                 cond="hasBrokenBehavior(_event)" target="storing">
       <log label="reflection.inventory" expr="brokenLog()"/>
     </transition>
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                cond="isFromInvoke(_event, 'breaking_memory')" target="failing">
+    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="failing">
       <assign location="failure" expr="unknownBreakMessage()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                cond="isFromInvoke(_event, 'breaking_memory')" target="failing">
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
       <assign location="failure" expr="breakFailedMessage(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="failing">
@@ -374,12 +374,10 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                cond="isFromInvoke(_event, 'preparing_memory')" target="authoring">
+      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="authoring">
         <assign location="existing_behavior" expr="preparedBehavior(_event)"/>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                cond="isFromInvoke(_event, 'preparing_memory')" target="failing">
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
         <assign location="failure" expr="revisionFailedMessage(_event.data.message)"/>
       </transition>
       <transition event="error.*" target="failing">
@@ -450,12 +448,10 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                cond="isFromInvoke(_event, 'accepting_memory')" target="storing">
+      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="storing">
         <log label="reflection.inventory" expr="acceptedLog()"/>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                cond="isFromInvoke(_event, 'accepting_memory')" target="failing">
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
         <assign location="failure" expr="revisionFailedMessage(_event.data.message)"/>
       </transition>
       <transition event="error.*" target="failing">
@@ -473,12 +469,10 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                  cond="isFromInvoke(_event, 'abandoning_memory')" target="failing">
+      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="failing">
         <log label="reflection.inventory" expr="draftLog()"/>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                  cond="isFromInvoke(_event, 'abandoning_memory')" target="failing"/>
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing"/>
       <transition event="error.*" target="failing"/>
     </state>
   </state>
@@ -499,13 +493,11 @@
       <param name="database" expr="database"/>
       <param name="statements" expr="statements"/>
     </invoke>
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                cond="isFromInvoke(_event, 'storing_memory')" target="idle">
+    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="idle">
       <log label="reflection.stored" expr="storedLog()"/>
       <send event="bot.ability.reflection.output" target="#_parent"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                cond="isFromInvoke(_event, 'storing_memory')" target="failing">
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
       <assign location="failure" expr="episodeStoreFailedMessage(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="failing">

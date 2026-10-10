@@ -93,10 +93,10 @@
         <param name="statements" expr="versionStatements()"/>
       </invoke>
     </state>
-    <transition event="sql.result" cond="isRead(_event)" target="planning">
+    <transition event="sql.result" target="planning">
       <assign location="current" expr="currentRevision(_event)"/>
     </transition>
-    <transition event="sql.failed" cond="isRead(_event)" target="failing">
+    <transition event="sql.failed" target="failing">
       <assign location="failure" expr="_event.data.message"/>
     </transition>
     <transition event="error.*" target="failing">
@@ -143,7 +143,7 @@
         <param name="statements" expr="steps"/>
       </invoke>
     </state>
-    <transition event="sql.result" cond="isApply(_event)" target="migrated">
+    <transition event="sql.result" target="migrated">
       <send event="bot.ability.migration.output" target="#_parent">
         <param name="from" expr="plan.from"/>
         <param name="to" expr="plan.to"/>
@@ -155,7 +155,7 @@
       <assign location="retried" expr="true"/>
       <assign location="plan" expr="null"/>
     </transition>
-    <transition event="sql.failed" cond="isApply(_event)" target="failing">
+    <transition event="sql.failed" target="failing">
       <assign location="failure" expr="_event.data.message"/>
     </transition>
     <transition event="error.*" target="failing">

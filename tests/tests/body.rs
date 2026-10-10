@@ -285,17 +285,28 @@ fn the_activation_passes_its_model_to_the_cognition() {
 }
 
 #[test]
-fn a_reboot_is_taken_only_from_the_cognition() {
+fn a_reboot_re_enters_live_whoever_asks() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    // From outside: rejected, nothing restarts.
+    // From outside: the name routes it, so live is re-entered as for the
+    // cognition's (decision D81).
     run.event(
         "bot.reboot",
         &json!({"reason": "cognition_child_teardown_failed"}),
     );
-    let records = run.until(WAIT, label_is("floppy.rejected"));
-    assert!(only(&records, &["double.exit"]).is_empty(), "{records:?}");
+    let records = run.until(WAIT, label_is("bot.activated"));
+    assert_eq!(
+        only(&records, &["double.exit", "bot.reboot", "bot.activated"]),
+        pairs(&[
+            ("double.exit", "Qwen/Qwen3.8-Flash-Next"),
+            (
+                "bot.reboot",
+                r#"{"reason":"cognition_child_teardown_failed"}"#
+            ),
+            ("bot.activated", "{}"),
+        ])
+    );
     // From the cognition: live is re-entered, the cognition restarts and
     // the bot activates again.
     run.event("bot.input", &input("reboot", "please"));
@@ -322,7 +333,7 @@ fn a_reboot_is_taken_only_from_the_cognition() {
         only(&records, &["double.input"]),
         pairs(&[("double.input", r#"2 reply "again""#)])
     );
-    close(run, "a_reboot_is_taken_only_from_the_cognition");
+    close(run, "a_reboot_re_enters_live_whoever_asks");
 }
 
 #[test]

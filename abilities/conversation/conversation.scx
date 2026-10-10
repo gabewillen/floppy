@@ -208,8 +208,7 @@
             <onexit>
               <cancel sendidexpr="timer"/>
             </onexit>
-            <transition event="bot.ability.turn_detector.ready" event:schema="schemas/bot.ability.turn_detector.ready.json"
-                        cond="isFromTurnDetector(_event)" target="exchange">
+            <transition event="bot.ability.turn_detector.ready" event:schema="schemas/bot.ability.turn_detector.ready.json" target="exchange">
               <send event="bot.ability.turn_detector.turn.start" target="#_turn_detector">
                 <content expr="turnStart()"/>
               </send>
@@ -246,8 +245,7 @@
           </state>
           <!-- Every source has its turn: on to memory. -->
           <transition cond="hasAllTurns()" target="recalling_from"/>
-          <transition event="bot.ability.turn_detector.failed" event:schema="schemas/bot.ability.turn_detector.failed.json"
-                      cond="isFromTurnDetector(_event)" target="waiting">
+          <transition event="bot.ability.turn_detector.failed" event:schema="schemas/bot.ability.turn_detector.failed.json" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'turn_detector'"/>
               <param name="message" expr="_event.data.message"/>
@@ -281,12 +279,10 @@
             <param name="database" expr="database"/>
             <param name="statements" expr="statements"/>
           </invoke>
-          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                      cond="isFromMemory(_event)" target="committing">
+          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="committing">
             <log label="conversation.memories" expr="memoriesLog(_event)"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                      cond="isFromMemory(_event)" target="waiting">
+          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
               <param name="message" expr="memoryFailedMessage(_event)"/>

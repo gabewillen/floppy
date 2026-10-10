@@ -78,16 +78,6 @@ function invalidRequestDiagnostics() {
 
 // design and author: the generate service's calls.
 
-// The json of a generate.result, else current.
-function generateResultJson(_event, current) {
-  return _event.name === 'generate.result' ? _event.data.json : current;
-}
-
-// The code of a generate.failed, else current.
-function generateFailedCode(_event, current) {
-  return _event.name === 'generate.failed' ? _event.data.code : current;
-}
-
 function isUnconfigured(_event) {
   return _event.invokeid === gen_id && gen_failure === 'unconfigured';
 }

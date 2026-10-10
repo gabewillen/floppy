@@ -102,14 +102,22 @@
         <param name="channels" expr="channels"/>
       </invoke>
       <transition event="bot.ability.hearing.voice.detection.output"
-                  cond="isDetectorOutput(_event)" target="applied">
+                  cond="hasSegments(_event)" target="applied">
         <assign location="result" expr="detectedResult(_event)"/>
-      </transition>
-      <transition event="*" cond="isOtherDetectorEvent(_event)" target="applied">
-        <assign location="result" expr="mismatchedResult()"/>
       </transition>
       <transition event="done.invoke.detector" target="applied">
         <assign location="result" expr="undetectedResult()"/>
+      </transition>
+      <!-- Failures here, as in detecting, before the catch-all below. -->
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
+        <assign location="result" expr="failedResult(_event)"/>
+      </transition>
+      <transition event="error.*" target="applied">
+        <assign location="result" expr="errorResult(_event)"/>
+      </transition>
+      <!-- Anything else the detector sends. -->
+      <transition event="*" target="applied">
+        <assign location="result" expr="mismatchedResult()"/>
       </transition>
     </state>
   </state>

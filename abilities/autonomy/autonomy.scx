@@ -151,16 +151,16 @@
       <param name="database" expr="database"/>
       <param name="statements" expr="behaviorSelectStatements()"/>
     </invoke>
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" cond="isFromInvoke(_event, 'load')">
+    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json">
       <assign location="rows" expr="behaviorsFromMemoryOutput(_event)"/>
     </transition>
     <transition event="done.invoke.load" target="matched"/>
     <!-- mosfet _on_load_behaviors_failure: a failed load is a warning, and the turn goes on with no inventory rows. -->
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromInvoke(_event, 'load')" target="matched">
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="matched">
       <log label="autonomy.behaviors.load.failed" expr="loadFailedReason(_event.data.message)"/>
       <assign location="rows" expr="[]"/>
     </transition>
-    <transition event="error.*" cond="isFromInvoke(_event, 'load')" target="matched">
+    <transition event="error.*" target="matched">
       <log label="autonomy.behaviors.load.failed" expr="loadFailedReason(_event.name)"/>
       <assign location="rows" expr="[]"/>
     </transition>
@@ -235,10 +235,10 @@
     </invoke>
     <transition event="done.invoke.usage" target="answered"/>
     <!-- mosfet: persistence_failed takes the same effect as persisted. -->
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromInvoke(_event, 'usage')" target="answered">
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="answered">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
-    <transition event="error.*" cond="isFromInvoke(_event, 'usage')" target="answered">
+    <transition event="error.*" target="answered">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.name)"/>
     </transition>
     <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="isTimerEvent(_event)" target="answered">
@@ -260,10 +260,10 @@
     </invoke>
     <transition event="done.invoke.failure" target="advancing"/>
     <!-- mosfet: persistence_failed takes the same effect as persisted. -->
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromInvoke(_event, 'failure')" target="advancing">
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="advancing">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
-    <transition event="error.*" cond="isFromInvoke(_event, 'failure')" target="advancing">
+    <transition event="error.*" target="advancing">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.name)"/>
     </transition>
     <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="isTimerEvent(_event)" target="advancing">
