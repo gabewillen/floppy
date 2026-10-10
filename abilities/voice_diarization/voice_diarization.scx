@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's VoiceDiarization (mosfet abilities/hearing/voice/diarization.py):
+  who spoke when in a closed utterance, through the speech service's
+  diarize operation (mosfet's VoiceDiarizer providers: pyannote's and MLX
+  Audio's pipelines; here LocalAI's POST {base}/audio/diarization, which
+  serves pyannote segmentation and Sortformer models). The interpretation
+  (abilities/interpretation/interpretation.scx) invokes it once per utterance from
+  DiarizingVoice; the interpretation's stage timer bounds it, and leaving
+  DiarizingVoice cancels it and the service call (SCXML 6.4).
+
+    applying (an invoked speech service) -> applied (final)
+
+  Input: the <param>s audio (a reference to the utterance: raw 16-bit PCM,
+  or a WAV container), media_type, sample_rate_hz and channels (its
+  format), output (the reference each segment's file extends,
+  <output>-<index>), and model (LocalAI's pyannote-diarization by default).
+
+  Output: <donedata>, received by the interpretation as
+  done.invoke.voice_diarization: {segments} (mosfet's OutputData: clipped
+  PCM segments, each a reference with its format, span and optional
+  confidence, ascending by start; raw speaker labels never enter) when the
+  service answers bot.ability.hearing.voice.diarization.output, or
+  {message} (mosfet's FailureData) when it answers bot.ability.failed,
+  answers something else, or cannot run.
+
+  Bindings: the speech service package; env scopes FLOPPY_VOICE_BASE_URL
+  and FLOPPY_VOICE_API_KEY to the service's <invoke> (no default backend,
+  decision D31). The run grants the service the media directory. An
+  invoked service's events are not checked against event:schema, so their
+  shape is checked by cond.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="voice_diarization" initial="applying">
+  <datamodel>
+    <!-- The invoker's <param>s. -->
+    <data id="audio" expr="null"/>
+    <data id="media_type" expr="null"/>
+    <data id="sample_rate_hz" expr="null"/>
+    <data id="channels" expr="null"/>
+    <data id="output" expr="null"/>
+    <data id="model" expr="'pyannote-diarization'"/>
+    <!-- The result. -->
+    <data id="result" expr="null"/>
+  </datamodel>
+  <script src="voice_diarization.js"/>
+
+  <state id="applying">
+    <invoke id="diarizer" type="https://github.com/stateforward/floppy/services/speech"
+            env:baseurl="FLOPPY_VOICE_BASE_URL" env:apikey="FLOPPY_VOICE_API_KEY">
+      <param name="operation" expr="'diarize'"/>
+      <param name="model" expr="model"/>
+      <param name="audio" expr="audio"/>
+      <param name="media_type" expr="media_type"/>
+      <param name="sample_rate_hz" expr="sample_rate_hz"/>
+      <param name="channels" expr="channels"/>
+      <param name="output" expr="output"/>
+    </invoke>
+    <transition event="bot.ability.hearing.voice.diarization.output"
+                cond="isDiarizerOutput(_event)" target="applied">
+      <assign location="result" expr="diarizedResult(_event)"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                cond="isFromDiarizer(_event)" target="applied">
+      <assign location="result" expr="failedResult(_event)"/>
+    </transition>
+    <transition event="*" cond="isOtherDiarizerEvent(_event)" target="applied">
+      <assign location="result" expr="mismatchedResult()"/>
+    </transition>
+    <transition event="done.invoke" cond="isFromDiarizer(_event)" target="applied">
+      <assign location="result" expr="undiarizedResult()"/>
+    </transition>
+    <transition event="error.*" target="applied">
+      <assign location="result" expr="errorResult(_event)"/>
+    </transition>
+  </state>
+
+  <final id="applied">
+    <donedata>
+      <content expr="result"/>
+    </donedata>
+  </final>
+</scxml>

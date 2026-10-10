@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Listening ability (mosfet abilities/listening/listening.py):
+  the ear. It hears an environment.sound, scores it against what the body
+  predicted, and hands it on to be interpreted. The body
+  (bots/floppy/floppy.scx) invokes it as its child "listening", one of its
+  input abilities.
+
+    live { initializing -children ready-> Perceiving {
+             Listening -environment.sound-> Sensing
+             Sensing -sensitivity output or failure-> Listening } }
+
+  Children: live holds <invoke id="sensitivity">
+  (abilities/sensitivity/sensitivity.scx, the body's prediction) and
+  <invoke id="interpretation">
+  (abilities/interpretation/interpretation.scx, the slow half). Each
+  is ready with its first bot.ability.offers; initializing waits for both.
+  A child that cannot start, or ends, ends this ability in its final state
+  degraded (the body then degrades the bot).
+
+  Sensing: environment.sound {audio, ...} from the body goes to the
+  sensitivity as bot.ability.listening.sensitivity.score {stimulus} (the
+  sound's envelope {event, data}), bounded by mosfet's 30 s stage
+  operation timeout (sensitivity_timeout_ms): the sensitivity's
+  bot.ability.listening.sensitivity.output goes on to the interpretation
+  and Sensing returns to Listening; the timer,
+  bot.ability.listening.sensitivity.failed {stage: "sensitivity",
+  message: "Listening sensitivity timed out."} sent to this session with
+  that delay, answers the body with bot.ability.listening.failed. Sounds
+  that arrive outside Listening wait, in order, in the data model queue
+  (mosfet defers them): scoring is the only stop between the ear and the
+  prediction.
+
+  Products: the interpretation's bot.ability.listening.speech.output
+  (mosfet's SpeechData: decoded speech, diarized or identified voice
+  segments, or the PCM of an acoustic observation), its environment.sound
+  (labelled non-speech, passed through unchanged) and its
+  bot.ability.listening.failed go on to the body unchanged, from wherever
+  perception is (mosfet re-emits them through its own terminals). The body
+  takes the products as turn stimuli.
+
+  Efference copy: bot.ability.speaking.efference (mosfet's EfferenceData)
+  goes to the sensitivity from wherever perception is: the report
+  modulates perception, it does not interrupt it. The body sends it here
+  (its listening_abilities list, mosfet's Speaking listening peers) just
+  before the bot's own speech comes back as environment.sound, so the bot
+  can tell its own voice apart.
+
+  Readiness: the entry into Perceiving sends bot.ability.offers {ability:
+  "listening", choices: []} to the body; it offers nothing (mosfet: the
+  listening's input is not a tool event).
+
+  Contracts: the events it takes reference abilities/schemas/ by
+  event:schema (never inline); conds only correlate (which child, which
+  timer).
+
+  Bindings: none of its own (the interpretation and its hearing leaves
+  bind the speech service).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="listening" initial="live">
+  <datamodel>
+    <data id="sensitivity_timeout_ms" expr="30000"/>
+    <data id="children" expr="['sensitivity', 'interpretation']"/>
+    <data id="ready" expr="({})"/>
+    <data id="queue" expr="[]"/>
+    <!-- The sound being scored. -->
+    <data id="sound" expr="null"/>
+  </datamodel>
+  <script src="listening.js"/>
+
+  <state id="live" initial="initializing">
+    <invoke id="sensitivity" type="scxml" src="../sensitivity/sensitivity.scx"/>
+    <invoke id="interpretation" type="scxml" src="../interpretation/interpretation.scx"/>
+
+    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json"
+                cond="isChildOffers(_event, children)">
+      <assign location="ready[_event.invokeid]" expr="true"/>
+    </transition>
+    <!-- A child that cannot run, or ends, degrades the ability. -->
+    <transition event="error.*" cond="isChild(_event, children)" target="degraded">
+      <log label="listening.degraded" expr="childCouldNotRunLog(_event)"/>
+    </transition>
+    <transition event="done.invoke" cond="isChild(_event, children)" target="degraded">
+      <log label="listening.degraded" expr="childEndedLog(_event)"/>
+    </transition>
+
+    <!-- Waits for the sensitivity and the interpretation. A child that
+         cannot start raises its error with no invokeid (SCXML 6.4.2). -->
+    <state id="initializing">
+      <transition cond="everyChildReady(ready)" target="Perceiving"/>
+      <transition event="error.*" target="degraded">
+        <log label="listening.degraded" expr="childCouldNotStartLog(_event)"/>
+      </transition>
+      <transition event="environment.sound" event:schema="schemas/environment.sound.json" cond="isFromOutside(_event)">
+        <assign location="queue" expr="queueWithSound(_event, queue)"/>
+      </transition>
+    </state>
+
+    <state id="Perceiving" initial="Listening">
+      <onentry>
+        <send event="bot.ability.offers" target="#_parent">
+          <param name="ability" expr="'listening'"/>
+          <param name="choices" expr="[]"/>
+        </send>
+      </onentry>
+      <!-- The body's report of what it is producing reaches the
+           prediction from wherever perception happens to be. -->
+      <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json"
+                  cond="isNotFromChild(_event, children)">
+        <send event="bot.ability.speaking.efference" target="#_sensitivity">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+      <!-- The interpretation's products and failures, out through this
+           ability's own. -->
+      <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json"
+                  cond="isFromInterpretation(_event)">
+        <send event="bot.ability.listening.speech.output" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+      <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+                  cond="isFromInterpretation(_event)">
+        <send event="environment.sound" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json"
+                  cond="isFromInterpretation(_event)">
+        <send event="bot.ability.listening.failed" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+
+      <state id="Listening">
+        <transition cond="hasQueuedSound(queue)" target="Sensing">
+          <assign location="sound" expr="queuedSound(queue)"/>
+          <assign location="queue" expr="queueRest(queue)"/>
+        </transition>
+        <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+                    cond="isFromOutside(_event)" target="Sensing">
+          <assign location="sound" expr="_event.data"/>
+        </transition>
+      </state>
+
+      <!-- The only stop between the ear and the prediction. -->
+      <state id="Sensing">
+        <onentry>
+          <send event="bot.ability.listening.sensitivity.score" target="#_sensitivity">
+            <content expr="scoreRequest(sound)"/>
+          </send>
+          <send id="sensing-timer" event="bot.ability.listening.sensitivity.failed" delayexpr="delay(sensitivity_timeout_ms)">
+            <content expr="sensitivityTimedOut()"/>
+          </send>
+        </onentry>
+        <onexit>
+          <cancel sendid="sensing-timer"/>
+        </onexit>
+        <transition event="environment.sound" event:schema="schemas/environment.sound.json" cond="isFromOutside(_event)">
+          <assign location="queue" expr="queueWithSound(_event, queue)"/>
+        </transition>
+        <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json"
+                    cond="isFromSensitivity(_event)" target="Listening">
+          <send event="bot.ability.listening.sensitivity.output" target="#_interpretation">
+            <content expr="_event.data"/>
+          </send>
+        </transition>
+        <transition event="bot.ability.listening.sensitivity.failed" event:schema="schemas/bot.ability.listening.sensitivity.failed.json"
+                    cond="isSensingTimer(_event)" target="Listening">
+          <send event="bot.ability.listening.failed" target="#_parent">
+            <content expr="_event.data"/>
+          </send>
+        </transition>
+      </state>
+    </state>
+  </state>
+
+  <final id="degraded"/>
+</scxml>

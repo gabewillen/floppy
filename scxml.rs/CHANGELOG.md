@@ -614,6 +614,14 @@ hard cutover.
 
 ### Changed
 
+- The Wasmtime session host compiles each document its embedder serves
+  (an `<invoke src>` document) once per run, on a fuel budget of its own
+  (`DEFAULT_FUEL`), instead of on the budget of the command that first
+  invokes it: a tree of invoked documents no longer has to compile within
+  one command's fuel, and a document invoked again is not compiled again.
+  Inline `<content>`, which an expression may write, is still compiled on
+  the invoking command's budget each time.
+
 - Attributes and elements from other namespaces are accepted on and in
   SCXML elements, as SCXML 1.0 and its schema allow, instead of rejected
   (`LIMIT006` is removed): `xml:*` and `xsi:*` attributes silently, any
@@ -1101,6 +1109,12 @@ hard cutover.
   `<foreach>` collection is `illegal`.
 
 ### Fixed
+
+- A live session's send whose processing trapped (out of fuel, for one)
+  fails with that trap: the host asked the trapped root's status to
+  classify the failure, and Wasmtime refuses to enter a trapped instance,
+  so the send failed with "cannot enter component instance" and hid the
+  cause.
 
 - A session snapshot an extension component reads
   (`session-snapshot-host.snapshot`) during the entry content of a compound

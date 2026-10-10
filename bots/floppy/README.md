@@ -15,8 +15,10 @@ which holds the [conversation](../../abilities/conversation/conversation.scx) (t
 committed text history, one transcript per participant set; memory recall
 is a seam until phase 3, and inferring participants and relationships from
 voice embeddings, mosfet's turn detectors, is phase 6) and
-[speaking](../../abilities/speaking/speaking.scx) (text mode: the words are logged
-as `bot.say`; speech synthesis and playout are phase 6). Each turn the body
+[speaking](../../abilities/speaking/speaking.scx) (the words are encoded to speech
+by [vocal](../../abilities/vocal/vocal.scx) through the speech service, logged as
+`bot.say`, played out as `environment.sound` after the efference copy to
+Listening, and recorded in the conversation). Each turn the body
 assembles the choices (its own
 `bot.focus_device`, pinned to the turn's focus candidates, and
 `bot.clear_focus` while a device is focused, plus each ability's latest
@@ -26,7 +28,9 @@ body itself or to the ability that offered it: a selected
 `bot.ability.communication.respond` is said through speaking and recorded
 in the conversation. Input addressed to the bot as
 `bot.ability.communication.input` is admitted into the conversation, whose
-updated history is the next turn's stimulus. The full Contract, Topology, Bindings, and Proof sections come
+updated history is the next turn's stimulus; so is a turn's selected
+`bot.ability.communication.input` (mosfet's SpeechHeard seed admits heard
+speech this way), which the body routes to itself. The full Contract, Topology, Bindings, and Proof sections come
 with the phase's saved live examples.
 
 ## Running
@@ -37,15 +41,18 @@ Activate it, then give it inputs, on standard input:
 # The locally built packages (the dev cache under target/).
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network bots/floppy/floppy.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
 # A conversation: text addressed to the bot, answered through bot.say.
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network bots/floppy/floppy.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
 # floppy's latest release, once one is published (phase 7).
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
-  scx run --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network bots/floppy/floppy.scx
+  scx run --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
 ```
 
 The env file must set `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
@@ -73,16 +80,48 @@ though it is used only when the database is a Postgres connection URI
 imports `wasi:filesystem` too (it reads the images a message names), so
 the run grants it a media directory the same way (create `media/` first;
 it is ignored by git).
+Speaking needs `FLOPPY_SPEECH_BASE_URL` and `FLOPPY_SPEECH_API_KEY` (the
+speech service has no default backend) and the speech service granted the
+media directory its audio is written to (`--dir
+https://github.com/stateforward/floppy/services/speech=HOST::/media`);
+without them a response fails with `bot.ability.communication.failed`.
 [`.env.example`](../../.env.example) names the variables, and the README's
 [Defaults](../../README.md#defaults) lists the model, the timeouts and the
 bounds this bot ships with.
+
+Sound (phase 6): `environment.sound` `{audio, media_type, sample_rate_hz,
+channels, kind, ...}` goes to the [listening](../../abilities/listening/listening.scx),
+the body's input ability (mosfet's Listening), and speaking's efference copy
+goes to it too, so the bot can tell its own voice apart. Its
+[sensitivity](../../abilities/sensitivity/sensitivity.scx) scores the sound against the
+body's prediction and its [interpretation](../../abilities/interpretation/interpretation.scx)
+(mosfet's Interpretation) works out what it was: voice detection on every
+sound, an open-speech window that joins voiced sounds into one utterance until
+a sound without voice closes it, then (as configured in its data) diarization,
+voice identification and speech decoding. floppy's default configuration is
+voice detection, sound classification and speech decoding: a sound whose
+`kind` labels it is non-speech and comes back as the turn's `environment.sound`
+stimulus, an unlabelled sound without voice is dropped, and an utterance is
+decoded by the speech service into the turn's
+`bot.ability.listening.speech.output` stimulus (`content_type` `text/plain`).
+`audio` is a reference to a file in the directory the run grants the speech
+service (`media/hello.wav` is `hello.wav` there); voiced audio is signed
+16-bit PCM, in a WAV container or raw with its rate and channels.
+Voice detection, diarization and voice identification call
+`FLOPPY_VOICE_BASE_URL` with `FLOPPY_VOICE_API_KEY` (LocalAI's `/vad`,
+`/audio/diarization` and `/voice/embed`, with its `silero-vad`,
+`pyannote-diarization` and `voice-detect-wespeaker-resnet34` models), and
+speech decoding calls `FLOPPY_SPEECH_BASE_URL` with `FLOPPY_SPEECH_API_KEY`;
+neither has a default backend. A sound that cannot be heard is logged as
+`bot.ability.listening.failed`.
 
 The root has no parent, so each event the body emits is a `log` record
 labelled with its name, its text the event's data as JSON: `bot.activated`,
 `bot.activating.failed`, `bot.deactivated`, `bot.processing.completed`,
 `bot.processing.failed`, `bot.output` (the turn's selected events), and,
 from the communication, `bot.ability.speaking.output` (what was said) and
-`bot.ability.communication.failed`; speaking logs the words as `bot.say`.
+`bot.ability.communication.failed`, and `environment.sound` (speaking's
+playout, by reference); speaking logs the words as `bot.say`.
 `bot.choices` lists each turn's choices (`event` or `event@target`),
 `bot.route` each routed selection, `bot.route.dropped` each selection the
 turn did not offer or no transition took, and `bot.focus` each focus
@@ -94,6 +133,10 @@ change.
   against a cognition double (`tests/fixtures/phase4/cognition_double.scx`),
   and the choices and routing (the offer union, focus grounding, dropped
   selections, ignore, the 32 KiB budget).
+- `cargo test -p floppy-tests --test listening`: the listening under a
+  harness, with the speech service decoding against a fake backend
+  (`tests/tests/support/hearing.rs`): decoded speech, labelled non-speech,
+  failures, the stage timer, the product threshold and order.
 - `cargo test -p floppy-tests --test cognition`: the cascade against fake
   decision and model backends (each path, the tuner, failures, hop timeouts
   and reboot requests, cancels).

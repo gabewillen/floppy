@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's SoundClassification (mosfet abilities/hearing/sound/
+  classification.py) with mosfet's KindSoundClassifier: non-speech sound
+  labelled from the sound's kind, with no model. The interpretation
+  (abilities/interpretation/interpretation.scx) invokes it once per sound from
+  ClassifyingSound.
+
+    applying -> applied (final)
+
+  Input: the <param>s audio, media_type and kind (mosfet's input is the
+  whole SoundData so the classifier can read its kind).
+
+  applying labels the sound (KindSoundClassifier.classify): a kind that is
+  null or blank is unlabeled, {labels: []}; any other kind, trimmed, is the
+  one label with confidence 1.0, {labels: [kind], confidence: 1.0}
+  (mosfet's OutputData). The result is the <donedata>, received by the
+  interpretation as done.invoke.sound_classification.
+
+  Bindings: none (no service, no I/O).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="sound_classification" initial="applying">
+  <datamodel>
+    <!-- The invoker's <param>s. -->
+    <data id="audio" expr="null"/>
+    <data id="media_type" expr="null"/>
+    <data id="kind" expr="null"/>
+    <!-- KindSoundClassifier's confidence, and the result. -->
+    <data id="confidence" expr="1.0"/>
+    <data id="label" expr="''"/>
+    <data id="output" expr="null"/>
+  </datamodel>
+  <script src="sound_classification.js"/>
+
+  <state id="applying">
+    <onentry>
+      <assign location="label" expr="trimmedKind()"/>
+      <assign location="output" expr="classifiedOutput()"/>
+    </onentry>
+    <transition target="applied"/>
+  </state>
+
+  <final id="applied">
+    <donedata>
+      <content expr="output"/>
+    </donedata>
+  </final>
+</scxml>

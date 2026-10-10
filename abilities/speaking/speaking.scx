@@ -1,33 +1,90 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Speaking ability in text mode (mosfet abilities/speaking): the
-  communication (abilities/communication/communication.scx) invokes it as its child
-  "speaking" and routes each selected response to it. Cognition never
-  selects it directly (mosfet: bot.ability.speaking.input is not offered).
+  floppy's Speaking ability (mosfet abilities/speaking/speaking.py): it
+  encodes text to speech, plays it out as environment.sound, and records
+  the words in the conversation. The communication (abilities/
+  communication/communication.scx) invokes it as its child "speaking" and routes each
+  selected response to it. Cognition never selects it directly (mosfet:
+  bot.ability.speaking.input is not offered).
 
-    idle -bot.ability.speaking.input-> emitting -> idle
+    idle -bot.ability.speaking.input-> encoding -> playing -> recording
+      -> idle
 
-  emitting writes the words as <log label="bot.say"> and answers the parent
-  with bot.ability.speaking.output {text}: no audio, so media_type,
-  sample_rate_hz and channels stay absent (null). Speech synthesis and
-  playout (mosfet's encoding and playing states) are phase 6; recording the
-  outbound message into the conversation is the communication's (its
-  sibling conversation is out of this session's reach: SCXML sends go only
-  to #_parent and to a session's own children). The input's contract is
-  schemas/bot.ability.speaking.input.json: a send whose data it rejects is
-  never routed here and raises error.execution in the sender (scxml.rs
-  session.accepts-event-data).
+  encoding invokes the vocal SpeechEncoding (abilities/vocal/vocal.scx, its
+  child "vocal", which invokes the speech service) and, once vocal is ready (its
+  first bot.ability.offers), sends it bot.ability.vocal.speech.encoding.input
+  {text}. The audio is written to output_prefix + operation + "." + the
+  media subtype (a path in the media directory the run grants the speech
+  service). Its bot.ability.vocal.speech.encoding.output is the encoded
+  speech: the audio reference with its media_type, sample_rate_hz and
+  channels (speaking's own, mosfet's 24000 Hz mono audio/pcm, where the
+  encoder leaves one null), and its duration when the encoder measured one
+  (the speech service does not yet). Synthesis is bounded by mosfet's
+  5 s (encoding_timeout_ms); leaving encoding cancels vocal and its
+  request.
+
+  playing issues the efference copy first (mosfet's entry action: the
+  copy leaves before the sound does): bot.ability.speaking.efference
+  {mouth, duration, media_type, sample_rate_hz, channels} to the parent,
+  which carries it to the bot's Listening; mouth is "speaking", the sound's
+  source (mosfet's source when no speaker is injected; devices are out of
+  scope). As in mosfet, no copy is sent when the encoded form gives no
+  duration. Then the words are logged as bot.say and the audio is
+  broadcast: environment.sound {audio, media_type, sample_rate_hz,
+  channels} to the parent, which the body puts into the environment.
+
+  recording builds the outbound message with <conversation:commit>
+  (mosfet's Message: direction outbound, content the text, content_type
+  text/plain; sequence 0, the conversation numbers it) and sends
+  bot.ability.conversation.append {message} to the parent, which holds the
+  conversation (a sibling is out of a child's reach: SCXML sends go only to
+  #_parent and to a session's own children). It is bounded by mosfet's 5 s
+  (recording_timeout_ms). Then it answers the parent with
+  bot.ability.speaking.output {text, media_type, sample_rate_hz, channels}.
+
+  Failures: a vocal failure (its bot.ability.failed), an encoding or
+  recording timeout, or a vocal that cannot run answers the parent with
+  bot.ability.failed {message} (mosfet's terminal failure, FailureData)
+  and returns to idle. Timers are bot.ability.speaking.apply.failed
+  {message} sends (mosfet's own failure event), taken only by the timer
+  in hand (_event.sendid). Input
+  that arrives outside idle waits in the data model queue and is taken on
+  the return to idle (mosfet defers it).
+
+  Contracts: the input's contract is schemas/bot.ability.speaking.input.json:
+  a send whose data it rejects is never routed here and raises
+  error.execution in the sender (scxml.rs session.accepts-event-data).
+  vocal's events are checked where vocal creates them.
 
   Readiness: every entry into idle sends bot.ability.offers {ability:
   "speaking", choices: []} to the parent; it offers nothing.
 
-  Bindings: none (no service, no I/O).
+  Bindings: the conversation namespace package; vocal's speech service.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="speaking" initial="idle">
   <datamodel>
+    <!-- Configuration (mosfet's Speaking defaults and bounds). -->
+    <data id="sample_rate_hz" expr="24000"/>
+    <data id="channels" expr="1"/>
+    <data id="media_type" expr="'audio/pcm'"/>
+    <!-- The speech model and voice vocal asks the speech service for:
+         mosfet's speech encoder defaults. -->
+    <data id="model" expr="'gemini-3.1-flash-tts-preview'"/>
+    <data id="voice" expr="'Kore'"/>
+    <data id="output_prefix" expr="'media/speaking-'"/>
+    <data id="encoding_timeout_ms" expr="5000"/>
+    <data id="recording_timeout_ms" expr="5000"/>
+    <!-- The utterance in hand, its number, the encoded speech and timer. -->
+    <data id="queue" expr="[]"/>
+    <data id="operation" expr="0"/>
     <data id="text" expr="null"/>
+    <data id="encoded" expr="null"/>
+    <data id="product" expr="null"/>
+    <data id="message" expr="null"/>
+    <data id="timer" expr="null"/>
   </datamodel>
   <script src="speaking.js"/>
 
@@ -38,20 +95,135 @@
         <param name="choices" expr="[]"/>
       </send>
     </onentry>
+    <transition cond="hasQueued()" target="encoding">
+      <assign location="text" expr="queuedText()"/>
+      <assign location="queue" expr="remainingQueue()"/>
+    </transition>
     <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json"
-                target="emitting">
+                target="encoding">
       <assign location="text" expr="_event.data.text"/>
     </transition>
   </state>
 
-  <!-- Text mode: the words are the output. -->
-  <state id="emitting">
+  <!-- Synthesis: no sound exists yet. -->
+  <state id="encoding">
     <onentry>
-      <log label="bot.say" expr="text"/>
-      <send event="bot.ability.speaking.output" target="#_parent">
-        <param name="text" expr="text"/>
+      <assign location="operation" expr="nextOperation()"/>
+      <send idlocation="timer" event="bot.ability.speaking.apply.failed" delayexpr="delay(encoding_timeout_ms)">
+        <param name="message" expr="'Speech encoding timed out.'"/>
       </send>
     </onentry>
-    <transition target="idle"/>
+    <onexit>
+      <cancel sendidexpr="timer"/>
+    </onexit>
+    <invoke id="vocal" type="scxml" src="../vocal/vocal.scx">
+      <param name="output" expr="outputPath()"/>
+      <param name="model" expr="model"/>
+      <param name="voice" expr="voice"/>
+      <param name="media_type" expr="media_type"/>
+    </invoke>
+    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json"
+                cond="isFromVocal(_event)">
+      <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal">
+        <param name="text" expr="text"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="schemas/bot.ability.vocal.speech.encoding.output.json"
+                cond="isFromVocal(_event)" target="playing">
+      <assign location="encoded" expr="encodedSpeech(_event)"/>
+      <assign location="encoded.sample_rate_hz" expr="encodedSampleRate()"/>
+      <assign location="encoded.channels" expr="encodedChannels()"/>
+      <assign location="encoded.media_type" expr="encodedMediaType()"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                cond="isFromVocal(_event)" target="idle">
+      <assign location="message" expr="_event.data.message"/>
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="message"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.speaking.apply.failed" event:schema="schemas/bot.ability.speaking.apply.failed.json"
+                cond="isTimer(_event)" target="idle">
+      <log label="speaking.timed_out" expr="encodingTimedOutLog()"/>
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="_event.data.message"/>
+      </send>
+    </transition>
+    <transition event="error.* done.invoke" cond="isFromVocalOrStart(_event)" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="encodingRunFailure(_event)"/>
+      </send>
+    </transition>
+    <!-- Input that arrives meanwhile waits (mosfet defers it). -->
+    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
+      <assign location="queue" expr="deferredQueue(_event)"/>
+      <log label="speaking.deferred" expr="_event.name"/>
+    </transition>
+  </state>
+
+  <!-- Playout: the copy leaves before the sound does. -->
+  <state id="playing">
+    <onentry>
+      <if cond="hasDuration()">
+        <send event="bot.ability.speaking.efference" target="#_parent">
+          <param name="mouth" expr="'speaking'"/>
+          <param name="duration" expr="encoded.duration"/>
+          <param name="media_type" expr="encoded.media_type"/>
+          <param name="sample_rate_hz" expr="encoded.sample_rate_hz"/>
+          <param name="channels" expr="encoded.channels"/>
+        </send>
+      </if>
+      <log label="bot.say" expr="text"/>
+      <send event="environment.sound" target="#_parent">
+        <param name="audio" expr="encoded.audio"/>
+        <param name="media_type" expr="encoded.media_type"/>
+        <param name="sample_rate_hz" expr="encoded.sample_rate_hz"/>
+        <param name="channels" expr="encoded.channels"/>
+      </send>
+      <assign location="product" expr="speechProduct()"/>
+      <raise event="bot.ability.speaking.apply.completed"/>
+    </onentry>
+    <transition event="bot.ability.speaking.apply.completed" target="recording"/>
+    <transition event="error.*" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="playoutFailure(_event)"/>
+      </send>
+    </transition>
+  </state>
+
+  <!-- The words go into the conversation's history. -->
+  <state id="recording">
+    <onentry>
+      <send idlocation="timer" event="bot.ability.speaking.apply.failed" delayexpr="delay(recording_timeout_ms)">
+        <param name="message" expr="'Conversation history recording timed out.'"/>
+      </send>
+      <conversation:commit location="message" direction="outbound" event="'bot.ability.conversation.append'"
+                           message="({source_ids: [], target_ids: [], content: text, content_type: 'text/plain'})"
+                           provenance="({id: 'speaking-' + operation})" sequence="0"/>
+      <send event="bot.ability.conversation.append" target="#_parent">
+        <param name="message" expr="message"/>
+      </send>
+      <raise event="bot.ability.speaking.conversation.recorded"/>
+    </onentry>
+    <onexit>
+      <cancel sendidexpr="timer"/>
+    </onexit>
+    <transition event="bot.ability.speaking.conversation.recorded" target="idle">
+      <send event="bot.ability.speaking.output" target="#_parent">
+        <content expr="product"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.speaking.apply.failed" event:schema="schemas/bot.ability.speaking.apply.failed.json"
+                cond="isTimer(_event)" target="idle">
+      <log label="speaking.timed_out" expr="recordingTimedOutLog()"/>
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="_event.data.message"/>
+      </send>
+    </transition>
+    <transition event="error.*" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="recordingFailure(_event)"/>
+      </send>
+    </transition>
   </state>
 </scxml>

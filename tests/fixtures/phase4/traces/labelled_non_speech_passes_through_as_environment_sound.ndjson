@@ -1,0 +1,2 @@
+{"label":"harness.ready","session":"session","text":"{\"ability\":\"listening\",\"choices\":[]}","type":"log"}
+{"label":"harness.sound","session":"session","text":"{\"audio\":\"media/ring-1.wav\",\"kind\":\" phone.ringing \",\"media_type\":\"audio/wav\"}","type":"log"}

@@ -21,6 +21,10 @@ function isFromIdentity(_event) {
   return _event.invokeid === 'identity';
 }
 
+function isFromListening(_event) {
+  return _event.invokeid === 'listening';
+}
+
 function eventDataJson(_event) {
   return JSON.stringify(_event.data);
 }

@@ -73,7 +73,7 @@ const FLOPPY_NAME: &str = "[floppy name]";
 const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// The body's events (`bots/floppy/schemas/`).
-const BODY_EVENTS: [&str; 15] = [
+const BODY_EVENTS: [&str; 14] = [
     "bot.activate",
     "bot.deactivate",
     "bot.reboot",
@@ -87,12 +87,11 @@ const BODY_EVENTS: [&str; 15] = [
     "bot.processing.failed",
     "bot.processing.timed_out",
     "bot.processing.cancel.timed_out",
-    "environment.sound",
     "environment.visual",
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 55] = [
+const ABILITY_EVENTS: [&str; 65] = [
     "bot.ability.failed",
     "bot.ability.cognition.input",
     "bot.ability.cognition.output",
@@ -121,6 +120,11 @@ const ABILITY_EVENTS: [&str; 55] = [
     "bot.ability.speaking.input",
     "bot.ability.speaking.output",
     "bot.ability.speaking.apply.failed",
+    "bot.ability.speaking.efference",
+    "bot.ability.vocal.speech.encoding.input",
+    "bot.ability.vocal.speech.encoding.output",
+    // Speaking's playout, which the body puts into the environment.
+    "environment.sound",
     "bot.ability.identity.adopt",
     "bot.ability.identity.adopted",
     "bot.ability.identity.adopt.failed",
@@ -140,6 +144,14 @@ const ABILITY_EVENTS: [&str; 55] = [
     // The migration ability's reached revision (Alembic's upgrade or
     // downgrade), described where the memory ability takes it.
     "bot.ability.migration.output",
+    // Phase 6: listening (mosfet's Listening, Sensitivity and
+    // Interpretation) and the efference copy it takes from speaking.
+    "bot.ability.listening.speech.output",
+    "bot.ability.listening.failed",
+    "bot.ability.listening.stage.failed",
+    "bot.ability.listening.sensitivity.score",
+    "bot.ability.listening.sensitivity.output",
+    "bot.ability.listening.sensitivity.failed",
     // Phase 6: mosfet's VisualClassification and Reading.
     "bot.ability.vision.classification.input",
     "bot.ability.vision.classification.output",
@@ -195,11 +207,13 @@ const RUNTIME_ONLY: [&str; 8] = [
 const NAMES_FILE: &str = "mosfet-event-names.json";
 
 /// The ability events the body takes, twinned into `bots/floppy/schemas/`.
-const BODY_TWINS: [&str; 11] = [
+const BODY_TWINS: [&str; 15] = [
     "bot.ability.offers",
     "bot.ability.communication.input",
     "bot.ability.communication.failed",
     "bot.ability.speaking.output",
+    "bot.ability.speaking.efference",
+    "environment.sound",
     "bot.ability.cognition.output",
     "bot.ability.cognition.cancelled",
     "bot.ability.processing.cancelled",
@@ -207,6 +221,8 @@ const BODY_TWINS: [&str; 11] = [
     "bot.ability.conversation.output",
     "bot.ability.identity.addressed",
     "bot.behavior.tick",
+    "bot.ability.listening.speech.output",
+    "bot.ability.listening.failed",
 ];
 
 /// The longest `cond` or (outside `<data>`) `expr` a phase 4 document may

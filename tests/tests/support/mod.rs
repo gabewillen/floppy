@@ -24,6 +24,7 @@
     reason = "each test binary uses the part of the shared support it needs"
 )]
 
+pub mod hearing;
 pub mod trace;
 
 use std::cell::RefCell;
@@ -40,11 +41,15 @@ use sha2::{Digest as _, Sha256};
 /// The variables the bots' documents name. The child process never inherits
 /// them, so a test supplies values only through its env file (or an
 /// explicit `--env NAME=VALUE`).
-pub const GRANTED: [&str; 4] = [
+pub const GRANTED: [&str; 8] = [
     "FLOPPY_API_KEY",
     "FLOPPY_BASE_URL",
     "TYPESAFE_API_KEY",
     "TYPESAFE_BASE_URL",
+    "FLOPPY_SPEECH_API_KEY",
+    "FLOPPY_SPEECH_BASE_URL",
+    "FLOPPY_VOICE_API_KEY",
+    "FLOPPY_VOICE_BASE_URL",
 ];
 
 /// The model floppy ships (README.md, "Defaults"): every document's `model`
@@ -504,6 +509,15 @@ pub fn pgsql_grant() -> Vec<String> {
     ]
 }
 
+/// `--dir` granting the speech service `media` at `/media`, where the
+/// audio references (`media/<file>`) of `environment.sound` resolve.
+pub fn speech_grant(media: &Path) -> Vec<String> {
+    vec![
+        "--dir".to_owned(),
+        format!("{}={}::/media", service_uri("speech"), media.display()),
+    ]
+}
+
 /// Whether the `.scx` document at `path`, or a document it loads by a
 /// literal relative `<invoke src>` (recursively), names the service `name`'s
 /// URI. Anything that is not a readable `.scx` file names none.
@@ -588,6 +602,67 @@ pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
         copy_ability("migration", abilities);
     }
     abilities.join(name).join(format!("{name}.scx"))
+}
+
+/// The listening's abilities (abilities/listening/, its children and its
+/// hearing leaves).
+pub const LISTENING: [&str; 8] = [
+    "listening",
+    "sensitivity",
+    "interpretation",
+    "voice_detection",
+    "voice_diarization",
+    "voice_identification",
+    "sound_classification",
+    "speech_decoding",
+];
+
+/// Copies the listening's abilities into the layout's `abilities`
+/// directory.
+pub fn copy_listening(abilities: &Path) {
+    for name in LISTENING {
+        copy_ability(name, abilities);
+    }
+}
+
+/// The speech service `<invoke>` opening tag in `abilities/vocal/vocal.scx`.
+const SPEECH_INVOKE: &str = r#"<invoke id="speech" type="https://github.com/stateforward/floppy/services/speech"
+            env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">"#;
+
+/// Copies the vocal ability into the laid-out `abilities` directory
+/// with its speech service `<invoke>` rewritten to invoke
+/// `tests/fixtures/phase6/speech_double.scx` (copied beside it, its `mode`
+/// set to the ECMAScript expression `mode`): the double of the speech
+/// service's encoding events, until the service lands.
+pub fn double_speech(abilities: &Path, mode: &str) {
+    let path = copy_ability("vocal", abilities);
+    let vocal = std::fs::read_to_string(&path).expect("the vocal ability is readable");
+    assert!(
+        vocal.contains(SPEECH_INVOKE),
+        "abilities/vocal/vocal.scx invokes the speech service"
+    );
+    std::fs::write(
+        &path,
+        vocal.replacen(
+            SPEECH_INVOKE,
+            r#"<invoke id="speech" type="scxml" src="speech_double.scx">"#,
+            1,
+        ),
+    )
+    .expect("the vocal copy is writable");
+    let double =
+        std::fs::read_to_string(workspace().join("tests/fixtures/phase6/speech_double.scx"))
+            .expect("the speech double is readable");
+    let declared = r#"<data id="mode" expr="'encode'"/>"#;
+    assert!(
+        double.contains(declared),
+        "the speech double declares its mode"
+    );
+    std::fs::write(
+        abilities.join("vocal/speech_double.scx"),
+        double.replacen(declared, &format!(r#"<data id="mode" expr="{mode}"/>"#), 1),
+    )
+    .expect("the speech double copy is writable");
 }
 
 /// Points the `<data id="database">` of the document at `path` at
