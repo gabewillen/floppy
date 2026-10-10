@@ -10,7 +10,7 @@
        version="1.0" datamodel="ecmascript" initial="live">
   <datamodel>
     <data id="run" expr="0"/>
-    <data id="delay" expr="'10s'"/>
+    <data id="delay" expr="'30s'"/>
   </datamodel>
   <state id="live">
     <onentry>

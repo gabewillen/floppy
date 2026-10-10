@@ -634,10 +634,10 @@ fn a_send_the_childs_schema_file_rejects_is_event011() {
 #[test]
 fn a_run_tagged_timer_guard_survives_self_reentry_of_a_state_holding_invokes() {
     // The wall clock: the logical clock would fire the first timer before
-    // the reboot arrives. Each timer is armed 10 s before it fires, when
+    // the reboot arrives. Each timer is armed 30 s before it fires, when
     // its member announces itself, and the reboot is sent as soon as the
     // first announcement is read, so a loaded machine still takes the
-    // reboot first.
+    // reboot first (10 s was not enough under a full parallel test run).
     let mut run = Run::start(&args(&[], &fixture("reentry/root.scx")), &[]);
     let mut records = run.until(Duration::from_secs(60), is_log("member"));
     run.event("spike.reboot", &Json::Null);
