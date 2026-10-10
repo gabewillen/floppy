@@ -244,9 +244,19 @@ pub struct Finished {
 impl Run {
     /// Starts `scx run` with `args` (the document among them) and the
     /// extra environment `env`.
+    ///
+    /// A run whose document tree binds the sql service (decided by
+    /// [`binds_sql`]) and that grants it no directory gets a fresh one
+    /// ([`memory_grant`]): the service imports `wasi:filesystem`, and a run
+    /// that binds it without a `--dir` grant is refused.
     pub fn start(args: &[String], env: &[(&str, &str)]) -> Self {
         let mut full = vec!["run".to_owned()];
         full.extend_from_slice(args);
+        let sql = service_uri("sql");
+        let granted = args.iter().any(|arg| arg.starts_with(&format!("{sql}=")));
+        if !granted && args.iter().any(|arg| binds_sql(Path::new(arg))) {
+            full.splice(1..1, memory_grant());
+        }
         let mut command = command(&full);
         for (name, value) in env {
             command.env(name, value);
@@ -423,6 +433,47 @@ pub fn closed_status(records: &[Json]) -> Option<String> {
 /// Whether the session closed with its root in a top-level final state.
 pub fn finished(records: &[Json]) -> bool {
     closed_status(records).as_deref() == Some("finished")
+}
+
+/// `--dir` granting the sql service a fresh scratch directory at
+/// `/memory`, where the bots keep their memory, `/memory/floppy.sqlite`.
+pub fn memory_grant() -> Vec<String> {
+    vec![
+        "--dir".to_owned(),
+        format!(
+            "{}={}::/memory",
+            service_uri("sql"),
+            unique_scratch("memory").display()
+        ),
+    ]
+}
+
+/// Whether the `.scx` document at `path`, or a document it loads by a
+/// literal relative `<invoke src>` (recursively), names the sql service's
+/// URI. Anything that is not a readable `.scx` file names none.
+pub fn binds_sql(path: &Path) -> bool {
+    fn visit(path: &Path, seen: &mut Vec<PathBuf>) -> bool {
+        let Ok(path) = path.canonicalize() else {
+            return false;
+        };
+        if path.extension().is_none_or(|extension| extension != "scx") || seen.contains(&path) {
+            return false;
+        }
+        seen.push(path.clone());
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return false;
+        };
+        if text.contains(&service_uri("sql")) {
+            return true;
+        }
+        let dir = path.parent().unwrap_or(Path::new("/")).to_owned();
+        text.split("src=\"")
+            .skip(1)
+            .filter_map(|rest| rest.split('"').next())
+            .filter(|src| !src.contains(':'))
+            .any(|src| visit(&dir.join(src), seen))
+    }
+    visit(path, &mut Vec::new())
 }
 
 /// A scratch directory of its own for each call (tests run in parallel).

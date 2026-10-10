@@ -577,38 +577,202 @@ fn intuition_handles_an_ignore_without_reasoning() {
     );
 }
 
-/// The builder seam: with its test-only `behavior` set, autonomy invokes
-/// the behavior double (`tests/fixtures/phase4/behavior_double.scx`, a
-/// stand-in for a builder-produced behavior) by `srcexpr`, and the
-/// double's donedata handles the turn before intuition runs.
-#[test]
-fn a_behavior_double_handles_a_turn_through_autonomy() {
-    let mock = Mock::start();
-    let bot = layout(&mock, Decision::Fail, Generation::Fail, &[]);
-    let abilities = bot
-        .body
-        .parent()
-        .and_then(Path::parent)
-        .and_then(Path::parent)
-        .expect("the scratch root")
-        .join("abilities");
-    let double = abilities.join("behavior_double.scx");
-    std::fs::copy(
-        workspace().join("tests/fixtures/phase4/behavior_double.scx"),
-        &double,
+/// The memory path every inventory test gives the cognition.
+const DATABASE: &str = "/memory/floppy.sqlite";
+
+/// One learned behavior row: name, trigger, status, lifetime and source.
+struct Learned<'a> {
+    name: &'a str,
+    trigger: &'a str,
+    status: &'a str,
+    source: &'a str,
+}
+
+/// A turn behavior document (phase 5 plan, "Turn Behavior Contract") that
+/// answers `donedata` (an ECMAScript expression over `turn`).
+fn turn_behavior(donedata: &str) -> String {
+    format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="done"><datamodel><data id="turn" expr="0"/><data id="input" expr="null"/></datamodel><final id="done"><donedata><content expr="{donedata}"/></donedata></final></scxml>"#
     )
-    .expect("the double is copyable");
-    // Relative to autonomy, the invoked document that evaluates it.
-    rewrite(
-        &abilities.join("autonomy.scx"),
-        &[("behavior", "'behavior_double.scx'")],
+}
+
+/// XML-escapes `text` for an attribute value.
+fn attribute(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// Runs `statements` (mosfet `Statement`s) in one transaction of the
+/// Memory ability (`abilities/memory.scx`) against the database in
+/// `grant`'s directory; returns its output.
+fn transact(grant: &[String], statements: &Json) -> Json {
+    let document = format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="applying">
+  <datamodel><data id="statements" expr="{}"/></datamodel>
+  <state id="applying">
+    <invoke id="memory" type="scxml" src="memory.scx">
+      <param name="database" expr="'{DATABASE}'"/>
+      <param name="statements" expr="statements"/>
+    </invoke>
+    <transition event="bot.ability.memory.output" target="done"><log label="output" expr="JSON.stringify(_event.data)"/></transition>
+    <transition event="*" target="done"><log label="failed" expr="_event.name"/></transition>
+  </state>
+  <final id="done"/>
+</scxml>"#,
+        attribute(&statements.to_string()),
     );
-    let mut run = start(&bot);
+    let dir = unique_scratch("inventory");
+    std::fs::copy(
+        workspace().join("abilities/memory.scx"),
+        dir.join("memory.scx"),
+    )
+    .expect("the ability is copyable");
+    let path = support::write(&dir, "inventory.scx", &document);
+    let mut args = grant.to_vec();
+    args.extend([
+        "--clock".to_owned(),
+        "logical".to_owned(),
+        path.display().to_string(),
+    ]);
+    let mut run = Run::start(&args, &[]);
+    run.end_input();
+    let finished = run.finish(WAIT);
+    let output = logs(&finished.all)
+        .into_iter()
+        .find(|(label, _)| label == "output")
+        .unwrap_or_else(|| panic!("the transaction committed: {:?}", finished.all));
+    serde_json::from_str(&output.1).expect("the output is JSON")
+}
+
+/// A memory directory holding `learned` as mosfet's inventory rows
+/// (`bot_behavior`, `bot_behavior_trigger`); returns its `--dir` grant.
+fn inventory(learned: &[Learned<'_>]) -> Vec<String> {
+    let grant = support::memory_grant();
+    let mut statements = Vec::new();
+    for row in learned {
+        statements.push(json!({
+            "sql": "INSERT INTO bot_behavior (name, source, lifetime, status) VALUES (?, ?, 'turn', ?)",
+            "parameters": [row.name, row.source, row.status],
+        }));
+        statements.push(json!({
+            "sql": "INSERT INTO bot_behavior_trigger (behavior_name, \"trigger\") VALUES (?, ?)",
+            "parameters": [row.name, row.trigger],
+        }));
+    }
+    transact(&grant, &Json::Array(statements));
+    grant
+}
+
+/// Each behavior's `[name, used_count, failed_count]`, by name.
+fn usage(grant: &[String]) -> Json {
+    let output = transact(
+        grant,
+        &json!([{"sql": "SELECT name, used_count, failed_count FROM bot_behavior ORDER BY name"}]),
+    );
+    Json::Array(
+        output["results"][0]["rows"]
+            .as_array()
+            .expect("the rows")
+            .iter()
+            .map(|row| row["values"].clone())
+            .collect(),
+    )
+}
+
+/// Starts the bot with the run arguments `args` before the body.
+fn start_with(bot: &Bot, args: &[String]) -> Run {
+    let mut full = args.to_vec();
+    full.extend([
+        "--env-file".to_owned(),
+        bot.env.display().to_string(),
+        bot.body.display().to_string(),
+    ]);
+    let mut run = Run::start(&full, &[]);
+    run.event("bot.activate", &json!({}));
+    run.until(WAIT, label_is("bot.activated"));
+    run
+}
+
+/// mosfet's Autonomy over the inventory: the ACTIVE turn behaviors the
+/// stimulus triggers run in name order as candidates (the behavior double,
+/// `tests/fixtures/phase4/behavior_double.scx`, is one); a silent one, one
+/// that declines and one that cannot run advance, and the first that
+/// handles the turn answers it before intuition runs. A DRAFT behavior and
+/// one triggered by another event never run; uses and failures are
+/// counted.
+#[test]
+fn autonomy_runs_the_learned_behaviors_the_stimulus_triggers() {
+    let mock = Mock::start();
+    let silent = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><state id="waiting"/></scxml>"#;
+    let declines = turn_behavior("({turn: turn, handled: false})");
+    let double =
+        std::fs::read_to_string(workspace().join("tests/fixtures/phase4/behavior_double.scx"))
+            .expect("the double is readable");
+    let grant = inventory(&[
+        Learned {
+            name: "Asilent",
+            trigger: "bot.input",
+            status: "ACTIVE",
+            source: silent,
+        },
+        Learned {
+            name: "Bdeclines",
+            trigger: "bot.input",
+            status: "ACTIVE",
+            source: &declines,
+        },
+        Learned {
+            name: "Cbroken",
+            trigger: "bot.input",
+            status: "ACTIVE",
+            source: "<scxml",
+        },
+        Learned {
+            name: "Ddouble",
+            trigger: "bot.input",
+            status: "ACTIVE",
+            source: &double,
+        },
+        Learned {
+            name: "Edraft",
+            trigger: "bot.input",
+            status: "DRAFT",
+            source: &double,
+        },
+        Learned {
+            name: "Fother",
+            trigger: "environment.sound",
+            status: "ACTIVE",
+            source: &double,
+        },
+    ]);
+    let memory = format!("'{DATABASE}'");
+    let bot = layout(
+        &mock,
+        Decision::Fail,
+        Generation::Fail,
+        &[("abilities/cognition.scx", &[("memory", memory.as_str())])],
+    );
+    let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
     let records = run.until(WAIT, label_is("cognition.ignore"));
     assert_eq!(
         texts(&records, "autonomy"),
-        strings(&["turn 1: one behavior"])
+        strings(&["turn 1: 4 matched for bot.input"])
+    );
+    assert_eq!(
+        texts(&records, "autonomy.candidate"),
+        strings(&["Asilent", "Bdeclines", "Cbroken", "Ddouble"])
+    );
+    assert_eq!(
+        texts(&records, "autonomy.candidate.silent"),
+        strings(&["Asilent after 1000 ms"])
+    );
+    assert_eq!(
+        texts(&records, "autonomy.candidate.advance"),
+        strings(&["Bdeclines"])
     );
     assert_eq!(texts(&records, "behavior.double"), strings(&["turn 1"]));
     assert_eq!(
@@ -619,18 +783,63 @@ fn a_behavior_double_handles_a_turn_through_autonomy() {
         json_text(&records, "bot.output"),
         json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "behavior: nothing to do", "target": "cognition"}]})
     );
-    assert_eq!(
-        texts(&records, "bot.route"),
-        strings(&["bot.ability.cognition.ignore -> cognition"])
-    );
     // Neither intuition nor reasoning ran: no backend was asked.
     assert!(texts(&records, "intuition").is_empty(), "{records:?}");
     assert!(mock.received("").is_empty());
     close(
         run,
         &mock,
-        "a_behavior_double_handles_a_turn_through_autonomy",
+        "autonomy_runs_the_learned_behaviors_the_stimulus_triggers",
     );
+    assert_eq!(
+        usage(&grant),
+        json!([
+            ["Asilent", "0", "0"],
+            ["Bdeclines", "0", "0"],
+            ["Cbroken", "0", "1"],
+            ["Ddouble", "1", "0"],
+            ["Edraft", "0", "0"],
+            ["Fother", "0", "0"]
+        ])
+    );
+}
+
+/// When every triggered behavior declines, autonomy answers unhandled and
+/// the cascade goes on to intuition.
+#[test]
+fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
+    let mock = Mock::start();
+    let declines = turn_behavior("({turn: turn, handled: false})");
+    let grant = inventory(&[Learned {
+        name: "Declines",
+        trigger: "bot.input",
+        status: "ACTIVE",
+        source: &declines,
+    }]);
+    let memory = format!("'{DATABASE}'");
+    let bot = layout(
+        &mock,
+        Decision::Ignore,
+        Generation::Fail,
+        &[("abilities/cognition.scx", &[("memory", memory.as_str())])],
+    );
+    let mut run = start_with(&bot, &grant);
+    say(&mut run, "background noise");
+    let records = run.until(WAIT, label_is("cognition.ignore"));
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&["autonomy unhandled (unhandled)", "intuition handled (none)"])
+    );
+    assert_eq!(
+        json_text(&records, "bot.output"),
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}}]})
+    );
+    close(
+        run,
+        &mock,
+        "when_no_learned_behavior_handles_the_turn_intuition_runs",
+    );
+    assert_eq!(usage(&grant), json!([["Declines", "0", "0"]]));
 }
 
 #[test]

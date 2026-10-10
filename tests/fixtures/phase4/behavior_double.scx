@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  A behavior double for the builder seam (tests/tests/cognition.rs): a
-  stand-in for one builder-produced behavior document, which autonomy
-  (abilities/autonomy.scx) invokes by <invoke srcexpr> when its test-only
-  behavior data names it. The test copies it beside autonomy.scx.
+  A behavior double (tests/tests/cognition.rs): a stand-in for one
+  builder-produced turn behavior, which the test stores as an inventory
+  row's source and autonomy (abilities/autonomy.scx) invokes by
+  <invoke><content expr>.
 
   It follows the rule builder output follows (docs/port-plan.md, "Builder
-  output"): a srcexpr child gets no schema files, so it carries no
+  output"): an invoked source gets no schema files, so it carries no
   event:schema reference and no <script>. It takes autonomy's <param>s turn
   and input, logs behavior.double with the turn, and handles the turn
   through its <donedata>: one bot.ability.cognition.ignore selection for

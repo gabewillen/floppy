@@ -48,9 +48,13 @@ expected_wasm_tools='wasm-tools 1.244.0'
 expected_wasi_virt='wasi-virt 0.2.0'
 expected_wasi_virt_source='https://github.com/bytecodealliance/WASI-Virt'
 expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
+# The C toolchain of the sql service's SQLite (libsqlite3-sys compiles
+# the amalgamation with $WASI_SDK_PATH/bin/clang and its sysroot): the
+# pinned wasi-sdk release, checked by its VERSION file.
+expected_wasi_sdk='25.0'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
 namespace_components='floppy_decision floppy_bot floppy_conversation'
-service_components='floppy_service_generate floppy_service_decision'
+service_components='floppy_service_generate floppy_service_decision floppy_service_sql'
 # Package validator components (stateforward:scxml-validator/package-validator),
 # each named by its package's manifest (`validator-artifact`).
 validator_components='floppy_service_generate_validator'
@@ -129,6 +133,24 @@ expected_imports() {
                 'stateforward:scxml/outbound-http@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0'
             ;;
+        # The sql service: one async `invoke` export and SQLite on a file
+        # in the directory the run grants. It keeps exactly the filesystem
+        # it imports for the host (which links it only under `--dir`): the
+        # filesystem interfaces, the wasi:io interfaces they use, and
+        # wasi:clocks/wall-clock for SQLite's CURRENT_TIMESTAMP; wasi:cli
+        # and the 0.2 monotonic clock are denied by the composed provider
+        # (services/sql/wasi-cli-deny.wat).
+        floppy_service_sql)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'wasi:io/poll@0.2.12' \
+                'wasi:clocks/wall-clock@0.2.12' \
+                'wasi:io/error@0.2.12' \
+                'wasi:io/streams@0.2.12' \
+                'wasi:filesystem/types@0.2.12' \
+                'wasi:filesystem/preopens@0.2.12'
+            ;;
         # A package validator's world imports nothing: its export's record
         # types arrive through the types-only types and document interfaces.
         floppy_service_generate_validator)
@@ -169,6 +191,17 @@ case "$(cargo install --list | grep '^wasi-virt ' || true)" in
         exit 1
         ;;
 esac
+
+[ -n "${WASI_SDK_PATH:-}" ] || {
+    echo "WASI_SDK_PATH is not set: install wasi-sdk $expected_wasi_sdk (https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-25) and point WASI_SDK_PATH at it" >&2
+    exit 1
+}
+actual_wasi_sdk=$(sed -n '1p' "$WASI_SDK_PATH/VERSION" 2>/dev/null || true)
+test "$actual_wasi_sdk" = "$expected_wasi_sdk" || {
+    echo "wasi-sdk identity mismatch: expected $expected_wasi_sdk, found ${actual_wasi_sdk:-none} at $WASI_SDK_PATH" >&2
+    exit 1
+}
+export WASI_SDK_PATH
 
 unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS CARGO_TARGET_WASM32_WASIP2_RUSTFLAGS
 . "$workspace/scripts/reproducible-wasm-env.sh"
@@ -238,7 +271,18 @@ build_component() {
         virt_input=$seeded
         ;;
     esac
-    if wasm-tools component wit "$virt_input" | sed -n 's/^  import \(.*\);$/\1/p' | grep -q '^wasi:'; then
+    if [ "$component" = floppy_service_sql ]; then
+        # The sql service keeps its filesystem imports for the host: a
+        # wasi-virt adapter would virtualize the filesystem too, so the
+        # standard library's and wasi-libc's other WASI imports (wasi:cli and
+        # the monotonic clock) are satisfied by the pinned deny-all provider
+        # instead (see the .wat header), as scxml.rs does for its files
+        # example service.
+        deny="$run_tmp/wasi-cli-deny-sql.wasm"
+        wasm-tools parse "$workspace/services/sql/wasi-cli-deny.wat" -o "$deny"
+        wasm-tools compose "$virt_input" -d "$deny" -o "$virtualized" >/dev/null 2>&1
+        wasm-tools compose "$virt_input" -d "$deny" -o "$repeat" >/dev/null 2>&1
+    elif wasm-tools component wit "$virt_input" | sed -n 's/^  import \(.*\);$/\1/p' | grep -q '^wasi:'; then
         wasi-virt "$virt_input" -o "$virtualized"
         wasi-virt "$virt_input" -o "$repeat"
     else
@@ -250,7 +294,10 @@ build_component() {
     cmp -s "$virtualized" "$repeat" || { echo "non-deterministic wasi-virt output: $component" >&2; exit 1; }
     wasm-tools validate --features component-model,cm-async "$virtualized"
     imports=$(wasm-tools component wit "$virtualized" | sed -n 's/^  import \(.*\);$/\1/p')
-    if printf '%s\n' "$imports" | grep -q '^wasi:'; then
+    # A component may keep only a WASI interface its allowlist names (the
+    # sql service the filesystem it imports).
+    allowed_wasi=$(expected_imports "$component" | grep -E '^wasi:' || true)
+    if printf '%s\n' "$imports" | grep -E '^wasi:' | grep -Fxv "$allowed_wasi" | grep -q .; then
         echo "virtualized component retains a WASI capability: $component" >&2
         printf '%s\n' "$imports" >&2
         exit 1
