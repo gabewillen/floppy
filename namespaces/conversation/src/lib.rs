@@ -4,8 +4,8 @@
 //! One conversation message as the conversation commits it (mosfet
 //! `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`,
 //! `_stable_context_ref`, `MessageProvenance`), shared by the inbound path
-//! (`abilities/conversation.scx`) and the outbound record
-//! (`abilities/communication.scx`). Documents bind [`NAMESPACE_URI`]
+//! (`abilities/conversation/conversation.scx`) and the outbound record
+//! (`abilities/communication/communication.scx`). Documents bind [`NAMESPACE_URI`]
 //! (conventionally with the prefix `conversation`):
 //!
 //! ```xml

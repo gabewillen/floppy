@@ -660,6 +660,8 @@ fn run(mock: &Mock, test: &str, route: &str, env: &[&str], request: &Json) -> Ve
 /// scratch file.
 fn run_builder(mock: &Mock, test: &str, route: &str, builder: &str, request: &Json) -> Vec<Json> {
     let dir = scratch("builder-variant");
+    std::fs::copy(builder_dir().join("builder.js"), dir.join("builder.js"))
+        .expect("the builder's script is copyable");
     let document = write(&dir, &format!("{test}.scx"), builder);
     let env = env_file(test, mock, route, "typesafe", &ALL);
     start(&document, "logical", &[env], request, &[])
@@ -702,10 +704,8 @@ fn builder_validates_clean_with_its_repository_packages() {
     let validated = validate(&builder_dir().join("builder.scx"), &[]);
     assert!(validated.status.success(), "{}", validated.stderr);
     assert!(
-        validated
-            .stderr
-            .contains("diagnostic summary: 0 error(s), 0 warning(s), 0 note(s)"),
-        "builder.scx validates without an error, a warning, or a note: {}",
+        support::validates_but_for_script_src(&validated.stderr),
+        "builder.scx validates without an error, a note, or a warning but LINT019 for builder.js: {}",
         validated.stderr
     );
 }

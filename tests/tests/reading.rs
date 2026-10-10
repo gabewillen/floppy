@@ -1,10 +1,10 @@
-//! The reading ability (`abilities/reading.scx`, mosfet's Reading) and its
-//! visual classification child (`abilities/vision.scx`, mosfet's
+//! The reading ability (`abilities/reading/reading.scx`, mosfet's Reading) and its
+//! visual classification child (`abilities/vision/vision.scx`, mosfet's
 //! `VisualClassification`), run as a harness document's child through
 //! `scx run` on the logical clock.
 //!
-//! Each test lays out a scratch directory with the harness, copies of
-//! `reading.scx` and `vision.scx`, and `abilities/schemas/` as `schemas/`.
+//! Each test lays out a scratch `abilities/` with the harness and copies of
+//! `reading/` and `vision/` (documents, scripts and schema twins).
 //! The harness invokes reading as its child "reading", sends it each input
 //! once it is invoked, logs every answer (`harness`, the event name and its
 //! JSON), and ends after one answer per input.
@@ -25,9 +25,9 @@ mod support;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use support::{Finished, Run, logs, unique_scratch, workspace};
+use support::{Finished, Run, logs, unique_scratch};
 
-/// The generate `<invoke>` of `abilities/reading.scx`, which the copy
+/// The generate `<invoke>` of `abilities/reading/reading.scx`, which the copy
 /// replaces with the double.
 const GENERATE_INVOKE: &str = r#"<invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
                 env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">"#;
@@ -105,7 +105,7 @@ fn harness(inputs: &str) -> String {
     <onentry>
       <send event="harness.start" delay="10ms"/>
     </onentry>
-    <invoke id="reading" type="scxml" src="reading.scx"/>
+    <invoke id="reading" type="scxml" src="reading/reading.scx"/>
     <transition event="harness.start">
       <foreach array="inputs" item="input">
         <send event="bot.ability.reading.input" target="#_reading">
@@ -125,30 +125,19 @@ fn harness(inputs: &str) -> String {
 }
 
 /// Lays out the harness beside reading (its generate invoke replaced by
-/// the double), vision and the abilities' schemas; returns the harness.
+/// the double) and vision; returns the harness.
 fn layout(inputs: &str, generate: &Generate) -> PathBuf {
     let dir = unique_scratch("reading");
-    let reading = std::fs::read_to_string(workspace().join("abilities/reading.scx"))
-        .expect("the reading ability is readable");
+    let abilities = dir.join("abilities");
+    let path = support::copy_ability("reading", &abilities);
+    let reading = std::fs::read_to_string(&path).expect("the reading ability is readable");
     let doubled = reading.replacen(GENERATE_INVOKE, DOUBLE_INVOKE, 1);
     assert_ne!(doubled, reading, "reading invokes the generate service");
-    support::write(&dir, "reading.scx", &doubled);
-    std::fs::copy(
-        workspace().join("abilities/vision.scx"),
-        dir.join("vision.scx"),
-    )
-    .expect("the vision ability is copyable");
-    let schemas = dir.join("schemas");
-    std::fs::create_dir_all(&schemas).expect("the schema directory is creatable");
-    for entry in std::fs::read_dir(workspace().join("abilities/schemas"))
-        .expect("the abilities' schemas are readable")
-    {
-        let path = entry.expect("a directory entry").path();
-        std::fs::copy(&path, schemas.join(path.file_name().expect("a file name")))
-            .expect("the schema is copyable");
-    }
-    support::write(&dir, "generate_double.scx", &double(generate));
-    support::write(&dir, "harness.scx", &harness(inputs))
+    std::fs::write(&path, doubled).expect("the doubled reading is writable");
+    support::copy_ability("vision", &abilities);
+    let reading_dir = abilities.join("reading");
+    support::write(&reading_dir, "generate_double.scx", &double(generate));
+    support::write(&abilities, "harness.scx", &harness(inputs))
 }
 
 fn run(harness: &Path) -> Finished {

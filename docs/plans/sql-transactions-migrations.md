@@ -2,7 +2,7 @@
 
 Status: proposal (2026-10-10), for the user's review before building.
 Context: `services/sql` today runs one transaction per `<invoke>` and knows
-no schema. `abilities/memory.scx` reads `PRAGMA user_version` in one
+no schema. `abilities/memory/memory.scx` reads `PRAGMA user_version` in one
 invocation and migrates in a second, so a race between two fresh migrations
 needs a retry (decision D47).
 
@@ -88,7 +88,7 @@ another service, so the layer is two pieces:
   * A step is `{revision, direction: "upgrade" | "downgrade", statements}`.
   * Unknown revisions, multiple heads and cycles fail the element
     (`error.execution`).
-* **`abilities/migration.scx`**: the runner, which plays Alembic's
+* **`abilities/migration/migration.scx`**: the runner, which plays Alembic's
   `command.upgrade` and `command.downgrade`. It is invoked with
   `<param name="database">`, `<param name="revisions">` and
   `<param name="target">` (default `head`), and runs these states:

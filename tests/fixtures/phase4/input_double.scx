@@ -2,7 +2,7 @@
 <!--
   An input ability double for the body tests (tests/tests/body.rs): the
   body's environment.* fan-out target. tests/tests/body.rs copies it to
-  abilities/identity.scx beside a copy of the body whose input
+  abilities/identity/identity.scx beside a copy of the body whose input
   is ['identity'], so the body's literal <invoke id="identity"> reaches it.
 
   On start it sends bot.ability.offers {ability: "identity", choices: []}

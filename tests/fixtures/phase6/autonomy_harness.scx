@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Test harness of abilities/autonomy.scx (tests/tests/cognition.rs, the
+  Test harness of abilities/autonomy/autonomy.scx (tests/tests/cognition.rs, the
   SpeechHeard seed's tests): it stands in for the cognition, which invokes
   autonomy first in each turn. Each external bot.ability.cognition.input
   {turn, stimulus, focus, focus_candidates} becomes one autonomy run as the
@@ -20,7 +20,7 @@
     </transition>
   </state>
   <state id="running">
-    <invoke id="autonomy" type="scxml" src="autonomy.scx">
+    <invoke id="autonomy" type="scxml" src="autonomy/autonomy.scx">
       <param name="turn" expr="request.turn"/>
       <param name="input" expr="({focus: request.focus, focus_candidates: request.focus_candidates})"/>
       <param name="stimulus" expr="request.stimulus"/>

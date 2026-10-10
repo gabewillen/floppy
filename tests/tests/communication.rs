@@ -1,11 +1,11 @@
-//! The floppy bot's communication (`abilities/communication.scx` with its
-//! children `abilities/conversation.scx` and `abilities/speaking.scx`),
+//! The floppy bot's communication (`abilities/communication/communication.scx` with its
+//! children `abilities/conversation/conversation.scx` and `abilities/speaking/speaking.scx`),
 //! run as the body's child through `scx run` on the wall clock.
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
 //! under `bots/floppy/`, the communication, conversation, speaking,
 //! identity, memory and every schema under `abilities/`) with
-//! `tests/fixtures/phase4/cognition_double.scx` as `abilities/cognition.scx`
+//! `tests/fixtures/phase4/cognition_double.scx` as `abilities/cognition/cognition.scx`
 //! (no model; its behavior per turn is the `bot.input` observation's name,
 //! or a conversation product's last text). No backend is involved: the
 //! communication path makes no service call.
@@ -64,7 +64,7 @@ enum Speaking {
     Real,
     /// [`DEAF_SPEAKING`].
     Deaf,
-    /// No `abilities/speaking.scx` at all.
+    /// No `abilities/speaking/speaking.scx` at all.
     Missing,
 }
 
@@ -101,10 +101,7 @@ fn layout(speaking: &Speaking, edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
         &workspace().join("bots/floppy/schemas"),
         &dir.join("bots/floppy/schemas"),
     );
-    copy_dir(
-        &workspace().join("abilities/schemas"),
-        &dir.join("abilities/schemas"),
-    );
+    let abilities = dir.join("abilities");
     for name in [
         "communication",
         "conversation",
@@ -112,19 +109,15 @@ fn layout(speaking: &Speaking, edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
         "identity",
         "memory",
     ] {
-        let name = format!("{name}.scx");
-        std::fs::copy(
-            workspace().join("abilities").join(&name),
-            dir.join("abilities").join(&name),
-        )
-        .expect("the ability is copyable");
+        support::copy_ability(name, &abilities);
     }
+    std::fs::create_dir_all(abilities.join("cognition")).expect("creatable");
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/cognition_double.scx"),
-        dir.join("abilities/cognition.scx"),
+        abilities.join("cognition/cognition.scx"),
     )
     .expect("the double is copyable");
-    let speaking_path = dir.join("abilities/speaking.scx");
+    let speaking_path = abilities.join("speaking/speaking.scx");
     match speaking {
         Speaking::Real => {}
         Speaking::Deaf => {
@@ -238,7 +231,28 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
 #[test]
 fn communication_input_is_a_turn_whose_stimulus_carries_the_history() {
     let body = layout(&Speaking::Real, &[]);
-    let mut run = started(&body);
+    let run = history_carrying_turns(&body);
+    close(
+        run,
+        "communication_input_is_a_turn_whose_stimulus_carries_the_history",
+    );
+}
+
+/// The same on the Postgres engine: the body's database is a `PGlite`
+/// server's, so the conversation recalls and remembers there.
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_communication_input_is_a_turn_whose_stimulus_carries_the_history() {
+    let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    let body = layout(&Speaking::Real, &[]);
+    support::use_database(&body, &server.database());
+    drop(history_carrying_turns(&body).close(WAIT));
+}
+
+/// [`communication_input_is_a_turn_whose_stimulus_carries_the_history`]
+/// up to its close: two inputs, each a turn that sees the history.
+fn history_carrying_turns(body: &Path) -> Run {
+    let mut run = started(body);
     run.event("bot.ability.communication.input", &said("reply"));
     let first = run.until(WAIT, label_is("communication.history"));
     run.event("bot.ability.communication.input", &said("reply"));
@@ -273,17 +287,17 @@ fn communication_input_is_a_turn_whose_stimulus_carries_the_history() {
     );
     assert_eq!(texts(&all, "communication.product"), strings(&["0", "2"]));
     assert_eq!(texts(&all, "bot.say"), strings(&["reply 1", "reply 2"]));
-    close(
-        run,
-        "communication_input_is_a_turn_whose_stimulus_carries_the_history",
-    );
+    run
 }
 
 #[test]
 fn the_history_reaching_a_turn_is_bounded_to_the_latest_messages() {
     let body = layout(
         &Speaking::Real,
-        &[("abilities/conversation.scx", &[("max_messages", "2")])],
+        &[(
+            "abilities/conversation/conversation.scx",
+            &[("max_messages", "2")],
+        )],
     );
     let mut run = started(&body);
     for _ in 0..2 {
@@ -346,7 +360,7 @@ fn a_response_waits_for_the_one_in_flight_and_each_hop_times_out() {
     let body = layout(
         &Speaking::Deaf,
         &[(
-            "abilities/communication.scx",
+            "abilities/communication/communication.scx",
             &[("response_timeout_ms", "500")],
         )],
     );
@@ -429,15 +443,7 @@ fn conversation_event(name: &str, data: &Json) -> (String, Json) {
 #[test]
 fn the_conversation_commits_each_message_into_its_history() {
     let dir = unique_scratch("conversation");
-    copy_dir(
-        &workspace().join("abilities/schemas"),
-        &dir.join("abilities/schemas"),
-    );
-    std::fs::copy(
-        workspace().join("abilities/conversation.scx"),
-        dir.join("abilities/conversation.scx"),
-    )
-    .expect("the conversation is copyable");
+    support::copy_ability("conversation", &dir.join("abilities"));
     let harness = dir.join("abilities/harness.scx");
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/conversation_harness.scx"),

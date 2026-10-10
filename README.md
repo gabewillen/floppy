@@ -50,10 +50,10 @@ echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestria
 # The floppy bot: activate it and say hello.
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" \
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" \
     bots/floppy/floppy.scx
 # A bot, with the packages of floppy's latest GitHub release (once one is
-# published).
+# published: docs/release.md).
 scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
 ```
 
@@ -102,9 +102,9 @@ read `FLOPPY_TRACE_BLESS`. Those are test settings, not bot variables.
 (direct vLLM; the CPA gateway lists it as `sparks/qwen3.8-flash-next`). It is
 the `model` `<data>` of `bots/builder/builder.scx` (a `builder.request`'s
 `model` overrides it), `bots/floppy/floppy.scx` (a `bot.activate`'s `model`
-overrides it), `abilities/cognition.scx`, `abilities/reasoning.scx` and
-`abilities/reflection.scx` (each takes its invoker's by `<param>`), and
-`abilities/reading.scx` (mosfet's image decoder).
+overrides it), `abilities/cognition/cognition.scx`, `abilities/reasoning/reasoning.scx` and
+`abilities/reflection/reflection.scx` (each takes its invoker's by `<param>`), and
+`abilities/reading/reading.scx` (mosfet's image decoder).
 
 ### Timeouts and bounds
 
@@ -117,14 +117,14 @@ overrides it), `abilities/cognition.scx`, `abilities/reasoning.scx` and
 | `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (mosfet's 30 s attachment timeout) |
 | `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (mosfet's 5 min processing timeout) |
 | `bots/floppy/floppy.scx` | `cancel_timeout_ms` | `5000` | a timed-out turn's cancel acknowledgement (clamped to 100 to 5000) |
-| `abilities/cognition.scx` | `hop_timeout_ms` | `30000` | each cascade stage (mosfet's 30 s) |
-| `abilities/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
-| `abilities/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (mosfet's `TURN_SILENCE_BOUND`) |
-| `abilities/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
-| `abilities/communication.scx` | `response_timeout_ms` | `6000` | saying one response (mosfet's 6 s) |
-| `abilities/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (mosfet's 30 s) |
-| `abilities/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (mosfet's 30 s) |
-| `abilities/conversation.scx` | `max_messages` | `20` | the history that reaches one turn |
+| `abilities/cognition/cognition.scx` | `hop_timeout_ms` | `30000` | each cascade stage (mosfet's 30 s) |
+| `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
+| `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (mosfet's `TURN_SILENCE_BOUND`) |
+| `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
+| `abilities/communication/communication.scx` | `response_timeout_ms` | `6000` | saying one response (mosfet's 6 s) |
+| `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (mosfet's 30 s) |
+| `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (mosfet's 30 s) |
+| `abilities/conversation/conversation.scx` | `max_messages` | `20` | the history that reaches one turn |
 
 The cognition's phase 5 gates are off (`reflection_enabled`,
 `routines_enabled`). The floppy bot's `database` is `/memory/floppy.sqlite`,
