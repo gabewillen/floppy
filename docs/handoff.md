@@ -11,7 +11,7 @@ Last updated: 2026-10-09.
 
 ## Current state (2026-10-09) — resume here
 
-- **Layout (2026-10-10, D48):** every bot and ability is
+- **Layout (2026-10-10, D65):** every bot and ability is
   `<name>/<name>.scx` with its ECMAScript in `<name>/<name>.js` beside it
   (one root `<script src="<name>.js"/>`; conds and exprs call its
   functions). Abilities are `abilities/<ability>/<ability>.scx`, each with
