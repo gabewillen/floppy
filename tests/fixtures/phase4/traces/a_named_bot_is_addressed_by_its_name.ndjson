@@ -19,7 +19,7 @@
 {"label":"bot.output","session":"session","text":"{\"turn\":2,\"output\":[{\"data\":{\"text\":\"I am Floppy\"},\"event\":\"bot.ability.communication.respond\"}]}","type":"log"}
 {"label":"bot.processing.completed","session":"session","text":"{\"output\":[{\"data\":{\"text\":\"I am Floppy\"},\"event\":\"bot.ability.communication.respond\"}],\"focus_candidates\":[],\"turn\":2}","type":"log"}
 {"label":"bot.route","session":"session","text":"bot.ability.communication.respond -> communication","type":"log"}
-{"label":"speech.encode","parent":"session.11","session":"session.12","text":"encode I am Floppy -> media/speaking-1.pcm","type":"log"}
+{"label":"speech.encode","parent":"session.13","session":"session.14","text":"encode I am Floppy -> media/speaking-1.pcm","type":"log"}
 {"label":"bot.say","parent":"session.2","session":"session.4","text":"I am Floppy","type":"log"}
 {"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}","type":"log"}
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}

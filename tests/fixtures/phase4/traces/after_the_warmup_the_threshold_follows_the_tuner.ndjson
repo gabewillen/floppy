@@ -5,13 +5,13 @@
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
 {"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition","parent":"session","session":"session.1","text":"turn 1: bot.input","type":"log"}
-{"label":"autonomy","parent":"session.1","session":"session.10","text":"turn 1: 0 matched for bot.input","type":"log"}
+{"label":"autonomy","parent":"session.1","session":"session.11","text":"turn 1: 0 matched for bot.input","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.12","text":"turn 1: threshold 0.6","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.12","text":"turn 1: low confidence 34","type":"log"}
+{"label":"intuition","parent":"session.1","session":"session.14","text":"turn 1: threshold 0.6","type":"log"}
+{"label":"intuition","parent":"session.1","session":"session.14","text":"turn 1: low confidence 34","type":"log"}
 {"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":67.12,\"n\":9,\"variance\":195.68}","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition unhandled (low_confidence)","type":"log"}
-{"label":"reasoning","parent":"session.1","session":"session.13","text":"turn 1: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
+{"label":"reasoning","parent":"session.1","session":"session.15","text":"turn 1: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"reasoning handled","type":"log"}
 {"label":"reflection","parent":"session","session":"session.1","text":"absent (phase 5)","type":"log"}
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}
@@ -21,13 +21,13 @@
 {"label":"cognition.ignore","parent":"session","session":"session.1","text":"idle","type":"log"}
 {"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition","parent":"session","session":"session.1","text":"turn 2: bot.input","type":"log"}
-{"label":"autonomy","parent":"session.1","session":"session.16","text":"turn 2: 0 matched for bot.input","type":"log"}
+{"label":"autonomy","parent":"session.1","session":"session.20","text":"turn 2: 0 matched for bot.input","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.18","text":"turn 2: threshold 0.5313143323996343","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.18","text":"turn 2: low confidence 34","type":"log"}
+{"label":"intuition","parent":"session.1","session":"session.23","text":"turn 2: threshold 0.5313143323996343","type":"log"}
+{"label":"intuition","parent":"session.1","session":"session.23","text":"turn 2: low confidence 34","type":"log"}
 {"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":64.4704,\"n\":10,\"variance\":267.78035200000005}","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition unhandled (low_confidence)","type":"log"}
-{"label":"reasoning","parent":"session.1","session":"session.19","text":"turn 2: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
+{"label":"reasoning","parent":"session.1","session":"session.24","text":"turn 2: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"reasoning handled","type":"log"}
 {"label":"reflection","parent":"session","session":"session.1","text":"absent (phase 5)","type":"log"}
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}

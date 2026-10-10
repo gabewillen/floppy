@@ -37,7 +37,10 @@
 //!   identifiers, dollar-quoted strings, and comments, as mosfet's
 //!   `postgres_memory` rewrites them for a `NUMERIC` adapter) and
 //!   optionally `parameters` (strings, finite numbers, booleans as 1 or 0,
-//!   and nulls).
+//!   and nulls), and optionally `rowcount` (the rowcount the statement
+//!   must have, else the whole transaction fails with code `rowcount`).
+//! * `transaction` (optional): `open` keeps the transaction open across
+//!   events (see "Open transactions"); `statements` is then optional.
 //!
 //! Any other parameter, a parameter given twice, or a malformed value
 //! rejects the start: the `<invoke>` raises `error.execution` and nothing
@@ -66,8 +69,21 @@
 //!
 //! Exactly `services/sql`'s: [`RESULT_EVENT`] `{"results": [{"rowcount":
 //! N, "rows": [{"columns": [...], "values": [...]}]}]}` or [`FAILED_EVENT`]
-//! `{"message": M}` (the server's message, or the rule or bound that was
-//! broken).
+//! `{"code": C, "message": M}`: `code` is the server's `SQLSTATE`
+//! (`23505`, `40001`, ...), or `rowcount`, `bound`, `statement`,
+//! `connection`, `changed` or `event` ([`Failed`]); `message` is the
+//! server's message, or the rule or bound that was broken.
+//!
+//! # Open transactions
+//!
+//! Exactly `services/sql`'s (its crate documentation): with `transaction`
+//! `open`, `sql.execute {statements}` answers `sql.result`, `sql.commit`
+//! answers `sql.committed {}`, `sql.rollback` answers `sql.rolledback {}`,
+//! and a failure or any other event answers `sql.failed`, each committing
+//! nothing; a cancel commits nothing. The service holds no connection
+//! between events: it replays the statements it ran, checks each result
+//! against the one it answered (else code `changed`), and commits only on
+//! `sql.commit`.
 //!
 //! # Bounds
 //!
@@ -111,6 +127,16 @@ pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/p
 pub const RESULT_EVENT: &str = "sql.result";
 /// The event that reports a transaction that did not commit.
 pub const FAILED_EVENT: &str = "sql.failed";
+/// The event that runs statements in an open transaction.
+pub const EXECUTE_EVENT: &str = "sql.execute";
+/// The event that commits an open transaction.
+pub const COMMIT_EVENT: &str = "sql.commit";
+/// The event that rolls an open transaction back.
+pub const ROLLBACK_EVENT: &str = "sql.rollback";
+/// The event that reports an open transaction committed.
+pub const COMMITTED_EVENT: &str = "sql.committed";
+/// The event that reports an open transaction rolled back.
+pub const ROLLEDBACK_EVENT: &str = "sql.rolledback";
 
 /// Upper bound on the statements of one transaction (wasm builds only).
 pub const MAX_STATEMENTS: usize = wasm_bound(64);
@@ -165,6 +191,43 @@ pub struct Statement {
     pub sql: String,
     /// Its bind values, in order.
     pub parameters: Vec<Parameter>,
+    /// The `rowcount` it must have, else the transaction fails (a guard,
+    /// for example a version row that must still be the one read).
+    pub rowcount: Option<u64>,
+}
+
+/// Why a transaction did not commit: a code and a message.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Failed {
+    /// The server's `SQLSTATE` (`23505`, `40001`, ...), or `rowcount` (a
+    /// statement's expected rowcount differed), `bound` (a bound was
+    /// exceeded), `statement` (a statement that would end or start a
+    /// transaction), `connection` (the server could not be reached or broke
+    /// the protocol), `changed` or `event` (an open transaction's).
+    pub code: String,
+    /// The server's message, or the rule that was broken.
+    pub message: String,
+}
+
+impl Failed {
+    fn new(code: &str, message: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            message: message.into(),
+        }
+    }
+}
+
+impl From<String> for Failed {
+    fn from(message: String) -> Self {
+        Self::new("connection", message)
+    }
+}
+
+impl From<&str> for Failed {
+    fn from(message: &str) -> Self {
+        Self::new("connection", message)
+    }
 }
 
 /// Where the transaction runs: the connection URI's parts.
@@ -183,8 +246,12 @@ pub struct Database {
 pub struct Transaction {
     /// The connection URI's parts.
     pub database: Database,
-    /// The ordered statements of the one transaction (at least one).
+    /// The ordered statements of the one transaction (at least one in a
+    /// batch; any number, run at once, in an open transaction).
     pub statements: Vec<Statement>,
+    /// Whether the transaction stays open for `sql.execute`, `sql.commit`
+    /// and `sql.rollback` (the `transaction` parameter `open`).
+    pub open: bool,
 }
 
 /// The one event an invocation returns: its name and canonical JSON data.
@@ -197,10 +264,20 @@ pub struct Returned {
 }
 
 impl Returned {
-    /// [`FAILED_EVENT`] with `message`, cut to a bounded length on a
-    /// character boundary.
+    /// `name` with the empty object.
     #[must_use]
-    pub fn failed(message: &str) -> Self {
+    pub fn empty(name: &'static str) -> Self {
+        Self {
+            name,
+            data: "{}".into(),
+        }
+    }
+
+    /// [`FAILED_EVENT`] with the failure's code and its message, cut to a
+    /// bounded length on a character boundary.
+    #[must_use]
+    pub fn failed(failed: &Failed) -> Self {
+        let message = failed.message.as_str();
         let mut end = message.len().min(MAX_FAILURE_BYTES);
         while !message.is_char_boundary(end) {
             end -= 1;
@@ -208,7 +285,7 @@ impl Returned {
         let message = message.get(..end).unwrap_or_default();
         Self {
             name: FAILED_EVENT,
-            data: canonical_json(&serde_json::json!({ "message": message })),
+            data: canonical_json(&serde_json::json!({ "code": failed.code, "message": message })),
         }
     }
 }
@@ -225,10 +302,12 @@ pub fn parse_parameters<'a>(
 ) -> Result<Transaction, &'static str> {
     let mut database = None;
     let mut statements = None;
+    let mut transaction = None;
     for (name, value) in parameters {
         let slot = match name {
             "database" => &mut database,
             "statements" => &mut statements,
+            "transaction" => &mut transaction,
             _ => return Err("pgsql takes no parameter of that name"),
         };
         if slot.replace(value).is_some() {
@@ -241,13 +320,21 @@ pub fn parse_parameters<'a>(
         }
         _ => return Err("pgsql database must be a connection URI within its bound"),
     };
-    let statements = match statements.ok_or("pgsql requires a statements parameter")? {
-        Data::JsonArray(text) => statements_from_json(text)?,
-        _ => return Err("pgsql statements must be a JSON array of statements"),
+    let open = match transaction {
+        None => false,
+        Some(Data::String(mode)) if mode == "open" => true,
+        Some(_) => return Err("pgsql transaction must be open"),
+    };
+    let statements = match (statements, open) {
+        (Some(Data::JsonArray(text)), _) => statements_from_json(text)?,
+        (Some(_), _) => return Err("pgsql statements must be a JSON array of statements"),
+        (None, true) => Vec::new(),
+        (None, false) => return Err("pgsql requires a statements parameter"),
     };
     Ok(Transaction {
         database,
         statements,
+        open,
     })
 }
 
@@ -299,8 +386,11 @@ fn statement_from_json(item: &Json) -> Result<Statement, &'static str> {
     let Json::Object(fields) = item else {
         return Err("pgsql statement must be an object with sql and parameters");
     };
-    if fields.keys().any(|key| key != "sql" && key != "parameters") {
-        return Err("pgsql statement takes only sql and parameters");
+    if fields
+        .keys()
+        .any(|key| !matches!(key.as_str(), "sql" | "parameters" | "rowcount"))
+    {
+        return Err("pgsql statement takes only sql, parameters and rowcount");
     }
     let sql = match fields.get("sql") {
         Some(Json::String(sql)) if !sql.trim().is_empty() && !sql.contains('\0') => sql,
@@ -322,9 +412,35 @@ fn statement_from_json(item: &Json) -> Result<Statement, &'static str> {
         }
         Some(_) => return Err("pgsql statement parameters must be an array"),
     };
+    let rowcount = match fields.get("rowcount") {
+        None | Some(Json::Null) => None,
+        Some(Json::Number(number)) => Some(
+            number
+                .as_u64()
+                .or_else(|| {
+                    number
+                        .as_f64()
+                        .filter(|real| {
+                            real.fract() == 0.0 && (0.0..9.007_199_254_740_992e15).contains(real)
+                        })
+                        .map(|real| {
+                            #[expect(
+                                clippy::cast_possible_truncation,
+                                clippy::cast_sign_loss,
+                                reason = "integral, non-negative and within 2^53, so exact"
+                            )]
+                            let whole = real as u64;
+                            whole
+                        })
+                })
+                .ok_or("pgsql statement rowcount must be a non-negative integer")?,
+        ),
+        Some(_) => return Err("pgsql statement rowcount must be a non-negative integer"),
+    };
     Ok(Statement {
         sql: numbered(sql),
         parameters,
+        rowcount,
     })
 }
 
@@ -572,7 +688,7 @@ impl<S: Read + Write> Session<S> {
                 b'R' => {
                     return Err("the server asks for a password; pgsql connects without one".into());
                 }
-                b'E' => return Err(error_message(&message.body)),
+                b'E' => return Err(server_error(&message.body).message),
                 b'Z' => return Ok(()),
                 _ => {}
             }
@@ -580,7 +696,7 @@ impl<S: Read + Write> Session<S> {
     }
 
     /// Runs `sql` as a simple query and waits for the server to be ready.
-    fn simple(&mut self, sql: &str) -> Result<(), String> {
+    fn simple(&mut self, sql: &str) -> Result<(), Failed> {
         let mut text = sql.as_bytes().to_vec();
         text.push(0);
         self.send(Some(b'Q'), &text)?;
@@ -588,7 +704,7 @@ impl<S: Read + Write> Session<S> {
         loop {
             let message = self.receive()?;
             match message.kind {
-                b'E' => failure = Some(error_message(&message.body)),
+                b'E' => failure = Some(server_error(&message.body)),
                 b'Z' => return failure.map_or(Ok(()), Err),
                 _ => {}
             }
@@ -601,7 +717,7 @@ impl<S: Read + Write> Session<S> {
         &mut self,
         statement: &Statement,
         rows_returned: &mut usize,
-    ) -> Result<Json, String> {
+    ) -> Result<Json, Failed> {
         let mut parse = vec![0];
         parse.extend_from_slice(statement.sql.as_bytes());
         parse.extend_from_slice(&[0, 0, 0]);
@@ -638,8 +754,10 @@ impl<S: Read + Write> Session<S> {
                 b'D' if failure.is_none() => {
                     *rows_returned += 1;
                     if exceeds_wasm_bound(*rows_returned, MAX_ROWS) {
-                        failure =
-                            Some("the pgsql transaction returns more rows than its bound".into());
+                        failure = Some(Failed::new(
+                            "bound",
+                            "the pgsql transaction returns more rows than its bound",
+                        ));
                         continue;
                     }
                     let described = columns.as_deref().unwrap_or_default();
@@ -648,7 +766,7 @@ impl<S: Read + Write> Session<S> {
                     rows.push(serde_json::json!({ "columns": names, "values": values }));
                 }
                 b'C' => tag = Body(&message.body).cstring()?,
-                b'E' => failure = Some(error_message(&message.body)),
+                b'E' => failure = Some(server_error(&message.body)),
                 b'Z' => break,
                 _ => {}
             }
@@ -656,8 +774,11 @@ impl<S: Read + Write> Session<S> {
         if let Some(failure) = failure {
             return Err(failure);
         }
-        Ok(if columns.is_some() {
-            serde_json::json!({ "rowcount": rows.len(), "rows": rows })
+        let (rowcount, result) = if columns.is_some() {
+            (
+                rows.len() as u64,
+                serde_json::json!({ "rowcount": rows.len(), "rows": rows }),
+            )
         } else {
             let changed = tag
                 .rsplit(' ')
@@ -665,8 +786,21 @@ impl<S: Read + Write> Session<S> {
                 .and_then(|count| count.parse::<u64>().ok())
                 .filter(|_| tag.contains(' '))
                 .unwrap_or(0);
-            serde_json::json!({ "rowcount": changed, "rows": [] })
-        })
+            (
+                changed,
+                serde_json::json!({ "rowcount": changed, "rows": [] }),
+            )
+        };
+        if statement
+            .rowcount
+            .is_some_and(|expected| expected != rowcount)
+        {
+            return Err(Failed::new(
+                "rowcount",
+                "a statement's rowcount is not the one it expects",
+            ));
+        }
+        Ok(result)
     }
 }
 
@@ -768,58 +902,78 @@ fn cell(text: &str, oid: u32) -> Json {
     }
 }
 
-/// The `M` (message) field of an `ErrorResponse`.
-fn error_message(body: &[u8]) -> String {
+/// An `ErrorResponse`'s `C` (`SQLSTATE`) and `M` (message) fields.
+fn server_error(body: &[u8]) -> Failed {
     let mut body = Body(body);
-    while let Some(&code) = body.0.first() {
-        if code == 0 || body.take(1).is_err() {
+    let mut code = None;
+    let mut message = None;
+    while let Some(&field) = body.0.first() {
+        if field == 0 || body.take(1).is_err() {
             break;
         }
         match body.cstring() {
-            Ok(text) if code == b'M' => return text,
+            Ok(text) if field == b'C' => code = Some(text),
+            Ok(text) if field == b'M' => message = Some(text),
             Ok(_) => {}
             Err(_) => break,
         }
     }
-    "the server reported an error".into()
+    Failed {
+        code: code.unwrap_or_else(|| "XX000".into()),
+        message: message.unwrap_or_else(|| "the server reported an error".into()),
+    }
 }
 
-/// Runs `statements` in one transaction on a started session and commits,
-/// returning mosfet's `OutputData` as JSON; on any failure it rolls back.
-///
-/// # Errors
-///
-/// The server's message, or the bound or rule that was broken.
-fn apply<S: Read + Write>(
+/// Runs `replayed` (statements an open transaction ran before, with the
+/// results it answered) and then `statements` in one transaction on a
+/// started session, commits when `commit` and else rolls back, and returns
+/// the results of `statements` alone; on any failure it rolls back. A
+/// replayed statement whose result differs from the one answered fails
+/// with code `changed`.
+fn transact<S: Read + Write>(
     session: &mut Session<S>,
+    replayed: &[(Statement, Json)],
     statements: &[Statement],
-) -> Result<Json, String> {
+    commit: bool,
+) -> Result<Json, Failed> {
     if statements
         .iter()
         .any(|statement| controls_transaction(&statement.sql))
     {
-        return Err("a pgsql statement may not end or start a transaction".into());
+        return Err(Failed::new(
+            "statement",
+            "a pgsql statement may not end or start a transaction",
+        ));
     }
     session.simple("BEGIN")?;
-    let output = execute(session, statements);
+    let output = execute(session, replayed, statements);
     match output {
         Ok(output) => {
-            session.simple("COMMIT")?;
+            session.simple(if commit { "COMMIT" } else { "ROLLBACK" })?;
             Ok(output)
         }
-        Err(message) => {
+        Err(failed) => {
             let _ = session.simple("ROLLBACK");
-            Err(message)
+            Err(failed)
         }
     }
 }
 
 fn execute<S: Read + Write>(
     session: &mut Session<S>,
+    replayed: &[(Statement, Json)],
     statements: &[Statement],
-) -> Result<Json, String> {
-    let mut results = Vec::with_capacity(statements.len());
+) -> Result<Json, Failed> {
     let mut rows_returned = 0_usize;
+    for (statement, answered) in replayed {
+        if session.statement(statement, &mut rows_returned)? != *answered {
+            return Err(Failed::new(
+                "changed",
+                "the database changed under the open transaction",
+            ));
+        }
+    }
+    let mut results = Vec::with_capacity(statements.len());
     for statement in statements {
         results.push(session.statement(statement, &mut rows_returned)?);
     }
@@ -827,35 +981,161 @@ fn execute<S: Read + Write>(
     output.insert("results".into(), Json::Array(results));
     let output = Json::Object(output);
     if exceeds_wasm_bound(canonical_json(&output).len(), MAX_RESULT_BYTES) {
-        return Err("the pgsql transaction's result exceeds its bound".into());
+        return Err(Failed::new(
+            "bound",
+            "the pgsql transaction's result exceeds its bound",
+        ));
     }
     Ok(output)
 }
 
-/// Runs the transaction on `stream`, a connection to its database:
-/// [`RESULT_EVENT`] with the results, or [`FAILED_EVENT`] with why nothing
-/// was committed.
-fn run_on<S: Read + Write>(stream: S, transaction: &Transaction) -> Returned {
+/// Starts a session on `stream`, a connection to `database`, runs
+/// [`transact`] and ends the session.
+fn transact_on<S: Read + Write>(
+    stream: S,
+    database: &Database,
+    replayed: &[(Statement, Json)],
+    statements: &[Statement],
+    commit: bool,
+) -> Result<Json, Failed> {
     let mut session = Session { stream };
     let output = session
-        .start(&transaction.database)
-        .and_then(|()| apply(&mut session, &transaction.statements));
+        .start(database)
+        .map_err(Failed::from)
+        .and_then(|()| transact(&mut session, replayed, statements, commit));
     let _ = session.send(Some(b'X'), &[]);
+    output
+}
+
+/// Connects to `database` and runs [`transact_on`].
+fn transact_at(
+    database: &Database,
+    replayed: &[(Statement, Json)],
+    statements: &[Statement],
+    commit: bool,
+) -> Result<Json, Failed> {
+    let stream = connect(database.address).map_err(|message| {
+        Failed::new("connection", format!("pgsql could not connect: {message}"))
+    })?;
+    transact_on(stream, database, replayed, statements, commit)
+}
+
+/// The reply to a batch's or an exchange's output.
+fn returned(output: Result<Json, Failed>) -> Returned {
     match output {
         Ok(output) => Returned {
             name: RESULT_EVENT,
             data: canonical_json(&output),
         },
-        Err(message) => Returned::failed(&message),
+        Err(failed) => Returned::failed(&failed),
     }
 }
 
 /// Connects to the transaction's database and applies the transaction.
 #[must_use]
 pub fn run(transaction: &Transaction) -> Returned {
-    match connect(transaction.database.address) {
-        Ok(stream) => run_on(stream, transaction),
-        Err(message) => Returned::failed(&format!("pgsql could not connect: {message}")),
+    returned(transact_at(
+        &transaction.database,
+        &[],
+        &transaction.statements,
+        true,
+    ))
+}
+
+/// An open transaction (the `transaction` parameter `open`), exactly as
+/// `services/sql`'s: the statements it ran, each with the result it
+/// answered. It holds no connection between events: each `sql.execute`
+/// replays them and runs its own in one transaction it rolls back, and
+/// `sql.commit` replays them all in one it commits, so a cancelled
+/// invocation leaves nothing behind and a database another writer changed
+/// meanwhile fails the transaction with code `changed`.
+#[derive(Clone, Debug)]
+pub struct Open {
+    database: Database,
+    replayed: Vec<(Statement, Json)>,
+}
+
+impl Open {
+    /// An open transaction on `database` that has run nothing yet.
+    #[must_use]
+    pub const fn new(database: Database) -> Self {
+        Self {
+            database,
+            replayed: Vec::new(),
+        }
+    }
+
+    /// Runs `statements` after the ones run before; returns their results.
+    ///
+    /// # Errors
+    ///
+    /// As a batch, or `changed`, or `bound` when the transaction would hold
+    /// more than [`MAX_STATEMENTS`] statements.
+    pub fn execute(&mut self, statements: &[Statement]) -> Result<Json, Failed> {
+        if exceeds_wasm_bound(self.replayed.len() + statements.len(), MAX_STATEMENTS) {
+            return Err(Failed::new(
+                "bound",
+                "the open pgsql transaction exceeds its statements bound",
+            ));
+        }
+        let output = transact_at(&self.database, &self.replayed, statements, false)?;
+        if let Some(Json::Array(results)) = output.get("results") {
+            self.replayed
+                .extend(statements.iter().cloned().zip(results.iter().cloned()));
+        }
+        Ok(output)
+    }
+
+    /// Commits every statement run so far.
+    ///
+    /// # Errors
+    ///
+    /// As [`Open::execute`].
+    pub fn commit(&self) -> Result<(), Failed> {
+        transact_at(&self.database, &self.replayed, &[], true).map(drop)
+    }
+
+    /// Takes one event the invoking session sent: the event to answer and
+    /// whether the invocation ends with it.
+    #[must_use]
+    pub fn receive(&mut self, name: &str, data: &Data) -> (Returned, bool) {
+        match name {
+            EXECUTE_EVENT => match execute_statements(data) {
+                Ok(statements) => {
+                    let output = self.execute(&statements);
+                    let ended = output.is_err();
+                    (returned(output), ended)
+                }
+                Err(message) => (Returned::failed(&Failed::new("event", message)), true),
+            },
+            COMMIT_EVENT => match self.commit() {
+                Ok(()) => (Returned::empty(COMMITTED_EVENT), true),
+                Err(failed) => (Returned::failed(&failed), true),
+            },
+            ROLLBACK_EVENT => (Returned::empty(ROLLEDBACK_EVENT), true),
+            _ => (
+                Returned::failed(&Failed::new(
+                    "event",
+                    "an open pgsql transaction takes only sql.execute, sql.commit and sql.rollback",
+                )),
+                true,
+            ),
+        }
+    }
+}
+
+/// The statements of an `sql.execute` event's data `{statements}`.
+fn execute_statements(data: &Data) -> Result<Vec<Statement>, &'static str> {
+    let malformed = "sql.execute data must be an object with only statements";
+    let Data::JsonObject(text) = data else {
+        return Err(malformed);
+    };
+    let Ok(Json::Object(fields)) = serde_json::from_str::<Json>(text) else {
+        return Err(malformed);
+    };
+    match (fields.len(), fields.get("statements")) {
+        (1, Some(statements @ Json::Array(_))) => statements_from_json(&statements.to_string()),
+        _ => Err(malformed),
     }
 }
 
@@ -1009,7 +1289,7 @@ mod guest {
         ComponentError, DataValue, ErrorCode, ErrorVersion, Event, EventType, InvokeRequest,
     };
 
-    use super::{Returned, Transaction};
+    use super::{Open, Returned, Transaction};
 
     /// The invocation's result: `ok` (no done data), or its error.
     type Done = Result<Option<DataValue>, ComponentError>;
@@ -1083,7 +1363,7 @@ mod guest {
     impl Guest for Component {
         async fn invoke(
             request: InvokeRequest,
-            _events: wit_bindgen::StreamReader<Event>,
+            mut events: wit_bindgen::StreamReader<Event>,
         ) -> Result<
             (
                 wit_bindgen::StreamReader<Event>,
@@ -1091,7 +1371,6 @@ mod guest {
             ),
             ComponentError,
         > {
-            // The service accepts no event: its input stream is dropped.
             let transaction = observed(Operation::Start, || plan(request))?;
             let (mut returned, returned_reader) = wit_stream::new::<Event>();
             let (done, done_reader) = wit_future::new::<Done>(|| {
@@ -1102,28 +1381,62 @@ mod guest {
             });
             wit_bindgen::spawn(async move {
                 // The wire exchange uses the blocking WASI 0.2 socket
-                // streams: the transaction runs to its commit or rollback
+                // streams: each transaction runs to its commit or rollback
                 // before the task next yields.
-                let reply = super::run(&transaction);
-                telemetry::event(
-                    Operation::Send,
-                    if reply.name == super::RESULT_EVENT {
-                        SignalEvent::TransformationCompleted
-                    } else {
-                        SignalEvent::InputRejected
-                    },
-                    None,
-                );
-                // The one event, then the result: `done.invoke.<id>` follows
-                // it.
-                if returned.write_one(event(&reply)).await.is_some() {
-                    return;
+                if transaction.open {
+                    // An open transaction: its first statements, if any, then
+                    // each event the invoking session sends, until one ends
+                    // it (or the session stops sending: nothing commits).
+                    let mut open = Open::new(transaction.database.clone());
+                    if !transaction.statements.is_empty() {
+                        let output = open.execute(&transaction.statements);
+                        let ended = output.is_err();
+                        if send(&mut returned, &super::returned(output)).await || ended {
+                            drop(returned);
+                            let _ = done.write(Ok(None)).await;
+                            return;
+                        }
+                    }
+                    while let Some(event) = events.next().await {
+                        let (reply, ended) = match native_value(event.data) {
+                            Ok(data) => open.receive(&event.name, &data),
+                            Err(_) => open.receive("", &scxml_types::DataValue::Null),
+                        };
+                        if send(&mut returned, &reply).await {
+                            return;
+                        }
+                        if ended {
+                            break;
+                        }
+                    }
+                } else {
+                    // A batch reads no event.
+                    drop(events);
+                    if send(&mut returned, &super::run(&transaction)).await {
+                        return;
+                    }
                 }
+                // The last event, then the result: `done.invoke.<id>`
+                // follows it.
                 drop(returned);
                 let _ = done.write(Ok(None)).await;
             });
             Ok((returned_reader, done_reader))
         }
+    }
+
+    /// Writes `reply`; true when the invoking session no longer reads.
+    async fn send(returned: &mut wit_bindgen::StreamWriter<Event>, reply: &Returned) -> bool {
+        telemetry::event(
+            Operation::Send,
+            if reply.name == super::FAILED_EVENT {
+                SignalEvent::InputRejected
+            } else {
+                SignalEvent::TransformationCompleted
+            },
+            None,
+        );
+        returned.write_one(event(reply)).await.is_some()
     }
 
     /// One call's closed telemetry: its outcome and one event (no attribute

@@ -4,6 +4,7 @@ members = [
     "namespaces/decision",
     "namespaces/bot",
     "namespaces/conversation",
+    "namespaces/migration",
     "services/generate",
     "services/generate/validator",
     "services/decision",

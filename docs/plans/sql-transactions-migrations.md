@@ -1,6 +1,11 @@
 # SQL service: transactions and migrations in the SCXML pattern
 
-Status: proposal (2026-10-10), for the user's review before building.
+Status: built on both engines (2026-10-10, decisions D48 to D51): SQLite
+through `services/sql` and Postgres through `services/pgsql`.
+As built, the migration ability answers `bot.ability.migration.output
+{from, to}` and `bot.ability.failed {message}` (mosfet's ability events)
+rather than `<donedata>` and `migration.failed`, and the version guard's
+failure code is the sql service's `rowcount`.
 Context: `services/sql` today runs one transaction per `<invoke>` and knows
 no schema. `abilities/memory/memory.scx` reads `PRAGMA user_version` in one
 invocation and migrates in a second, so a race between two fresh migrations
@@ -30,7 +35,7 @@ document: `<data>` or `<data src="...sql">`, with bind values in
 * Most callers need only this: recall, insert, or a read-modify-write that
   fits in SQL.
 
-## 2. Interactive transaction (new): one invocation spans several exchanges
+## 2. Open transaction: one invocation spans several exchanges (built, D50)
 
 For work where the next statement depends on a decision the document makes
 in between (behavior authoring in phase 5, for example), the invocation
@@ -40,35 +45,38 @@ stays open and holds one transaction:
 <state id="editing">
   <invoke id="tx" type="https://github.com/stateforward/floppy/services/sql">
     <param name="database" expr="database"/>
-    <param name="transaction" expr="'immediate'"/>   <!-- deferred | immediate | exclusive -->
+    <param name="transaction" expr="'open'"/>
+    <param name="statements" expr="[...]"/>                <!-- optional, run at once -->
   </invoke>
-  <onentry><send event="sql.execute" target="#_tx"><param name="statements" expr="..."/></send></onentry>
-  <transition event="sql.result" cond="_event.invokeid === 'tx'">  ...decide, send more sql.execute... </transition>
-  <transition event="..." ><send event="sql.commit" target="#_tx"/></transition>
+  <transition event="sql.result" cond="_event.invokeid === 'tx'">
+    ...decide, then <send event="sql.execute" target="#_tx"><param name="statements" expr="..."/></send>
+    or <send event="sql.commit" target="#_tx"/> or <send event="sql.rollback" target="#_tx"/>
+  </transition>
   <transition event="sql.committed" target="next"/>
   <transition event="sql.failed" target="recovering"/>
-  <transition event="tx.timeout" target="recovering"/>   <!-- <send delay> bounds it -->
 </state>
 ```
 
-* Inputs to the service: `sql.execute {statements}`, which answers
-  `sql.result {results}`. Then `sql.commit`, which answers `sql.committed`
-  and ends the invocation, or `sql.rollback`, which answers
-  `sql.rolledback` and ends it.
-* Leaving the state cancels the invocation, and a cancelled invocation
-  rolls back.
-* A statement that fails rolls back the whole transaction, answers
-  `sql.failed`, and ends the invocation. No partial state survives.
-* The SQL keywords name the events (`BEGIN` modes, `COMMIT`, `ROLLBACK`),
-  so nothing new is invented.
-* The rule against a statement ending or widening the transaction
-  (`BEGIN`, `COMMIT`, `ROLLBACK`, `ATTACH`, `DETACH`) stays: only the events
-  end it. `SAVEPOINT` stays allowed for nested undo.
-* Locking: SQLite holds the write lock until commit. Another invocation
-  that writes meanwhile gets `sql.failed` with `code: "SQLITE_BUSY"`
-  immediately (no busy wait inside a component), and its document decides
-  whether to retry. The invoking state's `<send delay>` bounds how long a
-  transaction may stay open.
+* Inputs: `sql.execute {statements}` answers `sql.result {results}` and keeps
+  the transaction open; `sql.commit` answers `sql.committed {}`;
+  `sql.rollback` answers `sql.rolledback {}`. The last two end the
+  invocation.
+* A failure answers `sql.failed {code, message}` and ends it with nothing
+  committed; so does any other event (code `event`). Leaving the state
+  cancels it, and nothing commits.
+* As built, the service holds no lock between events. The host drops a
+  cancelled invocation's instance without running it again, and SQLite's
+  WASI build locks with a dot-file, so a lock held across events would
+  outlive a cancel and lock the database for good. Instead the transaction
+  is optimistic: the service keeps each statement it ran with the result it
+  answered, each `sql.execute` replays them and runs its own inside one
+  transaction it rolls back, and `sql.commit` replays them all in one it
+  commits. A replayed result that differs (another writer committed
+  meanwhile) fails with code `changed`, and the document decides whether to
+  start over (Postgres's serialization failure, in the same shape). A
+  statement that reads the clock or randomness changes on replay, so an
+  open transaction reads neither.
+* The rule against a statement ending or widening the transaction stays.
 
 ## 3. Migrations: an Alembic-style migration ability, agnostic of the database
 
@@ -112,6 +120,24 @@ Revisions are data, like Alembic's script directory. One file per revision
   databases already carry, and an existing mosfet SQLite file migrates in
   place.
 
+Postgres (built, D51):
+
+* The runner and `<migration:plan>` never parse SQL. The runner picks the
+  engine from `database` as the memory ability does (a `postgresql://` URI
+  is the pgsql service, a file path the sql service), with one literal
+  `<invoke>` per engine, since scx binds a repository service only from a
+  literal `<invoke type>`.
+* Its own statements are standard SQL both engines accept (`CREATE TABLE IF
+  NOT EXISTS alembic_version`, `INSERT ... SELECT ?1 WHERE NOT EXISTS`,
+  `UPDATE`, `DELETE`); the pgsql service rewrites `?N` to `$N`.
+* Revision files hold each engine's SQL, with the same revision ids:
+  `abilities/memory/sqlite/` and `abilities/memory/postgresql/` (Postgres's
+  defaulted timestamps are `TIMESTAMPTZ DEFAULT NOW()`).
+* The pgsql service takes the whole contract: `rowcount`, `sql.failed
+  {code, message}` with the server's `SQLSTATE`, and open transactions by
+  replay. A lost race on Postgres is `23505` (the version row's key),
+  `40001` or `40P01`, which the runner retries once like `rowcount`.
+
 Transactions:
 
 * The read and the apply are separate invocations. The apply's first
@@ -151,9 +177,7 @@ upgrade, downgrade, current, alembic_version.
 
 ## 5. Decisions for the user
 
-* **Interactive transactions.** Recommended: yes, as specified in section 2.
-  Every phase 3 caller works in batch mode, but phase 5's behavior
-  authoring (validate, simulate, then store or discard) fits a transaction
-  held open across events.
+* **Open transactions.** Built on the recommended yes (section 2); every
+  phase 3 caller still works in batch mode.
 * **Revision files.** Recommended: JSON files via `<data src>` (scxml.rs
   parses JSON `<data src>` as data).
