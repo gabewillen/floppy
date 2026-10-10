@@ -130,8 +130,10 @@ Last updated: 2026-10-10.
   no document selects it.
 - **Live:** `speech_service`'s `live_speech_round_trip_through_an_env_file`
   is the one live speech test (ignored; it needs a speech backend in
-  `FLOPPY_LIVE_ENV_FILE`). No live run of hearing or reading is recorded
-  in [live-proof.md](live-proof.md) yet.
+  `FLOPPY_LIVE_ENV_FILE`). Reading passed live on the CPA gateway
+  (2026-10-10, [live-proof.md](live-proof.md)); hearing, listening and
+  speaking have not run live, because neither the CPA gateway nor TypeSafe
+  serves `/audio/speech` or `/audio/transcriptions`.
 
 ## Repositories
 
