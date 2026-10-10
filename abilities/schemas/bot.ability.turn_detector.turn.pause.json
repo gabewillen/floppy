@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.turn_detector.turn.pause",
+  "description": "Turn pause observation; it does not complete or discard the current turn.",
+  "examples": [
+    {
+      "conversation_ref": "support-call",
+      "duration_seconds": 0.2,
+      "source_participant_ref": "caller",
+      "turn_ref": "turn-1"
+    }
+  ],
+  "properties": {
+    "conversation_ref": {
+      "default": "conversation",
+      "examples": [
+        "support-call"
+      ],
+      "minLength": 1,
+      "title": "Conversation Ref",
+      "type": "string"
+    },
+    "turn_ref": {
+      "description": "Stable reference for the active turn.",
+      "minLength": 1,
+      "title": "Turn Ref",
+      "type": "string"
+    },
+    "source_participant_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        }
+      ],
+      "default": "caller",
+      "examples": [
+        "caller"
+      ],
+      "title": "Source Participant Ref"
+    },
+    "duration_seconds": {
+      "default": 0.0,
+      "examples": [
+        0.2
+      ],
+      "minimum": 0.0,
+      "title": "Duration Seconds",
+      "type": "number"
+    }
+  },
+  "required": [
+    "turn_ref"
+  ],
+  "type": "object"
+}

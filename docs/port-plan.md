@@ -94,7 +94,7 @@ in the gitignored `.env`), `decision` uses TypeSafe through its own
 | 2 | Builder bot: `bots/builder/` SCXML (intake, design, author, `scx:validate`, fix or regenerate with bounded retries as states, simulate the draft as an invoked child via `#_<invokeid>`, ending in the final states `done`/`failed` whose `<donedata>` carries the result), run with `scx run` | `bots/builder/builder.scx` implemented (contract schemas in `bots/builder/schemas`; design and author invoke the generate service and triage invokes the decision service on the `decision:choice` choices, each with `<finalize>`/`done.invoke` and a `builder.timeout` that preempts and cancels the call; cond-based fallback; simulation as an invoked child); runs with `scx run --env-file .env bots/builder/builder.scx` (decisions D14, D16; [bots/builder/README.md](../bots/builder/README.md#running)); deterministic harness in `tests/tests/builder_bot.rs`, which runs that command (including a timeout firing while a generation is in flight); live results in [live-proof.md](live-proof.md) |
 | 3 | Memory service on SQLite | Done: `services/sql` (`floppy_service_sql`), one SQLite transaction of mosfet's `Statement`s per `<invoke>` on a database file in a directory the run grants (`--dir URI=HOST::/memory`), answering `sql.result` or `sql.failed`; mosfet's Memory ability as `abilities/memory/memory.scx`, which migrates mosfet's schema and applies statements through it, answering `bot.ability.memory.output` or `bot.ability.failed`; reasoning recalls and retains cognitive episodes and standing directives, the identity recalls and remembers its adopted name, and the conversation recalls and remembers a relationship's memories (decisions D44 to D47, [plan](plans/phase3-memory.mdscript.md)). Reflection and behaviors use it in phase 5 |
 | 4 | Bot core: body and cognition as SCXML, abilities as invoked children, mosfet's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | Done through the script-validator cutover: the body `bots/floppy/floppy.scx`; `abilities/` cognition (autonomy seam, intuition, reasoning), communication (conversation, speaking in text mode); the `bot` and `conversation` namespaces and the decision elements; event contracts and runtime `event:schema` checks; no `<script>` (decisions D33 to D43, [Phase 4 conventions](#phase-4-conventions)). Identity, the phase 5 seams, and the saved live examples finish it ([plan](plans/phase4-bot-core.mdscript.md)) |
-| 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Done. The cognition runs reflection and routines beside its turns in every bot run (D76; with no database each logs `absent`). Autonomy runs the SpeechHeard seed and then the ACTIVE turn behaviors the stimulus triggers, each source by `<content expr>` under a 1 s silence bound, and records usage; reflection recalls the episodes and the inventory, selects at most one of `bot.behavior.create`, `change`, `break` through its enabled transitions, revises a behavior with the builder bot and stores it ACTIVE (or DRAFT `validation`), and stores the turn's episode; routines reconciles the ACTIVE persistent rows into a chain of runners that passes `bot.behavior.tick` up. All of it is kept by the Memory ability (decisions D60 to D64, D73 to D76, [plan](plans/phase5-behaviors.mdscript.md)) |
+| 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Done. The cognition runs reflection and routines beside its turns in every bot run (D80; with no database each logs `absent`). Autonomy runs the SpeechHeard seed and then the ACTIVE turn behaviors the stimulus triggers, each source by `<content expr>` under a 1 s silence bound, and records usage; reflection recalls the episodes and the inventory, selects at most one of `bot.behavior.create`, `change`, `break` through its enabled transitions, revises a behavior with the builder bot and stores it ACTIVE (or DRAFT `validation`), and stores the turn's episode; routines reconciles the ACTIVE persistent rows into a chain of runners that passes `bot.behavior.tick` up. All of it is kept by the Memory ability (decisions D60 to D64, D73 to D75, D80, [plan](plans/phase5-behaviors.mdscript.md)) |
 | 6 | Speech, vision, and devices as services (`speech`, `vision`, `phone`, audio) | Done for speech and vision; devices are out of scope. `services/speech` (`floppy_service_speech`) decodes and encodes speech on OpenAI-compatible audio APIs and detects, diarizes and identifies voices on LocalAI's voice APIs (decisions D57, D66); the generate service reads images (D58). mosfet's hearing leaves, Listening (`Perceiving{Listening, Sensing}`, Sensitivity, Interpretation with the open-speech window; decision D67) and the SpeechHeard seed turn `environment.sound` into the turn's `bot.ability.listening.speech.output` stimulus and then `bot.ability.communication.input`; vocal and Speaking speak audio (D59, superseding D38); vision and Reading are ported, invoked by nothing yet as in mosfet ([Phase 6 conventions](#phase-6-conventions), [plan](plans/phase6-speech-vision.mdscript.md)) |
 | 7 | Defaults and release: PGlite memory, tagged releases with `SHA256SUMS` for repository namespaces and services (releases wait for going public) | Done except publishing. Memory on Postgres: `services/pgsql` behind the unchanged Memory ability, selected by its `database` (a `postgresql://` URI), migrating mosfet's full head schema in the Postgres dialect through the Alembic-style migration ability, with every ability's SQL portable to both engines and tested on Postgres 16; PGlite is reached over its socket server, not compiled into a component (decisions D48 to D51, D69 to D72). Defaults: README.md's [Defaults](../README.md#defaults) and `.env.example`, checked by `tests/tests/defaults.rs`; there is no default backend, so every run names its endpoint with `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (decision D31). Releases: canonical Linux builds, `SHA256SUMS` and a dry run of the release layout, prepared and checked locally ([release.md](release.md)); no tag, release or upload until the repositories are public ([plan](plans/phase7-pglite-defaults.mdscript.md)) |
 
@@ -262,7 +262,7 @@ D33 to D43.
 | `speaking.py` Speaking | `abilities/speaking/speaking.scx` (`idle` → `encoding` → `playing` → `recording`, decision D59) | ability `.scx` child |
 | `vocal/speech/encoding.py` SpeechEncoding | `abilities/vocal/vocal.scx`, speaking's child, invoking `services/speech` `encode` | ability `.scx` child and service |
 | `identity/identity.py` Identity | `abilities/identity/identity.scx`; text name match `<bot:recognize>`; adoption and recall through `abilities/memory/memory.scx` (decisions D43, D44) | ability `.scx` child |
-| Reflection, Routines | `abilities/reflection/reflection.scx` (revising through `bots/builder/builder.scx`), `abilities/routines/routines.scx` over the chain `abilities/routines_runner/routines_runner.scx`; long-lived children of every cognition (D76) | ability `.scx` child |
+| Reflection, Routines | `abilities/reflection/reflection.scx` (revising through `bots/builder/builder.scx`), `abilities/routines/routines.scx` over the chain `abilities/routines_runner/routines_runner.scx`; long-lived children of every cognition (D80) | ability `.scx` child |
 | Behaviors (Starlark) | builder-built `.scx` documents | generated `.scx` |
 | Memory and its providers | `abilities/memory/memory.scx` over `services/sql` (SQLite, phase 3) or `services/pgsql` (Postgres, phase 7), migrated by `abilities/migration/migration.scx` with `<migration:plan>` | ability `.scx` child + service |
 | `listening` Listening (`Perceiving{Listening, Sensing}`) | `abilities/listening/listening.scx`, the body's input ability | ability `.scx` child |
@@ -270,7 +270,8 @@ D33 to D43.
 | `hearing` SpeechDecoding, SoundClassification, VoiceDetection, VoiceDiarization, VoiceIdentification | `abilities/speech_decoding/`, `sound_classification/`, `voice_detection/`, `voice_diarization/`, `voice_identification/` (the interpretation's children; all but sound classification invoke `services/speech`) | stage `.scx` child and service |
 | `communication/behaviors.py` SpeechHeard seed | `abilities/behaviors/speech_heard/speech_heard.scx`, which autonomy runs before the learned behaviors | turn behavior `.scx` |
 | `vision` VisualClassification, `reading` Reading | `abilities/vision/vision.scx` (reading's child), `abilities/reading/reading.scx` (image decoding through `services/generate`); nothing invokes reading, as in mosfet | ability `.scx` child and service |
-| Conversation's turn detectors, devices | not ported: the phase 6 plan has no turn detector slice, and devices are out of scope | open |
+| `conversation/turn_detector` TurnDetector | `abilities/turn_detector/turn_detector.scx`, which the conversation invokes once per source of each input (its `turn_exchange`; decisions D76 to D79, [conventions](#turn-detector-conventions)) | ability `.scx` child |
+| Conversation's voice-centroid participant matching, devices | not ported: each embedding source is its own participant (D79), and devices are out of scope | open |
 | payload validators | `event:schema` on the receiving transition plus a short correlation cond | `event:schema` |
 
 ### Builder output
@@ -374,6 +375,49 @@ are D52, D57 to D59, D66 and D67
   diarization, identification, failures, timeouts, the efference window),
   `reading.rs` (reading against a generate double), and
   `communication.rs` (a response spoken through the real speech service).
+
+## Turn detector conventions
+
+How mosfet's TurnDetector (`abilities/communication/conversation/turn_detector`)
+and the Conversation's `turn_detector` stage are written as SCXML; the
+decisions are D76 to D79.
+
+- **The machine.** `abilities/turn_detector/turn_detector.scx` is mosfet's
+  `idle`, `open`, `paused`, `closing` and `normalizing` with mosfet's
+  guards: a start addressed to its `participant_ref` opens a turn, an
+  update, pause, end or start for the open turn (its `turn_ref`,
+  `conversation_ref` and `source_participant_ref`) is taken, anything for
+  another turn is ignored, and heard speech
+  (`bot.ability.listening.speech.output`) with voice spans opens or feeds
+  a turn while speech without them pauses it. `open` and `paused` each
+  arm `<state>.after` for `end_of_turn_silence_seconds` (0.5 s, at least
+  0.01 s) on entry; its expiry closes the turn through `closing`. The
+  attachment states are not ported (D14), and the detector announces
+  `bot.ability.turn_detector.ready` on start (D76).
+- **The product.** `normalizing` answers `bot.ability.turn_detector.turn.complete`
+  (texts stripped and joined; audio by reference, in order, D77; the
+  modality-neutral content of a content, image or event stimulus) or
+  `bot.ability.turn_detector.failed` (`stage` `turn`, D78), then clears
+  the turn. There is no decoder (D77).
+- **The conversation's turns.** Each input is one turn per source, in
+  mosfet's identity order: `turn_exchange` invokes the detector for the
+  source's track, waits for its readiness (`readiness`), sends the start
+  carrying mosfet's `_content_for_detector` stimulus and the end
+  (`exchange`), and takes the completed turn; each wait is bounded by
+  mosfet's 5 s (`turn_timeout_ms`). A failure, a timeout, or a start the
+  detector's schema refuses answers `bot.ability.conversation.failed`
+  `{stage: "turn_detector"}` and commits nothing. Memory follows, and the
+  committed message is the turns' product with the first turn's
+  `turn_ref` (D79). Input that arrives while one is in hand waits in the
+  conversation's queue and is taken, in order, on the return to `waiting`
+  (mosfet defers it); before the turns every input without memory was
+  committed in the macrostep it arrived in, so none could arrive.
+- **Tests.** `tests/tests/turn_detector.rs` runs the detector under
+  `tests/fixtures/turn_detector/turn_detector_harness.scx` (assembly,
+  ignored turns, failures, heard speech and the end-of-turn silence);
+  `tests/tests/communication.rs` runs the conversation's turns
+  (`the_conversation_commits_each_message_into_its_history`,
+  `a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing`).
 
 ## Known gaps carried from phase 0
 

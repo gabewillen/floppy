@@ -18,9 +18,10 @@ stores the turn's episode) and [routines](../../abilities/routines/routines.scx)
 (the ACTIVE persistent behaviors, whose ticks become turns) running beside
 the turns, and the [communication](../../abilities/communication/communication.scx),
 which holds the [conversation](../../abilities/conversation/conversation.scx) (the
-committed text history, one transcript per participant set; it recalls
-and remembers a relationship's memories, and inferring participants and relationships from
-voice embeddings, mosfet's turn detectors, is not ported) and
+committed text history, one transcript per participant set; each input
+is one turn per source, assembled by a [turn detector](../../abilities/turn_detector/turn_detector.scx);
+it recalls and remembers a relationship's memories, and matching an
+embedding source to an earlier participant's voice is not ported) and
 [speaking](../../abilities/speaking/speaking.scx) (the words are encoded to speech
 by [vocal](../../abilities/vocal/vocal.scx) through the speech service, logged as
 `floppy.say`, played out as `environment.sound` after the efference copy to

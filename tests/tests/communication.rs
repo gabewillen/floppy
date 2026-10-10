@@ -516,10 +516,90 @@ fn the_conversation_commits_each_message_into_its_history() {
         json!(r#"relationship-["alice","zed",[0.5,1]]["a\"b","bot"]"#)
     );
     assert_eq!(last["messages"][1]["content"], Json::Null);
+    // Each source's turn (mosfet's identity order: names, then
+    // embeddings) is exchanged with its turn detector, and the turns'
+    // texts are committed joined, as mosfet's _complete_turn joins them.
+    assert_eq!(last["messages"][0]["content"], json!("hello hello hello"));
+    assert_eq!(
+        last["messages"][0]["provenance"]["turn_ref"],
+        json!("input-1:turn:alice")
+    );
+    assert_eq!(
+        last["messages"][1]["provenance"]["turn_ref"],
+        json!("input-2:turn:alice")
+    );
+    assert_eq!(
+        last["messages"][2]["content"],
+        json!({"b": 1, "a": [true, null]})
+    );
+    assert_eq!(
+        last["messages"][2]["provenance"]["turn_ref"],
+        json!("input-3:turn:bob")
+    );
+    assert_eq!(last["messages"][5]["content"], json!("again again again"));
     trace::assert_trace(
         "the_conversation_commits_each_message_into_its_history",
         &finished.all,
         &[],
+    );
+}
+
+#[test]
+fn a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing() {
+    let dir = unique_scratch("conversation");
+    support::copy_ability("conversation", &dir.join("abilities"));
+    let harness = dir.join("abilities/harness.scx");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/conversation_harness.scx"),
+        &harness,
+    )
+    .expect("the harness is copyable");
+    let input = "bot.ability.conversation.input";
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    // Sent in one macrostep, so the second and third wait for the first (mosfet
+    // defers them). White space only: the detector closes the turn with
+    // nothing to show. Empty text: the start's text stimulus is refused
+    // before the detector. Then text, stripped by the detector before it
+    // is committed, once per source.
+    let inputs: Vec<Json> = ["   ", "", "  hi  "]
+        .iter()
+        .map(|content| {
+            json!({"source_ids": ["alice", [3, 4]], "target_ids": [], "content": content, "content_type": "text/plain"})
+        })
+        .collect();
+    run.event("harness.burst", &json!({ "inputs": inputs }));
+    let seen = std::cell::Cell::new(0);
+    let all = run.until(WAIT, |record| {
+        if label_is("harness.failed")(record) || label_is("harness.output")(record) {
+            seen.set(seen.get() + 1);
+        }
+        seen.get() == 3
+    });
+    assert_eq!(
+        texts(&all, "conversation.deferred"),
+        strings(&[input, input])
+    );
+    let finished = run.close(WAIT);
+    let failures: Vec<Json> = texts(&all, "harness.failed")
+        .iter()
+        .map(|text| serde_json::from_str(text).expect("a failure is JSON"))
+        .collect();
+    assert_eq!(
+        failures,
+        vec![
+            json!({"stage": "turn_detector", "message": "Turn closed with neither text, audio, nor modality-neutral content."}),
+            json!({"stage": "turn_detector", "message": "The turn detector could not take the turn (error.execution)"}),
+        ]
+    );
+    let outputs = texts(&finished.all, "harness.output");
+    assert_eq!(outputs.len(), 1, "{outputs:?}");
+    let output: Json = serde_json::from_str(&outputs[0]).expect("the output is JSON");
+    assert_eq!(output["messages"].as_array().map(Vec::len), Some(1));
+    assert_eq!(output["messages"][0]["sequence"], json!(0));
+    assert_eq!(output["messages"][0]["content"], json!("hi hi"));
+    assert_eq!(
+        output["messages"][0]["provenance"]["turn_ref"],
+        json!("input-3:turn:alice")
     );
 }
 

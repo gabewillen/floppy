@@ -602,7 +602,8 @@ pub fn copy_tree(from: &Path, to: &Path) {
 /// Copies the ability `name` (`abilities/<name>/`: its document, its
 /// script, its schema twins, and any data beside them) into `abilities`,
 /// and returns the path of its copied document. The memory ability comes
-/// with the migration ability it invokes.
+/// with the migration ability it invokes, and the conversation with its
+/// turn detector.
 pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
     copy_tree(
         &workspace().join("abilities").join(name),
@@ -610,6 +611,9 @@ pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
     );
     if name == "memory" {
         copy_ability("migration", abilities);
+    }
+    if name == "conversation" {
+        copy_ability("turn_detector", abilities);
     }
     abilities.join(name).join(format!("{name}.scx"))
 }
