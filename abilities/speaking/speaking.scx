@@ -70,10 +70,10 @@
     <data id="sample_rate_hz" expr="24000"/>
     <data id="channels" expr="1"/>
     <data id="media_type" expr="'audio/pcm'"/>
-    <!-- The speech model and voice vocal asks the speech service for (it
-         requires both; the bot names none yet). -->
-    <data id="model" expr="null"/>
-    <data id="voice" expr="null"/>
+    <!-- The speech model and voice vocal asks the speech service for:
+         mosfet's speech encoder defaults. -->
+    <data id="model" expr="'gemini-3.1-flash-tts-preview'"/>
+    <data id="voice" expr="'Kore'"/>
     <data id="output_prefix" expr="'media/speaking-'"/>
     <data id="encoding_timeout_ms" expr="5000"/>
     <data id="recording_timeout_ms" expr="5000"/>

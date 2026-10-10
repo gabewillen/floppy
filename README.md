@@ -119,8 +119,10 @@ The listening's hearing leaves name the speech service's models:
 `abilities/voice_identification/voice_identification.scx`'s is
 `voice-detect-wespeaker-resnet34` (LocalAI's names for the models mosfet runs
 locally), and `abilities/speech_decoding/speech_decoding.scx`'s `model`
-is `whisper-1`. Speaking and vocal pass the speech service no model of
-their own (`null`: the backend's default voice model).
+is `whisper-1`. `abilities/speaking/speaking.scx`'s `model` is
+`gemini-3.1-flash-tts-preview` and its `voice` is `Kore`, mosfet's speech
+encoder defaults, which it passes to vocal for the speech service
+(vocal's own are `null`: its invoker names them).
 
 ### Timeouts and bounds
 

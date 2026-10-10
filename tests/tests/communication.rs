@@ -726,13 +726,7 @@ fn speech_backend() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Json>>>) {
 
 #[test]
 fn a_response_is_spoken_through_the_speech_service() {
-    let body = layout(
-        &Speaking::Real,
-        &[(
-            "abilities/speaking/speaking.scx",
-            &[("model", "'tts-1'"), ("voice", "'alloy'")],
-        )],
-    );
+    let body = layout(&Speaking::Real, &[]);
     with_listening(&body);
     let abilities = body
         .parent()
@@ -794,9 +788,10 @@ fn a_response_is_spoken_through_the_speech_service() {
     assert_eq!(written.len(), 4800);
     let requests = requests.lock().expect("the request log").clone();
     assert_eq!(requests.len(), 1, "{requests:?}");
-    assert_eq!(requests[0]["model"], "tts-1");
+    // speaking's defaults, mosfet's speech encoder model and voice.
+    assert_eq!(requests[0]["model"], "gemini-3.1-flash-tts-preview");
     assert_eq!(requests[0]["input"], "reply 1");
-    assert_eq!(requests[0]["voice"], "alloy");
+    assert_eq!(requests[0]["voice"], "Kore");
     assert_eq!(requests[0]["response_format"], "pcm");
     close(run, "a_response_is_spoken_through_the_speech_service");
 }
