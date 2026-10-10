@@ -58,7 +58,7 @@ function isOtherIdentifierEvent(_event) {
 }
 
 function mismatchedResult() {
-  return ({message: 'Voice identification produced output that does not match its apply schema.'});
+  return ({message: 'VoiceIdentification produced output that does not match its output schema.'});
 }
 
 function unidentifiedResult() {

@@ -39,7 +39,10 @@
   bot.ability.reasoning.input (mosfet's deliberate handoff event) escalates
   with reason deliberative_input. mosfet's per-event confidence_gate is off
   by default and the decision service reports no per-event confidence, so
-  there is no gate_dropped_all here. The decision
+  there is no gate_dropped_all here. Nor is there mosfet's routing_rejection
+  retry (a selection the processor grounded but the cognition could not
+  route, re-asked once): the decision service grounds only offered events,
+  and the body drops a selection it cannot route. The decision
   timer is deciding.after (floppy's own bound; mosfet's intuition has none).
 
   Output: <donedata>, received by the cognition as done.invoke.intuition:

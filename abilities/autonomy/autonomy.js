@@ -33,9 +33,10 @@ function silenceDelay() {
   return silence_ms + 'ms';
 }
 
-// Shared by seeding and running: the child answered the turn.
+// Shared by seeding and running: the child answered the turn with at least
+// one selection (mosfet _coerce_behavior_output: an empty one is unhandled).
 function isBehaviorHandled(event) {
-  return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected);
+  return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected) && event.data.selected.length > 0;
 }
 
 function seedSilentLog() {

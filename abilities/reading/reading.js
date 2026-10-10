@@ -77,7 +77,7 @@ function decodedImageText(_event) {
 }
 
 function imageDecodingFailedMessage(_event) {
-  return 'the image decoding failed (' + (typeof Object(_event.data).code === 'string' ? _event.data.code : 'unknown') + ')';
+  return typeof Object(_event.data).code === 'string' ? 'Reading image decoder failed: ' + _event.data.code + '.' : 'Reading image decoder failed.';
 }
 
 function imageDecodingCouldNotRunMessage(_event) {

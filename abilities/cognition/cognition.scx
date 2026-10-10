@@ -19,8 +19,8 @@
       re-enters live and so restarts this ability)
 
   Stages: each stage is an SCXML child invoked per turn inside its substate
-  (abilities/autonomy/autonomy.scx, intuition.scx, reasoning.scx, beside this
-  document) with the turn as <param>s; it answers through its top-level
+  (abilities/autonomy/autonomy.scx, abilities/intuition/intuition.scx,
+  abilities/reasoning/reasoning.scx, in sibling directories) with the turn as <param>s; it answers through its top-level
   final state's <donedata>, received here as done.invoke.<stage> (the
   invoke ids are the stage names; the substates are running_<stage>):
   {turn, handled, selected?, reason?, tuner?, failed?}. Leaving a stage's

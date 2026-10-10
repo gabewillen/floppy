@@ -421,7 +421,7 @@ fn inputs_during_a_turn_wait_and_run_in_order() {
             ("bot.processing.timed_out", r#"{"turn":1}"#),
             (
                 "bot.processing.failed",
-                r#"{"message":"the turn timed out after 1500 ms and was cancelled","turn":1}"#
+                r#"{"message":"Bot processing timed out after 1.5 seconds.","turn":1}"#
             ),
             ("double.input", r#"2 reply "second""#),
             ("double.input", r#"3 reply "third""#),
@@ -449,7 +449,7 @@ fn a_turn_that_times_out_is_cancelled_and_fails() {
             ("bot.processing.timed_out", r#"{"turn":1}"#),
             (
                 "bot.processing.failed",
-                r#"{"message":"the turn timed out after 300 ms and was cancelled","turn":1}"#
+                r#"{"message":"Bot processing timed out after 0.3 seconds.","turn":1}"#
             ),
         ])
     );
@@ -488,6 +488,10 @@ fn an_unacknowledged_cancel_degrades_the_bot() {
         pairs(&[
             ("bot.processing.timed_out", r#"{"turn":1}"#),
             ("bot.processing.cancel.timed_out", r#"{"turn":1}"#),
+            (
+                "bot.processing.failed",
+                r#"{"message":"Bot processing timed out after 0.3 seconds.","turn":1}"#
+            ),
             (
                 "floppy.degraded",
                 "turn 1: the cognition did not acknowledge its cancel"

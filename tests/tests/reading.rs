@@ -250,14 +250,14 @@ fn a_failed_image_decoding_fails_the_reading() {
     assert_eq!(
         texts(&finished, "harness"),
         strings(&[
-            r#"bot.ability.reading.failed {"message":"the image decoding failed (unconfigured)","stage":"image_decoding"}"#
+            r#"bot.ability.reading.failed {"message":"Reading image decoder failed: unconfigured.","stage":"image_decoding"}"#
         ]),
         "{}",
         finished.stderr
     );
     assert_eq!(
         texts(&finished, "reading.failed"),
-        strings(&["image_decoding: the image decoding failed (unconfigured)"])
+        strings(&["image_decoding: Reading image decoder failed: unconfigured."])
     );
 }
 
@@ -270,7 +270,7 @@ fn an_image_decoding_without_a_reply_fails_the_reading() {
     assert_eq!(
         texts(&finished, "harness"),
         strings(&[
-            r#"bot.ability.reading.failed {"message":"the image decoding returned no text","stage":"image_decoding"}"#
+            r#"bot.ability.reading.failed {"message":"Reading image decoder produced non-text output.","stage":"image_decoding"}"#
         ]),
         "{}",
         finished.stderr

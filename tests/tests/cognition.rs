@@ -1363,7 +1363,7 @@ fn cancels_in(
     assert_eq!(texts(&records, "cognition.cancelled"), strings(&[stage]));
     assert_eq!(
         json_text(&records, "bot.processing.failed"),
-        json!({"message": format!("the turn timed out after {timeout_ms} ms and was cancelled"), "turn": 1})
+        json!({"message": format!("Bot processing timed out after {} seconds.", timeout_ms.parse::<f64>().unwrap() / 1000.0), "turn": 1})
     );
     // The cognition is idle again: it offers, and the bot takes the next
     // turn.

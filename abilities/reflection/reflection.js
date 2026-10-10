@@ -2,6 +2,13 @@
 // <script src="reflection.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
+// idle
+
+// An input deferred while the previous reflection was in hand.
+function hasDeferredInput() {
+  return deferred.length > 0;
+}
+
 // Shared by every memory step.
 
 function isFromInvoke(_event, invokeid) {
@@ -121,8 +128,10 @@ function isSelectHopTimeout(_event) {
   return _event.sendid === hop_timer;
 }
 
+// mosfet _fail_cancel_timeout: the select child is cancelled on the hop
+// timeout (synchronously here, as leaving the invoking state cancels it).
 function selectTimedOutMessage() {
-  return 'Reflection select timed out after ' + select_timeout_ms + ' ms';
+  return 'Reflection child cancellation timed out.';
 }
 
 // breaking

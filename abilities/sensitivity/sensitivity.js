@@ -43,5 +43,5 @@ function perceivedLevel(observed, sensitivity_path_gain_db) {
 }
 
 function isPlayoutTimer(_event) {
-  return _event.sendid === 'playout';
+  return _event.sendid === 'producing-after';
 }

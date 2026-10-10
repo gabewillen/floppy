@@ -14,9 +14,8 @@
   Efference copy: bot.ability.speaking.efference {mouth, duration, ...}
   (mosfet's EfferenceData, which the listening forwards) remembers which
   mouth is producing and opens the window for exactly duration seconds:
-  producing arms floppy.sensitivity.playout (floppy's name for mosfet's
-  time event) with that delay
-  and leaving producing cancels it (mosfet's ballistic after()).
+  producing arms producing.after (mosfet's hsm.after on producing) with
+  that delay, and leaving producing cancels it (mosfet's ballistic after()).
 
   Scoring: bot.ability.listening.sensitivity.score {stimulus} (mosfet's
   ScoreData: the environment.sound envelope) answers the listening with
@@ -86,11 +85,11 @@
          prediction for exactly as long as the command lasts. -->
     <state id="producing">
       <onentry>
-        <send id="playout" event="floppy.sensitivity.playout"
+        <send id="producing-after" event="producing.after"
               delayexpr="playoutDelay(sensitivity_playout_seconds)"/>
       </onentry>
       <onexit>
-        <cancel sendid="playout"/>
+        <cancel sendid="producing-after"/>
       </onexit>
       <transition event="bot.ability.listening.sensitivity.score" event:schema="schemas/bot.ability.listening.sensitivity.score.json">
         <assign location="stimulus" expr="_event.data.stimulus"/>
@@ -117,7 +116,7 @@
         <assign location="sensitivity_playout_seconds" expr="_event.data.duration"/>
         <assign location="sensitivity_producing_mouth" expr="_event.data.mouth"/>
       </transition>
-      <transition event="floppy.sensitivity.playout" cond="isPlayoutTimer(_event)" target="quiet"/>
+      <transition event="producing.after" cond="isPlayoutTimer(_event)" target="quiet"/>
     </state>
   </state>
 </scxml>

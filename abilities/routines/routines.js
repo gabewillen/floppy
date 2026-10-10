@@ -22,9 +22,9 @@ function routinesSelectStatements() {
   return [{sql: select_routines, parameters: ['ACTIVE', 'persistent']}];
 }
 
-// The recalled rows, from the one JSON array the select returns.
+// The recalled rows, as the routines the chain runs.
 function routinesFromMemoryOutput(event) {
-  return JSON.parse(event.data.results[0].rows[0].values[0]);
+  return event.data.results[0].rows.map(function (r) { return {name: r.values[0], source: r.values[1]}; });
 }
 
 // mosfet inventory.revision: the recalled rows differ from the running set.

@@ -101,7 +101,7 @@
     </transition>
     <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json"
                 target="encoding">
-      <assign location="text" expr="_event.data.text"/>
+      <assign location="text" expr="spokenText(_event.data.text)"/>
     </transition>
   </state>
 
@@ -116,6 +116,12 @@
     <onexit>
       <cancel sendidexpr="timer"/>
     </onexit>
+    <!-- mosfet speaks the stripped text and refuses a blank one. -->
+    <transition cond="isBlankText()" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="'Speaking requires non-blank text.'"/>
+      </send>
+    </transition>
     <invoke id="vocal" type="scxml" src="../vocal/vocal.scx">
       <param name="output" expr="outputPath()"/>
       <param name="model" expr="model"/>

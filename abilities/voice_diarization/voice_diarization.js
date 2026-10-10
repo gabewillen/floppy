@@ -28,7 +28,7 @@ function isOtherDiarizerEvent(_event) {
 }
 
 function mismatchedResult() {
-  return ({message: 'Voice diarization produced output that does not match its apply schema.'});
+  return ({message: 'VoiceDiarization produced output that does not match its output schema.'});
 }
 
 function undiarizedResult() {

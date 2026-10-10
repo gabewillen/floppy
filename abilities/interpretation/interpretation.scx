@@ -617,16 +617,16 @@
             </send>
           <else/>
             <send event="environment.sound" target="#_parent">
-              <content expr="sensed.sound"/>
+              <content expr="completion.sensed.sound"/>
             </send>
           </if>
         </transition>
-        <!-- Labelled non-speech, or a sound that is not PCM: the sound as
-             it arrived (only these routes reach here from the sound in
-             hand). -->
+        <!-- Labelled non-speech, or a sound that is not PCM: the
+             completion's sound, normalized to PCM where detection did so
+             (mosfet hands off the completion chain's sensed sound). -->
         <transition target="Idle">
           <send event="environment.sound" target="#_parent">
-            <content expr="sensed.sound"/>
+            <content expr="completion.sensed.sound"/>
           </send>
         </transition>
       </state>

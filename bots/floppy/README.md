@@ -18,7 +18,7 @@ stores the turn's episode) and [routines](../../abilities/routines/routines.scx)
 (the ACTIVE persistent behaviors, whose ticks become turns) running beside
 the turns, and the [communication](../../abilities/communication/communication.scx),
 which holds the [conversation](../../abilities/conversation/conversation.scx) (the
-committed text history, one transcript per participant set; each input
+committed text history, one relationship per participant set; each input
 is one turn per source, assembled by a [turn detector](../../abilities/turn_detector/turn_detector.scx);
 it recalls and remembers a relationship's memories, and matching an
 embedding source to an earlier participant's voice is not ported) and
@@ -127,8 +127,10 @@ neither has a default backend. A sound that cannot be heard is logged as
 
 The root has no parent, so each event the body emits is a `log` record
 labelled with its name, its text the event's data as JSON: `bot.activated`,
-`bot.activating.failed`, `bot.deactivated`, `bot.processing.completed`,
-`bot.processing.failed`, and, from the communication,
+`bot.activating.failed`, `bot.deactivated`, `bot.reboot`,
+`bot.processing.completed`, `bot.processing.failed`,
+`bot.processing.timed_out`, `bot.processing.cancel.timed_out`, and, from
+the communication,
 `bot.ability.speaking.output` (what was said),
 `bot.ability.communication.failed`, `bot.ability.conversation.failed`
 and `environment.sound` (speaking's playout, by reference). floppy's own
@@ -136,8 +138,11 @@ records, which are not mosfet events, are labelled `floppy.*`:
 `floppy.output` is the turn's selected events, speaking logs the words as
 `floppy.say`, `floppy.choices` lists each turn's choices (`event` or `event@target`),
 `floppy.route` each routed selection, `floppy.route.dropped` each selection the
-turn did not offer or no transition took, and `floppy.focus` each focus
-change.
+turn did not offer or no transition took, `floppy.focus` each focus
+change, `floppy.deferred` each input deferred during a turn,
+`floppy.degraded` the reason the bot degraded, `floppy.stale` a reply to
+an earlier turn, `floppy.diagnostic` why activation failed, and
+`floppy.rejected` an event the body refused.
 
 ## Proof
 
@@ -160,7 +165,7 @@ change.
   and reboot requests, cancels).
 - `cargo test -p floppy-tests --test communication`: the communication
   path against the cognition double (a routed response said and recorded,
-  conversation input as a turn whose stimulus carries the bounded history,
+  conversation input as a turn whose stimulus carries the history,
   a blank response, a response deferred behind one in flight and the hop
   timeout, malformed input, a child that cannot start), and one response
   spoken through the real speech service on a fake backend, its efference

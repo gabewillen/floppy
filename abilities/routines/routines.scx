@@ -49,8 +49,8 @@
   <datamodel>
     <!-- The memory database (the cognition's), or null. -->
     <data id="database" expr="null"/>
-    <!-- mosfet select_active_behaviors_clauses: the rows as one JSON array. -->
-    <data id="select_routines">SELECT json_group_array(json_object('name', name, 'source', source)) FROM (SELECT name, source FROM bot_behavior WHERE status = ? AND lifetime = ? ORDER BY name)</data>
+    <!-- mosfet select_active_behaviors_clauses: plain rows, portable to both engines. -->
+    <data id="select_routines">SELECT name, source FROM bot_behavior WHERE status = ? AND lifetime = ? ORDER BY name</data>
     <!-- The rows the last recall selected, and the ones the chain runs. -->
     <data id="desired" expr="[]"/>
     <data id="routines" expr="[]"/>

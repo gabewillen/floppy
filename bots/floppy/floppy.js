@@ -163,7 +163,7 @@ function processingCompleted(_event) {
 }
 
 function cognitionFailure(_event) {
-  return JSON.stringify({message: typeof _event.data.message === 'string' && _event.data.message.length > 0 ? _event.data.message : 'the cognition failed', turn: turn});
+  return JSON.stringify({message: typeof _event.data.message === 'string' && _event.data.message.length > 0 ? _event.data.message : 'Bot processing ability failed.', turn: turn});
 }
 
 // The body's own timer for the current turn.
@@ -191,8 +191,10 @@ function cancelDelay() {
   return delay(Math.min(5000, Math.max(100, processing_timeout_ms)));
 }
 
+// mosfet _dispatch_processing_timeout_failure, after an acknowledged cancel
+// and after an unacknowledged one alike.
 function cancelledFailure() {
-  return JSON.stringify({message: 'the turn timed out after ' + processing_timeout_ms + ' ms and was cancelled', turn: turn});
+  return JSON.stringify({message: 'Bot processing timed out after ' + processing_timeout_ms / 1000 + ' seconds.', turn: turn});
 }
 
 function cancelUnacknowledgedReason() {

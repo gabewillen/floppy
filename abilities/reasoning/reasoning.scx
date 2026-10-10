@@ -17,13 +17,18 @@
   ({focus, focus_candidates, stimulus_name, output, behavior} as JSON,
   query_tags cognitive_episode) and sends itself
   bot.ability.reasoning.retained with memory_written true. The context is
-  the stimulus's target_device (mosfet _context_ref_from_input). A memory
-  failure fails the stage ("Reasoning memory recall failed: ..."). Without
+  the stimulus's target_device (mosfet _context_ref_from_input). A recalled
+  row that is not a JSON object is skipped, as mosfet skips one that does
+  not validate. A memory failure fails the stage ("Reasoning memory recall
+  failed: ..."). Without
   a database (mosfet's Reasoning without a memory collaborator) each step
   logs <log label="memory" expr="'absent'"> and sends its event with
   memory_consulted and memory_written false and nothing recalled. The
   model prompt carries the stimulus, the focus, and the recalled
-  prior_episodes and standing_directives (mosfet ProcessorInput).
+  prior_episodes and standing_directives (mosfet ProcessorInput) as JSON,
+  where mosfet renders it as model-facing XML. applying ends on the
+  generate service's done.invoke, which stands in for mosfet's private
+  bot.ability.reasoning.reasoned completion.
 
   Choices: the body's assembled choices for the turn (the <param>
   choices: the body's own and each ability's offers, tagged with the

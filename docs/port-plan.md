@@ -272,6 +272,7 @@ D33 to D43.
 | `vision` VisualClassification, `reading` Reading | `abilities/vision/vision.scx` (reading's child), `abilities/reading/reading.scx` (image decoding through `services/generate`); nothing invokes reading, as in mosfet | ability `.scx` child and service |
 | `conversation/turn_detector` TurnDetector | `abilities/turn_detector/turn_detector.scx`, which the conversation invokes once per source of each input (its `turn_exchange`; decisions D76 to D79, [conventions](#turn-detector-conventions)) | ability `.scx` child |
 | Conversation's voice-centroid participant matching, devices | not ported: each embedding source is its own participant (D79), and devices are out of scope | open |
+| `learning` Learning; memory's ShortTermMemory, LongTermMemory, MemoryConsolidation, AssociativeMemory, MemoryClassification, MemoryGeneration; the body's short-term stimulus register (`stm_memory`); `language/text` TextGeneration | not ported: none is composed by mosfet's Bot by default (Learning and the memory variants are optional, the body's `stm_memory` defaults to none, and TextGeneration serves only host turns). floppy's memory is the base Memory; its schema still creates `bot_stm_memory` | open |
 | payload validators | `event:schema` on the receiving transition plus a short correlation cond | `event:schema` |
 
 ### Builder output

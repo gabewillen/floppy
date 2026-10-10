@@ -25,7 +25,16 @@ function hasQueued() {
 
 // The text that waited longest.
 function queuedText() {
-  return queue[0];
+  return spokenText(queue[0]);
+}
+
+// mosfet speaking: data.text.strip().
+function spokenText(raw) {
+  return String(raw).trim();
+}
+
+function isBlankText() {
+  return text.length === 0;
 }
 
 function remainingQueue() {

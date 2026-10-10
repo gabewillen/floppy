@@ -18,6 +18,8 @@
       processing -empty selection-> storing
     storing -> idle (bot.ability.reflection.output to the cognition)
     any failure -> failing (bot.ability.failed {message}) -> idle
+    an input outside idle waits in deferred and runs from idle, in order
+      (mosfet defers it in every busy state)
 
   Memory: each step that reads or writes the inventory or the episodes is
   one transaction of the memory ability (abilities/memory/memory.scx, a child per
@@ -129,6 +131,8 @@
     <data id="statements" expr="[]"/>
     <data id="results" expr="null"/>
     <data id="failure" expr="null"/>
+    <!-- Inputs deferred while a reflection is in hand (mosfet hsm.defer). -->
+    <data id="deferred" expr="[]"/>
 
     <!-- mosfet SELECT_INSTRUCTIONS, with a routine's schedules as SCXML
          delayed sends. -->
@@ -169,6 +173,16 @@
   <script src="reflection.js"/>
 
   <state id="idle">
+    <transition cond="hasDeferredInput()" target="recalling">
+      <assign location="turn" expr="deferred[0].turn"/>
+      <assign location="cognition_input" expr="deferred[0].cognition_input"/>
+      <assign location="cognition_output" expr="deferred[0].cognition_output"/>
+      <assign location="deferred" expr="deferred.slice(1)"/>
+      <assign location="prior_episodes" expr="[]"/>
+      <assign location="behaviors" expr="[]"/>
+      <assign location="behavior" expr="null"/>
+      <assign location="failure" expr="null"/>
+    </transition>
     <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json"
                 target="recalling">
       <assign location="turn" expr="_event.data.turn"/>
@@ -183,6 +197,9 @@
 
   <!-- The prior episodes and the whole inventory, in one transaction. -->
   <state id="recalling">
+    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+      <assign location="deferred" expr="deferred.concat([_event.data])"/>
+    </transition>
     <onentry>
       <if cond="hasNoDatabase()">
         <log label="reflection" expr="'absent'"/>
@@ -216,6 +233,9 @@
   <!-- The select step: one structured model call over the enabled
        transitions for the inventory events. -->
   <state id="processing">
+    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+      <assign location="deferred" expr="deferred.concat([_event.data])"/>
+    </transition>
     <onentry>
       <decision:choice location="choices" events="bot.behavior.create bot.behavior.change bot.behavior.break"/>
       <decision:compact location="choices"/>
@@ -279,6 +299,9 @@
 
   <!-- mosfet _apply_break: status BROKEN, the row kept. -->
   <state id="breaking">
+    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+      <assign location="deferred" expr="deferred.concat([_event.data])"/>
+    </transition>
     <onentry>
       <assign location="statements" expr="breakBehaviorStatements()"/>
     </onentry>
@@ -306,6 +329,9 @@
   <!-- mosfet Revision: author and check one create or change with the
        builder bot, then store the result. -->
   <state id="revising" initial="preparing">
+    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+      <assign location="deferred" expr="deferred.concat([_event.data])"/>
+    </transition>
     <onentry>
       <send id="revising-after" event="revising.after" delayexpr="revisingTimeoutDelay()"/>
     </onentry>
@@ -436,6 +462,9 @@
 
   <!-- mosfet _store_activity: this turn's episode. -->
   <state id="storing">
+    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+      <assign location="deferred" expr="deferred.concat([_event.data])"/>
+    </transition>
     <onentry>
       <assign location="episode" expr="cognitiveEpisode()"/>
       <assign location="episode.stimulus_name" expr="cognition_input.stimulus.event"/>
@@ -463,6 +492,9 @@
 
   <!-- mosfet _fail_from_stage: the failure goes to the cognition. -->
   <state id="failing">
+    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+      <assign location="deferred" expr="deferred.concat([_event.data])"/>
+    </transition>
     <onentry>
       <log label="reflection.failed" expr="failure"/>
       <send event="bot.ability.failed" target="#_parent">

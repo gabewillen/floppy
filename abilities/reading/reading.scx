@@ -228,7 +228,7 @@
         <transition event="done.invoke" cond="isGenerate(_event)">
           <send event="bot.ability.reading.stage.failed" target="#_internal">
             <param name="stage" expr="'image_decoding'"/>
-            <param name="message" expr="'the image decoding returned no text'"/>
+            <param name="message" expr="'Reading image decoder produced non-text output.'"/>
           </send>
         </transition>
         <transition event="error.*">

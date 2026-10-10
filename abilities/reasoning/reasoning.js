@@ -43,9 +43,20 @@ function directiveSelectStatements() {
   return statements.concat([{sql: episode_select, parameters: ['standing_directive', context_ref]}]);
 }
 
-// The parsed contents of the rows of one statement's result.
+// The parsed contents of the rows of one statement's result; a row that is
+// not a JSON object is skipped (mosfet episodes_from_contents and
+// directives_from_contents skip rows that do not validate).
 function recalledContents(_event, index) {
-  return _event.data.results[index].rows.map(function (row) { return JSON.parse(row.values[0]); });
+  return _event.data.results[index].rows.map(function (row) { return parsedContent(row.values[0]); }).filter(function (content) { return content !== null; });
+}
+
+function parsedContent(text) {
+  try {
+    var content = JSON.parse(text);
+    return content !== null && typeof content === 'object' && !Array.isArray(content) ? content : null;
+  } catch (error) {
+    return null;
+  }
 }
 
 function recallFailedResult(detail) {

@@ -210,6 +210,8 @@
     </onentry>
     <onexit>
       <assign location="queue" expr="[]"/>
+      <!-- mosfet _clear_focus on every reboot and deactivate. -->
+      <assign location="focused_device" expr="null"/>
     </onexit>
     <invoke id="cognition" type="scxml" src="../../abilities/cognition/cognition.scx">
       <param name="model" expr="model"/>
@@ -354,6 +356,9 @@
       </transition>
 
       <state id="unfocused">
+        <onentry>
+          <assign location="focused_device" expr="null"/>
+        </onentry>
         <transition cond="hasQueuedStimulus()" target="processing">
           <assign location="stimulus" expr="queuedStimulus()"/>
           <assign location="queue" expr="queueRest()"/>
@@ -472,6 +477,7 @@
         <transition event="bot.processing.cancel.timed_out" event:schema="schemas/bot.processing.cancel.timed_out.json"
                     cond="isCurrentTurnTimer(_event)" target="degraded">
           <log label="bot.processing.cancel.timed_out" expr="turnJson()"/>
+          <log label="bot.processing.failed" expr="cancelledFailure()"/>
           <assign location="degraded_reason" expr="cancelUnacknowledgedReason()"/>
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json"
