@@ -47,11 +47,18 @@
   out its environment actions first: its selections less the deliberate
   handoff and bot.ability.cognition.ignore (mosfet _environment_actions),
   as selected in the donedata, which the cognition routes before
-  reasoning's own selections. There is no mosfet routing_rejection retry (a
-  selection the processor grounded but the cognition could not route,
-  re-asked once): the decision service grounds only offered events, and the
-  body drops a selection it cannot route. The decision timer is
-  deciding.after (floppy's own bound; mosfet's intuition has none).
+  reasoning's own selections. The decision timer is deciding.after
+  (floppy's own bound; mosfet's intuition has none).
+
+  Dispatch (mosfet _dispatch_selections_activity,
+  cognition.types.dispatch_selected_events): the selections handed out are
+  checked before the stage answers: <bot:verdict> removes ignore
+  selections and applies attention_selection_error with the turn's focus
+  and focus_candidates, then <decision:route> places each on the target
+  offering it in the choices. One that cannot be placed fails the stage
+  with mosfet's "Selection rejected: <message>". mosfet first re-asks its
+  processor once with the rejection as feedback (routing_rejection); the
+  decision service takes no such feedback, so that retry is not ported.
 
   Output: <donedata>, received by the cognition as done.invoke.intuition:
 
@@ -60,12 +67,13 @@
                                           (escalate to reasoning)
     {turn, handled: false, failed: true, reason, tuner}
 
+  A rejected selection,
   decision.failed, error.*, or no answer within decision_timeout_ms fails
   the stage (the cognition answers the turn with bot.ability.failed); the
   cognition's hop timeout bounds the whole stage too.
 
-  Bindings: the decision namespace and service packages, resolved from their
-  repository URIs; env scopes TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
+  Bindings: the bot namespace package, and the decision namespace and
+  service packages, resolved from their repository URIs; env scopes TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
   service's <invoke> (without a key it answers decision.failed
   unconfigured). An invoked service's events are not checked against
   event:schema (scxml.rs checks only events between SCXML sessions): the
@@ -74,6 +82,7 @@
   by cond (Object(...) reads a non-object as {}).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -95,6 +104,10 @@
     <data id="decision_timer" expr="null"/>
     <data id="result" expr="null"/>
     <data id="failed_code" expr="null"/>
+    <!-- The selection being dispatched, and why it was rejected (null when
+         placed). -->
+    <data id="dispatch_selections" expr="[]"/>
+    <data id="rejection" expr="null"/>
   </datamodel>
   <script src="intuition.js"/>
 
@@ -128,6 +141,14 @@
         <assign location="result" expr="escalatedResult('deliberative_input', _event)"/>
       <else/>
         <assign location="result" expr="selectionResult(_event)"/>
+      </if>
+      <bot:verdict location="dispatch_selections" rejectionlocation="rejection" selections="result.selected"
+                   focus="focus" candidates="focus_candidates"/>
+      <if cond="isAccepted()">
+        <decision:route location="dispatch_selections" rejectionlocation="rejection" selections="dispatch_selections" choices="choices"/>
+      </if>
+      <if cond="isRejected()">
+        <assign location="result" expr="rejectedResult()"/>
       </if>
     </transition>
     <transition event="decision.abstain" cond="isAbstainReason(_event)" target="done">

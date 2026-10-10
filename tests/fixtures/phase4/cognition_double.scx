@@ -29,15 +29,16 @@
   * twice: selects bot.ability.communication.respond twice;
   * then_blank: selects bot.ability.communication.respond, then again with
     blank text (the second waits for the first);
-  * unoffered: selects bot.ability.reasoning.input (offered by no ability
-    the body invokes);
+  * unoffered: selects bot.ability.communication.respond, then
+    bot.ability.reasoning.input (offered by no ability the body invokes);
   * adopt: selects bot.ability.identity.adopt for the observation's data;
   * admit: selects bot.ability.communication.input naming no target, the
     speech's words after the first from source "caller" (as mosfet's
     SpeechHeard seed admits heard speech);
   * ignore: selects bot.ability.cognition.ignore for target cognition;
   * focus: selects bot.focus_device for the observation's data;
-  * elsewhere: selects bot.ability.cognition.ignore for target speaking;
+  * elsewhere: selects bot.ability.communication.respond for target
+    identity (which does not offer it);
   * fail: answers bot.ability.failed;
   * stale: answers for another turn first, then for this one;
   * addressed: answers with one bot.ability.communication.respond
@@ -47,8 +48,8 @@
   * deaf: never answers and never acknowledges a cancel.
 
   It logs double.input per turn (turn, behavior, observation data),
-  double.choices (the turn's choices as JSON), double.ignore when a routed
-  bot.ability.cognition.ignore reaches it, and double.exit when it is
+  double.choices (the turn's choices as JSON), double.ignore if a
+  bot.ability.cognition.ignore ever reaches it (the body never sends one), and double.exit when it is
   cancelled.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
@@ -125,7 +126,7 @@
         <if cond="action === 'unoffered'">
           <send event="bot.ability.cognition.output" target="#_parent">
             <param name="turn" expr="turn"/>
-            <param name="output" expr="[{event: 'bot.ability.reasoning.input', data: {}}]"/>
+            <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {text: 'hello'}}, {event: 'bot.ability.reasoning.input', data: {}}]"/>
           </send>
         </if>
         <if cond="action === 'adopt'">
@@ -155,7 +156,7 @@
         <if cond="action === 'elsewhere'">
           <send event="bot.ability.cognition.output" target="#_parent">
             <param name="turn" expr="turn"/>
-            <param name="output" expr="[{event: 'bot.ability.cognition.ignore', data: {}, target: 'speaking'}]"/>
+            <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {text: 'x'}, target: 'identity'}]"/>
           </send>
         </if>
         <if cond="action === 'focus'">

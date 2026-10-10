@@ -341,7 +341,20 @@ function couldNotRunResult(_event) {
   return ({turn: turn, handled: false, failed: true, reason: 'the reasoning could not run (' + _event.name + ')'});
 }
 
+// dispatching
+
+// No selection was rejected.
+function isAccepted() {
+  return rejection === null;
+}
+
+// mosfet: the rejection fails the stage with its message.
+function rejectedResult() {
+  return ({turn: turn, handled: false, failed: true, reason: rejection});
+}
+
 // retaining
+
 
 // The turn's episode, as JSON.
 function episodeContent() {

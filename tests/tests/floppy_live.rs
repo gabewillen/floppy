@@ -93,13 +93,19 @@ fn texts(records: &[Json], label: &str) -> Vec<String> {
         .collect()
 }
 
-/// Every selection of the turn's output was routed, and none dropped.
+/// The turn completed, and every selection of its output but an ignore
+/// (never dispatched) was routed.
 fn all_routed(records: &[Json], output: Option<&Json>) -> bool {
     let selected = output
         .and_then(|output| output["output"].as_array())
-        .map_or(usize::MAX, Vec::len);
+        .map_or(usize::MAX, |items| {
+            items
+                .iter()
+                .filter(|item| item["event"] != "bot.ability.cognition.ignore")
+                .count()
+        });
     texts(records, "floppy.route").len() == selected
-        && texts(records, "floppy.route.dropped").is_empty()
+        && texts(records, "bot.processing.failed").is_empty()
 }
 
 fn model() -> String {
@@ -158,7 +164,7 @@ fn live_cascade() {
 /// One turn on a bot with a lamp, for an input that names the lamp: the
 /// body's choices are its own `bot.focus_device` (pinned to the lamp) and
 /// the cognition's and the communication's offers; whatever the cascade selects is routed (a focus
-/// on the lamp moves the body's attention there), and nothing is dropped.
+/// on the lamp moves the body's attention there), and the turn completes.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_choices() {

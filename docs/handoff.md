@@ -11,6 +11,18 @@ Last updated: 2026-10-10.
 
 ## Current state (2026-10-09) — resume here
 
+- **Selections the body can't place (audit item 4, 2026-10-10):** a turn
+  whose selections cannot all be placed fails with `bot.processing.failed`
+  and mosfet's `SelectionRejectionError` message, never
+  `bot.processing.completed`; `floppy.route.dropped` is gone. `<bot:verdict>`
+  (ignore selections removed, mosfet `attention_selection_error`) and
+  `<decision:route rejectionlocation choices>` (mosfet `_resolve_target`)
+  run where mosfet dispatches: in autonomy before a learned behavior's use
+  is counted (a rejected one is counted failed and fails the turn),
+  intuition ("Selection rejected: ...", without mosfet's one retry),
+  reasoning (before retaining), and in the body's `routing` before it logs
+  the outcome (which catches the trusted seed's selection).
+  `<decision:assemble>` lost `routeslocation`.
 - **Phase 7 (2026-10-10):** done except publishing
   ([plan](plans/phase7-pglite-defaults.mdscript.md), decisions D48 to D51
   and D69 to D72). Memory runs on two engines behind the unchanged Memory

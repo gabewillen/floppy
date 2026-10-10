@@ -1119,7 +1119,6 @@ fn ignore_offer() -> Json {
 fn assemble_attributes(bound: &str) -> Vec<Attribute> {
     vec![
         location("choices"),
-        attr("routeslocation", "routes"),
         attr("choices", "own"),
         attr("offers", "offers"),
         attr("bound", bound),
@@ -1142,7 +1141,7 @@ fn assembling() -> FakeHost {
 }
 
 #[test]
-fn assemble_tags_offers_by_target_in_name_order_compacts_and_builds_the_routes() {
+fn assemble_tags_offers_by_target_in_name_order_and_compacts() {
     let mut host = assembling();
     assert_eq!(
         execute("assemble", &assemble_attributes("32768"), &[], &mut host),
@@ -1156,20 +1155,12 @@ fn assemble_tags_offers_by_target_in_name_order_compacts_and_builds_the_routes()
         {"event": "bot.ability.cognition.ignore", "schema": {"type": "object"}, "target": "communication"},
     ]);
     assert_eq!(assigned_any(&host, "choices"), choices);
-    assert_eq!(
-        assigned_any(&host, "routes"),
-        json!({
-            "bot.clear_focus": [null],
-            "bot.ability.cognition.ignore": ["cognition", "communication"],
-            "bot.ability.communication.respond": ["communication"],
-        })
-    );
     assert_eq!(assigned(&host, "over"), Data::Bool(false));
     let size = canonical_json(&choices).len();
     assert_eq!(assigned(&host, "size"), number(size));
-    // The flags and the routes are assigned before the choices.
+    // The flags are assigned before the choices.
     let order: Vec<&str> = host.assigned.iter().map(|(at, _)| at.as_str()).collect();
-    assert_eq!(order, ["over", "size", "routes", "choices"]);
+    assert_eq!(order, ["over", "size", "choices"]);
 }
 
 #[test]
@@ -1207,7 +1198,7 @@ fn assemble_over_the_bound_drops_descriptions_then_keeps_the_list_and_sets_over(
 fn malformed_assembles_raise_error_execution_and_assign_nothing() {
     let cases: Vec<(Vec<Attribute>, Json, Json, &str)> = vec![
         (
-            assemble_attributes("1")[..3].to_vec(),
+            assemble_attributes("1")[..2].to_vec(),
             json!([]),
             json!({}),
             "decision:assemble requires a non-empty offers",
@@ -1216,7 +1207,7 @@ fn malformed_assembles_raise_error_execution_and_assign_nothing() {
             [assemble_attributes("1"), vec![attr("events", "x")]].concat(),
             json!([]),
             json!({}),
-            "decision:assemble takes only the location, routeslocation, choices, offers, bound, overlocation and sizelocation attributes",
+            "decision:assemble takes only the location, choices, offers, bound, overlocation and sizelocation attributes",
         ),
         (
             assemble_attributes("-1"),
@@ -1265,96 +1256,142 @@ fn malformed_assembles_raise_error_execution_and_assign_nothing() {
     }
 }
 
-fn routing(selections: &Json) -> Json {
+fn route_attributes() -> [Attribute; 4] {
+    [
+        location("placed"),
+        attr("rejectionlocation", "rejection"),
+        attr("selections", "selections"),
+        attr("choices", "choices"),
+    ]
+}
+
+/// What `<decision:route>` assigns, in order, for the selections by the
+/// choices: the body's `bot.clear_focus`, the cognition's and the
+/// communication's ignore, the communication's respond.
+fn routing(selections: &Json) -> Vec<(String, Data)> {
     let mut host = with_values(&[
         ("selections", selections.clone()),
         (
-            "routes",
-            json!({
-                "bot.clear_focus": [null],
-                "bot.ability.cognition.ignore": ["cognition", "communication"],
-                "bot.ability.communication.respond": ["communication"],
-            }),
+            "choices",
+            json!([
+                clear_choice(),
+                {"event": "bot.ability.cognition.ignore", "schema": {}, "target": "cognition"},
+                {"event": "bot.ability.communication.respond", "schema": {}, "target": "communication"},
+                {"event": "bot.ability.cognition.ignore", "schema": {}, "target": "communication"},
+            ]),
         ),
     ]);
     assert_eq!(
-        execute(
-            "route",
-            &[
-                location("routed"),
-                attr("selections", "selections"),
-                attr("routes", "routes")
-            ],
-            &[],
-            &mut host
-        ),
+        execute("route", &route_attributes(), &[], &mut host),
         Ok(Executed::Handled)
     );
-    assigned_any(&host, "routed")
+    host.assigned
+}
+
+fn rejected(selections: &Json) -> Data {
+    let assigned = routing(selections);
+    assert_eq!(
+        assigned[1],
+        ("placed".to_owned(), Data::JsonArray("[]".into()))
+    );
+    assigned[0].1.clone()
 }
 
 #[test]
-fn route_places_each_selection_in_order_or_says_why_not() {
-    let routed = routing(&json!([
-        {"event": "bot.clear_focus"},
-        {"event": "bot.ability.communication.respond", "data": {"text": "hi"}, "reason": "greet"},
-        {"event": "bot.ability.cognition.ignore", "data": null, "target": "cognition"},
-        {"event": "bot.ability.cognition.ignore"},
-        {"event": "bot.ability.communication.respond", "target": "cognition"},
-        {"event": "bot.focus_device", "data": {"device": "lamp"}},
-        {"data": {}},
-        "respond",
-    ]));
+fn route_places_every_selection_in_order() {
+    let placed = json!([
+        {"event": "bot.clear_focus", "data": {}, "target": null},
+        {"event": "bot.ability.communication.respond", "data": {"text": "hi"}, "target": "communication"},
+        {"event": "bot.ability.cognition.ignore", "data": {}, "target": "cognition"},
+    ]);
     assert_eq!(
-        routed,
-        json!([
-            {"event": "bot.clear_focus", "data": {}, "target": null},
-            {"event": "bot.ability.communication.respond", "data": {"text": "hi"}, "target": "communication"},
-            {"event": "bot.ability.cognition.ignore", "data": {}, "target": "cognition"},
-            {"dropped": "bot.ability.cognition.ignore names no target among [\"cognition\",\"communication\"]"},
-            {"dropped": "bot.ability.communication.respond is not offered by cognition"},
-            {"dropped": "bot.focus_device was not offered this turn"},
-            {"dropped": "a malformed selection"},
-            {"dropped": "a malformed selection"},
-        ])
+        routing(&json!([
+            {"event": "bot.clear_focus"},
+            {"event": "bot.ability.communication.respond", "data": {"text": "hi"}, "reason": "greet"},
+            {"event": "bot.ability.cognition.ignore", "data": null, "target": "cognition"},
+        ])),
+        vec![
+            ("rejection".to_owned(), Data::Null),
+            (
+                "placed".to_owned(),
+                Data::JsonArray(canonical_json(&placed))
+            ),
+        ]
     );
+}
+
+#[test]
+fn a_selection_that_cannot_be_placed_rejects_them_all_with_mosfets_message() {
+    let respond = json!({"event": "bot.ability.communication.respond", "data": {"text": "hi"}});
+    for (selection, message) in [
+        (
+            json!({"event": "bot.focus_device", "data": {"device": "lamp"}}),
+            "Processing selected unavailable event: bot.focus_device.",
+        ),
+        (
+            json!({"event": "bot.focus_device", "target": "lamp"}),
+            "Processing selected unavailable event for target lamp: bot.focus_device.",
+        ),
+        (
+            json!({"event": "bot.ability.communication.respond", "target": "cognition"}),
+            "Processing selected unavailable event for target cognition: bot.ability.communication.respond.",
+        ),
+        (
+            json!({"event": "bot.clear_focus", "target": "bot"}),
+            "Processing selected unavailable event for target bot: bot.clear_focus.",
+        ),
+        (
+            json!({"event": "bot.ability.cognition.ignore"}),
+            "Processing selected unavailable event: bot.ability.cognition.ignore.",
+        ),
+        (
+            json!({"data": {}}),
+            "Processing selected a malformed event selection.",
+        ),
+        (
+            json!("respond"),
+            "Processing selected a malformed event selection.",
+        ),
+    ] {
+        assert_eq!(
+            rejected(&json!([respond.clone(), selection.clone()])),
+            Data::String(message.to_owned()),
+            "{selection}"
+        );
+    }
 }
 
 #[test]
 fn malformed_routes_raise_error_execution_and_assign_nothing() {
-    let route_attributes = [
-        location("routed"),
-        attr("selections", "selections"),
-        attr("routes", "routes"),
-    ];
+    let attributes = route_attributes();
     let cases: Vec<(&[Attribute], Json, Json, &str)> = vec![
         (
-            &route_attributes[..2],
+            &attributes[..3],
             json!([]),
-            json!({}),
-            "decision:route requires a non-empty routes",
+            json!([]),
+            "decision:route requires a non-empty choices",
         ),
         (
-            &route_attributes,
+            &attributes,
             json!({}),
-            json!({}),
+            json!([]),
             "decision:route selections is not an array",
         ),
         (
-            &route_attributes,
+            &attributes,
             json!([]),
-            json!({"x": "cognition"}),
-            "decision:route routes is not a routing table",
+            json!({}),
+            "decision:route choices does not hold choices",
         ),
         (
-            &route_attributes,
+            &attributes,
             json!([]),
-            json!({"x": [1]}),
-            "decision:route routes is not a routing table",
+            json!([{"event": "x"}]),
+            "decision:route found a malformed choice",
         ),
     ];
-    for (attributes, selections, routes, detail) in cases {
-        let mut host = with_values(&[("selections", selections), ("routes", routes)]);
+    for (attributes, selections, choices, detail) in cases {
+        let mut host = with_values(&[("selections", selections), ("choices", choices)]);
         assert_eq!(
             execution(execute("route", attributes, &[], &mut host)),
             detail
@@ -1365,7 +1402,7 @@ fn malformed_routes_raise_error_execution_and_assign_nothing() {
     assert_eq!(
         execution(execute(
             "route",
-            &route_attributes,
+            &attributes,
             &[Content::Text("x".into())],
             &mut host
         )),

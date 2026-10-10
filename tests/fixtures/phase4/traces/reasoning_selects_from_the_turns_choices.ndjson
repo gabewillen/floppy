@@ -15,8 +15,6 @@
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}
 {"label":"floppy.output","session":"session","text":"{\"turn\":1,\"output\":[{\"data\":{},\"event\":\"bot.ability.cognition.ignore\",\"reason\":\"nothing to say\",\"target\":\"cognition\"}]}","type":"log"}
 {"label":"bot.processing.completed","session":"session","text":"{\"output\":[{\"data\":{},\"event\":\"bot.ability.cognition.ignore\",\"reason\":\"nothing to say\",\"target\":\"cognition\"}],\"focus_candidates\":[],\"turn\":1}","type":"log"}
-{"label":"floppy.route","session":"session","text":"bot.ability.cognition.ignore -> cognition","type":"log"}
-{"label":"cognition.ignore","parent":"session","session":"session.1","text":"idle","type":"log"}
 {"label":"reflection","parent":"session.1","session":"session.2","text":"turn 1: 1 episodes, 0 behaviors","type":"log"}
 {"label":"reflection.selected","parent":"session.1","session":"session.2","text":"none","type":"log"}
 {"label":"reflection.stored","parent":"session.1","session":"session.2","text":"turn 1","type":"log"}

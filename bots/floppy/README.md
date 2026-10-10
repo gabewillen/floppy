@@ -36,7 +36,14 @@ assembles the choices (its own
 `bot.clear_focus` while a device is focused, plus each ability's latest
 `bot.ability.offers`, tagged with the ability as `target`, compacted and
 held to 32 KiB) and routes each selected event of the turn's output to the
-body itself or to the ability that offered it: a selected
+body itself or to the ability that offered it. As in mosfet, an ignore
+selection is never dispatched, and a selection the body cannot place (a
+focus outside the turn's candidates, a clear with nothing focused, an
+event not offered this turn, a target that does not offer it, or several
+offerers and no target) fails the whole turn with
+`bot.processing.failed` (mosfet's `SelectionRejectionError` message)
+before anything is sent; the cognition's stages make the same checks
+before they answer. A selected
 `bot.ability.communication.respond` is said through speaking and recorded
 in the conversation. Input addressed to the bot as
 `bot.ability.communication.input` is admitted into the conversation, whose
@@ -140,8 +147,7 @@ and `environment.sound` (speaking's playout, by reference). floppy's own
 records, which are not mosfet events, are labelled `floppy.*`:
 `floppy.output` is the turn's selected events, speaking logs the words as
 `floppy.say`, `floppy.choices` lists each turn's choices (`event` or `event@target`),
-`floppy.route` each routed selection, `floppy.route.dropped` each selection the
-turn did not offer or no transition took, `floppy.focus` each focus
+`floppy.route` each routed selection, `floppy.focus` each focus
 change, `floppy.deferred` each input deferred during a turn,
 `floppy.degraded` the reason the bot degraded, `floppy.stale` a reply to
 an earlier turn, `floppy.diagnostic` why activation failed, and
@@ -151,8 +157,8 @@ an earlier turn, `floppy.diagnostic` why activation failed, and
 
 - `cargo test -p floppy-tests --test body`: the lifecycle and turn matrix
   against a cognition double (`tests/fixtures/phase4/cognition_double.scx`),
-  and the choices and routing (the offer union, focus grounding, dropped
-  selections, ignore, the 32 KiB budget).
+  and the choices and routing (the offer union, focus grounding, turns failed
+  by a selection that cannot be placed, ignore, the 32 KiB budget).
 - `cargo test -p floppy-tests --test listening`: the listening under a
   harness, with the speech service decoding against a fake backend
   (`tests/tests/support/hearing.rs`): decoded speech, labelled non-speech,

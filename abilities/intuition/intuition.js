@@ -115,6 +115,20 @@ function decisionFailedResult() {
   return ({handled: false, failed: true, reason: 'the decision failed (' + failed_code + ')', turn: turn, tuner: tuner});
 }
 
+// No selection was rejected.
+function isAccepted() {
+  return rejection === null;
+}
+
+function isRejected() {
+  return rejection !== null;
+}
+
+// mosfet _selection_rejection_message: the rejection fails the stage.
+function rejectedResult() {
+  return ({handled: false, failed: true, reason: 'Selection rejected: ' + rejection, turn: turn, tuner: tuner});
+}
+
 function timedOutResult() {
   return ({handled: false, failed: true, reason: 'the decision timed out after ' + decision_timeout_ms + ' ms', turn: turn, tuner: tuner});
 }

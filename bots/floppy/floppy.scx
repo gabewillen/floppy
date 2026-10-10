@@ -89,23 +89,34 @@
   relayed list of 48264 B, with its raw message, is over the 96 KiB event
   bound, so its send raises error.execution in the sender) every description is
   dropped too, and if they are still over the turn fails without reaching
-  the cognition. The routing table routes maps each offered event to the
-  targets offering it, and routes a selected
-  bot.ability.communication.input to the body itself, which takes it as
-  outside communication input.
+  the cognition.
 
-  Routing: a completed turn goes through routing, where <decision:route>
-  places each selected event of the output, in order, and the body sends it
-  to its receiver: an event the body offered
-  to itself (#_internal), else the ability whose invoke id is the
-  selection's target, or the only ability offering it when the selection
-  names none (#_<id>). A selection the routing table cannot place (not
-  offered this turn, or an unoffered target) is dropped with
-  <log label="floppy.route.dropped">, and so is a routed body event that no
-  transition takes (bot.focus_device for a device outside the turn's
-  candidates, bot.clear_focus with nothing focused). floppy.routed [floppy
-  name], raised after the selections, ends routing once every routed body
-  event has been taken (the internal queue is FIFO).
+  Routing: the cognition's output goes through routing, which checks every
+  selection before the turn's outcome is logged, as mosfet's cognition
+  does before it dispatches any (cognition.types.dispatch_selected_events):
+  <bot:verdict> removes the bot.ability.cognition.ignore selections (the
+  cognition's own terminal product, never dispatched) and applies mosfet's
+  attention_selection_error to the focus and clear selections (the turn's
+  focus and focus_candidates), then <decision:route> places each remaining
+  one on the target offering it in the turn's choices (mosfet
+  _resolve_target): an event the body offered to itself (#_internal),
+  else the ability whose invoke id is the selection's target, or the only
+  ability offering it when the selection names none (#_<id>). The body
+  also places a selected bot.ability.communication.input on itself (mosfet
+  dispatches the trusted SpeechHeard seed's selection to a declared event
+  of the bot), which takes it as outside communication input. A selection
+  that cannot be placed (refused by the attention policy, not offered this
+  turn, offered by another target, or offered by several when it names
+  none) fails the whole turn before anything is sent: bot.processing.failed
+  with mosfet's SelectionRejectionError message, never
+  bot.processing.completed (mosfet bot.py: illegal selections fail the
+  turn instead of silently dropping). The cognition's stages make the same
+  checks before they answer (autonomy, intuition, reasoning), so this one
+  catches what reaches the body unchecked (the trusted seed's selection).
+  Otherwise bot.processing.completed is logged and each placed selection is
+  sent, in order. floppy.routed [floppy name], raised after the
+  selections, ends routing once every routed body event has been taken
+  (the internal queue is FIFO).
 
   Outputs: the root has no parent, so each event the body emits is written
   as <log label="EVENT" expr="JSON data">: bot.activated,
@@ -185,15 +196,17 @@
     <data id="focus_candidates" expr="[]"/>
     <data id="queue" expr="[]"/>
     <data id="pending" expr="null"/>
-    <!-- The turn's choices and routing table, and its selections. -->
+    <!-- The turn's choices, its output, the selections dispatched, and
+         why they were rejected (null when placed). -->
     <data id="offering" expr="false"/>
     <data id="body_choices" expr="[]"/>
     <data id="choices" expr="[]"/>
     <data id="choice_names" expr="''"/>
-    <data id="routes" expr="({})"/>
     <data id="choices_over" expr="false"/>
     <data id="choices_size" expr="0"/>
     <data id="selections" expr="[]"/>
+    <data id="dispatch_selections" expr="[]"/>
+    <data id="rejection" expr="null"/>
     <data id="routing_selections" expr="false"/>
     <data id="routed_selections" expr="[]"/>
     <data id="route" expr="null"/>
@@ -332,14 +345,14 @@
       </transition>
       <!-- The body's own choices (mosfet: focus on active, clear only while
            a device is focused), offered on processing entry and taken only
-           as routed selections of the turn. -->
+           as routed selections of the turn (<bot:verdict> has checked
+           them; one that no longer applies, a second clear in one turn, is
+           ignored, as mosfet's guard ignores it). -->
       <transition event="bot.focus_device" event:schema="schemas/bot.focus_device.json"
                   cond="focusDeviceEnabled()">
         <if cond="isFocusCandidate(_event)">
           <assign location="focused_device" expr="_event.data.device"/>
           <log label="floppy.focus" expr="focused_device"/>
-        <else/>
-          <log label="floppy.route.dropped" expr="untakenRoutedEventLog(_event)"/>
         </if>
       </transition>
       <transition event="bot.clear_focus" event:schema="schemas/bot.clear_focus.json"
@@ -347,8 +360,6 @@
         <if cond="hasFocusedDevice()">
           <assign location="focused_device" expr="null"/>
           <log label="floppy.focus" expr="'none'"/>
-        <else/>
-          <log label="floppy.route.dropped" expr="untakenRoutedEventLog(_event)"/>
         </if>
       </transition>
 
@@ -392,12 +403,8 @@
           <assign location="offering" expr="false"/>
           <decision:pin location="body_choices" event="bot.focus_device" property="device" values="focus_candidates"/>
           <!-- bound: 32 KiB, the failure message below names it. -->
-          <decision:assemble location="choices" routeslocation="routes" choices="body_choices" offers="offers"
+          <decision:assemble location="choices" choices="body_choices" offers="offers"
                              bound="32768" overlocation="choices_over" sizelocation="choices_size"/>
-          <!-- A selected bot.ability.communication.input (mosfet's
-               SpeechHeard seed admits heard speech this way) is the body's
-               own: it goes through active's transition for outside input. -->
-          <assign location="routes['bot.ability.communication.input']" expr="[null]"/>
           <decision:names location="choice_names" choices="choices"/>
           <log label="floppy.choices" expr="choice_names"/>
           <if cond="choicesFit()">
@@ -419,7 +426,6 @@
         <transition event="bot.ability.cognition.output" event:schema="schemas/bot.ability.cognition.output.json"
                     cond="isCurrentTurn(_event)" target="routing">
           <log label="floppy.output" expr="botOutput(_event)"/>
-          <log label="bot.processing.completed" expr="processingCompleted(_event)"/>
           <assign location="selections" expr="_event.data.output"/>
         </transition>
         <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
@@ -483,33 +489,44 @@
         </transition>
       </state>
 
-      <!-- The completed turn's selections, each sent to its receiver; the
-           routed body events are taken (by active's transitions) before
-           floppy.routed. -->
+      <!-- The turn's selections, checked, then each sent to its receiver;
+           the routed body events are taken (by active's transitions) before
+           floppy.routed. A selection that cannot be placed fails the turn
+           before anything is sent. -->
       <state id="routing">
         <onentry>
           <assign location="routing_selections" expr="true"/>
-          <decision:route location="routed_selections" selections="selections" routes="routes"/>
-          <foreach array="routed_selections" item="route">
-            <if cond="isDroppedRoute(route)">
-              <log label="floppy.route.dropped" expr="route.dropped"/>
-            <elseif cond="isBodyRoute(route)"/>
-              <log label="floppy.route" expr="bodyRouteLog(route)"/>
-              <send eventexpr="route.event" target="#_internal">
-                <content expr="route.data"/>
-              </send>
-            <else/>
-              <log label="floppy.route" expr="abilityRouteLog(route)"/>
-              <send eventexpr="route.event" targetexpr="abilityTarget(route.target)">
-                <content expr="route.data"/>
-              </send>
-            </if>
-          </foreach>
+          <bot:verdict location="dispatch_selections" rejectionlocation="rejection" selections="selections"
+                       focus="focus" candidates="focus_candidates"/>
+          <if cond="isAccepted()">
+            <decision:route location="routed_selections" rejectionlocation="rejection" selections="dispatch_selections"
+                            choices="routeChoices()"/>
+          </if>
+          <if cond="isAccepted()">
+            <log label="bot.processing.completed" expr="processingCompleted()"/>
+            <foreach array="routed_selections" item="route">
+              <if cond="isBodyRoute(route)">
+                <log label="floppy.route" expr="bodyRouteLog(route)"/>
+                <send eventexpr="route.event" target="#_internal">
+                  <content expr="route.data"/>
+                </send>
+              <else/>
+                <log label="floppy.route" expr="abilityRouteLog(route)"/>
+                <send eventexpr="route.event" targetexpr="abilityTarget(route.target)">
+                  <content expr="route.data"/>
+                </send>
+              </if>
+            </foreach>
+          <else/>
+            <log label="bot.processing.failed" expr="rejectionFailure()"/>
+          </if>
           <raise event="floppy.routed"/>
         </onentry>
         <onexit>
           <assign location="routing_selections" expr="false"/>
           <assign location="selections" expr="[]"/>
+          <assign location="dispatch_selections" expr="[]"/>
+          <assign location="rejection" expr="null"/>
           <assign location="routed_selections" expr="[]"/>
         </onexit>
         <transition event="floppy.routed" target="returning"/>
