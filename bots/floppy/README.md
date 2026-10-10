@@ -37,15 +37,15 @@ Activate it, then give it inputs, on standard input:
 # The locally built packages (the dev cache under target/).
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env bots/floppy/floppy.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/floppy/floppy.scx
 # A conversation: text addressed to the bot, answered through bot.say.
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env bots/floppy/floppy.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/floppy/floppy.scx
 # floppy's latest release, once one is published (phase 7).
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
-  scx run --env-file .env bots/floppy/floppy.scx
+  scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/floppy/floppy.scx
 ```
 
 The env file must set `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
@@ -56,8 +56,10 @@ every turn fails with `the intuition failed: the decision failed
 (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
 `bot.activate` may name the model (`{"model": "..."}`); the default is
-`Qwen/Qwen3.8-Flash-Next`. The services import no WASI resources, so the run
-needs no grants.
+`Qwen/Qwen3.8-Flash-Next`. The `generate` service imports `wasi:filesystem`
+(it reads the images a message names), so the run grants it a media
+directory with `--dir` (create `media/` first; it is ignored by git); `scx
+run` refuses a run that binds the service without it.
 
 The root has no parent, so each event the body emits is a `log` record
 labelled with its name, its text the event's data as JSON: `bot.activated`,

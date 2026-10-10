@@ -37,10 +37,10 @@ sh scripts/build-components.sh
 SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml" \
   cargo install --locked --path scxml.rs/crates/scxml-cli
 # A bot, with the locally built packages.
-scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx
+scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
 # A bot, with the packages of floppy's latest GitHub release (once phase 7
 # publishes one).
-scx run --env-file .env bots/builder/builder.scx
+scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
 ```
 
 A bot's document is all a run needs: its namespaces and `<invoke type>`s are
@@ -50,7 +50,9 @@ same document runs against the dev cache `scripts/build-components.sh`
 fills (`--offline --cache-dir`) and against a release, unedited; its `env`
 attributes decide which `<invoke>` receives which variable of the env file,
 and an `<invoke src>` loads by URI (relative to its document, `file:`, or
-`https:`) with no flag. Each bot's README gives
+`https:`) with no flag. The `generate` service reads the images a message
+names from a directory the run grants, so every run that binds it gives one
+`--dir` (create `media/` first; it is ignored by git). Each bot's README gives
 its input events ([bots/builder/README.md](bots/builder/README.md#running)).
 
 Contributor rules are in [AGENTS.md](AGENTS.md).
