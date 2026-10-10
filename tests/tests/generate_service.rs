@@ -326,6 +326,121 @@ fn a_failing_backend_returns_generate_failed() {
     );
 }
 
+/// A PNG signature and two bytes: the smallest file the service sends as
+/// `image/png`.
+const PNG: &[u8] = b"\x89PNG\r\n\x1a\nab";
+
+/// `--dir` granting the generate service `dir` at `/media`.
+fn media(dir: &Path) -> Vec<String> {
+    vec![
+        "--dir".to_owned(),
+        format!("{}={}::/media", generate(), dir.display()),
+    ]
+}
+
+/// The parameters of mosfet's `ImageDecoder` reading the image `reference`.
+fn image_params(reference: &str) -> String {
+    format!(
+        r#"<param name="model" expr="'mock-model'"/>
+      <param name="messages" expr="[{{role: 'user', content: [{{kind: 'text', content: 'Read all visible text in this image. Return only the text.'}}, {{kind: 'image', content: '{reference}'}}]}}]"/>"#
+    )
+}
+
+#[test]
+fn an_image_part_reaches_the_backend_as_a_data_url() {
+    let mock = Mock::start();
+    let env = env_file("image", &format!("{}/text/v1", mock.origin));
+    let granted = support::unique_scratch("generate-media");
+    std::fs::write(granted.join("page.png"), PNG).expect("the image is writable");
+    let mut args = args(&env);
+    args.extend(media(&granted));
+    let finished = open(
+        &args,
+        &document(&image_params("media/page.png"), "_event.data.text"),
+    );
+    let records = &finished.records;
+    assert_eq!(
+        logs(records),
+        labelled(&[("reply", "Hello from the fake backend!"), ("final", "done")]),
+        "{records:?}"
+    );
+    assert!(
+        finished.stderr.contains("  = WASI resources: --dir "),
+        "the consent listing shows the grant: {}",
+        finished.stderr
+    );
+    let received = mock.received();
+    assert_eq!(received.len(), 1, "exactly one request");
+    assert_eq!(
+        String::from_utf8(received[0].body.clone()).expect("UTF-8"),
+        r#"{"messages":[{"content":[{"text":"Read all visible text in this image. Return only the text.","type":"text"},{"image_url":{"url":"data:image/png;base64,iVBORw0KGgphYg=="},"type":"image_url"}],"role":"user"}],"model":"mock-model","reasoning_effort":"low","stream":true}"#,
+        "the image is sent as a data URL of the granted file's bytes"
+    );
+}
+
+#[test]
+fn an_image_reference_outside_the_grant_rejects_the_start_and_sends_nothing() {
+    let mock = Mock::start();
+    let env = env_file("image-outside", &format!("{}/text/v1", mock.origin));
+    let granted = support::unique_scratch("generate-media");
+    let outside = support::unique_scratch("generate-outside");
+    std::fs::write(outside.join("page.png"), PNG).expect("the image is writable");
+    std::fs::write(granted.join("note.txt"), "not an image").expect("the file is writable");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(outside.join("page.png"), granted.join("escape.png"))
+        .expect("the symlink is creatable");
+    let mut args = args(&env);
+    args.extend(media(&granted));
+    for reference in [
+        // A directory the run never granted.
+        "elsewhere/page.png",
+        // The granted directory's parent, by a dot segment.
+        "media/../page.png",
+        // A file the grant does not hold.
+        "media/missing.png",
+        // A file that is not an image.
+        "media/note.txt",
+        // A symlink inside the grant to a file outside it.
+        "media/escape.png",
+    ] {
+        let finished = open(
+            &args,
+            &document(&image_params(reference), "_event.data.text"),
+        );
+        assert_eq!(
+            logs(&finished.records),
+            labelled(&[("final", "rejected")]),
+            "{reference}: {:?}",
+            finished.records
+        );
+    }
+    assert!(mock.received().is_empty(), "nothing is sent");
+}
+
+/// The service imports `wasi:filesystem`, so a run that binds it without
+/// a `--dir` grant is refused before anything runs.
+#[test]
+fn a_run_without_a_media_grant_is_refused() {
+    let env = env_file("no-grant", "http://127.0.0.1:9/v1");
+    let path = support::write(
+        &support::unique_scratch("generate-no-grant"),
+        "generate.scx",
+        &document(TEXT_PARAMS, "_event.data.text"),
+    );
+    let output = support::output(&[
+        "run".to_owned(),
+        "--env-file".to_owned(),
+        env.display().to_string(),
+        path.display().to_string(),
+    ]);
+    let stderr = &output.stderr;
+    assert!(!output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("whose resource the run does not grant"),
+        "{stderr}"
+    );
+}
+
 #[test]
 fn parameters_the_package_validator_sees_refuse_the_run_and_send_nothing() {
     let mock = Mock::start();
@@ -660,4 +775,31 @@ fn live_generate_through_an_env_file() {
     let pass = logs(&finished.records) == labelled(&[("reply", "true"), ("final", "done")]);
     println!("live generate: {}", if pass { "pass" } else { "fail" });
     assert!(pass, "the live generation did not pass");
+}
+
+/// One real image reading through an env file, as mosfet's `ImageDecoder`
+/// reads (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, a vision model): the
+/// fixture `tests/fixtures/total-due.png` (mosfet's reading example, "Total
+/// due: $14.21") is granted at `/media` and read by reference.
+/// Prints nothing but pass or fail.
+#[test]
+#[ignore = "makes one real model call; needs FLOPPY_LIVE_ENV_FILE and a vision model"]
+fn live_image_reading_through_an_env_file() {
+    let mut args: Vec<String> = support::live_env_files()
+        .iter()
+        .flat_map(|path| args(path))
+        .collect();
+    args.extend(media(&support::workspace().join("tests/fixtures")));
+    let model =
+        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "Qwen/Qwen3.8-Flash-Next".into());
+    let params = image_params("media/total-due.png").replace("'mock-model'", &format!("'{model}'"));
+    let finished = open_with(
+        &args,
+        &document(&params, "_event.data.text.indexOf('14.21') &gt;= 0"),
+        &[],
+        Duration::from_secs(180),
+    );
+    let pass = logs(&finished.records) == labelled(&[("reply", "true"), ("final", "done")]);
+    println!("live image reading: {}", if pass { "pass" } else { "fail" });
+    assert!(pass, "the live image reading did not pass");
 }

@@ -124,14 +124,31 @@ expected_imports() {
                 'stateforward:scxml/telemetry@0.2.0' \
                 'stateforward:scxml/data-model-host@0.2.0'
             ;;
-        # The generate and decision services: one async `invoke` export
-        # (their events go to the stream it returns) and one request through
-        # outbound-http's async `fetch`; they never read the logical clock.
-        floppy_service_generate|floppy_service_decision)
+        # The decision service: one async `invoke` export (its events go to
+        # the stream it returns) and one request through outbound-http's
+        # async `fetch`; it never reads the logical clock.
+        floppy_service_decision)
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
                 'stateforward:scxml/outbound-http@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0'
+            ;;
+        # The generate service: the same, and the images a message names,
+        # read from the directory the run grants. Like the sql service it
+        # keeps exactly the filesystem it imports for the host (linked only
+        # under `--dir`); wasi:cli and the 0.2 monotonic clock are denied by
+        # the composed provider (services/sql/wasi-cli-deny.wat).
+        floppy_service_generate)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/outbound-http@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'wasi:io/poll@0.2.12' \
+                'wasi:clocks/wall-clock@0.2.12' \
+                'wasi:io/error@0.2.12' \
+                'wasi:io/streams@0.2.12' \
+                'wasi:filesystem/types@0.2.12' \
+                'wasi:filesystem/preopens@0.2.12'
             ;;
         # The sql service: one async `invoke` export and SQLite on a file
         # in the directory the run grants. It keeps exactly the filesystem
@@ -271,8 +288,8 @@ build_component() {
         virt_input=$seeded
         ;;
     esac
-    if [ "$component" = floppy_service_sql ]; then
-        # The sql service keeps its filesystem imports for the host: a
+    if [ "$component" = floppy_service_sql ] || [ "$component" = floppy_service_generate ]; then
+        # The sql and generate services keep their filesystem imports for the host: a
         # wasi-virt adapter would virtualize the filesystem too, so the
         # standard library's and wasi-libc's other WASI imports (wasi:cli and
         # the monotonic clock) are satisfied by the pinned deny-all provider

@@ -245,17 +245,23 @@ impl Run {
     /// Starts `scx run` with `args` (the document among them) and the
     /// extra environment `env`.
     ///
-    /// A run whose document tree binds the sql service (decided by
-    /// [`binds_sql`]) and that grants it no directory gets a fresh one
-    /// ([`memory_grant`]): the service imports `wasi:filesystem`, and a run
-    /// that binds it without a `--dir` grant is refused.
+    /// A run whose document tree binds the sql or the generate service
+    /// (decided by [`binds`]) and that grants it no directory gets a fresh
+    /// one ([`memory_grant`], [`media_grant`]): both services import
+    /// `wasi:filesystem`, and a run that binds one without a `--dir` grant
+    /// is refused.
     pub fn start(args: &[String], env: &[(&str, &str)]) -> Self {
         let mut full = vec!["run".to_owned()];
         full.extend_from_slice(args);
-        let sql = service_uri("sql");
-        let granted = args.iter().any(|arg| arg.starts_with(&format!("{sql}=")));
-        if !granted && args.iter().any(|arg| binds_sql(Path::new(arg))) {
-            full.splice(1..1, memory_grant());
+        for (name, grant) in [
+            ("sql", memory_grant as fn() -> Vec<String>),
+            ("generate", media_grant),
+        ] {
+            let uri = service_uri(name);
+            let granted = args.iter().any(|arg| arg.starts_with(&format!("{uri}=")));
+            if !granted && args.iter().any(|arg| binds(Path::new(arg), name)) {
+                full.splice(1..1, grant());
+            }
         }
         let mut command = command(&full);
         for (name, value) in env {
@@ -448,11 +454,24 @@ pub fn memory_grant() -> Vec<String> {
     ]
 }
 
+/// `--dir` granting the generate service a fresh scratch directory at
+/// `/media`, where the images its messages name are read.
+pub fn media_grant() -> Vec<String> {
+    vec![
+        "--dir".to_owned(),
+        format!(
+            "{}={}::/media",
+            service_uri("generate"),
+            unique_scratch("media").display()
+        ),
+    ]
+}
+
 /// Whether the `.scx` document at `path`, or a document it loads by a
-/// literal relative `<invoke src>` (recursively), names the sql service's
+/// literal relative `<invoke src>` (recursively), names the service `name`'s
 /// URI. Anything that is not a readable `.scx` file names none.
-pub fn binds_sql(path: &Path) -> bool {
-    fn visit(path: &Path, seen: &mut Vec<PathBuf>) -> bool {
+pub fn binds(path: &Path, name: &str) -> bool {
+    fn visit(path: &Path, uri: &str, seen: &mut Vec<PathBuf>) -> bool {
         let Ok(path) = path.canonicalize() else {
             return false;
         };
@@ -463,7 +482,7 @@ pub fn binds_sql(path: &Path) -> bool {
         let Ok(text) = std::fs::read_to_string(&path) else {
             return false;
         };
-        if text.contains(&service_uri("sql")) {
+        if text.contains(uri) {
             return true;
         }
         let dir = path.parent().unwrap_or(Path::new("/")).to_owned();
@@ -471,9 +490,9 @@ pub fn binds_sql(path: &Path) -> bool {
             .skip(1)
             .filter_map(|rest| rest.split('"').next())
             .filter(|src| !src.contains(':'))
-            .any(|src| visit(&dir.join(src), seen))
+            .any(|src| visit(&dir.join(src), uri, seen))
     }
-    visit(path, &mut Vec::new())
+    visit(path, &service_uri(name), &mut Vec::new())
 }
 
 /// A scratch directory of its own for each call (tests run in parallel).
