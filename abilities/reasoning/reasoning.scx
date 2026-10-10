@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Reasoning stage (mosfet abilities/cognition/reasoning): the slow
+  System 2 pass. The cognition (abilities/cognition/cognition.scx) invokes it once
+  per turn that intuition left unhandled.
+
+    recalling (memory seam) -> applying (an invoked generate service)
+      -> retaining (memory seam) -> done
+
+  Memory is an honest seam until phase 3: recalling and retaining each log
+  <log label="memory" expr="'absent'"> and send their mosfet result event to itself (#_internal)
+  (bot.ability.reasoning.recalled, bot.ability.reasoning.retained) with
+  memory_consulted (and memory_written) false and nothing recalled; the
+  model request carries no recalled episode. Phase 3 replaces each such send
+  with an <invoke> of services/memory.
+
+  Choices: the body's assembled choices for the turn (the <param>
+  choices: the body's own and each ability's offers, tagged with the
+  offering ability's invoke id as target). A selection is returned, not
+  taken: the body routes it. The structured-output schema is built from
+  the choices by <decision:selection>, as mosfet's dispatch tool:
+  {events: [anyOf one branch per offered event]}, each branch {event (a
+  one-value enum), data (the event's schema without $schema, title and
+  examples), reason, and target (an enum of the abilities offering it) when
+  an ability offers it}, every field required and no extra property, sent
+  strict. The generate service returns only a reply that satisfies it, so a
+  selection outside the choices (event or target) fails the stage as
+  schema-mismatch. With no choices the stage fails without a model call.
+
+  Input: the <param>s turn, stimulus, focus, focus_candidates, choices and
+  model. Output: <donedata>, received by the cognition as
+  done.invoke.reasoning:
+
+    {turn, handled: true, selected: [{event, data, reason, target?}]}
+    {turn, handled: false, failed: true, reason}
+
+  The cognition's hop timeout bounds the stage (leaving it cancels the model
+  call, SCXML 6.4).
+
+  Bindings: the generate service package and the decision namespace
+  (<decision:selection> builds the schema, <decision:names> writes the
+  logged choice names), resolved from their
+  repository URIs; env scopes FLOPPY_API_KEY and
+  FLOPPY_BASE_URL to the service's <invoke> (no default backend: without
+  either it answers generate.failed unconfigured). The generate service's
+  events are recorded by <finalize>.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="reasoning" initial="recalling">
+  <datamodel>
+    <!-- The turn, from the cognition's <param>s. -->
+    <data id="turn" expr="0"/>
+    <data id="stimulus" expr="null"/>
+    <data id="focus" expr="null"/>
+    <data id="focus_candidates" expr="[]"/>
+    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="choices" expr="[]"/>
+    <data id="choice_names" expr="''"/>
+    <data id="system" expr="'You are the deliberate reasoning of floppy, a small companion robot. You receive one stimulus the robot observed, as JSON, with what the robot is looking at. Select every event the robot should take for it from the offered events (an empty list selects none), with its data, its target when the event names one, and a short reason. When an offered event says something, give it the complete text to say.'"/>
+    <!-- The model call: its schema, invocation, and reply. -->
+    <data id="schema" expr="null"/>
+    <data id="gen_id" expr="null"/>
+    <data id="selected" expr="null"/>
+    <data id="gen_failure" expr="null"/>
+    <data id="result" expr="null"/>
+  </datamodel>
+  <script src="reasoning.js"/>
+
+  <!-- Memory seam (phase 3): nothing is recalled. -->
+  <state id="recalling">
+    <onentry>
+      <log label="memory" expr="'absent'"/>
+      <send event="bot.ability.reasoning.recalled" target="#_internal">
+        <param name="turn" expr="turn"/>
+        <param name="host_input" expr="hostInput()"/>
+        <param name="prior_episodes" expr="[]"/>
+        <param name="memory_consulted" expr="false"/>
+        <param name="input" expr="focusInput()"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
+                cond="hasRecalledWithoutChoices(_event)"
+                target="done">
+      <assign location="result" expr="noChoicesResult()"/>
+    </transition>
+    <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
+                cond="hasRecalled(_event)"
+                target="applying"/>
+  </state>
+
+  <!-- One structured model call; leaving this state cancels it. -->
+  <state id="applying">
+    <onentry>
+      <decision:selection location="schema" choices="choices"/>
+      <assign location="selected" expr="null"/>
+      <assign location="gen_failure" expr="null"/>
+      <decision:names location="choice_names" choices="choices"/>
+      <log label="reasoning" expr="choiceNamesLog()"/>
+    </onentry>
+    <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
+            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
+      <param name="model" expr="model"/>
+      <param name="system" expr="system"/>
+      <param name="prompt" expr="modelPrompt()"/>
+      <param name="schema" expr="schema"/>
+      <param name="schemaname" expr="'dispatch'"/>
+      <param name="strict" expr="true"/>
+      <finalize>
+        <assign location="selected" expr="generatedSelection(_event)"/>
+        <assign location="gen_failure" expr="generateFailure(_event)"/>
+      </finalize>
+    </invoke>
+
+    <transition event="done.invoke" cond="hasSelection(_event)" target="retaining"/>
+    <transition event="done.invoke" cond="isGenerateDone(_event)" target="done">
+      <assign location="result" expr="failedResult()"/>
+    </transition>
+    <transition event="error.*" target="done">
+      <assign location="result" expr="couldNotRunResult(_event)"/>
+    </transition>
+  </state>
+
+  <!-- Memory seam (phase 3): nothing is written. -->
+  <state id="retaining">
+    <onentry>
+      <log label="memory" expr="'absent'"/>
+      <send event="bot.ability.reasoning.retained" target="#_internal">
+        <param name="turn" expr="turn"/>
+        <param name="result" expr="selected"/>
+        <param name="memory_consulted" expr="false"/>
+        <param name="memory_written" expr="false"/>
+        <param name="input" expr="focusInput()"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.reasoning.retained" event:schema="schemas/bot.ability.reasoning.retained.json"
+                cond="hasRetained(_event)"
+                target="done">
+      <assign location="result" expr="selectedResult()"/>
+    </transition>
+  </state>
+
+  <final id="done">
+    <donedata>
+      <content expr="result"/>
+    </donedata>
+  </final>
+</scxml>

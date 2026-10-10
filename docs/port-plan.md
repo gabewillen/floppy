@@ -239,15 +239,15 @@ D33 to D43.
 | `_selection_item_branch`, `dispatch_tool` | `<decision:selection>` | `namespaces/decision` element |
 | `ConfidenceTuner` | `<decision:tuner>` | `namespaces/decision` element |
 | `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`, `_stable_context_ref`, `MessageProvenance` | `<conversation:commit>` | `namespaces/conversation` element |
-| `cognition.py` Cognition | `abilities/cognition.scx` | ability `.scx` child |
-| `autonomy.py` Autonomy | `abilities/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<content expr>` children) | stage `.scx` child |
-| `intuition.py` Intuition | `abilities/intuition.scx` invoking `services/decision` | stage `.scx` child and service |
-| `reasoning.py` Reasoning | `abilities/reasoning.scx` invoking `services/generate` | stage `.scx` child and service |
-| `communication.py` Communication | `abilities/communication.scx` | ability `.scx` child |
-| `conversation.py` Conversation | `abilities/conversation.scx` | ability `.scx` child |
-| `speaking.py` Speaking | `abilities/speaking.scx` (text mode) | ability `.scx` child |
-| `identity/identity.py` Identity | `abilities/identity.scx`; text name match `<bot:recognize>`; adoption and recall are memory seams (decision D43) | ability `.scx` child |
-| Reflection, Routines | `abilities/reflection.scx`, `abilities/routines.scx` seams; routines are builder-built `.scx` children (phase 5) | ability `.scx` child |
+| `cognition.py` Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |
+| `autonomy.py` Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<content expr>` children) | stage `.scx` child |
+| `intuition.py` Intuition | `abilities/intuition/intuition.scx` invoking `services/decision` | stage `.scx` child and service |
+| `reasoning.py` Reasoning | `abilities/reasoning/reasoning.scx` invoking `services/generate` | stage `.scx` child and service |
+| `communication.py` Communication | `abilities/communication/communication.scx` | ability `.scx` child |
+| `conversation.py` Conversation | `abilities/conversation/conversation.scx` | ability `.scx` child |
+| `speaking.py` Speaking | `abilities/speaking/speaking.scx` (text mode) | ability `.scx` child |
+| `identity/identity.py` Identity | `abilities/identity/identity.scx`; text name match `<bot:recognize>`; adoption and recall are memory seams (decision D43) | ability `.scx` child |
+| Reflection, Routines | `abilities/reflection/reflection.scx`, `abilities/routines/routines.scx` seams; routines are builder-built `.scx` children (phase 5) | ability `.scx` child |
 | Behaviors (Starlark) | builder-built `.scx` documents | generated `.scx` |
 | Memory and its providers | `services/memory` (phase 3) | invoked service |
 | Listening, reading, turn detectors, devices | phase 6 `.scx` children and Wasm services | out of phase 4 |
@@ -263,7 +263,7 @@ the one exception to the literal relative `src` rule. scxml.rs reads
 source gets none, and a schema-file reference rejects it when it is
 invoked (`error.execution`). So builder output carries no `event:schema`
 reference (and, like every floppy document, no inline schema and no
-`<script>`): its host checks what it answers. `abilities/autonomy.scx`
+`<script>`): its host checks what it answers. `abilities/autonomy/autonomy.scx`
 runs the ACTIVE turn behaviors the stimulus triggers with `turn` and
 `input` and answers with the first one's `<donedata>` `handled` and
 `selected` (the phase 5 plan's "Turn Behavior Contract").

@@ -13,7 +13,7 @@ created: 2026-10-10
 
 ## Rules For Every Slice
 
-* everything the phase 4 and phase 3 plans' rules say still holds: `.scx` only for bots, abilities, behaviors and routines; no `<script>`; payloads checked by `event:schema` only (D42); conds only correlate; SQL lives in top-level `<data>`; memory is the Memory ability (`abilities/memory.scx`, over the sql service)
+* everything the phase 4 and phase 3 plans' rules say still holds: `.scx` only for bots, abilities, behaviors and routines; no `<script>`; payloads checked by `event:schema` only (D42); conds only correlate; SQL lives in top-level `<data>`; memory is the Memory ability (`abilities/memory/memory.scx`, over the sql service)
 * names are mosfet's (events, payload fields, statuses, lifetimes, table columns), with mosfet = floppy; floppy names only what SCXML forces (a state that holds a gated invoke)
 * a behavior or routine is one SCXML document stored as `bot_behavior.source` and run as a child by `<invoke type="scxml"><content expr="source"/></invoke>` (no file, no srcexpr); like every invoked child it gets no schema files, so it carries no `event:schema` references
 * the builder bot (`bots/builder/builder.scx`) is mosfet's Revision authoring and check loop (the model writes the program, it is validated, diagnostics drive the retry); no Starlark port
@@ -25,7 +25,7 @@ created: 2026-10-10
 | mosfet | floppy |
 | --- | --- |
 | `behavior.Source` (Starlark: `input_event`, `output_event`, `triggers`, `description`, `lifetime`, `hsm.define`) | an SCXML document; `name`, `triggers`, `description`, `lifetime` are its `bot_behavior` row's columns |
-| `Instance` (`status` `ACTIVE`/`DRAFT`/`BROKEN`, `lifetime` `turn`/`persistent`, usage counters) | the `bot_behavior` and `bot_behavior_trigger` rows (mosfet's 0001/0002 DDL, run by `abilities/memory.scx`) |
+| `Instance` (`status` `ACTIVE`/`DRAFT`/`BROKEN`, `lifetime` `turn`/`persistent`, usage counters) | the `bot_behavior` and `bot_behavior_trigger` rows (mosfet's 0001/0002 DDL, run by `abilities/memory/memory.scx`) |
 | `inventory.store_behavior` (delete then insert, `cause`) | one memory transaction: delete triggers, delete row, insert row, insert triggers |
 | `Behavior.apply` (input event, output selections, 1 s silence bound) | the turn behavior contract below |
 | `hsm.every` / `hsm.at` routines, `bot.behavior.tick` `TickData` | a persistent routine document: `<send delay>` loops that send `bot.behavior.tick` to `#_parent` |
@@ -46,7 +46,7 @@ created: 2026-10-10
 
 * mosfet's inventory events are contracts already (phase 4): `abilities/schemas/bot.behavior.{create,change,break,tick}.json`, listed in `tests/tests/contracts.rs`
 
-* Match Turn Behaviors In Autonomy: `abilities/autonomy.scx` loads the ACTIVE turn behaviors whose trigger is the stimulus's event name (one Memory ability transaction, by name) and runs each source as the child `candidate` by `<content expr>` with a 1 s silence bound; handled persists `used_count`/`last_used_at`, a source that cannot run persists `failed_count`/`last_failed_at`; the cognition passes `stimulus` and `memory` (`<data id="memory">`, null until the body passes it); tests `autonomy_runs_the_learned_behaviors_the_stimulus_triggers`, `when_no_learned_behavior_handles_the_turn_intuition_runs`. A source that does not compile fails the invocation with an `error.execution` that carries no invokeid (SCXML 3.12.2), so the candidate state takes any `error.*`
+* Match Turn Behaviors In Autonomy: `abilities/autonomy/autonomy.scx` loads the ACTIVE turn behaviors whose trigger is the stimulus's event name (one Memory ability transaction, by name) and runs each source as the child `candidate` by `<content expr>` with a 1 s silence bound; handled persists `used_count`/`last_used_at`, a source that cannot run persists `failed_count`/`last_failed_at`; the cognition passes `stimulus` and `memory` (`<data id="memory">`, null until the body passes it); tests `autonomy_runs_the_learned_behaviors_the_stimulus_triggers`, `when_no_learned_behavior_handles_the_turn_intuition_runs`. A source that does not compile fails the invocation with an `error.execution` that carries no invokeid (SCXML 3.12.2), so the candidate state takes any `error.*`
 
 ## Slices
 

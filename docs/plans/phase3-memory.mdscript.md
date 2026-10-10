@@ -15,7 +15,7 @@ created: 2026-10-09
 ## Rules For Every Slice
 
 * read `docs/handoff.md`, `docs/decisions.md` and `AGENTS.md` before the first slice of a session; trust them over `docs/port-plan.md`
-* everything the phase 4 plan's [Rules For Every Slice](phase4-bot-core.mdscript.md#rules-for-every-slice) says still holds: `.scx` documents only for bots and abilities, no `<script>` and no `function`, payloads checked by `event:schema` only (decision D42), conds only correlate, every cross-document `<send>` visible, mosfet event names byte for byte
+* everything the phase 4 plan's [Rules For Every Slice](phase4-bot-core.mdscript.md#rules-for-every-slice) says still holds: `.scx` documents only for bots and abilities, each `<name>/<name>.scx` with its ECMAScript in `<name>/<name>.js` (decision D44), payloads checked by `event:schema` only (decision D42), conds only correlate, every cross-document `<send>` visible, mosfet event names byte for byte
 * memory is I/O, so it is an invoked service (`<invoke type="https://github.com/stateforward/floppy/services/memory">`), never executable content and never a namespace element (AGENTS.md, decision D13)
 * the service's contract is mosfet's Memory ability (`mosfet/abilities/memory/store.py`): one invocation is one transaction of ordered, parameterized statements that all commit or all roll back; the documents own their SQL exactly as mosfet's domain code owns its SQLAlchemy clauses
 * every SQL text a document sends lives in a top-level `<data>` (where the 160-character `expr` bound does not apply); bind values go in `parameters`, never into the SQL text
@@ -41,9 +41,9 @@ created: 2026-10-09
 | `memory/schema.py`, `migrations/versions/0001`, `0002` | the service's migrations, run on open to `PRAGMA user_version` 2 | in the service |
 | `memory_model` topology (`idle` → `applying` with `hsm.defer`) | the invoking state: `<invoke>` on entry, `done.invoke.<id>` on completion, a `<send delay>` timer to preempt it | topology of each caller |
 | `Statement`, `InputData`, `Row`, `StatementResult`, `OutputData`, `FailureData` | `<invoke>` `<param name="statements">`; `bot.ability.memory.output` and `bot.ability.failed`, described by `event:schema` in `abilities/schemas/` | event contracts |
-| `episodes.py` `episode_select_input`/`episode_insert_input`, `directives.py` `directive_select_input` | SQL `<data>` and statements in `abilities/reasoning.scx` (`recalling`, `retaining`) | ability `.scx` |
-| `identity/name.py` `name_select_input`/`name_insert_input`/`adopted_name` | SQL `<data>` in `abilities/identity.scx` (`recalling`, `adopting`) | ability `.scx` |
-| `conversation/memory.py` recall and insert | SQL `<data>` in `abilities/conversation.scx` (`recalling`) and `abilities/communication.scx` | ability `.scx` |
+| `episodes.py` `episode_select_input`/`episode_insert_input`, `directives.py` `directive_select_input` | SQL `<data>` and statements in `abilities/reasoning/reasoning.scx` (`recalling`, `retaining`) | ability `.scx` |
+| `identity/name.py` `name_select_input`/`name_insert_input`/`adopted_name` | SQL `<data>` in `abilities/identity/identity.scx` (`recalling`, `adopting`) | ability `.scx` |
+| `conversation/memory.py` recall and insert | SQL `<data>` in `abilities/conversation/conversation.scx` (`recalling`) and `abilities/communication/communication.scx` | ability `.scx` |
 | `MemoryGeneration`, `MemoryClassification`, `MemoryConsolidation`, `AssociativeMemory`, `StmMemory`, `ShortTermMemory`, `LongTermMemory` | not in phase 3: they are model-driven or stimulus-driven abilities over the same store; each becomes a `.scx` ability invoking `services/memory` when a later phase needs it | later |
 
 ## Next Steps
@@ -70,7 +70,7 @@ created: 2026-10-09
 ### Recall And Retain Reasoning Episodes
 
 * goal: reasoning's `recalling` and `retaining` seams become invocations of the memory service, as mosfet `Reasoning._recall_activity` and `_retain_activity`
-* files: `abilities/reasoning.scx`, `abilities/cognition.scx` (passes `memory` through), `tests/tests/cognition.rs`, the cognition traces
+* files: `abilities/reasoning/reasoning.scx`, `abilities/cognition/cognition.scx` (passes `memory` through), `tests/tests/cognition.rs`, the cognition traces
 * `recalling` invokes the service with mosfet's two selects in one transaction (prior episodes with `query_tags = 'cognitive_episode'`, standing directives with `'standing_directive'`, each for the turn's context or none, oldest first, at most 50) and answers `bot.ability.reasoning.recalled` with `prior_episodes` and `memory_consulted: true`; the model prompt carries the recalled episodes and directives
 * `retaining` inserts one episode (`{focus, focus_candidates, stimulus_name, output}` as JSON, `scope 'short_term'`, `kind 'task'`, the memory id from SQLite's `randomblob`) and answers `bot.ability.reasoning.retained` with `memory_written: true`
 * a memory failure or a timeout fails the stage as mosfet does (`Reasoning memory recall failed: ...`)
@@ -80,14 +80,14 @@ created: 2026-10-09
 ### Recall And Adopt The Identity Name
 
 * goal: identity's `recalling` and `adopting` seams become invocations of the memory service, as mosfet `Identity._recall_name` and `_adopt_name`
-* files: `abilities/identity.scx`, `bots/floppy/floppy.scx` (passes `memory`), `tests/tests/identity.rs`, the identity traces
+* files: `abilities/identity/identity.scx`, `bots/floppy/floppy.scx` (passes `memory`), `tests/tests/identity.rs`, the identity traces
 * `recalling` selects the adopted names (`query_tags = 'self_name'`, `subject_ref = 'self'`, oldest first) and takes the last as the name, else the `<param>` name; `adopting` inserts the name (`scope 'long_term'`, `kind` the name's kind, `created_at` with microseconds so two adoptions in one second order) and answers `adopted {name, persisted: true}`, or `bot.ability.identity.adopt.failed` when the transaction fails
 * done when: the full proof is green and a second run of the bot on the same directory answers to the name the first adopted
 
 ### Recall And Remember Conversations
 
 * goal: the conversation's `recalling` seam recalls the relationship's memories, and each committed message is remembered, as mosfet `conversation/memory.py`
-* files: `abilities/conversation.scx`, `abilities/communication.scx` (passes `memory`), `tests/tests/communication.rs`, the communication traces
+* files: `abilities/conversation/conversation.scx`, `abilities/communication/communication.scx` (passes `memory`), `tests/tests/communication.rs`, the communication traces
 * recall selects `content` where `query_tags = 'conversation_memory'` and `context_ref` is the relationship's (the `<conversation:commit>` transcript key), oldest first, at most 50, and the output carries them as `memories`; each committed message is inserted with `scope 'short_term'`, `kind 'conversation'`
 * done when: the full proof is green and a second run on the same directory recalls the first run's messages
 

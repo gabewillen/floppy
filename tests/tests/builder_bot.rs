@@ -669,6 +669,8 @@ fn run(mock: &Mock, test: &str, route: &str, env: &[&str], request: &Json) -> Ve
 /// scratch file.
 fn run_builder(mock: &Mock, test: &str, route: &str, builder: &str, request: &Json) -> Vec<Json> {
     let dir = scratch("builder-variant");
+    std::fs::copy(builder_dir().join("builder.js"), dir.join("builder.js"))
+        .expect("the builder's script is copyable");
     let document = write(&dir, &format!("{test}.scx"), builder);
     let env = env_file(test, mock, route, "typesafe", &ALL);
     start(&document, "logical", &[env], request, &[])

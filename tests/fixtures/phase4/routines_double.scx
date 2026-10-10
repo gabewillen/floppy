@@ -2,7 +2,7 @@
 <!--
   A routines double for the cognition tests (tests/tests/cognition.rs):
   the cognition's child "routines" with one running routine that ticks
-  once. tests/tests/cognition.rs copies it over abilities/routines.scx.
+  once. tests/tests/cognition.rs copies it over abilities/routines/routines.scx.
 
   The first bot.ability.routines.reconcile (the cognition sends it after
   reflection settles a turn) fires the routine: it sends one

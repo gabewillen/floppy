@@ -11,6 +11,14 @@ Last updated: 2026-10-09.
 
 ## Current state (2026-10-09) — resume here
 
+- **Layout (2026-10-10, D44):** every bot and ability is
+  `<name>/<name>.scx` with its ECMAScript in `<name>/<name>.js` beside it
+  (one root `<script src="<name>.js"/>`; conds and exprs call its
+  functions). Abilities are `abilities/<ability>/<ability>.scx`, each with
+  byte-identical twins of the schemas it references in
+  `abilities/<ability>/schemas/` (canonical files stay in
+  `abilities/schemas/`). Tests lay abilities out with
+  `support::copy_ability`.
 - **floppy:** work continues on branch `claude/project-thread-brkerr`
   (pushed to the private `gabewillen/floppy`; `main` is behind it).
   Phase 4 is done through "Replace Script Validators With Event Schemas":
@@ -168,7 +176,7 @@ inlines the browser `validate` options type so no unapproved
   lifecycle and turns as the root session: `inactive`, `live{activating,
   active{unfocused, focused, processing, cancelling_processing,
   returning}}`, `deactivating`, final sink `degraded`) invokes
-  `abilities/cognition.scx` (one `generate` call per turn, answering
+  `abilities/cognition/cognition.scx` (one `generate` call per turn, answering
   `bot.ability.communication.respond`). Readiness is each ability's first
   `bot.ability.offers`; the body emits its events as `log` records labelled
   with the event name (it has no parent). Deferred stimuli wait in a data
@@ -180,12 +188,12 @@ inlines the browser `validate` options type so no unapproved
   `tests/tests/floppy_live.rs` `live_text_turn` (since replaced by
   `live_cascade`).
 
-- Phase 4 cognition cascade (floppy `b8964ae9`): `abilities/cognition.scx`
-  invokes per turn `abilities/autonomy.scx` (phase 5 seam, always
-  unhandled), `abilities/intuition.scx` (`<decision:choice>` of ignore or
+- Phase 4 cognition cascade (floppy `b8964ae9`): `abilities/cognition/cognition.scx`
+  invokes per turn `abilities/autonomy/autonomy.scx` (phase 5 seam, always
+  unhandled), `abilities/intuition/intuition.scx` (`<decision:choice>` of ignore or
   the reasoning handoff, decided by the decision service on TypeSafe, with
   mosfet's ConfidenceTuner passed by `<param>` and returned in
-  `<donedata>`), and `abilities/reasoning.scx` (memory seams around one
+  `<donedata>`), and `abilities/reasoning/reasoning.scx` (memory seams around one
   strict structured `generate` call whose schema is built from
   `<decision:choice>`: respond and ignore until the body assembles
   choices). Stages answer by `done.invoke.<stage>`; hop timers (30 s) ask
@@ -212,9 +220,9 @@ inlines the browser `validate` options type so no unapproved
   22 s for both).
 
 - Phase 4 communication, conversation and speaking (floppy `80f19f29`):
-  the body invokes `abilities/communication.scx` beside the cognition
+  the body invokes `abilities/communication/communication.scx` beside the cognition
   (both must offer before `bot.activated`). Communication holds
-  `abilities/conversation.scx` and `abilities/speaking.scx` as invoked
+  `abilities/conversation/conversation.scx` and `abilities/speaking/speaking.scx` as invoked
   children, offers `bot.ability.communication.respond` and `.activate`,
   says a routed response through speaking (text mode, `<log
   label="bot.say">`; the body logs `bot.ability.speaking.output`) within a

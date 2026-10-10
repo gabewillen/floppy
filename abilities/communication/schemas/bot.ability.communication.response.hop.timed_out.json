@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.communication.response.hop.timed_out",
+  "type": "object",
+  "description": "The communication response did not complete within its hop timeout."
+}

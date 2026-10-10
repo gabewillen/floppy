@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Speaking ability in text mode (mosfet abilities/speaking): the
+  communication (abilities/communication/communication.scx) invokes it as its child
+  "speaking" and routes each selected response to it. Cognition never
+  selects it directly (mosfet: bot.ability.speaking.input is not offered).
+
+    idle -bot.ability.speaking.input-> emitting -> idle
+
+  emitting writes the words as <log label="bot.say"> and answers the parent
+  with bot.ability.speaking.output {text}: no audio, so media_type,
+  sample_rate_hz and channels stay absent (null). Speech synthesis and
+  playout (mosfet's encoding and playing states) are phase 6; recording the
+  outbound message into the conversation is the communication's (its
+  sibling conversation is out of this session's reach: SCXML sends go only
+  to #_parent and to a session's own children). The input's contract is
+  schemas/bot.ability.speaking.input.json: a send whose data it rejects is
+  never routed here and raises error.execution in the sender (scxml.rs
+  session.accepts-event-data).
+
+  Readiness: every entry into idle sends bot.ability.offers {ability:
+  "speaking", choices: []} to the parent; it offers nothing.
+
+  Bindings: none (no service, no I/O).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="speaking" initial="idle">
+  <datamodel>
+    <data id="text" expr="null"/>
+  </datamodel>
+  <script src="speaking.js"/>
+
+  <state id="idle">
+    <onentry>
+      <send event="bot.ability.offers" target="#_parent">
+        <param name="ability" expr="'speaking'"/>
+        <param name="choices" expr="[]"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json"
+                target="emitting">
+      <assign location="text" expr="_event.data.text"/>
+    </transition>
+  </state>
+
+  <!-- Text mode: the words are the output. -->
+  <state id="emitting">
+    <onentry>
+      <log label="bot.say" expr="text"/>
+      <send event="bot.ability.speaking.output" target="#_parent">
+        <param name="text" expr="text"/>
+      </send>
+    </onentry>
+    <transition target="idle"/>
+  </state>
+</scxml>

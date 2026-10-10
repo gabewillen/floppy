@@ -1,4 +1,4 @@
-//! The memory ability (`abilities/memory.scx`, mosfet's Memory) run as a
+//! The memory ability (`abilities/memory/memory.scx`, mosfet's Memory) run as a
 //! harness document's child through `scx run`: it migrates the database to
 //! mosfet's head schema and applies one transaction of statements through
 //! the sql service, answering its parent with `bot.ability.memory.output`
@@ -14,7 +14,7 @@ mod support;
 use std::path::Path;
 use std::time::Duration;
 
-use support::{Finished, Run, logs, unique_scratch, workspace};
+use support::{Finished, Run, logs, unique_scratch};
 
 /// A harness that invokes the memory ability with `statements` (an
 /// ECMAScript expression), after `before` (statements for the sql service
@@ -38,7 +38,7 @@ fn harness(before: Option<&str>, statements: &str) -> String {
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="{initial}">
   {aging}
   <state id="remembering">
-    <invoke id="memory" type="scxml" src="memory.scx">
+    <invoke id="memory" type="scxml" src="memory/memory.scx">
       <param name="database" expr="'/memory/floppy.sqlite'"/>
       <param name="statements" expr="{statements}"/>
     </invoke>
@@ -58,11 +58,7 @@ fn harness(before: Option<&str>, statements: &str) -> String {
 /// service `directory`.
 fn run(directory: &Path, document: &str) -> Finished {
     let dir = unique_scratch("memory-ability");
-    std::fs::copy(
-        workspace().join("abilities/memory.scx"),
-        dir.join("memory.scx"),
-    )
-    .expect("the ability is copyable");
+    support::copy_ability("memory", &dir);
     let path = support::write(&dir, "harness.scx", document);
     let mut run = Run::start(
         &[

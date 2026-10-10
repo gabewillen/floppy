@@ -6,8 +6,8 @@
 //! `abilities/schemas/`, and the communication with its conversation and
 //! speaking, which make no backend call) with
 //! `tests/fixtures/phase4/cognition_double.scx` as
-//! `abilities/cognition.scx`, so the body's literal
-//! `<invoke src="../../abilities/cognition.scx">` reaches the double. The
+//! `abilities/cognition/cognition.scx`, so the body's literal
+//! `<invoke src="../../abilities/cognition/cognition.scx">` reaches the double. The
 //! double's behavior per turn is the `bot.input` observation's event name
 //! (`reply`, `fail`, `stale`, `reboot`, `hang`, `deaf`). Timer bounds are
 //! shortened by rewriting the copy's `<data>` expressions.
@@ -27,7 +27,7 @@
 //! double logs `input.sound` and `input.visual` for each `environment.*`
 //! stimulus the body fans out to it.
 //!
-//! One test runs the real cognition (`abilities/cognition.scx` and its
+//! One test runs the real cognition (`abilities/cognition/cognition.scx` and its
 //! stages) with no backend: the intuition's decision fails fast with
 //! `unconfigured`, and so does the turn.
 //!
@@ -58,7 +58,7 @@ enum Cognition {
     Double(&'static str),
     /// The repository's cognition.
     Real,
-    /// No `abilities/cognition.scx` at all.
+    /// No `abilities/cognition/cognition.scx` at all.
     Missing,
 }
 
@@ -95,15 +95,16 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
     }
     let body_path = body_dir.join("floppy.scx");
     std::fs::write(&body_path, body).expect("the body copy is writable");
+    std::fs::copy(
+        workspace().join("bots/floppy/floppy.js"),
+        body_dir.join("floppy.js"),
+    )
+    .expect("the body's script is copyable");
+    let abilities = dir.join("abilities");
     for name in ["communication", "conversation", "speaking", "identity"] {
-        let name = format!("{name}.scx");
-        std::fs::copy(
-            workspace().join("abilities").join(&name),
-            dir.join("abilities").join(&name),
-        )
-        .expect("the ability is copyable");
+        support::copy_ability(name, &abilities);
     }
-    let ability = dir.join("abilities/cognition.scx");
+    let ability = abilities.join("cognition/cognition.scx");
     match cognition {
         Cognition::Double(mode) => {
             let double = std::fs::read_to_string(
@@ -114,17 +115,13 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
                 r#"<data id="mode" expr="'ready'"/>"#,
                 &format!(r#"<data id="mode" expr="{mode}"/>"#),
             );
+            std::fs::create_dir_all(abilities.join("cognition")).expect("creatable");
             std::fs::write(ability, double).expect("the double copy is writable");
         }
         Cognition::Real => {
             // The cognition and its stages.
             for stage in ["cognition", "autonomy", "intuition", "reasoning"] {
-                let name = format!("{stage}.scx");
-                std::fs::copy(
-                    workspace().join("abilities").join(&name),
-                    dir.join("abilities").join(&name),
-                )
-                .expect("the ability is copyable");
+                support::copy_ability(stage, &abilities);
             }
         }
         Cognition::Missing => {}
@@ -817,7 +814,7 @@ fn environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition() {
         .join("abilities");
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/input_double.scx"),
-        abilities.join("identity.scx"),
+        abilities.join("identity/identity.scx"),
     )
     .expect("the input double is copyable");
     let mut run = start(&body);

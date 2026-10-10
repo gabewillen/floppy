@@ -504,3 +504,28 @@ pub fn run_document(
     run.end_input();
     run.finish(limit)
 }
+
+/// Copies the directory `from` to `to`, recursively.
+pub fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).expect("the directory is creatable");
+    for entry in std::fs::read_dir(from).expect("the directory is readable") {
+        let path = entry.expect("a directory entry").path();
+        let target = to.join(path.file_name().expect("a file name"));
+        if path.is_dir() {
+            copy_tree(&path, &target);
+        } else {
+            std::fs::copy(&path, &target).expect("the file is copyable");
+        }
+    }
+}
+
+/// Copies the ability `name` (`abilities/<name>/`: its document, its
+/// script, and its schema twins) into `abilities`, and returns the path of
+/// its copied document.
+pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
+    copy_tree(
+        &workspace().join("abilities").join(name),
+        &abilities.join(name),
+    );
+    abilities.join(name).join(format!("{name}.scx"))
+}
