@@ -169,10 +169,10 @@ function memoryFailedMessage(_event) {
 // committing
 
 // The turns' product in place of the input (mosfet _complete_turn): their
-// texts joined as text/plain when any has text, else no content for audio,
-// else the input's content.
+// texts joined as text/plain when any has text, each text once (D79), else
+// no content for audio, else the input's content.
 function turnProduct() {
-  var texts = turns.map(function (turn) { return turn.text; }).filter(function (text) { return text !== ''; });
+  var texts = turns.map(function (turn) { return turn.text; }).filter(function (text, i, all) { return text !== '' && all.indexOf(text) === i; });
   if (texts.length > 0) {
     return {source_ids: input.source_ids, target_ids: input.target_ids, content: texts.join(' '), content_type: 'text/plain'};
   }
