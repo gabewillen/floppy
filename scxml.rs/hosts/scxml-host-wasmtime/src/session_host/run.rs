@@ -18,7 +18,7 @@ use wasmtime::component::{Resource, ResourceAny};
 
 use super::links::{ParentLink, SessionLinks, SessionPlace, invalid_input};
 use super::loopback::{
-    CompilerRuntime, ReceiverRuntime, Route, Routes, inbound_http_trace_context,
+    ChildCompile, CompilerRuntime, ReceiverRuntime, Route, Routes, inbound_http_trace_context,
 };
 use super::network::RunHttp;
 use super::snapshot::{CheckpointSnapshot, CheckpointSnapshotFailure, Snapshotter};
@@ -67,6 +67,10 @@ pub(crate) struct RunShared {
     pub(crate) invoked_sessions: RefCell<RunInvokedSessions>,
     fault: RefCell<Option<RunFailure>>,
     compiler: RefCell<Option<CompilerRuntime>>,
+    /// The compile of each document the embedder served, by the SHA-256 of
+    /// everything the compile reads ([`super::links::compile_key`]): each
+    /// is compiled once per run.
+    compiled_documents: RefCell<BTreeMap<[u8; 32], ChildCompile>>,
     pub(crate) receiver: RefCell<Option<ReceiverRuntime>>,
     /// A live session's streamed outputs, taken by the embedder after each
     /// call; `None` for a batch run, which streams nothing.
@@ -263,6 +267,7 @@ impl RunShared {
             invoked_sessions: RefCell::new(RunInvokedSessions::default()),
             fault: RefCell::new(None),
             compiler: RefCell::new(None),
+            compiled_documents: RefCell::new(BTreeMap::new()),
             receiver: RefCell::new(None),
             outputs: (mode == RunMode::Live).then(|| RefCell::new(Vec::new())),
             http,
@@ -392,6 +397,18 @@ impl RunShared {
 
     pub(crate) fn take_fault(&self) -> Option<RunFailure> {
         self.fault.borrow_mut().take()
+    }
+
+    /// The compile of the embedder's document `key` names, when this run
+    /// compiled it.
+    pub(crate) fn compiled_document(&self, key: &[u8; 32]) -> Option<ChildCompile> {
+        self.compiled_documents.borrow().get(key).cloned()
+    }
+
+    /// Keeps the compile of the embedder's document `key` names for the
+    /// rest of the run.
+    pub(crate) fn keep_compiled_document(&self, key: [u8; 32], compiled: ChildCompile) {
+        self.compiled_documents.borrow_mut().insert(key, compiled);
     }
 
     /// Runs `body` with the run's compiler, instantiated on first use.
@@ -1062,7 +1079,8 @@ impl RunSessions {
     /// starts or cancels in turn) is carried out first, in the order one
     /// uninterrupted call would have made them. The command is one host
     /// call of the fuel budget: the call, every start, cancel, and
-    /// continuation carried out for it, spend one budget.
+    /// continuation carried out for it, spend one budget (compiling a
+    /// document the embedder served aside, `SessionLinks::compile_invocation`).
     fn command(
         &mut self,
         key: SessionKey,

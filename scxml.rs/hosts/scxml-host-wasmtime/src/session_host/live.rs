@@ -824,10 +824,16 @@ impl LiveSession {
             }
             engine.advance_clock_to(at_ms)?;
             if let Err(failure) = engine.input(event, &mut no_hook()) {
-                let status = engine.machine_status()?;
-                return if is_rejection(&failure)
-                    && matches!(status, Status::Running | Status::Finished)
-                {
+                // Only a rejection asks the root's status: any other
+                // failure is the session's, and a trapped root's instance
+                // cannot be entered again, so asking would report that
+                // instead of the trap.
+                let rejected = is_rejection(&failure)
+                    && matches!(
+                        engine.machine_status(),
+                        Ok(Status::Running | Status::Finished)
+                    );
+                return if rejected {
                     Ok(Err(failure))
                 } else {
                     Err(failure)

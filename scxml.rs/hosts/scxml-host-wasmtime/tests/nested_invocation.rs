@@ -19,6 +19,7 @@
 
 mod prebuilt;
 
+use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
@@ -764,15 +765,120 @@ fn the_child_starts_a_call_defers_spend_that_call_s_fuel() {
     let one = burning_invocations(1).expect("one child fits one host call's fuel");
     assert_eq!(one.terminal, Terminal::Running);
     let error = burning_invocations(2).expect_err("two children exceed one host call's fuel");
-    assert!(
-        matches!(
-            &error.failure,
-            RunFailure::Host(HostError::Wasmtime(trap))
-                if trap.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::OutOfFuel)
+    assert!(out_of_fuel(&error.failure), "{:?}", error.failure);
+}
+
+/// Whether `failure` is a Wasm trap for running out of fuel.
+fn out_of_fuel(failure: &RunFailure) -> bool {
+    matches!(
+        failure,
+        RunFailure::Host(HostError::Wasmtime(trap))
+            if trap.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::OutOfFuel)
+    )
+}
+
+/// An event a live session's root takes to a state invoking two burning
+/// children exceeds the send's fuel, which traps the root in the
+/// continuation of its call: the send fails with that trap, not with a
+/// later call into the trapped root's instance, which Wasmtime refuses
+/// ("cannot enter component instance").
+#[test]
+fn a_send_that_runs_out_of_fuel_fails_with_the_trap() {
+    let body = r#"<invoke type="scxml" src="burn.scxml"/>"#.repeat(2);
+    let (ir, data_model) = lower(&scxml(
+        "r0",
+        &format!(
+            r#"<state id="r0"><transition event="go" target="r1"/></state><state id="r1">{body}</state>"#
         ),
-        "{:?}",
-        error.failure
-    );
+    ));
+    let mut live = host_with_fuel(SHARED_FUEL)
+        .open(SessionOpen {
+            machine_ir: &ir,
+            data_model: data_model.as_deref(),
+            session_id: "root",
+            embedder: Rc::new(Documents(vec![("burn.scxml", BURNING_CHILD.to_owned())])),
+            max_commands: 64,
+            clock: LiveClock::Logical,
+            record: false,
+            replay: None,
+            http: LiveHttp::default(),
+        })
+        .expect("the session opens");
+    let error = live
+        .send(&ScriptedEvent::named("go"))
+        .expect_err("two children exceed one send's fuel");
+    assert!(out_of_fuel(&error.failure), "{:?}", error.failure);
+    assert_eq!(live.status(), LiveStatus::Failed);
+}
+
+/// A null-data-model document of `states` states, numbered from `first`
+/// so documents built from different ranges differ: cheap to start,
+/// costly to compile.
+fn wide_document(first: usize, states: usize) -> String {
+    let mut body = String::new();
+    for state in first..first + states {
+        let next = if state + 1 == first + states {
+            first
+        } else {
+            state + 1
+        };
+        let _ = write!(
+            body,
+            r#"<state id="w{state}"><transition event="next" target="w{next}"/></state>"#
+        );
+    }
+    scxml(&format!("w{first}"), &body)
+}
+
+/// The result of a root that starts `documents` distinct wide `<invoke
+/// src>` documents in its start, on a host whose host call runs on
+/// `fuel`.
+fn wide_invocations(documents: usize, fuel: u64) -> Result<SessionOutcome, SessionHostError> {
+    let mut invokes = String::new();
+    for document in 0..documents {
+        let _ = write!(
+            invokes,
+            r#"<invoke type="scxml" src="wide{document}.scxml"/>"#
+        );
+    }
+    let (ir, data_model) = lower(&scxml(
+        "r0",
+        &format!(r#"<state id="r0">{invokes}</state>"#),
+    ));
+    let served: Vec<(&'static str, String)> = (0..documents)
+        .map(|document| {
+            let uri: &'static str = Box::leak(format!("wide{document}.scxml").into_boxed_str());
+            (uri, wide_document(document * WIDE_STATES, WIDE_STATES))
+        })
+        .collect();
+    host_with_fuel(fuel).run(&SessionRun {
+        machine_ir: &ir,
+        data_model: data_model.as_deref(),
+        session_id: "root",
+        events: &[],
+        external_client: None,
+        embedder: Rc::new(Documents(served)),
+        max_commands: 64,
+        snapshots: SnapshotRequest::none(),
+    })
+}
+
+/// States of each document [`wide_invocations`] serves.
+const WIDE_STATES: usize = 200;
+
+/// Fuel of one host call in the compile proof: one wide document's start,
+/// compile included, fits it; four compiles do not.
+const COMPILE_FUEL: u64 = 120_000_000;
+
+/// A document the embedder serves is compiled on a fuel budget of its own,
+/// not the invoking call's: a root whose start invokes four wide documents,
+/// whose compiles together exceed the call's fuel, starts them all.
+#[test]
+fn the_documents_a_call_compiles_spend_their_own_fuel() {
+    let one = wide_invocations(1, COMPILE_FUEL).expect("one wide child fits");
+    assert_eq!(one.terminal, Terminal::Running);
+    let four = wide_invocations(4, COMPILE_FUEL).expect("the compiles spend their own fuel");
+    assert_eq!(four.terminal, Terminal::Running);
 }
 
 /// A chain of `depth` levels that each send `up` to their invoking
