@@ -11,11 +11,7 @@
 {"label":"intuition","parent":"session.1","session":"session.12","text":"turn 1: low confidence 34","type":"log"}
 {"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":34,\"n\":1,\"variance\":100}","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition unhandled (low_confidence)","type":"log"}
-<<<<<<< HEAD
-{"label":"reasoning","parent":"session.1","session":"session.13","text":"turn 1: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication bot.ability.identity.adopt@identity","type":"log"}
-=======
-{"label":"reasoning","parent":"session.1","session":"session.10","text":"turn 1: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
->>>>>>> origin/main
+{"label":"reasoning","parent":"session.1","session":"session.13","text":"turn 1: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"reasoning handled","type":"log"}
 {"label":"reflection","parent":"session","session":"session.1","text":"absent (phase 5)","type":"log"}
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}
@@ -31,11 +27,7 @@
 {"label":"intuition","parent":"session.1","session":"session.18","text":"turn 2: low confidence 34","type":"log"}
 {"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":34,\"n\":2,\"variance\":100}","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition unhandled (low_confidence)","type":"log"}
-<<<<<<< HEAD
-{"label":"reasoning","parent":"session.1","session":"session.19","text":"turn 2: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication bot.ability.identity.adopt@identity","type":"log"}
-=======
-{"label":"reasoning","parent":"session.1","session":"session.16","text":"turn 2: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
->>>>>>> origin/main
+{"label":"reasoning","parent":"session.1","session":"session.19","text":"turn 2: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"reasoning handled","type":"log"}
 {"label":"reflection","parent":"session","session":"session.1","text":"absent (phase 5)","type":"log"}
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}

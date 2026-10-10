@@ -15,14 +15,9 @@
 {"label":"bot.route","session":"session","text":"bot.ability.communication.respond -> communication","type":"log"}
 {"label":"speech.encode","parent":"session.10","session":"session.11","text":"encode reply 2 -> media/speaking-1.pcm","type":"log"}
 {"label":"bot.say","parent":"session.2","session":"session.4","text":"reply 2","type":"log"}
-<<<<<<< HEAD
 {"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}","type":"log"}
-{"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
-{"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"text\":\"reply 2\"}","type":"log"}
-=======
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}
-{"label":"bot.ability.speaking.output","session":"session","text":"{\"text\":\"reply 2\"}","type":"log"}
->>>>>>> origin/main
+{"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"text\":\"reply 2\"}","type":"log"}
 {"label":"conversation","parent":"session.2","session":"session.3","text":"outbound 0","type":"log"}
 {"label":"communication.history","parent":"session","session":"session.2","text":"1","type":"log"}
 {"label":"bot.ability.listening.failed","session":"session","text":"{\"message\":\"Voice detection failed: the backend is not configured.\",\"stage\":\"voice_detection\"}","type":"log"}
