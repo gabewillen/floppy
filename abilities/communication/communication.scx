@@ -44,12 +44,14 @@
 
   Activate: bot.ability.communication.activate {} keeps the one
   conversation active (a catalog of conversations to switch between is
-  loaded through memory, phase 3); it is taken and logged.
+  loaded through memory, phase 3); it is taken and logged in inactive only,
+  as mosfet's Communication takes it only there.
 
   Offers: every entry into active sends bot.ability.offers {ability:
   "communication", choices} to the body: <decision:choice events=
-  "bot.ability.communication.respond bot.ability.communication.activate">
-  (mosfet's tool events; input is not one), compacted by <decision:compact>
+  "bot.ability.communication.respond"> (mosfet's enabled transitions in
+  active; activate is enabled only in inactive, and input is not a tool
+  event), compacted by <decision:compact>
   ($schema, title and examples dropped; over 32 KiB descriptions dropped
   too; still over, the offer is empty and logged). The children offer
   nothing, so nothing is relayed.
@@ -157,7 +159,7 @@
     <state id="active">
       <onentry>
         <assign location="offering" expr="true"/>
-        <decision:choice location="offered" events="bot.ability.communication.respond bot.ability.communication.activate"/>
+        <decision:choice location="offered" events="bot.ability.communication.respond"/>
         <assign location="offering" expr="false"/>
         <decision:compact location="offered" bound="32768" overlocation="offers_over"/>
         <if cond="offers_over">
@@ -197,10 +199,6 @@
         <send event="bot.ability.communication.failed" target="#_parent">
           <param name="message" expr="'Communication response text must be non-blank.'"/>
         </send>
-      </transition>
-      <transition event="bot.ability.communication.activate" event:schema="schemas/bot.ability.communication.activate.json"
-                  cond="hasActivate(_event)">
-        <log label="communication.activate" expr="'conversation'"/>
       </transition>
       <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json"
                   cond="isNotFromChild(_event)">
