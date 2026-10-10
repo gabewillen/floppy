@@ -47,19 +47,16 @@ const SETTLE: Duration = Duration::from_secs(1);
 const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-fake\n";
 const IGNORE: &str = "bot.ability.cognition.ignore";
 const RESPOND: &str = "bot.ability.communication.respond";
-const ACTIVATE: &str = "bot.ability.communication.activate";
 const ADOPT: &str = "bot.ability.identity.adopt";
 /// The turn's choices as the body logs them: the cognition's offer, the
 /// communication's and the identity's.
-const CHOICES: &str = "bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication bot.ability.identity.adopt@identity";
+const CHOICES: &str = "bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity";
 
 /// The decision backend's scripted answer.
 #[derive(Clone, Copy)]
 enum Decision {
     /// Chooses ignore (0.8).
     Ignore,
-    /// Chooses the communication's activate (0.8).
-    Activate,
     /// Chooses "none of these" (0.8): reasoning handles the turn.
     Abstain,
     /// Chooses ignore with 0.34 (each other label 0.33).
@@ -74,7 +71,6 @@ impl Decision {
     const fn path(self) -> &'static str {
         match self {
             Self::Ignore => "ignore",
-            Self::Activate => "activate",
             Self::Abstain => "abstain",
             Self::Low => "low",
             Self::Fail => "dfail",
@@ -90,7 +86,7 @@ enum Generation {
     Ignore,
     /// A selection of an event outside the choices.
     OffChoice,
-    /// The communication's activate, then a response to say.
+    /// A response for the communication to say.
     Respond,
     /// Answers 500.
     Fail,
@@ -140,6 +136,12 @@ fn streamed(content: &str) -> String {
 /// `share`, the rest share what is left; every other question answers its
 /// first label.
 fn decided(body: &Json, chosen: &str, share: f64) -> Option<String> {
+    decided_with(body, chosen, share, None)
+}
+
+/// [`decided`], with each other selection label given `other` instead of
+/// an even split of what is left.
+fn decided_with(body: &Json, chosen: &str, share: f64, other: Option<f64>) -> Option<String> {
     let questions = body.get("questions")?.as_object()?;
     let mut answers = Map::new();
     for (name, question) in questions {
@@ -153,6 +155,8 @@ fn decided(body: &Json, chosen: &str, share: f64) -> Option<String> {
             for label in &labels {
                 let p = if label.as_str() == chosen {
                     share
+                } else if let Some(other) = other {
+                    other
                 } else {
                     (1.0 - share) / f64::from(u32::try_from(rest.max(1)).ok()?)
                 };
@@ -184,14 +188,12 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
     let selection = |events: Json| ok(streamed(&json!({ "events": events }).to_string()));
     match target {
         "/ignore/v1/systemone" => ok(decided(body, IGNORE, 0.8)?),
-        "/activate/v1/systemone" => ok(decided(body, ACTIVATE, 0.8)?),
         "/abstain/v1/systemone" => ok(decided(body, "none of these", 0.8)?),
-        "/low/v1/systemone" => ok(decided(body, IGNORE, 0.34)?),
+        "/low/v1/systemone" => ok(decided_with(body, IGNORE, 0.34, Some(0.33))?),
         "/gignore/v1/chat/completions" => selection(json!([
             {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}
         ])),
         "/grespond/v1/chat/completions" => selection(json!([
-            {"event": ACTIVATE, "data": {}, "reason": "talk here", "target": "communication"},
             {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet", "target": "communication"}
         ])),
         "/offchoice/v1/chat/completions" => selection(json!([
@@ -488,44 +490,6 @@ fn selection_labels(mock: &Mock) -> Vec<String> {
     labels
 }
 
-/// mosfet's intuition dispatch: the decision chooses from the turn's
-/// enabled transitions, not two of its own, and the body routes the chosen
-/// event to the ability offering it without asking reasoning.
-#[test]
-fn intuition_dispatches_an_offered_event_to_its_target() {
-    let mock = Mock::start();
-    let bot = layout(&mock, Decision::Activate, Generation::Fail, &[]);
-    let mut run = start(&bot);
-    say(&mut run, "hello there");
-    let records = run.until(WAIT, label_is("communication.activate"));
-    assert_eq!(texts(&records, "bot.choices"), strings(&[CHOICES]));
-    assert_eq!(
-        texts(&records, "cognition.stage"),
-        strings(&[
-            "autonomy unhandled (no-behaviors)",
-            "intuition handled (none)"
-        ])
-    );
-    assert_eq!(
-        json_text(&records, "bot.output"),
-        json!({"turn": 1, "output": [{"event": ACTIVATE, "data": {}}]})
-    );
-    assert_eq!(
-        texts(&records, "bot.route"),
-        strings(&["bot.ability.communication.activate -> communication"])
-    );
-    assert_eq!(
-        selection_labels(&mock),
-        strings(&[IGNORE, ACTIVATE, "none of these"])
-    );
-    assert!(mock.received("/chat/completions").is_empty());
-    close(
-        run,
-        &mock,
-        "intuition_dispatches_an_offered_event_to_its_target",
-    );
-}
-
 #[test]
 fn intuition_handles_an_ignore_without_reasoning() {
     let mock = Mock::start();
@@ -562,10 +526,7 @@ fn intuition_handles_an_ignore_without_reasoning() {
     assert_eq!(texts(&records, "cognition.ignore"), strings(&["idle"]));
     // The decision offered the turn's choices it could fill (respond's
     // text and adopt's name have no grounded value); no model was asked.
-    assert_eq!(
-        selection_labels(&mock),
-        strings(&[IGNORE, ACTIVATE, "none of these"])
-    );
+    assert_eq!(selection_labels(&mock), strings(&[IGNORE, "none of these"]));
     assert!(mock.received("/chat/completions").is_empty());
     let finished = close(run, &mock, "intuition_handles_an_ignore_without_reasoning");
     // The cognition offers ignore from each idle entry (the activation's
@@ -955,7 +916,7 @@ fn reasoning_selects_from_the_turns_choices() {
             event
         })
         .collect();
-    assert_eq!(pinned, strings(&[IGNORE, RESPOND, ACTIVATE, ADOPT]));
+    assert_eq!(pinned, strings(&[IGNORE, RESPOND, ADOPT]));
     let prompt = body["messages"]
         .as_array()
         .and_then(|messages| messages.last())
@@ -983,8 +944,8 @@ fn reasoning_selects_from_the_turns_choices() {
 }
 
 /// The whole text path on fake backends: "say hi" escalates to reasoning,
-/// which selects the communication's activate and respond; the body routes
-/// both to the communication, which says the response through speaking
+/// which selects the communication's respond; the body routes it to the
+/// communication, which says the response through speaking
 /// and records it in its conversation.
 #[test]
 fn a_reasoned_response_is_said_through_the_communication() {
@@ -1006,14 +967,7 @@ fn a_reasoned_response_is_said_through_the_communication() {
     );
     assert_eq!(
         texts(&records, "bot.route"),
-        strings(&[
-            "bot.ability.communication.activate -> communication",
-            "bot.ability.communication.respond -> communication"
-        ])
-    );
-    assert_eq!(
-        texts(&records, "communication.activate"),
-        strings(&["conversation"])
+        strings(&["bot.ability.communication.respond -> communication"])
     );
     assert_eq!(texts(&records, "bot.say"), strings(&["Hi! I am floppy."]));
     assert_eq!(

@@ -2297,9 +2297,8 @@ mod tests {
             "https://github.com/stateforward/scxml.rs/namespaces/example"
         );
         assert_eq!(uri.tag.as_deref(), Some("v0.2.0"));
-        let tagless =
-            RepositoryUri::parse("https://github.com/stateforward/nemobot/namespaces/decision")
-                .expect("a tagless repository namespace URI");
+        let tagless = RepositoryUri::parse("https://github.com/acme/widgets/namespaces/example")
+            .expect("a tagless repository namespace URI");
         assert_eq!(tagless.tag, None);
         // The vocabularies scx provides are matched first: never fetched.
         for built_in in [
@@ -2425,19 +2424,17 @@ mod tests {
 
     #[test]
     fn repository_service_uris_are_exact_and_never_namespaces() {
-        let uri = RepositoryUri::parse_service(
-            "https://github.com/stateforward/nemobot/services/memory@v0.1.0",
-        )
-        .expect("a repository service URI");
+        let uri =
+            RepositoryUri::parse_service("https://github.com/acme/widgets/services/store@v0.1.0")
+                .expect("a repository service URI");
         assert_eq!(uri.kind, Kind::Service);
         assert_eq!(
             uri.tagless,
-            "https://github.com/stateforward/nemobot/services/memory"
+            "https://github.com/acme/widgets/services/store"
         );
         assert_eq!(uri.tag.as_deref(), Some("v0.1.0"));
         assert!(
-            RepositoryUri::parse("https://github.com/stateforward/nemobot/services/memory@v0.1.0")
-                .is_none(),
+            RepositoryUri::parse("https://github.com/acme/widgets/services/store@v0.1.0").is_none(),
             "a services/ URI is never a repository namespace"
         );
         assert!(
