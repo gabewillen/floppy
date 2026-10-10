@@ -206,7 +206,9 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
 fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
     let mut request_line = String::new();
-    if reader.read_line(&mut request_line).is_err() {
+    // A connection closed before its request line (a cancelled call's,
+    // under load) is no request.
+    if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
         return;
     }
     let mut length = 0;

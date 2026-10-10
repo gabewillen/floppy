@@ -17,4 +17,3 @@
 {"label":"autonomy","parent":"session.1","session":"session.9","text":"turn 2: no behaviors (phase 5)","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
 {"label":"intuition","parent":"session.1","session":"session.10","text":"turn 2: threshold 0.35","type":"log"}
-{"body":null,"target":"","type":"request"}
