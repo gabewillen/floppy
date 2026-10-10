@@ -85,7 +85,7 @@ const BODY_EVENTS: [&str; 14] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 50] = [
+const ABILITY_EVENTS: [&str; 52] = [
     "bot.ability.failed",
     "bot.ability.cognition.input",
     "bot.ability.cognition.output",
@@ -114,6 +114,11 @@ const ABILITY_EVENTS: [&str; 50] = [
     "bot.ability.speaking.input",
     "bot.ability.speaking.output",
     "bot.ability.speaking.apply.failed",
+    "bot.ability.speaking.efference",
+    "bot.ability.vocal.speech.encoding.input",
+    "bot.ability.vocal.speech.encoding.output",
+    // Speaking's playout, which the body puts into the environment.
+    "environment.sound",
     "bot.ability.identity.adopt",
     "bot.ability.identity.adopted",
     "bot.ability.identity.adopt.failed",
@@ -132,14 +137,12 @@ const ABILITY_EVENTS: [&str; 50] = [
     "bot.ability.memory.output",
     // Phase 6: listening (mosfet's Listening, Sensitivity and
     // Interpretation) and the efference copy it takes from speaking.
-    "environment.sound",
     "bot.ability.listening.speech.output",
     "bot.ability.listening.failed",
     "bot.ability.listening.stage.failed",
     "bot.ability.listening.sensitivity.score",
     "bot.ability.listening.sensitivity.output",
     "bot.ability.listening.sensitivity.failed",
-    "bot.ability.speaking.efference",
 ];
 
 /// The correlated events of one processing turn: each requires `turn`.
@@ -182,11 +185,13 @@ const RUNTIME_ONLY: [&str; 8] = [
 const NAMES_FILE: &str = "mosfet-event-names.json";
 
 /// The ability events the body takes, twinned into `bots/floppy/schemas/`.
-const BODY_TWINS: [&str; 14] = [
+const BODY_TWINS: [&str; 15] = [
     "bot.ability.offers",
     "bot.ability.communication.input",
     "bot.ability.communication.failed",
     "bot.ability.speaking.output",
+    "bot.ability.speaking.efference",
+    "environment.sound",
     "bot.ability.cognition.output",
     "bot.ability.cognition.cancelled",
     "bot.ability.processing.cancelled",
@@ -194,7 +199,6 @@ const BODY_TWINS: [&str; 14] = [
     "bot.ability.conversation.output",
     "bot.ability.identity.addressed",
     "bot.behavior.tick",
-    "environment.sound",
     "bot.ability.listening.speech.output",
     "bot.ability.listening.failed",
 ];

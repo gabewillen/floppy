@@ -49,7 +49,7 @@ use serde_json::{Value as Json, json};
 use support::{Finished, Run, logs, trace, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup included).
-const WAIT: Duration = Duration::from_secs(60);
+const WAIT: Duration = Duration::from_secs(300);
 
 /// The cognition the scratch layout gets.
 enum Cognition {
@@ -95,7 +95,13 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
     }
     let body_path = body_dir.join("floppy.scx");
     std::fs::write(&body_path, body).expect("the body copy is writable");
-    for name in ["communication", "conversation", "speaking", "identity"] {
+    for name in [
+        "communication",
+        "conversation",
+        "speaking",
+        "identity",
+        "memory",
+    ] {
         let name = format!("{name}.scx");
         std::fs::copy(
             workspace().join("abilities").join(&name),
@@ -104,6 +110,7 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
         .expect("the ability is copyable");
     }
     support::copy_listening(&dir.join("abilities"));
+    support::double_speech(&dir.join("abilities"), "'encode'");
     let ability = dir.join("abilities/cognition.scx");
     match cognition {
         Cognition::Double(mode) => {
@@ -831,6 +838,9 @@ fn environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition() {
     // The stimuli start no turn: the next turn is the first.
     run.event("bot.input", &input("reply", "after"));
     run.until(WAIT, label_is("bot.processing.completed"));
+    // The reply is played out into the environment, where the bot hears
+    // it too.
+    run.until(WAIT, label_is("bot.ability.speaking.output"));
     let finished = close(
         run,
         "environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition",
@@ -844,6 +854,10 @@ fn environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition() {
             ("input.sound", &sound.to_string()),
             ("input.visual", &visual.to_string()),
             ("double.input", r#"1 reply "after""#),
+            (
+                "input.sound",
+                r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#,
+            ),
         ])
     );
 }

@@ -35,6 +35,13 @@
   routine's bot.behavior.tick the cognition forwards (phase 5 routines,
   gated off in phase 4).
 
+  Speaking: the communication relays speaking's playout, the efference
+  copy bot.ability.speaking.efference (sent on to each Listening ability
+  in listening, mosfet's Speaking listening peers) and then
+  environment.sound, which the body puts into the environment: a log
+  record labelled environment.sound (the root has no parent), and, as any
+  sound there, a stimulus for each input ability (the bot hears itself).
+
   Environment: environment.sound and environment.visual from outside,
   while active, go to each input ability (input, mosfet's Bot input: the invoke ids
   of the abilities that perceive raw stimuli; the listening), in
@@ -117,6 +124,15 @@
   input. The cognition's stages need TYPESAFE_API_KEY (intuition's decision
   service) and FLOPPY_BASE_URL and FLOPPY_API_KEY (reasoning's generate
   service, no default backend); without them a turn fails.
+
+  Memory (mosfet's sqlite_memory): the body passes its database (a file in
+  the directory the run grants the sql service at /memory, scx run's
+  dir option) to the cognition, the communication and the identity as
+  <param name="database">; reasoning recalls and retains cognitive
+  episodes, the identity its adopted names, and the conversation its
+  relationship memories (abilities/memory.scx over services/sql, one
+  SQLite transaction per invocation). A run without the grant is refused
+  before it starts.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
@@ -126,6 +142,9 @@
   <datamodel>
     <!-- Configuration. -->
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <!-- The memory database file (mosfet's sqlite_memory
+         database), in the directory the run grants the service at /memory. -->
+    <data id="database" expr="'/memory/floppy.sqlite'"/>
     <data id="activation_timeout_ms" expr="30000"/>
     <data id="processing_timeout_ms" expr="300000"/>
     <data id="cancel_timeout_ms" expr="5000"/>
@@ -143,6 +162,9 @@
          (mosfet's Bot input, as invoke ids), and the one being sent to. -->
     <data id="input" expr="['listening']"/>
     <data id="ability" expr="null"/>
+    <!-- The Listening abilities that receive speaking's efference copy
+         (mosfet's Speaking listening peers, as invoke ids). -->
+    <data id="listening" expr="['listening']"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
     <data id="focused_device" expr="null"/>
@@ -183,9 +205,14 @@
     </onexit>
     <invoke id="cognition" type="scxml" src="../../abilities/cognition.scx">
       <param name="model" expr="model"/>
+      <param name="database" expr="database"/>
     </invoke>
-    <invoke id="communication" type="scxml" src="../../abilities/communication.scx"/>
-    <invoke id="identity" type="scxml" src="../../abilities/identity.scx"/>
+    <invoke id="communication" type="scxml" src="../../abilities/communication.scx">
+      <param name="database" expr="database"/>
+    </invoke>
+    <invoke id="identity" type="scxml" src="../../abilities/identity.scx">
+      <param name="database" expr="database"/>
+    </invoke>
     <invoke id="listening" type="scxml" src="../../abilities/listening.scx"/>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
@@ -262,6 +289,27 @@
                   cond="!_event.invokeid">
         <foreach array="input" item="ability">
           <send event="environment.visual" targetexpr="'#_' + ability">
+            <content expr="_event.data"/>
+          </send>
+        </foreach>
+      </transition>
+      <!-- Speaking's playout: the sound goes into the environment (the
+           root has no parent, so it is a log record) and, as any sound
+           there, to every input ability; the efference copy goes only to
+           Listening, before the sound. -->
+      <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json"
+                  cond="_event.invokeid === 'communication'">
+        <foreach array="listening" item="ability">
+          <send event="bot.ability.speaking.efference" targetexpr="'#_' + ability">
+            <content expr="_event.data"/>
+          </send>
+        </foreach>
+      </transition>
+      <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+                  cond="_event.invokeid === 'communication'">
+        <log label="environment.sound" expr="JSON.stringify(_event.data)"/>
+        <foreach array="input" item="ability">
+          <send event="environment.sound" targetexpr="'#_' + ability">
             <content expr="_event.data"/>
           </send>
         </foreach>

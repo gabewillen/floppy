@@ -557,3 +557,43 @@ pub fn copy_listening(abilities: &Path) {
         .expect("the listening document is copyable");
     }
 }
+
+/// The speech service `<invoke>` opening tag in `abilities/vocal.scx`.
+const SPEECH_INVOKE: &str = r#"<invoke id="speech" type="https://github.com/stateforward/floppy/services/speech"
+            env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">"#;
+
+/// Writes `abilities/vocal.scx` into the laid-out `abilities` directory
+/// with its speech service `<invoke>` rewritten to invoke
+/// `tests/fixtures/phase6/speech_double.scx` (copied beside it, its `mode`
+/// set to the ECMAScript expression `mode`): the double of the speech
+/// service's encoding events, until the service lands.
+pub fn double_speech(abilities: &Path, mode: &str) {
+    let vocal = std::fs::read_to_string(workspace().join("abilities/vocal.scx"))
+        .expect("the vocal ability is readable");
+    assert!(
+        vocal.contains(SPEECH_INVOKE),
+        "abilities/vocal.scx invokes the speech service"
+    );
+    std::fs::write(
+        abilities.join("vocal.scx"),
+        vocal.replacen(
+            SPEECH_INVOKE,
+            r#"<invoke id="speech" type="scxml" src="speech_double.scx">"#,
+            1,
+        ),
+    )
+    .expect("the vocal copy is writable");
+    let double =
+        std::fs::read_to_string(workspace().join("tests/fixtures/phase6/speech_double.scx"))
+            .expect("the speech double is readable");
+    let declared = r#"<data id="mode" expr="'encode'"/>"#;
+    assert!(
+        double.contains(declared),
+        "the speech double declares its mode"
+    );
+    std::fs::write(
+        abilities.join("speech_double.scx"),
+        double.replacen(declared, &format!(r#"<data id="mode" expr="{mode}"/>"#), 1),
+    )
+    .expect("the speech double copy is writable");
+}

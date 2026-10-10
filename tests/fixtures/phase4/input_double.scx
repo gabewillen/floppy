@@ -8,7 +8,9 @@
   On start it sends bot.ability.offers {ability: "identity", choices: []}
   (its readiness), then logs input.sound or input.visual with the event's
   data as JSON for each environment.sound or environment.visual it is
-  sent. It perceives nothing and sends no product.
+  sent, and input.efference for each bot.ability.speaking.efference (as a
+  Listening peer, tests/tests/communication.rs). It perceives nothing and
+  sends no product.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        version="1.0" datamodel="ecmascript" name="input_double" initial="perceiving">
@@ -21,6 +23,9 @@
     </onentry>
     <transition event="environment.sound">
       <log label="input.sound" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="bot.ability.speaking.efference">
+      <log label="input.efference" expr="JSON.stringify(_event.data)"/>
     </transition>
     <transition event="environment.visual">
       <log label="input.visual" expr="JSON.stringify(_event.data)"/>

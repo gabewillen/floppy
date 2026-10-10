@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's vocal SpeechEncoding ability (mosfet abilities/vocal/speech/
+  encoding.py SpeechEncoding): text to speech through the speech service
+  (services/speech, operation encode). Speaking (abilities/speaking.scx)
+  invokes it as its child "vocal" from its encoding state, so leaving
+  encoding (an answer, a failure or mosfet's 5 s bound) cancels it and the
+  service request with it (SCXML 6.4).
+
+    idle -bot.ability.vocal.speech.encoding.input-> applying -> idle
+
+  Input: bot.ability.vocal.speech.encoding.input {text} (mosfet's input is
+  the text's UTF-8 bytes). applying invokes the speech service with the
+  <param>s operation "encode", model and voice (the speech service
+  requires both: the invoker names them), text, output (where the
+  service writes the audio: a path in the media directory the run grants
+  it, which the invoker names) and media_type, and answers the parent with
+  the service's bot.ability.vocal.speech.encoding.output {audio,
+  media_type, sample_rate_hz, channels} (the audio as a reference, never
+  bytes; a measured duration, when the service gives one, rides along), or bot.ability.failed {message} (mosfet's
+  FailureData) when the service fails, ends without an answer, or cannot
+  run. An input that arrives while applying is logged and dropped: its
+  invoker sends one per invocation.
+
+  The service's events are not checked by scxml.rs (D41), so <finalize>
+  keeps only an answer of the right shape.
+
+  Readiness: every entry into idle sends bot.ability.offers {ability:
+  "vocal", choices: []} to the parent; it offers nothing.
+
+  Bindings: the speech service package, with FLOPPY_SPEECH_BASE_URL and
+  FLOPPY_SPEECH_API_KEY (no default backend, D31) and a media directory
+  the run grants it (scx run's dir option).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="vocal" initial="idle">
+  <datamodel>
+    <!-- The invoker's <param>s. -->
+    <data id="model" expr="null"/>
+    <data id="voice" expr="null"/>
+    <data id="output" expr="null"/>
+    <data id="media_type" expr="'audio/pcm'"/>
+    <!-- The utterance in hand and the service's answer. -->
+    <data id="text" expr="null"/>
+    <data id="encoded" expr="null"/>
+    <data id="failure" expr="null"/>
+  </datamodel>
+
+  <state id="idle">
+    <onentry>
+      <send event="bot.ability.offers" target="#_parent">
+        <param name="ability" expr="'vocal'"/>
+        <param name="choices" expr="[]"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.vocal.speech.encoding.input" event:schema="schemas/bot.ability.vocal.speech.encoding.input.json"
+                target="applying">
+      <assign location="text" expr="_event.data.text"/>
+    </transition>
+  </state>
+
+  <state id="applying">
+    <onentry>
+      <assign location="encoded" expr="null"/>
+      <assign location="failure" expr="null"/>
+    </onentry>
+    <invoke id="speech" type="https://github.com/stateforward/floppy/services/speech"
+            env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">
+      <param name="operation" expr="'encode'"/>
+      <param name="model" expr="model"/>
+      <param name="text" expr="text"/>
+      <param name="voice" expr="voice"/>
+      <param name="output" expr="output"/>
+      <param name="media_type" expr="media_type"/>
+      <finalize>
+        <assign location="encoded" expr="_event.name === 'bot.ability.vocal.speech.encoding.output' &amp;&amp; typeof Object(_event.data).audio === 'string' ? _event.data : encoded"/>
+        <assign location="failure" expr="_event.name === 'bot.ability.failed' &amp;&amp; typeof Object(_event.data).message === 'string' ? _event.data.message : failure"/>
+      </finalize>
+    </invoke>
+
+    <transition event="done.invoke" cond="_event.invokeid === 'speech' &amp;&amp; encoded !== null" target="idle">
+      <send event="bot.ability.vocal.speech.encoding.output" target="#_parent">
+        <content expr="encoded"/>
+      </send>
+    </transition>
+    <transition event="done.invoke" cond="_event.invokeid === 'speech'" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="failure === null ? 'The speech service ended without encoding.' : failure"/>
+      </send>
+    </transition>
+    <transition event="error.*" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="'The speech service could not run (' + _event.name + ').'"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.vocal.speech.encoding.input" event:schema="schemas/bot.ability.vocal.speech.encoding.input.json">
+      <log label="vocal.dropped" expr="_event.name"/>
+    </transition>
+  </state>
+</scxml>

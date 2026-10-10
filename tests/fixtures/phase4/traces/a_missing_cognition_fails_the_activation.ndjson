@@ -1,10 +1,4 @@
-{"label":"memory","parent":"session","session":"session.4","text":"absent","type":"log"}
-{"label":"identity.name","parent":"session","session":"session.4","text":"recalled null","type":"log"}
-{"label":"identity.offers","parent":"session","session":"session.4","text":"bot.ability.identity.adopt","type":"log"}
 {"label":"bot.diagnostic","session":"session","text":"error.execution while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
-{"label":"memory","parent":"session","session":"session.11","text":"absent","type":"log"}
-{"label":"identity.name","parent":"session","session":"session.11","text":"recalled null","type":"log"}
-{"label":"identity.offers","parent":"session","session":"session.11","text":"bot.ability.identity.adopt","type":"log"}
 {"label":"bot.diagnostic","session":"session","text":"error.execution while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}

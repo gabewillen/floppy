@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.speaking.efference",
+  "additionalProperties": false,
   "description": "Copy of a motor command sent to a mouth, delivered to perception at the moment the command is issued and before the sound exists in the environment.",
   "properties": {
     "mouth": {
@@ -25,8 +26,8 @@
     "media_type": {
       "anyOf": [
         {
-          "minLength": 1,
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         {
           "type": "null"
@@ -42,8 +43,8 @@
     "sample_rate_hz": {
       "anyOf": [
         {
-          "minimum": 1,
-          "type": "integer"
+          "type": "integer",
+          "minimum": 1
         },
         {
           "type": "null"
@@ -59,8 +60,8 @@
     "channels": {
       "anyOf": [
         {
-          "minimum": 1,
-          "type": "integer"
+          "type": "integer",
+          "minimum": 1
         },
         {
           "type": "null"
@@ -79,14 +80,13 @@
     "duration"
   ],
   "type": "object",
-  "additionalProperties": false,
   "examples": [
     {
-      "channels": 1,
+      "mouth": "01J8ZQ2K7M0000000000000000",
       "duration": 3.6,
       "media_type": "audio/pcm",
-      "mouth": "01J8ZQ2K7M0000000000000000",
-      "sample_rate_hz": 24000
+      "sample_rate_hz": 24000,
+      "channels": 1
     }
   ]
 }
