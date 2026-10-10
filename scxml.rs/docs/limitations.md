@@ -360,11 +360,7 @@ In detail:
   such a child uses is not resolved for it (its invocation fails with
   `error.execution`), and an `<invoke srcexpr>` document that pins a release
   (`@<tag>`) does not load (`error.execution`), since its pin was never
-  resolved. A relative `srcexpr` URI resolves against the root
-  document's base URI (the host's `load-document` call does not identify the
-  invoking document), and a literal relative URI that documents of
-  different bases resolve to different URLs does not load (its element
-  raises `error.execution`). The documents a run loads are fetched again by
+  resolved. The documents a run loads are fetched again by
   a `--replay`, not read from its log. A slot named by an
   `env:<slot>expr` expression is evaluated per execution, so the CLI's element
   listing cannot say whether the run holds its value.
