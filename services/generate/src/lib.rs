@@ -485,8 +485,19 @@ pub fn strict_schema(schema: &Json) -> Json {
         .and_then(Json::as_object)
         .map(|properties| properties.keys().cloned().map(Json::from).collect());
     if names.is_some() || out.get("type").and_then(Json::as_str) == Some("object") {
+        // The declared required names keep their order; the rest follow.
+        let mut required: Vec<Json> = out
+            .get("required")
+            .and_then(Json::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for name in names.unwrap_or_default() {
+            if !required.contains(&name) {
+                required.push(name);
+            }
+        }
         out.insert("additionalProperties".into(), Json::Bool(false));
-        out.insert("required".into(), Json::Array(names.unwrap_or_default()));
+        out.insert("required".into(), Json::Array(required));
     }
     Json::Object(out)
 }

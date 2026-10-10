@@ -149,7 +149,7 @@ fn a_strict_schema_is_sent_with_every_property_required() {
                     {"type": "null"}
                 ]}
             },
-            "required": ["data", "event", "items"],
+            "required": ["event", "data", "items"],
             "additionalProperties": false
         })
     );
