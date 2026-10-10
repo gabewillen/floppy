@@ -11,7 +11,7 @@
 {"label":"floppy.output","session":"session","text":"{\"turn\":1,\"output\":[{\"data\":{\"text\":\"reply 1\"},\"event\":\"bot.ability.communication.respond\"}]}","type":"log"}
 {"label":"bot.processing.completed","session":"session","text":"{\"output\":[{\"data\":{\"text\":\"reply 1\"},\"event\":\"bot.ability.communication.respond\"}],\"focus_candidates\":[],\"turn\":1}","type":"log"}
 {"label":"floppy.route","session":"session","text":"bot.ability.communication.respond -> communication","type":"log"}
-{"label":"speech.encode","parent":"session.13","session":"session.14","text":"encode reply 1 -> media/speaking-1.pcm","type":"log"}
+{"label":"speech.encode","parent":"session.14","session":"session.15","text":"encode reply 1 -> media/speaking-1.pcm","type":"log"}
 {"label":"floppy.say","parent":"session.2","session":"session.4","text":"reply 1","type":"log"}
 {"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}","type":"log"}
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}
@@ -28,7 +28,7 @@
 {"label":"floppy.output","session":"session","text":"{\"turn\":2,\"output\":[{\"data\":{\"text\":\"reply 2\"},\"event\":\"bot.ability.communication.respond\"}]}","type":"log"}
 {"label":"bot.processing.completed","session":"session","text":"{\"output\":[{\"data\":{\"text\":\"reply 2\"},\"event\":\"bot.ability.communication.respond\"}],\"focus_candidates\":[],\"turn\":2}","type":"log"}
 {"label":"floppy.route","session":"session","text":"bot.ability.communication.respond -> communication","type":"log"}
-{"label":"speech.encode","parent":"session.18","session":"session.19","text":"encode reply 2 -> media/speaking-2.pcm","type":"log"}
+{"label":"speech.encode","parent":"session.20","session":"session.21","text":"encode reply 2 -> media/speaking-2.pcm","type":"log"}
 {"label":"floppy.say","parent":"session.2","session":"session.4","text":"reply 2","type":"log"}
 {"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-2.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}","type":"log"}
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}
