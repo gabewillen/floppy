@@ -59,7 +59,8 @@
   Routines (gated by routines_enabled, off in phase 4): the root is a
   parallel of the turns, the reflection region and a routines region
   that, on, invokes
-  abilities/routines.scx as the long-lived child "routines". A settled
+  abilities/routines.scx as the long-lived child "routines" with the
+  memory path as <param name="memory">. A settled
   reflection sends it bot.ability.routines.reconcile; each
   bot.behavior.tick it forwards goes on to the body, which takes it as a
   turn's stimulus (mosfet _observe_routine_tick). Off, nothing is invoked.
@@ -374,7 +375,9 @@
     </state>
     <state id="routines_off"/>
     <state id="routines_on">
-      <invoke id="routines" type="scxml" src="routines.scx"/>
+      <invoke id="routines" type="scxml" src="routines.scx">
+        <param name="memory" expr="memory"/>
+      </invoke>
       <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
                   cond="_event.invokeid === 'routines'">
         <send event="bot.behavior.tick" target="#_parent">
