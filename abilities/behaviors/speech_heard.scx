@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's SpeechHeard seed (mosfet abilities/communication/behaviors.py,
+  speech_heard_seed): a trusted turn behavior that autonomy
+  (abilities/autonomy.scx) runs before the learned ones when the stimulus
+  is bot.ability.listening.speech.output, its one trigger
+  (SPEECH_HEARD_TRIGGERS).
+
+    idle -> handled | unhandled
+
+  Input: the <param>s turn, input (focus and focus_candidates) and
+  stimulus (the turn's stimulus envelope): mosfet's seed takes the
+  cognition's InputData unchanged (its input_adapter), not the learned
+  behaviors' behavior_input_payload.
+
+  idle (mosfet _has_admissible_speech): speech with at least one source_id
+  is admitted; any other speech, including empty source_ids, is unhandled,
+  so the learned inventory and the next cognition stage may continue.
+
+  Output: the Turn Behavior Contract's <donedata> {turn, handled,
+  selected}. handled carries one selection, mosfet's SelectedEvent
+  {event: bot.ability.communication.input, data: TurnData, reason}: the
+  speech's source_ids, an empty target_ids, its content, content_type,
+  sample_rate_hz and channels. mosfet's TurnData.parent is not in the
+  JSON schema (SkipJsonSchema), so the selection carries none.
+
+  Contracts: none of its own; the selection's data is
+  schemas/bot.ability.communication.input.json, checked where the body
+  sends it.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="speech_heard" initial="idle">
+  <datamodel>
+    <data id="turn" expr="0"/>
+    <data id="input" expr="null"/>
+    <data id="stimulus" expr="null"/>
+    <data id="turn_data" expr="null"/>
+  </datamodel>
+
+  <state id="idle">
+    <transition cond="stimulus.data.source_ids.length &gt; 0" target="handled">
+      <assign location="turn_data" expr="({source_ids: stimulus.data.source_ids, target_ids: [], content: stimulus.data.content})"/>
+      <assign location="turn_data.content_type" expr="stimulus.data.content_type"/>
+      <assign location="turn_data.sample_rate_hz" expr="stimulus.data.sample_rate_hz"/>
+      <assign location="turn_data.channels" expr="stimulus.data.channels"/>
+    </transition>
+    <transition target="unhandled"/>
+  </state>
+
+  <final id="handled">
+    <donedata>
+      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.input', data: turn_data, reason: 'seeded speech admit via communication'}]})"/>
+    </donedata>
+  </final>
+
+  <final id="unhandled">
+    <donedata>
+      <content expr="({turn: turn, handled: false})"/>
+    </donedata>
+  </final>
+</scxml>

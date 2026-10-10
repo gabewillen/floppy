@@ -70,6 +70,7 @@ fn with_devices(devices: &str) -> PathBuf {
         "bots/floppy",
         "bots/floppy/schemas",
         "abilities",
+        "abilities/behaviors",
         "abilities/schemas",
     ] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
@@ -269,6 +270,7 @@ fn with_name(name: &str) -> PathBuf {
         "bots/floppy",
         "bots/floppy/schemas",
         "abilities",
+        "abilities/behaviors",
         "abilities/schemas",
     ] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
