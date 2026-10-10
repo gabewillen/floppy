@@ -18,7 +18,10 @@ Last updated: 2026-10-09.
   byte-identical twins of the schemas it references in
   `abilities/<ability>/schemas/` (canonical files stay in
   `abilities/schemas/`). Tests lay abilities out with
-  `support::copy_ability`.
+  `support::copy_ability`. `scx validate` reads each document's `.js`
+  (scxml.rs `98fd120`, `Validator::with_script_resources`), so a cond or
+  `<log expr>` calling its functions is judged by their bodies and every
+  document validates with 0 errors, 0 warnings, and 0 notes.
 - **floppy:** work continues on branch `claude/project-thread-brkerr`
   (pushed to the private `gabewillen/floppy`; `main` is behind it).
   Phase 4 is done through "Replace Script Validators With Event Schemas":

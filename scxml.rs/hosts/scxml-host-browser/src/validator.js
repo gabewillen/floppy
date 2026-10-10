@@ -48,6 +48,24 @@ function isInvokedDocuments(documents) {
   );
 }
 
+/**
+ * True when `scripts` is `{src, text}[]`: the files the validated document's
+ * `<script src>` elements name, each `src` as authored (XML white space
+ * collapsed). The component checks every bound.
+ */
+function isScripts(scripts) {
+  return (
+    Array.isArray(scripts) &&
+    scripts.every(
+      (script) =>
+        script !== null &&
+        typeof script === 'object' &&
+        typeof script.src === 'string' &&
+        typeof script.text === 'string',
+    )
+  );
+}
+
 let defaultLoader;
 
 /** A data-model failure as the validator's closed `declined` value. */
@@ -149,7 +167,8 @@ export async function createValidator(options) {
      *   validate`), `packages` (ExtensionPackage[]), `eventSchemas`
      *   (`{uri, bytes}[]`), `invokedDocuments` (`{src, text,
      *   eventSchemas?}[]`, the documents its literal `<invoke src>` elements
-     *   load, for `EVENT011`)
+     *   load, for `EVENT011`), `scripts` (`{src, text}[]`, the files its
+     *   `<script src>` elements name, for the side-effect analysis)
      */
     async validate(source, validateOptions) {
       if (lost) {
@@ -162,6 +181,7 @@ export async function createValidator(options) {
         typeof sourceName !== 'string' ||
         !isCompileRequestOptions(validateOptions, schemaPolicy) ||
         !isInvokedDocuments(validateOptions?.invokedDocuments ?? []) ||
+        !isScripts(validateOptions?.scripts ?? []) ||
         !(validateOptions?.packages ?? []).every((pkg) =>
           ['validatorArtifact', 'validatorSha256'].every(
             (field) => pkg[field] === undefined || typeof pkg[field] === 'string',
@@ -177,6 +197,7 @@ export async function createValidator(options) {
         text: document.text,
         eventSchemas: compileRequestParts({ eventSchemas: document.eventSchemas }).eventSchemas,
       }));
+      const scripts = (validateOptions?.scripts ?? []).map((script) => ({ src: script.src, text: script.text }));
       // The validator's package record also carries the optional package
       // validator fields.
       const packages = records.map((pkg, index) => ({
@@ -197,6 +218,7 @@ export async function createValidator(options) {
               packages,
               eventSchemas,
               invokedDocuments,
+              scripts,
               traceContext: undefined,
             }),
           ),

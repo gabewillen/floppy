@@ -1246,6 +1246,140 @@ fn a_call_effect_labels_its_cause_in_the_script() {
     );
 }
 
+/// The script files `scripts` names, as a caller that read them supplies.
+fn script_files(files: &[(&str, &str)]) -> ScriptResources {
+    files
+        .iter()
+        .map(|(src, text)| ((*src).to_owned(), (*text).to_owned()))
+        .collect()
+}
+
+#[test]
+fn a_supplied_script_src_file_reaches_the_effect_analysis_as_a_script() {
+    let checker = EffectChecker::default();
+    let xml = machine(
+        "ecmascript",
+        r#"<script src=" lib.js "/><state id="s"><onentry><script src="lib.js"/></onentry><transition cond="f()" target="s"/></state>"#,
+    );
+    let scripts = script_files(&[("lib.js", "function f() { return true; }")]);
+    let _ = validate_expressions_with_scripts(&parse(&xml), &[&checker], &scripts);
+    let requests = checker.requests.lock().expect("requests lock");
+    let [(fragments, unread)] = requests.as_slice() else {
+        panic!("one request expected: {requests:?}");
+    };
+    assert_eq!(
+        *unread,
+        ExternalScripts::Absent,
+        "every `<script src>` was read, so none is reported as unread"
+    );
+    let roles: Vec<(&str, &str)> = fragments
+        .iter()
+        .map(|(role, source)| (role.as_str(), source.as_str()))
+        .collect();
+    assert_eq!(
+        roles,
+        [
+            ("Condition", "f()"),
+            ("Script", "function f() { return true; }"),
+        ],
+        "the file follows the document's fragments, once however often it is named"
+    );
+}
+
+#[test]
+fn a_script_src_without_its_file_stays_unread() {
+    let checker = EffectChecker::default();
+    let xml = machine(
+        "ecmascript",
+        r#"<script src="lib.js"/><script src="other.js"/><state id="s"><transition cond="f()" target="s"/></state>"#,
+    );
+    let scripts = script_files(&[("lib.js", "function f() { return true; }")]);
+    let _ = validate_expressions_with_scripts(&parse(&xml), &[&checker], &scripts);
+    let requests = checker.requests.lock().expect("requests lock");
+    let [(fragments, unread)] = requests.as_slice() else {
+        panic!("one request expected: {requests:?}");
+    };
+    assert_eq!(
+        *unread,
+        ExternalScripts::Present,
+        "`other.js` was not supplied, so the machine still has an unread script"
+    );
+    assert_eq!(
+        fragments.len(),
+        2,
+        "the condition and `lib.js`: {fragments:?}"
+    );
+}
+
+#[test]
+fn a_call_effect_in_a_script_src_file_labels_its_src() {
+    let xml = machine(
+        "ecmascript",
+        r#"<script src="lib.js"/><state id="s"><onentry><log expr="bump()"/></onentry></state>"#,
+    );
+    let checker = EffectChecker {
+        findings: vec![EffectFinding {
+            certain: true,
+            kind: EffectKind::FunctionCall,
+            span: effect_span(0, 0, 6),
+            subject: "bump".to_owned(),
+            cause: Some(EffectCause {
+                kind: EffectKind::Update,
+                span: effect_span(1, 18, 23),
+                subject: "count".to_owned(),
+                function: "bump".to_owned(),
+            }),
+            operator: None,
+        }],
+        ..EffectChecker::default()
+    };
+    let scripts = script_files(&[("lib.js", "function bump() { count++; return true; }")]);
+    let report = validate_expressions_with_scripts(&parse(&xml), &[&checker], &scripts);
+    let [error] = report.diagnostics() else {
+        panic!("one diagnostic expected: {report:?}");
+    };
+    assert_eq!(
+        (error.code.as_str(), error.message.as_str()),
+        ("SCXML074", "`expr` on `<log>` has a side effect")
+    );
+    assert_eq!(text(&xml, error.primary.span), "bump()");
+    assert_eq!(error.secondary.len(), 1);
+    assert_eq!(text(&xml, error.secondary[0].span), "lib.js");
+    assert_eq!(
+        error.secondary[0].message.as_deref(),
+        Some("`bump` changes `count` here (in `lib.js`)")
+    );
+}
+
+#[test]
+fn a_system_variable_write_in_a_script_src_file_is_reported_at_its_src() {
+    let xml = machine("ecmascript", r#"<script src="lib.js"/><state id="s"/>"#);
+    let checker = EffectChecker {
+        findings: vec![EffectFinding {
+            certain: true,
+            kind: EffectKind::SystemVariableWrite,
+            span: effect_span(0, 7, 13),
+            subject: "_event".to_owned(),
+            cause: None,
+            operator: None,
+        }],
+        ..EffectChecker::default()
+    };
+    let scripts = script_files(&[("lib.js", "delete _event;")]);
+    let report = validate_expressions_with_scripts(&parse(&xml), &[&checker], &scripts);
+    let [error] = report.diagnostics() else {
+        panic!("one diagnostic expected: {report:?}");
+    };
+    assert_eq!(
+        (error.code.as_str(), error.message.as_str()),
+        (
+            "SCXML077",
+            "the `<script src>` file `lib.js` changes the system variable `_event`"
+        )
+    );
+    assert_eq!(text(&xml, error.primary.span), "lib.js");
+}
+
 #[test]
 fn a_write_of_a_system_variable_is_a_warning_in_any_fragment() {
     let xml = machine(

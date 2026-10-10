@@ -1,0 +1,10 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <script src="scripts/pure.js"/>
+  <state id="a">
+    <onentry>
+      <log label="entry" expr="describe(1)"/>
+    </onentry>
+    <transition event="go" cond="isReady(_event)" target="f"/>
+  </state>
+  <final id="f"/>
+</scxml>

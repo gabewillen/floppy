@@ -260,6 +260,7 @@ fn component_report(body: &str) -> serde_json::Value {
             }],
             event_schemas: Vec::new(),
             invoked_documents: Vec::new(),
+            scripts: Vec::new(),
             trace_context: None,
         })
         .expect("the validator answers");
