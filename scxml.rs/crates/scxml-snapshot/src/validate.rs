@@ -512,10 +512,14 @@ impl Passes {
         self.unique_states(full, &configuration.with_key("full"));
         let full_set: BTreeSet<&str> = full.iter().map(String::as_str).collect();
         let atomic_in_full = atomic.iter().all(|id| full_set.contains(id.as_str()));
+        // At a checkpoint a started session is in at least one atomic
+        // state; executable content may run before one is entered (the
+        // entry content of a compound state, whose children are not yet
+        // in the configuration it observes).
         let shape_ok = if session.status == Status::Ready {
             atomic.is_empty() && full.is_empty()
         } else {
-            !atomic.is_empty()
+            !atomic.is_empty() || context.executable_content
         };
         if !atomic_in_full || !shape_ok {
             self.fail(SnapshotErrorCode::Inconsistent, &configuration);

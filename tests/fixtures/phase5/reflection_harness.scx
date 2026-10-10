@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Test harness of the Reflection ability (abilities/reflection.scx), laid
+  out beside it in a scratch copy of abilities/ (tests/tests/reflection.rs).
+  It seeds the database with the statements in seed (none by default),
+  invokes the reflection as the cognition does (the <param>s memory and
+  model), forwards each bot.ability.reflection.input from standard input
+  to it, and after each answer logs it (harness.output or
+  harness.failed) and then the inventory and the stored episodes
+  (inventory, episodes), each as one JSON value.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="reflection_harness" initial="seeding">
+  <datamodel>
+    <data id="database" expr="'/memory/floppy.sqlite'"/>
+    <data id="seed" expr="[]"/>
+    <data id="inspect_inventory">SELECT json_group_array(json_object('name', name, 'source', source, 'description', description, 'lifetime', lifetime, 'status', status, 'status_reason', status_reason, 'used_count', used_count, 'failed_count', failed_count, 'triggers', json((SELECT json_group_array("trigger") FROM (SELECT "trigger" FROM bot_behavior_trigger WHERE behavior_name = b.name ORDER BY "trigger"))))) FROM (SELECT * FROM bot_behavior ORDER BY name) AS b</data>
+    <data id="inspect_episodes">SELECT json_group_array(json_object('context_ref', context_ref, 'scope', scope, 'kind', kind, 'content', json(content))) FROM (SELECT * FROM bot_memory WHERE query_tags = 'cognitive_episode' ORDER BY created_at, rowid)</data>
+  </datamodel>
+
+  <state id="seeding">
+    <transition cond="seed.length === 0" target="running"/>
+    <invoke id="seeder" type="scxml" src="memory.scx">
+      <param name="database" expr="database"/>
+      <param name="statements" expr="seed"/>
+    </invoke>
+    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+                cond="_event.invokeid === 'seeder'" target="running"/>
+  </state>
+
+  <state id="running" initial="waiting">
+    <invoke id="reflection" type="scxml" src="reflection.scx">
+      <param name="database" expr="database"/>
+      <param name="model" expr="'fake-model'"/>
+    </invoke>
+    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+      <send event="bot.ability.reflection.input" target="#_reflection">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.reflection.output" event:schema="schemas/bot.ability.reflection.output.json"
+                target="inspecting">
+      <log label="harness.output" expr="'answered'"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                cond="_event.invokeid === 'reflection'" target="inspecting">
+      <log label="harness.failed" expr="_event.data.message"/>
+    </transition>
+
+    <state id="waiting"/>
+    <state id="inspecting">
+      <invoke id="inspector" type="scxml" src="memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="[{sql: inspect_inventory}, {sql: inspect_episodes}]"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+                  cond="_event.invokeid === 'inspector'" target="waiting">
+        <log label="inventory" expr="_event.data.results[0].rows[0].values[0]"/>
+        <log label="episodes" expr="_event.data.results[1].rows[0].values[0]"/>
+      </transition>
+    </state>
+  </state>
+</scxml>

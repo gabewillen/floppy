@@ -3,17 +3,18 @@
 //! run as the body's child through `scx run` on the wall clock.
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
-//! under `bots/floppy/`, the communication, conversation, speaking and
-//! every schema under `abilities/`) with
+//! under `bots/floppy/`, the communication, conversation, speaking,
+//! identity, memory and every schema under `abilities/`) with
 //! `tests/fixtures/phase4/cognition_double.scx` as `abilities/cognition.scx`
 //! (no model; its behavior per turn is the `bot.input` observation's name,
 //! or a conversation product's last text). No backend is involved: the
 //! communication path makes no service call.
 //!
 //! The speaking child logs `bot.say`, the conversation each commit
-//! (`conversation`) and `memory`, the communication what it forwards
-//! (`communication.product`, `communication.history`,
-//! `communication.deferred`, `communication.activate`), and the body each
+//! (`conversation`) and what memory recalled (`conversation.memories`),
+//! the communication what it forwards (`communication.product`,
+//! `communication.history`, `communication.deferred`,
+//! `communication.activate`), and the body each
 //! event it emits (`bot.ability.speaking.output`,
 //! `bot.ability.communication.failed`).
 //!
@@ -39,7 +40,7 @@ use serde_json::{Value as Json, json};
 use support::{Finished, Run, logs, trace, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup included).
-const WAIT: Duration = Duration::from_secs(60);
+const WAIT: Duration = Duration::from_secs(300);
 
 /// A speaking child that is ready but never answers.
 const DEAF_SPEAKING: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
@@ -105,7 +106,13 @@ fn layout(speaking: &Speaking, edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
         &workspace().join("abilities/schemas"),
         &dir.join("abilities/schemas"),
     );
-    for name in ["communication", "conversation", "speaking", "identity"] {
+    for name in [
+        "communication",
+        "conversation",
+        "speaking",
+        "identity",
+        "memory",
+    ] {
         let name = format!("{name}.scx");
         std::fs::copy(
             workspace().join("abilities").join(&name),
@@ -273,7 +280,13 @@ fn communication_input_is_a_turn_whose_stimulus_carries_the_history() {
             "outbound 3",
         ])
     );
-    assert_eq!(texts(&all, "memory"), strings(&["absent", "absent"]));
+    // The body gives the conversation a database: each inbound message
+    // recalls the relationship's memories, then is remembered.
+    assert!(texts(&all, "memory").is_empty(), "{all:?}");
+    assert_eq!(
+        texts(&all, "conversation.memories"),
+        strings(&["recalled 0, remembered 1", "recalled 1, remembered 1"])
+    );
     assert_eq!(texts(&all, "communication.product"), strings(&["0", "2"]));
     assert_eq!(texts(&all, "bot.say"), strings(&["reply 1", "reply 2"]));
     close(

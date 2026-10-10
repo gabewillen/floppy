@@ -39,15 +39,15 @@ Activate it, then give it inputs, on standard input:
 # The locally built packages (the dev cache under target/).
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env bots/floppy/floppy.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory bots/floppy/floppy.scx
 # A conversation: text addressed to the bot, answered through bot.say.
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env bots/floppy/floppy.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory bots/floppy/floppy.scx
 # floppy's latest release, once one is published (phase 7).
 printf '%s\n' '{"name":"bot.activate","data":{}}' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
-  scx run --env-file .env bots/floppy/floppy.scx
+  scx run --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory bots/floppy/floppy.scx
 ```
 
 The env file must set `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
@@ -58,12 +58,19 @@ every turn fails with `the intuition failed: the decision failed
 (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
 `bot.activate` may name the model (`{"model": "..."}`); the default is
-`Qwen/Qwen3.8-Flash-Next`. Speaking needs `FLOPPY_SPEECH_BASE_URL` and
-`FLOPPY_SPEECH_API_KEY` (the speech service has no default backend) and
-the speech service granted the media directory its audio is written to
-(`--dir https://github.com/stateforward/floppy/services/speech=<host
-dir>::/media`); without them a response fails with
-`bot.ability.communication.failed`.
+`Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory.scx`, mosfet's
+Memory) keeps the bot's database, `/memory/floppy.sqlite`, through the sql
+service (`services/sql`, SQLite), in the directory the run grants that
+service: `--dir
+https://github.com/stateforward/floppy/services/sql=HOST::/memory`
+preopens the host directory `HOST` (here `memory/`, created first with
+`mkdir -p memory`) at `/memory`, and the run is refused without it.
+Speaking needs `FLOPPY_SPEECH_BASE_URL` and `FLOPPY_SPEECH_API_KEY` (the
+speech service has no default backend) and the speech service granted the
+media directory its audio is written to (`--dir
+https://github.com/stateforward/floppy/services/speech=HOST::/media`);
+without them a response fails with `bot.ability.communication.failed`.
+The other services import no WASI resources.
 
 The root has no parent, so each event the body emits is a `log` record
 labelled with its name, its text the event's data as JSON: `bot.activated`,

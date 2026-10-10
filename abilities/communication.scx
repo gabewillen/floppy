@@ -73,6 +73,9 @@
        version="1.0" datamodel="ecmascript" name="communication" initial="attached">
   <datamodel>
     <data id="response_timeout_ms" expr="6000"/>
+    <!-- The memory database file, for the conversation (null:
+         no memory). -->
+    <data id="database" expr="null"/>
     <data id="ready" expr="({})"/>
     <data id="queue" expr="[]"/>
     <!-- The response in hand: its number, words and hop timer. -->
@@ -90,7 +93,9 @@
   </datamodel>
 
   <state id="attached" initial="inactive">
-    <invoke id="conversation" type="scxml" src="conversation.scx"/>
+    <invoke id="conversation" type="scxml" src="conversation.scx">
+      <param name="database" expr="database"/>
+    </invoke>
     <invoke id="speaking" type="scxml" src="speaking.scx"/>
 
     <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json"
@@ -108,6 +113,15 @@
     <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json"
                 cond="_event.invokeid === 'conversation'">
       <log label="communication.history" expr="String(_event.data.messages.length)"/>
+    </transition>
+    <!-- A conversation that could not take an input fails it (mosfet's
+         conversation failed terminal). -->
+    <transition event="bot.ability.conversation.failed" event:schema="schemas/bot.ability.conversation.failed.json"
+                cond="_event.invokeid === 'conversation'">
+      <log label="communication.rejected" expr="_event.data.stage + ': ' + _event.data.message"/>
+      <send event="bot.ability.communication.failed" target="#_parent">
+        <param name="message" expr="_event.data.message"/>
+      </send>
     </transition>
     <!-- A child that cannot run, or ends, degrades the ability. -->
     <transition event="error.*" cond="children.indexOf(_event.invokeid) &gt;= 0" target="degraded">

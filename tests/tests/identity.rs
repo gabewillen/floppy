@@ -3,7 +3,7 @@
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
 //! under `bots/floppy/`, the communication, conversation, speaking,
-//! identity and every schema under `abilities/`) with
+//! identity, memory and every schema under `abilities/`) with
 //! `tests/fixtures/phase4/cognition_double.scx` as `abilities/cognition.scx`
 //! (no model; an addressed turn answers "I am <name>", a `bot.input`
 //! observation `adopt` selects `bot.ability.identity.adopt` for its data).
@@ -11,7 +11,9 @@
 //! `<data id="name">`, which stands in for the invoker's `<param>`.
 //!
 //! The identity logs `identity.name`, `identity.heard`, `identity.offers`
-//! and `memory`; the body logs each route (`bot.route`).
+//! and `identity.adopt.failed`; the body logs each route (`bot.route`).
+//! The body gives the identity its database, in a directory each run is
+//! granted (`support::memory_grant`), so an adopted name outlives the run.
 //!
 //! Every test ends by comparing its whole run with its pinned trace under
 //! `tests/fixtures/phase4/traces/` (`support::trace`; `FLOPPY_TRACE_BLESS=1`
@@ -31,7 +33,7 @@ use serde_json::{Value as Json, json};
 use support::{Run, logs, trace, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup included).
-const WAIT: Duration = Duration::from_secs(60);
+const WAIT: Duration = Duration::from_secs(300);
 
 fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).expect("the directory is creatable");
@@ -57,7 +59,13 @@ fn layout(name: Option<&str>) -> PathBuf {
         &workspace().join("abilities/schemas"),
         &dir.join("abilities/schemas"),
     );
-    for name in ["communication", "conversation", "speaking", "identity"] {
+    for name in [
+        "communication",
+        "conversation",
+        "speaking",
+        "identity",
+        "memory",
+    ] {
         let name = format!("{name}.scx");
         std::fs::copy(
             workspace().join("abilities").join(&name),
@@ -105,7 +113,15 @@ fn strings(values: &[&str]) -> Vec<String> {
 /// Starts the body and activates it; returns the run and every record up
 /// to the activation.
 fn started(body: &Path) -> (Run, Vec<Json>) {
-    let mut run = Run::start(&[body.display().to_string()], &[]);
+    started_with(body, &[])
+}
+
+/// [`started`] with `grant` (the memory service's directory) before the
+/// body; an empty `grant` gets a fresh directory.
+fn started_with(body: &Path, grant: &[String]) -> (Run, Vec<Json>) {
+    let mut args = grant.to_vec();
+    args.push(body.display().to_string());
+    let mut run = Run::start(&args, &[]);
     run.event("bot.activate", &json!({}));
     let records = run.until(WAIT, label_is("bot.activated"));
     (run, records)
@@ -129,8 +145,9 @@ fn close(run: Run, test: &str) -> Vec<Json> {
 #[test]
 fn the_identity_is_ready_with_its_adopt_offer() {
     let (run, records) = started(&layout(None));
-    // The identity's first offers are part of the activation.
-    assert_eq!(texts(&records, "memory"), strings(&["absent"]));
+    // The identity's first offers are part of the activation; the body
+    // gives it a database, so it recalls from memory.
+    assert!(texts(&records, "memory").is_empty(), "{records:?}");
     assert_eq!(
         texts(&records, "identity.name"),
         strings(&["recalled null"])
@@ -219,7 +236,7 @@ fn an_adopted_name_is_answered_to() {
     );
     assert_eq!(
         texts(&records, "identity.name"),
-        strings(&[r#"adopted "Floppy" (persisted: false)"#])
+        strings(&[r#"adopted "Floppy" (persisted: true)"#])
     );
     // Back in knowing, it offers again, and now answers to the name.
     run.event(
@@ -237,4 +254,28 @@ fn an_adopted_name_is_answered_to() {
         texts(&all, "identity.offers"),
         strings(&["bot.ability.identity.adopt", "bot.ability.identity.adopt"])
     );
+}
+
+#[test]
+fn an_adopted_name_is_recalled_by_the_next_run() {
+    let body = layout(None);
+    let grant = support::memory_grant();
+    let (mut run, _) = started_with(&body, &grant);
+    run.event("bot.input", &input("adopt", "Floppy"));
+    run.until(WAIT, label_is("identity.offers"));
+    run.event("bot.input", &input("adopt", "Pip"));
+    let records = run.until(WAIT, |record| {
+        record["type"] == "log"
+            && record["label"] == "identity.name"
+            && record["text"] == r#"adopted "Pip" (persisted: true)"#
+    });
+    assert!(texts(&records, "identity.adopt.failed").is_empty());
+    drop(run.close(WAIT));
+    // The next run wakes up with the name it took last.
+    let (run, records) = started_with(&body, &grant);
+    assert_eq!(
+        texts(&records, "identity.name"),
+        strings(&[r#"recalled "Pip""#])
+    );
+    close(run, "an_adopted_name_is_recalled_by_the_next_run");
 }

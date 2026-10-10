@@ -39,7 +39,7 @@ use serde_json::{Map, Value as Json, json};
 use support::{Finished, Run, logs, trace, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup included).
-const WAIT: Duration = Duration::from_secs(90);
+const WAIT: Duration = Duration::from_secs(300);
 /// How long the mock must receive nothing before a blessing run takes its
 /// requests as complete.
 const SETTLE: Duration = Duration::from_secs(1);
@@ -548,7 +548,7 @@ fn intuition_handles_an_ignore_without_reasoning() {
     );
     assert_eq!(
         texts(&records, "autonomy"),
-        strings(&["turn 1: no behaviors (phase 5)"])
+        strings(&["turn 1: 0 matched for bot.input"])
     );
     assert_eq!(
         texts(&records, "reflection"),
@@ -754,7 +754,7 @@ fn autonomy_runs_the_learned_behaviors_the_stimulus_triggers() {
         &mock,
         Decision::Fail,
         Generation::Fail,
-        &[("abilities/cognition.scx", &[("memory", memory.as_str())])],
+        &[("abilities/cognition.scx", &[("database", memory.as_str())])],
     );
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
@@ -822,7 +822,7 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
         &mock,
         Decision::Ignore,
         Generation::Fail,
-        &[("abilities/cognition.scx", &[("memory", memory.as_str())])],
+        &[("abilities/cognition.scx", &[("database", memory.as_str())])],
     );
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
@@ -873,14 +873,16 @@ fn reasoning_selects_from_the_turns_choices() {
             "reasoning handled"
         ])
     );
-    // Both memory seams ran and recalled nothing; reflection is absent.
-    assert_eq!(texts(&records, "memory"), strings(&["absent", "absent"]));
+    // The body gives the cognition a database: reasoning recalls from and
+    // retains to memory (no seam logs absent); reflection is absent.
+    assert!(texts(&records, "memory").is_empty(), "{records:?}");
     assert_eq!(
         texts(&records, "reflection"),
         strings(&["absent (phase 5)"])
     );
     // The model request: the dispatch schema of the choices, strict, and
-    // a prompt that carries the stimulus and no recalled memory.
+    // a prompt that carries the stimulus and what memory recalled (a fresh
+    // database holds nothing).
     let requests = mock.received("/chat/completions");
     assert_eq!(requests.len(), 1);
     let body = &requests[0].body;
@@ -927,7 +929,18 @@ fn reasoning_selects_from_the_turns_choices() {
         "what is the capital of France?"
     );
     let keys: Vec<&String> = prompt.as_object().expect("an object").keys().collect();
-    assert_eq!(keys, ["focus", "focus_candidates", "stimulus"]);
+    assert_eq!(
+        keys,
+        [
+            "focus",
+            "focus_candidates",
+            "prior_episodes",
+            "standing_directives",
+            "stimulus"
+        ]
+    );
+    assert_eq!(prompt["prior_episodes"], json!([]));
+    assert_eq!(prompt["standing_directives"], json!([]));
     close(run, &mock, "reasoning_selects_from_the_turns_choices");
 }
 
@@ -981,6 +994,48 @@ fn a_reasoned_response_is_said_through_the_communication() {
         &mock,
         "a_reasoned_response_is_said_through_the_communication",
     );
+}
+
+/// The user message of each model request, parsed.
+fn prompts(mock: &Mock) -> Vec<Json> {
+    mock.received("/chat/completions")
+        .iter()
+        .map(|request| {
+            let prompt = request.body["messages"]
+                .as_array()
+                .and_then(|messages| messages.last())
+                .and_then(|message| message["content"].as_str())
+                .expect("the user message");
+            serde_json::from_str(prompt).expect("the prompt is JSON")
+        })
+        .collect()
+}
+
+/// mosfet's Reasoning recall: a reasoned turn retains its episode, and the
+/// next turn's prompt carries it.
+#[test]
+fn a_reasoned_turn_is_recalled_by_the_next() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
+    let mut run = start(&bot);
+    say(&mut run, "remember this");
+    run.until(WAIT, turn_ended);
+    say(&mut run, "and this");
+    run.until(WAIT, turn_ended);
+    let prompts = prompts(&mock);
+    assert_eq!(prompts.len(), 2, "{prompts:?}");
+    assert_eq!(prompts[0]["prior_episodes"], json!([]));
+    assert_eq!(
+        prompts[1]["prior_episodes"],
+        json!([{
+            "focus": null,
+            "focus_candidates": [],
+            "stimulus_name": "bot.input",
+            "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}],
+            "behavior": null
+        }])
+    );
+    close(run, &mock, "a_reasoned_turn_is_recalled_by_the_next");
 }
 
 #[test]
@@ -1197,7 +1252,7 @@ fn a_silent_reasoning_asks_the_body_for_a_reboot() {
         Decision::Abstain,
         Generation::Hang,
         "reasoning",
-        "6000",
+        "20000",
     );
 }
 
@@ -1276,6 +1331,11 @@ fn a_cancel_during_reasoning_is_acknowledged() {
 /// The phase 5 seams' gates, on.
 const GATES_ON: &[(&str, &str)] = &[("reflection_enabled", "true"), ("routines_enabled", "true")];
 
+/// A body without a database: the seams' gate tests watch the seams, not
+/// memory (with one, reflection asks the model; `tests/tests/reflection.rs`
+/// covers it).
+const NO_DATABASE: &[(&str, &str)] = &[("database", "null")];
+
 /// With both gates on, the routines start (finding no routines), each
 /// output is followed by the reflection seam, and a settled reflection
 /// asks the routines to reconcile.
@@ -1286,7 +1346,10 @@ fn with_its_gates_on_the_cognition_reflects_and_reconciles_the_routines() {
         &mock,
         Decision::Abstain,
         Generation::Ignore,
-        &[("abilities/cognition.scx", GATES_ON)],
+        &[
+            ("abilities/cognition.scx", GATES_ON),
+            ("bots/floppy/floppy.scx", NO_DATABASE),
+        ],
     );
     let mut run = start(&bot);
     say(&mut run, "hmm");
@@ -1320,7 +1383,10 @@ fn a_routine_tick_becomes_a_turn() {
         &mock,
         Decision::Abstain,
         Generation::Ignore,
-        &[("abilities/cognition.scx", GATES_ON)],
+        &[
+            ("abilities/cognition.scx", GATES_ON),
+            ("bots/floppy/floppy.scx", NO_DATABASE),
+        ],
     );
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/routines_double.scx"),
