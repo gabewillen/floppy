@@ -1,0 +1,25 @@
+[package]
+name = "floppy-spike-pglite"
+description = "Phase 7 spike: an invoked service that reaches PGlite over the Postgres wire protocol on `wasi:sockets/tcp` and runs one simple query"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde_json.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# `wasi:sockets/tcp` without wasi-libc's socket layer.
+wasip2 = "1.0.4"
+# The WASI 0.3 async ABI: `invoke` is an `async func`.
+wit-bindgen = { workspace = true, features = ["async", "async-spawn"] }
+
+[lints]
+workspace = true
