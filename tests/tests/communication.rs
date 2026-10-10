@@ -662,3 +662,125 @@ fn speech_encoding_is_bounded_by_its_timeout() {
     assert!(texts(&records, "bot.say").is_empty());
     close(run, "speech_encoding_is_bounded_by_its_timeout");
 }
+
+/// A fake `OpenAI`-compatible speech backend on 127.0.0.1: every
+/// `POST /v1/audio/speech` answers a tenth of a second of raw 24 kHz mono
+/// 16-bit PCM (4800 bytes), and its request bodies are recorded.
+fn speech_backend() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Json>>>) {
+    use std::io::{BufRead as _, BufReader, Read as _, Write as _};
+    let listener =
+        std::net::TcpListener::bind("127.0.0.1:0").expect("the backend binds a loopback port");
+    let origin = format!(
+        "http://{}",
+        listener.local_addr().expect("the backend has an address")
+    );
+    let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = std::sync::Arc::clone(&requests);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
+            let mut line = String::new();
+            let mut length = 0;
+            while reader.read_line(&mut line).is_ok() && line != "\r\n" && !line.is_empty() {
+                if let Some((name, value)) = line.trim_end().split_once(':')
+                    && name.eq_ignore_ascii_case("content-length")
+                {
+                    length = value.trim().parse().unwrap_or(0);
+                }
+                line.clear();
+            }
+            let mut body = vec![0; length];
+            if reader.read_exact(&mut body).is_err() {
+                continue;
+            }
+            log.lock()
+                .expect("the request log")
+                .push(serde_json::from_slice(&body).unwrap_or(Json::Null));
+            let audio = vec![0_u8; 4800];
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                audio.len()
+            );
+            let _ = stream.write_all(&audio);
+        }
+    });
+    (origin, requests)
+}
+
+#[test]
+fn a_response_is_spoken_through_the_speech_service() {
+    let body = layout(
+        &Speaking::Real,
+        &[(
+            "abilities/speaking.scx",
+            &[("model", "'tts-1'"), ("voice", "'alloy'")],
+        )],
+    );
+    with_listening(&body);
+    let abilities = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the body is under bots/floppy/")
+        .join("abilities");
+    // The real vocal ability, which invokes the speech service.
+    std::fs::copy(
+        workspace().join("abilities/vocal.scx"),
+        abilities.join("vocal.scx"),
+    )
+    .expect("the vocal ability is copyable");
+    std::fs::remove_file(abilities.join("speech_double.scx")).expect("the double is removable");
+    let (origin, requests) = speech_backend();
+    let media = unique_scratch("speaking-media");
+    let env = media.join("speech.env");
+    std::fs::write(
+        &env,
+        format!(
+            "FLOPPY_SPEECH_BASE_URL={origin}/v1\nFLOPPY_SPEECH_API_KEY=sk-floppy-speech-fake\n"
+        ),
+    )
+    .expect("the env file is writable");
+    let mut run = Run::start(
+        &[
+            "--env-file".to_owned(),
+            env.display().to_string(),
+            "--dir".to_owned(),
+            format!(
+                "{}={}::/media",
+                support::service_uri("speech"),
+                media.display()
+            ),
+            body.display().to_string(),
+        ],
+        &[],
+    );
+    run.event("bot.activate", &json!({}));
+    run.until(WAIT, label_is("bot.activated"));
+    run.event("bot.input", &input("reply"));
+    let records = until_all(&run, &["input.sound", "bot.ability.speaking.output"]);
+    // 4800 bytes of 24 kHz mono 16-bit PCM: a tenth of a second, measured.
+    assert_eq!(
+        texts(&records, "input.efference"),
+        strings(&[
+            r#"{"channels":1,"duration":0.1,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
+        ])
+    );
+    assert_eq!(
+        texts(&records, "input.sound"),
+        strings(&[
+            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
+        ])
+    );
+    assert_eq!(texts(&records, "bot.say"), strings(&["reply 1"]));
+    let written = std::fs::read(media.join("speaking-1.pcm")).expect("the audio was written");
+    assert_eq!(written.len(), 4800);
+    let requests = requests.lock().expect("the request log").clone();
+    assert_eq!(requests.len(), 1, "{requests:?}");
+    assert_eq!(requests[0]["model"], "tts-1");
+    assert_eq!(requests[0]["input"], "reply 1");
+    assert_eq!(requests[0]["voice"], "alloy");
+    assert_eq!(requests[0]["response_format"], "pcm");
+    close(run, "a_response_is_spoken_through_the_speech_service");
+}

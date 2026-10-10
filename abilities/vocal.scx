@@ -11,8 +11,8 @@
 
   Input: bot.ability.vocal.speech.encoding.input {text} (mosfet's input is
   the text's UTF-8 bytes). applying invokes the speech service with the
-  <param>s operation "encode", model (the speech service requires one:
-  the invoker names it), text, voice, output (where the
+  <param>s operation "encode", model and voice (the speech service
+  requires both: the invoker names them), text, output (where the
   service writes the audio: a path in the media directory the run grants
   it, which the invoker names) and media_type, and answers the parent with
   the service's bot.ability.vocal.speech.encoding.output {audio,

@@ -1,7 +1,6 @@
-{"label":"memory","parent":"session","session":"session.5","text":"absent","type":"log"}
+{"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
 {"label":"identity.name","parent":"session","session":"session.5","text":"recalled null","type":"log"}
 {"label":"identity.offers","parent":"session","session":"session.5","text":"bot.ability.identity.adopt","type":"log"}
-{"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
 {"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"double.input","parent":"session","session":"session.1","text":"1 reply \"reply\"","type":"log"}
@@ -9,7 +8,7 @@
 {"label":"bot.output","session":"session","text":"{\"turn\":1,\"output\":[{\"data\":{\"text\":\"reply 1\"},\"event\":\"bot.ability.communication.respond\"}]}","type":"log"}
 {"label":"bot.processing.completed","session":"session","text":"{\"output\":[{\"data\":{\"text\":\"reply 1\"},\"event\":\"bot.ability.communication.respond\"}],\"focus_candidates\":[],\"turn\":1}","type":"log"}
 {"label":"bot.route","session":"session","text":"bot.ability.communication.respond -> communication","type":"log"}
-{"label":"speech.encode","parent":"session.6","session":"session.7","text":"encode reply 1 -> media/speaking-1.pcm","type":"log"}
+{"label":"speech.encode","parent":"session.7","session":"session.8","text":"encode reply 1 -> media/speaking-1.pcm","type":"log"}
 {"label":"speaking.timed_out","parent":"session.2","session":"session.4","text":"encoding 1 after 300 ms","type":"log"}
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
 {"label":"bot.ability.communication.failed","session":"session","text":"{\"message\":\"Speech encoding timed out.\"}","type":"log"}

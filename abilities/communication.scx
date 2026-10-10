@@ -35,7 +35,7 @@
   (response_timeout_ms, mosfet's 6 s; the transition takes only the timer
   of the response in hand, _event.sendid). Speaking's output goes on to the
   body as bot.ability.speaking.output. A speaking failure
-  (bot.ability.failed) or the hop timeout answers the body with
+  (bot.ability.speaking.apply.failed) or the hop timeout answers the body with
   bot.ability.communication.failed {message}. Input and responses that
   arrive outside active wait in the data model queue, in order, and are
   taken on the return to active (mosfet defers them).
@@ -150,7 +150,7 @@
       </send>
     </transition>
     <!-- A speaking answer for no response in hand. -->
-    <transition event="bot.ability.speaking.output bot.ability.failed" cond="_event.invokeid === 'speaking'">
+    <transition event="bot.ability.speaking.output bot.ability.speaking.apply.failed" cond="_event.invokeid === 'speaking'">
       <log label="communication.stale" expr="_event.name"/>
     </transition>
 
@@ -260,7 +260,7 @@
           <content expr="_event.data"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+      <transition event="bot.ability.speaking.apply.failed" event:schema="schemas/bot.ability.speaking.apply.failed.json"
                   cond="_event.invokeid === 'speaking'" target="active">
         <send event="bot.ability.communication.failed" target="#_parent">
           <param name="message" expr="_event.data.message"/>
