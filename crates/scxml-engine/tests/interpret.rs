@@ -2297,7 +2297,7 @@ fn a_deferred_service_start_settles_when_the_run_continues() {
 }
 
 #[test]
-fn a_failed_service_raises_error_communication_with_its_invoke_id() {
+fn a_failed_service_raises_error_communication_named_after_its_invoke_id() {
     let mut caps = Mock::default();
     caps.bound_services.push(ECHO.into());
     let ir = machine(
@@ -2305,8 +2305,10 @@ fn a_failed_service_raises_error_communication_with_its_invoke_id() {
         &format!(
             r#"<state id="s">
                  <invoke type="{ECHO}" id="echo"/>
+                 <transition event="error.communication.other" target="other"/>
                  <transition event="error.communication" cond="failedEcho" target="comm"/>
                </state>
+               <final id="other"/>
                <final id="comm"/>"#
         ),
     );
@@ -2321,7 +2323,7 @@ fn a_failed_service_raises_error_communication_with_its_invoke_id() {
         .next_internal()
         .expect("the failure waits on the internal queue")
         .clone();
-    assert_eq!(queued.name.as_str(), "error.communication");
+    assert_eq!(queued.name.as_str(), "error.communication.echo");
     assert_eq!(queued.event_type, EventType::Platform);
     assert_eq!(
         queued.invoke_id.as_ref().map(InvokeId::as_str),

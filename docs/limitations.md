@@ -120,7 +120,7 @@ disagree are in [spec-errata.md](spec-errata.md).
   with an `events` stream fed by `#_<invokeid>` sends and autoforwarded
   events; the events the service writes to its returned stream, and its
   future (`ok`: `done.invoke` with data; `err` or a trap: the
-  `communication-error` message, `error.communication` with the invoke id),
+  `communication-error` message, `error.communication.<invokeid>` with the invoke id),
   reuse the invocation routing of invoked sessions. Its
   `wasi:clocks/monotonic-clock` runs on the session's logical clock, and
   leaving the invoking state cancels the invocation and drops its store

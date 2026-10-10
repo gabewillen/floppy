@@ -145,6 +145,10 @@ also read each `file:` document a literal `<invoke src>` of the document
 names (fetching nothing), with its own schema files, and `snapshot run` and
 `run` pass the documents they loaded, so a `<send>` between the two whose
 literal data the receiving transition's schema rejects is `EVENT011`.
+All four also read each `file:` script a `<script src>` of the document
+names (fetching nothing for validation), so the side-effect analysis of
+conditions and `<log expr>` reads the functions it declares; a remote
+script stays unread, and a call it may define or replace is `LINT019`.
 
 ### Package a component for an ahead-of-time host
 

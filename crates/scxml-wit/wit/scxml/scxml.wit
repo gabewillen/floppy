@@ -1029,7 +1029,7 @@ interface machine-capability-types {
     /// this session through `session.deliver-from-invocation` stamped with
     /// the invoke id; its future resolving `ok` becomes
     /// `done.invoke.<invoke-id>`, and resolving `err` or a trap becomes
-    /// `communication-error` (`error.communication`).
+    /// `communication-error` (`error.communication.<invoke-id>`).
     ///
     /// Errors (returned here, or passed to `invocation-completed`):
     /// `invalid-input` when the invoked session is rejected at load or at
@@ -1651,7 +1651,7 @@ interface invoked-service-api {
   /// its data, after every event returned before it; `err`, a trap
   /// (including fuel exhaustion), or an event outside the `types.event`
   /// bounds becomes the invocation's `communication-error` message
-  /// (`error.communication`, and no `done.invoke`).
+  /// (`error.communication.<invoke-id>`, and no `done.invoke`).
   ///
   /// When the invoking state exits first (or the invoking session ends),
   /// the host cancels the subtask and drops the store: nothing the service

@@ -39,8 +39,10 @@ interface invoked-service-api {
   `done.invoke.<id>` carrying `data`, after every event returned before it;
   `err`, a trap (fuel exhaustion included), or a returned event outside the
   `types.event` bounds is the invocation's `communication-error` message
-  (the session raises `error.communication` with the invoke id, and no
-  `done.invoke` follows).
+  (the session raises `error.communication.<id>` with the invoke id, and no
+  `done.invoke` follows). Named after the invocation as `done.invoke.<id>`
+  is, one invocation's failure is selected by descriptor; a transition on
+  `error.communication` or `error.*` still matches it.
 - **Rejecting `invoke`** (it returns an error, traps, or the component
   cannot be instantiated) fails the `<invoke>`: the session raises
   `error.execution`.

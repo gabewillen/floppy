@@ -24,7 +24,7 @@
 //!   with its invoke id; its future resolving `ok` becomes
 //!   `done.invoke.<id>`, and resolving `err`, a trap (fuel exhaustion
 //!   included), or an invalid returned event becomes the invocation's
-//!   `communication-error` message (`error.communication`). A rejected
+//!   `communication-error` message (`error.communication.<id>`). A rejected
 //!   `invoke` (it returned an error, trapped, or could not be instantiated)
 //!   fails the `<invoke>` instead (`error.execution`).
 //! * **Determinism** — the session hands each input to the invocation (its

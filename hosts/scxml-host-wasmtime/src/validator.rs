@@ -81,8 +81,8 @@ pub mod validator_types {
     };
     pub use super::validator_bindings::stateforward::scxml_validator::types::{
         Applicability, Diagnostic, Edit, EventSchemaResource, ExtensionPackage, Fix,
-        InvokedDocument, Label, SchemaPolicy, SchemaResource, Severity, Span, TraceContext,
-        ValidationRequest,
+        InvokedDocument, Label, SchemaPolicy, SchemaResource, ScriptResource, Severity, Span,
+        TraceContext, ValidationRequest,
     };
 }
 

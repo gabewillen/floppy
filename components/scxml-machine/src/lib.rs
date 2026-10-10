@@ -1296,9 +1296,9 @@ mod guest {
         /// processes it; the message itself is never dequeued.
         /// `deliver-from-invocation` of a `communication-error` message: the
         /// invoked service `invoke_id` failed after it started, so its
-        /// `error.communication` (carrying the invoke id) joins the internal
-        /// queue and the resumed run is the macrostep that processes it, as
-        /// for `communication-error` (SCXML 3.12.2).
+        /// `error.communication.<invoke_id>` (carrying the invoke id) joins
+        /// the internal queue and the resumed run is the macrostep that
+        /// processes it, as for `communication-error` (SCXML 3.12.2).
         fn invocation_communication_error(
             &self,
             invoke_id: String,

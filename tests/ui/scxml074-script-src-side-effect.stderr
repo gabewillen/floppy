@@ -1,0 +1,17 @@
+error[SCXML074]: `expr` on `<log>` has a side effect
+ --> tests/ui/scxml074-script-src-side-effect.scx:8:31
+  |
+5 |   <script src="scripts/side-effects.js"/>
+  |                ----------------------- `remember` calls the mutating `push` here (in `scripts/side-effects.js`)
+...
+8 |       <log label="seen" expr="remember('entry')"/>
+  |                               ^^^^^^^^^^^^^^^^^ calls `remember`, which has a side effect
+  |
+  = note: SCXML 1.0 §4.7.3: "The SCXML processor MUST ensure that <log> has no side-effects on document interpretation."
+  = help: log a value without changing anything; move the change into `<assign>` or `<script>`
+  = spec: SCXML 1.0 Appendix B Data Models
+  = spec: SCXML 1.0 §4.7.3 <log>
+  = spec: SCXML 1.0 §B.2 The ECMAScript Data Model
+
+diagnostic summary: 1 error(s), 0 warning(s), 0 note(s), 1 total
+For more information about this error, try `scx --explain SCXML074`.
