@@ -518,8 +518,8 @@ fn the_conversation_commits_each_message_into_its_history() {
     assert_eq!(last["messages"][1]["content"], Json::Null);
     // Each source's turn (mosfet's identity order: names, then
     // embeddings) is exchanged with its turn detector, and the turns'
-    // texts are committed joined, as mosfet's _complete_turn joins them.
-    assert_eq!(last["messages"][0]["content"], json!("hello hello hello"));
+    // texts are committed joined, each distinct text once (D79).
+    assert_eq!(last["messages"][0]["content"], json!("hello"));
     assert_eq!(
         last["messages"][0]["provenance"]["turn_ref"],
         json!("input-1:turn:alice")
@@ -536,7 +536,7 @@ fn the_conversation_commits_each_message_into_its_history() {
         last["messages"][2]["provenance"]["turn_ref"],
         json!("input-3:turn:bob")
     );
-    assert_eq!(last["messages"][5]["content"], json!("again again again"));
+    assert_eq!(last["messages"][5]["content"], json!("again"));
     trace::assert_trace(
         "the_conversation_commits_each_message_into_its_history",
         &finished.all,
@@ -560,7 +560,7 @@ fn a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing() {
     // defers them). White space only: the detector closes the turn with
     // nothing to show. Empty text: the start's text stimulus is refused
     // before the detector. Then text, stripped by the detector before it
-    // is committed, once per source.
+    // is committed once, not once per source.
     let inputs: Vec<Json> = ["   ", "", "  hi  "]
         .iter()
         .map(|content| {
@@ -596,7 +596,7 @@ fn a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing() {
     let output: Json = serde_json::from_str(&outputs[0]).expect("the output is JSON");
     assert_eq!(output["messages"].as_array().map(Vec::len), Some(1));
     assert_eq!(output["messages"][0]["sequence"], json!(0));
-    assert_eq!(output["messages"][0]["content"], json!("hi hi"));
+    assert_eq!(output["messages"][0]["content"], json!("hi"));
     assert_eq!(
         output["messages"][0]["provenance"]["turn_ref"],
         json!("input-3:turn:alice")

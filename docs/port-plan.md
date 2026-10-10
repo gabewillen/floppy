@@ -408,8 +408,8 @@ decisions are D76 to D79.
   mosfet's 5 s (`turn_timeout_ms`). A failure, a timeout, or a start the
   detector's schema refuses answers `bot.ability.conversation.failed`
   `{stage: "turn_detector"}` and commits nothing. Memory follows, and the
-  committed message is the turns' product with the first turn's
-  `turn_ref` (D79). Input that arrives while one is in hand waits in the
+  committed message is the turns' product, each distinct text once, with
+  the first turn's `turn_ref` (D79). Input that arrives while one is in hand waits in the
   conversation's queue and is taken, in order, on the return to `waiting`
   (mosfet defers it); before the turns every input without memory was
   committed in the macrostep it arrived in, so none could arrive.

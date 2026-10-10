@@ -35,7 +35,7 @@
   bot.ability.conversation.failed {stage: "turn_detector", message} and
   commits nothing. The turns' product is what is committed (mosfet
   _complete_turn): the turns' texts joined by spaces as text/plain when
-  any has text; else no content for audio; else the input's content. The
+  any has text, each distinct text once; else no content for audio; else the input's content. The
   committed provenance's turn_ref is the first turn's. Input that arrives
   while one is in hand waits in the data model queue, in order, and is
   taken on the return to waiting (mosfet defers it).
