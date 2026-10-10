@@ -9,7 +9,7 @@
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
 {"label":"intuition","parent":"session.1","session":"session.9","text":"turn 1: threshold 0.6","type":"log"}
 {"label":"intuition","parent":"session.1","session":"session.9","text":"turn 1: low confidence 34","type":"log"}
-{"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":67.12,\"n\":9,\"variance\":195.68}","type":"log"}
+{"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":67.12,\"n\":9,\"var\":195.68}","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition unhandled (low_confidence)","type":"log"}
 {"label":"reasoning","parent":"session.1","session":"session.10","text":"turn 1: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"reasoning handled","type":"log"}
@@ -25,7 +25,7 @@
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
 {"label":"intuition","parent":"session.1","session":"session.15","text":"turn 2: threshold 0.5313143323996343","type":"log"}
 {"label":"intuition","parent":"session.1","session":"session.15","text":"turn 2: low confidence 34","type":"log"}
-{"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":64.4704,\"n\":10,\"variance\":267.78035200000005}","type":"log"}
+{"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":64.4704,\"n\":10,\"var\":267.78035200000005}","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition unhandled (low_confidence)","type":"log"}
 {"label":"reasoning","parent":"session.1","session":"session.16","text":"turn 2: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"reasoning handled","type":"log"}
