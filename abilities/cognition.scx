@@ -68,7 +68,7 @@
 
   Choices: each turn's input carries the body's assembled choices (its own
   and every ability's offers, tagged with their target); they go to
-  intuition (the decision service's menu) and to reasoning, and the body
+  intuition (the decision service's enabled transitions) and to reasoning, and the body
   routes either stage's selections.
 
   Contracts: the events it takes reference abilities/schemas/ by

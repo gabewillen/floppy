@@ -487,7 +487,7 @@ fn selection_labels(mock: &Mock) -> Vec<String> {
 }
 
 /// mosfet's intuition dispatch: the decision chooses from the turn's
-/// snapshot choices, not a menu of its own, and the body routes the chosen
+/// enabled transitions, not two of its own, and the body routes the chosen
 /// event to the ability offering it without asking reasoning.
 #[test]
 fn intuition_dispatches_an_offered_event_to_its_target() {

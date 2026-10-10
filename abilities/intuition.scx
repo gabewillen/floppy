@@ -11,7 +11,7 @@
   Choices: the turn's choices, the <param> choices: the body's assembled
   snapshot choices (its own enabled event:schema transitions and each
   ability's latest offers, tagged with the offering ability as target), the
-  same menu reasoning gets (mosfet collect_offered_events over every
+  same enabled transitions reasoning gets (mosfet collect_offered_events over every
   actor's enabled_call_events). The decision service asks one batch over
   them plus its abstain label (mosfet's pass criterion), filling each
   event's required data from the evidence, the stimulus data (mosfet's
