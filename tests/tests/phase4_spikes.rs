@@ -437,7 +437,7 @@ fn a_childs_choice_relays_through_its_parent_to_a_third_sessions_decision() {
         json!({
             "order.ship": "Ship the order to the customer.",
             "order.cancel": "Cancel the order.",
-            "none of these": "None of these: take no event.",
+            "__unhandled__": "None of these: leave the turn unhandled.",
         }),
         "the decider offers exactly the offerer's choices"
     );

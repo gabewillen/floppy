@@ -9,41 +9,101 @@ function stimulusData() {
   return stimulus !== null && stimulus.data instanceof Object && !Array.isArray(stimulus.data) ? stimulus.data : ({});
 }
 
-function thresholdLog() {
-  return 'turn ' + turn + ': threshold ' + threshold;
-}
-
 function decisionTimeoutDelay() {
   return decision_timeout_ms + 'ms';
 }
 
+// mosfet's deliberate handoff event (types.DELIBERATIVE_HANDOFF_EVENT_NAME).
+function isDeliberativeHandoff(name) {
+  return name === 'bot.ability.reasoning.input';
+}
+
+// The choices the processor offers: the turn's, less the deliberate handoff
+// (the TypeSafe processor skips deliberative handoff schemas).
+function processorChoices() {
+  return choices.filter(function (choice) { return !isDeliberativeHandoff(choice.event); });
+}
+
+// mosfet _stimulus_document as the TypeSafe state {"turn": ...}: the
+// stimulus envelope's name and its data.
 function decisionState() {
-  return ({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates});
+  if (stimulus === null) {
+    return ({turn: {data: null}});
+  }
+  return ({turn: {envelope: {name: stimulus.event}, data: stimulus.data === undefined ? null : stimulus.data}});
+}
+
+// A selected event with at least one selection (the service's events are
+// unchecked).
+function hasSelections(_event) {
+  return Array.isArray(Object(_event.data).selections) && _event.data.selections.length > 0;
+}
+
+// mosfet normalize_confidence: a probability in (0, 1] as a whole number
+// on the 0-100 scale, rounded half to even as Python's round does.
+function normalizedConfidence(probability) {
+  var scaled = probability * 100;
+  var rounded = Math.round(scaled);
+  if (rounded - scaled === 0.5 && rounded % 2 !== 0) {
+    rounded -= 1;
+  }
+  return Math.max(0, Math.min(100, rounded));
+}
+
+// mosfet selection_confidence: the minimum of the selections' confidences.
+function selectionConfidence(_event) {
+  return _event.data.selections.reduce(function (least, selection) {
+    return Math.min(least, normalizedConfidence(Number(selection.confidence)));
+  }, 100);
+}
+
+function selectionNames(_event) {
+  return _event.data.selections.map(function (selection) { return selection.event; }).join(' ');
+}
+
+function tunedLog(_event) {
+  return 'turn ' + turn + ': ' + selectionNames(_event) + ' (confidence ' + confidence + ', threshold ' + threshold + ')';
+}
+
+// mosfet should_escalate: the confidence is below the updated threshold
+// (written as a probability).
+function isLowConfidence() {
+  return confidence / 100 < threshold;
+}
+
+function hasDeliberativeInput(_event) {
+  return _event.data.selections.some(function (selection) { return isDeliberativeHandoff(selection.event); });
+}
+
+// The selections as the turn's product {event, data}.
+function product(_event) {
+  return _event.data.selections.map(function (selection) { return ({event: selection.event, data: Object(selection.data)}); });
+}
+
+// The turn's selections (mosfet's escalation reason none).
+function selectionResult(_event) {
+  return ({handled: true, selected: product(_event), reason: 'none', turn: turn, tuner: tuner});
+}
+
+// mosfet _environment_actions: the selections safe to hand out before the
+// turn escalates, less the deliberate handoff and the cognition ignore
+// (types.is_ignore_event).
+function escalatedResult(reason, _event) {
+  var actions = product(_event).filter(function (item) { return !isDeliberativeHandoff(item.event) && item.event !== 'bot.ability.cognition.ignore'; });
+  return ({handled: false, selected: actions, reason: reason, turn: turn, tuner: tuner});
 }
 
 // An abstain with one of its reasons (the service's events are unchecked).
 function isAbstainReason(_event) {
-  return ['no-candidates', 'declined', 'below-threshold'].indexOf(Object(_event.data).reason) >= 0;
-}
-
-// mosfet's low_confidence: a below-threshold abstain with its probability.
-function isLowConfidence(_event) {
-  return _event.data.reason === 'below-threshold' && typeof _event.data.confidence === 'number';
-}
-
-function lowConfidenceLog(_event) {
-  return 'turn ' + turn + ': low confidence ' + Math.round(_event.data.confidence * 100);
-}
-
-function lowConfidenceResult() {
-  return ({handled: false, reason: 'low_confidence', turn: turn, tuner: tuner});
+  return ['no-candidates', 'declined'].indexOf(Object(_event.data).reason) >= 0;
 }
 
 function abstainedLog(_event) {
   return 'turn ' + turn + ': abstained (' + _event.data.reason + ')';
 }
 
-function abstainedResult(_event) {
+// mosfet's empty product: no selection, no observation.
+function abstainedResult() {
   return ({handled: false, reason: 'empty_product', turn: turn, tuner: tuner});
 }
 
@@ -53,19 +113,6 @@ function failedCode(_event) {
 
 function decisionFailedResult() {
   return ({handled: false, failed: true, reason: 'the decision failed (' + failed_code + ')', turn: turn, tuner: tuner});
-}
-
-function chosenLog(_event) {
-  return 'turn ' + turn + ': ' + _event.name;
-}
-
-function deliberativeInputResult() {
-  return ({handled: false, reason: 'deliberative_input', turn: turn, tuner: tuner});
-}
-
-// The turn's one selection {event, data} (mosfet's escalation reason none).
-function selectionResult(_event) {
-  return ({handled: true, selected: [{event: _event.name, data: Object(_event.data)}], reason: 'none', turn: turn, tuner: tuner});
 }
 
 function timedOutResult() {

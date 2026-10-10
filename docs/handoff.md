@@ -73,6 +73,31 @@ Last updated: 2026-10-10.
   `scxml_conformance::RunReport::read_json` (`--baseline`) like the scx
   readers; the gateway report.
 
+## Intuition contract and reasoning prompt (2026-10-10)
+
+- **Intuition** uses the decision service's new kind `select` (mosfet's
+  TypeSafe `Processor.process`): `decision.selected {selections: [{event,
+  data, confidence}]}`, every groundable event with its own probability.
+  Intuition observes their least confidence (0-100) with `<decision:tuner>`
+  first, then compares it with the updated threshold (mosfet
+  `_tune_confidence`). `low_confidence` and `deliberative_input` hand out
+  the environment actions in the unhandled donedata's `selected`; the
+  cognition routes them first in the turn's output. The service's pass
+  criterion is mosfet's `__unhandled__`, its state document mosfet's
+  `{"turn": {"envelope": {"name"}, "data"}}`, and data grounds from the
+  non-null stimulus value then the enum (no `const`). `choose` lost its
+  `threshold` (and `below-threshold`).
+- **Reasoning** sends mosfet's `model_facing_xml(ProcessorInput)` under
+  mosfet's budgets (`promptProjection()` in reasoning.js), checked
+  byte-for-byte against mosfet's renderer on sample inputs. The reasoning
+  and intuition system prompts still describe floppy's old inputs (gap 9,
+  the maintainer's).
+- **Tests in worktrees:** a `target/` copied from another checkout keeps
+  `floppy-tests` binaries whose `CARGO_MANIFEST_DIR` is the other
+  checkout, so `support::workspace()` builds and runs there. Run
+  `cargo clean -p floppy-tests` (and remove `target/test-components`)
+  first.
+
 ## Phase 3 (2026-10-10): memory service
 
 - **Branch:** `claude/project-thread-r7141w` (from `claude/project-thread-brkerr`),

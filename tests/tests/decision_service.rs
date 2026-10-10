@@ -64,7 +64,7 @@ fn answer(target: &str, body: &[u8]) -> Option<String> {
         "/ship/v1/systemone" => "order.ship",
         "/cancel/v1/systemone" => "order.cancel",
         "/hold/v1/systemone" => "order.hold",
-        "/abstain/v1/systemone" => "none of these",
+        "/abstain/v1/systemone" => "__unhandled__",
         "/stray/v1/systemone" => "order.refund",
         "/classify/v1/systemone" => "complaint",
         _ => return None,
@@ -326,7 +326,7 @@ fn the_events_filter_narrows_the_choices_the_backend_receives() {
             "order.ship": "Ship the order to the customer.",
             "order.cancel": "Cancel the order.",
             "order.hold": "Put the order on hold.",
-            "none of these": "None of these: take no event.",
+            "__unhandled__": "None of these: leave the turn unhandled.",
         }),
         "without events every schema transition is offered"
     );
@@ -347,7 +347,7 @@ fn the_events_filter_narrows_the_choices_the_backend_receives() {
         json!({
             "order.cancel": "Cancel the order.",
             "order.hold": "Put the order on hold.",
-            "none of these": "None of these: take no event.",
+            "__unhandled__": "None of these: leave the turn unhandled.",
         }),
         "the filter keeps only the events its descriptors match"
     );
@@ -366,7 +366,7 @@ fn a_choices_filtered_to_leave_out_the_chosen_event_never_fires_it() {
         filtered,
         json!({
             "order.cancel": "Cancel the order.",
-            "none of these": "None of these: take no event.",
+            "__unhandled__": "None of these: leave the turn unhandled.",
         })
     );
     assert_eq!(
@@ -407,18 +407,21 @@ fn choose_fires_the_chosen_schema_transition_with_schema_valid_data() {
             "order.ship": "Ship the order to the customer.",
             "order.cancel": "Cancel the order.",
             "order.hold": "Put the order on hold.",
-            "none of these": "None of these: take no event.",
+            "__unhandled__": "None of these: leave the turn unhandled.",
         }),
         "exactly the three event:schema transitions are offered, plus abstain"
     );
     assert_eq!(
-        body["questions"]["fill.0.0"]["criteria"],
-        json!({"A-1": null}),
+        body["questions"]["order.ship::sku"]["criteria"],
+        json!({"A-1": "Which value fills 'sku' for order.ship?"}),
         "the sku is grounded in the dataexpr evidence"
     );
     assert_eq!(
-        body["questions"]["fill.0.1"]["criteria"],
-        json!({"ups": null, "fedex": null}),
+        body["questions"]["order.ship::carrier"]["criteria"],
+        json!({
+            "ups": "Which value fills 'carrier' for order.ship?",
+            "fedex": "Which value fills 'carrier' for order.ship?"
+        }),
         "the carrier is grounded in the schema's enum"
     );
     assert_eq!(
@@ -442,6 +445,49 @@ fn choose_fires_another_transition_when_the_backend_prefers_it() {
         labelled(&[("data", "{}"), ("final", "held")]),
         "{records:?}"
     );
+}
+
+/// `select` (mosfet's `TypeSafe` processor): every groundable event comes
+/// back in one `decision.selected`, each with its data and its own
+/// probability in the selection, and nothing is fired.
+#[test]
+fn select_returns_every_groundable_event_with_its_own_probability() {
+    let mock = Mock::start();
+    let env_path = env_file("select", &format!("{}/ship", mock.origin), &BOTH);
+    let document = document(
+        r#"<param name="kind" expr="'select'"/>
+      <param name="state" expr="order"/>"#,
+    )
+    .replace(
+        r#"<transition event="decision.abstain" target="abstained">"#,
+        r#"<transition event="decision.selected" target="abstained">
+      <log label="data" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="decision.abstain" target="abstained">"#,
+    );
+    let finished = open(&args(&env_path), &document, &[], Duration::from_secs(60));
+    // The mock gives order.ship 0.8 and shares 0.2 among the other three
+    // labels; each member question answers its first label.
+    let records = logs(&finished.records);
+    let (label, text) = records.first().expect("a data log");
+    assert_eq!(label, "data", "{records:?}");
+    let data: Json = serde_json::from_str(text).expect("JSON");
+    let selections = data["selections"].as_array().expect("selections");
+    let events: Vec<&str> = selections
+        .iter()
+        .map(|selection| selection["event"].as_str().expect("an event"))
+        .collect();
+    assert_eq!(events, ["order.ship", "order.cancel", "order.hold"]);
+    assert_eq!(
+        selections[0]["data"],
+        json!({"carrier": "fedex", "sku": "A-1"})
+    );
+    assert_eq!(selections[1]["data"], json!({"reason": "customer"}));
+    assert_eq!(selections[2]["data"], json!({}));
+    assert_eq!(selections[0]["confidence"], json!(0.8));
+    let other = selections[1]["confidence"].as_f64().expect("a number");
+    assert!((other - 0.2 / 3.0).abs() < 1e-12, "{data}");
+    assert_eq!(mock.received().len(), 1);
 }
 
 #[test]

@@ -32,6 +32,17 @@
   failed (or an error.* from the stage) answers bot.ability.failed. The
   intuition tuner state is passed in by <param> and kept from the donedata.
 
+  Environment actions: an intuition that escalates for low confidence (or
+  a deliberate handoff) still hands out its environment actions (mosfet
+  _environment_actions, which mosfet's intuition dispatches before the
+  turn goes on to reasoning) as the selected of its unhandled donedata.
+  The cognition keeps them and puts them first in the turn's output, before
+  reasoning's own selections, so the body routes them first; the turn's
+  one answer stays one bot.ability.cognition.output. The reflection gets
+  reasoning's selections only (mosfet's cognition output is reasoning's
+  terminal). A turn whose reasoning fails or is cancelled routes none of
+  them (mosfet would already have dispatched them).
+
   Hop timeouts: each stage substate arms
   bot.ability.cognition.child.hop.timed_out (child_operation_timeout_ms,
   mosfet's child_operation_timeout, 30 s)
@@ -119,6 +130,8 @@
     <data id="stage" expr="null"/>
     <data id="hop_timer" expr="null"/>
     <data id="selected" expr="[]"/>
+    <!-- An escalated intuition's environment actions, routed first. -->
+    <data id="environment_actions" expr="[]"/>
     <data id="failure" expr="null"/>
     <data id="reboot_reason" expr="null"/>
     <!-- A routine tick's stimulus envelope, for the handoff. -->
@@ -173,6 +186,7 @@
   <state id="processing" initial="running_autonomy">
     <onentry>
       <assign location="selected" expr="[]"/>
+      <assign location="environment_actions" expr="[]"/>
       <assign location="failure" expr="null"/>
       <log label="cognition" expr="processingLog()"/>
     </onentry>
@@ -247,6 +261,7 @@
       </transition>
       <transition event="done.invoke.intuition" cond="isUnhandled(_event)" target="running_reasoning">
         <assign location="tuner" expr="intuitionTuner(_event)"/>
+        <assign location="environment_actions" expr="environmentActions(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <log label="cognition.stage" expr="stageLog('intuition unhandled', _event)"/>
       </transition>
@@ -298,7 +313,7 @@
       <onentry>
         <send event="bot.ability.cognition.output" target="#_parent">
           <param name="turn" expr="turn"/>
-          <param name="output" expr="selected"/>
+          <param name="output" expr="turnOutput()"/>
         </send>
         <send event="bot.ability.reflection.input" target="#_reflection">
           <param name="turn" expr="turn"/>

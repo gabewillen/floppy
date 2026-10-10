@@ -1,5 +1,6 @@
 //! The `decision` invoked service: one decision per `<invoke>` (choose an
-//! event from a choice list, rank candidates, or classify a state), as a
+//! event from a choice list, select every groundable event with its
+//! confidence, rank candidates, or classify a state), as a
 //! `stateforward:scxml/invoked-service` Wasm component.
 //!
 //! Asking a backend is slow I/O, so a decision is a service, never
@@ -31,20 +32,21 @@
 //!
 //! # Parameters (`<param>`)
 //!
-//! * `kind` (optional): `choose` (the default), `rank`, or `classify`.
+//! * `kind` (optional): `choose` (the default), `select`, `rank`, or
+//!   `classify`.
 //! * `state` (required): the state document the backend decides about, a
 //!   string, a JSON object, or a JSON array.
 //! * `instructions` (optional, a non-empty string): what to decide; each
 //!   kind has a default.
 //! * `model` (optional, a non-empty string): the backend's model; the
 //!   backend's default without one.
-//! * `choose`: `choices` (required: a JSON array of objects with `event`, an
-//!   event name, `schema`, a self-contained JSON Schema, and an optional
-//!   `description` string, as `<decision:choice>` writes it, and an optional
-//!   `target` string, as `<decision:assemble>` tags it; an event is listed
-//!   once, or once per target with the same schema, and is one candidate),
-//!   `data` (optional: a JSON object of evidence), and `threshold`
-//!   (optional, a number in `[0, 1]`, `0` without it).
+//! * `choose` and `select`: `choices` (required: a JSON array of objects
+//!   with `event`, an event name, `schema`, a self-contained JSON Schema, and
+//!   an optional `description` string, as `<decision:choice>` writes it, and
+//!   an optional `target` string, as `<decision:assemble>` tags it; an event
+//!   is listed once, or once per target with the same schema, and is one
+//!   candidate; no event is named [`ABSTAIN_LABEL`]) and `data` (optional: a
+//!   JSON object of evidence).
 //! * `rank`: `candidates` (required: a non-empty JSON array of distinct
 //!   candidates; a string is its own label, any other value is labelled by
 //!   its canonical JSON, and an object or array is also its description).
@@ -64,23 +66,36 @@
 //! namespace defaulted to its provider's URL; the manifest stays the one
 //! place the origin is written.
 //!
-//! # `choose`
+//! # `choose` and `select`
+//!
+//! Both are mosfet's `TypeSafe` processor (`mosfet.providers.typesafe`
+//! `Processor.process`) asking one batch:
 //!
 //! * **Grounded data.** The data of each offered event is a JSON object
 //!   holding its schema's top-level `required` members, each chosen by its
 //!   own question among grounded options, never authored: the evidence's
-//!   member of that name (the evidence is `data`, else the state when it is
-//!   an object), then the property's `enum` values, then its `const`. An
-//!   event with a required member that has no option is not offered.
-//! * **The decision.** One batch asks the selection (every offered event,
-//!   plus [`ABSTAIN_LABEL`]) and every offered event's member questions.
-//!   When nothing is offered, the abstain label wins, or the chosen event's
-//!   probability is below `threshold`, the service returns [`ABSTAIN_EVENT`]
-//!   `{"reason": "no-candidates" | "declined" | "below-threshold", "confidence": P}`
-//!   (`confidence` absent for `no-candidates`, which sends nothing).
-//! * **Validation before returning.** The filled data must satisfy the chosen
-//!   event's schema from the choices; otherwise the service returns
-//!   [`FAILED_EVENT`] `{"code": "schema-mismatch"}` and never the event.
+//!   non-null member of that name (the evidence is `data`, else the state
+//!   when it is an object), then the property's non-null `enum` values
+//!   (mosfet `_candidate_values`). An event with a required member that has
+//!   no option is not offered.
+//! * **The batch.** The question `selection` criteria are every offered
+//!   event (described by the first line of its description, else by its
+//!   name: mosfet `_event_wording`) plus the pass criterion [`ABSTAIN_LABEL`]
+//!   ([`ABSTAIN_DESCRIPTION`]); each offered event's required member is its
+//!   own question `<event>::<member>` whose criteria are its options. When
+//!   nothing is offered, the service returns [`ABSTAIN_EVENT`]
+//!   `{"reason": "no-candidates"}` without a request; when the pass
+//!   criterion wins, [`ABSTAIN_EVENT`] `{"reason": "declined", "confidence": P}`.
+//! * **`choose`** returns the winning event itself, with its filled data.
+//! * **`select`** returns [`SELECTED_EVENT`]
+//!   `{"selections": [{"event": E, "data": D, "confidence": P}]}`: every
+//!   offered event, in choices order, with its filled data and its own
+//!   probability in the selection question (mosfet: "every groundable event
+//!   rides the response"); the invoking document owns what to dispatch.
+//! * **Validation before returning.** The filled data of every returned
+//!   event must satisfy its schema from the choices; otherwise the service
+//!   returns [`FAILED_EVENT`] `{"code": "schema-mismatch"}` and never the
+//!   event.
 //!
 //! # `rank` and `classify`
 //!
@@ -98,14 +113,14 @@
 //! document (its choices' `event:schema` transitions), and the document
 //! describes this service's own events with `event:schema` too
 //! (`bots/builder/builder.scxml`); the service validates what it returns
-//! itself: the chosen event's data against the choices' schema for it, and
-//! its own events by construction (their shapes are documented here). An
-//! event name the choices offer is a valid SCXML event name with no `*` and no
-//! empty token. The service reads no event: it drops the event stream
-//! `invoke` receives. `outbound-http.fetch` is an `async func`: awaiting it
-//! suspends only the invocation's own task, and leaving the invoking state
-//! cancels the invocation (SCXML 6.4), which closes the request's
-//! connection.
+//! itself: the chosen or selected events' data against the choices' schema
+//! for each, and its own events by construction (their shapes are
+//! documented here). An event name the choices offer is a valid SCXML event
+//! name with no `*` and no empty token. The service reads no event: it
+//! drops the event stream `invoke` receives. `outbound-http.fetch` is an
+//! `async func`: awaiting it suspends only the invocation's own task, and
+//! leaving the invoking state cancels the invocation (SCXML 6.4), which
+//! closes the request's connection.
 //!
 //! # Bounds
 //!
@@ -158,17 +173,21 @@ pub const API_KEY_SLOT: &str = "apikey";
 /// The `env` slot of the API base URL (`env:baseurl`).
 pub const BASE_URL_SLOT: &str = "baseurl";
 
-/// The event `choose` returns when it takes no event.
+/// The event `choose` and `select` return when they take no event.
 pub const ABSTAIN_EVENT: &str = "decision.abstain";
+/// The event `select` returns.
+pub const SELECTED_EVENT: &str = "decision.selected";
 /// The event `rank` returns.
 pub const RANKED_EVENT: &str = "decision.ranked";
 /// The event `classify` returns.
 pub const CLASSIFIED_EVENT: &str = "decision.classified";
 /// The event a failed decision returns.
 pub const FAILED_EVENT: &str = "decision.failed";
-/// The selection's reserved criterion: no event fits. It holds spaces, so
-/// it is never an event name.
-pub const ABSTAIN_LABEL: &str = "none of these";
+/// The selection's reserved pass criterion: no event fits (mosfet
+/// `_RESERVED_PASS_CRITERION`). The choices never name it.
+pub const ABSTAIN_LABEL: &str = "__unhandled__";
+/// The pass criterion's wording (mosfet `_DEFAULT_PASS_WORDING`).
+pub const ABSTAIN_DESCRIPTION: &str = "None of these: leave the turn unhandled.";
 
 /// The selection question's name in a `choose` batch.
 pub const SELECTION_QUESTION: &str = "selection";
@@ -176,10 +195,11 @@ pub const SELECTION_QUESTION: &str = "selection";
 const RANK_INSTRUCTIONS: &str =
     "Rank the candidates by how well each fits the state: give the best fit the most probability.";
 const CLASSIFY_INSTRUCTIONS: &str = "Classify the state: choose the label that describes it.";
-const CHOOSE_INSTRUCTIONS: &str = "Choose the single event the machine should take in this state: each criterion names an event it can take. Choose \"none of these\" when no event fits.";
-const ABSTAIN_DESCRIPTION: &str = "None of these: take no event.";
-const FILL_INSTRUCTIONS: &str =
-    "The criteria are the exact values the evidence offers. Pick the value the state supports.";
+const CHOOSE_INSTRUCTIONS: &str = "Choose the single event the machine should take in this state: each criterion names an event it can take. Choose the pass criterion when none fits.";
+/// mosfet `_SELECTION_INSTRUCTIONS`.
+const SELECT_INSTRUCTIONS: &str = "Choose the single criterion that answers this turn from the bot's own peripheral transducers: the criterion text names the situation. Choose the pass criterion when none offered fits.";
+/// mosfet `_PAYLOAD_KEY_INSTRUCTIONS`.
+const FILL_INSTRUCTIONS: &str = "Fill one payload field for the selected event: the criteria are the exact values the evidence offers. Pick the value the turn supports.";
 
 /// Upper bound on one question's criteria (wasm builds only).
 pub const MAX_CRITERIA: usize = wasm_bound(256);
@@ -316,19 +336,17 @@ pub struct Candidate {
     pub schema: Json,
     /// The schema compiled for checking the filled data.
     pub compiled: CompiledSchema,
-    /// What the event means, when known.
+    /// The first line of what the event means, when known.
     pub description: Option<String>,
 }
 
-/// The first line of the schema's `description`, else of its `title`.
-fn description_of(schema: &Json) -> Option<String> {
-    ["description", "title"].iter().find_map(|key| {
-        schema
-            .get(key)
-            .and_then(Json::as_str)
-            .and_then(|text| text.lines().map(str::trim).find(|line| !line.is_empty()))
-            .map(str::to_owned)
-    })
+/// The first non-blank line of `text`, trimmed (mosfet `_event_wording`
+/// takes the first line of a stripped description).
+fn first_line(text: &str) -> Option<String> {
+    text.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(str::to_owned)
 }
 
 /// Whether `name` is an event name a candidate may carry: non-empty, no
@@ -379,6 +397,9 @@ pub fn choices_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
             .and_then(Json::as_str)
             .filter(|event| valid_event_name(event))
             .ok_or(INVALID)?;
+        if event == ABSTAIN_LABEL {
+            return Err("decision choices name the reserved pass criterion");
+        }
         let target = match members.get("target") {
             None => None,
             Some(Json::String(target)) if !target.is_empty() => Some(target.as_str()),
@@ -412,8 +433,11 @@ pub fn choices_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
         let compiled = CompiledSchema::new(&resolved.schema)
             .map_err(|_| "decision choices schema is not a self-contained JSON Schema")?;
         let description = match members.get("description") {
-            None => description_of(&schema),
-            Some(Json::String(text)) => Some(text.clone()),
+            None => schema
+                .get("description")
+                .and_then(Json::as_str)
+                .and_then(first_line),
+            Some(Json::String(text)) => first_line(text),
             Some(_) => return Err(INVALID),
         };
         choices.push(Candidate {
@@ -476,14 +500,19 @@ fn ground(
                 values.push(value.clone());
             }
         };
-        if let Some(value) = evidence.and_then(|evidence| evidence.get(member)) {
+        // mosfet `_candidate_values`: the evidence's value, then the
+        // schema's enum options, never null.
+        if let Some(value) = evidence
+            .and_then(|evidence| evidence.get(member))
+            .filter(|value| !value.is_null())
+        {
             push(value);
         }
         if let Some(Json::Array(options)) = property.and_then(|property| property.get("enum")) {
-            options.iter().for_each(&mut push);
-        }
-        if let Some(value) = property.and_then(|property| property.get("const")) {
-            push(value);
+            options
+                .iter()
+                .filter(|value| !value.is_null())
+                .for_each(&mut push);
         }
         if values.is_empty() || exceeds_wasm_bound(values.len(), MAX_OPTIONS) {
             return None;
@@ -521,10 +550,11 @@ pub struct DecisionRequest {
 
 #[derive(Debug)]
 enum Kind {
+    /// `choose` (`every: false`) or `select` (`every: true`).
     Choose {
         choices: Vec<Candidate>,
         evidence: Option<Map<String, Json>>,
-        threshold: f64,
+        every: bool,
     },
     Rank {
         candidates: Vec<Json>,
@@ -638,12 +668,15 @@ fn find<'a>(given: &[(&str, &'a Data)], name: &str) -> Option<&'a Data> {
         .map(|(_, value)| *value)
 }
 
-/// The `choose` part of a request: its choices, its evidence (`data`, else an
-/// object `state`), and its threshold.
-fn choose_kind(given: &[(&str, &Data)], state: &Json) -> Result<Kind, &'static str> {
+/// The `choose` or `select` part of a request: its choices and its
+/// evidence (`data`, else an object `state`).
+fn choose_kind(given: &[(&str, &Data)], state: &Json, every: bool) -> Result<Kind, &'static str> {
     let choices = choices_from_json(
-        &json_of(find(given, "choices").ok_or("decision choose requires a choice list parameter")?)
-            .ok_or("decision choices must be a JSON array")?,
+        &json_of(
+            find(given, "choices")
+                .ok_or("decision choose and select require a choice list parameter")?,
+        )
+        .ok_or("decision choices must be a JSON array")?,
     )?;
     let evidence = match find(given, "data") {
         None => match state {
@@ -655,15 +688,10 @@ fn choose_kind(given: &[(&str, &Data)], state: &Json) -> Result<Kind, &'static s
             _ => return Err("decision data must be a JSON object"),
         },
     };
-    let threshold = match find(given, "threshold") {
-        None => 0.0,
-        Some(Data::Number(number)) if (0.0..=1.0).contains(&number.get()) => number.get(),
-        Some(_) => return Err("decision threshold must be a number in [0, 1]"),
-    };
     Ok(Kind::Choose {
         choices,
         evidence,
-        threshold,
+        every,
     })
 }
 
@@ -687,13 +715,15 @@ pub fn parse_parameters<'a>(
     let get = |name: &str| find(&given, name);
     let kind = match get("kind") {
         None => "choose",
-        Some(Data::String(kind)) if matches!(kind.as_str(), "choose" | "rank" | "classify") => {
+        Some(Data::String(kind))
+            if matches!(kind.as_str(), "choose" | "select" | "rank" | "classify") =>
+        {
             kind.as_str()
         }
-        Some(_) => return Err("decision kind must be choose, rank, or classify"),
+        Some(_) => return Err("decision kind must be choose, select, rank, or classify"),
     };
     let allowed: &[&str] = match kind {
-        "choose" => &["choices", "data", "threshold"],
+        "choose" | "select" => &["choices", "data"],
         "rank" => &["candidates"],
         _ => &["labels"],
     };
@@ -719,6 +749,7 @@ pub fn parse_parameters<'a>(
         .transpose()?;
     let default_instructions = match kind {
         "choose" => CHOOSE_INSTRUCTIONS,
+        "select" => SELECT_INSTRUCTIONS,
         "rank" => RANK_INSTRUCTIONS,
         _ => CLASSIFY_INSTRUCTIONS,
     };
@@ -733,7 +764,8 @@ pub fn parse_parameters<'a>(
         .transpose()?
         .unwrap_or_else(|| default_instructions.to_owned());
     let kind = match kind {
-        "choose" => choose_kind(&given, &state)?,
+        "choose" => choose_kind(&given, &state, false)?,
+        "select" => choose_kind(&given, &state, true)?,
         "rank" => {
             let (candidates, criteria) =
                 rank_criteria(get("candidates").ok_or("decision rank requires candidates")?)?;
@@ -775,7 +807,7 @@ enum Decide {
     Choose {
         choices: Vec<Candidate>,
         offered: Vec<Grounded>,
-        threshold: f64,
+        every: bool,
     },
     Rank {
         candidates: Vec<Json>,
@@ -785,23 +817,59 @@ enum Decide {
 
 const NO_ANSWER: FailureCode = FailureCode::Malformed;
 
-/// The questions of one `choose` batch: the selection (every offered event,
-/// then [`ABSTAIN_LABEL`]), then each offered event's member questions
-/// (`fill.<event>.<member>`), in choices and `required` order.
+/// A member name as Python's `repr` writes a string (mosfet formats
+/// `{key!r}`): single quotes unless it holds a single quote and no double
+/// one.
+fn python_repr(text: &str) -> String {
+    let quote = if text.contains('\'') && !text.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    let mut repr = String::with_capacity(text.len() + 2);
+    repr.push(quote);
+    for character in text.chars() {
+        match character {
+            '\\' => repr.push_str("\\\\"),
+            '\n' => repr.push_str("\\n"),
+            '\r' => repr.push_str("\\r"),
+            '\t' => repr.push_str("\\t"),
+            other if other == quote => {
+                repr.push('\\');
+                repr.push(other);
+            }
+            other => repr.push(other),
+        }
+    }
+    repr.push(quote);
+    repr
+}
+
+/// The questions of one `choose` or `select` batch (mosfet's `TypeSafe`
+/// `Processor.process`): the selection (every offered event, then
+/// [`ABSTAIN_LABEL`]), then each offered event's member questions
+/// (`<event>::<member>`, each criterion described by the question's
+/// wording), in choices and `required` order.
+///
+/// # Errors
+///
+/// A static detail when two member questions would share a name.
 fn choose_questions(
     choices: &[Candidate],
     offered: &[Grounded],
     instructions: String,
-) -> Vec<Question> {
+) -> Result<Vec<Question>, &'static str> {
     let mut selection: Vec<Criterion> = offered
         .iter()
         .filter_map(|grounded| choices.get(grounded.candidate))
         .map(|candidate| Criterion {
             label: candidate.event.clone(),
-            description: candidate
-                .description
-                .clone()
-                .map_or(Json::Null, Json::String),
+            description: Json::String(
+                candidate
+                    .description
+                    .clone()
+                    .unwrap_or_else(|| candidate.event.clone()),
+            ),
         })
         .collect();
     selection.push(Criterion {
@@ -813,22 +881,31 @@ fn choose_questions(
         instructions,
         criteria: selection,
     }];
-    for (event_index, grounded) in offered.iter().enumerate() {
+    let mut names = BTreeSet::from([SELECTION_QUESTION.to_owned()]);
+    for grounded in offered {
         let event = choices
             .get(grounded.candidate)
             .map_or("", |candidate| candidate.event.as_str());
-        for (member_index, (member, criteria, _)) in grounded.members.iter().enumerate() {
+        for (member, criteria, _) in &grounded.members {
+            let name = format!("{event}::{member}");
+            if !names.insert(name.clone()) {
+                return Err("decision member questions would share a name");
+            }
+            let wording = format!("Which value fills {} for {event}?", python_repr(member));
             questions.push(Question {
-                name: format!("fill.{event_index}.{member_index}"),
-                instructions: format!(
-                    "Which value fills {} for the event {event}? {FILL_INSTRUCTIONS}",
-                    Json::String(member.clone()),
-                ),
-                criteria: criteria.clone(),
+                name,
+                instructions: format!("{wording} {FILL_INSTRUCTIONS}"),
+                criteria: criteria
+                    .iter()
+                    .map(|criterion| Criterion {
+                        label: criterion.label.clone(),
+                        description: Json::String(wording.clone()),
+                    })
+                    .collect(),
             });
         }
     }
-    questions
+    Ok(questions)
 }
 
 /// The data of the offered event at `chosen`: each required member's most
@@ -874,7 +951,7 @@ impl DecisionRequest {
             Kind::Choose {
                 choices,
                 evidence,
-                threshold,
+                every,
             } => {
                 let offered: Vec<Grounded> = (0..choices.len())
                     .filter_map(|index| ground(&choices, index, evidence.as_ref()))
@@ -883,11 +960,11 @@ impl DecisionRequest {
                     return Ok(Plan::Return(Returned::abstain("no-candidates", None)));
                 }
                 (
-                    choose_questions(&choices, &offered, instructions),
+                    choose_questions(&choices, &offered, instructions)?,
                     Decide::Choose {
                         choices,
                         offered,
-                        threshold,
+                        every,
                     },
                 )
             }
@@ -969,31 +1046,15 @@ impl Prepared {
             Decide::Choose {
                 choices,
                 offered,
-                threshold,
-            } => {
-                let chosen = backend::argmax(&question.criteria, distribution).ok_or(NO_ANSWER)?;
-                let confidence = distribution
-                    .probabilities
-                    .get(chosen)
-                    .copied()
-                    .unwrap_or(0.0);
-                let Some(grounded) = offered.get(chosen) else {
-                    // The abstain label is the selection's last criterion.
-                    return Ok(Returned::abstain("declined", Some(confidence)));
-                };
-                if confidence < *threshold {
-                    return Ok(Returned::abstain("below-threshold", Some(confidence)));
-                }
-                let candidate = choices.get(grounded.candidate).ok_or(NO_ANSWER)?;
-                let data = filled_data(offered, chosen, distributions)?;
-                if !candidate
-                    .compiled
-                    .admits(&Data::JsonObject(canonical_json(&data)))
-                {
-                    return Err(FailureCode::SchemaMismatch);
-                }
-                Ok(Returned::new(&candidate.event, &data))
-            }
+                every,
+            } => decided_choice(
+                choices,
+                offered,
+                *every,
+                question,
+                distribution,
+                distributions,
+            ),
             Decide::Rank { candidates } => {
                 let mut ranked: Vec<(f64, &str, &Json)> = question
                     .criteria
@@ -1050,6 +1111,64 @@ impl Prepared {
             }
         }
     }
+}
+
+/// The event a `choose` or `select` answer decides (see the crate
+/// documentation).
+fn decided_choice(
+    choices: &[Candidate],
+    offered: &[Grounded],
+    every: bool,
+    question: &Question,
+    distribution: &Distribution,
+    distributions: &[Distribution],
+) -> Result<Returned, FailureCode> {
+    let chosen = backend::argmax(&question.criteria, distribution).ok_or(NO_ANSWER)?;
+    let probability = |index: usize| {
+        distribution
+            .probabilities
+            .get(index)
+            .copied()
+            .unwrap_or(0.0)
+    };
+    if offered.get(chosen).is_none() {
+        // The pass criterion is the selection's last criterion.
+        return Ok(Returned::abstain("declined", Some(probability(chosen))));
+    }
+    // The event at `index` with its filled data, validated
+    // against its schema.
+    let event = |index: usize| -> Result<(&str, Json), FailureCode> {
+        let grounded = offered.get(index).ok_or(NO_ANSWER)?;
+        let candidate = choices.get(grounded.candidate).ok_or(NO_ANSWER)?;
+        let data = filled_data(offered, index, distributions)?;
+        if !candidate
+            .compiled
+            .admits(&Data::JsonObject(canonical_json(&data)))
+        {
+            return Err(FailureCode::SchemaMismatch);
+        }
+        Ok((candidate.event.as_str(), data))
+    };
+    if !every {
+        let (name, data) = event(chosen)?;
+        return Ok(Returned::new(name, &data));
+    }
+    // mosfet: every groundable event rides the response with
+    // its own probability; the pass criterion never does.
+    let selections = (0..offered.len())
+        .map(|index| {
+            let (name, data) = event(index)?;
+            Ok(serde_json::json!({
+                "event": name,
+                "data": data,
+                "confidence": probability(index),
+            }))
+        })
+        .collect::<Result<Vec<Json>, FailureCode>>()?;
+    Ok(Returned::new(
+        SELECTED_EVENT,
+        &serde_json::json!({ "selections": selections }),
+    ))
 }
 
 /// The package's first declared `http-origins` entry: the base URL when no
