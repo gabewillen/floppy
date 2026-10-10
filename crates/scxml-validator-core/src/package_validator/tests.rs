@@ -9,7 +9,7 @@ use crate::{
 };
 
 const EXAMPLE: &str = "https://example.com/namespaces/ex";
-const SERVICE: &str = "https://github.com/acme/bots/services/generate";
+const SERVICE: &str = "https://github.com/acme/widgets/services/echo";
 
 type Answer = Box<
     dyn Fn(&document::Context, &[u32]) -> Result<Vec<Diagnostic>, PackageValidatorFailure> + Send,
@@ -142,7 +142,7 @@ fn each_package_is_called_once_with_its_targets_and_codes_are_prefixed() {
     let report = validate(validator.clone());
     let mut codes = package_codes(&report);
     codes.sort();
-    assert_eq!(codes, ["ex::bad_greeting", "generate::bad_param"]);
+    assert_eq!(codes, ["echo::bad_param", "ex::bad_greeting"]);
     let calls = validator.calls.lock().expect("not poisoned").clone();
     assert_eq!(calls.len(), 2, "one call per package: {calls:?}");
     assert_eq!(calls[0].0, EXAMPLE);
@@ -198,7 +198,7 @@ fn package_prefixes_are_the_document_prefix_or_the_last_path_segment() {
         }
     });
     assert_eq!(super::package_prefix(EXAMPLE, hello), "ex");
-    assert_eq!(super::package_prefix(SERVICE, None), "generate");
+    assert_eq!(super::package_prefix(SERVICE, None), "echo");
     assert_eq!(
         super::package_prefix("https://stateforward.org/scxml/services/echo/", None),
         "echo"
