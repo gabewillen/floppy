@@ -9,6 +9,7 @@ sends, and it does no I/O.
 | Element | mosfet | Writes |
 | --- | --- | --- |
 | `<bot:attention location focuslocation? stimulus devices focus sources?>` | `attention_bias_for_turn`, `_interrupt_reference`, `_target_device_reference` | the focus (`focuslocation`) and the focus candidates (`location`) |
+| `<bot:verdict location rejectionlocation selections focus candidates>` | `without_ignore_selections`, `attention_selection_error` | the selections without the ignore ones (`location`) and the first refused focus or clear selection's message, else `null` (`rejectionlocation`) |
 | `<bot:stimulus location event data source target? id?>` | the `bot.ability.cognition.input` stimulus | the envelope `{event, data, source, target?, id?}` |
 | `<bot:recognize location name text>` | `recognition.hears_name` (the text `NameRecognizer`) | whether the text names the bot (`true`/`false`) |
 
@@ -18,5 +19,6 @@ manifest [`package/bot.extension.json`](package/bot.extension.json) pins.
 `scripts/build-components.sh` builds, virtualizes and checks the component
 (imports: `types`, `telemetry`, `data-model-host`) and publishes it into the
 dev package cache. The floppy body ([`bots/floppy/floppy.scx`](../../bots/floppy/floppy.scx))
-uses `attention` and `stimulus`; the identity ability
+uses `attention`, `verdict` and `stimulus`; autonomy, intuition and reasoning
+use `verdict`; the identity ability
 ([`abilities/identity/identity.scx`](../../abilities/identity/identity.scx)) uses `recognize`.

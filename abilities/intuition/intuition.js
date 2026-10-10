@@ -82,6 +82,20 @@ function selectionResult(_event) {
   return ({handled: true, selected: [{event: _event.name, data: Object(_event.data)}], reason: 'none', turn: turn, tuner: tuner});
 }
 
+// No selection was rejected.
+function isAccepted() {
+  return rejection === null;
+}
+
+function isRejected() {
+  return rejection !== null;
+}
+
+// mosfet _selection_rejection_message: the rejection fails the stage.
+function rejectedResult() {
+  return ({handled: false, failed: true, reason: 'Selection rejected: ' + rejection, turn: turn, tuner: tuner});
+}
+
 function isDecisionTimeout(_event) {
   return _event.sendid === decision_timer;
 }

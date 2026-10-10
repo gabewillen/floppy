@@ -126,6 +126,21 @@ function candidateFailedLog(event) {
   return candidateName() + ' (' + event.name + ')';
 }
 
+// dispatching and recorded_failure
+
+// No selection of the handled behavior was rejected.
+function isAccepted() {
+  return rejection === null;
+}
+
+function isRejected() {
+  return rejection !== null;
+}
+
+function candidateRejectedLog() {
+  return candidateName() + ' (' + rejection + ')';
+}
+
 // advancing
 
 function nextIndex() {

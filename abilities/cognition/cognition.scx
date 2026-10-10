@@ -46,8 +46,11 @@
   for here (an SCXML invoke cancel is synchronous); the body's cancel timer
   still bounds the acknowledgement.
 
-  Ignore: bot.ability.cognition.ignore is taken here (in idle and
-  processing) and does nothing but log; it is this ability's offer.
+  Ignore: bot.ability.cognition.ignore is this ability's offer: its
+  transitions (in idle and processing, which only log) are what
+  <decision:choice> offers. A selected ignore is the turn's terminal
+  product and is never dispatched (mosfet without_ignore_selections), so
+  neither the stages nor the body send it here.
 
   Reflection: a reflection region invokes abilities/reflection/reflection.scx
   as the long-lived child "reflection" (mosfet composes Reflection beside
@@ -79,8 +82,14 @@
 
   Choices: each turn's input carries the body's assembled choices (its own
   and every ability's offers, tagged with their target); they go to
-  intuition (the decision service's enabled transitions) and to reasoning, and the body
-  routes either stage's selections.
+  autonomy (which checks a learned behavior's selections against them),
+  intuition (the decision service's enabled transitions) and reasoning,
+  and the body routes the handling stage's selections. Each stage checks
+  its selections as mosfet's does before it dispatches them (the ignore
+  selections removed, the attention policy, a target offering each), and
+  one it cannot place fails the stage with mosfet's
+  SelectionRejectionError message, which this ability answers as
+  bot.ability.failed.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline). scxml.rs checks them where each event is
@@ -198,6 +207,7 @@
         <param name="turn" expr="turn"/>
         <param name="input" expr="processingInput()"/>
         <param name="stimulus" expr="stimulus"/>
+        <param name="choices" expr="choices"/>
         <param name="database" expr="database"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"

@@ -158,8 +158,8 @@ function botOutput(_event) {
   return JSON.stringify({turn: turn, output: _event.data.output});
 }
 
-function processingCompleted(_event) {
-  return JSON.stringify({output: _event.data.output, focus_candidates: focus_candidates, turn: turn});
+function processingCompleted() {
+  return JSON.stringify({output: selections, focus_candidates: focus_candidates, turn: turn});
 }
 
 function cognitionFailure(_event) {
@@ -203,8 +203,21 @@ function cancelUnacknowledgedReason() {
 
 // routing
 
-function isDroppedRoute(route) {
-  return route.dropped !== undefined;
+// No selection was rejected (by <bot:verdict> or <decision:route>).
+function isAccepted() {
+  return rejection === null;
+}
+
+// The turn's choices, and bot.ability.communication.input placed on the
+// body itself (the trusted SpeechHeard seed's selection, mosfet's declared
+// event of the bot), which takes it as outside communication input.
+function routeChoices() {
+  return choices.concat([{event: 'bot.ability.communication.input', schema: {}}]);
+}
+
+// mosfet: a rejected selection fails the turn (bot.processing.failed).
+function rejectionFailure() {
+  return JSON.stringify({message: rejection, turn: turn});
 }
 
 function isBodyRoute(route) {
@@ -225,11 +238,3 @@ function staleReplyLog(_event) {
   return _event.name + ' for turn ' + _event.data.turn + ' (current ' + turn + ')';
 }
 
-// A routed body event no transition took.
-function isUntakenRoutedEvent(_event) {
-  return routing_selections && _event.type === 'internal' && _event.name !== 'floppy.routed';
-}
-
-function untakenRoutedEventLog(_event) {
-  return _event.name + ' was not taken';
-}

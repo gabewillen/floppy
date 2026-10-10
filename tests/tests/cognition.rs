@@ -551,7 +551,7 @@ fn intuition_handles_an_ignore_without_reasoning() {
     let bot = layout(&mock, Decision::Ignore, Generation::Fail, &[]);
     let mut run = start(&bot);
     say(&mut run, "background noise");
-    let records = run.until(WAIT, label_is("cognition.ignore"));
+    let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         json_text(&records, "floppy.output"),
         json!({"turn": 1, "output": [{"event": IGNORE, "data": {}}]})
@@ -569,12 +569,13 @@ fn intuition_handles_an_ignore_without_reasoning() {
         texts(&records, "autonomy"),
         strings(&["turn 1: 0 matched for bot.input"])
     );
-    // The body routed the selection to the only ability offering it.
-    assert_eq!(
-        texts(&records, "floppy.route"),
-        strings(&["bot.ability.cognition.ignore -> cognition"])
+    // An ignore is the turn's terminal product: never dispatched (mosfet
+    // without_ignore_selections).
+    assert!(texts(&records, "floppy.route").is_empty(), "{records:?}");
+    assert!(
+        texts(&records, "cognition.ignore").is_empty(),
+        "{records:?}"
     );
-    assert_eq!(texts(&records, "cognition.ignore"), strings(&["idle"]));
     // The decision offered the turn's choices it could fill (respond's
     // text and adopt's name have no grounded value); reasoning asked no
     // model.
@@ -816,7 +817,7 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
     support::use_database(&bot.body, database);
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
-    let records = run.until(WAIT, label_is("cognition.ignore"));
+    let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         texts(&records, "autonomy"),
         strings(&["turn 1: 4 matched for bot.input"])
@@ -860,6 +861,58 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
     );
 }
 
+/// mosfet's Autonomy dispatches a handled behavior's selections before it
+/// counts the use: one the turn cannot place (here an event nobody offers)
+/// marks the behavior failed, not used, and fails the turn with mosfet's
+/// SelectionRejectionError message; intuition never runs.
+#[test]
+fn a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn() {
+    let mock = Mock::start();
+    let unoffered = turn_behavior(
+        "({turn: turn, handled: true, selected: [{event: 'bot.ability.reasoning.input', data: {}}]})",
+    );
+    let grant = inventory(
+        DATABASE,
+        &[Learned {
+            name: "Unoffered",
+            trigger: "bot.input",
+            status: "ACTIVE",
+            source: &unoffered,
+        }],
+    );
+    let memory = format!("'{DATABASE}'");
+    let bot = layout(
+        &mock,
+        Decision::Fail,
+        Generation::Fail,
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[("database", memory.as_str())],
+        )],
+    );
+    support::use_database(&bot.body, DATABASE);
+    let mut run = start_with(&bot, &grant);
+    say(&mut run, "background noise");
+    let records = run.until(WAIT, turn_ended);
+    let message = "Processing selected unavailable event: bot.ability.reasoning.input.";
+    assert_eq!(
+        texts(&records, "autonomy.candidate.failed"),
+        strings(&[&format!("Unoffered ({message})")])
+    );
+    assert_eq!(
+        json_text(&records, "bot.processing.failed"),
+        json!({"message": message, "turn": 1})
+    );
+    assert!(texts(&records, "floppy.output").is_empty(), "{records:?}");
+    assert!(texts(&records, "intuition").is_empty(), "{records:?}");
+    close(
+        run,
+        &mock,
+        "a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn",
+    );
+    assert_eq!(usage(&grant, DATABASE), json!([["Unoffered", "0", "1"]]));
+}
+
 /// When every triggered behavior declines, autonomy answers unhandled and
 /// the cascade goes on to intuition.
 #[test]
@@ -887,7 +940,7 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
     );
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
-    let records = run.until(WAIT, label_is("cognition.ignore"));
+    let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         texts(&records, "cognition.stage"),
         strings(&["autonomy unhandled (unhandled)", "intuition handled (none)"])
@@ -910,22 +963,19 @@ fn reasoning_selects_from_the_turns_choices() {
     let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
     let mut run = start(&bot);
     say(&mut run, "what is the capital of France?");
-    let records = run.until(WAIT, label_is("cognition.ignore"));
+    let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         json_text(&records, "floppy.output"),
         json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}]})
     );
     // Reasoning selected from the body's assembled choices (the
-    // cognition's offer, tagged), and the body routed the selection back.
+    // cognition's offer, tagged); an ignore is never dispatched.
     assert_eq!(texts(&records, "floppy.choices"), strings(&[CHOICES]));
     assert_eq!(
         texts(&records, "reasoning"),
         strings(&[&format!("turn 1: {CHOICES}")])
     );
-    assert_eq!(
-        texts(&records, "floppy.route"),
-        strings(&["bot.ability.cognition.ignore -> cognition"])
-    );
+    assert!(texts(&records, "floppy.route").is_empty(), "{records:?}");
     assert_eq!(
         texts(&records, "cognition.stage"),
         strings(&[
@@ -1043,7 +1093,7 @@ fn a_reasoned_response_is_said_through_the_communication() {
     );
     assert_eq!(texts(&records, "conversation"), strings(&["outbound 0"]));
     assert!(
-        texts(&records, "floppy.route.dropped").is_empty(),
+        texts(&records, "bot.processing.failed").is_empty(),
         "{records:?}"
     );
     close(

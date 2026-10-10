@@ -199,9 +199,14 @@ D33 to D43.
   candidates, and `bot.clear_focus`, plus each ability's latest offers
   tagged with its `target`), holds them to 32 KiB, and sends them as
   `bot.ability.cognition.input.choices` [floppy field]. Reasoning selects
-  only from them; the body's `routing` state delivers each selection to
-  `#_internal` or `#_<target>` with a visible `<foreach>`/`<send>` and logs
-  `floppy.route`/`floppy.route.dropped`.
+  only from them; the body's `routing` state checks every selection
+  (`<bot:verdict>`, then `<decision:route>`) and, when all can be placed,
+  logs `bot.processing.completed` and delivers each to `#_internal` or
+  `#_<target>` with a visible `<foreach>`/`<send>` (logging `floppy.route`);
+  one that cannot be placed fails the turn (`bot.processing.failed` with
+  mosfet's `SelectionRejectionError` message). Autonomy, intuition and
+  reasoning make the same checks before they answer, where mosfet
+  dispatches.
 - **Per-turn stage children.** The cognition invokes each stage (autonomy,
   intuition, reasoning) per turn with `<param>`s named after the mosfet
   input event's fields and takes its result as `done.invoke.<stage>`
@@ -245,10 +250,11 @@ D33 to D43.
 | `bot.py` attachment Group, `_AttachmentOperation`, `_ProcessingOperation` | the body's `<invoke>`s in `live`, its offers bookkeeping and its delayed `<send>`/`<cancel>` | composition inside the body |
 | `attention_bias_for_turn`, `_interrupt_reference`, `_target_device_reference` | `<bot:attention>` | `namespaces/bot` element |
 | stimulus envelope | `<bot:stimulus>` | `namespaces/bot` element |
+| `without_ignore_selections`, `attention_selection_error` | `<bot:verdict>` | `namespaces/bot` element |
 | `model_facing_event_json_schema` and the 32 KiB bound | `<decision:compact>` | `namespaces/decision` element |
 | `collect_offered_events`, `_dispatch_bot_processing` | `<decision:assemble>` | `namespaces/decision` element |
 | focus pinning | `<decision:pin>` | `namespaces/decision` element |
-| `_resolve_target`, `fill_unique_selection_targets` | `<decision:route>` (the body's `<foreach>`/`<send>` delivers) | `namespaces/decision` element |
+| `_resolve_target`, `fill_unique_selection_targets`, `SelectionRejectionError` | `<decision:route>` (the body's `<foreach>`/`<send>` delivers) | `namespaces/decision` element |
 | choice-name logs | `<decision:names>` | `namespaces/decision` element |
 | `_selection_item_branch`, `dispatch_tool` | `<decision:selection>` | `namespaces/decision` element |
 | `ConfidenceTuner` | `<decision:tuner>` | `namespaces/decision` element |

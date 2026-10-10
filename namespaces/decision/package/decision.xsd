@@ -28,15 +28,17 @@
                    choices expression's, then each offers member's tagged
                    with its name as target, compacted as decision:compact
                    does but kept when still over bound.
-                   routeslocation (required): receives the routing table
-                   (event -> targets, null for the document itself).
                    choices, offers (required): expressions.
                    bound (optional): a decimal integer, default 32768.
                    overlocation, sizelocation (optional): receive whether
                    the choices are over the bound, and their size in bytes.
-  decision:route   location (required): receives each selection placed by
-                   the routing table ({event, data, target}) or why not
-                   ({dropped}). selections, routes (required): expressions.
+  decision:route   location (required): receives every selection placed on
+                   the target offering it ({event, data, target}), or []
+                   when one cannot be placed.
+                   rejectionlocation (required): receives the first
+                   unplaceable selection's message (mosfet
+                   SelectionRejectionError), else null.
+                   selections, choices (required): expressions.
   decision:names   location (required): receives the choices' names
                    (event or event@target, space separated).
                    choices (required): an expression.
@@ -85,7 +87,6 @@
   <xs:element name="assemble">
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
-      <xs:attribute name="routeslocation" type="xs:string" use="required"/>
       <xs:attribute name="choices" type="xs:string" use="required"/>
       <xs:attribute name="offers" type="xs:string" use="required"/>
       <xs:attribute name="bound" use="optional">
@@ -102,8 +103,9 @@
   <xs:element name="route">
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="rejectionlocation" type="xs:string" use="required"/>
       <xs:attribute name="selections" type="xs:string" use="required"/>
-      <xs:attribute name="routes" type="xs:string" use="required"/>
+      <xs:attribute name="choices" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="names">

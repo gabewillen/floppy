@@ -1,6 +1,6 @@
 [package]
 name = "floppy-bot"
-description = "The `bot` namespace: `<bot:attention>` and `<bot:stimulus>`, a bot body's turn attention bias and stimulus envelope, as a Wasm extension component"
+description = "The `bot` namespace: `<bot:attention>`, `<bot:verdict>` and `<bot:stimulus>`, a bot body's turn attention bias, attention verdict and stimulus envelope, as a Wasm extension component"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

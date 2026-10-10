@@ -107,7 +107,7 @@
 //! is required. An entry for `E` whose schema has no object
 //! `properties.<P>` is `error.execution`.
 //!
-//! # `<decision:assemble location="L" routeslocation="R" choices="X" offers="Y" bound="N" overlocation="O" sizelocation="S"/>`
+//! # `<decision:assemble location="L" choices="X" offers="Y" bound="N" overlocation="O" sizelocation="S"/>`
 //!
 //! A turn's choices (mosfet `collect_offered_events` and the body's
 //! dispatch inventory): the choices `choices` evaluates to (a document's
@@ -119,25 +119,34 @@
 //! otherwise; unlike `<decision:compact>`, a list still over the bound is
 //! kept (the document logs it and fails the turn) and `overlocation`
 //! (optional) receives `true`. `sizelocation` (optional) receives the
-//! assigned list's size in bytes. `routeslocation` receives the routing
-//! table: an object mapping each offered event to its targets in choices
-//! order, `null` for a choice without a target (the document itself).
-//! `overlocation`, `sizelocation` and `routeslocation` are assigned before
-//! `location`.
+//! assigned list's size in bytes. `overlocation` and `sizelocation` are
+//! assigned before `location`.
 //!
-//! # `<decision:route location="L" selections="X" routes="Y"/>`
+//! # `<decision:route location="L" rejectionlocation="R" selections="X" choices="Y"/>`
 //!
-//! Places each selection (`{event, data?, target?}`) of the array
-//! `selections` evaluates to by the routing table `routes` evaluates to
-//! (mosfet `_resolve_target` and `fill_unique_selection_targets`), in
-//! order: `location` receives one entry per selection, either `{event,
-//! data, target}` (`data` `{}` when the selection has none or `null`;
-//! `target` the named target when it offers the event, else the event's
-//! only target, `null` meaning the document itself) or `{dropped}` with why
-//! it cannot be placed: `<event> was not offered this turn`, `<event> is not
-//! offered by <target>`, `<event> names no target among <targets JSON>`, or
-//! `a malformed selection`. The document delivers each placed selection
-//! with a visible `<send>` (this element never sends).
+//! Places every selection (`{event, data?, target?}`) of the array
+//! `selections` evaluates to by the choices `choices` evaluates to (each
+//! choice's event is offered by its `target`, a choice without one by the
+//! document itself), in order, as mosfet's `dispatch_selected_events`
+//! resolves its targets (`fill_unique_selection_targets`, the offered-event
+//! check and `_resolve_target`): a selection that names a `target` goes to
+//! it when it offers the event; one that names none goes to the event's
+//! only offerer. A selection that cannot be placed fails all of them
+//! (mosfet's `SelectionRejectionError`, raised before anything is
+//! dispatched): `rejectionlocation` receives the first one's message,
+//! mosfet's `Processing selected unavailable event: <event>.` (an event
+//! nobody offers, or one that names no target and is offered by several)
+//! or `Processing selected unavailable event for target <target>:
+//! <event>.` (a named target that does not offer it; also an event nobody
+//! offers, when it names one), or `Processing selected a malformed event
+//! selection.` for one that is not an object with a non-empty string
+//! `event` (floppy's text: mosfet refuses it while parsing), and
+//! `location` receives `[]`. Otherwise `rejectionlocation` receives `null`
+//! and `location` one `{event, data, target}` per selection (`data` `{}`
+//! when the selection has none or `null`; `target` `null` for the document
+//! itself), canonical JSON. `rejectionlocation` is assigned before
+//! `location`. The document delivers each placed selection with a visible
+//! `<send>` (this element never sends).
 //!
 //! # `<decision:names location="L" choices="X"/>`
 //!
@@ -591,33 +600,20 @@ fn assemble<H: ChoiceHost>(
     content: &[Content],
     host: &mut H,
 ) -> Result<Executed, Failure<H::Error>> {
-    let [
-        location,
-        routes_location,
-        own,
-        offers,
-        bound,
-        over_location,
-        size_location,
-    ] = attribute_values(
+    let [location, own, offers, bound, over_location, size_location] = attribute_values(
         attributes,
         [
             "location",
-            "routeslocation",
             "choices",
             "offers",
             "bound",
             "overlocation",
             "sizelocation",
         ],
-        "decision:assemble takes only the location, routeslocation, choices, offers, bound, overlocation and sizelocation attributes",
+        "decision:assemble takes only the location, choices, offers, bound, overlocation and sizelocation attributes",
         "decision:assemble repeats an attribute",
     )?;
     let location = required(location, "decision:assemble requires a non-empty location")?;
-    let routes_location = required(
-        routes_location,
-        "decision:assemble requires a non-empty routeslocation",
-    )?;
     let own = required(own, "decision:assemble requires a non-empty choices")?;
     let offers = required(offers, "decision:assemble requires a non-empty offers")?;
     let bound = bound_value(bound, "decision:assemble bound is not a decimal integer")?;
@@ -655,12 +651,6 @@ fn assemble<H: ChoiceHost>(
     }
     assign_to(
         host,
-        routes_location,
-        &Data::JsonObject(assembled.routes),
-        "decision:assemble could not assign routeslocation",
-    )?;
-    assign_to(
-        host,
         location,
         &Data::JsonArray(assembled.choices),
         "decision:assemble could not assign the choices",
@@ -673,9 +663,6 @@ fn assemble<H: ChoiceHost>(
 pub struct Assembled {
     /// The compacted choices, canonical JSON.
     pub choices: String,
-    /// The routing table, canonical JSON: each offered event's targets in
-    /// choices order, `null` for a choice without a target.
-    pub routes: String,
     /// Whether the choices are over the bound even without descriptions.
     pub over: bool,
 }
@@ -684,7 +671,7 @@ pub struct Assembled {
 /// target) followed by each `offers` member's choices tagged with its
 /// name as `target`, in name order; compacted like `<decision:compact>`,
 /// except that over the bound without descriptions the description-less
-/// list is kept and `over` is set; and the routing table of the result.
+/// list is kept and `over` is set.
 ///
 /// # Errors
 ///
@@ -730,26 +717,8 @@ pub fn assemble_choices(
             break;
         }
     }
-    let mut routes = Map::new();
-    for entry in &all {
-        let event = entry
-            .get("event")
-            .and_then(Json::as_str)
-            .unwrap_or_default();
-        let target = entry.get("target").cloned().unwrap_or(Json::Null);
-        let Json::Array(targets) = routes
-            .entry(event.to_owned())
-            .or_insert_with(|| Json::Array(Vec::new()))
-        else {
-            continue;
-        };
-        if !targets.contains(&target) {
-            targets.push(target);
-        }
-    }
     Ok(Assembled {
         choices: compacted,
-        routes: canonical_json(&Json::Object(routes)),
         over,
     })
 }
@@ -760,97 +729,128 @@ fn route<H: ChoiceHost>(
     content: &[Content],
     host: &mut H,
 ) -> Result<Executed, Failure<H::Error>> {
-    let [location, selections, routes] = attribute_values(
+    let [location, rejection_location, selections, choices] = attribute_values(
         attributes,
-        ["location", "selections", "routes"],
-        "decision:route takes only the location, selections and routes attributes",
+        ["location", "rejectionlocation", "selections", "choices"],
+        "decision:route takes only the location, rejectionlocation, selections and choices attributes",
         "decision:route repeats an attribute",
     )?;
     let location = required(location, "decision:route requires a non-empty location")?;
+    let rejection_location = required(
+        rejection_location,
+        "decision:route requires a non-empty rejectionlocation",
+    )?;
     let selections = required(selections, "decision:route requires a non-empty selections")?;
-    let routes = required(routes, "decision:route requires a non-empty routes")?;
+    let choices = required(choices, "decision:route requires a non-empty choices")?;
     no_content(content, "decision:route holds no content")?;
     let selections = read_json(
         host,
         selections,
         "decision:route selections is not an array",
     )?;
-    let routes = read_json(host, routes, "decision:route routes is not a routing table")?;
-    let placed = route_selections(&selections, &routes).map_err(Failure::Execution)?;
+    let choices = read_json(
+        host,
+        choices,
+        "decision:route choices does not hold choices",
+    )?;
+    let routed = route_selections(&selections, &choices).map_err(Failure::Execution)?;
+    let (placed, rejection) = match routed {
+        Ok(placed) => (placed, Data::Null),
+        Err(rejection) => ("[]".to_owned(), Data::String(rejection)),
+    };
+    assign_to(
+        host,
+        rejection_location,
+        &rejection,
+        "decision:route could not assign rejectionlocation",
+    )?;
     assign_to(
         host,
         location,
         &Data::JsonArray(placed),
-        "decision:route could not assign the routed selections",
+        "decision:route could not assign the placed selections",
     )?;
     Ok(Executed::Handled)
 }
 
-/// Each selection of `selections`, in order, placed by the routing table
-/// `routes` (see [`assemble_choices`]): `{event, data, target}` (`target`
-/// `null` is the table's own document; `data` `{}` when the selection has
-/// none) or `{dropped}` with why it cannot be placed; canonical JSON. See
+/// mosfet `_unavailable_message`.
+fn unavailable(event: &str, target: Option<&str>) -> String {
+    match target {
+        None => format!("Processing selected unavailable event: {event}."),
+        Some(target) => {
+            format!("Processing selected unavailable event for target {target}: {event}.")
+        }
+    }
+}
+
+/// Every selection of `selections`, in order, placed by the offerers of
+/// `choices`: `Ok` with the canonical JSON of the `{event, data, target}`
+/// entries (`target` `null` is the document itself; `data` `{}` when the
+/// selection has none), or `Err` with the first rejection's message. See
 /// the crate documentation (`<decision:route>`).
 ///
 /// # Errors
 ///
-/// A static detail when `selections` is not an array or `routes` is not an
-/// object of target arrays.
-pub fn route_selections(selections: &Json, routes: &Json) -> Result<String, &'static str> {
+/// A static detail when `selections` is not an array or `choices` does not
+/// hold choices.
+pub fn route_selections(
+    selections: &Json,
+    choices: &Json,
+) -> Result<Result<String, String>, &'static str> {
     let selections = selections
         .as_array()
         .ok_or("decision:route selections is not an array")?;
-    let routes = routes
-        .as_object()
-        .ok_or("decision:route routes is not a routing table")?;
-    if routes.values().any(|targets| {
-        !targets.as_array().is_some_and(|targets| {
-            targets
-                .iter()
-                .all(|target| target.is_null() || target.is_string())
-        })
-    }) {
-        return Err("decision:route routes is not a routing table");
+    let mut offerers: Map<String, Json> = Map::new();
+    for entry in checked_entries(choices, ROUTE_ENTRIES)? {
+        let event = entry
+            .get("event")
+            .and_then(Json::as_str)
+            .unwrap_or_default();
+        let target = entry.get("target").cloned().unwrap_or(Json::Null);
+        if let Json::Array(targets) = offerers
+            .entry(event.to_owned())
+            .or_insert_with(|| Json::Array(Vec::new()))
+            && !targets.contains(&target)
+        {
+            targets.push(target);
+        }
     }
-    let dropped = |why: String| {
+    let mut placed = Vec::with_capacity(selections.len());
+    for selection in selections {
+        let Some(event) = selection
+            .get("event")
+            .and_then(Json::as_str)
+            .filter(|event| !event.is_empty())
+        else {
+            return Ok(Err(
+                "Processing selected a malformed event selection.".to_owned()
+            ));
+        };
+        let named = selection.get("target").and_then(Json::as_str);
+        let Some(targets) = offerers.get(event).and_then(Json::as_array) else {
+            return Ok(Err(unavailable(event, named)));
+        };
+        let target = match named {
+            Some(named) if targets.iter().any(|target| target.as_str() == Some(named)) => {
+                Json::String(named.to_owned())
+            }
+            Some(named) => return Ok(Err(unavailable(event, Some(named)))),
+            None => match targets.as_slice() {
+                [target] => target.clone(),
+                _ => return Ok(Err(unavailable(event, None))),
+            },
+        };
+        let data = match selection.get("data") {
+            None | Some(Json::Null) => Json::Object(Map::new()),
+            Some(data) => data.clone(),
+        };
         let mut out = Map::new();
-        out.insert("dropped".into(), Json::String(why));
-        Json::Object(out)
-    };
-    let placed: Vec<Json> = selections
-        .iter()
-        .map(|selection| {
-            let Some(event) = selection.get("event").and_then(Json::as_str) else {
-                return dropped("a malformed selection".to_owned());
-            };
-            let Some(targets) = routes.get(event).and_then(Json::as_array) else {
-                return dropped(format!("{event} was not offered this turn"));
-            };
-            let target = match selection.get("target").and_then(Json::as_str) {
-                Some(named) if targets.iter().any(|target| target.as_str() == Some(named)) => {
-                    Json::String(named.to_owned())
-                }
-                Some(named) => return dropped(format!("{event} is not offered by {named}")),
-                None if targets.len() == 1 => targets[0].clone(),
-                None => {
-                    return dropped(format!(
-                        "{event} names no target among {}",
-                        Json::Array(targets.clone())
-                    ));
-                }
-            };
-            let data = match selection.get("data") {
-                None | Some(Json::Null) => Json::Object(Map::new()),
-                Some(data) => data.clone(),
-            };
-            let mut out = Map::new();
-            out.insert("event".into(), Json::String(event.to_owned()));
-            out.insert("data".into(), data);
-            out.insert("target".into(), target);
-            Json::Object(out)
-        })
-        .collect();
-    Ok(canonical_json(&Json::Array(placed)))
+        out.insert("event".into(), Json::String(event.to_owned()));
+        out.insert("data".into(), data);
+        out.insert("target".into(), target);
+        placed.push(Json::Object(out));
+    }
+    Ok(Ok(canonical_json(&Json::Array(placed))))
 }
 
 /// Executes `<decision:names>`.
@@ -1210,6 +1210,13 @@ const ASSEMBLE_ENTRIES: [&str; 3] = [
     "decision:assemble choices does not hold choices",
     "decision:assemble found a choice that is not an object",
     "decision:assemble found a malformed choice",
+];
+
+/// `<decision:route>`'s choice-entry failures (see `checked_entries`).
+const ROUTE_ENTRIES: [&str; 3] = [
+    "decision:route choices does not hold choices",
+    "decision:route found a choice that is not an object",
+    "decision:route found a malformed choice",
 ];
 
 /// `<decision:names>`'s choice-entry failures (see `checked_entries`).
@@ -1739,6 +1746,7 @@ mod guest {
                 Data::String(text) => DataValue::Text(text.clone()),
                 Data::Number(value) => DataValue::Number(value.get()),
                 Data::Bool(value) => DataValue::Boolean(*value),
+                Data::Null => DataValue::Null,
                 _ => return Ok(Err(())),
             };
             match data_model_host::assign(location, &value) {
