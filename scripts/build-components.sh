@@ -54,7 +54,7 @@ expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 expected_wasi_sdk='25.0'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
 namespace_components='floppy_decision floppy_bot floppy_conversation'
-service_components='floppy_service_generate floppy_service_decision floppy_service_sql'
+service_components='floppy_service_generate floppy_service_decision floppy_service_sql floppy_service_speech'
 # Package validator components (stateforward:scxml-validator/package-validator),
 # each named by its package's manifest (`validator-artifact`).
 validator_components='floppy_service_generate_validator'
@@ -143,6 +143,26 @@ expected_imports() {
         floppy_service_sql)
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'wasi:io/poll@0.2.12' \
+                'wasi:clocks/wall-clock@0.2.12' \
+                'wasi:io/error@0.2.12' \
+                'wasi:io/streams@0.2.12' \
+                'wasi:filesystem/types@0.2.12' \
+                'wasi:filesystem/preopens@0.2.12'
+            ;;
+        # The speech service: one async `invoke` export, one request through
+        # outbound-http's async `fetch`, and the media files in the directory
+        # the run grants. It keeps exactly the filesystem it imports for the
+        # host (which links it only under `--dir`): the filesystem
+        # interfaces, the wasi:io interfaces they use, and
+        # wasi:clocks/wall-clock for their timestamps; wasi:cli and the 0.2
+        # monotonic clock are denied by the composed provider
+        # (services/speech/wasi-cli-deny.wat).
+        floppy_service_speech)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/outbound-http@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0' \
                 'wasi:io/poll@0.2.12' \
                 'wasi:clocks/wall-clock@0.2.12' \
@@ -271,15 +291,16 @@ build_component() {
         virt_input=$seeded
         ;;
     esac
-    if [ "$component" = floppy_service_sql ]; then
-        # The sql service keeps its filesystem imports for the host: a
-        # wasi-virt adapter would virtualize the filesystem too, so the
-        # standard library's and wasi-libc's other WASI imports (wasi:cli and
-        # the monotonic clock) are satisfied by the pinned deny-all provider
-        # instead (see the .wat header), as scxml.rs does for its files
-        # example service.
-        deny="$run_tmp/wasi-cli-deny-sql.wasm"
-        wasm-tools parse "$workspace/services/sql/wasi-cli-deny.wat" -o "$deny"
+    if [ "$component" = floppy_service_sql ] || [ "$component" = floppy_service_speech ]; then
+        # The sql and speech services keep their filesystem imports for the
+        # host: a wasi-virt adapter would virtualize the filesystem too, so
+        # the standard library's and wasi-libc's other WASI imports
+        # (wasi:cli and the monotonic clock) are satisfied by each one's
+        # pinned deny-all provider instead (see the .wat header), as
+        # scxml.rs does for its files example service.
+        name=${component#floppy_service_}
+        deny="$run_tmp/wasi-cli-deny-$name.wasm"
+        wasm-tools parse "$workspace/services/$name/wasi-cli-deny.wat" -o "$deny"
         wasm-tools compose "$virt_input" -d "$deny" -o "$virtualized" >/dev/null 2>&1
         wasm-tools compose "$virt_input" -d "$deny" -o "$repeat" >/dev/null 2>&1
     elif wasm-tools component wit "$virt_input" | sed -n 's/^  import \(.*\);$/\1/p' | grep -q '^wasi:'; then
@@ -295,7 +316,7 @@ build_component() {
     wasm-tools validate --features component-model,cm-async "$virtualized"
     imports=$(wasm-tools component wit "$virtualized" | sed -n 's/^  import \(.*\);$/\1/p')
     # A component may keep only a WASI interface its allowlist names (the
-    # sql service the filesystem it imports).
+    # sql and speech services the filesystem they import).
     allowed_wasi=$(expected_imports "$component" | grep -E '^wasi:' || true)
     if printf '%s\n' "$imports" | grep -E '^wasi:' | grep -Fxv "$allowed_wasi" | grep -q .; then
         echo "virtualized component retains a WASI capability: $component" >&2
