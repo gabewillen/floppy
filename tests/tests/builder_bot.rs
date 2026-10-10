@@ -340,28 +340,18 @@ fn two_ping_draft() -> String {
     .to_string()
 }
 
-/// A streamed Chat Completions answer (server-sent events, as the generate
-/// service asks for) carrying `content`, split in two deltas.
+/// A non-streamed Chat Completions answer carrying `content`, as the
+/// generate service asks for one by default.
 fn completion(content: &str) -> String {
-    let middle = content.chars().count() / 2;
-    let head: String = content.chars().take(middle).collect();
-    let tail: String = content.chars().skip(middle).collect();
-    let chunk = |delta: Json, finish: Option<&str>| {
-        json!({
-            "object": "chat.completion.chunk",
-            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
-        })
-    };
-    [
-        chunk(json!({"role": "assistant", "content": ""}), None),
-        chunk(json!({"content": head}), None),
-        chunk(json!({"content": tail}), None),
-        chunk(json!({}), Some("stop")),
-    ]
-    .iter()
-    .map(|chunk| format!("data: {chunk}\n\n"))
-    .chain(std::iter::once("data: [DONE]\n\n".to_owned()))
-    .collect()
+    json!({
+        "object": "chat.completion",
+        "choices": [{
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {"role": "assistant", "content": content},
+        }],
+    })
+    .to_string()
 }
 
 /// A `system_one` answer choosing `chosen` in the selection (0.8, the rest
@@ -955,7 +945,9 @@ fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
     });
     run.event(
         "builder.request",
-        &json!({"spec": SPEC, "generate_timeout_ms": 1000}),
+        // Long enough that the redesign answers in time on a loaded
+        // machine (the held first plan times out whatever the bound).
+        &json!({"spec": SPEC, "generate_timeout_ms": 5000}),
     );
     run.end_input();
     records.extend(run.finish(Duration::from_mins(3)).records);

@@ -17,8 +17,8 @@
 //!   `messages`; `schemaname` or `strict` without `schema`.
 //! * `invalid_value` (error, ECMAScript documents, literal `expr` only): a
 //!   `reasoning_effort` that is not one of [`REASONING_EFFORTS`] (a
-//!   machine-applicable fix to the one strictly closest within two edits), a `strict` that is
-//!   not `true` or `false`, a `schemaname` outside `[A-Za-z0-9_-]{1,64}`, or
+//!   machine-applicable fix to the one strictly closest within two edits), a `strict` or
+//!   `stream` that is not `true` or `false`, a `schemaname` outside `[A-Za-z0-9_-]{1,64}`, or
 //!   an empty `model`, `prompt`, or `system`.
 //! * `schema_mismatch` (warning): a transition that can take the
 //!   invocation's events (in the invoking state, an ancestor, or a
@@ -46,7 +46,7 @@ use serde_json::Value as Json;
 /// The service's exact type URI.
 pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/generate";
 /// The parameters the service takes.
-pub const PARAMETERS: [&str; 8] = [
+pub const PARAMETERS: [&str; 9] = [
     "model",
     "prompt",
     "messages",
@@ -55,6 +55,7 @@ pub const PARAMETERS: [&str; 8] = [
     "schemaname",
     "strict",
     "reasoning_effort",
+    "stream",
 ];
 /// The `reasoning_effort` values the service accepts.
 pub const REASONING_EFFORTS: [&str; 6] = ["none", "minimal", "low", "medium", "high", "xhigh"];
@@ -399,8 +400,8 @@ fn value(name: &str, expr: &Attribute, findings: &mut Vec<Finding>) {
             format!("use one of {}", REASONING_EFFORTS.join(", ")),
             None,
         )),
-        ("strict", Literal::String(_)) => findings.push(invalid(
-            "strict must be a boolean".to_owned(),
+        (name @ ("strict" | "stream"), Literal::String(_)) => findings.push(invalid(
+            format!("{name} must be a boolean"),
             "write `true` or `false`".to_owned(),
             None,
         )),

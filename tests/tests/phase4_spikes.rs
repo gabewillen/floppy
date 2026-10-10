@@ -73,22 +73,18 @@ enum Seen {
     Closed,
 }
 
-/// A streamed Chat Completions answer carrying `content`.
-fn streamed(content: &str) -> String {
-    let chunk = |delta: Json, finish: Option<&str>| {
-        json!({
-            "object": "chat.completion.chunk",
-            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
-        })
-    };
-    [
-        chunk(json!({"role": "assistant", "content": content}), None),
-        chunk(json!({}), Some("stop")),
-    ]
-    .iter()
-    .map(|chunk| format!("data: {chunk}\n\n"))
-    .chain(std::iter::once("data: [DONE]\n\n".to_owned()))
-    .collect()
+/// A non-streamed Chat Completions answer carrying `content`, as the
+/// generate service asks for one by default.
+fn completion(content: &str) -> String {
+    json!({
+        "object": "chat.completion",
+        "choices": [{
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {"role": "assistant", "content": content},
+        }],
+    })
+    .to_string()
 }
 
 /// The `system_one` answer choosing `order.ship`: the selection gives it
@@ -201,8 +197,8 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Seen>>) {
     let body: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
     let answer = if target.starts_with("/text/") {
         Some((
-            "text/event-stream",
-            streamed("Hello from the spike backend!"),
+            "application/json",
+            completion("Hello from the spike backend!"),
         ))
     } else if target.starts_with("/ship/") {
         ship(&body).map(|text| ("application/json", text))

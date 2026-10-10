@@ -78,6 +78,20 @@ fn reply(content: &str) -> Vec<u8> {
     ])
 }
 
+/// A non-streamed completion of `content`, finished by `finish_reason`.
+fn completion(content: &str, finish_reason: &str) -> Vec<u8> {
+    serde_json::json!({
+        "object": "chat.completion",
+        "choices": [{
+            "index": 0,
+            "finish_reason": finish_reason,
+            "message": { "role": "assistant", "content": content },
+        }],
+    })
+    .to_string()
+    .into_bytes()
+}
+
 #[expect(
     clippy::unnecessary_wraps,
     reason = "builds the answered arm of a transport outcome for `decide`"
@@ -111,7 +125,29 @@ fn a_prompt_with_a_system_message_builds_the_canonical_request() {
     );
     assert_eq!(
         String::from_utf8(request.body).expect("UTF-8"),
-        r#"{"messages":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"model":"mock-model","reasoning_effort":"low","stream":true}"#
+        r#"{"messages":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"model":"mock-model","reasoning_effort":"low"}"#
+    );
+    assert_eq!(
+        request.headers[2],
+        (
+            "accept".to_owned(),
+            vec![Part::Literal("application/json".into())]
+        )
+    );
+}
+
+#[test]
+fn a_streamed_generation_asks_for_server_sent_events() {
+    let generation = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("stream", Data::Bool(true)),
+    ])
+    .expect("valid parameters");
+    let request = build_request(2, 1, &generation);
+    assert_eq!(
+        String::from_utf8(request.body).expect("UTF-8"),
+        r#"{"messages":[{"content":"p","role":"user"}],"model":"m","reasoning_effort":"low","stream":true}"#
     );
     assert_eq!(
         request.headers[2],
@@ -119,6 +155,18 @@ fn a_prompt_with_a_system_message_builds_the_canonical_request() {
             "accept".to_owned(),
             vec![Part::Literal("text/event-stream".into())]
         )
+    );
+    // Its reply is the stream's text; a completion is not a stream.
+    assert_eq!(
+        outcome(&generation, ok(reply("hello there"))),
+        Returned {
+            name: RESULT_EVENT,
+            data: r#"{"text":"hello there"}"#.into()
+        }
+    );
+    assert_eq!(
+        outcome(&generation, ok(completion("hi", "stop"))),
+        Returned::failed(FailureCode::Malformed)
     );
 }
 
@@ -249,7 +297,7 @@ fn an_image_part_is_sent_as_an_image_url_with_its_data_url() {
     let request = build_request(0, 1, &generation);
     assert_eq!(
         String::from_utf8(request.body).expect("UTF-8"),
-        r#"{"messages":[{"content":[{"text":"Read all visible text in this image. Return only the text.","type":"text"},{"image_url":{"url":"data:image/png;base64,iVBORw0KGgphYg=="},"type":"image_url"}],"role":"user"}],"model":"m","reasoning_effort":"low","stream":true}"#,
+        r#"{"messages":[{"content":[{"text":"Read all visible text in this image. Return only the text.","type":"text"},{"image_url":{"url":"data:image/png;base64,iVBORw0KGgphYg=="},"type":"image_url"}],"role":"user"}],"model":"m","reasoning_effort":"low"}"#,
     );
 }
 
@@ -412,6 +460,10 @@ fn malformed_parameters_reject_the_start() {
             "strict without a schema",
         ),
         (
+            vec![model.clone(), prompt.clone(), ("stream", text("true"))],
+            "stream as text",
+        ),
+        (
             vec![
                 model.clone(),
                 prompt.clone(),
@@ -461,11 +513,16 @@ fn malformed_parameters_reject_the_start() {
 fn a_text_reply_becomes_the_result_event() {
     let generation = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
     assert_eq!(
-        outcome(&generation, ok(reply("hello there"))),
+        outcome(&generation, ok(completion("hello there", "stop"))),
         Returned {
             name: RESULT_EVENT,
             data: r#"{"text":"hello there"}"#.into()
         }
+    );
+    // A stream is not a completion.
+    assert_eq!(
+        outcome(&generation, ok(reply("hello there"))),
+        Returned::failed(FailureCode::Malformed)
     );
 }
 
@@ -478,18 +535,21 @@ fn a_structured_reply_is_validated_before_it_is_returned() {
     ])
     .expect("valid");
     assert_eq!(
-        outcome(&generation, ok(reply(r#"{"score":41,"answer":"yes"}"#))),
+        outcome(
+            &generation,
+            ok(completion(r#"{"score":41,"answer":"yes"}"#, "stop"))
+        ),
         Returned {
             name: RESULT_EVENT,
             data: r#"{"json":{"answer":"yes","score":41}}"#.into()
         }
     );
     assert_eq!(
-        outcome(&generation, ok(reply(r#"{"answer":"yes"}"#))),
+        outcome(&generation, ok(completion(r#"{"answer":"yes"}"#, "stop"))),
         Returned::failed(FailureCode::SchemaMismatch)
     );
     assert_eq!(
-        outcome(&generation, ok(reply("not json"))),
+        outcome(&generation, ok(completion("not json", "stop"))),
         Returned::failed(FailureCode::NotJson)
     );
 }
@@ -517,6 +577,38 @@ fn every_failure_has_its_closed_code() {
         failed(ok(b"{}".to_vec())),
         Returned::failed(FailureCode::Malformed)
     );
+    assert_eq!(
+        failed(ok(completion("cut", "length"))),
+        Returned::failed(FailureCode::Truncated)
+    );
+    assert_eq!(
+        failed(ok(completion("", "content_filter"))),
+        Returned::failed(FailureCode::Filtered)
+    );
+    let refused = serde_json::json!({
+        "choices": [{ "index": 0, "finish_reason": "stop", "message": { "content": null, "refusal": "no" } }],
+    });
+    assert_eq!(
+        failed(ok(refused.to_string().into_bytes())),
+        Returned::failed(FailureCode::Refusal)
+    );
+    assert_eq!(
+        failed(ok(completion("", "stop"))),
+        Returned::failed(FailureCode::Malformed),
+        "a completion without content"
+    );
+    assert_eq!(
+        failed(ok(br#"{"error":{"message":"boom"}}"#.to_vec())),
+        Returned::failed(FailureCode::Malformed)
+    );
+    // The streamed failures, as a streamed generation reads them.
+    let streamed = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("stream", Data::Bool(true)),
+    ])
+    .expect("valid");
+    let failed = |answered| outcome(&streamed, answered);
     assert_eq!(
         failed(ok(stream(&[
             chunk(&serde_json::json!({ "content": "cut" }), None),
