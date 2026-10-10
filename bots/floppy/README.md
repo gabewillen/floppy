@@ -59,6 +59,21 @@ fails with `the reasoning failed (unconfigured)`.
 `Qwen/Qwen3.8-Flash-Next`. The services import no WASI resources, so the run
 needs no grants.
 
+Sound (phase 6): `environment.sound` `{audio, media_type, sample_rate_hz,
+channels, kind, ...}` goes to the [listening](../../abilities/listening.scx),
+the body's input ability (mosfet's Listening). Its
+[sensitivity](../../abilities/sensitivity.scx) scores the sound against the
+body's prediction and its [interpretation](../../abilities/interpretation.scx)
+works out what it was: voice detection, diarization and voice identification
+are seams that log `absent` (no OpenAI-compatible model, decision D52), a
+sound whose `kind` labels it is non-speech and comes back as the turn's
+`environment.sound` stimulus, and any other sound is decoded by the speech
+service into the turn's `bot.ability.listening.speech.output` stimulus
+(`content_type` `text/plain`). `audio` is a reference to a file in the
+directory the run grants the speech service, and decoding needs
+`FLOPPY_SPEECH_BASE_URL` and `FLOPPY_SPEECH_API_KEY` (no default backend); a
+sound that cannot be heard is logged as `bot.ability.listening.failed`.
+
 The root has no parent, so each event the body emits is a `log` record
 labelled with its name, its text the event's data as JSON: `bot.activated`,
 `bot.activating.failed`, `bot.deactivated`, `bot.processing.completed`,
@@ -76,6 +91,10 @@ change.
   against a cognition double (`tests/fixtures/phase4/cognition_double.scx`),
   and the choices and routing (the offer union, focus grounding, dropped
   selections, ignore, the 32 KiB budget).
+- `cargo test -p floppy-tests --test listening`: the listening under a
+  harness, with a double of the speech service's decoding events
+  (`tests/fixtures/phase6/speech_double.scx`): decoded speech, labelled
+  non-speech, failures, the stage timer, the product threshold and order.
 - `cargo test -p floppy-tests --test cognition`: the cascade against fake
   decision and model backends (each path, the tuner, failures, hop timeouts
   and reboot requests, cancels).

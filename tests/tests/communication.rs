@@ -113,6 +113,7 @@ fn layout(speaking: &Speaking, edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
         )
         .expect("the ability is copyable");
     }
+    support::copy_listening(&dir.join("abilities"));
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/cognition_double.scx"),
         dir.join("abilities/cognition.scx"),

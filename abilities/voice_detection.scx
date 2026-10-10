@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's VoiceDetection (mosfet abilities/hearing/voice/detection.py), as
+  an honest seam (decision D52): mosfet's voice activity classifiers run
+  only on local models (MLX Silero), which have no OpenAI-compatible API.
+  The interpretation (abilities/interpretation.scx) invokes it once per
+  sound from DetectingVoice.
+
+    applying -> applied (final)
+
+  Input: the <param>s audio (a reference to the sound's audio, as
+  environment.sound carries it), media_type, sample_rate_hz and channels.
+
+  applying logs <log label="voice_detection" expr="'absent'"> and ends
+  with no <donedata>: there is no voice activity classifier, so no voice
+  spans (mosfet's ApplyData) are reported, never fabricated. The
+  interpretation receives done.invoke.voice_detection without data and
+  takes its route for an absent voice detection.
+
+  Bindings: none (no service, no I/O).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="voice_detection" initial="applying">
+  <datamodel>
+    <!-- The invoker's <param>s. -->
+    <data id="audio" expr="null"/>
+    <data id="media_type" expr="null"/>
+    <data id="sample_rate_hz" expr="null"/>
+    <data id="channels" expr="null"/>
+  </datamodel>
+
+  <!-- The classifier seam: no voice activity classifier. -->
+  <state id="applying">
+    <onentry>
+      <log label="voice_detection" expr="'absent'"/>
+    </onentry>
+    <transition target="applied"/>
+  </state>
+
+  <final id="applied"/>
+</scxml>

@@ -1,0 +1,7 @@
+{"label":"harness.ready","session":"session","text":"{\"ability\":\"listening\",\"choices\":[]}","type":"log"}
+{"label":"voice_detection","parent":"session.3","session":"session.4","text":"absent","type":"log"}
+{"label":"speech.decode","parent":"session.6","session":"session.7","text":"{\"operation\":\"decode\",\"model\":\"whisper-1\",\"audio\":\"media/cut-in.wav\",\"media_type\":null}","type":"log"}
+{"label":"harness.speech","session":"session","text":"{\"channels\":1,\"content\":\"cut in\",\"content_type\":\"text/plain\",\"media_type\":\"audio/pcm\",\"parent\":{\"data\":{\"amplitude_db\":60,\"audio\":\"media/cut-in.wav\",\"received_level_db\":54,\"sample_rate_hz\":16000},\"event\":\"environment.sound\"},\"sample_rate_hz\":16000,\"source_ids\":[],\"voice_detection\":{\"segments\":[]}}","type":"log"}
+{"label":"voice_detection","parent":"session.3","session":"session.8","text":"absent","type":"log"}
+{"label":"speech.decode","parent":"session.10","session":"session.11","text":"{\"operation\":\"decode\",\"model\":\"whisper-1\",\"audio\":\"media/after.wav\",\"media_type\":null}","type":"log"}
+{"label":"harness.speech","session":"session","text":"{\"channels\":1,\"content\":\"after\",\"content_type\":\"text/plain\",\"media_type\":\"audio/pcm\",\"parent\":{\"data\":{\"audio\":\"media/after.wav\",\"received_level_db\":54,\"sample_rate_hz\":16000},\"event\":\"environment.sound\"},\"sample_rate_hz\":16000,\"source_ids\":[],\"voice_detection\":{\"segments\":[]}}","type":"log"}

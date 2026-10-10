@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's VoiceIdentification (mosfet abilities/hearing/voice/
+  identification.py), as an honest seam (decision D52): mosfet's voice
+  classifiers (pyannote embeddings) run only on local models, which have
+  no OpenAI-compatible API. In mosfet the interpretation identifies a
+  voice only after voice detection reported voice and only when a voice
+  classifier is configured; with voice detection absent
+  (abilities/voice_detection.scx) floppy's interpretation never reaches
+  it, so speech products carry empty source_ids (mosfet: listening has
+  speech evidence but no identity classifier result).
+
+    applying -> applied (final)
+
+  Input: the <param> segments (mosfet's InputData: voice segments, each a
+  reference to its audio with its format and span).
+
+  applying logs <log label="voice_identification" expr="'absent'"> and
+  ends with no <donedata>: no voice embeddings (mosfet's OutputData) are
+  reported, never fabricated.
+
+  Bindings: none (no service, no I/O).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="voice_identification" initial="applying">
+  <datamodel>
+    <!-- The invoker's <param>s. -->
+    <data id="segments" expr="[]"/>
+  </datamodel>
+
+  <!-- The classifier seam: no voice classifier. -->
+  <state id="applying">
+    <onentry>
+      <log label="voice_identification" expr="'absent'"/>
+    </onentry>
+    <transition target="applied"/>
+  </state>
+
+  <final id="applied"/>
+</scxml>

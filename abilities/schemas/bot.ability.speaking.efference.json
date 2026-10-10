@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.speaking.efference",
+  "description": "Copy of a motor command sent to a mouth, delivered to perception at the moment the command is issued and before the sound exists in the environment.",
+  "properties": {
+    "mouth": {
+      "description": "Identity of the transducer this command was sent to. A body may have more than one mouth (a handset receiver and a loudspeaker are different sound sources on the same robot), so a copy says which one is producing.",
+      "examples": [
+        "01J8ZQ2K7M0000000000000000"
+      ],
+      "minLength": 1,
+      "title": "Mouth",
+      "type": "string"
+    },
+    "duration": {
+      "description": "Seconds of sound this command commits to, measured from the encoded audio rather than estimated. This is how long the consequences of the command are expected to last; sound arriving after it is no longer a consequence of this command.",
+      "examples": [
+        3.6,
+        0.4
+      ],
+      "exclusiveMinimum": 0.0,
+      "title": "Duration",
+      "type": "number"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Media type of the audio this command plays out, when known.",
+      "examples": [
+        "audio/pcm"
+      ],
+      "title": "Media Type"
+    },
+    "sample_rate_hz": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Sample rate of the audio this command plays out, in hertz, when known.",
+      "examples": [
+        24000
+      ],
+      "title": "Sample Rate Hz"
+    },
+    "channels": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Channel count of the audio this command plays out, when known.",
+      "examples": [
+        1
+      ],
+      "title": "Channels"
+    }
+  },
+  "required": [
+    "mouth",
+    "duration"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "channels": 1,
+      "duration": 3.6,
+      "media_type": "audio/pcm",
+      "mouth": "01J8ZQ2K7M0000000000000000",
+      "sample_rate_hz": 24000
+    }
+  ]
+}

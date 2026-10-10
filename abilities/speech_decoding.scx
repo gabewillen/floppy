@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's SpeechDecoding (mosfet abilities/hearing/speech/decoding.py):
+  speech to words through the speech service (services/speech, operation
+  decode: OpenAI-compatible POST {base}/audio/transcriptions, Whisper on
+  the Sparks), mosfet's SpeechDecoder providers. The interpretation
+  (abilities/interpretation.scx) invokes it once per utterance from
+  DecodingSpeech; the interpretation's stage timer bounds it, and leaving
+  DecodingSpeech cancels it and the service call (SCXML 6.4).
+
+    applying (an invoked speech service) -> applied (final)
+
+  Input: the <param>s audio (a reference to the utterance's audio in the
+  directory the run grants the speech service), media_type, and model
+  (the transcription model; the OpenAI API's whisper-1 by default).
+
+  Output: <donedata>, received by the interpretation as
+  done.invoke.speech_decoding: {text} (mosfet's decoded speech, as words)
+  when the service answers bot.ability.hearing.speech.decoding.output
+  {text}, or {message} (mosfet's FailureData) when it answers
+  bot.ability.failed {message}, answers something else, or cannot run.
+
+  Bindings: the speech service package, resolved from its repository URI;
+  env scopes FLOPPY_SPEECH_BASE_URL and FLOPPY_SPEECH_API_KEY to the
+  service's <invoke> (no default backend, decision D31: without them the
+  service answers bot.ability.failed). The run grants the service the
+  media directory (scx run's dir option). An invoked service's events are
+  not checked against event:schema (scxml.rs checks only events between
+  SCXML sessions), so their shape is checked by cond.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="speech_decoding" initial="applying">
+  <datamodel>
+    <!-- The invoker's <param>s. -->
+    <data id="audio" expr="null"/>
+    <data id="media_type" expr="null"/>
+    <data id="model" expr="'whisper-1'"/>
+    <!-- The result. -->
+    <data id="output" expr="null"/>
+  </datamodel>
+
+  <state id="applying">
+    <invoke id="decoder" type="https://github.com/stateforward/floppy/services/speech"
+            env:baseurl="FLOPPY_SPEECH_BASE_URL" env:apikey="FLOPPY_SPEECH_API_KEY">
+      <param name="operation" expr="'decode'"/>
+      <param name="model" expr="model"/>
+      <param name="audio" expr="audio"/>
+      <param name="media_type" expr="media_type"/>
+    </invoke>
+    <transition event="bot.ability.hearing.speech.decoding.output"
+                cond="_event.invokeid === 'decoder' &amp;&amp; typeof Object(_event.data).text === 'string'" target="applied">
+      <assign location="output" expr="({text: _event.data.text})"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+                cond="_event.invokeid === 'decoder'" target="applied">
+      <assign location="output" expr="({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'SpeechDecoding failed.'})"/>
+    </transition>
+    <transition event="*" cond="_event.invokeid === 'decoder' &amp;&amp; _event.name.indexOf('done.') !== 0" target="applied">
+      <assign location="output" expr="({message: 'SpeechDecoding produced output that does not match its output schema.'})"/>
+    </transition>
+    <transition event="done.invoke" cond="_event.invokeid === 'decoder'" target="applied">
+      <assign location="output" expr="({message: 'SpeechDecoding ended without decoding.'})"/>
+    </transition>
+    <transition event="error.*" target="applied">
+      <assign location="output" expr="({message: 'SpeechDecoding could not run (' + _event.name + ')'})"/>
+    </transition>
+  </state>
+
+  <final id="applied">
+    <donedata>
+      <content expr="output"/>
+    </donedata>
+  </final>
+</scxml>

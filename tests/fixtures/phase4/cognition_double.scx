@@ -18,7 +18,10 @@
   carries (stimulus.data.observation.event), or, for a conversation
   product (stimulus.event bot.ability.conversation.output), the first word
   of its last message's text, whose observed data is then the number of messages, or,
-  for bot.ability.identity.addressed, "addressed" with the name observed:
+  for bot.ability.identity.addressed, "addressed" with the name observed, or,
+  for the listening's bot.ability.listening.speech.output, the first word
+  of its content, with the content observed, or, for its environment.sound,
+  "ignore" with the sound's kind observed:
 
   * reply: answers the turn with one bot.ability.communication.respond
     selection naming no target (the communication offers it);
@@ -78,8 +81,8 @@
       <transition event="bot.ability.cognition.input" target="working">
         <assign location="turn" expr="_event.data.turn"/>
         <assign location="stimulus" expr="_event.data.stimulus"/>
-        <assign location="action" expr="stimulus.event === 'bot.ability.identity.addressed' ? 'addressed' : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages[stimulus.data.messages.length - 1].content.split(' ')[0] : stimulus.data.observation.event"/>
-        <assign location="observed" expr="stimulus.event === 'bot.ability.identity.addressed' ? stimulus.data.name : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages.length : stimulus.data.observation.data"/>
+        <assign location="action" expr="stimulus.event === 'bot.ability.listening.speech.output' ? stimulus.data.content.split(' ')[0] : stimulus.event === 'environment.sound' ? 'ignore' : stimulus.event === 'bot.ability.identity.addressed' ? 'addressed' : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages[stimulus.data.messages.length - 1].content.split(' ')[0] : stimulus.data.observation.event"/>
+        <assign location="observed" expr="stimulus.event === 'bot.ability.listening.speech.output' ? stimulus.data.content : stimulus.event === 'environment.sound' ? stimulus.data.kind : stimulus.event === 'bot.ability.identity.addressed' ? stimulus.data.name : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages.length : stimulus.data.observation.data"/>
         <log label="double.input" expr="turn + ' ' + action + ' ' + JSON.stringify(observed)"/>
         <log label="double.choices" expr="JSON.stringify(_event.data.choices)"/>
       </transition>

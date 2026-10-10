@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A double of the speech service's decoding events (services/speech,
+  operation decode) for the listening tests (tests/tests/listening.rs and
+  tests/tests/body.rs) until the speech service lands. The tests copy it
+  beside a copy of abilities/speech_decoding.scx whose service <invoke> is
+  rewritten to <invoke type="scxml" src="speech_double.scx">, so the
+  decoding leaf receives what the service would send.
+
+  It takes the service's <param>s (operation, model, audio, media_type),
+  logs them as speech.decode (JSON), and answers by the audio reference's
+  file name (the part after the last / and before the first .):
+
+  * hang...: never answers (the interpretation's stage timer fails it);
+  * fail...: bot.ability.failed {message: "unconfigured"};
+  * anything else: bot.ability.hearing.speech.decoding.output {text}, the
+    file name's words ("media/reply-hello.wav" decodes to "reply hello").
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="speech_double" initial="decoding">
+  <datamodel>
+    <data id="operation" expr="null"/>
+    <data id="model" expr="null"/>
+    <data id="audio" expr="null"/>
+    <data id="media_type" expr="null"/>
+    <data id="name" expr="''"/>
+  </datamodel>
+  <state id="decoding">
+    <onentry>
+      <log label="speech.decode" expr="JSON.stringify({operation: operation, model: model, audio: audio, media_type: media_type})"/>
+      <assign location="name" expr="String(audio).split('/').pop().split('.')[0]"/>
+      <if cond="name.indexOf('hang') === 0">
+      <elseif cond="name.indexOf('fail') === 0"/>
+        <send event="bot.ability.failed" target="#_parent">
+          <param name="message" expr="'unconfigured'"/>
+        </send>
+      <else/>
+        <send event="bot.ability.hearing.speech.decoding.output" target="#_parent">
+          <param name="text" expr="name.split('-').join(' ')"/>
+        </send>
+      </if>
+    </onentry>
+  </state>
+</scxml>

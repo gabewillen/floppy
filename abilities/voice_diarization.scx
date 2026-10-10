@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's VoiceDiarization (mosfet abilities/hearing/voice/
+  diarization.py), as an honest seam (decision D52): mosfet's voice
+  diarizers (pyannote, MLX) run only on local models, which have no
+  OpenAI-compatible API. In mosfet the interpretation diarizes an utterance
+  only after voice detection reported voice and only when a diarizer is
+  configured; with voice detection absent (abilities/voice_detection.scx)
+  floppy's interpretation never reaches it.
+
+    applying -> applied (final)
+
+  Input: the <param>s audio (a reference to the utterance's audio),
+  media_type, sample_rate_hz and channels (mosfet's InputData).
+
+  applying logs <log label="voice_diarization" expr="'absent'"> and ends
+  with no <donedata>: no voice segments (mosfet's OutputData) are
+  reported, never fabricated.
+
+  Bindings: none (no service, no I/O).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="voice_diarization" initial="applying">
+  <datamodel>
+    <!-- The invoker's <param>s. -->
+    <data id="audio" expr="null"/>
+    <data id="media_type" expr="null"/>
+    <data id="sample_rate_hz" expr="null"/>
+    <data id="channels" expr="null"/>
+  </datamodel>
+
+  <!-- The diarizer seam: no voice diarizer. -->
+  <state id="applying">
+    <onentry>
+      <log label="voice_diarization" expr="'absent'"/>
+    </onentry>
+    <transition target="applied"/>
+  </state>
+
+  <final id="applied"/>
+</scxml>

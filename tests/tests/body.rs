@@ -103,6 +103,7 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
         )
         .expect("the ability is copyable");
     }
+    support::copy_listening(&dir.join("abilities"));
     let ability = dir.join("abilities/cognition.scx");
     match cognition {
         Cognition::Double(mode) => {
@@ -843,6 +844,34 @@ fn environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition() {
             ("input.sound", &sound.to_string()),
             ("input.visual", &visual.to_string()),
             ("double.input", r#"1 reply "after""#),
+        ])
+    );
+}
+
+#[test]
+fn the_listenings_products_are_turn_stimuli() {
+    let body = layout(&Cognition::Double("'ready'"), &[]);
+    let mut run = start(&body);
+    activated(&mut run);
+    // Decoded speech (the speech double decodes the file name's words): a
+    // turn whose stimulus is bot.ability.listening.speech.output.
+    let speech = json!({"audio": "media/reply-to-me.wav", "sample_rate_hz": 16000});
+    run.event("environment.sound", &speech);
+    run.until(WAIT, label_is("bot.processing.completed"));
+    // Labelled non-speech: a turn whose stimulus is the environment.sound.
+    let ring = json!({"audio": "media/ring.wav", "kind": "phone.ringing"});
+    run.event("environment.sound", &ring);
+    run.until(WAIT, label_is("double.ignore"));
+    let finished = close(run, "the_listenings_products_are_turn_stimuli");
+    assert_eq!(
+        only(
+            &finished.all,
+            &["double.input", "bot.ability.speaking.output"]
+        ),
+        pairs(&[
+            ("double.input", r#"1 reply "reply to me""#),
+            ("bot.ability.speaking.output", r#"{"text":"reply 1"}"#),
+            ("double.input", r#"2 ignore "phone.ringing""#),
         ])
     );
 }

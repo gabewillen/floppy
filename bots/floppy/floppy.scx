@@ -13,8 +13,9 @@
 
   Abilities: live holds <invoke id="cognition">, <invoke
   id="communication"> (abilities/communication.scx, which holds the
-  conversation and speaking) and <invoke id="identity">
-  (abilities/identity.scx, the bot's name); leaving live cancels every ability (SCXML
+  conversation and speaking), <invoke id="identity">
+  (abilities/identity.scx, the bot's name) and <invoke id="listening">
+  (abilities/listening.scx, the ear); leaving live cancels every ability (SCXML
   6.4), which replaces mosfet's cleanup states. An ability is ready when it
   sends its first bot.ability.offers; the body is active when every
   expected ability is ready. A run-tagged activation timer
@@ -36,13 +37,15 @@
 
   Environment: environment.sound and environment.visual from outside,
   while active, go to each input ability (input, mosfet's Bot input: the invoke ids
-  of the abilities that perceive raw stimuli; none until phase 6), in
+  of the abilities that perceive raw stimuli; the listening), in
   order, by <foreach>; never to the cognition, which hears of a stimulus
-  only as an input ability's product.
+  only as an input ability's product: the listening's
+  bot.ability.listening.speech.output (decoded speech) or environment.sound
+  (labelled non-speech, passed through), each a turn's stimulus like
+  bot.input. The listening's bot.ability.listening.failed is logged.
 
-  Turns: bot.input, a conversation product or an addressed in unfocused
-  or focused
-  starts a processing turn; <bot:stimulus> writes the event's stimulus
+  Turns: bot.input, a conversation product, an addressed, a routine's tick
+  or a listening product in unfocused or focused starts a processing turn; <bot:stimulus> writes the event's stimulus
   envelope {event, data, source}. The body counts the turn, computes the
   turn's attention bias with <bot:attention> (focus, focus_candidates:
   mosfet's attention_bias_for_turn from device identity only), assembles the turn's choices (below), sends bot.ability.cognition.input
@@ -92,7 +95,8 @@
   bot.activating.failed, bot.deactivated, bot.processing.completed,
   bot.processing.failed, and bot.output (the turn's selected events, one
   record per completed turn), plus the communication's
-  bot.ability.speaking.output and bot.ability.communication.failed;
+  bot.ability.speaking.output and bot.ability.communication.failed and the
+  listening's bot.ability.listening.failed;
   bot.choices logs each turn's assembled
   choices as event@target, bot.route each routed selection, and bot.focus
   each focus change.
@@ -130,13 +134,12 @@
     <!-- Lifecycle: each entry into live is one run; the abilities expected
          and the offers each has sent this run. -->
     <data id="live_run" expr="0"/>
-    <data id="expected" expr="['cognition', 'communication', 'identity']"/>
+    <data id="expected" expr="['cognition', 'communication', 'identity', 'listening']"/>
     <data id="offers" expr="({})"/>
     <data id="waiting" expr="[]"/>
     <!-- The input abilities each environment.* stimulus fans out to
-         (mosfet's Bot input, as invoke ids; none until phase 6), and the
-         one being sent to. -->
-    <data id="input" expr="[]"/>
+         (mosfet's Bot input, as invoke ids), and the one being sent to. -->
+    <data id="input" expr="['listening']"/>
     <data id="ability" expr="null"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
@@ -181,6 +184,7 @@
     </invoke>
     <invoke id="communication" type="scxml" src="../../abilities/communication.scx"/>
     <invoke id="identity" type="scxml" src="../../abilities/identity.scx"/>
+    <invoke id="listening" type="scxml" src="../../abilities/listening.scx"/>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
     <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json"
@@ -267,6 +271,10 @@
       <transition event="bot.ability.communication.failed" event:schema="schemas/bot.ability.communication.failed.json" cond="_event.invokeid === 'communication'">
         <log label="bot.ability.communication.failed" expr="JSON.stringify(_event.data)"/>
       </transition>
+      <!-- What the listening could not hear. -->
+      <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json" cond="_event.invokeid === 'listening'">
+        <log label="bot.ability.listening.failed" expr="JSON.stringify(_event.data)"/>
+      </transition>
       <!-- The body's own choices (mosfet: focus on active, clear only while
            a device is focused), offered on processing entry and taken only
            as routed selections of the turn. -->
@@ -301,6 +309,14 @@
                     cond="_event.invokeid === 'cognition'" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
+        <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json"
+                    cond="_event.invokeid === 'listening'" target="processing">
+          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+        </transition>
+        <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+                    cond="_event.invokeid === 'listening'" target="processing">
+          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+        </transition>
       </state>
 
       <state id="focused">
@@ -321,6 +337,14 @@
         </transition>
         <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
                     cond="_event.invokeid === 'cognition'" target="processing">
+          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+        </transition>
+        <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json"
+                    cond="_event.invokeid === 'listening'" target="processing">
+          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+        </transition>
+        <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+                    cond="_event.invokeid === 'listening'" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
       </state>
@@ -397,6 +421,18 @@
           <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>
         </transition>
+        <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json"
+                    cond="_event.invokeid === 'listening'">
+          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="queue" expr="queue.concat([pending])"/>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
+        <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+                    cond="_event.invokeid === 'listening'">
+          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="queue" expr="queue.concat([pending])"/>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
       </state>
 
       <!-- The turn timed out: wait (bounded) for the cognition's
@@ -444,6 +480,18 @@
         </transition>
         <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
                     cond="_event.invokeid === 'cognition'">
+          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="queue" expr="queue.concat([pending])"/>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
+        <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json"
+                    cond="_event.invokeid === 'listening'">
+          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="queue" expr="queue.concat([pending])"/>
+          <log label="bot.deferred" expr="String(queue.length)"/>
+        </transition>
+        <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+                    cond="_event.invokeid === 'listening'">
           <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
           <assign location="queue" expr="queue.concat([pending])"/>
           <log label="bot.deferred" expr="String(queue.length)"/>

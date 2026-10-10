@@ -504,3 +504,51 @@ pub fn run_document(
     run.end_input();
     run.finish(limit)
 }
+
+/// The listening's documents (abilities/listening.scx, its children and
+/// its hearing leaves).
+pub const LISTENING: [&str; 8] = [
+    "listening",
+    "sensitivity",
+    "interpretation",
+    "voice_detection",
+    "voice_diarization",
+    "voice_identification",
+    "sound_classification",
+    "speech_decoding",
+];
+
+/// The speech service's `<invoke>` in `abilities/speech_decoding.scx`.
+const SPEECH_INVOKE: &str = r#"<invoke id="decoder" type="https://github.com/stateforward/floppy/services/speech"
+            env:baseurl="FLOPPY_SPEECH_BASE_URL" env:apikey="FLOPPY_SPEECH_API_KEY">"#;
+
+/// Copies the listening's documents into the layout's `abilities`
+/// directory, with `speech_decoding.scx`'s speech service replaced by
+/// `tests/fixtures/phase6/speech_double.scx` (a double of the service's
+/// decoding events, until the speech service lands).
+pub fn copy_listening(abilities: &Path) {
+    for name in LISTENING {
+        let name = format!("{name}.scx");
+        std::fs::copy(
+            workspace().join("abilities").join(&name),
+            abilities.join(&name),
+        )
+        .expect("the listening document is copyable");
+    }
+    let path = abilities.join("speech_decoding.scx");
+    let text = std::fs::read_to_string(&path).expect("the decoding leaf is readable");
+    assert!(
+        text.contains(SPEECH_INVOKE),
+        "speech_decoding.scx invokes the speech service"
+    );
+    let text = text.replace(
+        SPEECH_INVOKE,
+        r#"<invoke id="decoder" type="scxml" src="speech_double.scx">"#,
+    );
+    std::fs::write(&path, text).expect("the decoding leaf copy is writable");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase6/speech_double.scx"),
+        abilities.join("speech_double.scx"),
+    )
+    .expect("the speech double is copyable");
+}
