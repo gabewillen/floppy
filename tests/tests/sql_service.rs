@@ -1,13 +1,12 @@
-//! Integration test of the `memory` service through `scx run`: a session
-//! binds the real `floppy_service_memory` component (resolved from its
+//! Integration test of the `sql` service through `scx run`: a session
+//! binds the real `floppy_service_sql` component (resolved from its
 //! repository URI) and invokes it
-//! (`<invoke type="https://github.com/stateforward/floppy/services/memory">`)
+//! (`<invoke type="https://github.com/stateforward/floppy/services/sql">`)
 //! against a database file in a directory the run grants with
 //! `--dir URI=HOST::GUEST`. Each invocation is one SQLite transaction of
-//! mosfet's `Statement`s; the service answers `bot.ability.memory.output`
-//! (mosfet's `OutputData`) or `bot.ability.failed` (mosfet's
-//! `FailureData`), then completes. The file outlives the invocation and the
-//! run.
+//! mosfet's `Statement`s; the service answers `sql.result` (mosfet's
+//! `OutputData`) or `sql.failed` (mosfet's `FailureData`), then completes.
+//! The file outlives the invocation and the run.
 
 #![allow(
     missing_docs,
@@ -21,37 +20,38 @@ use std::time::Duration;
 
 use support::{Finished, logs, run_document, service_uri, unique_scratch};
 
-fn memory() -> String {
-    service_uri("memory")
+fn sql() -> String {
+    service_uri("sql")
 }
 
-/// A fresh host directory granted to the memory service at `/memory`.
+/// A fresh host directory granted to the sql service at `/memory`.
 fn granted() -> (PathBuf, Vec<String>) {
-    let directory = unique_scratch("memory");
+    let directory = unique_scratch("sql");
     let grant = vec![
         "--dir".to_owned(),
-        format!("{}={}::/memory", memory(), directory.display()),
+        format!("{}={}::/memory", sql(), directory.display()),
     ];
     (directory, grant)
 }
 
 fn open(args: &[String], document: &str) -> Finished {
-    run_document("memory.scx", document, args, &[], Duration::from_secs(60))
+    run_document("sql.scx", document, args, &[], Duration::from_secs(60))
 }
 
-/// Inserts an adopted name, then recalls the names in a second
-/// invocation, logging each event's name and data.
+/// Creates a table and inserts an adopted name, then recalls the names in
+/// a second invocation, logging each event's name and data.
 const REMEMBER_AND_RECALL: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="storing">
   <datamodel>
-    <data id="insert_name">INSERT INTO bot_memory (memory_id, scope, subject_ref, kind, content, content_format, query_tags) VALUES (?, 'long_term', 'self', 'fact', ?, 'application/json', 'self_name')</data>
+    <data id="create">CREATE TABLE IF NOT EXISTS bot_memory (memory_id TEXT PRIMARY KEY, subject_ref TEXT, content TEXT NOT NULL, query_tags TEXT, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL)</data>
+    <data id="insert_name">INSERT INTO bot_memory (memory_id, subject_ref, content, query_tags) VALUES (?, 'self', ?, 'self_name')</data>
     <data id="select_names">SELECT content FROM bot_memory WHERE query_tags = ? AND subject_ref = ? ORDER BY created_at LIMIT 50</data>
   </datamodel>
   <state id="storing">
-    <invoke id="store" type="https://github.com/stateforward/floppy/services/memory">
+    <invoke id="store" type="https://github.com/stateforward/floppy/services/sql">
       <param name="database" expr="'/memory/floppy.sqlite'"/>
-      <param name="statements" expr="[{sql: insert_name, parameters: ['n1', JSON.stringify({text: 'Floppy', kind: 'fact'})]}]"/>
+      <param name="statements" expr="[{sql: create}, {sql: insert_name, parameters: ['n1', JSON.stringify({text: 'Floppy', kind: 'fact'})]}]"/>
     </invoke>
-    <transition event="bot.ability.memory.output">
+    <transition event="sql.result">
       <log label="stored" expr="JSON.stringify(_event.data)"/>
     </transition>
     <transition event="done.invoke.store" target="recalling"/>
@@ -60,11 +60,11 @@ const REMEMBER_AND_RECALL: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scx
     </transition>
   </state>
   <state id="recalling">
-    <invoke id="recall" type="https://github.com/stateforward/floppy/services/memory">
+    <invoke id="recall" type="https://github.com/stateforward/floppy/services/sql">
       <param name="database" expr="'/memory/floppy.sqlite'"/>
       <param name="statements" expr="[{sql: select_names, parameters: ['self_name', 'self']}]"/>
     </invoke>
-    <transition event="bot.ability.memory.output">
+    <transition event="sql.result">
       <log label="recalled" expr="JSON.stringify(_event.data.results[0].rows.map(r =&gt; JSON.parse(r.values[0]).text))"/>
     </transition>
     <transition event="done.invoke.recall" target="done"/>
@@ -85,7 +85,7 @@ fn an_insert_commits_and_a_later_invocation_recalls_it_from_the_granted_file() {
         [
             (
                 "stored".to_owned(),
-                r#"{"results":[{"rowcount":1,"rows":[]}]}"#.to_owned()
+                r#"{"results":[{"rowcount":0,"rows":[]},{"rowcount":1,"rows":[]}]}"#.to_owned()
             ),
             ("recalled".to_owned(), r#"["Floppy"]"#.to_owned()),
         ],
@@ -101,7 +101,7 @@ fn an_insert_commits_and_a_later_invocation_recalls_it_from_the_granted_file() {
     let resources = consent
         .lines()
         .find(|line| line.starts_with("  = WASI resources: --dir "))
-        .expect("the memory service's directory is listed");
+        .expect("the sql service's directory is listed");
     assert!(resources.ends_with("::/memory"), "{consent}");
 }
 
@@ -118,8 +118,7 @@ fn the_database_outlives_the_run() {
         logs(&second.records),
         [(
             "failed".to_owned(),
-            r#"bot.ability.failed {"message":"UNIQUE constraint failed: bot_memory.memory_id"}"#
-                .to_owned()
+            r#"sql.failed {"message":"UNIQUE constraint failed: bot_memory.memory_id"}"#.to_owned()
         )],
         "{}",
         second.stderr
@@ -130,8 +129,8 @@ fn the_database_outlives_the_run() {
 #[test]
 fn a_run_that_binds_the_service_without_a_directory_is_refused() {
     let path = support::write(
-        &unique_scratch("memory-documents"),
-        "memory.scx",
+        &unique_scratch("sql-documents"),
+        "sql.scx",
         REMEMBER_AND_RECALL,
     );
     let refused = support::output(&[
@@ -162,7 +161,7 @@ fn a_malformed_parameter_raises_error_execution() {
         &grant,
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s">
   <state id="s">
-    <invoke id="store" type="https://github.com/stateforward/floppy/services/memory">
+    <invoke id="store" type="https://github.com/stateforward/floppy/services/sql">
       <param name="database" expr="'/memory/floppy.sqlite'"/>
       <param name="statements" expr="[]"/>
     </invoke>

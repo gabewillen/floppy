@@ -7,7 +7,7 @@ members = [
     "services/generate",
     "services/generate/validator",
     "services/decision",
-    "services/memory",
+    "services/sql",
 ]
 # scxml.rs is a squashed subtree with its own workspace, lockfile, and proof
 # matrix; floppy depends on its crates by path and never absorbs it.
@@ -37,7 +37,7 @@ sha2 = { version = "0.10.9", default-features = false }
 # wit-bindgen generated ABI glue of the namespace components (the same pin as
 # scxml.rs's components).
 wit-bindgen = { version = "0.51.0", default-features = false, features = ["macros", "realloc"] }
-# SQLite for the memory service (floppy only; scxml.rs has no SQLite):
+# SQLite for the sql service (floppy only; scxml.rs has no SQLite):
 # `bundled` compiles the amalgamation into the component; `hooks` for the
 # authorizer that keeps a document's statements inside their transaction.
 rusqlite = { version = "0.37.0", default-features = false, features = ["bundled", "hooks"] }

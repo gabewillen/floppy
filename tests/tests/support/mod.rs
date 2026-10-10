@@ -245,18 +245,16 @@ impl Run {
     /// Starts `scx run` with `args` (the document among them) and the
     /// extra environment `env`.
     ///
-    /// A run whose document tree binds the memory service (decided by
-    /// [`binds_memory`]) and that grants it no directory gets a fresh one
+    /// A run whose document tree binds the sql service (decided by
+    /// [`binds_sql`]) and that grants it no directory gets a fresh one
     /// ([`memory_grant`]): the service imports `wasi:filesystem`, and a run
     /// that binds it without a `--dir` grant is refused.
     pub fn start(args: &[String], env: &[(&str, &str)]) -> Self {
         let mut full = vec!["run".to_owned()];
         full.extend_from_slice(args);
-        let memory = service_uri("memory");
-        let granted = args
-            .iter()
-            .any(|arg| arg.starts_with(&format!("{memory}=")));
-        if !granted && args.iter().any(|arg| binds_memory(Path::new(arg))) {
+        let sql = service_uri("sql");
+        let granted = args.iter().any(|arg| arg.starts_with(&format!("{sql}=")));
+        if !granted && args.iter().any(|arg| binds_sql(Path::new(arg))) {
             full.splice(1..1, memory_grant());
         }
         let mut command = command(&full);
@@ -437,23 +435,23 @@ pub fn finished(records: &[Json]) -> bool {
     closed_status(records).as_deref() == Some("finished")
 }
 
-/// `--dir` granting the memory service a fresh scratch directory at
-/// `/memory`, where the bots keep `/memory/floppy.sqlite`.
+/// `--dir` granting the sql service a fresh scratch directory at
+/// `/memory`, where the bots keep their memory, `/memory/floppy.sqlite`.
 pub fn memory_grant() -> Vec<String> {
     vec![
         "--dir".to_owned(),
         format!(
             "{}={}::/memory",
-            service_uri("memory"),
+            service_uri("sql"),
             unique_scratch("memory").display()
         ),
     ]
 }
 
 /// Whether the `.scx` document at `path`, or a document it loads by a
-/// literal relative `<invoke src>` (recursively), names the memory
-/// service's URI. Anything that is not a readable `.scx` file names none.
-pub fn binds_memory(path: &Path) -> bool {
+/// literal relative `<invoke src>` (recursively), names the sql service's
+/// URI. Anything that is not a readable `.scx` file names none.
+pub fn binds_sql(path: &Path) -> bool {
     fn visit(path: &Path, seen: &mut Vec<PathBuf>) -> bool {
         let Ok(path) = path.canonicalize() else {
             return false;
@@ -465,7 +463,7 @@ pub fn binds_memory(path: &Path) -> bool {
         let Ok(text) = std::fs::read_to_string(&path) else {
             return false;
         };
-        if text.contains(&service_uri("memory")) {
+        if text.contains(&service_uri("sql")) {
             return true;
         }
         let dir = path.parent().unwrap_or(Path::new("/")).to_owned();
