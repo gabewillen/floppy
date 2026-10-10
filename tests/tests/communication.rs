@@ -560,7 +560,7 @@ fn with_listening(body: &Path) {
         .expect("the body is under bots/floppy/");
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/input_double.scx"),
-        root.join("abilities/identity.scx"),
+        root.join("abilities/identity/identity.scx"),
     )
     .expect("the input double is copyable");
     rewrite(
@@ -608,7 +608,10 @@ fn a_spoken_response_reaches_listening_as_its_efference_copy_before_its_sound() 
 fn unmeasured_speech_sends_no_efference_copy_and_takes_speakings_format() {
     let body = layout(
         &Speaking::Real,
-        &[("abilities/speech_double.scx", &[("mode", "'unmeasured'")])],
+        &[(
+            "abilities/vocal/speech_double.scx",
+            &[("mode", "'unmeasured'")],
+        )],
     );
     with_listening(&body);
     let mut run = started(&body);
@@ -631,7 +634,7 @@ fn unmeasured_speech_sends_no_efference_copy_and_takes_speakings_format() {
 fn a_speech_service_failure_fails_the_response_unsaid_and_unrecorded() {
     let body = layout(
         &Speaking::Real,
-        &[("abilities/speech_double.scx", &[("mode", "'fail'")])],
+        &[("abilities/vocal/speech_double.scx", &[("mode", "'fail'")])],
     );
     let mut run = started(&body);
     run.event("bot.input", &input("reply"));
@@ -654,8 +657,11 @@ fn speech_encoding_is_bounded_by_its_timeout() {
     let body = layout(
         &Speaking::Real,
         &[
-            ("abilities/speech_double.scx", &[("mode", "'silent'")]),
-            ("abilities/speaking.scx", &[("encoding_timeout_ms", "300")]),
+            ("abilities/vocal/speech_double.scx", &[("mode", "'silent'")]),
+            (
+                "abilities/speaking/speaking.scx",
+                &[("encoding_timeout_ms", "300")],
+            ),
         ],
     );
     let mut run = started(&body);
@@ -724,7 +730,7 @@ fn a_response_is_spoken_through_the_speech_service() {
     let body = layout(
         &Speaking::Real,
         &[(
-            "abilities/speaking.scx",
+            "abilities/speaking/speaking.scx",
             &[("model", "'tts-1'"), ("voice", "'alloy'")],
         )],
     );
@@ -737,11 +743,12 @@ fn a_response_is_spoken_through_the_speech_service() {
         .join("abilities");
     // The real vocal ability, which invokes the speech service.
     std::fs::copy(
-        workspace().join("abilities/vocal.scx"),
-        abilities.join("vocal.scx"),
+        workspace().join("abilities/vocal/vocal.scx"),
+        abilities.join("vocal/vocal.scx"),
     )
     .expect("the vocal ability is copyable");
-    std::fs::remove_file(abilities.join("speech_double.scx")).expect("the double is removable");
+    std::fs::remove_file(abilities.join("vocal/speech_double.scx"))
+        .expect("the double is removable");
     let (origin, requests) = speech_backend();
     let media = unique_scratch("speaking-media");
     let env = media.join("speech.env");
