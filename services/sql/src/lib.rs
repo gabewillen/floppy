@@ -37,6 +37,10 @@
 //!   read), and nothing else (mosfet's `Statement`, `extra="forbid"`, with
 //!   its `StatementResult.rowcount` as the guard).
 //!
+//! * `transaction` (optional): `open` keeps the transaction open across
+//!   events (see "Open transactions"); `statements` is then optional, and
+//!   any given run at once. Without it the invocation is one batch.
+//!
 //! Any other parameter, a parameter given twice, or a malformed value
 //! rejects the start: the `<invoke>` raises `error.execution` and the
 //! database is not opened.
@@ -67,7 +71,7 @@
 //!
 //! # Events
 //!
-//! `invoke` writes exactly one event to the stream it returns, then
+//! A batch's `invoke` writes exactly one event to the stream it returns, then
 //! resolves its result future with no data (the invoking session receives
 //! `done.invoke.<id>` after the event), named like floppy's other services
 //! (`generate.result`, `generate.failed`):
@@ -85,8 +89,42 @@
 //!   bound value or a path.
 //!
 //! The invoking document describes both with `event:schema` on the
-//! transitions that take them (`abilities/schemas/`). The service reads no
-//! event: it drops the event stream `invoke` receives.
+//! transitions that take them (`abilities/schemas/`). A batch reads no
+//! event: it drops the event stream `invoke` receives. `code` is also
+//! `changed` or `event` in an open transaction (below).
+//!
+//! # Open transactions
+//!
+//! With `transaction` `open`, one invocation is one transaction over several
+//! exchanges, for work whose next statement depends on a decision the
+//! document makes in between. The invoking session sends it events
+//! (`<send target="#_<invokeid>">`):
+//!
+//! * [`EXECUTE_EVENT`] `{statements}` runs them after the ones before and
+//!   answers [`RESULT_EVENT`] with their results; the transaction stays
+//!   open.
+//! * [`COMMIT_EVENT`] commits and answers [`COMMITTED_EVENT`] `{}`.
+//! * [`ROLLBACK_EVENT`] answers [`ROLLEDBACK_EVENT`] `{}` and commits
+//!   nothing.
+//!
+//! Any failure answers [`FAILED_EVENT`] and commits nothing, as does any
+//! other event (code `event`); each of these ends the invocation
+//! (`done.invoke.<id>` follows). Leaving the invoking state cancels it, and
+//! a cancelled open transaction commits nothing.
+//!
+//! The service holds no connection and no lock between events (the host
+//! drops a cancelled invocation's instance without running it again, so a
+//! lock held across events could outlive it). It keeps the statements it ran
+//! with the results it answered: each `sql.execute` replays them and runs
+//! its own in one `IMMEDIATE` transaction that it rolls back, and
+//! `sql.commit` replays them all in one that it commits. A replayed
+//! statement whose result differs from the one answered (another writer
+//! changed the database meanwhile) fails the transaction with code
+//! `changed`: optimistic concurrency, serializable as seen by the document,
+//! which decides whether to start over. A statement whose result depends on
+//! the clock or on randomness fails the replay the same way, so an open
+//! transaction reads neither. The statements of one open transaction, and
+//! the rows and result bytes of each replay, are bounded as a batch's.
 //!
 //! # Bounds
 //!
@@ -139,6 +177,16 @@ pub const RESULT_EVENT: &str = "sql.result";
 /// The event that reports a transaction that did not commit (mosfet's
 /// `FailureData`).
 pub const FAILED_EVENT: &str = "sql.failed";
+/// The event that runs statements in an open transaction.
+pub const EXECUTE_EVENT: &str = "sql.execute";
+/// The event that commits an open transaction.
+pub const COMMIT_EVENT: &str = "sql.commit";
+/// The event that rolls an open transaction back.
+pub const ROLLBACK_EVENT: &str = "sql.rollback";
+/// The event that reports an open transaction committed.
+pub const COMMITTED_EVENT: &str = "sql.committed";
+/// The event that reports an open transaction rolled back.
+pub const ROLLEDBACK_EVENT: &str = "sql.rolledback";
 
 /// Upper bound on the statements of one transaction (wasm builds only).
 pub const MAX_STATEMENTS: usize = wasm_bound(64);
@@ -251,8 +299,12 @@ const fn sqlite_code(code: rusqlite::ErrorCode) -> &'static str {
 pub struct Transaction {
     /// The database file's absolute guest path.
     pub database: String,
-    /// The ordered statements of the one transaction (at least one).
+    /// The ordered statements of the one transaction (at least one in a
+    /// batch; any number, run at once, in an open transaction).
     pub statements: Vec<Statement>,
+    /// Whether the transaction stays open for `sql.execute`, `sql.commit`
+    /// and `sql.rollback` (the `transaction` parameter `open`).
+    pub open: bool,
 }
 
 /// The one event an invocation returns: its name and canonical JSON data.
@@ -265,6 +317,15 @@ pub struct Returned {
 }
 
 impl Returned {
+    /// `name` with the empty object.
+    #[must_use]
+    pub fn empty(name: &'static str) -> Self {
+        Self {
+            name,
+            data: "{}".into(),
+        }
+    }
+
     /// [`FAILED_EVENT`] with the failure's code and its message, cut to a
     /// bounded length on a character boundary.
     #[must_use]
@@ -294,10 +355,12 @@ pub fn parse_parameters<'a>(
 ) -> Result<Transaction, &'static str> {
     let mut database = None;
     let mut statements = None;
+    let mut transaction = None;
     for (name, value) in parameters {
         let slot = match name {
             "database" => &mut database,
             "statements" => &mut statements,
+            "transaction" => &mut transaction,
             _ => return Err("sql takes no parameter of that name"),
         };
         if slot.replace(value).is_some() {
@@ -315,13 +378,21 @@ pub fn parse_parameters<'a>(
         }
         _ => return Err("sql database must be an absolute file path within its bound"),
     };
-    let statements = match statements.ok_or("sql requires a statements parameter")? {
-        Data::JsonArray(text) => statements_from_json(text)?,
-        _ => return Err("sql statements must be a JSON array of statements"),
+    let open = match transaction {
+        None => false,
+        Some(Data::String(mode)) if mode == "open" => true,
+        Some(_) => return Err("sql transaction must be open"),
+    };
+    let statements = match (statements, open) {
+        (Some(Data::JsonArray(text)), _) => statements_from_json(text)?,
+        (Some(_), _) => return Err("sql statements must be a JSON array of statements"),
+        (None, true) => Vec::new(),
+        (None, false) => return Err("sql requires a statements parameter"),
     };
     Ok(Transaction {
         database,
         statements,
+        open,
     })
 }
 
@@ -437,6 +508,20 @@ fn parameter_from_json(value: &Json) -> Result<Parameter, &'static str> {
 ///
 /// SQLite's code and message, or the bound or rule that was broken.
 pub fn apply(connection: &mut Connection, statements: &[Statement]) -> Result<Json, Failed> {
+    transact(connection, &[], statements, true)
+}
+
+/// Runs `replayed` (statements an open transaction ran before, with the
+/// results it answered) and then `statements` in one `BEGIN IMMEDIATE`
+/// transaction, commits when `commit` and else rolls back, and returns the
+/// results of `statements` alone. A replayed statement whose result differs
+/// from the one answered fails with code `changed`.
+fn transact(
+    connection: &mut Connection,
+    replayed: &[(Statement, Json)],
+    statements: &[Statement],
+    commit: bool,
+) -> Result<Json, Failed> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     // A statement may not end or widen the one transaction: SQLite refuses
     // to prepare `BEGIN`, `COMMIT`, `ROLLBACK`, `ATTACH`, and `DETACH`
@@ -448,11 +533,162 @@ pub fn apply(connection: &mut Connection, statements: &[Statement]) -> Result<Js
         }
         _ => Authorization::Allow,
     }));
-    let output = execute(&transaction, statements);
+    let all: Vec<Statement> = replayed
+        .iter()
+        .map(|(statement, _)| statement.clone())
+        .chain(statements.iter().cloned())
+        .collect();
+    let output = execute(&transaction, &all);
     transaction.authorizer(None::<fn(AuthContext<'_>) -> Authorization>);
-    let output = output?;
-    transaction.commit()?;
-    Ok(output)
+    let Json::Array(mut results) = output?
+        .get_mut("results")
+        .map(Json::take)
+        .unwrap_or_default()
+    else {
+        return Err(Failed::bound("the sql transaction has no results"));
+    };
+    let fresh = results.split_off(replayed.len());
+    if results
+        .iter()
+        .zip(replayed)
+        .any(|(result, (_, answered))| result != answered)
+    {
+        return Err(Failed {
+            code: "changed",
+            message: "the database changed under the open transaction".into(),
+        });
+    }
+    if commit {
+        transaction.commit()?;
+    } else {
+        transaction.rollback()?;
+    }
+    let mut output = Map::new();
+    output.insert("results".into(), Json::Array(fresh));
+    Ok(Json::Object(output))
+}
+
+/// An open transaction (the `transaction` parameter `open`): the statements
+/// it ran, each with the result it answered. It holds no connection and no
+/// lock between events: each `sql.execute` replays them and runs its own
+/// statements in one transaction it rolls back, and `sql.commit` replays
+/// them all in one transaction it commits, so a cancelled invocation leaves
+/// nothing behind, and a database another writer changed meanwhile fails
+/// the transaction with code `changed` (optimistic concurrency).
+#[derive(Clone, Debug)]
+pub struct Open {
+    database: String,
+    replayed: Vec<(Statement, Json)>,
+}
+
+impl Open {
+    /// An open transaction on `database` that has run nothing yet.
+    #[must_use]
+    pub const fn new(database: String) -> Self {
+        Self {
+            database,
+            replayed: Vec::new(),
+        }
+    }
+
+    /// Runs `statements` after the ones run before; returns their results.
+    ///
+    /// # Errors
+    ///
+    /// As [`apply`], or `changed`, or `bound` when the transaction would
+    /// hold more than [`MAX_STATEMENTS`] statements.
+    pub fn execute(&mut self, statements: &[Statement]) -> Result<Json, Failed> {
+        if exceeds_wasm_bound(self.replayed.len() + statements.len(), MAX_STATEMENTS) {
+            return Err(Failed::bound(
+                "the open sql transaction exceeds its statements bound",
+            ));
+        }
+        let output = transact(
+            &mut connect(&self.database)?,
+            &self.replayed,
+            statements,
+            false,
+        )?;
+        if let Some(Json::Array(results)) = output.get("results") {
+            self.replayed
+                .extend(statements.iter().cloned().zip(results.iter().cloned()));
+        }
+        Ok(output)
+    }
+
+    /// Commits every statement run so far.
+    ///
+    /// # Errors
+    ///
+    /// As [`Open::execute`].
+    pub fn commit(&self) -> Result<(), Failed> {
+        transact(&mut connect(&self.database)?, &self.replayed, &[], true).map(drop)
+    }
+
+    /// Takes one event the invoking session sent: the event to answer and
+    /// whether the invocation ends with it (see the crate documentation,
+    /// "Open transactions").
+    #[must_use]
+    pub fn receive(&mut self, name: &str, data: &Data) -> (Returned, bool) {
+        match name {
+            EXECUTE_EVENT => match execute_statements(data) {
+                Ok(statements) => match self.execute(&statements) {
+                    Ok(output) => (
+                        Returned {
+                            name: RESULT_EVENT,
+                            data: canonical_json(&output),
+                        },
+                        false,
+                    ),
+                    Err(failed) => (Returned::failed(&failed), true),
+                },
+                Err(message) => (
+                    Returned::failed(&Failed {
+                        code: "event",
+                        message: message.into(),
+                    }),
+                    true,
+                ),
+            },
+            COMMIT_EVENT => match self.commit() {
+                Ok(()) => (Returned::empty(COMMITTED_EVENT), true),
+                Err(failed) => (Returned::failed(&failed), true),
+            },
+            ROLLBACK_EVENT => (Returned::empty(ROLLEDBACK_EVENT), true),
+            _ => (
+                Returned::failed(&Failed {
+                    code: "event",
+                    message: "an open sql transaction takes only sql.execute, sql.commit and sql.rollback".into(),
+                }),
+                true,
+            ),
+        }
+    }
+}
+
+/// The statements of an `sql.execute` event's data `{statements}`.
+fn execute_statements(data: &Data) -> Result<Vec<Statement>, &'static str> {
+    let malformed = "sql.execute data must be an object with only statements";
+    let Data::JsonObject(text) = data else {
+        return Err(malformed);
+    };
+    let Ok(Json::Object(fields)) = serde_json::from_str::<Json>(text) else {
+        return Err(malformed);
+    };
+    match (fields.len(), fields.get("statements")) {
+        (1, Some(statements @ Json::Array(_))) => statements_from_json(&statements.to_string()),
+        _ => Err(malformed),
+    }
+}
+
+/// Opens `database` read-write, creating it when missing.
+fn connect(database: &str) -> Result<Connection, Failed> {
+    Ok(Connection::open_with_flags(
+        database,
+        OpenFlags::SQLITE_OPEN_READ_WRITE
+            | OpenFlags::SQLITE_OPEN_CREATE
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?)
 }
 
 /// Runs each statement in the open transaction and builds the results.
@@ -554,15 +790,9 @@ fn cell(value: ValueRef<'_>) -> Result<Json, Failed> {
 /// results, or [`FAILED_EVENT`] with why nothing was committed.
 #[must_use]
 pub fn run(transaction: &Transaction) -> Returned {
-    let opened = Connection::open_with_flags(
-        &transaction.database,
-        OpenFlags::SQLITE_OPEN_READ_WRITE
-            | OpenFlags::SQLITE_OPEN_CREATE
-            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    );
-    let mut connection = match opened {
+    let mut connection = match connect(&transaction.database) {
         Ok(connection) => connection,
-        Err(error) => return Returned::failed(&error.into()),
+        Err(failed) => return Returned::failed(&failed),
     };
     match apply(&mut connection, &transaction.statements) {
         Ok(output) => Returned {
@@ -592,7 +822,7 @@ mod guest {
         ComponentError, DataValue, ErrorCode, ErrorVersion, Event, EventType, InvokeRequest,
     };
 
-    use super::{Returned, Transaction};
+    use super::{Open, Returned, Transaction};
 
     /// The invocation's result: `ok` (no done data), or its error.
     type Done = Result<Option<DataValue>, ComponentError>;
@@ -666,7 +896,7 @@ mod guest {
     impl Guest for Component {
         async fn invoke(
             request: InvokeRequest,
-            _events: wit_bindgen::StreamReader<Event>,
+            mut events: wit_bindgen::StreamReader<Event>,
         ) -> Result<
             (
                 wit_bindgen::StreamReader<Event>,
@@ -674,7 +904,6 @@ mod guest {
             ),
             ComponentError,
         > {
-            // The service accepts no event: its input stream is dropped.
             let transaction = observed(Operation::Start, || plan(request))?;
             let (mut returned, returned_reader) = wit_stream::new::<Event>();
             let (done, done_reader) = wit_future::new::<Done>(|| {
@@ -684,28 +913,70 @@ mod guest {
                 ))
             });
             wit_bindgen::spawn(async move {
-                // SQLite is synchronous: the transaction runs to its commit
-                // or rollback before the task next yields.
-                let reply = super::run(&transaction);
-                telemetry::event(
-                    Operation::Send,
-                    if reply.name == super::RESULT_EVENT {
-                        SignalEvent::TransformationCompleted
-                    } else {
-                        SignalEvent::InputRejected
-                    },
-                    None,
-                );
-                // The one event, then the result: `done.invoke.<id>` follows
-                // it.
-                if returned.write_one(event(&reply)).await.is_some() {
-                    return;
+                if transaction.open {
+                    // An open transaction: its first statements, if any, then
+                    // each event the invoking session sends, until one ends
+                    // it (or the session stops sending: nothing commits).
+                    let mut open = Open::new(transaction.database.clone());
+                    if !transaction.statements.is_empty() {
+                        let (reply, ended) = match open.execute(&transaction.statements) {
+                            Ok(output) => (
+                                Returned {
+                                    name: super::RESULT_EVENT,
+                                    data: scxml_event_schema::canonical_json(&output),
+                                },
+                                false,
+                            ),
+                            Err(failed) => (Returned::failed(&failed), true),
+                        };
+                        if send(&mut returned, &reply).await || ended {
+                            drop(returned);
+                            let _ = done.write(Ok(None)).await;
+                            return;
+                        }
+                    }
+                    while let Some(event) = events.next().await {
+                        let (reply, ended) = match native_value(event.data) {
+                            Ok(data) => open.receive(&event.name, &data),
+                            Err(_) => open.receive("", &scxml_types::DataValue::Null),
+                        };
+                        if send(&mut returned, &reply).await {
+                            return;
+                        }
+                        if ended {
+                            break;
+                        }
+                    }
+                } else {
+                    // A batch: SQLite is synchronous, so the transaction runs
+                    // to its commit or rollback before the task next yields.
+                    // The service reads no event.
+                    drop(events);
+                    if send(&mut returned, &super::run(&transaction)).await {
+                        return;
+                    }
                 }
+                // The last event, then the result: `done.invoke.<id>`
+                // follows it.
                 drop(returned);
                 let _ = done.write(Ok(None)).await;
             });
             Ok((returned_reader, done_reader))
         }
+    }
+
+    /// Writes `reply`; true when the invoking session no longer reads.
+    async fn send(returned: &mut wit_bindgen::StreamWriter<Event>, reply: &Returned) -> bool {
+        telemetry::event(
+            Operation::Send,
+            if reply.name == super::FAILED_EVENT {
+                SignalEvent::InputRejected
+            } else {
+                SignalEvent::TransformationCompleted
+            },
+            None,
+        );
+        returned.write_one(event(reply)).await.is_some()
     }
 
     /// One call's closed telemetry: its outcome and one event (no attribute

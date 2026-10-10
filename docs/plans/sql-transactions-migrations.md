@@ -1,7 +1,6 @@
 # SQL service: transactions and migrations in the SCXML pattern
 
-Status: sections 1, 3 and 4 built (2026-10-10, decisions D48 and D49);
-section 2 (interactive transactions) is proposed, awaiting the user's call.
+Status: built (2026-10-10, decisions D48, D49 and D50).
 As built, the migration ability answers `bot.ability.migration.output
 {from, to}` and `bot.ability.failed {message}` (mosfet's ability events)
 rather than `<donedata>` and `migration.failed`, and the version guard's
@@ -35,7 +34,7 @@ document: `<data>` or `<data src="...sql">`, with bind values in
 * Most callers need only this: recall, insert, or a read-modify-write that
   fits in SQL.
 
-## 2. Interactive transaction (new): one invocation spans several exchanges
+## 2. Open transaction: one invocation spans several exchanges (built, D50)
 
 For work where the next statement depends on a decision the document makes
 in between (behavior authoring in phase 5, for example), the invocation
@@ -45,35 +44,38 @@ stays open and holds one transaction:
 <state id="editing">
   <invoke id="tx" type="https://github.com/stateforward/floppy/services/sql">
     <param name="database" expr="database"/>
-    <param name="transaction" expr="'immediate'"/>   <!-- deferred | immediate | exclusive -->
+    <param name="transaction" expr="'open'"/>
+    <param name="statements" expr="[...]"/>                <!-- optional, run at once -->
   </invoke>
-  <onentry><send event="sql.execute" target="#_tx"><param name="statements" expr="..."/></send></onentry>
-  <transition event="sql.result" cond="_event.invokeid === 'tx'">  ...decide, send more sql.execute... </transition>
-  <transition event="..." ><send event="sql.commit" target="#_tx"/></transition>
+  <transition event="sql.result" cond="_event.invokeid === 'tx'">
+    ...decide, then <send event="sql.execute" target="#_tx"><param name="statements" expr="..."/></send>
+    or <send event="sql.commit" target="#_tx"/> or <send event="sql.rollback" target="#_tx"/>
+  </transition>
   <transition event="sql.committed" target="next"/>
   <transition event="sql.failed" target="recovering"/>
-  <transition event="tx.timeout" target="recovering"/>   <!-- <send delay> bounds it -->
 </state>
 ```
 
-* Inputs to the service: `sql.execute {statements}`, which answers
-  `sql.result {results}`. Then `sql.commit`, which answers `sql.committed`
-  and ends the invocation, or `sql.rollback`, which answers
-  `sql.rolledback` and ends it.
-* Leaving the state cancels the invocation, and a cancelled invocation
-  rolls back.
-* A statement that fails rolls back the whole transaction, answers
-  `sql.failed`, and ends the invocation. No partial state survives.
-* The SQL keywords name the events (`BEGIN` modes, `COMMIT`, `ROLLBACK`),
-  so nothing new is invented.
-* The rule against a statement ending or widening the transaction
-  (`BEGIN`, `COMMIT`, `ROLLBACK`, `ATTACH`, `DETACH`) stays: only the events
-  end it. `SAVEPOINT` stays allowed for nested undo.
-* Locking: SQLite holds the write lock until commit. Another invocation
-  that writes meanwhile gets `sql.failed` with `code: "SQLITE_BUSY"`
-  immediately (no busy wait inside a component), and its document decides
-  whether to retry. The invoking state's `<send delay>` bounds how long a
-  transaction may stay open.
+* Inputs: `sql.execute {statements}` answers `sql.result {results}` and keeps
+  the transaction open; `sql.commit` answers `sql.committed {}`;
+  `sql.rollback` answers `sql.rolledback {}`. The last two end the
+  invocation.
+* A failure answers `sql.failed {code, message}` and ends it with nothing
+  committed; so does any other event (code `event`). Leaving the state
+  cancels it, and nothing commits.
+* As built, the service holds no lock between events. The host drops a
+  cancelled invocation's instance without running it again, and SQLite's
+  WASI build locks with a dot-file, so a lock held across events would
+  outlive a cancel and lock the database for good. Instead the transaction
+  is optimistic: the service keeps each statement it ran with the result it
+  answered, each `sql.execute` replays them and runs its own inside one
+  transaction it rolls back, and `sql.commit` replays them all in one it
+  commits. A replayed result that differs (another writer committed
+  meanwhile) fails with code `changed`, and the document decides whether to
+  start over (Postgres's serialization failure, in the same shape). A
+  statement that reads the clock or randomness changes on replay, so an
+  open transaction reads neither.
+* The rule against a statement ending or widening the transaction stays.
 
 ## 3. Migrations: an Alembic-style migration ability, agnostic of the database
 
@@ -117,6 +119,24 @@ Revisions are data, like Alembic's script directory. One file per revision
   databases already carry, and an existing mosfet SQLite file migrates in
   place.
 
+Postgres (the PGlite spike's engine over a TCP socket, which another thread
+is adding to Memory):
+
+* The runner and `<migration:plan>` never parse SQL, so they serve any engine
+  service that takes the sql service's contract (`database`, `statements`
+  with `rowcount`, `sql.result`, `sql.failed {code}`): the runner's own
+  statements are standard SQL (`CREATE TABLE IF NOT EXISTS alembic_version`,
+  `INSERT ... SELECT ... WHERE NOT EXISTS`, `UPDATE`, `DELETE`), with `?N`
+  placeholders the engine binds positionally.
+* The runner names its engine by the sql service's literal URI today (scx
+  binds a repository service only from a literal `<invoke type>`). For
+  Postgres it gains a `<param name="engine">` choosing between two literal
+  invokes, one per engine, until scx binds `typeexpr`.
+* Revision files hold the engine's SQL. mosfet's 0001 and 0002 are SQLite
+  DDL; a Postgres memory carries its own revision files, or a revision
+  holds per-engine statements, with the same revision ids so
+  `alembic_version` means the same thing on both.
+
 Transactions:
 
 * The read and the apply are separate invocations. The apply's first
@@ -156,9 +176,7 @@ upgrade, downgrade, current, alembic_version.
 
 ## 5. Decisions for the user
 
-* **Interactive transactions.** Recommended: yes, as specified in section 2.
-  Every phase 3 caller works in batch mode, but phase 5's behavior
-  authoring (validate, simulate, then store or discard) fits a transaction
-  held open across events.
+* **Open transactions.** Built on the recommended yes (section 2); every
+  phase 3 caller still works in batch mode.
 * **Revision files.** Recommended: JSON files via `<data src>` (scxml.rs
   parses JSON `<data src>` as data).

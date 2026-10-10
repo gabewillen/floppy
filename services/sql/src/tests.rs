@@ -333,3 +333,125 @@ fn a_statement_whose_rowcount_differs_fails_the_transaction() {
     ));
     assert_eq!(guarded.name, RESULT_EVENT, "{}", guarded.data);
 }
+
+fn object(value: &Json) -> Data {
+    Data::JsonObject(canonical_json(value))
+}
+
+fn execute(open: &mut Open, statements: &Json) -> (Returned, bool) {
+    open.receive(
+        EXECUTE_EVENT,
+        &object(&serde_json::json!({ "statements": statements })),
+    )
+}
+
+fn count(database: &str) -> Json {
+    let counted = run(&transaction(
+        database,
+        &serde_json::json!([{"sql": "SELECT count(*) AS n FROM bot_memory"}]),
+    ));
+    data(&counted)["results"][0]["rows"][0]["values"][0].clone()
+}
+
+#[test]
+fn the_transaction_parameter_opens_it_and_makes_statements_optional() {
+    let parsed = parse(&[
+        ("database", text("/memory/floppy.sqlite")),
+        ("transaction", text("open")),
+    ])
+    .expect("an open transaction needs no statements");
+    assert!(parsed.open);
+    assert!(parsed.statements.is_empty());
+    assert_eq!(
+        parse(&[
+            ("database", text("/memory/floppy.sqlite")),
+            ("transaction", text("immediate")),
+        ]),
+        Err("sql transaction must be open")
+    );
+    assert_eq!(
+        parse(&[("database", text("/memory/floppy.sqlite"))]),
+        Err("sql requires a statements parameter")
+    );
+}
+
+#[test]
+fn an_open_transaction_reads_its_own_writes_and_commits_them() {
+    let database = created("open-commit");
+    let mut open = Open::new(database.clone());
+    let (inserted, ended) = execute(
+        &mut open,
+        &serde_json::json!([{"sql": INSERT_NAME, "parameters": ["m1", "\"Floppy\"", "2026-10-10T00:00:00"]}]),
+    );
+    assert!(!ended);
+    assert_eq!(inserted.name, RESULT_EVENT, "{}", inserted.data);
+    // Its own write is visible to it, and to no one else yet.
+    let (selected, ended) = execute(
+        &mut open,
+        &serde_json::json!([{"sql": SELECT_NAMES, "parameters": ["self_name", "self"]}]),
+    );
+    assert!(!ended);
+    assert_eq!(
+        data(&selected)["results"][0]["rows"][0]["values"],
+        serde_json::json!(["\"Floppy\""])
+    );
+    assert_eq!(count(&database), 0);
+    let (committed, ended) = open.receive(COMMIT_EVENT, &object(&serde_json::json!({})));
+    assert!(ended);
+    assert_eq!(
+        (committed.name, committed.data.as_str()),
+        (COMMITTED_EVENT, "{}")
+    );
+    assert_eq!(count(&database), 1);
+}
+
+#[test]
+fn a_rollback_a_failure_or_another_event_commits_nothing() {
+    let database = created("open-rollback");
+    let insert = serde_json::json!([{"sql": INSERT_NAME, "parameters": ["m1", "x", "t"]}]);
+    let mut open = Open::new(database.clone());
+    let _ = execute(&mut open, &insert);
+    let (rolled, ended) = open.receive(ROLLBACK_EVENT, &Data::Null);
+    assert!(ended);
+    assert_eq!(rolled.name, ROLLEDBACK_EVENT);
+    let mut failing = Open::new(database.clone());
+    let _ = execute(&mut failing, &insert);
+    let (failed, ended) = execute(&mut failing, &serde_json::json!([{"sql": "SELECT nope"}]));
+    assert!(ended);
+    assert_eq!(data(&failed)["code"], "SQLITE_ERROR");
+    let mut stray = Open::new(database.clone());
+    let _ = execute(&mut stray, &insert);
+    let (refused, ended) = stray.receive("sql.whatever", &Data::Null);
+    assert!(ended);
+    assert_eq!(data(&refused)["code"], "event");
+    let (malformed, ended) = Open::new(database.clone()).receive(EXECUTE_EVENT, &Data::Null);
+    assert!(ended);
+    assert_eq!(data(&malformed)["code"], "event");
+    assert_eq!(count(&database), 0);
+}
+
+#[test]
+fn a_database_changed_under_an_open_transaction_fails_it_with_changed() {
+    let database = created("open-changed");
+    let mut open = Open::new(database.clone());
+    let (read, _) = execute(
+        &mut open,
+        &serde_json::json!([{"sql": "SELECT count(*) FROM bot_memory"}]),
+    );
+    assert_eq!(read.name, RESULT_EVENT);
+    // Another writer commits meanwhile: the count the document decided on
+    // no longer holds.
+    let other = run(&transaction(
+        &database,
+        &serde_json::json!([{"sql": INSERT_NAME, "parameters": ["m9", "x", "t"]}]),
+    ));
+    assert_eq!(other.name, RESULT_EVENT);
+    let _ = execute(
+        &mut open,
+        &serde_json::json!([{"sql": INSERT_NAME, "parameters": ["m1", "x", "t"]}]),
+    );
+    let (failed, ended) = open.receive(COMMIT_EVENT, &Data::Null);
+    assert!(ended);
+    assert_eq!(data(&failed)["code"], "changed");
+    assert_eq!(count(&database), 1);
+}
