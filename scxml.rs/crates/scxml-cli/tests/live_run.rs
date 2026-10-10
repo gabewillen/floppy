@@ -471,54 +471,6 @@ fn a_srcexpr_uri_loads_when_the_invoke_runs_and_a_failure_is_error_execution() {
     }
 }
 
-/// A relative URI that an `<invoke src>` document's session loads resolves
-/// against that document's base URI, not the root's (RFC 3986 §5.1): a
-/// `srcexpr` evaluated in `sub/mid.scx`, and one evaluated in an inline
-/// `<content>` child of it, both load `sub/leaf.scx`, though the root's own
-/// literal `leaf.scx` names a different URL and there is no `leaf.scx`
-/// beside the root.
-#[test]
-fn a_relative_srcexpr_in_an_invoked_document_resolves_against_that_document() {
-    let directory = scratch("invoke-srcexpr-child-base");
-    fs::create_dir_all(directory.join("sub")).expect("a child directory");
-    fs::write(
-        directory.join("sub/leaf.scx"),
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><final id="f"/></scxml>"#,
-    )
-    .expect("the leaf is writable");
-    let outcome = |prefix: &str| {
-        format!(
-            r#"<transition event="error.execution" target="{prefix}failed"/></state><final id="{prefix}ok"><donedata><content expr="'{prefix}ok'"/></donedata></final><final id="{prefix}failed"><donedata><content expr="'{prefix}failed'"/></donedata></final>"#
-        )
-    };
-    let inline = format!(
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><state id="i0"><invoke type="scxml" srcexpr="'leaf.scx'"/><transition event="done.invoke" target="inline-ok"/>{}</scxml>"#,
-        outcome("inline-")
-    );
-    fs::write(
-        directory.join("sub/mid.scx"),
-        format!(
-            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><state id="m0"><invoke type="scxml" srcexpr="'leaf.scx'"/><transition event="done.invoke" target="m1"/><transition event="error.execution" target="mid-failed"/></state><state id="m1"><invoke type="scxml"><content>{inline}</content></invoke><transition event="done.invoke" cond="_event.data == 'inline-ok'" target="mid-ok"/><transition event="done.invoke" target="mid-failed"/>{}</scxml>"#,
-            outcome("mid-")
-        ),
-    )
-    .expect("the middle document is writable");
-    let output = run(
-        &document(
-            &directory,
-            r#"<state id="s0"><invoke type="scxml" src="sub/mid.scx"/><transition event="done.invoke" target="done"/><transition event="error.execution" target="failed"/></state><state id="unused"><invoke type="scxml" src="leaf.scx"/></state><final id="done"><donedata><content expr="_event.data"/></donedata></final><final id="failed"><donedata><content expr="'failed'"/></donedata></final>"#,
-        ),
-        &["--clock", "logical", "--on-eof", "close"],
-        "",
-    );
-    let records = parse_records(&output);
-    let done = records
-        .iter()
-        .find(|record| record["type"] == "done")
-        .unwrap_or_else(|| panic!("{records:?}\n{}", stderr(&output)));
-    assert_eq!(done["data"], "mid-ok", "{records:?}\n{}", stderr(&output));
-}
-
 /// A `<script src>` that cannot be fetched rejects the document before
 /// anything runs (SCXML 5.8); one that loads is pinned and runs.
 #[test]

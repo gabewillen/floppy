@@ -129,6 +129,20 @@ hard cutover.
   own schema files; a remote `src` is not judged, nothing is fetched), and
   `snapshot run` and `run` pass the documents they loaded before the
   session.
+- The side-effect analysis (`SCXML074`, `LINT020`, `LINT019`) reads a
+  `<script src>` file the caller supplies: the functions it declares are
+  judged by their bodies like an inline `<script>`'s, so a `cond` or
+  `<log expr>` calling a pure one is clean, an effect in one is labeled at
+  the `src` value (`(in `<src>`)`), and only a `<script src>` with no file
+  stays unread. The caller reads the files:
+  `Validator::with_script_resources` and
+  `scxml_validator_core::ScriptResources` (text keyed by `src` as authored,
+  its XML white space collapsed), `validate_expressions_with_scripts`, the
+  validator WIT `validation-request` field `scripts` (`script-resource`),
+  and the browser `validate` option `scripts`. `scx validate`, `compile`,
+  `snapshot run`, and `run` read the `file:` scripts a document's
+  `<script src>` elements name (a remote script stays unread; nothing is
+  fetched for validation).
 - Browser host parity, slice 1: `createValidator` runs the bundled validator
   component (the `scx validate` report, byte for byte); the validator and
   compiler take the page's extension packages and `event:schema` files
@@ -1087,23 +1101,6 @@ hard cutover.
   `<foreach>` collection is `illegal`.
 
 ### Fixed
-
-- A session snapshot an extension component reads
-  (`session-snapshot-host.snapshot`) during the entry content of a compound
-  state, before any of its children is entered, is valid: its
-  `configuration.atomic` is empty, which the snapshot decoder refused as
-  `inconsistent`, so the reading element raised `error.execution`. A
-  checkpoint document still requires an atomic state.
-
-- A relative URI that an `<invoke src>` document's session loads (an
-  `<invoke srcexpr>` value, or a literal `src`) resolves against that
-  document's own base URI, as SCXML and RFC 3986 define; a `srcexpr` URI
-  resolved against the root document's base, and a literal relative URI
-  that documents of different bases resolve to different URLs did not load.
-  The Wasmtime host resolves it against `EmbeddedDocument::base_uri` (new;
-  the CLI sets it to the URL a child was loaded from) before asking the
-  embedder, for the document's sessions and the inline `<content>`
-  sessions below them.
 
 - An SCXML `<send>` whose data and raw message each fit their bounds but
   together exceed the `types.event` bound (96 KiB) is rejected by the

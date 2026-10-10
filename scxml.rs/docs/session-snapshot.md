@@ -287,9 +287,7 @@ The document says exactly what holds at that element:
   content no longer sees the states exited before it, and entry content
   sees every state entered before it, so during the entry content of a
   compound state its children are not yet listed. `configuration.atomic`
-  lists the atomic and final states among them, so it is empty while none
-  is entered yet (the decoder accepts that only for an executable-content
-  document).
+  lists the atomic and final states among them.
 - **Transitions.** The walk starts from each innermost state of that
   configuration (a state none of whose children is in it; at a checkpoint
   these are exactly the atomic states), so the entry content of a compound
