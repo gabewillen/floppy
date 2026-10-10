@@ -22,7 +22,7 @@
 //! `bot.focus`, `double.ignore`). `tests/tests/communication.rs` covers
 //! what the communication does with what it is routed.
 //!
-//! One test sets `input_abilities` to `['identity']` and puts
+//! One test sets `input` (mosfet's Bot input) to `['identity']` and puts
 //! `tests/fixtures/phase4/input_double.scx` in the identity's place; the
 //! double logs `input.sound` and `input.visual` for each `environment.*`
 //! stimulus the body fans out to it.
@@ -807,10 +807,7 @@ fn choices_over_the_budget_fail_the_turn_before_the_cognition() {
 
 #[test]
 fn environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition() {
-    let body = layout(
-        &Cognition::Double("'ready'"),
-        &[("input_abilities", "['identity']")],
-    );
+    let body = layout(&Cognition::Double("'ready'"), &[("input", "['identity']")]);
     // The input double stands in for the identity, the one input ability.
     let abilities = body
         .parent()

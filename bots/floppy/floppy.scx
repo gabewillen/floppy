@@ -35,7 +35,7 @@
   gated off in phase 4).
 
   Environment: environment.sound and environment.visual from outside,
-  while active, go to each input ability (input_abilities, the invoke ids
+  while active, go to each input ability (input, mosfet's Bot input: the invoke ids
   of the abilities that perceive raw stimuli; none until phase 6), in
   order, by <foreach>; never to the cognition, which hears of a stimulus
   only as an input ability's product.
@@ -133,10 +133,11 @@
     <data id="expected" expr="['cognition', 'communication', 'identity']"/>
     <data id="offers" expr="({})"/>
     <data id="waiting" expr="[]"/>
-    <!-- The abilities each environment.* stimulus fans out to (invoke
-         ids; none until phase 6), and the one being sent to. -->
-    <data id="input_abilities" expr="[]"/>
-    <data id="input_ability" expr="null"/>
+    <!-- The input abilities each environment.* stimulus fans out to
+         (mosfet's Bot input, as invoke ids; none until phase 6), and the
+         one being sent to. -->
+    <data id="input" expr="[]"/>
+    <data id="ability" expr="null"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
     <data id="focused_device" expr="null"/>
@@ -245,16 +246,16 @@
       <!-- Environment stimuli from outside go to every input ability. -->
       <transition event="environment.sound" event:schema="schemas/environment.sound.json"
                   cond="!_event.invokeid">
-        <foreach array="input_abilities" item="input_ability">
-          <send event="environment.sound" targetexpr="'#_' + input_ability">
+        <foreach array="input" item="ability">
+          <send event="environment.sound" targetexpr="'#_' + ability">
             <content expr="_event.data"/>
           </send>
         </foreach>
       </transition>
       <transition event="environment.visual" event:schema="schemas/environment.visual.json"
                   cond="!_event.invokeid">
-        <foreach array="input_abilities" item="input_ability">
-          <send event="environment.visual" targetexpr="'#_' + input_ability">
+        <foreach array="input" item="ability">
+          <send event="environment.visual" targetexpr="'#_' + ability">
             <content expr="_event.data"/>
           </send>
         </foreach>
