@@ -25,9 +25,17 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | `tests/` | `floppy-tests`: integration tests that run the bots, namespaces, and services through `scx run` |
 | `scripts/` | build and proof scripts |
 
-## Running a bot
+## Quick start
+
+Building needs the Rust toolchain `rust-toolchain.toml` pins (with the
+`wasm32-wasip2` target), `wasm-tools` 1.244.0, `wasi-virt` at the revision
+`scripts/build-components.sh` names, and wasi-sdk 25 with `WASI_SDK_PATH`
+pointing at it (the sql service compiles SQLite with it); the script checks
+each and says how to install what is missing.
 
 ```console
+# The run's variables: copy the example and write the values (see Defaults).
+cp .env.example .env
 # The session components and every namespace and service component, verified,
 # with every package published into a dev repository-package cache under
 # target/ (never scx's release cache), pinned under the bots' tagless
@@ -36,10 +44,15 @@ sh scripts/build-components.sh
 # scx, from the subtree, embedding the session components just built.
 SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml" \
   cargo install --locked --path scxml.rs/crates/scxml-cli
-# A bot, with the locally built packages.
-scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx
-# A bot, with the packages of floppy's latest GitHub release (once phase 7
-# publishes one).
+# The builder bot, with the locally built packages.
+echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
+  scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx
+# The floppy bot: activate it and say hello.
+printf '%s\n' '{"name":"bot.activate","data":{}}' \
+  '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
+  scx run --offline --cache-dir target/components/package-cache --env-file .env bots/floppy/floppy.scx
+# A bot, with the packages of floppy's latest GitHub release (once one is
+# published).
 scx run --env-file .env bots/builder/builder.scx
 ```
 
@@ -50,8 +63,65 @@ same document runs against the dev cache `scripts/build-components.sh`
 fills (`--offline --cache-dir`) and against a release, unedited; its `env`
 attributes decide which `<invoke>` receives which variable of the env file,
 and an `<invoke src>` loads by URI (relative to its document, `file:`, or
-`https:`) with no flag. Each bot's README gives
-its input events ([bots/builder/README.md](bots/builder/README.md#running)).
+`https:`) with no flag. Each bot's README gives its input events and output
+([bots/builder/README.md](bots/builder/README.md#running),
+[bots/floppy/README.md](bots/floppy/README.md#running)).
+
+## Defaults
+
+The defaults floppy ships, in one place. Each is a top-level `<data>` of the
+document named, so a parent that invokes the document overrides it with a
+`<param>` of the same name (SCXML 6.4); the run-time overrides are listed.
+`tests/tests/defaults.rs` checks this section against the documents and
+`.env.example`.
+
+### Variables
+
+[`.env.example`](.env.example) names every variable a bot reads, without
+values. No package has a default model endpoint (decision D31).
+
+| Variable | Read by | Required |
+| --- | --- | --- |
+| `FLOPPY_BASE_URL` | the `generate` service (`env:baseurl`): the builder's design and author stages, the floppy bot's reasoning | yes: without it a generation fails `unconfigured` |
+| `FLOPPY_API_KEY` | the `generate` service (`env:apikey`), as above | yes, as above |
+| `TYPESAFE_BASE_URL` | the `decision` service (`env:baseurl`): the builder's triage, the floppy bot's intuition | no: the service's declared origin, `https://api.typesafe.ai` |
+| `TYPESAFE_API_KEY` | the `decision` service (`env:apikey`), as above | for the floppy bot: without it every turn fails (`unconfigured`); the builder triages with its fallback |
+
+The live tests read `FLOPPY_LIVE_ENV_FILE` (the env files, joined like
+`PATH`) and `FLOPPY_LIVE_MODEL` (default: the model below); the trace tests
+read `FLOPPY_TRACE_BLESS`. Those are test settings, not bot variables.
+
+### Model
+
+`Qwen/Qwen3.8-Flash-Next`, the model the maintainer's DGX Sparks serve
+(direct vLLM; the CPA gateway lists it as `sparks/qwen3.8-flash-next`). It is
+the `model` `<data>` of `bots/builder/builder.scx` (a `builder.request`'s
+`model` overrides it), `bots/floppy/floppy.scx` (a `bot.activate`'s `model`
+overrides it), and `abilities/cognition.scx` and `abilities/reasoning.scx`
+(each takes its invoker's by `<param>`).
+
+### Timeouts and bounds
+
+| Document | `<data>` | Default | What it bounds |
+| --- | --- | --- | --- |
+| `bots/builder/builder.scx` | `generate_timeout_ms` | `300000` | one design or author generation (a `builder.request`'s `generate_timeout_ms` overrides it) |
+| `bots/builder/builder.scx` | `decision_timeout_ms` | `60000` | one triage decision |
+| `bots/builder/builder.scx` | `max_tests` | `8` | the test scripts one draft may carry |
+| `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
+| `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (mosfet's 30 s attachment timeout) |
+| `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (mosfet's 5 min processing timeout) |
+| `bots/floppy/floppy.scx` | `cancel_timeout_ms` | `5000` | a timed-out turn's cancel acknowledgement (clamped to 100 to 5000) |
+| `abilities/cognition.scx` | `hop_timeout_ms` | `30000` | each cascade stage (mosfet's 30 s) |
+| `abilities/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
+| `abilities/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (mosfet's `TURN_SILENCE_BOUND`) |
+| `abilities/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
+| `abilities/communication.scx` | `response_timeout_ms` | `6000` | saying one response (mosfet's 6 s) |
+| `abilities/conversation.scx` | `max_messages` | `20` | the history that reaches one turn |
+
+The cognition's phase 5 gates are off (`reflection_enabled`,
+`routines_enabled`), and its `memory` (the memory database path) is `null`:
+the floppy bot keeps no memory unless its invoker names a database, so a run
+needs no `--dir` grant.
 
 Contributor rules are in [AGENTS.md](AGENTS.md).
 

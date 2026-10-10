@@ -182,7 +182,7 @@ Everything a run needs is in the document:
   resolves them from that release, or, with `--offline --cache-dir
   target/components/package-cache`, from the dev cache
   `scripts/build-components.sh` publishes the locally built packages into
-  (README, "Running a bot"). The consent listing shows the release tag and
+  (README, "Quick start"). The consent listing shows the release tag and
   commit each one resolved to.
 * Its `env` attributes scope the variables: `FLOPPY_API_KEY` and
   `FLOPPY_BASE_URL` go only to the generate service's `<invoke>`s
@@ -209,7 +209,9 @@ declared `http-origins` entry, `https://api.typesafe.ai`. `--env-file`
 repeats, so the keys may come from two files (`--env-file .env --env-file
 <typesafe env file>`). Without `TYPESAFE_API_KEY` the decision service
 answers `decision.failed` (`unconfigured`) and the builder triages with its
-fallback. Drafts are
+fallback. [`.env.example`](../../.env.example) names the variables, and the
+README's [Defaults](../../README.md#defaults) lists the model, the timeouts
+and the bounds the builder ships with. Drafts are
 validated without packages, so a built machine uses no extension namespace
 or service.
 
@@ -217,7 +219,7 @@ or service.
 
 From the repository root, after `sh scripts/build-components.sh` and with
 `scx` installed from the subtree (see the
-[README](../../README.md#running-a-bot)):
+[README](../../README.md#quick-start)):
 
 ```console
 # The locally built packages (the dev cache under target/).

@@ -1,3 +1,6 @@
 target/
 .env*
 node_modules/
+
+# .env.example names every variable the bots read; it holds no values.
+!.env.example

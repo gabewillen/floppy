@@ -57,7 +57,9 @@ every turn fails with `the intuition failed: the decision failed
 fails with `the reasoning failed (unconfigured)`.
 `bot.activate` may name the model (`{"model": "..."}`); the default is
 `Qwen/Qwen3.8-Flash-Next`. The services import no WASI resources, so the run
-needs no grants.
+needs no grants. [`.env.example`](../../.env.example) names the variables,
+and the README's [Defaults](../../README.md#defaults) lists the model, the
+timeouts and the bounds this bot ships with.
 
 The root has no parent, so each event the body emits is a `log` record
 labelled with its name, its text the event's data as JSON: `bot.activated`,
