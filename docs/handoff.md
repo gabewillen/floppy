@@ -499,6 +499,11 @@ The remaining mosfet port runs as one ultracode run with these grants:
   web components + hsm.ts, marketplace of packages, a Mindstorms-style
   workshop whose pieces are inferred from element XSDs, live highlighting
   of running bots.
+- Live speech runs: hearing, listening and speaking (Gemini TTS, `Kore`)
+  have never run live; they need a speech backend at
+  `FLOPPY_SPEECH_BASE_URL` (and LocalAI at `FLOPPY_VOICE_BASE_URL` for
+  listening). Neither the CPA gateway nor TypeSafe serves one
+  (live-proof.md, 2026-10-10).
 - Going public: CI, publishing the prepared releases with `SHA256SUMS`
   ([release.md](release.md)), per-platform `scx` binaries, IRP identity
   regeneration on Linux CI.
