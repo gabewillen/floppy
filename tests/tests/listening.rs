@@ -254,7 +254,18 @@ fn labelled_non_speech_passes_through_as_environment_sound() {
         run,
         "labelled_non_speech_passes_through_as_environment_sound",
     );
-    assert_eq!(json_texts(&finished.all, "harness.sound"), vec![ring]);
+    // Handed off as the detection normalized it (mosfet's pcm_sensed),
+    // its label kept.
+    assert_eq!(
+        json_texts(&finished.all, "harness.sound"),
+        vec![json!({
+            "audio": "media/floppy-sound-1.pcm",
+            "media_type": "audio/pcm",
+            "sample_rate_hz": 16000,
+            "channels": 1,
+            "kind": " phone.ringing "
+        })]
+    );
     assert!(
         backend.decoded().is_empty(),
         "a labelled sound is not decoded"

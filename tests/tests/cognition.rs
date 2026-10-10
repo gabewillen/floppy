@@ -1374,17 +1374,17 @@ fn cancels_in(
             && record["text"] == "turn 2: bot.input"
     });
     assert!(texts(&records, "bot.reboot").is_empty());
-    if stage == "reasoning" {
-        // The second turn's decision request is pinned: wait for its
-        // answer before closing.
-        run.until(WAIT, |record| {
-            record["type"] == "log"
-                && record["label"] == "cognition.stage"
-                && record["text"]
-                    .as_str()
-                    .is_some_and(|text| text.starts_with("intuition"))
-        });
-    }
+    // The second turn waits on the same backend, so it times out too:
+    // close only after its failure, or its timer races the close (a
+    // trailing bot.processing.timed_out under load).
+    let records = run.until(WAIT, |record| {
+        record["type"] == "log"
+            && record["label"] == "bot.processing.failed"
+            && record["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("\"turn\":2"))
+    });
+    assert_eq!(texts(&records, "cognition.cancelled"), strings(&[stage]));
     close(run, &mock, test);
 }
 

@@ -1,2 +1,2 @@
 {"label":"harness.ready","session":"session","text":"{\"ability\":\"listening\",\"choices\":[]}","type":"log"}
-{"label":"harness.sound","session":"session","text":"{\"audio\":\"media/ring-1.wav\",\"kind\":\" phone.ringing \",\"media_type\":\"audio/wav\"}","type":"log"}
+{"label":"harness.sound","session":"session","text":"{\"audio\":\"media/floppy-sound-1.pcm\",\"channels\":1,\"kind\":\" phone.ringing \",\"media_type\":\"audio/pcm\",\"sample_rate_hz\":16000}","type":"log"}
