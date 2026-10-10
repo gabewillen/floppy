@@ -13,7 +13,7 @@
 //! The speaking child logs `bot.say`, the conversation each commit
 //! (`conversation`) and `memory`, the communication what it forwards
 //! (`communication.product`, `communication.history`,
-//! `communication.deferred`, `communication.activate`), and the body each
+//! `communication.deferred`), and the body each
 //! event it emits (`bot.ability.speaking.output`,
 //! `bot.ability.communication.failed`).
 //!
@@ -220,7 +220,7 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
     all.extend(finished.records);
     assert_eq!(
         texts(&all, "communication.offers"),
-        strings(&["bot.ability.communication.respond bot.ability.communication.activate"]),
+        strings(&["bot.ability.communication.respond"]),
         "{all:?}"
     );
     assert_eq!(

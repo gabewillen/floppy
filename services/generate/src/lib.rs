@@ -35,7 +35,11 @@
 //!   type `json_schema`), and the reply must parse as JSON and satisfy the
 //!   schema **before** anything is returned. `schemaname` (a string matching
 //!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it) and `strict`
-//!   (a boolean, `false` without it) are sent with it and require it.
+//!   (a boolean, `false` without it) are sent with it and require it. A
+//!   strict schema is sent as [`strict_schema`] normalizes it (mosfet's
+//!   OpenAI-compatible provider does the same): strict structured outputs
+//!   require every object property; the reply is still checked against the
+//!   schema as given.
 //! * `reasoning_effort` (optional, one of `none`, `minimal`, `low`,
 //!   `medium`, `high`, `xhigh`): sent as `reasoning_effort`, and
 //!   [`DEFAULT_REASONING_EFFORT`] without it.
@@ -443,6 +447,50 @@ pub fn response_schema(
     })
 }
 
+/// `schema` as strict structured outputs take it (mosfet's
+/// `_normalize_openai_schema`): `default`, `examples` and `title` dropped,
+/// `oneOf` sent as `anyOf`, and every object schema closed
+/// (`additionalProperties: false`) with all its properties required, at
+/// every depth. An optional property is then always present: a nullable
+/// one answers `null`.
+#[must_use]
+pub fn strict_schema(schema: &Json) -> Json {
+    let Json::Object(map) = schema else {
+        return schema.clone();
+    };
+    let mut out = Map::new();
+    for (key, value) in map {
+        match (key.as_str(), value) {
+            ("default" | "examples" | "title", _) => {}
+            ("properties" | "$defs" | "definitions", Json::Object(members)) => {
+                let members = members
+                    .iter()
+                    .map(|(name, member)| (name.clone(), strict_schema(member)))
+                    .collect();
+                out.insert(key.clone(), Json::Object(members));
+            }
+            ("anyOf" | "oneOf", Json::Array(branches)) => {
+                out.insert("anyOf".into(), branches.iter().map(strict_schema).collect());
+            }
+            ("items", _) => {
+                out.insert(key.clone(), strict_schema(value));
+            }
+            _ => {
+                out.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    let names: Option<Vec<Json>> = out
+        .get("properties")
+        .and_then(Json::as_object)
+        .map(|properties| properties.keys().cloned().map(Json::from).collect());
+    if names.is_some() || out.get("type").and_then(Json::as_str) == Some("object") {
+        out.insert("additionalProperties".into(), Json::Bool(false));
+        out.insert("required".into(), Json::Array(names.unwrap_or_default()));
+    }
+    Json::Object(out)
+}
+
 /// The `reasoning_effort` an invocation asks: one of [`REASONING_EFFORTS`],
 /// or [`DEFAULT_REASONING_EFFORT`] without the parameter.
 fn reasoning_effort_parameter(value: Option<&Data>) -> Result<&'static str, &'static str> {
@@ -612,7 +660,11 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
                 "json_schema": {
                     "name": schema.name,
                     "strict": schema.strict,
-                    "schema": schema.schema,
+                    "schema": if schema.strict {
+                        strict_schema(&schema.schema)
+                    } else {
+                        schema.schema.clone()
+                    },
                 },
             }),
         );

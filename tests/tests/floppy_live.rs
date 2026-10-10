@@ -182,7 +182,7 @@ fn live_choices() {
     let mut all = records;
     all.extend(finished.records);
     keep("live_choices", &all);
-    let choices = "bot.focus_device bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication";
+    let choices = "bot.focus_device bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity";
     let output = texts(&all, "bot.output")
         .pop()
         .and_then(|text| serde_json::from_str::<Json>(&text).ok());

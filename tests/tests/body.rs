@@ -16,7 +16,7 @@
 //! event's name; the double logs `double.input` and `double.exit`.
 //!
 //! The double offers `bot.ability.cognition.ignore` and the communication
-//! `bot.ability.communication.respond` and `.activate`; the routing tests
+//! `bot.ability.communication.respond`; the routing tests
 //! check the turn's assembled choices (`double.choices`) and where the
 //! body routes each selection (`bot.route`, `bot.route.dropped`,
 //! `bot.focus`, `double.ignore`). `tests/tests/communication.rs` covers
@@ -596,10 +596,9 @@ fn offered_choice(target: &str, event: &str) -> Json {
 }
 
 /// The communication's offers, then the identity's.
-fn ability_choices() -> [Json; 3] {
+fn ability_choices() -> [Json; 2] {
     [
         offered_choice("communication", "bot.ability.communication.respond"),
-        offered_choice("communication", "bot.ability.communication.activate"),
         offered_choice("identity", "bot.ability.identity.adopt"),
     ]
 }
@@ -646,23 +645,17 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     // focused), then the double's offer, compacted and tagged.
     run.event("bot.input", &device_input("focus", "lamp", "lamp"));
     let records = run.until(WAIT, label_is("bot.focus"));
-    let [respond, activate, adopt] = ability_choices();
+    let [respond, adopt] = ability_choices();
     assert_eq!(
         last_json(&records, "double.choices"),
-        json!([
-            focus_choice(&["lamp"]),
-            ignore_choice(),
-            respond,
-            activate,
-            adopt
-        ])
+        json!([focus_choice(&["lamp"]), ignore_choice(), respond, adopt])
     );
     assert_eq!(
         only(&records, &["bot.choices", "bot.route", "bot.focus"]),
         pairs(&[
             (
                 "bot.choices",
-                "bot.focus_device bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.communication.activate@communication bot.ability.identity.adopt@identity"
+                "bot.focus_device bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity"
             ),
             ("bot.route", "bot.focus_device -> bot"),
             ("bot.focus", "lamp"),
@@ -680,7 +673,6 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
             clear_choice(),
             ignore_choice(),
             respond,
-            activate,
             adopt
         ])
     );
@@ -717,10 +709,10 @@ fn a_selection_the_turn_did_not_offer_is_dropped() {
     // configured, so the body offers no focus.
     run.event("bot.input", &input("unoffered", "hello"));
     let records = run.until(WAIT, label_is("bot.route.dropped"));
-    let [respond, activate, adopt] = ability_choices();
+    let [respond, adopt] = ability_choices();
     assert_eq!(
         last_json(&records, "double.choices"),
-        json!([ignore_choice(), respond, activate, adopt])
+        json!([ignore_choice(), respond, adopt])
     );
     assert_eq!(
         only(&records, &["bot.route.dropped"]),
