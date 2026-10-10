@@ -38,8 +38,8 @@ SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml" \
   cargo install --locked --path scxml.rs/crates/scxml-cli
 # A bot, with the locally built packages.
 scx run --offline --cache-dir target/components/package-cache --env-file .env bots/builder/builder.scx
-# A bot, with the packages of floppy's latest GitHub release (once phase 7
-# publishes one).
+# A bot, with the packages of floppy's latest GitHub release (once one is
+# published: docs/release.md).
 scx run --env-file .env bots/builder/builder.scx
 ```
 
