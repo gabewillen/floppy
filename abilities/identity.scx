@@ -35,7 +35,8 @@
   through <decision:choice events="bot.ability.identity.adopt">, compacted
   by <decision:compact> ($schema, title and examples dropped), in
   bot.ability.offers {ability: "identity", choices}, from knowing's
-  onentry; the first offers are the ability's readiness. adopting is the memory seam for writing the
+  onentry (<decision:choice> reads knowing's own transitions there,
+  before a child is entered); the first offers are the ability's readiness. adopting is the memory seam for writing the
   name down: it logs <log label="memory" expr="'absent'"> and sends
   bot.ability.identity.adopted {name: {text, kind: "fact"}, persisted:
   false} (persisted [floppy field]: nothing was written) to #_internal;
@@ -84,7 +85,8 @@
   </state>
 
   <state id="knowing" initial="listening">
-    <!-- The offers, on every entry (the choices are its transitions). -->
+    <!-- The offers, read on entry: the choices are knowing's own
+         transitions, since no child is entered yet. -->
     <onentry>
       <decision:choice location="offered" events="bot.ability.identity.adopt"/>
       <decision:compact location="offered" bound="32768" overlocation="offers_over"/>
@@ -98,7 +100,6 @@
         <param name="choices" expr="offered"/>
       </send>
     </onentry>
-
     <!-- Offered for the whole time the ability is knowing: a bot can be
          given a name mid-sentence. -->
     <transition event="bot.ability.identity.adopt" event:schema="schemas/bot.ability.identity.adopt.json" target="adopting">
