@@ -32,6 +32,13 @@ function isRevisionChanged() {
   return JSON.stringify(desired) !== JSON.stringify(routines);
 }
 
+// running
+
+// The first deferred tick's routine is in the running set.
+function hasRunningTick() {
+  return ticks.length > 0 && routines.some(function (r) { return r.name === ticks[0].name; });
+}
+
 function reconcileFailedLog(detail) {
   return 'Routine inventory load failed: ' + detail;
 }

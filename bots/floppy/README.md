@@ -62,8 +62,7 @@ The env file must set `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
 reasoning's `generate` service has no default backend, decision D31) and
 `TYPESAFE_API_KEY` (the intuition's `decision` service; `TYPESAFE_BASE_URL`
 is optional, `https://api.typesafe.ai` without it). Without the TypeSafe key
-every turn fails with `the intuition failed: the decision failed
-(unconfigured)`; without the model endpoint a turn that reaches reasoning
+every turn fails with `the decision failed (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
 `bot.activate` may name the model (`{"model": "..."}`); the default is
 `Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory/memory.scx`, mosfet's

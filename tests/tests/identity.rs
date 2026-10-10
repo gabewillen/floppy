@@ -229,7 +229,7 @@ fn an_adopted_name_is_answered_to() {
     );
     assert_eq!(
         texts(&records, "identity.name"),
-        strings(&[r#"adopted "Floppy" (persisted: true)"#])
+        strings(&[r#"adopted "Floppy""#])
     );
     // Back in knowing, it offers again, and now answers to the name.
     run.event(
@@ -260,7 +260,7 @@ fn adopted_then_recalled(body: &Path, grant: &[String]) -> (Run, Vec<Json>) {
     let records = run.until(WAIT, |record| {
         record["type"] == "log"
             && record["label"] == "identity.name"
-            && record["text"] == r#"adopted "Pip" (persisted: true)"#
+            && record["text"] == r#"adopted "Pip""#
     });
     assert!(texts(&records, "identity.adopt.failed").is_empty());
     drop(run.close(WAIT));

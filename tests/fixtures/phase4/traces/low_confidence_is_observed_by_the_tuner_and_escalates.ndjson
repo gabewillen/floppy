@@ -9,7 +9,7 @@
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
 {"label":"intuition","parent":"session.1","session":"session.14","text":"turn 1: threshold 0.35","type":"log"}
 {"label":"intuition","parent":"session.1","session":"session.14","text":"turn 1: low confidence 34","type":"log"}
-{"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":34,\"n\":1,\"variance\":100}","type":"log"}
+{"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":34,\"n\":1,\"var\":100}","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition unhandled (low_confidence)","type":"log"}
 {"label":"reasoning","parent":"session.1","session":"session.15","text":"turn 1: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"reasoning handled","type":"log"}
@@ -25,7 +25,7 @@
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
 {"label":"intuition","parent":"session.1","session":"session.23","text":"turn 2: threshold 0.35","type":"log"}
 {"label":"intuition","parent":"session.1","session":"session.23","text":"turn 2: low confidence 34","type":"log"}
-{"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":34,\"n\":2,\"variance\":100}","type":"log"}
+{"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":34,\"n\":2,\"var\":100}","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition unhandled (low_confidence)","type":"log"}
 {"label":"reasoning","parent":"session.1","session":"session.24","text":"turn 2: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"reasoning handled","type":"log"}

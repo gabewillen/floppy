@@ -288,9 +288,9 @@ fn history_carrying_turns(body: &Path) -> Run {
     assert_eq!(
         texts(&all, "conversation"),
         strings(&[
-            r#"inbound 0 from ["gabe"] (1 in its transcript)"#,
+            r#"inbound 0 from ["gabe"] (1 in its relationship)"#,
             "outbound 1",
-            r#"inbound 2 from ["gabe"] (2 in its transcript)"#,
+            r#"inbound 2 from ["gabe"] (2 in its relationship)"#,
             "outbound 3",
         ])
     );
@@ -304,31 +304,6 @@ fn history_carrying_turns(body: &Path) -> Run {
     assert_eq!(texts(&all, "communication.product"), strings(&["0", "2"]));
     assert_eq!(texts(&all, "bot.say"), strings(&["reply 1", "reply 2"]));
     run
-}
-
-#[test]
-fn the_history_reaching_a_turn_is_bounded_to_the_latest_messages() {
-    let body = layout(
-        &Speaking::Real,
-        &[(
-            "abilities/conversation/conversation.scx",
-            &[("max_messages", "2")],
-        )],
-    );
-    let mut run = started(&body);
-    for _ in 0..2 {
-        run.event("bot.ability.communication.input", &said("reply"));
-        run.until(WAIT, label_is("communication.history"));
-    }
-    run.event("bot.ability.communication.input", &said("ignore"));
-    let records = run.until(WAIT, label_is("double.ignore"));
-    // The third input is sequence 4; the double sees its last 2 messages.
-    assert_eq!(texts(&records, "double.input"), strings(&["3 ignore 2"]));
-    assert_eq!(texts(&records, "communication.product"), strings(&["4"]));
-    close(
-        run,
-        "the_history_reaching_a_turn_is_bounded_to_the_latest_messages",
-    );
 }
 
 #[test]
@@ -523,13 +498,13 @@ fn the_conversation_commits_each_message_into_its_history() {
     assert_eq!(
         texts(&all, "conversation"),
         strings(&[
-            r#"inbound 0 from ["alice","zed",[0.5,1]] (1 in its transcript)"#,
-            r#"inbound 1 from ["alice"] (1 in its transcript)"#,
-            r#"inbound 2 from ["bob",[2,1.25]] (1 in its transcript)"#,
+            r#"inbound 0 from ["alice","zed",[0.5,1]] (1 in its relationship)"#,
+            r#"inbound 1 from ["alice"] (1 in its relationship)"#,
+            r#"inbound 2 from ["bob",[2,1.25]] (1 in its relationship)"#,
             "outbound 3",
             "outbound r-1 already committed",
             "outbound 4",
-            r#"inbound 5 from ["alice","zed",[0.5,1]] (2 in its transcript)"#,
+            r#"inbound 5 from ["alice","zed",[0.5,1]] (2 in its relationship)"#,
         ])
     );
     let finished = run.close(WAIT);

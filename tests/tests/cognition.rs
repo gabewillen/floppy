@@ -863,7 +863,7 @@ fn reasoning_selects_from_the_turns_choices() {
         texts(&records, "cognition.stage"),
         strings(&[
             "autonomy unhandled (no-behaviors)",
-            "intuition unhandled (declined)",
+            "intuition unhandled (empty_product)",
             "reasoning handled"
         ])
     );
@@ -956,7 +956,7 @@ fn a_reasoned_response_is_said_through_the_communication() {
         texts(&records, "cognition.stage"),
         strings(&[
             "autonomy unhandled (no-behaviors)",
-            "intuition unhandled (declined)",
+            "intuition unhandled (empty_product)",
             "reasoning handled"
         ])
     );
@@ -1053,7 +1053,7 @@ fn an_abstention_escalates_to_reasoning() {
         texts(&records, "cognition.stage"),
         strings(&[
             "autonomy unhandled (no-behaviors)",
-            "intuition unhandled (declined)",
+            "intuition unhandled (empty_product)",
             "reasoning handled"
         ])
     );
@@ -1084,7 +1084,7 @@ fn low_confidence_is_observed_by_the_tuner_and_escalates() {
         // the variance stays at its floor.
         assert_eq!(
             json_text(records, "cognition.tuner"),
-            json!({"mean": 34, "variance": 100, "n": n})
+            json!({"mean": 34, "var": 100, "n": n})
         );
         assert_eq!(texts(records, "bot.output").len(), 1);
     }
@@ -1104,7 +1104,7 @@ fn after_the_warmup_the_threshold_follows_the_tuner() {
         Generation::Ignore,
         &[(
             "abilities/cognition/cognition.scx",
-            &[("tuner", "({mean: 70, variance: 100, n: 8})")],
+            &[("tuner", "({mean: 70, var: 100, n: 8})")],
         )],
     );
     let mut run = start(&bot);
@@ -1117,7 +1117,7 @@ fn after_the_warmup_the_threshold_follows_the_tuner() {
     // delta = 34 - 70; mean = 70 + 0.08 * delta; variance =
     // max(100, 0.92 * 100 + 0.08 * delta^2).
     assert!((number("mean") - 67.12).abs() < 1e-9, "{tuner}");
-    assert!((number("variance") - 195.68).abs() < 1e-9, "{tuner}");
+    assert!((number("var") - 195.68).abs() < 1e-9, "{tuner}");
     assert_eq!(tuner["n"], 9);
     say(&mut run, "two");
     let second = run.until(WAIT, turn_ended);
@@ -1178,7 +1178,7 @@ fn an_intuition_failure_fails_the_turn() {
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
         json_text(&records, "bot.processing.failed"),
-        json!({"message": "the intuition failed: the decision failed (status)", "turn": 1})
+        json!({"message": "the decision failed (status)", "turn": 1})
     );
     assert!(mock.received("/chat/completions").is_empty());
     close(run, &mock, "an_intuition_failure_fails_the_turn");
@@ -1201,7 +1201,7 @@ fn an_intuition_that_does_not_decide_in_time_fails_the_turn() {
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
         json_text(&records, "bot.processing.failed"),
-        json!({"message": "the intuition failed: the decision timed out after 300 ms", "turn": 1})
+        json!({"message": "the decision timed out after 300 ms", "turn": 1})
     );
     close(
         run,
@@ -1226,7 +1226,7 @@ fn reboots_on_a_silent_stage(
         generation,
         &[(
             "abilities/cognition/cognition.scx",
-            &[("hop_timeout_ms", hop_ms)],
+            &[("child_operation_timeout_ms", hop_ms)],
         )],
     );
     let mut run = start(&bot);

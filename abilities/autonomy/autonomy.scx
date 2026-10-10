@@ -60,8 +60,10 @@
 
   Memory: each transaction invokes the Memory ability (abilities/memory/memory.scx)
   with the database and mosfet's statements. A transaction that fails or
-  outlasts memory_timeout_ms answers {turn, handled: false, failed: true,
-  reason}.
+  outlasts memory_timeout_ms (floppy's bound) is logged and the turn goes
+  on, as in mosfet: a failed load matches no inventory rows
+  (_on_load_behaviors_failure), and a failed usage or failure record takes
+  the same effect as a persisted one (persistence_failed).
 
   Contracts: the Memory ability's events reference abilities/schemas/ by
   event:schema. A candidate is builder output and gets no schema files.
@@ -153,14 +155,18 @@
       <assign location="rows" expr="behaviorsFromMemoryOutput(_event)"/>
     </transition>
     <transition event="done.invoke.load" target="matched"/>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromInvoke(_event, 'load')" target="failed">
-      <assign location="answer" expr="loadFailedReason(_event.data.message)"/>
+    <!-- mosfet _on_load_behaviors_failure: a failed load is a warning, and the turn goes on with no inventory rows. -->
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromInvoke(_event, 'load')" target="matched">
+      <log label="autonomy.behaviors.load.failed" expr="loadFailedReason(_event.data.message)"/>
+      <assign location="rows" expr="[]"/>
     </transition>
-    <transition event="error.*" cond="isFromInvoke(_event, 'load')" target="failed">
-      <assign location="answer" expr="loadFailedReason(_event.name)"/>
+    <transition event="error.*" cond="isFromInvoke(_event, 'load')" target="matched">
+      <log label="autonomy.behaviors.load.failed" expr="loadFailedReason(_event.name)"/>
+      <assign location="rows" expr="[]"/>
     </transition>
-    <transition event="bot.ability.autonomy.behaviors.load.failed" cond="isTimerEvent(_event)" target="failed">
-      <assign location="answer" expr="loadTimedOutReason()"/>
+    <transition event="bot.ability.autonomy.behaviors.load.failed" cond="isTimerEvent(_event)" target="matched">
+      <log label="autonomy.behaviors.load.failed" expr="loadTimedOutReason()"/>
+      <assign location="rows" expr="[]"/>
     </transition>
   </state>
 
@@ -228,14 +234,15 @@
       <param name="statements" expr="usedPersistenceStatements()"/>
     </invoke>
     <transition event="done.invoke.usage" target="answered"/>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromInvoke(_event, 'usage')" target="failed">
-      <assign location="answer" expr="usageFailedReason(_event.data.message)"/>
+    <!-- mosfet: persistence_failed takes the same effect as persisted. -->
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromInvoke(_event, 'usage')" target="answered">
+      <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
-    <transition event="error.*" cond="isFromInvoke(_event, 'usage')" target="failed">
-      <assign location="answer" expr="usageFailedReason(_event.name)"/>
+    <transition event="error.*" cond="isFromInvoke(_event, 'usage')" target="answered">
+      <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.name)"/>
     </transition>
-    <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="isTimerEvent(_event)" target="failed">
-      <assign location="answer" expr="usageTimedOutReason()"/>
+    <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="isTimerEvent(_event)" target="answered">
+      <log label="autonomy.behavior_usage.persistence_failed" expr="usageTimedOutReason()"/>
     </transition>
   </state>
 
@@ -252,14 +259,15 @@
       <param name="statements" expr="failedPersistenceStatements()"/>
     </invoke>
     <transition event="done.invoke.failure" target="advancing"/>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromInvoke(_event, 'failure')" target="failed">
-      <assign location="answer" expr="usageFailedReason(_event.data.message)"/>
+    <!-- mosfet: persistence_failed takes the same effect as persisted. -->
+    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="isFromInvoke(_event, 'failure')" target="advancing">
+      <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
-    <transition event="error.*" cond="isFromInvoke(_event, 'failure')" target="failed">
-      <assign location="answer" expr="usageFailedReason(_event.name)"/>
+    <transition event="error.*" cond="isFromInvoke(_event, 'failure')" target="advancing">
+      <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.name)"/>
     </transition>
-    <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="isTimerEvent(_event)" target="failed">
-      <assign location="answer" expr="usageTimedOutReason()"/>
+    <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" cond="isTimerEvent(_event)" target="advancing">
+      <log label="autonomy.behavior_usage.persistence_failed" expr="usageTimedOutReason()"/>
     </transition>
   </state>
 
