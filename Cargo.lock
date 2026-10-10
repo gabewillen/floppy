@@ -334,6 +334,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "floppy-spike-pglite"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wasip2",
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
 name = "floppy-tests"
 version = "0.1.0"
 dependencies = [
@@ -1564,6 +1573,9 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+dependencies = [
+ "bitflags",
+]
 
 [[package]]
 name = "wit-bindgen-core"
