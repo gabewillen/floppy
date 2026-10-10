@@ -2,18 +2,19 @@
 
 The floppy bot is the port of mosfet's Bot: an SCXML machine,
 [`floppy.scx`](floppy.scx), whose abilities are invoked children under
-[`../../abilities/`](../../abilities/). Phase 4 is in progress: the body runs
+[`../../abilities/`](../../abilities/). The body runs
 its lifecycle and processing turns, and its abilities are the
 [cognition](../../abilities/cognition/cognition.scx), mosfet's cascade of stages
-invoked per turn: [autonomy](../../abilities/autonomy/autonomy.scx) (a seam until
-phase 5: no behaviors), [intuition](../../abilities/intuition/intuition.scx) (the
+invoked per turn: [autonomy](../../abilities/autonomy/autonomy.scx) (mosfet's
+SpeechHeard seed, then the learned turn behaviors the stimulus triggers,
+kept by memory; reflection and routines are gated off), [intuition](../../abilities/intuition/intuition.scx) (the
 decision service picks ignore or hands the turn on, with mosfet's
 self-tuning confidence gate), and [reasoning](../../abilities/reasoning/reasoning.scx)
-(one structured model call over the turn's choices; memory is a seam until
-phase 3), and the [communication](../../abilities/communication/communication.scx),
+(one structured model call over the turn's choices; it recalls and
+retains cognitive episodes through memory), and the [communication](../../abilities/communication/communication.scx),
 which holds the [conversation](../../abilities/conversation/conversation.scx) (the
-committed text history, one transcript per participant set; memory recall
-is a seam until phase 3, and inferring participants and relationships from
+committed text history, one transcript per participant set; it recalls
+and remembers a relationship's memories, and inferring participants and relationships from
 voice embeddings, mosfet's turn detectors, is not ported) and
 [speaking](../../abilities/speaking/speaking.scx) (the words are encoded to speech
 by [vocal](../../abilities/vocal/vocal.scx) through the speech service, logged as

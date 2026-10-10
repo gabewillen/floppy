@@ -94,6 +94,18 @@ Last updated: 2026-10-10.
   compilation, no cache), so the behavior tests' per-record bound is 300 s.
 - **Next:** phase 5 (behaviors and routines, stored in memory), 6, 7.
 
+## Phase 5 (2026-10-10): behaviors and routines
+
+- **Done on `main`:** autonomy matches the ACTIVE turn behaviors the
+  stimulus triggers and runs each source by `<content expr>` (after the
+  SpeechHeard seed); reflection selects through its enabled transitions,
+  revises behaviors with the builder bot and stores episodes; routines run
+  as a chain of runners passing `bot.behavior.tick` up. Decisions D60 to
+  D64 and D73 to D75 (the plan's D48, D49 and D55, renumbered past clashes).
+  Plan: [plans/phase5-behaviors.mdscript.md](plans/phase5-behaviors.mdscript.md).
+- **Open:** the plan's "Turn The Seams On": the cognition's
+  `reflection_enabled` and `routines_enabled` are still `false`.
+
 ## Phase 6 (2026-10-10): speech and vision
 
 - **Done on `main`** (`d569318`): `services/speech` (decode, encode, and the
