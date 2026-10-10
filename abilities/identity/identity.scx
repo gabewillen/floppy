@@ -5,7 +5,9 @@
   as its child "identity".
 
     recalling -bot.ability.identity.recalled-> knowing {
-      listening -heard text-> recognizing -> listening }
+      listening -heard text-> recognizing.recognized -> listening
+      listening -environment.sound-> recognizing.classifying (speech
+        decoding) -> recognized -> listening }
     knowing -bot.ability.identity.adopt-> adopting
       -bot.ability.identity.adopted-> knowing
 
@@ -25,8 +27,15 @@
   mosfet does. Without a database it logs <log label="memory"
   expr="'absent'"> and recalls the session's name.
 
-  Recognition (mosfet recognition.hears_name, the text recognizer): the
-  body relays each outside bot.ability.communication.input to this
+  Recognition (mosfet recognition.SpeechNameRecognizer): identity is one
+  of the body's input abilities, so each environment.sound reaches it;
+  with a name to look for, classifying invokes
+  abilities/speech_decoding/speech_decoding.scx on the sound and
+  <bot:recognize> looks for the name in the transcript (no transcript
+  leaves the ability). A decoding failure answers the body with
+  bot.ability.failed {message} (mosfet _fail_from_stage) and goes back to
+  listening. Text (mosfet recognition.hears_name, decision D43): the
+  body also relays each outside bot.ability.communication.input to this
   ability. <bot:recognize> decides whether its text (a string content with
   a text/* content_type) names the bot: the name's case-folded
   letter-and-digit tokens appear as a whole run in the text's (so a bot
@@ -34,8 +43,8 @@
   bot.ability.cognition.input {stimulus} whose stimulus is
   bot.ability.identity.addressed {name} from "identity" (mosfet's
   _dispatch_addressed handoff), and grants it a turn. Not addressed, or no name yet, produces nothing: a
-  nameless bot only hears words. Other content is not heard (audio is
-  phase 6).
+  nameless bot only hears words. Other communication content is not
+  heard.
 
   Adoption: bot.ability.identity.adopt {name, reason?} is offered (as the
   model-callable act of taking a name) on every entry into knowing,
@@ -58,10 +67,12 @@
   Without a database it logs <log label="memory" expr="'absent'"> and
   sends adopted.
 
-  Deferral (mosfet's defer): communication input and adopt events that
-  arrive while recalling or adopting wait in the data model queue, in
-  order; entering knowing puts them back on the internal queue, where
-  each is taken by the same transitions as on arrival.
+  Deferral (mosfet's defer): communication input, sounds and adopt events
+  that arrive while recalling or adopting, and input and sounds that
+  arrive while recognizing, wait in the data model queue, in order;
+  entering knowing (or listening, after recognizing) puts them back on the
+  internal queue, where each is taken by the same transitions as on
+  arrival.
 
   Logs: identity.name (each name taken, recalled or adopted),
   identity.heard (whether a relayed text addressed the bot), and
@@ -83,6 +94,8 @@
   <datamodel>
     <data id="name" expr="null"/>
     <data id="addressed" expr="false"/>
+    <!-- The sound in hand while classifying. -->
+    <data id="heard" expr="null"/>
     <!-- The addressed stimulus envelope, for the handoff. -->
     <data id="handoff" expr="null"/>
     <data id="adopting_name" expr="null"/>
@@ -148,6 +161,9 @@
     <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
       <assign location="queue" expr="deferredQueue(_event)"/>
     </transition>
+    <transition event="environment.sound" event:schema="schemas/environment.sound.json">
+      <assign location="queue" expr="deferredQueue(_event)"/>
+    </transition>
     <transition event="bot.ability.identity.adopt" event:schema="schemas/bot.ability.identity.adopt.json">
       <assign location="queue" expr="deferredQueue(_event)"/>
     </transition>
@@ -188,25 +204,71 @@
     </transition>
 
     <state id="listening">
+      <!-- What waited while recognizing, back on the internal queue. -->
+      <onentry>
+        <foreach array="queue" item="deferred">
+          <send eventexpr="deferred.event" target="#_internal">
+            <content expr="deferred.data"/>
+          </send>
+        </foreach>
+        <assign location="queue" expr="[]"/>
+      </onentry>
       <!-- A nameless bot hears words and nothing follows from them. -->
       <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json"
-                  cond="canRecognize()" target="recognizing">
+                  cond="canRecognize()" target="recognized">
         <bot:recognize location="addressed" name="name" text="heardText(_event.data)"/>
+      </transition>
+      <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+                  cond="canRecognize()" target="classifying">
+        <assign location="heard" expr="_event.data"/>
       </transition>
     </state>
 
-    <!-- One recognition decision about one heard text. -->
-    <state id="recognizing">
-      <transition cond="addressed" target="listening">
-        <log label="identity.heard" expr="addressedLog()"/>
-        <bot:stimulus location="handoff" event="'bot.ability.identity.addressed'" data="({name: name})" source="'identity'"/>
-        <send event="bot.ability.cognition.input" target="#_parent">
-          <param name="stimulus" expr="handoff"/>
-        </send>
+    <!-- One recognition decision about one heard text or sound. -->
+    <state id="recognizing" initial="recognized">
+      <!-- Input that arrives meanwhile waits (mosfet defers it). -->
+      <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
+        <assign location="queue" expr="deferredQueue(_event)"/>
       </transition>
-      <transition target="listening">
-        <log label="identity.heard" expr="'not addressed'"/>
+      <transition event="environment.sound" event:schema="schemas/environment.sound.json">
+        <assign location="queue" expr="deferredQueue(_event)"/>
       </transition>
+
+      <!-- mosfet SpeechNameRecognizer: decode the sound, then look for
+           the name in the transcript; no transcript leaves this state. -->
+      <state id="classifying">
+        <invoke id="speech_decoding" type="scxml" src="../speech_decoding/speech_decoding.scx">
+          <param name="audio" expr="heard.audio"/>
+          <param name="media_type" expr="heard.media_type"/>
+        </invoke>
+        <transition event="done.invoke.speech_decoding" cond="hasTranscript(_event)" target="recognized">
+          <bot:recognize location="addressed" name="name" text="_event.data.text"/>
+        </transition>
+        <transition event="done.invoke.speech_decoding" target="listening">
+          <log label="identity.recognition.failed" expr="recognitionFailedMessage(_event)"/>
+          <send event="bot.ability.failed" target="#_parent">
+            <param name="message" expr="recognitionFailedMessage(_event)"/>
+          </send>
+        </transition>
+        <transition event="error.*" target="listening">
+          <send event="bot.ability.failed" target="#_parent">
+            <param name="message" expr="recognitionErrorMessage(_event)"/>
+          </send>
+        </transition>
+      </state>
+
+      <state id="recognized">
+        <transition cond="addressed" target="listening">
+          <log label="identity.heard" expr="addressedLog()"/>
+          <bot:stimulus location="handoff" event="'bot.ability.identity.addressed'" data="({name: name})" source="'identity'"/>
+          <send event="bot.ability.cognition.input" target="#_parent">
+            <param name="stimulus" expr="handoff"/>
+          </send>
+        </transition>
+        <transition target="listening">
+          <log label="identity.heard" expr="'not addressed'"/>
+        </transition>
+      </state>
     </state>
   </state>
 
@@ -257,6 +319,9 @@
     </transition>
     <!-- After adopt.failed: the adopt descriptor also matches it. -->
     <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
+      <assign location="queue" expr="deferredQueue(_event)"/>
+    </transition>
+    <transition event="environment.sound" event:schema="schemas/environment.sound.json">
       <assign location="queue" expr="deferredQueue(_event)"/>
     </transition>
     <transition event="bot.ability.identity.adopt" event:schema="schemas/bot.ability.identity.adopt.json">

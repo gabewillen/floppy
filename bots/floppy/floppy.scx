@@ -49,7 +49,8 @@
   Environment: environment.sound (logged, as any sound in the
   environment) and environment.visual from outside, while active, go to
   each input ability (input, mosfet's Bot input: the invoke ids
-  of the abilities that perceive raw stimuli; the listening), in
+  of the abilities that perceive raw stimuli; the identity and the
+  listening), in
   order, by <foreach>; never to the cognition, which hears of a stimulus
   only as an input ability's product: the listening hands its decoded
   speech or labelled non-speech over as bot.ability.cognition.input, which
@@ -183,7 +184,7 @@
     <data id="waiting" expr="[]"/>
     <!-- The input abilities each environment.* stimulus fans out to
          (mosfet's Bot input, as invoke ids), and the one being sent to. -->
-    <data id="input" expr="['listening']"/>
+    <data id="input" expr="['identity', 'listening']"/>
     <data id="ability" expr="null"/>
     <!-- The Listening abilities that receive speaking's efference copy
          (mosfet's Speaking listening peers, as invoke ids). -->
