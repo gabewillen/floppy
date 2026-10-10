@@ -302,7 +302,7 @@ inlines the browser `validate` options type so no unapproved
   sends them as `bot.ability.cognition.input.choices` (`[floppy field]`).
   Reasoning selects only from them (a `target` enum per event). A
   completed turn passes through `routing`, which sends each selection to
-  `#_internal` or `#_<target>` and logs `bot.route`/`bot.route.dropped`;
+  `#_internal` or `#_<target>` and logs `floppy.route`/`floppy.route.dropped`;
   `floppy.routed` ends it. Focus is taken only as a routed selection. No
   ability offers `bot.ability.communication.respond` until communication
   lands, so the bot does not speak yet. Live: `live_choices` and
@@ -315,7 +315,7 @@ inlines the browser `validate` options type so no unapproved
   `abilities/conversation/conversation.scx` and `abilities/speaking/speaking.scx` as invoked
   children, offers `bot.ability.communication.respond` and `.activate`,
   says a routed response through speaking (text mode, `<log
-  label="bot.say">`; the body logs `bot.ability.speaking.output`) within a
+  label="floppy.say">`; the body logs `bot.ability.speaking.output`) within a
   6 s hop timer, records it as an outbound
   `bot.ability.conversation.append`, and defers input and responses while
   one is in flight; a waiting one passes the same checks when replayed
@@ -359,7 +359,7 @@ inlines the browser `validate` options type so no unapproved
   the body keeps only the visible `<foreach>`/`<send>` that delivers each
   placed selection. `<decision:route>` writes one ordered list of
   `{event, data, target}` or `{dropped}` entries (not separate routed and
-  dropped lists) so the `bot.route`/`bot.route.dropped` log order stays
+  dropped lists) so the `floppy.route`/`floppy.route.dropped` log order stays
   byte-identical. The body's choice/route script functions are gone,
   traces unchanged. Still scripted in the body: validators,
   `attentionBias`, `envelope` (later slices).

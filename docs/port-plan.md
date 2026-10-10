@@ -201,7 +201,7 @@ D33 to D43.
   `bot.ability.cognition.input.choices` [floppy field]. Reasoning selects
   only from them; the body's `routing` state delivers each selection to
   `#_internal` or `#_<target>` with a visible `<foreach>`/`<send>` and logs
-  `bot.route`/`bot.route.dropped`.
+  `floppy.route`/`floppy.route.dropped`.
 - **Per-turn stage children.** The cognition invokes each stage (autonomy,
   intuition, reasoning) per turn with `<param>`s named after the mosfet
   input event's fields and takes its result as `done.invoke.<stage>`
@@ -231,7 +231,7 @@ D33 to D43.
   topology does not change (decision D44).
 - **Speaking.** Phase 4 spoke in text mode (decision D38); phase 6
   speaks audio (decision D59, [Phase 6 conventions](#phase-6-conventions)),
-  and the words are still logged as `<log label="bot.say">`.
+  and the words are still logged as `<log label="floppy.say">`.
 - **Traces.** Each deterministic test in `body.rs`, `cognition.rs` and
   `communication.rs` compares its whole run with
   `tests/fixtures/phase4/traces/<test>.ndjson` byte for byte; rewrite them
@@ -358,7 +358,7 @@ are D52, D57 to D59, D66 and D67
   24 kHz mono `audio/pcm`), the efference copy
   `bot.ability.speaking.efference` leaves before the sound (the body
   carries it to each of `listening_abilities`), the words are logged as
-  `bot.say`, the audio is broadcast as `environment.sound` by reference,
+  `floppy.say`, the audio is broadcast as `environment.sound` by reference,
   and the outbound message is recorded in the conversation. Every terminal
   failure is `bot.ability.failed {message}`.
 - **Vision and reading.** Reading is mosfet's `Reading{Unfocused,

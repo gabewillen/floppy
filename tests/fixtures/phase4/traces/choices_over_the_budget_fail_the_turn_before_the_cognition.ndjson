@@ -2,6 +2,6 @@
 {"label":"identity.name","parent":"session","session":"session.5","text":"recalled null","type":"log"}
 {"label":"identity.offers","parent":"session","session":"session.5","text":"bot.ability.identity.adopt","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
-{"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.cognition.input@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
+{"label":"floppy.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.cognition.input@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"bot.processing.failed","session":"session","text":"{\"message\":\"the turn's choices are 37161 bytes, over 32768\",\"turn\":1}","type":"log"}
 {"label":"double.exit","parent":"session","session":"session.1","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}

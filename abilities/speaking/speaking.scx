@@ -29,7 +29,7 @@
   which carries it to the bot's Listening; mouth is "speaking", the sound's
   source (mosfet's source when no speaker is injected; devices are out of
   scope). As in mosfet, no copy is sent when the encoded form gives no
-  duration. Then the words are logged as bot.say and the audio is
+  duration. Then the words are logged as floppy.say and the audio is
   broadcast: environment.sound {audio, media_type, sample_rate_hz,
   channels} to the parent, which the body puts into the environment.
 
@@ -173,7 +173,7 @@
           <param name="channels" expr="encoded.channels"/>
         </send>
       </if>
-      <log label="bot.say" expr="text"/>
+      <log label="floppy.say" expr="text"/>
       <send event="environment.sound" target="#_parent">
         <param name="audio" expr="encoded.audio"/>
         <param name="media_type" expr="encoded.media_type"/>
