@@ -5,13 +5,13 @@
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
 {"label":"bot.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition","parent":"session","session":"session.1","text":"turn 1: bot.input","type":"log"}
-{"label":"autonomy","parent":"session.1","session":"session.8","text":"turn 1: 0 matched for bot.input","type":"log"}
+{"label":"autonomy","parent":"session.1","session":"session.11","text":"turn 1: 0 matched for bot.input","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.11","text":"turn 1: threshold 0.35","type":"log"}
+{"label":"intuition","parent":"session.1","session":"session.14","text":"turn 1: threshold 0.35","type":"log"}
 {"label":"cognition.hop.timed_out","parent":"session","session":"session.1","text":"turn 1: intuition after 500 ms","type":"log"}
 {"label":"bot.reboot","session":"session","text":"{\"reason\":\"cognition_child_teardown_failed\"}","type":"log"}
-{"label":"cognition.offers","parent":"session","session":"session.12","text":"bot.ability.cognition.ignore","type":"log"}
-{"label":"communication.offers","parent":"session","session":"session.13","text":"bot.ability.communication.respond","type":"log"}
-{"label":"identity.name","parent":"session","session":"session.16","text":"recalled null","type":"log"}
-{"label":"identity.offers","parent":"session","session":"session.16","text":"bot.ability.identity.adopt","type":"log"}
+{"label":"cognition.offers","parent":"session","session":"session.15","text":"bot.ability.cognition.ignore","type":"log"}
+{"label":"communication.offers","parent":"session","session":"session.16","text":"bot.ability.communication.respond","type":"log"}
+{"label":"identity.name","parent":"session","session":"session.19","text":"recalled null","type":"log"}
+{"label":"identity.offers","parent":"session","session":"session.19","text":"bot.ability.identity.adopt","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
