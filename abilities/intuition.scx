@@ -18,7 +18,8 @@
   stimulus data mapping), else the schema's enum or const; an event it
   cannot fill is not offered, so a reply that needs free text goes on to
   reasoning (user answer, 2026-10-08). The event it chooses comes back as
-  that event and becomes the turn's one selection {event, data, reason},
+  that event and becomes the turn's one selection {event, data} (mosfet's
+  escalation reason none),
   which the body routes to the target offering it (mosfet dispatches the
   selection to its single enabler).
 
@@ -38,7 +39,7 @@
 
   Output: <donedata>, received by the cognition as done.invoke.intuition:
 
-    {turn, handled: true, selected: [{event, data, reason}], reason, tuner}
+    {turn, handled: true, selected: [{event, data}], reason: "none", tuner}
     {turn, handled: false, reason, tuner}          (escalate to reasoning)
     {turn, handled: false, failed: true, reason, tuner}
 
@@ -70,7 +71,7 @@
     <data id="decision_timeout_ms" expr="20000"/>
     <data id="instructions" expr="'You decide what a small companion robot does with one stimulus it observed. Choose the offered event the robot should take for it. Abstain when none of them fits, so slower reasoning handles it.'"/>
     <!-- The decision in flight. -->
-    <data id="evidence" expr="({})"/>
+    <data id="stimulus_data" expr="({})"/>
     <data id="threshold" expr="0"/>
     <data id="decision_id" expr="null"/>
     <data id="decision_timer" expr="null"/>
@@ -80,7 +81,7 @@
 
   <state id="deciding">
     <onentry>
-      <assign location="evidence" expr="stimulus !== null &amp;&amp; stimulus.data instanceof Object &amp;&amp; !Array.isArray(stimulus.data) ? stimulus.data : ({})"/>
+      <assign location="stimulus_data" expr="stimulus !== null &amp;&amp; stimulus.data instanceof Object &amp;&amp; !Array.isArray(stimulus.data) ? stimulus.data : ({})"/>
       <decision:tuner location="tuner" thresholdlocation="threshold"/>
       <log label="intuition" expr="'turn ' + turn + ': threshold ' + threshold"/>
       <send idlocation="decision_timer" event="floppy.intuition.timed_out" delayexpr="decision_timeout_ms + 'ms'"/>
@@ -92,7 +93,7 @@
             env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
       <param name="choices" expr="choices"/>
       <param name="state" expr="({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates})"/>
-      <param name="data" expr="evidence"/>
+      <param name="data" expr="stimulus_data"/>
       <param name="instructions" expr="instructions"/>
       <param name="threshold" expr="threshold"/>
     </invoke>
@@ -119,7 +120,7 @@
     <transition event="*" cond="decision_id !== null &amp;&amp; _event.invokeid === decision_id &amp;&amp; _event.name.indexOf('done.') !== 0"
                 target="done">
       <log label="intuition" expr="'turn ' + turn + ': ' + _event.name"/>
-      <assign location="result" expr="({handled: true, selected: [{event: _event.name, data: Object(_event.data), reason: 'intuition'}], reason: _event.name, turn: turn, tuner: tuner})"/>
+      <assign location="result" expr="({handled: true, selected: [{event: _event.name, data: Object(_event.data)}], reason: 'none', turn: turn, tuner: tuner})"/>
     </transition>
     <transition event="floppy.intuition.timed_out" cond="_event.sendid === decision_timer" target="done">
       <assign location="result" expr="({handled: false, failed: true, reason: 'the decision timed out after ' + decision_timeout_ms + ' ms', turn: turn, tuner: tuner})"/>

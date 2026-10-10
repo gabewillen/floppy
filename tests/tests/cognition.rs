@@ -501,12 +501,12 @@ fn intuition_dispatches_an_offered_event_to_its_target() {
         texts(&records, "cognition.stage"),
         strings(&[
             "autonomy unhandled (no-behaviors)",
-            "intuition handled (bot.ability.communication.activate)"
+            "intuition handled (none)"
         ])
     );
     assert_eq!(
         json_text(&records, "bot.output"),
-        json!({"turn": 1, "output": [{"event": ACTIVATE, "data": {}, "reason": "intuition"}]})
+        json!({"turn": 1, "output": [{"event": ACTIVATE, "data": {}}]})
     );
     assert_eq!(
         texts(&records, "bot.route"),
@@ -526,13 +526,13 @@ fn intuition_handles_an_ignore_without_reasoning() {
     let records = run.until(WAIT, label_is("cognition.ignore"));
     assert_eq!(
         json_text(&records, "bot.output"),
-        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "intuition"}]})
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}}]})
     );
     assert_eq!(
         texts(&records, "cognition.stage"),
         strings(&[
             "autonomy unhandled (no-behaviors)",
-            "intuition handled (bot.ability.cognition.ignore)"
+            "intuition handled (none)"
         ])
     );
     assert_eq!(
