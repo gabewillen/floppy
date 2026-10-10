@@ -124,16 +124,16 @@
             <assign location="statements" expr="statements.concat([{sql: memory_insert, parameters: ['memory', message.provenance.session_ref, 'conversation']}])"/>
             <assign location="statements[1].parameters" expr="statements[1].parameters.concat(['standard', 'retain', remembered, 'application/json', 'conversation_memory'])"/>
           </onentry>
-          <invoke id="memory" type="scxml" src="memory.scx">
+          <invoke id="remember" type="scxml" src="memory.scx">
             <param name="database" expr="database"/>
             <param name="statements" expr="statements"/>
           </invoke>
           <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
-                      cond="_event.invokeid === 'memory'" target="committing">
+                      cond="_event.invokeid === 'remember'" target="committing">
             <log label="conversation.memories" expr="'recalled ' + _event.data.results[0].rowcount + ', remembered ' + _event.data.results[1].rowcount"/>
           </transition>
           <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
-                      cond="_event.invokeid === 'memory'" target="waiting">
+                      cond="_event.invokeid === 'remember'" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
               <param name="message" expr="'Conversation memory failed: ' + _event.data.message"/>

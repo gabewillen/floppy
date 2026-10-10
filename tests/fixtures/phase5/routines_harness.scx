@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Test harness of abilities/routines.scx (tests/tests/routines.rs). It
+  stores four rows in behavior inventory through the Memory ability (memory.scx)
+  (Alpha and Beta: ACTIVE persistent routines; Gamma: a BROKEN persistent
+  routine; Delta: an ACTIVE turn behavior; Epsilon: an ACTIVE persistent
+  routine whose source is not SCXML), then invokes the routines as
+  its child "routines" with the database path as <param name="database">.
+
+  Each routine ticks every 60 s (a <send delay> loop) with its name and an
+  output whose text names its revision. The harness logs the first tick of
+  each routine and revision it sees (harness.tick, "<name> <text>"). Once
+  Alpha and Beta have ticked it changes Alpha's source (revision two),
+  deletes Beta, and asks the routines to reconcile; after the next three
+  ticks of Alpha's revision two it logs any other tick it saw since
+  (harness.stale) and ends in done. A tick of Gamma or Delta is logged as
+  harness.unexpected.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="seeding">
+  <datamodel>
+    <data id="database" expr="'/memory/floppy.sqlite'"/>
+    <data id="insert">INSERT INTO bot_behavior (name, source, status, lifetime) VALUES (?, ?, ?, ?)</data>
+    <data id="update">UPDATE bot_behavior SET source = ? WHERE name = ?</data>
+    <data id="remove">DELETE FROM bot_behavior WHERE name = ?</data>
+    <data id="routine">&lt;scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="waiting"&gt;&lt;state id="waiting"&gt;&lt;onentry&gt;&lt;send event="every" delay="60s"/&gt;&lt;/onentry&gt;&lt;transition event="every" target="waiting"&gt;&lt;send event="bot.behavior.tick" target="#_parent"&gt;&lt;content expr="({name: 'NAME', trigger: 'every', scheduled_at: '2026-10-05T08:00:00-04:00', fired_at: '2026-10-05T08:00:00-04:00', output: [{event: 'bot.speaking.say', data: {text: 'TEXT'}}]})"/&gt;&lt;/send&gt;&lt;/transition&gt;&lt;/state&gt;&lt;/scxml&gt;</data>
+    <data id="seen" expr="[]"/>
+    <data id="after" expr="0"/>
+    <data id="stale" expr="[]"/>
+  </datamodel>
+
+  <state id="seeding">
+    <invoke id="seed" type="scxml" src="memory.scx">
+      <param name="database" expr="database"/>
+      <param name="statements" expr="['Alpha one', 'Beta one', 'Gamma one', 'Delta one', 'Epsilon one'].map(t =&gt; ({sql: insert, parameters: [t.split(' ')[0], t[0] === 'E' ? 'not scxml' : routine.replace('NAME', t.split(' ')[0]).replace('TEXT', t.split(' ')[1]), t[0] === 'G' ? 'BROKEN' : 'ACTIVE', t[0] === 'D' ? 'turn' : 'persistent']}))"/>
+    </invoke>
+    <transition event="bot.ability.memory.output" cond="_event.invokeid === 'seed'" target="live"/>
+    <transition event="bot.ability.failed error.*" target="failed">
+      <log label="harness.failed" expr="_event.name + ' ' + JSON.stringify(_event.data)"/>
+    </transition>
+  </state>
+
+  <parallel id="live">
+    <state id="child">
+      <invoke id="routines" type="scxml" src="routines.scx">
+        <param name="database" expr="database"/>
+      </invoke>
+    </state>
+
+    <state id="steps" initial="first">
+      <transition event="bot.behavior.tick" cond="/^(Gamma|Delta)/.test(_event.data.name)">
+        <log label="harness.unexpected" expr="_event.data.name"/>
+      </transition>
+      <transition event="bot.behavior.tick" cond="seen.indexOf((_event.data.name + ' ' + _event.data.output[0].data.text)) &lt; 0">
+        <assign location="seen" expr="seen.concat([(_event.data.name + ' ' + _event.data.output[0].data.text)])"/>
+        <log label="harness.tick" expr="(_event.data.name + ' ' + _event.data.output[0].data.text)"/>
+      </transition>
+
+      <state id="first">
+        <transition cond="seen.indexOf('Alpha one') &gt;= 0 &amp;&amp; seen.indexOf('Beta one') &gt;= 0" target="changing"/>
+      </state>
+
+      <state id="changing">
+        <invoke id="change" type="scxml" src="memory.scx">
+          <param name="database" expr="database"/>
+          <param name="statements" expr="[{sql: update, parameters: [routine.replace('NAME', 'Alpha').replace('TEXT', 'two'), 'Alpha']}, {sql: remove, parameters: ['Beta']}]"/>
+        </invoke>
+        <transition event="bot.ability.memory.output" cond="_event.invokeid === 'change'" target="second">
+          <send event="bot.ability.routines.reconcile" target="#_routines">
+            <content expr="({})"/>
+          </send>
+        </transition>
+      </state>
+
+      <state id="second">
+        <transition event="bot.behavior.tick" cond="(_event.data.name + ' ' + _event.data.output[0].data.text) === 'Alpha two'" target="settled">
+          <log label="harness.tick" expr="'Alpha two'"/>
+        </transition>
+      </state>
+
+      <state id="settled">
+        <transition event="bot.behavior.tick" cond="(_event.data.name + ' ' + _event.data.output[0].data.text) === 'Alpha two' &amp;&amp; after &lt; 2">
+          <assign location="after" expr="after + 1"/>
+        </transition>
+        <transition event="bot.behavior.tick" cond="(_event.data.name + ' ' + _event.data.output[0].data.text) === 'Alpha two'" target="done">
+          <log label="harness.stale" expr="JSON.stringify(stale)"/>
+        </transition>
+        <transition event="bot.behavior.tick">
+          <assign location="stale" expr="stale.concat([(_event.data.name + ' ' + _event.data.output[0].data.text)])"/>
+        </transition>
+      </state>
+    </state>
+  </parallel>
+
+  <final id="done"/>
+  <final id="failed"/>
+</scxml>

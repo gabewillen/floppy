@@ -382,8 +382,7 @@ fn leaving_the_roots_state_mid_request_cancels_the_tree_and_closes_the_connectio
 #[test]
 #[ignore = "makes one real model call; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_invoke_tree_generates_through_the_grandchild() {
-    let model =
-        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "Qwen/Qwen3.8-Flash-Next".to_owned());
+    let model = support::live_model();
     let mut run = Run::start(
         &args(
             &support::live_env_files(),

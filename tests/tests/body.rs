@@ -132,6 +132,10 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
                 )
                 .expect("the ability is copyable");
             }
+            copy_dir(
+                &workspace().join("abilities/behaviors"),
+                &dir.join("abilities/behaviors"),
+            );
         }
         Cognition::Missing => {}
     }

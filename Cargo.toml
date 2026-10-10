@@ -8,6 +8,9 @@ members = [
     "services/generate/validator",
     "services/decision",
     "services/sql",
+    "services/speech",
+    "services/pgsql",
+    "tests/spikes/pglite",
 ]
 # scxml.rs is a squashed subtree with its own workspace, lockfile, and proof
 # matrix; floppy depends on its crates by path and never absorbs it.
