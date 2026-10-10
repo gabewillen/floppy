@@ -10,5 +10,5 @@
   "http-origins": [],
   "env-slots": ["apikey", "baseurl"],
   "validator-artifact": "floppy_service_generate_validator.virtualized.wasm",
-  "validator-sha256": "6a5b17fb03d223972e3801de759d3eec2db0cfcff77107af91c1b3e6ada3d24d"
+  "validator-sha256": "9df9cd48cb94e00638ff84b09785bf7c80bca7e2a3038773328394f8c420b2f9"
 }
