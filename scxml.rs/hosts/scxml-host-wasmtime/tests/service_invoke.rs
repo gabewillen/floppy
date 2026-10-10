@@ -228,7 +228,7 @@ fn document() -> String {
       <log label="done" expr="JSON.stringify(_event.data) + ' ' + finalized"/>
     </transition>
     <transition event="error.communication" target="failed">
-      <log label="failed" expr="_event.invokeid + ' ' + _event.type"/>
+      <log label="failed" expr="_event.name + ' ' + _event.invokeid + ' ' + _event.type"/>
     </transition>
     <transition event="leave" target="away"/>
   </state>
@@ -377,7 +377,10 @@ fn a_service_whose_future_resolves_err_raises_error_communication() {
     session
         .send(&ScriptedEvent::named("long"))
         .expect("the long event is processed");
-    assert_eq!(logs(&mut session), ["failed: echo platform"]);
+    assert_eq!(
+        logs(&mut session),
+        ["failed: error.communication.echo echo platform"]
+    );
     assert_eq!(session.configuration().expect("configuration"), ["failed"]);
     // No done.invoke follows, its timer is gone, and `#_echo` is now
     // unreachable.

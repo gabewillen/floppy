@@ -1136,7 +1136,8 @@ impl Engine {
     /// any other event"; 6.2.4: "If it is unable to dispatch the message,
     /// the Processor MUST place the error error.communication on the
     /// internal event queue." The event is a platform event whose `sendid`
-    /// is `send_id` and whose `invokeid` is `invoke_id` (5.10.1). No
+    /// is `send_id` and whose `invokeid` is `invoke_id` (5.10.1); an
+    /// invocation's failure is named `error.communication.<invoke_id>`. No
     /// liveness check: the message of an invocation already cancelled is
     /// still delivered, as its events are.
     ///
@@ -1167,10 +1168,19 @@ impl Engine {
                 EngineStatus::Running => {}
             }
             self.push_platform_error(PlatformError::Communication, send_id, trace_context)?;
-            if invoke_id.is_some()
+            if let Some(invoke_id) = invoke_id
                 && let Some(event) = self.internal.back_mut()
             {
-                event.invoke_id = invoke_id;
+                // Named after the invocation, as `done.invoke.<id>` is
+                // (SCXML 6.4), so a transition can select one invocation's
+                // failure by descriptor; `error.communication` still
+                // matches it (3.12.1).
+                event.name = EventName::new(format!(
+                    "{}.{invoke_id}",
+                    PlatformError::Communication.event_name()
+                ))
+                .map_err(|_| EngineError::BrokenInvariant)?;
+                event.invoke_id = Some(invoke_id);
             }
             Ok(())
         })();

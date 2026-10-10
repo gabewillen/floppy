@@ -678,7 +678,7 @@ impl Gather<'_> {
     /// The external event queue of the session `key`, oldest first:
     /// a message from an invocation appears as the event the session will
     /// process (stamped with its `invokeid`; `done.invoke.<id>` for a
-    /// completion; `error.communication` for a retired service).
+    /// completion; `error.communication.<id>` for a retired service).
     fn queue(&self, invoked_sessions: &RunInvokedSessions, key: SessionKey) -> Vec<Event> {
         invoked_sessions
             .external(key)
@@ -712,12 +712,12 @@ impl Gather<'_> {
                     trace_context: done.as_ref().and_then(|done| done.trace_context.clone()),
                 }),
                 // A retired invoked service's failure: the session raises
-                // `error.communication` carrying the invoke id.
+                // `error.communication.<id>` carrying the invoke id.
                 Delivery::FromInvocation {
                     invoke_id,
                     message: Invoked::CommunicationError,
                 } => self.event(&WitEvent {
-                    name: "error.communication".to_owned(),
+                    name: format!("error.communication.{invoke_id}"),
                     event_type: WitEventType::Platform,
                     send_id: None,
                     origin: None,

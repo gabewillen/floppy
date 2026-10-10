@@ -78,8 +78,8 @@ pub enum Invoked<E, V> {
     Done(Option<V>),
     /// The invocation failed after it started (an invoked service whose
     /// future resolved `err`, that trapped, or that returned an invalid
-    /// event): the invoking session receives `error.communication` carrying
-    /// the invoke id (WIT `invocation-message.communication-error`). The
+    /// event): the invoking session receives `error.communication.<id>`
+    /// carrying the invoke id (WIT `invocation-message.communication-error`). The
     /// caller begins the invocation's cancellation right after queueing it,
     /// so no `done.invoke` follows.
     CommunicationError,

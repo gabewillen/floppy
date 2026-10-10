@@ -208,7 +208,7 @@ hard cutover.
   service writes to its returned stream reach the invoking session stamped
   with the invoke id (through `<finalize>`); the future resolving `ok` is
   `done.invoke.<id>` with its data, and `err` or a trap is
-  `error.communication` (`invocation-message.communication-error`);
+  `error.communication.<id>` (`invocation-message.communication-error`);
   rejecting `invoke` fails the `<invoke>` with `error.execution`. Leaving
   the invoking state cancels the invocation (SCXML 6.4): the host drops its
   store and closes its HTTP connections at once. A type no service binds,
