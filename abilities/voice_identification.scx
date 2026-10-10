@@ -100,7 +100,7 @@
                   cond="_event.invokeid === 'identifier' &amp;&amp; Array.isArray(Object(_event.data).embeddings)" target="applied">
         <assign location="result" expr="({segments: segments, embeddings: _event.data.embeddings})"/>
       </transition>
-      <transition event="*" cond="_event.invokeid === 'identifier' &amp;&amp; _event.name.indexOf('done.') !== 0" target="applied">
+      <transition event="*" cond="_event.invokeid === 'identifier' &amp;&amp; _event.name.indexOf('done.') !== 0 &amp;&amp; _event.name !== 'bot.ability.failed'" target="applied">
         <assign location="result" expr="({message: 'Voice identification produced output that does not match its apply schema.'})"/>
       </transition>
       <transition event="done.invoke.identifier" target="applied">

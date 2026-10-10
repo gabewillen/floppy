@@ -1,3 +1,2 @@
 {"label":"harness.ready","session":"session","text":"{\"ability\":\"listening\",\"choices\":[]}","type":"log"}
-{"label":"voice_detection","parent":"session.3","session":"session.4","text":"absent","type":"log"}
-{"label":"harness.sound","session":"session","text":"{\"audio\":\"media/ring-1.wav\",\"kind\":\" phone.ringing \"}","type":"log"}
+{"label":"harness.sound","session":"session","text":"{\"audio\":\"media/ring-1.wav\",\"kind\":\" phone.ringing \",\"media_type\":\"audio/wav\"}","type":"log"}

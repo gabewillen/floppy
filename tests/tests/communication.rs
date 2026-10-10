@@ -559,7 +559,10 @@ fn with_listening(body: &Path) {
     .expect("the input double is copyable");
     rewrite(
         body,
-        &[("input", "['identity']"), ("listening", "['identity']")],
+        &[
+            ("input", "['identity']"),
+            ("listening_abilities", "['identity']"),
+        ],
     );
 }
 

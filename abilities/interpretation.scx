@@ -64,9 +64,11 @@
   * SpeechEnded joins the open speech into one utterance file with the
     speech service's append step when diarization or decoding will read
     it, then diarizes, else decodes, else returns to Idle. The utterance
-    is always a WAV container (floppy-utterance-<n>.wav): mosfet hands its
-    decoder bytes in the ingress format, but floppy hands the decoder a
-    file, and transcription APIs read a container, not raw PCM.
+    is a WAV container (floppy-utterance-<n>.wav) whenever its rate is
+    known: mosfet hands its decoder bytes in the ingress format, but floppy
+    hands the decoder a file, and transcription APIs read a container, not
+    raw PCM. Without a rate it stays raw PCM (floppy-utterance-<n>.pcm),
+    and decoding then fails as mosfet's does.
   * ClassifyingSound invokes abilities/sound_classification.scx: a
     labelled sound is non-speech and is handed off as the original
     environment.sound; an unlabelled one is dropped when speech decoding
@@ -140,6 +142,7 @@
     <data id="open_sensed" expr="null"/>
     <data id="active_source_ids" expr="[]"/>
     <data id="active_voice_embedding" expr="null"/>
+    <data id="open_wav" expr="false"/>
     <data id="utterance" expr="null"/>
     <!-- HandingOff's working values. -->
     <data id="audible" expr="false"/>
@@ -361,6 +364,7 @@
             </send>
           </if>
           <assign location="stage" expr="diarizer ? 'voice_diarization' : 'speech_decoding'"/>
+          <assign location="open_wav" expr="typeof open_sensed.sound.sample_rate_hz === 'number'"/>
           <send id="open-speech-timer" event="bot.ability.listening.stage.failed" delayexpr="stage_timeout_ms + 'ms'">
             <content expr="({stage: stage, message: 'Listening ' + stage + ' timed out.'})"/>
           </send>
@@ -372,8 +376,8 @@
         <invoke id="open_speech" type="https://github.com/stateforward/floppy/services/speech">
           <param name="operation" expr="'append'"/>
           <param name="frames" expr="open_frames"/>
-          <param name="output" expr="media_dir + 'floppy-utterance-' + serial + '.wav'"/>
-          <param name="wav" expr="true"/>
+          <param name="output" expr="media_dir + 'floppy-utterance-' + serial + (open_wav ? '.wav' : '.pcm')"/>
+          <param name="wav" expr="open_wav"/>
         </invoke>
         <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" cond="_event.invokeid === 'open_speech'">
           <send event="bot.ability.listening.stage.failed" target="#_internal">
@@ -642,14 +646,16 @@
             </send>
           <else/>
             <send event="environment.sound" target="#_parent">
-              <content expr="completion.sensed.sound"/>
+              <content expr="sensed.sound"/>
             </send>
           </if>
         </transition>
-        <!-- Labelled non-speech, or a sound that is not PCM. -->
+        <!-- Labelled non-speech, or a sound that is not PCM: the sound as
+             it arrived (only these routes reach here from the sound in
+             hand). -->
         <transition target="Idle">
           <send event="environment.sound" target="#_parent">
-            <content expr="completion.sensed.sound"/>
+            <content expr="sensed.sound"/>
           </send>
         </transition>
       </state>

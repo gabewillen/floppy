@@ -1,3 +1,2 @@
 {"label":"harness.ready","session":"session","text":"{\"ability\":\"listening\",\"choices\":[]}","type":"log"}
-{"label":"voice_detection","parent":"session.3","session":"session.4","text":"absent","type":"log"}
-{"label":"harness.speech","session":"session","text":"{\"channels\":1,\"content\":\"after\",\"content_type\":\"text/plain\",\"media_type\":\"audio/pcm\",\"parent\":{\"data\":{\"audio\":\"media/after.wav\",\"sample_rate_hz\":16000},\"event\":\"environment.sound\"},\"sample_rate_hz\":16000,\"source_ids\":[],\"voice_detection\":{\"segments\":[]}}","type":"log"}
+{"label":"harness.speech","session":"session","text":"{\"channels\":1,\"content\":\"after\",\"content_type\":\"text/plain\",\"media_type\":\"audio/pcm\",\"parent\":{\"data\":{\"audio\":\"media/after.wav\",\"channels\":1,\"media_type\":\"audio/wav\",\"sample_rate_hz\":16000},\"event\":\"environment.sound\"},\"sample_rate_hz\":16000,\"source_ids\":[],\"voice_detection\":{\"segments\":[]}}","type":"log"}

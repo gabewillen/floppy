@@ -865,13 +865,20 @@ fn environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition() {
 #[test]
 fn the_listenings_products_are_turn_stimuli() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
-    // The real speech service decodes against a fake backend on 127.0.0.1
-    // that hears an audio file's name as words.
+    // The real speech service detects voice and decodes against a fake
+    // backend on 127.0.0.1 that reads the words spelled into the audio.
     let backend = support::hearing::Backend::start();
     let mut args = support::hearing::granted(
         "the_listenings_products_are_turn_stimuli",
         &backend,
-        &["reply-to-me.wav", "ring.wav"],
+        &[
+            (
+                "reply-to-me.wav",
+                support::hearing::spoken_wav("reply to me"),
+            ),
+            ("silence.wav", support::hearing::silent_wav()),
+            ("ring.wav", support::hearing::silent_wav()),
+        ],
     )
     .args;
     args.push(body.display().to_string());
@@ -879,8 +886,10 @@ fn the_listenings_products_are_turn_stimuli() {
     activated(&mut run);
     // Decoded speech: a turn whose stimulus is
     // bot.ability.listening.speech.output.
-    let speech = json!({"audio": "media/reply-to-me.wav", "sample_rate_hz": 16000});
+    let speech = json!({"audio": "media/reply-to-me.wav", "media_type": "audio/wav"});
     run.event("environment.sound", &speech);
+    let silence = json!({"audio": "media/silence.wav", "media_type": "audio/wav"});
+    run.event("environment.sound", &silence);
     run.until(WAIT, label_is("bot.processing.completed"));
     // Labelled non-speech: a turn whose stimulus is the environment.sound.
     let ring = json!({"audio": "media/ring.wav", "kind": "phone.ringing"});
@@ -894,11 +903,18 @@ fn the_listenings_products_are_turn_stimuli() {
         ),
         pairs(&[
             ("double.input", r#"1 reply "reply to me""#),
-            ("bot.ability.speaking.output", r#"{"text":"reply 1"}"#),
+            (
+                "bot.ability.speaking.output",
+                r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 1"}"#
+            ),
             ("double.input", r#"2 ignore "phone.ringing""#),
         ])
     );
-    assert_eq!(backend.received().len(), 1, "only the speech is decoded");
+    assert_eq!(
+        backend.decoded(),
+        vec!["reply to me"],
+        "only the speech is decoded"
+    );
 }
 
 #[test]
@@ -908,7 +924,10 @@ fn a_selected_communication_input_reaches_the_communication() {
     let mut args = support::hearing::granted(
         "a_selected_communication_input_reaches_the_communication",
         &backend,
-        &["admit-reply-now.wav"],
+        &[
+            ("admit.wav", support::hearing::spoken_wav("admit reply now")),
+            ("silence.wav", support::hearing::silent_wav()),
+        ],
     )
     .args;
     args.push(body.display().to_string());
@@ -918,8 +937,10 @@ fn a_selected_communication_input_reaches_the_communication() {
     // mosfet's SpeechHeard seed does): the body routes it to itself and
     // relays it to the communication, whose conversation product is the
     // next turn's stimulus.
-    let speech = json!({"audio": "media/admit-reply-now.wav", "sample_rate_hz": 16000});
+    let speech = json!({"audio": "media/admit.wav", "media_type": "audio/wav"});
     run.event("environment.sound", &speech);
+    let silence = json!({"audio": "media/silence.wav", "media_type": "audio/wav"});
+    run.event("environment.sound", &silence);
     run.until(WAIT, label_is("bot.ability.speaking.output"));
     let finished = close(
         run,
@@ -938,7 +959,10 @@ fn a_selected_communication_input_reaches_the_communication() {
                 "bot.route",
                 "bot.ability.communication.respond -> communication"
             ),
-            ("bot.ability.speaking.output", r#"{"text":"reply 2"}"#),
+            (
+                "bot.ability.speaking.output",
+                r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 2"}"#
+            ),
         ])
     );
 }

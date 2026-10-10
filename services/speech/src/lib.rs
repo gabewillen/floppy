@@ -1,8 +1,15 @@
-//! The `speech` invoked service: one speech decoding or encoding per
+//! The `speech` invoked service: one speech or voice operation per
 //! `<invoke>`, as a `stateforward:scxml/invoked-service` Wasm component. It
 //! is mosfet's `SpeechDecoder` (hearing's `SpeechDecoding`) and
 //! `SpeechEncoder` (vocal's `SpeechEncoding`) providers in one service
 //! (decision D50): both directions are one `OpenAI`-compatible audio API.
+//! It is also the local models of mosfet's hearing that floppy cannot run
+//! in a document: the voice activity classifier (`VoiceDetection`), the
+//! diarizer (`VoiceDiarization`) and the voice classifier
+//! (`VoiceIdentification`), through `LocalAI`'s voice APIs ([`voice`]), and
+//! the media steps mosfet's interpretation does on bytes in memory
+//! (normalizing a sound to PCM, joining the open speech, clipping a voice
+//! span), which floppy does on files.
 //!
 //! A model call is slow I/O, so it is a service, never executable content:
 //! the invoking session keeps processing events and timers while the call is
@@ -37,9 +44,13 @@
 //! # Parameters (`<param>`)
 //!
 //! * `operation` (required): `decode` (speech to text, mosfet's
-//!   `SpeechDecoder`) or `encode` (text to speech, mosfet's
-//!   `SpeechEncoder`).
-//! * `model` (required, a non-empty string): the backend's model name.
+//!   `SpeechDecoder`), `encode` (text to speech, mosfet's
+//!   `SpeechEncoder`), or one of the voice operations `detect`, `diarize`,
+//!   `identify`, `normalize`, `append`, and `clip` ([`voice`] documents
+//!   their parameters, requests, and results).
+//! * `model` (required for decode and encode, optional for the backend
+//!   voice operations, refused by the media steps, a non-empty string): the
+//!   backend's model name.
 //! * decode: `audio` (required, a reference to the speech to decode) and
 //!   `media_type` (optional, a `type/subtype` sent as the file part's
 //!   `content-type`, `application/octet-stream` without it).
@@ -56,7 +67,8 @@
 //! `error.execution` and nothing is read, sent, or written.
 //!
 //! The `env` slots ([`API_KEY_SLOT`], [`BASE_URL_SLOT`]) are both required
-//! at run time. When either names no variable the run holds, the invocation
+//! at run time by the operations that call a backend (all but `normalize`,
+//! `append`, and `clip`). When either names no variable the run holds, the invocation
 //! reads, sends, and writes nothing and answers [`FAILED_EVENT`]
 //! ([`FailureCode::Unconfigured`]).
 //!
@@ -75,10 +87,12 @@
 //!
 //! # Events
 //!
-//! `invoke` (the component's one export, an `async func`) writes exactly one
-//! event to the stream it returns, then resolves its result future with no
-//! data (the invoking session receives `done.invoke.<id>` after the event).
-//! The names and data are mosfet's (`services/speech/schemas/`):
+//! `invoke` (the component's one export, an `async func`) writes at most
+//! one event to the stream it returns, then resolves its result future (the
+//! invoking session receives `done.invoke.<id>` after the event): with no
+//! data, except that a media step that succeeds writes no event and
+//! resolves with its result as the done data. The names and data are
+//! mosfet's (`services/speech/schemas/`):
 //!
 //! * [`DECODING_OUTPUT_EVENT`] `{"text": T}`: the decoded speech (empty when
 //!   the backend heard none).
@@ -89,6 +103,9 @@
 //!   16-bit, a WAV file declares its own, and `ElevenLabs` names its `mp3`
 //!   rate), else `null`. `D` is the seconds of sound measured from the bytes
 //!   of linear PCM, mosfet's `Speaking._playout_duration`.
+//! * [`voice::DETECTION_OUTPUT_EVENT`], [`voice::DIARIZATION_OUTPUT_EVENT`],
+//!   and [`voice::IDENTIFICATION_OUTPUT_EVENT`]: the voice operations'
+//!   results ([`voice`]).
 //! * [`FAILED_EVENT`] `{"message": M}` (mosfet's `FailureData`), `M` one
 //!   closed message per [`FailureCode`] and direction.
 //!

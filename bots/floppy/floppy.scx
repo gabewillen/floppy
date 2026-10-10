@@ -164,7 +164,7 @@
     <data id="ability" expr="null"/>
     <!-- The Listening abilities that receive speaking's efference copy
          (mosfet's Speaking listening peers, as invoke ids). -->
-    <data id="listening" expr="['listening']"/>
+    <data id="listening_abilities" expr="['listening']"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
     <data id="focused_device" expr="null"/>
@@ -299,7 +299,7 @@
            Listening, before the sound. -->
       <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json"
                   cond="_event.invokeid === 'communication'">
-        <foreach array="listening" item="ability">
+        <foreach array="listening_abilities" item="ability">
           <send event="bot.ability.speaking.efference" targetexpr="'#_' + ability">
             <content expr="_event.data"/>
           </send>
