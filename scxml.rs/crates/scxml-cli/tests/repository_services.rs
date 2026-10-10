@@ -4,7 +4,7 @@
 )]
 
 //! Repository services end to end through the CLI (`wasmtime` feature): a
-//! document invokes `https://github.com/stateforward/nemobot/services/echo@v0.1.0`
+//! document invokes `https://github.com/acme/widgets/services/echo@v0.1.0`
 //! and binds nothing, and `validate` and `snapshot run` resolve it from a
 //! mock GitHub this suite serves on 127.0.0.1 (`--github-api-base`,
 //! `--github-raw-base`, `--github-download-base`) exactly like a repository
@@ -37,14 +37,14 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use sha2::{Digest as _, Sha256};
 
-const SERVICE_URI: &str = "https://github.com/stateforward/nemobot/services/echo@v0.1.0";
+const SERVICE_URI: &str = "https://github.com/acme/widgets/services/echo@v0.1.0";
 /// The tagless URI of the echo service: its identity, which every release's
 /// manifest names, and, in a document, the repository's latest release.
-const TAGLESS_URI: &str = "https://github.com/stateforward/nemobot/services/echo";
+const TAGLESS_URI: &str = "https://github.com/acme/widgets/services/echo";
 const ASSET: &str = "scxml_service_example.virtualized.wasm";
 /// The commit the mock tag names (a lightweight tag).
 const COMMIT: &str = "89abcdef0123456789abcdef0123456789abcdef";
-const REPO: &str = "stateforward/nemobot";
+const REPO: &str = "acme/widgets";
 
 const COMPONENTS: &[&str] = &[
     "scxml_clock",
@@ -421,12 +421,12 @@ fn a_package_that_does_not_name_itself_exactly_or_an_unlisted_component_fails_cl
     for (name, named, expected) in [
         (
             "uri",
-            "https://github.com/stateforward/nemobot/services/other",
-            "is `https://github.com/stateforward/nemobot/services/other`, not `https://github.com/stateforward/nemobot/services/echo`",
+            "https://github.com/acme/widgets/services/other",
+            "is `https://github.com/acme/widgets/services/other`, not `https://github.com/acme/widgets/services/echo`",
         ),
         (
             "pinned-uri",
-            "https://github.com/stateforward/nemobot/services/echo@v0.1.0",
+            "https://github.com/acme/widgets/services/echo@v0.1.0",
             "names the pinned URI",
         ),
     ] {
@@ -766,7 +766,7 @@ fn a_package_validator_the_release_does_not_list_fails_closed() {
     );
 }
 
-const DATA_MODEL_URI: &str = "https://github.com/stateforward/nemobot/datamodels/example";
+const DATA_MODEL_URI: &str = "https://github.com/acme/widgets/datamodels/example";
 const NULL_ASSET: &str = "scxml_data_model_null.virtualized.wasm";
 
 fn data_model_manifest() -> String {

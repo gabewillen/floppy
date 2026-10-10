@@ -414,15 +414,15 @@ fn a_extension_reads_the_snapshot_in_a_compound_state_entry_content() {
             "ecmascript",
             r#"<datamodel><data id="doc"/></datamodel>
                 <state id="s0">
-                  <transition target="knowing"/>
+                  <transition target="outer"/>
                 </state>
-                <state id="knowing">
+                <state id="outer">
                   <onentry>
                     <example:snapshot location="doc" exclude="data_model"/>
                     <log label="doc" expr="doc"/>
                   </onentry>
                   <transition event="answer.yes" target="done"/>
-                  <state id="listening"/>
+                  <state id="inner"/>
                 </state>
                 <final id="done"/>"#,
         ),
@@ -443,14 +443,14 @@ fn a_extension_reads_the_snapshot_in_a_compound_state_entry_content() {
     let root = &doc["snapshot"]["root"];
     assert_eq!(
         root["configuration"],
-        serde_json::json!({"atomic": [], "full": ["knowing"]}),
+        serde_json::json!({"atomic": [], "full": ["outer"]}),
         "the entry content observes the compound state before its children"
     );
     assert_eq!(
         listed_transitions(root),
-        [("knowing".to_owned(), vec!["answer.yes".to_owned()], false)]
+        [("outer".to_owned(), vec!["answer.yes".to_owned()], false)]
     );
-    assert_eq!(outcome.configuration, ["listening"]);
+    assert_eq!(outcome.configuration, ["inner"]);
 }
 
 /// `(source, events, has_cond)` of each listed transition of a session

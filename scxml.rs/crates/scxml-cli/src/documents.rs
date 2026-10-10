@@ -636,10 +636,10 @@ mod tests {
 
     #[test]
     fn relative_https_and_file_uris_resolve_and_others_do_not() {
-        let base = url::Url::parse("file:///work/bots/root.scx").expect("a URL");
+        let base = url::Url::parse("file:///work/documents/root.scx").expect("a URL");
         assert_eq!(
             resolve(&base, "child.scx").map(String::from),
-            Some("file:///work/bots/child.scx".to_owned())
+            Some("file:///work/documents/child.scx".to_owned())
         );
         assert_eq!(
             resolve(&base, "../lib/a.js").map(String::from),

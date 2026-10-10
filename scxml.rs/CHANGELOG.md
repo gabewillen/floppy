@@ -155,7 +155,7 @@ hard cutover.
   `https://github.com/stateforward/scxml.rs/namespaces/scx`, tagless and
   versioned with the toolchain): `<scx:validate>` runs the validator on a
   document held as text and assigns the canonical report, optionally with
-  the machine-applicable fixes applied. It moved from nemobot's `scxml`
+  the machine-applicable fixes applied. It replaces an earlier out-of-tree `scxml`
   namespace (`<sx:validate>`). `scx` embeds its package and its component
   (`ArtifactKind::Scx`, listed in the release manifest), so a document uses
   it with no flag or fetch; `scripts/verify-wasm-capabilities.sh` builds and
