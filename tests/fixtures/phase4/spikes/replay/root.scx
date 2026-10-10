@@ -13,7 +13,7 @@
     <invoke id="worker" type="scxml" src="worker.scx"/>
     <state id="busy">
       <transition event="spike.work">
-        <script>queue.push({name: _event.name, data: _event.data, from: _event.invokeid});</script>
+        <assign location="queue" expr="queue.concat([{name: _event.name, data: _event.data, from: _event.invokeid}])"/>
         <log label="deferred" expr="_event.data.tag"/>
       </transition>
       <transition event="spike.release" target="idle">
