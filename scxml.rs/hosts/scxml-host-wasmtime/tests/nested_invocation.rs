@@ -879,10 +879,11 @@ fn a_document_runs_on_a_data_model_package() {
         .and_then(Path::parent)
         .expect("host crate has a workspace parent");
     let _ = components();
-    let bytes = std::fs::read(workspace.join(
-        "target/session-host-proof/wasm-artifacts/nested-invocation/scxml_data_model_null.virtualized.wasm",
-    ))
-    .expect("the release null data model is readable");
+    let release = prebuilt::release_dir().unwrap_or_else(|| {
+        workspace.join("target/session-host-proof/wasm-artifacts/nested-invocation")
+    });
+    let bytes = std::fs::read(release.join("scxml_data_model_null.virtualized.wasm"))
+        .expect("the release null data model is readable");
     let component = scxml_host_wasmtime::authenticate_data_model_component(
         &bytes,
         scxml_host_wasmtime::TrustedComponentDigest::from_hex(&format!(

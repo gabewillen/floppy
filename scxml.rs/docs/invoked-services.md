@@ -206,7 +206,7 @@ release tag, exactly like a repository namespace
 so a document needs no flag to bind it:
 
 ```xml
-<invoke type="https://github.com/stateforward/nemobot/services/memory@v0.1.0" id="memory"/>
+<invoke type="https://github.com/acme/widgets/services/store@v0.1.0" id="store"/>
 ```
 
 - **The URI form.** Exactly `https://github.com/<owner>/<repo>/services/<name>`:

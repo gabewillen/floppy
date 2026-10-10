@@ -442,7 +442,7 @@ it was loaded from). Every literal URI of the document, and of every
 before the first macrostep and listed before running:
 
 ```text
-document `file:///work/bots/child.scx`
+document `file:///work/documents/child.scx`
   = for: <invoke src="child.scx">
   = loaded: 312 bytes, sha256 …
 ```
