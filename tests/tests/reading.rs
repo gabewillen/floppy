@@ -243,7 +243,7 @@ fn an_image_is_read_by_the_vision_model() {
     assert_eq!(
         texts(&finished, "double.messages"),
         strings(&[
-            r#"[{"content":[{"text":"Read all visible text in this image. Return only the text.","type":"text"},{"image":"media/receipt.png","type":"image"}],"role":"user"}]"#
+            r#"[{"content":[{"content":"Read all visible text in this image. Return only the text.","kind":"text"},{"content":"media/receipt.png","kind":"image"}],"role":"user"}]"#
         ])
     );
     assert_eq!(

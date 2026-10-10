@@ -34,7 +34,8 @@
   "unreadable", confidence}; DecodingImage invokes the generate service
   with one user message whose content is mosfet's ImageDecoder prompt
   ("Read all visible text in this image. Return only the text.") as a
-  text part and the input's reference as an image part, and sends
+  text part ({kind: "text", content}) and the input's reference as an
+  image part ({kind: "image", content}), mosfet's reading parts, and sends
   bot.ability.reading.image.decoded {text (the reply, trimmed as mosfet
   does), source_kind: "image", confidence}. The confidence is the
   classification's. EncodingOutput sends
@@ -58,8 +59,12 @@
 
   Media by reference: an image input's content is a reference (a URI
   reference) to the image file in the media directory the run grants the
-  generate service; the service reads the file and sends it as a data:
-  URL. This document never holds image bytes.
+  generate service as its guest directory /media (scx run's dir grant
+  for https://github.com/stateforward/floppy/services/generate, so
+  "media/page.png" names /media/page.png); the service reads the file and
+  sends it as a data: URL, and an unreadable reference rejects the start
+  (error.execution, a failed image_decoding). This document never holds
+  image bytes.
 
   Logs: reading.focused (the input's kind), reading.output (the
   source_kind) and reading.failed (the stage).
@@ -204,7 +209,7 @@
         <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
                 env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
           <param name="model" expr="model"/>
-          <param name="messages" expr="[{role: 'user', content: [{type: 'text', text: prompt}, {type: 'image', image: classified.input.content}]}]"/>
+          <param name="messages" expr="[{role: 'user', content: [{kind: 'text', content: prompt}, {kind: 'image', content: classified.input.content}]}]"/>
         </invoke>
         <transition event="generate.result" cond="_event.invokeid === gen_id &amp;&amp; typeof Object(_event.data).text === 'string'">
           <send event="bot.ability.reading.image.decoded" target="#_internal">
