@@ -623,6 +623,22 @@ pub fn double_speech(abilities: &Path, mode: &str) {
     .expect("the speech double copy is writable");
 }
 
+/// Points the `<data id="database">` of the document at `path` at
+/// `database` (a file path or a Postgres connection URI), so the bot or
+/// ability keeps its memory there.
+pub fn use_database(path: &Path, database: &str) {
+    let mut text = std::fs::read_to_string(path).expect("the document is readable");
+    let start = text
+        .find(r#"<data id="database" expr=""#)
+        .unwrap_or_else(|| panic!("{} declares <data id=\"database\">", path.display()));
+    let end = start + text[start..].find("/>").expect("the <data> element closes");
+    text.replace_range(
+        start..end,
+        &format!(r#"<data id="database" expr="'{database}'""#),
+    );
+    std::fs::write(path, text).expect("the document copy is writable");
+}
+
 /// Copies the directory `from` to `to`, recursively.
 pub fn copy_tree(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).expect("the directory is creatable");
