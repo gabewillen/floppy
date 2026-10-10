@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.speech.decoding.output",
+  "description": "Speech decoded by hearing's SpeechDecoding. mosfet carries the decoded speech as UTF-8 bytes; floppy carries it as text.",
+  "properties": {
+    "text": {
+      "description": "The decoded speech; empty when the audio held none [floppy field].",
+      "examples": [
+        "hello there"
+      ],
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "text": "hello there"
+    }
+  ]
+}
