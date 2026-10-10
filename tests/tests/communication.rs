@@ -118,6 +118,7 @@ fn layout(speaking: &Speaking, edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
         dir.join("abilities/cognition.scx"),
     )
     .expect("the double is copyable");
+    support::double_speech(&dir.join("abilities"), "'encode'");
     let speaking_path = dir.join("abilities/speaking.scx");
     match speaking {
         Speaking::Real => {}
@@ -202,9 +203,23 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
         strings(&["bot.ability.communication.respond -> communication"])
     );
     assert_eq!(texts(&records, "bot.say"), strings(&["reply 1"]));
+    // Encoded by the speech service (its double), played out into the
+    // environment by reference, then said.
+    assert_eq!(
+        texts(&records, "speech.encode"),
+        strings(&["encode reply 1 -> /media/speaking-1.pcm"])
+    );
+    assert_eq!(
+        texts(&records, "environment.sound"),
+        strings(&[
+            r#"{"audio":"/media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
+        ])
+    );
     assert_eq!(
         texts(&records, "bot.ability.speaking.output"),
-        strings(&[r#"{"text":"reply 1"}"#])
+        strings(&[
+            r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 1"}"#
+        ])
     );
     // The outbound message is history only: no product, no new turn.
     assert_eq!(texts(&records, "conversation"), strings(&["outbound 0"]));
@@ -512,4 +527,125 @@ fn the_conversation_commits_each_message_into_its_history() {
         &finished.all,
         &[],
     );
+}
+
+/// The body's input and Listening abilities are `['identity']`, and the
+/// identity is `tests/fixtures/phase4/input_double.scx`, which logs what it
+/// hears (`input.sound`) and its efference copies (`input.efference`).
+fn with_listening(body: &Path) {
+    let root = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the body is under bots/floppy/");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/input_double.scx"),
+        root.join("abilities/identity.scx"),
+    )
+    .expect("the input double is copyable");
+    rewrite(
+        body,
+        &[("input", "['identity']"), ("listening", "['identity']")],
+    );
+}
+
+#[test]
+fn a_spoken_response_reaches_listening_as_its_efference_copy_before_its_sound() {
+    let body = layout(&Speaking::Real, &[]);
+    with_listening(&body);
+    let mut run = started(&body);
+    run.event("bot.input", &input("reply"));
+    let records = until_all(&run, &["input.sound", "bot.ability.speaking.output"]);
+    // "reply 1" is 7 characters: the double measures 0.7 s.
+    assert_eq!(
+        texts(&records, "input.efference"),
+        strings(&[
+            r#"{"channels":1,"duration":0.7,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
+        ])
+    );
+    assert_eq!(
+        texts(&records, "input.sound"),
+        strings(&[
+            r#"{"audio":"/media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
+        ])
+    );
+    let order: Vec<String> = logs(&records)
+        .into_iter()
+        .map(|(label, _)| label)
+        .filter(|label| ["input.efference", "input.sound"].contains(&label.as_str()))
+        .collect();
+    assert_eq!(order, strings(&["input.efference", "input.sound"]));
+    close(
+        run,
+        "a_spoken_response_reaches_listening_as_its_efference_copy_before_its_sound",
+    );
+}
+
+#[test]
+fn unmeasured_speech_sends_no_efference_copy_and_takes_speakings_format() {
+    let body = layout(
+        &Speaking::Real,
+        &[("abilities/speech_double.scx", &[("mode", "'unmeasured'")])],
+    );
+    with_listening(&body);
+    let mut run = started(&body);
+    run.event("bot.input", &input("reply"));
+    let records = until_all(&run, &["input.sound", "bot.ability.speaking.output"]);
+    assert!(texts(&records, "input.efference").is_empty(), "{records:?}");
+    assert_eq!(
+        texts(&records, "bot.ability.speaking.output"),
+        strings(&[
+            r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 1"}"#
+        ])
+    );
+    close(
+        run,
+        "unmeasured_speech_sends_no_efference_copy_and_takes_speakings_format",
+    );
+}
+
+#[test]
+fn a_speech_service_failure_fails_the_response_unsaid_and_unrecorded() {
+    let body = layout(
+        &Speaking::Real,
+        &[("abilities/speech_double.scx", &[("mode", "'fail'")])],
+    );
+    let mut run = started(&body);
+    run.event("bot.input", &input("reply"));
+    let records = run.until(WAIT, label_is("bot.ability.communication.failed"));
+    assert_eq!(
+        texts(&records, "bot.ability.communication.failed"),
+        strings(&[r#"{"message":"unconfigured"}"#])
+    );
+    assert!(texts(&records, "bot.say").is_empty());
+    assert!(texts(&records, "environment.sound").is_empty());
+    assert!(texts(&records, "conversation").is_empty());
+    close(
+        run,
+        "a_speech_service_failure_fails_the_response_unsaid_and_unrecorded",
+    );
+}
+
+#[test]
+fn speech_encoding_is_bounded_by_its_timeout() {
+    let body = layout(
+        &Speaking::Real,
+        &[
+            ("abilities/speech_double.scx", &[("mode", "'silent'")]),
+            ("abilities/speaking.scx", &[("encoding_timeout_ms", "300")]),
+        ],
+    );
+    let mut run = started(&body);
+    run.event("bot.input", &input("reply"));
+    let records = run.until(WAIT, label_is("bot.ability.communication.failed"));
+    assert_eq!(
+        texts(&records, "speaking.timed_out"),
+        strings(&["encoding 1 after 300 ms"])
+    );
+    assert_eq!(
+        texts(&records, "bot.ability.communication.failed"),
+        strings(&[r#"{"message":"Speech encoding timed out."}"#])
+    );
+    assert!(texts(&records, "bot.say").is_empty());
+    close(run, "speech_encoding_is_bounded_by_its_timeout");
 }

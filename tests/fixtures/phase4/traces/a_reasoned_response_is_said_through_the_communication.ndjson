@@ -23,9 +23,11 @@
 {"label":"bot.route","session":"session","text":"bot.ability.communication.activate -> communication","type":"log"}
 {"label":"bot.route","session":"session","text":"bot.ability.communication.respond -> communication","type":"log"}
 {"label":"communication.activate","parent":"session","session":"session.2","text":"conversation","type":"log"}
+{"label":"speech.encode","parent":"session.9","session":"session.10","text":"encode Hi! I am floppy. -> /media/speaking-1.pcm","type":"log"}
 {"label":"bot.say","parent":"session.2","session":"session.4","text":"Hi! I am floppy.","type":"log"}
+{"label":"environment.sound","session":"session","text":"{\"audio\":\"/media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}","type":"log"}
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond bot.ability.communication.activate","type":"log"}
-{"label":"bot.ability.speaking.output","session":"session","text":"{\"text\":\"Hi! I am floppy.\"}","type":"log"}
+{"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"text\":\"Hi! I am floppy.\"}","type":"log"}
 {"label":"conversation","parent":"session.2","session":"session.3","text":"outbound 0","type":"log"}
 {"label":"communication.history","parent":"session","session":"session.2","text":"1","type":"log"}
 {"body":{"model":"jev-latest","questions":{"selection":{"criteria":{"bot.ability.cognition.ignore":"Deliberately ignore this stimulus: no device command, no focus change, no speech. Required when no other offered event should run. Do not use a device command, focus, or clear_focus as a stand-in for ignore. Put why on the selection envelope reason field, not on this empty payload.","bot.ability.communication.activate":"Select which Conversation is active for attach and routing.","none of these":"None of these: take no event."},"instructions":"You decide what a small companion robot does with one stimulus it observed. Choose the offered event the robot should take for it. Abstain when none of them fits, so slower reasoning handles it.","type":"choice"}},"state":{"focus":null,"focus_candidates":[],"stimulus":{"data":{"observation":{"data":"say hi","event":"text"}},"event":"bot.input","source":null}}},"target":"/abstain/v1/systemone","type":"request"}

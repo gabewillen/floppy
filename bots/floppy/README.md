@@ -15,8 +15,10 @@ which holds the [conversation](../../abilities/conversation.scx) (the
 committed text history, one transcript per participant set; memory recall
 is a seam until phase 3, and inferring participants and relationships from
 voice embeddings, mosfet's turn detectors, is phase 6) and
-[speaking](../../abilities/speaking.scx) (text mode: the words are logged
-as `bot.say`; speech synthesis and playout are phase 6). Each turn the body
+[speaking](../../abilities/speaking.scx) (the words are encoded to speech
+by [vocal](../../abilities/vocal.scx) through the speech service, logged as
+`bot.say`, played out as `environment.sound` after the efference copy to
+Listening, and recorded in the conversation). Each turn the body
 assembles the choices (its own
 `bot.focus_device`, pinned to the turn's focus candidates, and
 `bot.clear_focus` while a device is focused, plus each ability's latest
@@ -56,15 +58,20 @@ every turn fails with `the intuition failed: the decision failed
 (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
 `bot.activate` may name the model (`{"model": "..."}`); the default is
-`Qwen/Qwen3.8-Flash-Next`. The services import no WASI resources, so the run
-needs no grants.
+`Qwen/Qwen3.8-Flash-Next`. Speaking needs `FLOPPY_SPEECH_BASE_URL` and
+`FLOPPY_SPEECH_API_KEY` (the speech service has no default backend) and
+the speech service granted the media directory its audio is written to
+(`--dir https://github.com/stateforward/floppy/services/speech=<host
+dir>::/media`); without them a response fails with
+`bot.ability.communication.failed`.
 
 The root has no parent, so each event the body emits is a `log` record
 labelled with its name, its text the event's data as JSON: `bot.activated`,
 `bot.activating.failed`, `bot.deactivated`, `bot.processing.completed`,
 `bot.processing.failed`, `bot.output` (the turn's selected events), and,
 from the communication, `bot.ability.speaking.output` (what was said) and
-`bot.ability.communication.failed`; speaking logs the words as `bot.say`.
+`bot.ability.communication.failed`, and `environment.sound` (speaking's
+playout, by reference); speaking logs the words as `bot.say`.
 `bot.choices` lists each turn's choices (`event` or `event@target`),
 `bot.route` each routed selection, `bot.route.dropped` each selection the
 turn did not offer or no transition took, and `bot.focus` each focus

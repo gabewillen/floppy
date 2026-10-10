@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A double of the speech service's encoding events (services/speech,
+  operation encode) for the tests, until the service lands:
+  support::double_speech copies it beside a copy of abilities/vocal.scx
+  whose speech <invoke> it rewrites to <invoke type="scxml"
+  src="speech_double.scx">, so vocal's <param>s reach it as its data.
+
+  mode (rewritten by a test) picks the answer:
+    'encode'  bot.ability.vocal.speech.encoding.output {audio: output,
+              media_type, sample_rate_hz: 24000, channels: 1, duration:
+              the text's length / 10 seconds}
+    'unmeasured'  the same with duration, sample_rate_hz and channels null
+    'fail'    bot.ability.failed {message: "unconfigured"}
+    'silent'  no answer, ever (a request that hangs)
+  then it ends (final), as the service does, except 'silent'. It logs
+  speech.encode with the text it was given.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="speech_double" initial="answering">
+  <datamodel>
+    <data id="mode" expr="'encode'"/>
+    <data id="operation" expr="null"/>
+    <data id="model" expr="null"/>
+    <data id="text" expr="null"/>
+    <data id="voice" expr="null"/>
+    <data id="output" expr="null"/>
+    <data id="media_type" expr="null"/>
+  </datamodel>
+
+  <state id="answering">
+    <onentry>
+      <log label="speech.encode" expr="operation + ' ' + text + ' -> ' + output"/>
+      <if cond="mode === 'encode'">
+        <send event="bot.ability.vocal.speech.encoding.output" target="#_parent">
+          <param name="audio" expr="output"/>
+          <param name="media_type" expr="media_type"/>
+          <param name="sample_rate_hz" expr="24000"/>
+          <param name="channels" expr="1"/>
+          <param name="duration" expr="text.length / 10"/>
+        </send>
+      <elseif cond="mode === 'unmeasured'"/>
+        <send event="bot.ability.vocal.speech.encoding.output" target="#_parent">
+          <param name="audio" expr="output"/>
+          <param name="media_type" expr="media_type"/>
+          <param name="sample_rate_hz" expr="null"/>
+          <param name="channels" expr="null"/>
+          <param name="duration" expr="null"/>
+        </send>
+      <elseif cond="mode === 'fail'"/>
+        <send event="bot.ability.failed" target="#_parent">
+          <param name="message" expr="'unconfigured'"/>
+        </send>
+      </if>
+    </onentry>
+    <transition cond="mode !== 'silent'" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

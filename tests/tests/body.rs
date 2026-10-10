@@ -103,6 +103,7 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
         )
         .expect("the ability is copyable");
     }
+    support::double_speech(&dir.join("abilities"), "'encode'");
     let ability = dir.join("abilities/cognition.scx");
     match cognition {
         Cognition::Double(mode) => {
@@ -830,6 +831,9 @@ fn environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition() {
     // The stimuli start no turn: the next turn is the first.
     run.event("bot.input", &input("reply", "after"));
     run.until(WAIT, label_is("bot.processing.completed"));
+    // The reply is played out into the environment, where the bot hears
+    // it too.
+    run.until(WAIT, label_is("bot.ability.speaking.output"));
     let finished = close(
         run,
         "environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition",
@@ -843,6 +847,10 @@ fn environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition() {
             ("input.sound", &sound.to_string()),
             ("input.visual", &visual.to_string()),
             ("double.input", r#"1 reply "after""#),
+            (
+                "input.sound",
+                r#"{"audio":"/media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#,
+            ),
         ])
     );
 }

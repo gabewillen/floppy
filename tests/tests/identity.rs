@@ -70,6 +70,7 @@ fn layout(name: Option<&str>) -> PathBuf {
         dir.join("abilities/cognition.scx"),
     )
     .expect("the double is copyable");
+    support::double_speech(&dir.join("abilities"), "'encode'");
     if let Some(name) = name {
         let path = dir.join("abilities/identity.scx");
         let text = std::fs::read_to_string(&path).expect("the identity is readable");

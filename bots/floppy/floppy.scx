@@ -34,6 +34,13 @@
   routine's bot.behavior.tick the cognition forwards (phase 5 routines,
   gated off in phase 4).
 
+  Speaking: the communication relays speaking's playout, the efference
+  copy bot.ability.speaking.efference (sent on to each Listening ability
+  in listening, mosfet's Speaking listening peers) and then
+  environment.sound, which the body puts into the environment: a log
+  record labelled environment.sound (the root has no parent), and, as any
+  sound there, a stimulus for each input ability (the bot hears itself).
+
   Environment: environment.sound and environment.visual from outside,
   while active, go to each input ability (input, mosfet's Bot input: the invoke ids
   of the abilities that perceive raw stimuli; none until phase 6), in
@@ -138,6 +145,10 @@
          one being sent to. -->
     <data id="input" expr="[]"/>
     <data id="ability" expr="null"/>
+    <!-- The Listening abilities that receive speaking's efference copy
+         (mosfet's Speaking listening peers, as invoke ids; none until
+         listening is invoked). -->
+    <data id="listening" expr="[]"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
     <data id="focused_device" expr="null"/>
@@ -256,6 +267,27 @@
                   cond="!_event.invokeid">
         <foreach array="input" item="ability">
           <send event="environment.visual" targetexpr="'#_' + ability">
+            <content expr="_event.data"/>
+          </send>
+        </foreach>
+      </transition>
+      <!-- Speaking's playout: the sound goes into the environment (the
+           root has no parent, so it is a log record) and, as any sound
+           there, to every input ability; the efference copy goes only to
+           Listening, before the sound. -->
+      <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json"
+                  cond="_event.invokeid === 'communication'">
+        <foreach array="listening" item="ability">
+          <send event="bot.ability.speaking.efference" targetexpr="'#_' + ability">
+            <content expr="_event.data"/>
+          </send>
+        </foreach>
+      </transition>
+      <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+                  cond="_event.invokeid === 'communication'">
+        <log label="environment.sound" expr="JSON.stringify(_event.data)"/>
+        <foreach array="input" item="ability">
+          <send event="environment.sound" targetexpr="'#_' + ability">
             <content expr="_event.data"/>
           </send>
         </foreach>

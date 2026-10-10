@@ -361,6 +361,7 @@ fn layout(
         &workspace().join("abilities/schemas"),
         &dir.join("abilities/schemas"),
     );
+    support::double_speech(&dir.join("abilities"), "'encode'");
     for (path, data) in edits {
         rewrite(&dir.join(path), data);
     }
@@ -966,7 +967,9 @@ fn a_reasoned_response_is_said_through_the_communication() {
     assert_eq!(texts(&records, "bot.say"), strings(&["Hi! I am floppy."]));
     assert_eq!(
         texts(&records, "bot.ability.speaking.output"),
-        strings(&[r#"{"text":"Hi! I am floppy."}"#])
+        strings(&[
+            r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"Hi! I am floppy."}"#
+        ])
     );
     assert_eq!(texts(&records, "conversation"), strings(&["outbound 0"]));
     assert!(

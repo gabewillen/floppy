@@ -67,7 +67,7 @@ const FLOPPY_NAME: &str = "[floppy name]";
 const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// The body's events (`bots/floppy/schemas/`).
-const BODY_EVENTS: [&str; 15] = [
+const BODY_EVENTS: [&str; 14] = [
     "bot.activate",
     "bot.deactivate",
     "bot.reboot",
@@ -81,12 +81,11 @@ const BODY_EVENTS: [&str; 15] = [
     "bot.processing.failed",
     "bot.processing.timed_out",
     "bot.processing.cancel.timed_out",
-    "environment.sound",
     "environment.visual",
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 42] = [
+const ABILITY_EVENTS: [&str; 46] = [
     "bot.ability.failed",
     "bot.ability.cognition.input",
     "bot.ability.cognition.output",
@@ -115,6 +114,11 @@ const ABILITY_EVENTS: [&str; 42] = [
     "bot.ability.speaking.input",
     "bot.ability.speaking.output",
     "bot.ability.speaking.apply.failed",
+    "bot.ability.speaking.efference",
+    "bot.ability.vocal.speech.encoding.input",
+    "bot.ability.vocal.speech.encoding.output",
+    // Speaking's playout, which the body puts into the environment.
+    "environment.sound",
     "bot.ability.identity.adopt",
     "bot.ability.identity.adopted",
     "bot.ability.identity.adopt.failed",
@@ -173,11 +177,13 @@ const RUNTIME_ONLY: [&str; 8] = [
 const NAMES_FILE: &str = "mosfet-event-names.json";
 
 /// The ability events the body takes, twinned into `bots/floppy/schemas/`.
-const BODY_TWINS: [&str; 11] = [
+const BODY_TWINS: [&str; 13] = [
     "bot.ability.offers",
     "bot.ability.communication.input",
     "bot.ability.communication.failed",
     "bot.ability.speaking.output",
+    "bot.ability.speaking.efference",
+    "environment.sound",
     "bot.ability.cognition.output",
     "bot.ability.cognition.cancelled",
     "bot.ability.processing.cancelled",

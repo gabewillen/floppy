@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.vocal.speech.encoding.output",
+  "additionalProperties": false,
+  "description": "Encoded speech (mosfet's SpeechEncoding output, the audio bytes; floppy passes media by reference, with its format).",
+  "properties": {
+    "audio": {
+      "description": "Reference (a URI reference) to the encoded audio the speech service wrote; floppy passes media by reference, never as bytes [floppy field].",
+      "examples": [
+        "/media/speaking-1.pcm"
+      ],
+      "format": "uri-reference",
+      "minLength": 1,
+      "title": "Audio",
+      "type": "string"
+    },
+    "media_type": {
+      "description": "Media type of the encoded audio (e.g. audio/pcm, audio/wav) [floppy field].",
+      "examples": [
+        "audio/pcm",
+        "audio/wav"
+      ],
+      "minLength": 1,
+      "title": "Media Type",
+      "type": "string"
+    },
+    "sample_rate_hz": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Sample rate of the encoded audio in hertz, when known [floppy field].",
+      "examples": [
+        24000
+      ],
+      "title": "Sample Rate Hz"
+    },
+    "channels": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Channel count of the encoded audio, when known [floppy field].",
+      "examples": [
+        1
+      ],
+      "title": "Channels"
+    },
+    "duration": {
+      "anyOf": [
+        {
+          "type": "number",
+          "exclusiveMinimum": 0.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Seconds of sound the audio makes, measured from its bytes when the form is linear PCM (mosfet's Speaking playout duration), else null [floppy field].",
+      "examples": [
+        3.6
+      ],
+      "title": "Duration"
+    }
+  },
+  "required": [
+    "audio",
+    "media_type"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "audio": "/media/speaking-1.pcm",
+      "media_type": "audio/pcm",
+      "sample_rate_hz": 24000,
+      "channels": 1,
+      "duration": 3.6
+    }
+  ]
+}
