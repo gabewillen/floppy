@@ -68,7 +68,8 @@
 
   Choices: each turn's input carries the body's assembled choices (its own
   and every ability's offers, tagged with their target); they go to
-  reasoning, whose selections the body routes.
+  intuition (the decision service's menu) and to reasoning, and the body
+  routes either stage's selections.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline). scxml.rs checks them where each event is
@@ -215,6 +216,7 @@
         <param name="stimulus" expr="stimulus"/>
         <param name="focus" expr="focus"/>
         <param name="focus_candidates" expr="focus_candidates"/>
+        <param name="choices" expr="choices"/>
         <param name="tuner" expr="tuner"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"

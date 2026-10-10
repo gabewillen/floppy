@@ -40,7 +40,9 @@
 //!   backend's default without one.
 //! * `choose`: `choices` (required: a JSON array of objects with `event`, an
 //!   event name, `schema`, a self-contained JSON Schema, and an optional
-//!   `description` string, as `<decision:choice>` writes it; events distinct),
+//!   `description` string, as `<decision:choice>` writes it, and an optional
+//!   `target` string, as `<decision:assemble>` tags it; an event is listed
+//!   once, or once per target with the same schema, and is one candidate),
 //!   `data` (optional: a JSON object of evidence), and `threshold`
 //!   (optional, a number in `[0, 1]`, `0` without it).
 //! * `rank`: `candidates` (required: a non-empty JSON array of distinct
@@ -340,24 +342,35 @@ fn valid_event_name(name: &str) -> bool {
 }
 
 /// The candidates of a `choices` value: an array of objects with `event`,
-/// `schema`, and an optional `description`.
+/// `schema`, an optional `description`, and an optional `target` (the
+/// offering ability, as `<decision:assemble>` tags it).
+///
+/// An event is one candidate however many targets offer it (mosfet
+/// `collect_offered_events` keeps one event per name): it may be listed
+/// again only when every listing has a `target` and the same schema, and
+/// the first listing's description is kept. The target is the document's to
+/// route, never part of the decision.
 ///
 /// # Errors
 ///
-/// A static detail for a malformed candidate, a duplicate event, or a schema
-/// that is not a self-contained JSON Schema.
+/// A static detail for a malformed candidate, a duplicate event without
+/// distinct targets or with another schema, or a schema that is not a
+/// self-contained JSON Schema.
 pub fn choices_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
-    const INVALID: &str = "decision choices must be an array of objects with an event name, a schema, and an optional description";
+    const INVALID: &str = "decision choices must be an array of objects with an event name, a schema, an optional description, and an optional target";
+    const TWICE: &str = "decision choices name an event twice";
     let items = value.as_array().ok_or(INVALID)?;
     if exceeds_wasm_bound(items.len(), MAX_CRITERIA) {
         return Err("decision choices exceed the candidate bound");
     }
     let mut choices: Vec<Candidate> = Vec::new();
+    // Per candidate: its schema as given, and the targets that offer it.
+    let mut listings: Vec<(&Json, Vec<&str>)> = Vec::new();
     for item in items {
         let members = item.as_object().ok_or(INVALID)?;
         if members
             .keys()
-            .any(|key| !matches!(key.as_str(), "event" | "schema" | "description"))
+            .any(|key| !matches!(key.as_str(), "event" | "schema" | "description" | "target"))
         {
             return Err(INVALID);
         }
@@ -366,10 +379,33 @@ pub fn choices_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
             .and_then(Json::as_str)
             .filter(|event| valid_event_name(event))
             .ok_or(INVALID)?;
-        if choices.iter().any(|candidate| candidate.event == event) {
-            return Err("decision choices name an event twice");
-        }
+        let target = match members.get("target") {
+            None => None,
+            Some(Json::String(target)) if !target.is_empty() => Some(target.as_str()),
+            Some(_) => return Err(INVALID),
+        };
         let source = members.get("schema").ok_or(INVALID)?;
+        if members
+            .get("description")
+            .is_some_and(|text| !text.is_string())
+        {
+            return Err(INVALID);
+        }
+        if let Some(index) = choices
+            .iter()
+            .position(|candidate| candidate.event == event)
+        {
+            let (schema, targets) = listings.get_mut(index).ok_or(TWICE)?;
+            let Some(target) = target else {
+                return Err(TWICE);
+            };
+            if targets.is_empty() || targets.contains(&target) || *schema != source {
+                return Err(TWICE);
+            }
+            targets.push(target);
+            continue;
+        }
+        listings.push((source, target.into_iter().collect()));
         let resolved = scxml_event_schema::resolve(canonical_json(source).as_bytes(), None)
             .map_err(|_| "decision choices schema is not a self-contained JSON Schema")?;
         let schema: Json = serde_json::from_str(&resolved.schema).map_err(|_| INVALID)?;
