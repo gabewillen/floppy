@@ -46,9 +46,9 @@
   readiness. adopting
   (mosfet Identity._adopt_name) writes the name down before answering to
   it: with a database it inserts the name (scope long_term, kind fact,
-  query_tags self_name, subject_ref self, created_at with milliseconds,
-  and the recall orders ties by insertion, so two adoptions in one second
-  keep their order) and sends
+  query_tags self_name, subject_ref self, and the recall orders ties in
+  created_at by memory_id, so two adoptions in one second keep their
+  order) and sends
   bot.ability.identity.adopted {name: {text, kind: "fact"}, persisted:
   true} (persisted [floppy field]) to #_internal; a write that fails sends
   bot.ability.identity.adopt.failed {message: "Identity could not remember
@@ -82,12 +82,14 @@
     <data id="offers_over" expr="false"/>
     <data id="offer_names" expr="''"/>
     <!-- Memory: the database file (null: no memory) and mosfet's
-         statements (identity/name.py). A memory id is the next
-         rowid as 32 hex digits: the sql service's randomblob is not
-         unique across invocations. -->
+         statements (identity/name.py). The SQL runs on both
+         engines (SQLite and Postgres). A memory id is the next row count
+         as 32 zero-padded digits (neither engine's randomness is unique
+         across invocations in Wasm); JSON rows are told by their
+         content_format, oldest first by created_at, then memory_id. -->
     <data id="database" expr="null"/>
-    <data id="name_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND json_valid(content) ORDER BY created_at, rowid LIMIT 50'"/>
-    <data id="name_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags, created_at) VALUES ((SELECT printf(\'%032x\', coalesce(max(rowid), 0) + 1) FROM bot_memory), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8, strftime(?9, ?10))'"/>
+    <data id="name_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND content_format = \'application/json\' ORDER BY created_at, memory_id LIMIT 50'"/>
+    <data id="name_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
     <data id="recalled_name" expr="null"/>
     <data id="name_parameters" expr="[]"/>
   </datamodel>
@@ -201,7 +203,7 @@
     <state id="adopting_memory">
       <onentry>
         <assign location="name_parameters" expr="['long_term', 'self', 'fact', 'standard', 'retain', JSON.stringify({text: adopting_name, kind: 'fact'})]"/>
-        <assign location="name_parameters" expr="name_parameters.concat(['application/json', 'self_name', '%Y-%m-%dT%H:%M:%f', 'now'])"/>
+        <assign location="name_parameters" expr="name_parameters.concat(['application/json', 'self_name'])"/>
       </onentry>
       <invoke id="remember" type="scxml" src="memory.scx">
         <param name="database" expr="database"/>

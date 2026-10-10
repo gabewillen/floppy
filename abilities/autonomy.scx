@@ -69,8 +69,8 @@
     <data id="answer" expr="null"/>
     <data id="timer" expr="null"/>
     <data id="select_sql">SELECT b.name, b.source FROM bot_behavior AS b JOIN bot_behavior_trigger AS t ON t.behavior_name = b.name WHERE b.status = 'ACTIVE' AND b.lifetime = 'turn' AND t."trigger" = ? ORDER BY b.name</data>
-    <data id="used_sql">UPDATE bot_behavior SET used_count = CAST(CAST(used_count AS INTEGER) + 1 AS TEXT), last_used_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE name = ?</data>
-    <data id="failed_sql">UPDATE bot_behavior SET failed_count = CAST(CAST(failed_count AS INTEGER) + 1 AS TEXT), last_failed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE name = ?</data>
+    <data id="used_sql">UPDATE bot_behavior SET used_count = CAST(CAST(used_count AS INTEGER) + 1 AS TEXT), last_used_at = CAST(CURRENT_TIMESTAMP AS TEXT) WHERE name = ?</data>
+    <data id="failed_sql">UPDATE bot_behavior SET failed_count = CAST(CAST(failed_count AS INTEGER) + 1 AS TEXT), last_failed_at = CAST(CURRENT_TIMESTAMP AS TEXT) WHERE name = ?</data>
   </datamodel>
 
   <state id="matching">
