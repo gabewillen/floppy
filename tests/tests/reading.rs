@@ -1,6 +1,6 @@
 //! The reading ability (`abilities/reading.scx`, mosfet's Reading) and its
 //! visual classification child (`abilities/vision.scx`, mosfet's
-//! VisualClassification), run as a harness document's child through
+//! `VisualClassification`), run as a harness document's child through
 //! `scx run` on the logical clock.
 //!
 //! Each test lays out a scratch directory with the harness, copies of
