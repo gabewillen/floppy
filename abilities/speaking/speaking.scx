@@ -44,10 +44,10 @@
 
   Failures: a vocal failure (its bot.ability.failed), an encoding or
   recording timeout, or a vocal that cannot run answers the parent with
-  bot.ability.speaking.apply.failed {message} (mosfet's failure event,
-  FailureData) and returns to idle. Timers are
-  bot.ability.speaking.apply.failed {message} sends too, taken only by the
-  timer in hand (_event.sendid). Input
+  bot.ability.failed {message} (mosfet's terminal failure, FailureData)
+  and returns to idle. Timers are bot.ability.speaking.apply.failed
+  {message} sends (mosfet's own failure event), taken only by the timer
+  in hand (_event.sendid). Input
   that arrives outside idle waits in the data model queue and is taken on
   the return to idle (mosfet defers it).
 
@@ -138,19 +138,19 @@
     <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
                 cond="isFromVocal(_event)" target="idle">
       <assign location="message" expr="_event.data.message"/>
-      <send event="bot.ability.speaking.apply.failed" target="#_parent">
+      <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="message"/>
       </send>
     </transition>
     <transition event="bot.ability.speaking.apply.failed" event:schema="schemas/bot.ability.speaking.apply.failed.json"
                 cond="isTimer(_event)" target="idle">
       <log label="speaking.timed_out" expr="encodingTimedOutLog()"/>
-      <send event="bot.ability.speaking.apply.failed" target="#_parent">
+      <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="_event.data.message"/>
       </send>
     </transition>
     <transition event="error.* done.invoke" cond="isFromVocalOrStart(_event)" target="idle">
-      <send event="bot.ability.speaking.apply.failed" target="#_parent">
+      <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="encodingRunFailure(_event)"/>
       </send>
     </transition>
@@ -185,7 +185,7 @@
     </onentry>
     <transition event="bot.ability.speaking.apply.completed" target="recording"/>
     <transition event="error.*" target="idle">
-      <send event="bot.ability.speaking.apply.failed" target="#_parent">
+      <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="playoutFailure(_event)"/>
       </send>
     </transition>
@@ -216,12 +216,12 @@
     <transition event="bot.ability.speaking.apply.failed" event:schema="schemas/bot.ability.speaking.apply.failed.json"
                 cond="isTimer(_event)" target="idle">
       <log label="speaking.timed_out" expr="recordingTimedOutLog()"/>
-      <send event="bot.ability.speaking.apply.failed" target="#_parent">
+      <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="_event.data.message"/>
       </send>
     </transition>
     <transition event="error.*" target="idle">
-      <send event="bot.ability.speaking.apply.failed" target="#_parent">
+      <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="recordingFailure(_event)"/>
       </send>
     </transition>
