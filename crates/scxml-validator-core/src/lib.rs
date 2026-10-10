@@ -95,8 +95,8 @@ pub use datamodel_check::{
     DEFAULT_DATA_MODEL, EffectCause, EffectCheck, EffectFinding, EffectFragment, EffectKind,
     EffectRole, EffectSpan, ExpressionCheck, ExpressionKind, ExpressionSyntaxChecker,
     ExternalScripts, MAX_CHECKED_EXPRESSION_BYTES, MAX_CHECKED_EXPRESSIONS,
-    MAX_ISSUES_PER_EXPRESSION, SyntaxIssue, report_unchecked_expressions, validate_expressions,
-    validate_expressions_with,
+    MAX_ISSUES_PER_EXPRESSION, ScriptResources, SyntaxIssue, report_unchecked_expressions,
+    validate_expressions, validate_expressions_with, validate_expressions_with_scripts,
 };
 pub use diagnostic::{Diagnostic, Fix, FixEdit, Label, Report, Severity, line_column_span};
 pub use env_attributes::{MAX_ENV_NAME_BYTES, env_attribute_diagnostics, env_slot, is_env_name};
@@ -187,6 +187,9 @@ pub struct Validator<R, B> {
     /// The documents the validated document's literal `<invoke src>`
     /// elements load, keyed by `src` as authored (`EVENT011`).
     invoked_documents: std::collections::BTreeMap<String, InvokedDocument>,
+    /// The text of each `<script src>` file, keyed by `src` as authored
+    /// (the side-effect analysis, `LINT019`).
+    script_resources: ScriptResources,
     /// The linked package validators; `None` runs none.
     packages: Option<std::sync::Arc<dyn PackageValidator>>,
 }
@@ -205,6 +208,7 @@ impl<R, B> Validator<R, B> {
             data_models: None,
             event_schema_resources: std::collections::BTreeMap::new(),
             invoked_documents: std::collections::BTreeMap::new(),
+            script_resources: std::collections::BTreeMap::new(),
             packages: None,
         }
     }
@@ -255,6 +259,20 @@ impl<R, B> Validator<R, B> {
         documents: std::collections::BTreeMap<String, InvokedDocument>,
     ) -> Self {
         self.invoked_documents = documents;
+        self
+    }
+
+    /// The text of each file the document's `<script src>` elements name,
+    /// keyed by the `src` value as authored with its XML white space
+    /// collapsed. The caller reads them as its host would load them; the
+    /// side-effect analysis of conditions and `<log expr>` then reads the
+    /// functions each file declares (a `cond` calling one is judged by its
+    /// body), and a `src` with no entry stays unread, so a call it may
+    /// define or replace is `LINT019`. The validator itself performs no
+    /// I/O.
+    #[must_use]
+    pub fn with_script_resources(mut self, scripts: ScriptResources) -> Self {
+        self.script_resources = scripts;
         self
     }
 
@@ -480,7 +498,11 @@ impl<R: SchemaResolver, B: SchemaValidator> Validator<R, B> {
             if checkers.is_empty() {
                 report.extend(report_unchecked_expressions(document));
             } else {
-                report.extend(validate_expressions_with(document, &checkers));
+                report.extend(validate_expressions_with_scripts(
+                    document,
+                    &checkers,
+                    &self.script_resources,
+                ));
             }
             report
         };

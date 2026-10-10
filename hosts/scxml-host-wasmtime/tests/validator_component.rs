@@ -25,7 +25,7 @@ use std::process::Command;
 use std::sync::OnceLock;
 
 use scxml_host_wasmtime::validator_types::{
-    EventSchemaResource, InvokedDocument, SchemaPolicy, ValidationRequest,
+    EventSchemaResource, InvokedDocument, SchemaPolicy, ScriptResource, ValidationRequest,
 };
 use scxml_host_wasmtime::{
     ArtifactKind, AuthenticatedComponent, ComponentValidator, TelemetryProviders,
@@ -177,6 +177,26 @@ fn ui_invoked_documents(source: &str) -> Vec<InvokedDocument> {
     documents
 }
 
+/// The files under `tests/ui/scripts/` the case `source`'s literal `src`
+/// attributes name, supplied as `scx validate` reads them.
+fn ui_scripts(source: &str) -> Vec<ScriptResource> {
+    let ui = artifacts().workspace.join("tests/ui");
+    let mut scripts: Vec<ScriptResource> = Vec::new();
+    for (src, _) in source
+        .split("src=\"")
+        .skip(1)
+        .filter_map(|rest| rest.split_once('"'))
+    {
+        if src.starts_with("scripts/") && scripts.iter().all(|script| script.src != src) {
+            scripts.push(ScriptResource {
+                src: src.to_owned(),
+                text: String::from_utf8(read(&ui.join(src))).expect("the script is UTF-8"),
+            });
+        }
+    }
+    scripts
+}
+
 fn validate(validator: &ComponentValidator, source_name: &str, source: &str) -> String {
     let request = ValidationRequest {
         source_name: source_name.to_owned(),
@@ -186,6 +206,7 @@ fn validate(validator: &ComponentValidator, source_name: &str, source: &str) -> 
         packages: Vec::new(),
         event_schemas: ui_event_schemas(),
         invoked_documents: ui_invoked_documents(source),
+        scripts: ui_scripts(source),
         trace_context: None,
     };
     let bytes = validator
@@ -303,6 +324,7 @@ fn invoked_documents_are_bounded_at_the_request_boundary() {
         packages: Vec::new(),
         event_schemas: Vec::new(),
         invoked_documents,
+        scripts: Vec::new(),
         trace_context: None,
     }
     };
@@ -333,6 +355,57 @@ fn invoked_documents_are_bounded_at_the_request_boundary() {
     }
     let at_bound = (0..64)
         .map(|index| document(&format!("{index}.scx"), String::new()))
+        .collect();
+    assert!(validator.validate(&request(at_bound)).is_ok());
+}
+
+/// `scripts` is bounded at the request boundary: a repeated or empty
+/// `src`, more than 64 files, or more than 16 MiB of text together is
+/// `invalid-request`, and the instance stays usable.
+#[test]
+fn scripts_are_bounded_at_the_request_boundary() {
+    let validator = linked(Some(&artifacts().ecmascript));
+    let script = |src: &str, text: String| ScriptResource {
+        src: src.to_owned(),
+        text,
+    };
+    let request = |scripts: Vec<ScriptResource>| {
+        ValidationRequest {
+        source_name: "document.scx".to_owned(),
+        source: r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"><final id="f"/></scxml>"#.to_owned(),
+        policy: SchemaPolicy::Strict,
+        schemas: Vec::new(),
+        packages: Vec::new(),
+        event_schemas: Vec::new(),
+        invoked_documents: Vec::new(),
+        scripts,
+        trace_context: None,
+    }
+    };
+    for (what, scripts) in [
+        (
+            "repeated src",
+            vec![script("a.js", String::new()), script("a.js", String::new())],
+        ),
+        ("empty src", vec![script("", String::new())]),
+        (
+            "65 files",
+            (0..65)
+                .map(|index| script(&format!("{index}.js"), String::new()))
+                .collect(),
+        ),
+        (
+            "over 16 MiB",
+            vec![
+                script("a.js", "x".repeat(8 * 1024 * 1024)),
+                script("b.js", "x".repeat(8 * 1024 * 1024 + 1)),
+            ],
+        ),
+    ] {
+        assert!(validator.validate(&request(scripts)).is_err(), "{what}");
+    }
+    let at_bound = (0..64)
+        .map(|index| script(&format!("{index}.js"), String::new()))
         .collect();
     assert!(validator.validate(&request(at_bound)).is_ok());
 }
@@ -514,6 +587,7 @@ fn guest_validate_span_records_its_events_and_error_category() {
         packages: Vec::new(),
         event_schemas: Vec::new(),
         invoked_documents: Vec::new(),
+        scripts: Vec::new(),
         // A sampled remote parent, so the guest span is recorded whatever
         // the process-global provider is.
         trace_context: Some(scxml_host_wasmtime::validator_types::TraceContext {
@@ -567,6 +641,7 @@ fn guest_validate_span_without_a_carrier_is_a_root_span_under_a_noop_global_prov
         packages: Vec::new(),
         event_schemas: Vec::new(),
         invoked_documents: Vec::new(),
+        scripts: Vec::new(),
         trace_context: None,
     });
     drop(validator);

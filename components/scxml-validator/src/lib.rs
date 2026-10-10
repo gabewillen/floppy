@@ -141,8 +141,8 @@ mod guest {
         ComponentRequestBoundary, EffectCause, EffectCheck, EffectFinding, EffectFragment,
         EffectKind, EffectRole, EffectSpan, ExpressionCheck, ExpressionKind,
         ExpressionSyntaxChecker, ExternalScripts, InvokedDocument, MemorySchemaResolver,
-        PackageValidator, PackageValidatorFailure, SchemaMode, SchemaSource, SyntaxIssue,
-        Validator,
+        PackageValidator, PackageValidatorFailure, SchemaMode, SchemaSource, ScriptResources,
+        SyntaxIssue, Validator,
         package_validator::{document, types as package_types},
     };
     use scxml_validator_xsd::{BundledSchemaResolver, XsdSchemaBackend};
@@ -159,7 +159,7 @@ mod guest {
     use stateforward::scxml_validator::telemetry as wit_telemetry;
     use stateforward::scxml_validator::types::{
         self as wit_types, ComponentError, ErrorCode, ErrorVersion,
-        InvokedDocument as InvokedDocumentRecord, SchemaPolicy, ValidationRequest,
+        InvokedDocument as InvokedDocumentRecord, SchemaPolicy, ScriptResource, ValidationRequest,
     };
 
     /// The source id of the one document a validation reads: every span
@@ -513,6 +513,14 @@ mod guest {
                     code: ErrorCode::InvalidRequest,
                 });
             };
+            let Some(scripts) = scripts(std::mem::take(&mut request.scripts)) else {
+                span.event(SignalEvent::InputRejected);
+                span.fail(ErrorCategory::InvalidInput);
+                return Err(ComponentError {
+                    version: ErrorVersion::V1,
+                    code: ErrorCode::InvalidRequest,
+                });
+            };
             let result = (|| {
                 let source_name = request.source_name.clone();
                 let source_text = request.source.clone();
@@ -534,6 +542,7 @@ mod guest {
                     })
                     .with_event_schema_resources(event_schemas)
                     .with_invoked_documents(invoked_documents)
+                    .with_script_resources(scripts)
                     // The request carries no service packages, so no
                     // invoked-service type is bound: a literal one is
                     // `PKG004`, exactly as `scx validate` reports
@@ -677,6 +686,34 @@ mod guest {
                     event_schemas,
                 },
             );
+        }
+        Some(collected)
+    }
+
+    /// Maximum `scripts` in one request (an interface bound on every
+    /// build).
+    const MAX_SCRIPTS: usize = 64;
+    /// Maximum UTF-8 bytes of one script's `src`.
+    const MAX_SCRIPT_SRC_BYTES: usize = 16 * 1024;
+    /// Maximum text bytes of every script together.
+    const MAX_SCRIPT_TOTAL_BYTES: usize = 16 * 1024 * 1024;
+
+    /// Collects a request's `scripts`, or `None` when they break a request
+    /// bound or repeat a `src`.
+    fn scripts(resources: Vec<ScriptResource>) -> Option<ScriptResources> {
+        let mut collected = ScriptResources::new();
+        let mut total = 0_usize;
+        for resource in resources {
+            total = total.checked_add(resource.text.len())?;
+            if collected.len() >= MAX_SCRIPTS
+                || resource.src.is_empty()
+                || resource.src.len() > MAX_SCRIPT_SRC_BYTES
+                || total > MAX_SCRIPT_TOTAL_BYTES
+                || collected.contains_key(&resource.src)
+            {
+                return None;
+            }
+            collected.insert(resource.src, resource.text);
         }
         Some(collected)
     }

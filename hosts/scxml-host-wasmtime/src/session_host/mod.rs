@@ -226,21 +226,11 @@ pub struct EmbeddedDocument {
     /// files and 16777216 bytes together); beyond that the document is
     /// rejected the same way.
     pub event_schemas: std::collections::BTreeMap<String, Vec<u8>>,
-    /// For an `<invoke src>` document, its base URI (RFC 3986 §5.1.3: the
-    /// absolute URL it was retrieved from); `None` for none known. A
-    /// relative URI that one of its sessions, or of the inline `<content>`
-    /// sessions they invoke, asks the embedder to load (a `srcexpr` value
-    /// included) is resolved against it first
-    /// ([`scxml_types::resolve_reference`]), so the embedder receives the
-    /// absolute URL; without one, the embedder receives the URI as the
-    /// engine passed it, to resolve against the base it knows.
-    pub base_uri: Option<String>,
 }
 
 impl From<String> for EmbeddedDocument {
     /// A document whose source indicated no media type, that binds
-    /// nothing of its own, that carries no schema files, and whose base
-    /// URI is not known.
+    /// nothing of its own, and that carries no schema files.
     fn from(text: String) -> Self {
         Self {
             text,
@@ -248,7 +238,6 @@ impl From<String> for EmbeddedDocument {
             extensions: None,
             services: None,
             event_schemas: std::collections::BTreeMap::new(),
-            base_uri: None,
         }
     }
 }
@@ -258,12 +247,9 @@ impl From<String> for EmbeddedDocument {
 /// The host calls it synchronously from inside a session's capability
 /// call; implementations must not call back into the host.
 pub trait SessionEmbedder {
-    /// Resolves one document `uri` names, with the media type its source
-    /// indicated; `None` when it is not resolvable (the machine raises
-    /// `error.execution`). `uri` is as the engine passed it, except that in
-    /// a session whose document has a base URI
-    /// ([`EmbeddedDocument::base_uri`]) a relative one arrives resolved
-    /// against that base.
+    /// Resolves one document exactly as authored by `uri`, with the media
+    /// type its source indicated; `None` when it is not resolvable (the
+    /// machine raises `error.execution`).
     fn document(&self, kind: DocumentKind, uri: &str) -> Option<EmbeddedDocument>;
 
     /// The external-script capability of one new session (root or child).
@@ -583,8 +569,6 @@ pub(crate) struct ServiceEntry {
 pub(crate) struct DocumentBindings {
     namespaces: Vec<(crate::ExtensionPackage, Rc<LazyComponent>)>,
     services: Vec<ServiceEntry>,
-    /// The document's base URI ([`crate::EmbeddedDocument::base_uri`]).
-    base_uri: Option<String>,
 }
 
 impl DocumentBindings {
@@ -602,17 +586,11 @@ impl DocumentBindings {
             .iter()
             .find(|entry| entry.package.service_uri == type_uri)
     }
-
-    /// The document's base URI, when it is known.
-    pub(crate) fn base_uri(&self) -> Option<&str> {
-        self.base_uri.as_deref()
-    }
 }
 
 impl HostCore {
     /// The bindings one `<invoke src>` document carries, verified like the
-    /// host's own; empty (the host's) when it carries none. They keep the
-    /// document's base URI.
+    /// host's own; empty (the host's) when it carries none.
     ///
     /// # Errors
     ///
@@ -622,7 +600,6 @@ impl HostCore {
         &self,
         extensions: Option<crate::ExtensionComponents>,
         services: Option<crate::ServiceComponents>,
-        base_uri: Option<String>,
     ) -> Result<Rc<DocumentBindings>, HostError> {
         let mut namespaces = Vec::new();
         if let Some(extensions) = extensions {
@@ -657,7 +634,6 @@ impl HostCore {
         Ok(Rc::new(DocumentBindings {
             namespaces,
             services: entries,
-            base_uri,
         }))
     }
 

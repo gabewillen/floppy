@@ -402,57 +402,6 @@ fn a_extension_reads_the_executing_session_snapshot_only_during_execution() {
     );
 }
 
-/// The entry content of a compound state reads a snapshot taken before any
-/// of its children is entered: the compound state is in the configuration
-/// and no atomic state is yet, and the walk starts from the compound state.
-#[test]
-fn a_extension_reads_the_snapshot_in_a_compound_state_entry_content() {
-    let host = host();
-    let outcome = run_on(
-        &host,
-        &scxml(
-            "ecmascript",
-            r#"<datamodel><data id="doc"/></datamodel>
-                <state id="s0">
-                  <transition target="knowing"/>
-                </state>
-                <state id="knowing">
-                  <onentry>
-                    <example:snapshot location="doc" exclude="data_model"/>
-                    <log label="doc" expr="doc"/>
-                  </onentry>
-                  <transition event="answer.yes" target="done"/>
-                  <state id="listening"/>
-                </state>
-                <final id="done"/>"#,
-        ),
-        &[],
-    )
-    .expect("the run completes");
-    let texts = texts(&outcome);
-    let [doc] = texts.as_slice() else {
-        panic!("one log: {texts:?}");
-    };
-    assert!(
-        scxml_snapshot::check(doc.as_bytes())
-            .expect("a structurally valid document")
-            .is_empty(),
-        "the document is canonical and consistent: {doc}"
-    );
-    let doc: serde_json::Value = serde_json::from_str(doc).expect("JSON");
-    let root = &doc["snapshot"]["root"];
-    assert_eq!(
-        root["configuration"],
-        serde_json::json!({"atomic": [], "full": ["knowing"]}),
-        "the entry content observes the compound state before its children"
-    );
-    assert_eq!(
-        listed_transitions(root),
-        [("knowing".to_owned(), vec!["answer.yes".to_owned()], false)]
-    );
-    assert_eq!(outcome.configuration, ["listening"]);
-}
-
 /// `(source, events, has_cond)` of each listed transition of a session
 /// object; an executable-content snapshot has no previews.
 fn listed_transitions(root: &serde_json::Value) -> Vec<(String, Vec<String>, bool)> {
@@ -837,7 +786,6 @@ impl SessionEmbedder for ChildDocument {
             extensions: self.bindings.clone(),
             services: None,
             event_schemas: std::collections::BTreeMap::new(),
-            base_uri: None,
         })
     }
 

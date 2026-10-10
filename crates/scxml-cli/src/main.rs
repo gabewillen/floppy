@@ -965,6 +965,7 @@ fn validate(
             .with_data_models(data_models.bound())
             .with_event_schema_resources(event_schemas::load(path, &source))
             .with_invoked_documents(documents::local_invoked_documents(path, &source))
+            .with_script_resources(documents::local_script_files(path, &source))
             .with_schema_mode(mode)
             .with_expression_checker(std::sync::Arc::new(expression::EcmaScriptSyntax))
             .with_expression_checker(std::sync::Arc::new(expression::XPathSyntax));
@@ -1028,6 +1029,7 @@ fn compile(
         let extension_packages = resolved.all();
         let event_schemas = event_schemas::load(path, &bytes);
         let invoked_documents = documents::local_invoked_documents(path, &bytes);
+        let script_files = documents::local_script_files(path, &bytes);
         let source = utf8_source(path, bytes)?;
         // The template is read and bounded before compilation so a missing
         // or oversized template never yields a partial artifact.
@@ -1048,6 +1050,7 @@ fn compile(
         let mut validator = Validator::new(schemas.resolver(&extension_packages), XsdSchemaBackend)
             .with_schema_mode(mode)
             .with_invoked_documents(invoked_documents)
+            .with_script_resources(script_files)
             .with_services(services::bound_services(&services))
             .with_data_models(data_models.bound())
             .with_expression_checker(std::sync::Arc::new(expression::EcmaScriptSyntax))

@@ -24,13 +24,9 @@
 //! non-conformant, and the platform MUST reject it"). Any other literal URI
 //! that cannot be fetched is not an error yet: its `<invoke>` or `<data>`
 //! raises `error.execution` when it runs, as SCXML defines. A `srcexpr` URI
-//! is fetched when its `<invoke>` runs, through the same fetcher; a failure
-//! is `error.execution`. A relative one is resolved against the base URI of
-//! the document whose session evaluates it: the host resolves it against
-//! an `<invoke src>` document's own URL
-//! ([`scxml_host_wasmtime::EmbeddedDocument::base_uri`]), so only the root
-//! document's sessions (and their inline `<content>` sessions) pass one
-//! here relative, resolved against the root's base.
+//! is fetched when its `<invoke>` runs, through the same fetcher (relative
+//! ones against the root document's base, the only base the host's
+//! `load-document` call identifies); a failure is `error.execution`.
 //! Everything is fetched once per root session and shared by every session
 //! of the tree.
 //!
@@ -257,6 +253,72 @@ pub(crate) fn local_invoked_documents(
     })
 }
 
+/// The text of each file the `<script src>` elements of `text` (a document
+/// whose base URI is `base`) name, keyed by `src` as authored with its XML
+/// white space collapsed, for the validator's side-effect analysis
+/// ([`scxml_validator_core::Validator::with_script_resources`]): each `src`
+/// resolved like a `<script src>` the run loads, and `load` reads the file
+/// at that URL. A file that cannot be read, or is not UTF-8 (a Wasm
+/// script), is left out and stays unread.
+fn script_files(
+    base: &url::Url,
+    text: &str,
+    mut load: impl FnMut(&url::Url) -> Option<Vec<u8>>,
+) -> scxml_validator_core::ScriptResources {
+    let Ok(document) = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
+        scxml_syntax::SourceId::new(1),
+        "document",
+        text,
+    )) else {
+        return BTreeMap::new();
+    };
+    let mut sites = Vec::new();
+    document.root.visit_with_base(&mut |element, xml_base| {
+        if element
+            .name
+            .is(Some(scxml_validator_core::SCXML_NAMESPACE), "script")
+            && let Some(src) = element.attribute("src")
+        {
+            let key = scxml_syntax::collapse_whitespace(&src.value).into_owned();
+            let authored = match xml_base {
+                Some(xml_base) => scxml_types::resolve_reference(xml_base, &key),
+                None => key.clone(),
+            };
+            sites.push((key, resolve(base, &authored)));
+        }
+    });
+    let mut scripts = BTreeMap::new();
+    for (key, url) in sites {
+        if scripts.contains_key(&key) {
+            continue;
+        }
+        if let Some(text) = url
+            .as_ref()
+            .and_then(&mut load)
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+        {
+            scripts.insert(key, text);
+        }
+    }
+    scripts
+}
+
+/// The text of each file the `<script src>` elements of the document at
+/// `path` (holding `source`) name by a `file:` URL, for `validate` and
+/// `compile`, which fetch nothing (a remote script stays unread).
+pub(crate) fn local_script_files(
+    path: &Path,
+    source: &[u8],
+) -> scxml_validator_core::ScriptResources {
+    let Ok(base) = file_base(path) else {
+        return BTreeMap::new();
+    };
+    script_files(&base, &String::from_utf8_lossy(source), |url| {
+        // The run path's reader: only a regular file is opened.
+        crate::read_source(&url.to_file_path().ok()?).ok()
+    })
+}
+
 impl Documents {
     /// Fetches every literal URI of the root document at `path` (holding
     /// `source`) and of every `<invoke src>` document reached from it.
@@ -423,14 +485,28 @@ impl Documents {
         lines
     }
 
-    /// The URL `uri` (as the host passes it) names: `uri` resolved against
-    /// the root's base. The host passes a URI relative only from a session
-    /// of the root document (or an inline `<content>` session below one);
-    /// one a child document names arrives resolved against that child's
-    /// base URI. `None` when it does not resolve to an `https:` or `file:`
-    /// URL.
+    /// The URL `uri` (as the engine passes it) names: the one its literal
+    /// sites resolved to, or, for a URI no literal names (a `srcexpr`
+    /// value), `uri` resolved against the root's base. `None` when it does
+    /// not resolve, or when literals in documents of different bases
+    /// resolve the same text to different URLs.
     fn url_of(&self, uri: &str) -> Option<url::Url> {
-        resolve(&self.base, &scxml_syntax::collapse_whitespace(uri))
+        let authored = scxml_syntax::collapse_whitespace(uri);
+        let urls: BTreeSet<&url::Url> = self
+            .literals
+            .iter()
+            .filter(|literal| literal.authored == authored)
+            .filter_map(|literal| literal.url.as_ref())
+            .collect();
+        let named = self
+            .literals
+            .iter()
+            .any(|literal| literal.authored == authored);
+        match (urls.len(), named) {
+            (1, _) => urls.into_iter().next().cloned(),
+            (0, false) => resolve(&self.base, &authored),
+            _ => None,
+        }
     }
 
     /// The fetched document `uri` names (fetching a `srcexpr` URI now).
@@ -587,7 +663,6 @@ mod embedder {
                 extensions,
                 services,
                 event_schemas,
-                base_uri: (kind == DocumentKind::Invocation).then(|| url.to_string()),
             })
         }
 

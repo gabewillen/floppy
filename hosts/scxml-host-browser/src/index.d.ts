@@ -1429,6 +1429,17 @@ export interface InvokedDocument {
 }
 
 /**
+ * The text of one file a `<script src>` of the validated document names,
+ * read by the page (the validator fetches nothing).
+ */
+export interface ScriptResource {
+  /** The `src` value as authored, its XML white space collapsed. */
+  src: string;
+  /** The file's text. */
+  text: string;
+}
+
+/**
  * Instantiates one validator (the bundled validator component). Its
  * expression checks use `dataModel` (a bundled ECMAScript or XPath data
  * model): only documents whose `datamodel` is exactly that data model's name
@@ -1462,6 +1473,13 @@ export function createValidator(options?: {
        * transition schema rejects is `EVENT011`.
        */
       invokedDocuments?: InvokedDocument[];
+      /**
+       * The files the document's `<script src>` elements name: the
+       * side-effect analysis reads the functions each one declares, and a
+       * `<script src>` with no file stays unread (`LINT019` on the calls it
+       * may define or replace).
+       */
+      scripts?: ScriptResource[];
     },
   ): Promise<{ report: Uint8Array }>;
 }>;
