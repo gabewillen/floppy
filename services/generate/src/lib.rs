@@ -44,6 +44,10 @@
 //! * `reasoning_effort` (optional, one of `none`, `minimal`, `low`,
 //!   `medium`, `high`, `xhigh`): sent as `reasoning_effort`, and
 //!   [`DEFAULT_REASONING_EFFORT`] without it.
+//! * `stream` (optional, a boolean, `false` without it): `true` asks for a
+//!   streamed reply (`"stream": true`, server-sent events); without it the
+//!   call is one non-streamed completion, as mosfet's `OpenAI`-compatible
+//!   provider makes it.
 //!
 //! Any other parameter, a parameter given twice, or a malformed value
 //! rejects the start: the `<invoke>` raises `error.execution` and nothing is
@@ -99,7 +103,8 @@
 //! # The request
 //!
 //! `POST {base}/chat/completions` with `authorization: Bearer <apikey>`,
-//! `content-type: application/json`, `accept: text/event-stream`, and a body
+//! `content-type: application/json`, `accept: application/json` (or
+//! `text/event-stream` when streamed), and a body
 //! that is canonical JSON ([`scxml_event_schema::canonical_json`]: compact,
 //! members sorted by key), so one request always produces the same bytes
 //! ([`build_request`]):
@@ -108,8 +113,7 @@
 //! {"messages":[{"content":"…","role":"system"},{"content":"…","role":"user"}],
 //!  "model":"…",
 //!  "reasoning_effort":"low",
-//!  "response_format":{"json_schema":{"name":"result","schema":{…},"strict":false},"type":"json_schema"},
-//!  "stream":true}
+//!  "response_format":{"json_schema":{"name":"result","schema":{…},"strict":false},"type":"json_schema"}}
 //! ```
 //!
 //! The request never blocks the session: `outbound-http.fetch` is an
@@ -118,8 +122,10 @@
 //! invocation (SCXML 6.4): the host drops it and closes the request's
 //! connection at once.
 //!
-//! The request streams (`"stream": true`, server-sent events) so that
-//! closing the connection can stop the generation on the backend: a
+//! A call is not streamed unless the invocation asks (`stream`), as mosfet's
+//! provider calls the API. A streamed request (`"stream": true`,
+//! server-sent events) lets closing the connection stop the generation on
+//! the backend: a
 //! streaming backend notices the closed connection while it is still
 //! writing tokens, while a non-streaming one may finish (and bill) the whole
 //! generation before it writes anything. `OpenAI`'s API reference documents
@@ -148,7 +154,11 @@
 //!
 //! # The reply
 //!
-//! The reply is the text the stream carries ([`reply_text`]): every
+//! A non-streamed reply is the completion's `choices[0].message.content`
+//! ([`completion_text`]); a refusal (`message.refusal`), a `finish_reason`
+//! of `length` or `content_filter`, an `error` object, no or empty content,
+//! or a body that is not such a completion is a failure. A streamed reply
+//! is the text the stream carries ([`reply_text`]): every
 //! `data:` event up to `data: [DONE]` is a chunk, and the
 //! `choices[0].delta.content` of the chunks are joined in order (a chunk
 //! without choices, such as a usage chunk, adds nothing, and a reasoning
@@ -158,7 +168,7 @@
 //! content (empty content counts as none: a reasoning model's stream opens
 //! with an empty `content`), or a body that is not such a stream is a failure. With a schema
 //! the whole text is parsed as JSON and checked against the compiled schema
-//! only once the stream ended ([`structured_value`]).
+//! only once the whole reply arrived ([`structured_value`]).
 //!
 //! # Bounds
 //!
@@ -384,6 +394,8 @@ pub struct Generation {
     pub schema: Option<ResponseSchema>,
     /// `reasoning_effort`, one of [`REASONING_EFFORTS`].
     pub reasoning_effort: &'static str,
+    /// Whether the reply is streamed (`stream`).
+    pub stream: bool,
 }
 
 /// The closed failure codes of [`FAILED_EVENT`].
@@ -735,6 +747,18 @@ pub fn strict_schema(schema: &Json) -> Json {
     Json::Object(out)
 }
 
+/// An optional boolean parameter's value.
+fn boolean_parameter(
+    value: Option<&Data>,
+    invalid: &'static str,
+) -> Result<Option<bool>, &'static str> {
+    match value {
+        None => Ok(None),
+        Some(Data::Bool(value)) => Ok(Some(*value)),
+        Some(_) => Err(invalid),
+    }
+}
+
 /// The `reasoning_effort` an invocation asks: one of [`REASONING_EFFORTS`],
 /// or [`DEFAULT_REASONING_EFFORT`] without the parameter.
 fn reasoning_effort_parameter(value: Option<&Data>) -> Result<&'static str, &'static str> {
@@ -787,6 +811,7 @@ pub fn parse_parameters<'a>(
     let mut schema_name = None;
     let mut strict = None;
     let mut reasoning_effort = None;
+    let mut stream = None;
     for (name, value) in parameters {
         let slot = match name {
             "model" => &mut model,
@@ -797,6 +822,7 @@ pub fn parse_parameters<'a>(
             "schemaname" => &mut schema_name,
             "strict" => &mut strict,
             "reasoning_effort" => &mut reasoning_effort,
+            "stream" => &mut stream,
             _ => return Err("generate takes no parameter of that name"),
         };
         if slot.replace(value).is_some() {
@@ -855,12 +881,9 @@ pub fn parse_parameters<'a>(
         }
         Some(_) => return Err("generate schemaname must match [A-Za-z0-9_-]{1,64}"),
     };
-    let strict = match strict {
-        None => None,
-        Some(Data::Bool(strict)) => Some(*strict),
-        Some(_) => return Err("generate strict must be a boolean"),
-    };
+    let strict = boolean_parameter(strict, "generate strict must be a boolean")?;
     let reasoning_effort = reasoning_effort_parameter(reasoning_effort)?;
+    let stream = boolean_parameter(stream, "generate stream must be a boolean")?.unwrap_or(false);
     let schema = match schema {
         None => {
             if schema_name.is_some() || strict.is_some() {
@@ -878,6 +901,7 @@ pub fn parse_parameters<'a>(
         messages: conversation,
         schema,
         reasoning_effort,
+        stream,
     })
 }
 
@@ -902,8 +926,8 @@ pub const fn endpoint(
 /// The Chat Completions request: `POST {base}/chat/completions` (`base` is
 /// the `baseurl` slot's reference) with the `apikey` slot's reference as a
 /// bearer key and a canonical JSON body: `messages`, `model`,
-/// `reasoning_effort`, `stream` (`true`), and, with a schema,
-/// `response_format`.
+/// `reasoning_effort`, `stream` (`true`) when streamed, and, with a
+/// schema, `response_format`.
 #[must_use]
 pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Request {
     let mut body = Map::new();
@@ -922,7 +946,9 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
         "reasoning_effort".into(),
         generation.reasoning_effort.into(),
     );
-    body.insert("stream".into(), Json::Bool(true));
+    if generation.stream {
+        body.insert("stream".into(), Json::Bool(true));
+    }
     if let Some(schema) = &generation.schema {
         body.insert(
             "response_format".into(),
@@ -956,7 +982,14 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
             ),
             (
                 "accept".into(),
-                vec![Part::Literal("text/event-stream".into())],
+                vec![Part::Literal(
+                    if generation.stream {
+                        "text/event-stream"
+                    } else {
+                        "application/json"
+                    }
+                    .into(),
+                )],
             ),
         ],
         body: canonical_json(&Json::Object(body)).into_bytes(),
@@ -1071,6 +1104,47 @@ pub fn reply_text(body: &[u8]) -> Result<String, FailureCode> {
         .ok_or(FailureCode::Malformed)
 }
 
+/// The reply text of a non-streamed Chat Completions result: its
+/// `choices[0].message.content`.
+///
+/// # Errors
+///
+/// [`FailureCode::Malformed`] when the body is not such a completion (not a
+/// JSON object, an `error` object, or no or empty content),
+/// [`FailureCode::Truncated`] or [`FailureCode::Filtered`] for a
+/// `finish_reason` of `length` or `content_filter`, and
+/// [`FailureCode::Refusal`] when the message carries a refusal.
+pub fn completion_text(body: &[u8]) -> Result<String, FailureCode> {
+    let completion: Json = serde_json::from_slice(body).map_err(|_| FailureCode::Malformed)?;
+    if !completion.is_object() || completion.get("error").is_some() {
+        return Err(FailureCode::Malformed);
+    }
+    let choice = completion
+        .get("choices")
+        .and_then(Json::as_array)
+        .and_then(|choices| choices.first())
+        .ok_or(FailureCode::Malformed)?;
+    match choice.get("finish_reason").and_then(Json::as_str) {
+        Some("length") => return Err(FailureCode::Truncated),
+        Some("content_filter") => return Err(FailureCode::Filtered),
+        _ => {}
+    }
+    let message = choice.get("message");
+    if message
+        .and_then(|message| message.get("refusal"))
+        .and_then(Json::as_str)
+        .is_some_and(|refusal| !refusal.is_empty())
+    {
+        return Err(FailureCode::Refusal);
+    }
+    message
+        .and_then(|message| message.get("content"))
+        .and_then(Json::as_str)
+        .filter(|text| !text.is_empty())
+        .map(str::to_owned)
+        .ok_or(FailureCode::Malformed)
+}
+
 /// The structured reply: `text` parsed as JSON, admitted by `schema`.
 ///
 /// # Errors
@@ -1117,7 +1191,12 @@ pub fn outcome(generation: &Generation, answered: Result<Response, TransportFail
     if !(200..300).contains(&response.status) {
         return Returned::failed(FailureCode::Status);
     }
-    let text = match reply_text(&response.body) {
+    let text = if generation.stream {
+        reply_text(&response.body)
+    } else {
+        completion_text(&response.body)
+    };
+    let text = match text {
         Ok(text) => text,
         Err(code) => return Returned::failed(code),
     };

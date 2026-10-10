@@ -7,7 +7,7 @@
 //! `abilities/`), with `<data>` expressions rewritten to shorten bounds, and
 //! runs it against one deterministic fake backend on 127.0.0.1 that serves
 //! both services (nothing reaches the network): the decision service's
-//! `TypeSafe` `system_one` endpoint and the generate service's streamed Chat
+//! `TypeSafe` `system_one` endpoint and the generate service's Chat
 //! Completions endpoint. The first path segment of each base URL picks the
 //! scripted answer ([`Decision`], [`Generation`]); every request is
 //! recorded. The keys are fake and reach the run only through an env file.
@@ -113,23 +113,18 @@ struct Received {
     body: Json,
 }
 
-/// A streamed Chat Completions answer carrying `content`.
-fn streamed(content: &str) -> String {
-    let chunk = |delta: Json, finish: Option<&str>| {
-        json!({
-            "object": "chat.completion.chunk",
-            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
-        })
-    };
-    [
-        chunk(json!({"role": "assistant", "content": ""}), None),
-        chunk(json!({"content": content}), None),
-        chunk(json!({}), Some("stop")),
-    ]
-    .iter()
-    .map(|chunk| format!("data: {chunk}\n\n"))
-    .chain(std::iter::once("data: [DONE]\n\n".to_owned()))
-    .collect()
+/// A non-streamed Chat Completions answer carrying `content`, as the
+/// generate service asks for one by default.
+fn completion(content: &str) -> String {
+    json!({
+        "object": "chat.completion",
+        "choices": [{
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {"role": "assistant", "content": content},
+        }],
+    })
+    .to_string()
 }
 
 /// The `system_one` answer: the selection question's `chosen` label gets
@@ -185,7 +180,7 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
             r#"{"error":{"message":"boom"}}"#.to_owned(),
         ))
     };
-    let selection = |events: Json| ok(streamed(&json!({ "events": events }).to_string()));
+    let selection = |events: Json| ok(completion(&json!({ "events": events }).to_string()));
     match target {
         "/ignore/v1/systemone" => ok(decided(body, IGNORE, 0.8)?),
         "/abstain/v1/systemone" => ok(decided(body, "none of these", 0.8)?),
