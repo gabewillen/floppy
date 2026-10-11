@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Cognition ability (mosfet abilities/cognition/cognition.py): the
+  floppy's Cognition ability (the reference abilities/cognition/cognition.py): the
   autonomy -> intuition -> reasoning cascade, with cancellation, hop
   timeouts and reboot requests. The body (bots/floppy/floppy.scx) invokes it
   as its child "cognition" and sends it one bot.ability.cognition.input per
@@ -24,7 +24,7 @@
   final state's <donedata>, received here as done.invoke.<stage> (the
   invoke ids are the stage names; the substates are running_<stage>):
   {turn, handled, selected?, reason?, tuner?, failed?}. Leaving a stage's
-  substate cancels it (SCXML 6.4), which replaces mosfet's stage cancel
+  substate cancels it (SCXML 6.4), which replaces the original's stage cancel
   tokens. Handled ends the turn with the stage's selections as the output;
   unhandled goes on to the next stage (autonomy always does without
   a database: it gets the stimulus and the database, and runs the learned
@@ -33,19 +33,19 @@
   intuition tuner state is passed in by <param> and kept from the donedata.
 
   Environment actions: an intuition that escalates for low confidence (or
-  a deliberate handoff) still hands out its environment actions (mosfet
-  _environment_actions, which mosfet's intuition dispatches before the
+  a deliberate handoff) still hands out its environment actions (the original
+  _environment_actions, which the original's intuition dispatches before the
   turn goes on to reasoning) as the selected of its unhandled donedata.
   The cognition keeps them and puts them first in the turn's output, before
   reasoning's own selections, so the body routes them first; the turn's
   one answer stays one bot.ability.cognition.output. The reflection gets
-  reasoning's selections only (mosfet's cognition output is reasoning's
+  reasoning's selections only (the original's cognition output is reasoning's
   terminal). A turn whose reasoning fails or is cancelled routes none of
-  them (mosfet would already have dispatched them).
+  them (the original would already have dispatched them).
 
   Hop timeouts: each stage substate arms
   bot.ability.cognition.child.hop.timed_out (child_operation_timeout_ms,
-  mosfet's child_operation_timeout, 30 s)
+  the original's child_operation_timeout, 30 s)
   and cancels it on exit; the transition takes only the timer of the stage
   in hand (_event.sendid, SCXML 5.10.1). A timeout goes to rebooting, which
   sends bot.reboot {reason: "cognition_child_teardown_failed"} to the body.
@@ -53,35 +53,35 @@
   Cancel: bot.ability.cognition.cancel for the turn in hand moves to
   cancelling/<stage>; leaving the stage's substate already cancelled it, so
   acknowledging sends bot.ability.cognition.cancelled {turn} at once and
-  returns to idle. mosfet's 5 s cancel teardown bound has nothing to wait
+  returns to idle. The original's 5 s cancel teardown bound has nothing to wait
   for here (an SCXML invoke cancel is synchronous); the body's cancel timer
   still bounds the acknowledgement.
 
   Ignore: bot.ability.cognition.ignore is this ability's offer: its
   transitions (in idle and processing, which only log) are what
   <decision:choice> offers. A selected ignore is the turn's terminal
-  product and is never dispatched (mosfet without_ignore_selections), so
+  product and is never dispatched (the reference without_ignore_selections), so
   neither the stages nor the body send it here.
 
   Reflection: a reflection region invokes abilities/reflection/reflection.scx
-  as the long-lived child "reflection" (mosfet composes Reflection beside
+  as the long-lived child "reflection" (the original composes Reflection beside
   the turns), and each output is followed by bot.ability.reflection.input
   {turn, cognition_input, cognition_output} to it; its
   bot.ability.reflection.output settles the turn, and its
   bot.ability.failed {message} is logged. The reflection takes the
   database path and the model by <param>; with no database (null) it
   logs that its memory is absent and answers at once. A bot.reboot from
-  it goes to rebooting, which forwards it to the body (mosfet
+  it goes to rebooting, which forwards it to the body (the original
   _forward_reflection_reboot).
 
   Routines: the root is a parallel of the turns, the reflection region and
   a routines region that invokes abilities/routines/routines.scx as the
-  long-lived child "routines" (mosfet's bots compose Routines) with the
+  long-lived child "routines" (the original's bots compose Routines) with the
   database as <param name="database">. A settled reflection, output or
-  failure, sends it bot.ability.routines.reconcile (mosfet
+  failure, sends it bot.ability.routines.reconcile (the original
   _is_reflection_settled); each bot.behavior.tick it sends is handed to
   the body as bot.ability.cognition.input {stimulus} (the tick's envelope,
-  source "routines"), which the body grants a turn (mosfet
+  source "routines"), which the body grants a turn (the original
   _observe_routine_tick). With no database it runs no routine.
 
   Readiness: every entry into idle sends bot.ability.offers {ability,
@@ -96,9 +96,9 @@
   autonomy (which checks a learned behavior's selections against them),
   intuition (the decision service's enabled transitions) and reasoning,
   and the body routes the handling stage's selections. Each stage checks
-  its selections as mosfet's does before it dispatches them (the ignore
+  its selections as the original's does before it dispatches them (the ignore
   selections removed, the attention policy, a target offering each), and
-  one it cannot place fails the stage with mosfet's
+  one it cannot place fails the stage with the original's
   SelectionRejectionError message, which this ability answers as
   bot.ability.failed.
 
@@ -133,7 +133,7 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="choices" expr="[]"/>
-    <!-- The intuition's confidence tuner (mosfet ConfidenceTuner). -->
+    <!-- The intuition's confidence tuner (the reference ConfidenceTuner). -->
     <data id="tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <!-- The stage in hand: its name, hop timer, and answer. -->
     <data id="stage" expr="null"/>
@@ -392,7 +392,7 @@
           <content expr="({})"/>
         </send>
       </transition>
-      <!-- mosfet _forward_reflection_reboot: the body restarts this ability. -->
+      <!-- The original _forward_reflection_reboot: the body restarts this ability. -->
       <transition event="bot.reboot" event:schema="schemas/bot.reboot.json" target="rebooting">
         <assign location="reboot_reason" expr="_event.data.reason"/>
       </transition>

@@ -140,7 +140,7 @@ fn utter(run: &mut Run, voiced: &Json, silent: &Json) {
     run.event("environment.sound", silent);
 }
 
-/// The speech product mosfet's interpretation makes of the utterance that
+/// The speech product the original's interpretation makes of the utterance that
 /// `sound` opened, decoded into `text`.
 fn speech(text: &str, sound: &Json) -> Json {
     json!({
@@ -254,7 +254,7 @@ fn labelled_non_speech_passes_through_as_environment_sound() {
         run,
         "labelled_non_speech_passes_through_as_environment_sound",
     );
-    // Handed off as the detection normalized it (mosfet's pcm_sensed),
+    // Handed off as the detection normalized it (the original's pcm_sensed),
     // its label kept.
     assert_eq!(
         json_texts(&finished.all, "harness.sound"),

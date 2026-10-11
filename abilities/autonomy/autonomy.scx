@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Autonomy stage (mosfet abilities/cognition/autonomy): the
+  floppy's Autonomy stage (the reference abilities/cognition/autonomy): the
   cognition (abilities/cognition/cognition.scx) invokes it first in each turn. It
   runs the trusted seeds the turn's stimulus triggers, then recalls the
   learned turn behaviors whose triggers name the stimulus, and runs them
@@ -15,14 +15,14 @@
   (seeding runs only when the stimulus triggers a seed; inventory ends at
   once without memory.)
 
-  Input: the <param>s turn, input (focus and focus_candidates, mosfet's
+  Input: the <param>s turn, input (focus and focus_candidates, the original's
   bot.ability.autonomy.input, schemas/bot.ability.autonomy.input.json),
   stimulus (the turn's stimulus envelope), choices (the turn's assembled
   choices, which the learned behaviors' selections are checked against)
   and database (the memory database; null means no learned inventory,
   and only the seeds run).
 
-  Seeds (mosfet _prepare_match: the seeded behaviors ride before the
+  Seeds (the reference _prepare_match: the seeded behaviors ride before the
   learned inventory, with or without memory): SpeechHeard
   (abilities/behaviors/speech_heard/speech_heard.scx), triggered by
   bot.ability.listening.speech.output, runs as the child "seed" with the
@@ -31,19 +31,19 @@
   answers {turn, handled: true, selected, candidates, reason: "behavior"}
   with no usage persisted (a seed is not an inventory row); not handled,
   or silent within silence_ms, goes on to the inventory; an error.* for it
-  fails autonomy ("Autonomy native seed 'SpeechHeard' failed: ...", mosfet
+  fails autonomy ("Autonomy native seed 'SpeechHeard' failed: ...", the original
   _emit_native_start_failure). candidates names it first. A seed's
-  selections are trusted (mosfet DispatchTrust.TRUSTED_BEHAVIOR may name
+  selections are trusted (the reference DispatchTrust.TRUSTED_BEHAVIOR may name
   any event a recipient declares, not only the offered ones), so the body
   checks them where it places them (its own bot.ability.communication.input).
 
-  Matching (mosfet _prepare_match, _match_activity): one memory
+  Matching (the reference _prepare_match, _match_activity): one memory
   transaction selects the ACTIVE behaviors of lifetime 'turn' that have a
   trigger equal to the stimulus's event name, in inventory order (by name).
   No match answers {turn, handled: false, candidates: [], reason:
   "no-behaviors"}.
 
-  Candidates (mosfet _CandidateRun): running invokes the chain
+  Candidates (the reference _CandidateRun): running invokes the chain
   abilities/candidates_runner/candidates_runner.scx as the child
   "candidates", which tries them one at a time, one runner each, and
   answers {tried, handled, selected, rejection}. Each behavior's source is
@@ -51,9 +51,9 @@
   runner's child "candidate" by <invoke><content expr>, with the <param>s
   turn and input
   (the stimulus's data, or {event: data} when it is not an object, plus
-  focus and focus_candidates: mosfet behavior_input_payload). It answers by
+  focus and focus_candidates: the reference behavior_input_payload). It answers by
   its final state's <donedata> {turn, handled, selected}:
-    * handled with selections: dispatching checks them as mosfet's
+    * handled with selections: dispatching checks them as the original's
       _dispatch_candidate_activity does before it dispatches them
       (cognition.types.dispatch_selected_events): <bot:verdict> removes the
       ignore selections and applies attention_selection_error with the
@@ -61,10 +61,10 @@
       each on the target offering it in choices (_resolve_target). Placed,
       its used_count and last_used_at are persisted, then autonomy answers
       {turn, handled: true, selected, candidates, reason: "behavior"}.
-      Rejected (mosfet persisting_dispatch_failed), its failed_count and
+      Rejected (the reference persisting_dispatch_failed), its failed_count and
       last_failed_at are persisted and autonomy fails with the rejection's
       message (_fail_after_dispatch_persistence), so the turn fails;
-    * not handled (mosfet candidate.advance), or no answer within
+    * not handled (the reference candidate.advance), or no answer within
       silence_ms (TURN_SILENCE_BOUND, candidate.silent): the next one runs;
     * an error.* for it (candidate.failed): its failed_count and
       last_failed_at are persisted, then the next one runs.
@@ -72,9 +72,9 @@
   "unhandled"}. candidates names the behaviors tried, in order.
 
   Memory: each transaction invokes the Memory ability (abilities/memory/memory.scx)
-  with the database and mosfet's statements. A transaction that fails or
+  with the database and the original's statements. A transaction that fails or
   outlasts memory_timeout_ms (floppy's bound) is logged and the turn goes
-  on, as in mosfet: a failed load matches no inventory rows
+  on, as in the original: a failed load matches no inventory rows
   (_on_load_behaviors_failure), and a failed usage or failure record (the
   runner's) takes the same effect as a persisted one (persistence_failed).
 
@@ -164,7 +164,7 @@
       <assign location="rows" expr="behaviorsFromMemoryOutput(_event)"/>
     </transition>
     <transition event="done.invoke.load" target="matched"/>
-    <!-- mosfet _on_load_behaviors_failure: a failed load is a warning, and the turn goes on with no inventory rows. -->
+    <!-- the reference _on_load_behaviors_failure: a failed load is a warning, and the turn goes on with no inventory rows. -->
     <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="matched">
       <log label="autonomy.behaviors.load.failed" expr="loadFailedReason(_event.data.message)"/>
       <assign location="rows" expr="[]"/>

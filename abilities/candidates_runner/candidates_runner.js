@@ -18,7 +18,7 @@ function silenceDelay() {
   return silence_ms + 'ms';
 }
 
-// The candidate answered the turn with at least one selection (mosfet
+// The candidate answered the turn with at least one selection (the original
 // _coerce_behavior_output: an empty one is unhandled).
 function isBehaviorHandled(event) {
   return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected) && event.data.selected.length > 0;
@@ -53,12 +53,12 @@ function memoryTimeoutDelay() {
   return memory_timeout_ms + 'ms';
 }
 
-// mosfet _prepare_used_persistence.
+// the reference _prepare_used_persistence.
 function usedPersistenceStatements() {
   return [{sql: used_sql, parameters: [candidateName()]}];
 }
 
-// mosfet _prepare_failed_persistence.
+// the reference _prepare_failed_persistence.
 function failedPersistenceStatements() {
   return [{sql: failed_sql, parameters: [candidateName()]}];
 }

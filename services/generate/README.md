@@ -8,10 +8,10 @@ events, the request, the reply, bounds, and telemetry.
 
 ## Images
 
-A `messages` entry's `content` may be an array of mosfet's reading parts,
+A `messages` entry's `content` may be an array of the original's reading parts,
 `{"kind": "text", "content": T}` and, in a `user` message,
 `{"kind": "image", "content": R}`, so a vision model reads an image as
-mosfet's `ImageDecoder` does:
+The original's `ImageDecoder` does:
 
 ```xml
 <invoke id="read" type="https://github.com/stateforward/floppy/services/generate"

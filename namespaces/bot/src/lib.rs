@@ -3,9 +3,9 @@
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! A bot body's per-turn bookkeeping that is synchronous and quick: the
-//! turn's attention bias (mosfet `attention_bias_for_turn`, with the body's
+//! turn's attention bias (the reference `attention_bias_for_turn`, with the body's
 //! `_interrupt_reference` and `_target_device_reference`), the attention
-//! verdict on a turn's selections (mosfet `attention_selection_error`), the
+//! verdict on a turn's selections (the reference `attention_selection_error`), the
 //! stimulus envelope the body hands its cognition (`bot.ability.cognition.input`
 //! `stimulus`), and the identity ability's text name recognition.
 //! Documents bind [`NAMESPACE_URI`] (conventionally with the
@@ -29,7 +29,7 @@
 //!
 //! # `<bot:attention location="L" focuslocation="F" stimulus="X" devices="D" focus="G" sources="S"/>`
 //!
-//! The turn's attention bias from device identity only (mosfet
+//! The turn's attention bias from device identity only (the original
 //! `attention_bias_for_turn`). `focus` is the currently focused device (any
 //! value; `null` when none), `devices` the configured devices (an array),
 //! `stimulus` the turn's stimulus envelope (an object, see
@@ -39,10 +39,10 @@
 //! * The focus: `focus` when it is not `null` and is one of `devices`, else
 //!   `null`. It is the first focus candidate when it is not `null`.
 //! * The stimulus's device: for a `bot.input` stimulus, its data's
-//!   `target_device` when the data is an object that has one (mosfet
+//!   `target_device` when the data is an object that has one (the original
 //!   `_target_device_reference`); otherwise, and when that is `null`, the
 //!   device `sources` maps the stimulus's `source` to when the source is a
-//!   non-empty string (mosfet `_interrupt_reference`), else `null`. It is
+//!   non-empty string (the reference `_interrupt_reference`), else `null`. It is
 //!   appended to the candidates when it is not `null`, is one of `devices`,
 //!   and is not a candidate already.
 //!
@@ -52,7 +52,7 @@
 //!
 //! # `<bot:verdict location="L" rejectionlocation="R" selections="X" focus="F" candidates="C"/>`
 //!
-//! The checks mosfet's cognition makes on a turn's selections before any is
+//! The checks the original's cognition makes on a turn's selections before any is
 //! dispatched (`cognition.types.dispatch_selected_events`). `selections`
 //! evaluates to an array of selections (`{event, data?, target?}`), `focus`
 //! to the turn's focus (a device, or `null`), `candidates` to the turn's
@@ -60,15 +60,15 @@
 //! `<bot:attention>`).
 //!
 //! * `location` (required) receives the selections without the
-//!   `bot.ability.cognition.ignore` ones (mosfet
+//!   `bot.ability.cognition.ignore` ones (the original
 //!   `without_ignore_selections`: ignore is the cognition's own terminal
 //!   product, never dispatched), in order, canonical JSON.
 //! * `rejectionlocation` (required) receives the message of the first of
-//!   those selections the attention policy refuses (mosfet
+//!   those selections the attention policy refuses (the original
 //!   `attention_selection_error`), else `null`. A `bot.focus_device` whose
 //!   `target` is neither absent, `null` nor `"bot"`, or whose `device` is
 //!   not one of `candidates`: `Processing selected focus_device outside
-//!   available device candidates.`; one whose data is not mosfet's
+//!   available device candidates.`; one whose data is not the original's
 //!   `FocusDeviceEventData` (a falsy `data` is `{}`): `Processing selected
 //!   invalid focus selection data for event: bot.focus_device: ` and
 //!   pydantic's detail (`device: missing: Field required`, `device:
@@ -99,7 +99,7 @@
 //!
 //! # `<bot:recognize location="L" name="N" text="T"/>`
 //!
-//! Whether `text` names the bot (mosfet `recognition.hears_name`, the text
+//! Whether `text` names the bot (the reference `recognition.hears_name`, the text
 //! recognizer). `name` and `text` (required) each evaluate to a string, or
 //! to `null` (also `undefined`) when there is none. Each is split on white
 //! space into tokens kept to their letters and digits and lowercased, the
@@ -411,7 +411,7 @@ fn attention<H: BotHost>(
     Ok(Executed::Handled)
 }
 
-/// mosfet `attention_bias_for_turn`: the turn's focus and focus candidates
+/// The reference `attention_bias_for_turn`: the turn's focus and focus candidates
 /// (see the crate documentation, `<bot:attention>`).
 #[must_use]
 pub fn attention_bias(
@@ -512,14 +512,14 @@ fn verdict<H: BotHost>(
     Ok(Executed::Handled)
 }
 
-/// mosfet's cognition ignore event, never dispatched.
+/// The original's cognition ignore event, never dispatched.
 const IGNORE_EVENT: &str = "bot.ability.cognition.ignore";
-/// mosfet `FocusDeviceEvent`.
+/// The reference `FocusDeviceEvent`.
 const FOCUS_DEVICE_EVENT: &str = "bot.focus_device";
-/// mosfet `ClearFocusEvent`.
+/// The reference `ClearFocusEvent`.
 const CLEAR_FOCUS_EVENT: &str = "bot.clear_focus";
 
-/// mosfet `without_ignore_selections` and `attention_selection_error` over
+/// The reference `without_ignore_selections` and `attention_selection_error` over
 /// a turn's selections: the selections without the ignore ones, and the
 /// message of the first the attention policy refuses (see the crate
 /// documentation, `<bot:verdict>`).
@@ -540,7 +540,7 @@ pub fn selection_verdict(
     (kept, rejection)
 }
 
-/// mosfet `attention_selection_error` for one selection.
+/// The reference `attention_selection_error` for one selection.
 fn attention_selection_error(
     selection: &Json,
     focus: &Json,
@@ -585,7 +585,7 @@ fn attention_selection_error(
     }
 }
 
-/// mosfet `FocusDeviceEventData.model_validate(selection.data or {})`: the
+/// The reference `FocusDeviceEventData.model_validate(selection.data or {})`: the
 /// device, or pydantic's detail (`<loc>: <type>: <msg>`).
 fn focus_device_data(data: Option<&Json>) -> Result<&str, &'static str> {
     let falsy = match data {
@@ -763,7 +763,7 @@ fn recognize<H: BotHost>(
     Ok(Executed::Handled)
 }
 
-/// mosfet `recognition._tokens`: the white-space separated words of
+/// The reference `recognition._tokens`: the white-space separated words of
 /// `text`, each kept to its letters and digits and lowercased, the empty
 /// ones dropped.
 fn tokens(text: &str) -> Vec<String> {
@@ -778,7 +778,7 @@ fn tokens(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// mosfet `recognition.hears_name`: whether `name`'s tokens appear as a
+/// The reference `recognition.hears_name`: whether `name`'s tokens appear as a
 /// whole run among `text`'s; a name with no tokens is never heard.
 #[must_use]
 pub fn hears_name(text: &str, name: &str) -> bool {

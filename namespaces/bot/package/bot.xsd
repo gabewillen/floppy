@@ -5,7 +5,7 @@
   does. Bind it with the prefix `bot` by convention.
 
   bot:attention  location (required): receives the turn's focus candidates
-                 (mosfet attention_bias_for_turn): the focus, then the
+                 (the reference attention_bias_for_turn): the focus, then the
                  stimulus's device (a bot.input's target_device, else the
                  device its source reports from) when it is configured.
                  focuslocation (optional): receives the focus (the focused
@@ -14,11 +14,11 @@
                  expressions of the stimulus envelope, the configured
                  devices, the focused device, and source id -> device.
   bot:verdict    location (required): receives the selections without the
-                 bot.ability.cognition.ignore ones (mosfet
+                 bot.ability.cognition.ignore ones (the original
                  without_ignore_selections).
                  rejectionlocation (required): receives the message of the
                  first focus or clear selection the attention policy
-                 refuses (mosfet attention_selection_error), else null.
+                 refuses (the reference attention_selection_error), else null.
                  selections, focus, candidates (required): expressions of
                  the turn's selections, its focus and its focus candidates.
   bot:stimulus   location (required): receives the stimulus envelope
@@ -26,7 +26,7 @@
                  event, data, source (required), target, id (optional):
                  expressions; a null, undefined or empty source is null.
   bot:recognize  location (required): receives whether the text names the
-                 bot (mosfet recognition.hears_name): the name's
+                 bot (the original recognition.hears_name): the name's
                  case-folded letter-and-digit tokens as a whole run in the
                  text's.
                  name, text (required): expressions; each a string or null.

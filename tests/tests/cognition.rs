@@ -172,7 +172,7 @@ fn decided_with(body: &Json, chosen: &str, share: f64, other: Option<f64>) -> Op
     Some(json!({"model": "fake", "answers": answers, "usage": {"input_tokens": 1, "output_tokens": 1}}).to_string())
 }
 
-/// Whether `body` is reflection's select call (mosfet
+/// Whether `body` is reflection's select call (the original
 /// `SELECT_INSTRUCTIONS` as its system message).
 fn is_reflection(body: &Json) -> bool {
     body["messages"].as_array().is_some_and(|messages| {
@@ -570,7 +570,7 @@ fn intuition_handles_an_ignore_without_reasoning() {
         texts(&records, "autonomy"),
         strings(&["turn 1: 0 matched for bot.input"])
     );
-    // An ignore is the turn's terminal product: never dispatched (mosfet
+    // An ignore is the turn's terminal product: never dispatched (the original
     // without_ignore_selections).
     assert!(texts(&records, "floppy.route").is_empty(), "{records:?}");
     assert!(
@@ -627,7 +627,7 @@ fn attribute(text: &str) -> String {
         .replace('>', "&gt;")
 }
 
-/// Runs `statements` (mosfet `Statement`s) in one transaction of the
+/// Runs `statements` (the reference `Statement`s) in one transaction of the
 /// Memory ability (`abilities/memory/memory.scx`) against `database` (a file in
 /// `grant`'s directory, or a Postgres connection URI); returns its output.
 fn transact(grant: &[String], database: &str, statements: &Json) -> Json {
@@ -665,7 +665,7 @@ fn transact(grant: &[String], database: &str, statements: &Json) -> Json {
     serde_json::from_str(&output.1).expect("the output is JSON")
 }
 
-/// `database` holding `learned` as mosfet's inventory rows
+/// `database` holding `learned` as the original's inventory rows
 /// (`bot_behavior`, `bot_behavior_trigger`), in a fresh memory directory
 /// for [`DATABASE`]; returns the run's grant.
 fn inventory(database: &str, learned: &[Learned<'_>]) -> Vec<String> {
@@ -720,7 +720,7 @@ fn start_with(bot: &Bot, args: &[String]) -> Run {
     run
 }
 
-/// mosfet's Autonomy over the inventory: the ACTIVE turn behaviors the
+/// The original's Autonomy over the inventory: the ACTIVE turn behaviors the
 /// stimulus triggers run in name order as candidates (the behavior double,
 /// `tests/fixtures/phase4/behavior_double.scx`, is one); a silent one, one
 /// that declines and one that cannot run advance, and the first that
@@ -862,9 +862,9 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
     );
 }
 
-/// mosfet's Autonomy dispatches a handled behavior's selections before it
+/// The original's Autonomy dispatches a handled behavior's selections before it
 /// counts the use: one the turn cannot place (here an event nobody offers)
-/// marks the behavior failed, not used, and fails the turn with mosfet's
+/// marks the behavior failed, not used, and fails the turn with the original's
 /// SelectionRejectionError message; intuition never runs.
 #[test]
 fn a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn() {
@@ -1031,7 +1031,7 @@ fn reasoning_selects_from_the_turns_choices() {
         .and_then(|messages| messages.last())
         .and_then(|message| message["content"].as_str())
         .expect("the user message");
-    // mosfet's model_facing_xml of the ProcessorInput: the host input
+    // The original's model_facing_xml of the ProcessorInput: the host input
     // (stimulus and instructions), prior episodes and standing directives,
     // no focus.
     assert!(
@@ -1106,7 +1106,7 @@ fn a_reasoned_response_is_said_through_the_communication() {
     );
 }
 
-/// The user message of each reasoning request (mosfet's model-facing XML).
+/// The user message of each reasoning request (the original's model-facing XML).
 fn prompts(mock: &Mock) -> Vec<String> {
     reasoning_requests(mock)
         .iter()
@@ -1121,7 +1121,7 @@ fn prompts(mock: &Mock) -> Vec<String> {
         .collect()
 }
 
-/// mosfet's Reasoning recall: a reasoned turn retains its episode, and the
+/// The original's Reasoning recall: a reasoned turn retains its episode, and the
 /// next turn's prompt carries it.
 #[test]
 fn a_reasoned_turn_is_recalled_by_the_next() {
@@ -1147,7 +1147,7 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
     let mut run = start(&bot);
     say(&mut run, "remember this");
     run.until(WAIT, turn_ended);
-    // Reflection stores the turn's episode too (mosfet's Reasoning
+    // Reflection stores the turn's episode too (the original's Reasoning
     // `_retain_activity` and Reflection `_store_activity` both insert
     // one); `say` waits for it, so the next turn's recall is fixed.
     say(&mut run, "and this");
@@ -1160,7 +1160,7 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
         prompts[0]
     );
     // Reasoning's episode, then reflection's, each a
-    // cognition:cognitive_episode (mosfet episodes.CognitiveEpisode).
+    // cognition:cognitive_episode (the original episodes.CognitiveEpisode).
     let episode = format!(
         "    <cognition:cognitive_episode stimulus_name=\"bot.input\">\n      <focus_candidates count=\"0\" />\n      <output count=\"1\">\n        <cognition:event target=\"cognition\" event=\"{IGNORE}\" reason=\"nothing to say\">\n          <data />\n        </cognition:event>\n      </output>\n    </cognition:cognitive_episode>\n"
     );
@@ -1251,7 +1251,7 @@ fn after_the_warmup_the_threshold_follows_the_tuner() {
     };
     say(&mut run, "one");
     let first = run.until(WAIT, turn_ended);
-    // mosfet observes before it compares: delta = 34 - 70; mean = 70 +
+    // The original observes before it compares: delta = 34 - 70; mean = 70 +
     // 0.08 * delta; variance = max(100, 0.92 * 100 + 0.08 * delta^2); the
     // threshold is then max(35 / 2, mean - sqrt(variance)), about 53.1.
     let tuner = json_text(&first, "cognition.tuner");
@@ -1292,12 +1292,12 @@ fn offered_schema(event: &str) -> Json {
     schema
 }
 
-/// mosfet's `low_confidence` keeps the environment actions: intuition gets
+/// The original's `low_confidence` keeps the environment actions: intuition gets
 /// every groundable event with its own confidence (ignore 0.34, respond
 /// 0.33 with the stimulus's text), observes their least, 33, and escalates
 /// under the floor 35 with respond (ignore is no environment action); the
 /// cognition routes respond first, then reasoning's selection. Reasoning's
-/// prompt is mosfet's model-facing XML of its `ProcessorInput`.
+/// prompt is the original's model-facing XML of its `ProcessorInput`.
 #[test]
 fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     let mock = Mock::start();
@@ -1359,7 +1359,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
             {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"},
         ]})
     );
-    // The TypeSafe state is mosfet's turn document, and respond's text is
+    // The TypeSafe state is the original's turn document, and respond's text is
     // grounded in the stimulus's value.
     let decisions = mock.received("/systemone");
     assert_eq!(decisions.len(), 1);
@@ -1691,7 +1691,7 @@ fn autonomy_harness(database: &str) -> PathBuf {
     harness
 }
 
-/// mosfet's `SpeechData` (its interpretation example, decoded) heard from
+/// The original's `SpeechData` (its interpretation example, decoded) heard from
 /// `source_ids`.
 fn speech(source_ids: &Json) -> Json {
     json!({
@@ -1721,7 +1721,7 @@ fn autonomy_turn(run: &mut Run, turn: u64, event: &str, data: &Json) -> Json {
     json_text(&records, "harness.output")
 }
 
-/// The selection mosfet's `SpeechHeard` makes: one
+/// The selection the original's `SpeechHeard` makes: one
 /// `bot.ability.communication.input` carrying the speech as `TurnData`.
 fn admitted(turn: u64) -> Json {
     json!({
@@ -1757,7 +1757,7 @@ fn admits(event: &str, data: &Json) -> bool {
     schema.admits(&value)
 }
 
-/// mosfet's `SpeechHeard` seed without memory (seed-only autonomy): speech
+/// The original's `SpeechHeard` seed without memory (seed-only autonomy): speech
 /// with a source becomes a `bot.ability.communication.input` selection
 /// whose data the communication's schema admits; speech with no source is
 /// unhandled; a stimulus no seed triggers runs nothing.
@@ -1797,7 +1797,7 @@ fn the_speech_heard_seed_admits_identified_speech_as_communication_input() {
     );
 }
 
-/// mosfet `_prepare_match`: the seeds run before the learned inventory. A
+/// The reference `_prepare_match`: the seeds run before the learned inventory. A
 /// learned behavior the speech triggers runs only when the seed does not
 /// handle the turn, and only its use is counted.
 #[test]

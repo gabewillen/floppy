@@ -1,7 +1,7 @@
 {
   "revision": "0001",
   "down_revision": null,
-  "doc": "Initial memory schema in Postgres (mosfet abilities/memory/migrations/versions/0001_initial_memory_schema.py). The defaulted created_at and updated_at are TIMESTAMPTZ DEFAULT NOW(), as mosfet's postgres_memory declares created_at.",
+  "doc": "Initial memory schema in Postgres (the reference abilities/memory/migrations/versions/0001_initial_memory_schema.py). The defaulted created_at and updated_at are TIMESTAMPTZ DEFAULT NOW(), as the original's postgres_memory declares created_at.",
   "upgrade": [
     {
       "sql": "CREATE TABLE bot_memory (memory_id TEXT NOT NULL, scope TEXT DEFAULT 'memory' NOT NULL, context_ref TEXT, subject_ref TEXT, kind TEXT, sensitivity TEXT, retention TEXT, content TEXT NOT NULL, content_format TEXT DEFAULT 'text/plain' NOT NULL, query_tags TEXT, metadata_json TEXT DEFAULT '{}' NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL, PRIMARY KEY (memory_id))"

@@ -351,7 +351,7 @@ fn json_log(records: &[Json], label: &str) -> Json {
 /// A seed of one ACTIVE turn behavior named `GreetOnKnock`, used once.
 const SEED_BEHAVIOR: &str = "[{sql: &quot;INSERT INTO bot_behavior (name, source, description, status, used_count, last_used_at) VALUES ('GreetOnKnock', '&lt;scxml/&gt;', 'Say hello.', 'ACTIVE', '1', '2026-10-09T00:00:00Z')&quot;}, {sql: &quot;INSERT INTO bot_behavior_trigger (behavior_name, \\&quot;trigger\\&quot;) VALUES ('GreetOnKnock', 'environment.sound')&quot;}]";
 
-/// mosfet's select step: with nothing selected the turn's episode is
+/// The original's select step: with nothing selected the turn's episode is
 /// stored, and the next turn's select recalls it.
 #[test]
 fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it() {
@@ -430,7 +430,7 @@ fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(databas
     );
 }
 
-/// mosfet `_apply_break`: the row is kept, BROKEN with the trimmed reason,
+/// The reference `_apply_break`: the row is kept, BROKEN with the trimmed reason,
 /// and the episode records the break.
 #[test]
 fn a_break_marks_the_behavior_broken_and_keeps_it() {
@@ -505,7 +505,7 @@ fn a_break_of_an_unknown_behavior_fails_on(database: &str) {
     assert_eq!(json_log(&records, "episodes"), json!([]));
 }
 
-/// mosfet's select returns at most one inventory event.
+/// The original's select returns at most one inventory event.
 #[test]
 fn more_than_one_selection_fails() {
     more_than_one_selection_fails_on(SQLITE);
@@ -531,7 +531,7 @@ fn more_than_one_selection_fails_on(database: &str) {
     assert_eq!(json_log(&records, "inventory")[0]["status"], "ACTIVE");
 }
 
-/// mosfet Revision through the builder: a create stores the built document
+/// The original Revision through the builder: a create stores the built document
 /// ACTIVE with its grounded triggers, and the episode records it.
 #[test]
 fn a_create_is_built_and_stored_active_with_grounded_triggers() {
@@ -587,7 +587,7 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     assert!(spec.contains(r#""status":"DRAFT""#), "{spec}");
     assert!(spec.contains(r#""name":"GreetOnKnock""#), "{spec}");
     // The persistent routine contract carries the at schedule's
-    // next_after (mosfet hsm.at) for the routine's data model.
+    // next_after (the reference hsm.at) for the routine's data model.
     let prompt: Json =
         serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
     assert!(
@@ -600,8 +600,8 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
 }
 
 /// A build that fails its checks drafts the rejected source as DRAFT with
-/// `status_reason` validation, and the turn fails with mosfet's abandon
-/// message and rendered report (mosfet `_abandon`, `_persist_draft`).
+/// `status_reason` validation, and the turn fails with the original's abandon
+/// message and rendered report (the reference `_abandon`, `_persist_draft`).
 #[test]
 fn a_failed_build_leaves_a_validation_draft() {
     a_failed_build_leaves_a_validation_draft_on(SQLITE);
@@ -643,7 +643,7 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
 
 /// A change call that fails without a draft to check (every generation
 /// fails) fails the turn and drafts nothing: the create's stub stays as
-/// mosfet's `_prepare` stored it (mosfet `_fail_child`).
+/// The original's `_prepare` stored it (the reference `_fail_child`).
 #[test]
 fn a_failed_change_call_drafts_nothing() {
     a_failed_change_call_drafts_nothing_on(SQLITE);

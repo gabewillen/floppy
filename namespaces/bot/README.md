@@ -6,7 +6,7 @@ executable-content extension component (`floppy_bot`). It reads its
 expressions and assigns its results through the data model; it never
 sends, and it does no I/O.
 
-| Element | mosfet | Writes |
+| Element | The original | Writes |
 | --- | --- | --- |
 | `<bot:attention location focuslocation? stimulus devices focus sources?>` | `attention_bias_for_turn`, `_interrupt_reference`, `_target_device_reference` | the focus (`focuslocation`) and the focus candidates (`location`) |
 | `<bot:verdict location rejectionlocation selections focus candidates>` | `without_ignore_selections`, `attention_selection_error` | the selections without the ignore ones (`location`) and the first refused focus or clear selection's message, else `null` (`rejectionlocation`) |

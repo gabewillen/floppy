@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Reasoning stage (mosfet abilities/cognition/reasoning): the slow
+  floppy's Reasoning stage (the reference abilities/cognition/reasoning): the slow
   System 2 pass. The cognition (abilities/cognition/cognition.scx) invokes it once
   per turn that intuition left unhandled.
 
     recalling -> applying (an invoked generate service) -> dispatching ->
       retaining -> done
 
-  Memory (mosfet Reasoning._recall_activity and _retain_activity): with a
+  Memory (the original Reasoning._recall_activity and _retain_activity): with a
   database (the <param> database, the memory database file), recalling
   invokes the memory ability (abilities/memory/memory.scx) with one
-  transaction of mosfet's two selects, prior cognitive episodes
+  transaction of the original's two selects, prior cognitive episodes
   (query_tags cognitive_episode) and standing directives (query_tags
   standing_directive), each for the turn's context or none, oldest first,
   at most 50, and sends itself bot.ability.reasoning.recalled with them and
@@ -18,40 +18,40 @@
   ({focus, focus_candidates, stimulus_name, output, behavior} as JSON,
   query_tags cognitive_episode) and sends itself
   bot.ability.reasoning.retained with memory_written true. The context is
-  the stimulus's target_device (mosfet _context_ref_from_input). A recalled
-  row that is not a JSON object is skipped, as mosfet skips one that does
+  the stimulus's target_device (the original _context_ref_from_input). A recalled
+  row that is not a JSON object is skipped, as the original skips one that does
   not validate. A memory failure fails the stage ("Reasoning memory recall
   failed: ..."). Without
-  a database (mosfet's Reasoning without a memory collaborator) each step
+  a database (the original's Reasoning without a memory collaborator) each step
   logs <log label="memory" expr="'absent'"> and sends its event with
   memory_consulted and memory_written false and nothing recalled.
 
-  Prompt (mosfet processing.py InputData.model_facing_payload over
-  cognition/event.py model_facing_xml): the user message is mosfet's
+  Prompt (the reference processing.py InputData.model_facing_payload over
+  cognition/event.py model_facing_xml): the user message is the original's
   ProcessorInput as model-facing XML, built by promptProjection() in
   reasoning.js: <cognition:processor_input> holding host_input (a
   processing:input whose input field is the stimulus, stamped
   stimulus:event, stimulus:id, stimulus:source and stimulus:target),
   prior_episodes (cognition:cognitive_episode) and standing_directives
-  (cognition:directive), each list with its count; no focus (mosfet's
+  (cognition:directive), each list with its count; no focus (the original's
   ProcessorInput has none). The stimulus's data is JSON here, so it renders
-  as mosfet renders a payload that is not a model: a content field, an
+  as the original renders a payload that is not a model: a content field, an
   object as entry elements, an array as item elements. ElementTree's
   indent and serialization (two spaces, an empty element as <name />) are
-  reproduced. mosfet's budgets hold: 262144 encoded bytes, 4096 nodes, 4096
+  reproduced. The original's budgets hold: 262144 encoded bytes, 4096 nodes, 4096
   collection items and 65536 characters per scalar for the projection, and
   262144 bytes for the system prompt, the projection and the dispatch
   schema together; over any, the stage fails without a model call with
-  mosfet's message (for example "prompt projection encoded byte budget
+  the original's message (for example "prompt projection encoded byte budget
   exceeded"). applying ends on the generate service's done.invoke, which
-  stands in for mosfet's private bot.ability.reasoning.reasoned
+  stands in for the original's private bot.ability.reasoning.reasoned
   completion.
 
   Choices: the body's assembled choices for the turn (the <param>
   choices: the body's own and each ability's offers, tagged with the
   offering ability's invoke id as target). A selection is returned, not
   taken: the body routes it. The structured-output schema is built from
-  the choices by <decision:selection>, as mosfet's dispatch tool:
+  the choices by <decision:selection>, as the original's dispatch tool:
   {events: [anyOf one branch per offered event]}, each branch {event (a
   one-value enum), data (the event's schema without $schema, title and
   examples), reason, and target (an enum of the abilities offering it) when
@@ -60,14 +60,14 @@
   selection outside the choices (event or target) fails the stage as
   schema-mismatch. With no choices the stage fails without a model call.
 
-  Dispatching (mosfet's apply activity dispatches the reasoned selections
+  Dispatching (the original's apply activity dispatches the reasoned selections
   before bot.ability.reasoning.reasoned, cognition.types.
   dispatch_selected_events): <bot:verdict> removes the ignore selections
   and applies attention_selection_error with the turn's focus and
   focus_candidates, then <decision:route> places each on the target
   offering it in the choices (_resolve_target: a selection that names no
   target needs exactly one offerer). A selection that cannot be placed
-  fails the stage with mosfet's SelectionRejectionError message, before
+  fails the stage with the original's SelectionRejectionError message, before
   anything is retained.
 
   Input: the <param>s turn, stimulus, focus, focus_candidates, choices,
@@ -116,7 +116,7 @@
          when placed). -->
     <data id="dispatch_selections" expr="[]"/>
     <data id="rejection" expr="null"/>
-    <!-- Memory: the database file (null: no memory) and mosfet's
+    <!-- Memory: the database file (null: no memory) and the original's
          statements (episodes.py, directives.py), with ?2 the context. The SQL runs on both
          engines (SQLite and Postgres). A memory id is the next row count
          as 32 zero-padded digits (neither engine's randomness is unique

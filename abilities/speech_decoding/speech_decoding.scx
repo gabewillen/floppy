@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's SpeechDecoding (mosfet abilities/hearing/speech/decoding.py):
+  floppy's SpeechDecoding (the reference abilities/hearing/speech/decoding.py):
   speech to words through the speech service (services/speech, operation
   decode: OpenAI-compatible POST {base}/audio/transcriptions, Whisper on
-  the Sparks), mosfet's SpeechDecoder providers. The interpretation
+  the Sparks), the original's SpeechDecoder providers. The interpretation
   (abilities/interpretation/interpretation.scx) invokes it once per utterance from
   DecodingSpeech; the interpretation's stage timer bounds it, and leaving
   DecodingSpeech cancels it and the service call (SCXML 6.4).
@@ -15,9 +15,9 @@
   (the transcription model; the OpenAI API's whisper-1 by default).
 
   Output: <donedata>, received by the interpretation as
-  done.invoke.speech_decoding: {text} (mosfet's decoded speech, as words)
+  done.invoke.speech_decoding: {text} (the original's decoded speech, as words)
   when the service answers bot.ability.hearing.speech.decoding.output
-  {text}, or {message} (mosfet's FailureData) when it answers
+  {text}, or {message} (the original's FailureData) when it answers
   bot.ability.failed {message}, answers something else, or cannot run.
 
   Bindings: the speech service package, resolved from its repository URI;

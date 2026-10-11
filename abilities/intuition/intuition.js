@@ -4,7 +4,7 @@
 
 // deciding
 
-// mosfet's stimulus data mapping: the stimulus's object data, else {}.
+// The original's stimulus data mapping: the stimulus's object data, else {}.
 function stimulusData() {
   return stimulus !== null && stimulus.data instanceof Object && !Array.isArray(stimulus.data) ? stimulus.data : ({});
 }
@@ -13,7 +13,7 @@ function decisionTimeoutDelay() {
   return decision_timeout_ms + 'ms';
 }
 
-// mosfet's deliberate handoff event (types.DELIBERATIVE_HANDOFF_EVENT_NAME).
+// The original's deliberate handoff event (types.DELIBERATIVE_HANDOFF_EVENT_NAME).
 function isDeliberativeHandoff(name) {
   return name === 'bot.ability.reasoning.input';
 }
@@ -24,7 +24,7 @@ function processorChoices() {
   return choices.filter(function (choice) { return !isDeliberativeHandoff(choice.event); });
 }
 
-// mosfet _stimulus_document as the TypeSafe state {"turn": ...}: the
+// The original _stimulus_document as the TypeSafe state {"turn": ...}: the
 // stimulus envelope's name and its data.
 function decisionState() {
   if (stimulus === null) {
@@ -39,7 +39,7 @@ function hasSelections(_event) {
   return Array.isArray(Object(_event.data).selections) && _event.data.selections.length > 0;
 }
 
-// mosfet normalize_confidence: a probability in (0, 1] as a whole number
+// The reference normalize_confidence: a probability in (0, 1] as a whole number
 // on the 0-100 scale, rounded half to even as Python's round does.
 function normalizedConfidence(probability) {
   var scaled = probability * 100;
@@ -50,7 +50,7 @@ function normalizedConfidence(probability) {
   return Math.max(0, Math.min(100, rounded));
 }
 
-// mosfet selection_confidence: the minimum of the selections' confidences.
+// The reference selection_confidence: the minimum of the selections' confidences.
 function selectionConfidence(_event) {
   return _event.data.selections.reduce(function (least, selection) {
     return Math.min(least, normalizedConfidence(Number(selection.confidence)));
@@ -65,7 +65,7 @@ function tunedLog(_event) {
   return 'turn ' + turn + ': ' + selectionNames(_event) + ' (confidence ' + confidence + ', threshold ' + threshold + ')';
 }
 
-// mosfet should_escalate: the confidence is below the updated threshold
+// The reference should_escalate: the confidence is below the updated threshold
 // (written as a probability).
 function isLowConfidence() {
   return confidence / 100 < threshold;
@@ -80,12 +80,12 @@ function product(_event) {
   return _event.data.selections.map(function (selection) { return ({event: selection.event, data: Object(selection.data)}); });
 }
 
-// The turn's selections (mosfet's escalation reason none).
+// The turn's selections (the original's escalation reason none).
 function selectionResult(_event) {
   return ({handled: true, selected: product(_event), reason: 'none', turn: turn, tuner: tuner});
 }
 
-// mosfet _environment_actions: the selections safe to hand out before the
+// The original _environment_actions: the selections safe to hand out before the
 // turn escalates, less the deliberate handoff and the cognition ignore
 // (types.is_ignore_event).
 function escalatedResult(reason, _event) {
@@ -102,7 +102,7 @@ function abstainedLog(_event) {
   return 'turn ' + turn + ': abstained (' + _event.data.reason + ')';
 }
 
-// mosfet's empty product: no selection, no observation.
+// The original's empty product: no selection, no observation.
 function abstainedResult() {
   return ({handled: false, reason: 'empty_product', turn: turn, tuner: tuner});
 }
@@ -124,7 +124,7 @@ function isRejected() {
   return rejection !== null;
 }
 
-// mosfet _selection_rejection_message: the rejection fails the stage.
+// The original _selection_rejection_message: the rejection fails the stage.
 function rejectedResult() {
   return ({handled: false, failed: true, reason: 'Selection rejected: ' + rejection, turn: turn, tuner: tuner});
 }

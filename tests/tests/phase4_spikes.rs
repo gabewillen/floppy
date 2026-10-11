@@ -1,7 +1,7 @@
-//! Phase 4 spikes: the scxml.rs behavior the mosfet bot core relies on,
+//! Phase 4 spikes: the scxml.rs behavior the original bot core relies on,
 //! pinned through `scx run` before any ability is written. The documents
 //! are `tests/fixtures/phase4/spikes/`; every event they use is a
-//! test-only `spike.*` name (floppy's, not mosfet's).
+//! test-only `spike.*` name (floppy's, not the original's).
 //!
 //! * (a) `invoke_tree`: a root invokes `../x/child.scx`, which invokes
 //!   `grandchild.scx`, which alone invokes the `generate` service with

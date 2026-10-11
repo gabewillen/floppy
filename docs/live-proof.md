@@ -36,8 +36,8 @@ generate package declares no origin, and floppy's `.env` holds
 `scx` was the debug binary the tests build from the subtree
 (`target/scx/debug/scx`), with the dev cache
 `target/components/package-cache`. The live test also had
-`TYPESAFE_API_KEY` from `mosfet/mosfet.py/.env`
-(`FLOPPY_LIVE_ENV_FILE=.env:$HOME/VSCode/stateforward/mosfet/mosfet.py/.env
+`TYPESAFE_API_KEY` from `.env.local`
+(`FLOPPY_LIVE_ENV_FILE=.env:.env.local
 FLOPPY_LIVE_MODEL=Qwen/Qwen3.8-Flash-Next cargo test -p floppy-tests --test
 builder_bot -- --ignored`); the README runs used the README's command,
 `--env-file .env` only, so triage ran its fallback
@@ -48,7 +48,7 @@ builder_bot -- --ignored`); the README runs used the README's command,
 | `live_builder_through_an_env_file` | `Qwen/Qwen3.8-Flash-Next` | pass | 1 | 1033 s, final state `done` on attempt 8 after 7 failures (`validate` and `simulate test-failed`), triage `triage.repair` seven times through TypeSafe, one machine-applicable fix |
 | README command, run 1 | `Qwen/Qwen3.8-Flash-Next` | fail | 1 of 2 | exit 0 in 615 s, final state `failed` (`no-progress`): both author generations cancelled at the builder's 300 s `author-timeout` |
 | README command, run 2 | `Qwen/Qwen3.8-Flash-Next` | pass | 2 of 2 | exit 0 in 380 s, final state `done` on attempt 5 after `validate SCXML008` (with `XSD-cvc-complex-type.3.2.2`), `simulate test-failed`, `validate XML001`, and `simulate test-failed`, fallback triage four times, one machine-applicable fix; plan `traffic_light_pedestrian`; saved as `bots/builder/examples/traffic_light_vllm/` (`scx validate`: 0 errors, 0 warnings) |
-| README command without `FLOPPY_BASE_URL` | none | pass (fail fast) | 1 | `--env-file mosfet/mosfet.py/.env` only: the consent listing showed `env FLOPPY_BASE_URL (no value)` and `env FLOPPY_API_KEY (no value)`, the design generation sent nothing, and the builder ended in `failed` (`unconfigured`, its diagnostic naming both variables) 76 ms after the request |
+| README command without `FLOPPY_BASE_URL` | none | pass (fail fast) | 1 | `--env-file .env.local` only: the consent listing showed `env FLOPPY_BASE_URL (no value)` and `env FLOPPY_API_KEY (no value)`, the design generation sent nothing, and the builder ended in `failed` (`unconfigured`, its diagnostic naming both variables) 76 ms after the request |
 
 ## 2026-10-07, the builder against vLLM directly (no gateway), model `Qwen/Qwen3.8-Flash-Next`
 
@@ -62,7 +62,7 @@ through the CPA gateway. The vLLM key reached the builder's
 exported `CPA_API_KEY` from `VLLM_API_KEY` in floppy's `.env` and `scx` got
 a bare `--env CPA_API_KEY`; floppy's `.env` was not given as an env file
 (its own `CPA_API_KEY` would have won), and no value was written to disk.
-`TYPESAFE_API_KEY` came from `mosfet/mosfet.py/.env`. The base URL came
+`TYPESAFE_API_KEY` came from `.env.local`. The base URL came
 from a scratch env file holding only `CPA_BASE_URL`, naming a local
 streaming tap (`http://127.0.0.1:<port>/v1`, a Python script outside the
 repository) that forwarded each request byte for byte to
@@ -74,7 +74,7 @@ recorded a header). In the floppy root:
 ```console
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"model":"Qwen/Qwen3.8-Flash-Next"}}' |
   target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
-    --env CPA_API_KEY --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env \
+    --env CPA_API_KEY --env-file .env.local \
     --env-file <file with only CPA_BASE_URL> bots/builder/builder.scx
 ```
 
@@ -151,7 +151,7 @@ generation answered after 119.9 s. From a clean shell
 ```console
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"model":"sparks/qwen3.8-flash-next"}}' |
   target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
-    --env-file .env --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env \
+    --env-file .env --env-file .env.local \
     --env-file <file with only CPA_BASE_URL> bots/builder/builder.scx
 ```
 
@@ -186,7 +186,7 @@ removed `scx`'s 120 s total and 10 s connect timeouts on invoked-service
 requests), with the dev cache rebuilt by `sh scripts/build-components.sh`
 and `scx` rebuilt with its session components into `target/scx-live`, as
 the entries below describe. `CPA_API_KEY` came from floppy's `.env` and
-`TYPESAFE_API_KEY` from `mosfet/mosfet.py/.env`, no base URL was set, and
+`TYPESAFE_API_KEY` from `.env.local`, no base URL was set, and
 the request set no `max_attempts`, so only the no-progress rule could end
 the loop. From a clean shell (`env -i HOME="$HOME" PATH="/usr/bin:/bin"`),
 in the floppy root:
@@ -194,7 +194,7 @@ in the floppy root:
 ```console
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"model":"sparks/qwen3.8-flash-next"}}' |
   target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
-    --env-file .env --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env bots/builder/builder.scx
+    --env-file .env --env-file .env.local bots/builder/builder.scx
 ```
 
 Durations are from the arrival of each stage's `log` record on standard
@@ -223,7 +223,7 @@ The runs used floppy commit `834a9c08` (the subtree unchanged from the
 entry below), built and run exactly as that entry describes: the dev cache
 pinned to commit `834a9c08`, `scx` rebuilt with its session components,
 `CPA_API_KEY` from floppy's `.env` and `TYPESAFE_API_KEY` from
-`mosfet/mosfet.py/.env`, no base URL set, and the same builder command.
+`.env.local`, no base URL set, and the same builder command.
 
 ### Choosing the default
 
@@ -285,7 +285,7 @@ subtree with those session components embedded
 (`SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml"
 CARGO_TARGET_DIR="$PWD/target/scx-live" cargo build --release --locked -p
 scxml-cli --manifest-path scxml.rs/Cargo.toml`). `CPA_API_KEY` came from
-floppy's `.env` and `TYPESAFE_API_KEY` from `mosfet/mosfet.py/.env`; no
+floppy's `.env` and `TYPESAFE_API_KEY` from `.env.local`; no
 `CPA_BASE_URL` or `TYPESAFE_BASE_URL` was set, so each service used its
 package's declared origin (`https://cpa.willen.dev/v1`,
 `https://api.typesafe.ai`), as the consent listing showed. The live tests
@@ -297,7 +297,7 @@ package's declared origin (`https://cpa.willen.dev/v1`,
 ```console
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"max_attempts":4}}' |
   target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
-    --env-file .env --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env bots/builder/builder.scx
+    --env-file .env --env-file .env.local bots/builder/builder.scx
 ```
 
 | Run | Model | Result | Runs used | Note |
@@ -338,7 +338,7 @@ root:
 ```console
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"max_attempts":4,"model":"gpt-6-luna"}}' |
   target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
-    --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env bots/builder/builder.scx
+    --env-file .env.local bots/builder/builder.scx
 ```
 
 `--offline` resolves every repository package from the dev cache, so the
@@ -374,7 +374,7 @@ root:
 ```console
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"max_attempts":4,"model":"gpt-6-luna"}}' |
   target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
-    --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env bots/builder/builder.scx
+    --env-file .env.local bots/builder/builder.scx
 ```
 
 The consent listing named the decision namespace and both services by their
@@ -399,7 +399,7 @@ their tagless URIs to release tag `v0.1.0` at that commit; `scx`'s release
 cache untouched), and `scx` built from the subtree with those session
 components embedded (`SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml"
 CARGO_TARGET_DIR=target/scx-live cargo build --release --locked -p
-scxml-cli`). The mosfet env file sets no `TYPESAFE_BASE_URL`; the decision
+scxml-cli`). The the original env file sets no `TYPESAFE_BASE_URL`; the decision
 service used its package's declared origin `https://api.typesafe.ai`
 (decision D18), so the builder's triage went to the decision service, not
 the fallback. Drafts were checked with `<scx:validate profile="draft">`
@@ -409,7 +409,7 @@ the fallback. Drafts were checked with `<scx:validate profile="draft">`
 ```console
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"max_attempts":4,"model":"gpt-6-luna"}}' |
   target/scx-live/release/scx run --offline --cache-dir target/components/package-cache \
-    --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env bots/builder/builder.scx
+    --env-file .env.local bots/builder/builder.scx
 ```
 
 The consent listing named each package with `release v0.1.0 (commit
@@ -440,7 +440,7 @@ cargo install --locked --path scxml.rs/crates/scxml-cli`), and
 services into `scx`'s default package cache. The builder's `env` attributes
 scoped `OPENAI_*` to the generate service's `<invoke>`s and `TYPESAFE_*` to
 the decision service's; the consent listing showed exactly that (names
-only). The mosfet env file sets no `TYPESAFE_BASE_URL`, so in the builder
+only). The the original env file sets no `TYPESAFE_BASE_URL`, so in the builder
 run the decision service's `baseurl` slot was absent and the builder used
 its fallback triage. The builder command, from a clean shell
 (`env -i HOME="$HOME" PATH="$HOME/.cargo/bin:/usr/bin:/bin"`), in the
@@ -448,15 +448,15 @@ nemobot root:
 
 ```console
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button","constraints":["send every light change and every walk signal to the invoker","a button press during green ends green early"],"max_attempts":4,"model":"gpt-6-luna"}}' |
-  scx run --env-file /Users/gabrielwillen/VSCode/stateforward/mosfet/mosfet.py/.env bots/builder/builder.scx
+  scx run --env-file .env.local bots/builder/builder.scx
 ```
 
-The live tests: `NEMOBOT_LIVE_ENV_FILE=<mosfet .env> NEMOBOT_LIVE_MODEL=gpt-6-luna
+The live tests: `NEMOBOT_LIVE_ENV_FILE=<the original .env> NEMOBOT_LIVE_MODEL=gpt-6-luna
 cargo test -p nemobot-tests --test <test> -- --ignored --nocapture`.
 
 | Run | Model | Result | Runs used | Note |
 | --- | --- | --- | --- | --- |
-| `scx run --env-file <mosfet .env> bots/builder/builder.scx` | `gpt-6-luna` (generate service); decision unconfigured (no `TYPESAFE_BASE_URL`) | pass | 1 of 1 | exit 0 in 116 s; the `done` record's data: attempt 2 of 4 after 1 failure (`validate` / `SCXML070`), 0 machine fixes, triage `fallback:unavailable`, plan `pedestrian_traffic_light`, all four of its tests passed in simulation; progress `log`s `design`, `author`, `validate`, `retry_gate`, `triage`, `author`, `validate`, `simulate`, `done`; the built document compiled again with `scx compile` (no packages) |
+| `scx run --env-file <the original .env> bots/builder/builder.scx` | `gpt-6-luna` (generate service); decision unconfigured (no `TYPESAFE_BASE_URL`) | pass | 1 of 1 | exit 0 in 116 s; the `done` record's data: attempt 2 of 4 after 1 failure (`validate` / `SCXML070`), 0 machine fixes, triage `fallback:unavailable`, plan `pedestrian_traffic_light`, all four of its tests passed in simulation; progress `log`s `design`, `author`, `validate`, `retry_gate`, `triage`, `author`, `validate`, `simulate`, `done`; the built document compiled again with `scx compile` (no packages) |
 | `generate_service live_generate_through_an_env_file` | `gpt-6-luna` | pass | 1 | strict structured output through `generate.result` |
 | `decision_service live_decision_through_an_env_file` | TypeSafe `system_one` (no OpenAI model) | pass (`shipped`) | 1 | the consent check is strict again: the declared origin `https://api.typesafe.ai` is listed though the run's base URL equals it |
 
@@ -471,7 +471,7 @@ consent check below (subtree scxml.rs `aa12fa6d`): `services/generate` and
 `outbound-http.fetch`, on wasmtime 49 with the Component Model async ABI,
 through `scxml-cli run`. `OPENAI_*` was granted to the generate service and
 `TYPESAFE_*` to the decision service. Commands:
-`NEMOBOT_LIVE_ENV_FILE=<mosfet .env> NEMOBOT_LIVE_MODEL=gpt-6-luna cargo test
+`NEMOBOT_LIVE_ENV_FILE=<the original .env> NEMOBOT_LIVE_MODEL=gpt-6-luna cargo test
 -p nemobot-tests --test <test> -- --ignored <name>`.
 
 | Test | Model | Result | Runs used | Note |
@@ -495,7 +495,7 @@ bots/builder/parent.scxml`, with `OPENAI_BASE_URL` and `TYPESAFE_BASE_URL`
 defaults in the calling environment (the env file's values win). The
 `--env` scopes of `builder.args` granted `OPENAI_*` to the generate service
 and `TYPESAFE_*` to the decision service. Command:
-`NEMOBOT_LIVE_ENV_FILE=<mosfet .env> NEMOBOT_LIVE_MODEL=gpt-6-luna cargo test
+`NEMOBOT_LIVE_ENV_FILE=<the original .env> NEMOBOT_LIVE_MODEL=gpt-6-luna cargo test
 -p nemobot-tests --test builder_bot -- --ignored live_builder_through_an_env_file`.
 
 | Test | Model | Result | Runs used | Note |

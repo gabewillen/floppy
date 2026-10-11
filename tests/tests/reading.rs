@@ -1,5 +1,5 @@
-//! The reading ability (`abilities/reading/reading.scx`, mosfet's Reading) and its
-//! visual classification child (`abilities/vision/vision.scx`, mosfet's
+//! The reading ability (`abilities/reading/reading.scx`, the original's Reading) and its
+//! visual classification child (`abilities/vision/vision.scx`, the original's
 //! `VisualClassification`), run as a harness document's child through
 //! `scx run` on the logical clock.
 //!

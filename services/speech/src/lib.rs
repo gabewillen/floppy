@@ -1,13 +1,13 @@
 //! The `speech` invoked service: one speech or voice operation per
 //! `<invoke>`, as a `stateforward:scxml/invoked-service` Wasm component. It
-//! is mosfet's `SpeechDecoder` (hearing's `SpeechDecoding`) and
+//! is the original's `SpeechDecoder` (hearing's `SpeechDecoding`) and
 //! `SpeechEncoder` (vocal's `SpeechEncoding`) providers in one service
 //! (decision D57): both directions are one `OpenAI`-compatible audio API.
-//! It is also the local models of mosfet's hearing that floppy cannot run
+//! It is also the local models of the original's hearing that floppy cannot run
 //! in a document: the voice activity classifier (`VoiceDetection`), the
 //! diarizer (`VoiceDiarization`) and the voice classifier
 //! (`VoiceIdentification`), through `LocalAI`'s voice APIs ([`voice`]), and
-//! the media steps mosfet's interpretation does on bytes in memory
+//! the media steps the original's interpretation does on bytes in memory
 //! (normalizing a sound to PCM, joining the open speech, clipping a voice
 //! span), which floppy does on files.
 //!
@@ -43,8 +43,8 @@
 //!
 //! # Parameters (`<param>`)
 //!
-//! * `operation` (required): `decode` (speech to text, mosfet's
-//!   `SpeechDecoder`), `encode` (text to speech, mosfet's
+//! * `operation` (required): `decode` (speech to text, the original's
+//!   `SpeechDecoder`), `encode` (text to speech, the original's
 //!   `SpeechEncoder`), or one of the voice operations `detect`, `diarize`,
 //!   `identify`, `normalize`, `append`, and `clip` ([`voice`] documents
 //!   their parameters, requests, and results).
@@ -58,7 +58,7 @@
 //!   `[A-Za-z0-9_.-]{1,128}`), `output` (required, a reference to the file
 //!   the audio is written to, created or replaced), `media_type` (optional,
 //!   one of [`FORMATS`], `audio/mpeg` without it, the default of both
-//!   backends), and `provider` (optional, exactly `elevenlabs`: mosfet's
+//!   backends), and `provider` (optional, exactly `elevenlabs`: the original's
 //!   `elevenlabs` provider instead of the `OpenAI`-compatible API).
 //!
 //! A parameter whose value is `null` is not given. Any other parameter, a
@@ -92,7 +92,7 @@
 //! invoking session receives `done.invoke.<id>` after the event): with no
 //! data, except that a media step that succeeds writes no event and
 //! resolves with its result as the done data. The names and data are
-//! mosfet's (`services/speech/schemas/`):
+//! The original's (`services/speech/schemas/`):
 //!
 //! * [`DECODING_OUTPUT_EVENT`] `{"text": T}`: the decoded speech (empty when
 //!   the backend heard none).
@@ -102,11 +102,11 @@
 //!   are numbers only when known ([`sound`]: raw `pcm` is 24 kHz mono
 //!   16-bit, a WAV file declares its own, and `ElevenLabs` names its `mp3`
 //!   rate), else `null`. `D` is the seconds of sound measured from the bytes
-//!   of linear PCM, mosfet's `Speaking._playout_duration`.
+//!   of linear PCM, the original's `Speaking._playout_duration`.
 //! * [`voice::DETECTION_OUTPUT_EVENT`], [`voice::DIARIZATION_OUTPUT_EVENT`],
 //!   and [`voice::IDENTIFICATION_OUTPUT_EVENT`]: the voice operations'
 //!   results ([`voice`]).
-//! * [`FAILED_EVENT`] `{"message": M}` (mosfet's `FailureData`), `M` one
+//! * [`FAILED_EVENT`] `{"message": M}` (the original's `FailureData`), `M` one
 //!   closed message per [`FailureCode`] and direction.
 //!
 //! The service reads no event: it drops the event stream `invoke` receives.
@@ -172,11 +172,11 @@ pub const DEFAULT_MEDIA_TYPE: &str = "audio/mpeg";
 /// names none.
 pub const DEFAULT_AUDIO_MEDIA_TYPE: &str = "application/octet-stream";
 
-/// The decoded speech (mosfet's `SpeechDecoding.output_event`).
+/// The decoded speech (the original's `SpeechDecoding.output_event`).
 pub const DECODING_OUTPUT_EVENT: &str = "bot.ability.hearing.speech.decoding.output";
-/// The encoded speech (mosfet's `SpeechEncoding.output_event`).
+/// The encoded speech (the original's `SpeechEncoding.output_event`).
 pub const ENCODING_OUTPUT_EVENT: &str = "bot.ability.vocal.speech.encoding.output";
-/// The failure (mosfet's `Ability.failed_event`, `FailureData`).
+/// The failure (the original's `Ability.failed_event`, `FailureData`).
 pub const FAILED_EVENT: &str = "bot.ability.failed";
 
 /// Upper bound on the audio a decoding reads (wasm builds only): the host's
@@ -211,7 +211,7 @@ pub struct Format {
 
 /// The formats an encoding may ask for: the `OpenAI` speech API's
 /// `response_format`s; `ElevenLabs` encodes `mp3` as `mp3_44100_128`
-/// (mosfet's `ElevenLabs` default) and `pcm` as `pcm_24000`.
+/// (the original's `ElevenLabs` default) and `pcm` as `pcm_24000`.
 pub const FORMATS: [Format; 6] = [
     Format {
         media_type: "audio/mpeg",
@@ -295,12 +295,12 @@ pub struct Media {
     pub path: String,
 }
 
-/// The encoding backend (mosfet's provider packages).
+/// The encoding backend (the original's provider packages).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Provider {
-    /// An `OpenAI`-compatible audio API (mosfet's `openai_compat`).
+    /// An `OpenAI`-compatible audio API (the original's `openai_compat`).
     OpenaiCompat,
-    /// `ElevenLabs`' `text-to-speech` API (mosfet's `elevenlabs`).
+    /// `ElevenLabs`' `text-to-speech` API (the original's `elevenlabs`).
     Elevenlabs,
 }
 
@@ -991,7 +991,7 @@ pub struct Sound {
     pub sample_rate_hz: Option<u32>,
     /// Channels.
     pub channels: Option<u16>,
-    /// Seconds of sound, measured from the bytes of linear PCM (mosfet's
+    /// Seconds of sound, measured from the bytes of linear PCM (the original's
     /// `Speaking._playout_duration`).
     pub duration: Option<f64>,
 }

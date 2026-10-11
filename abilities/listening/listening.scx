@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Listening ability (mosfet abilities/listening/listening.py):
+  floppy's Listening ability (the reference abilities/listening/listening.py):
   the ear. It hears an environment.sound, scores it against what the body
   predicted, and hands it on to be interpreted. The body
   (bots/floppy/floppy.scx) invokes it as its child "listening", one of its
@@ -20,7 +20,7 @@
 
   Sensing: environment.sound {audio, ...} from the body goes to the
   sensitivity as bot.ability.listening.sensitivity.score {stimulus} (the
-  sound's envelope {event, data}), bounded by mosfet's 30 s stage
+  sound's envelope {event, data}), bounded by the original's 30 s stage
   operation timeout (sensitivity_timeout_ms): the sensitivity's
   bot.ability.listening.sensitivity.output goes on to the interpretation
   and Sensing returns to Listening; the timer,
@@ -28,28 +28,28 @@
   message: "Listening sensitivity timed out."} sent to this session with
   that delay, answers the body with bot.ability.listening.failed. Sounds
   that arrive outside Listening wait, in order, in the data model queue
-  (mosfet defers them): scoring is the only stop between the ear and the
+  (the original defers them): scoring is the only stop between the ear and the
   prediction.
 
   Products: the interpretation's bot.ability.listening.speech.output
-  (mosfet's SpeechData: decoded speech, diarized or identified voice
+  (the original's SpeechData: decoded speech, diarized or identified voice
   segments, or the PCM of an acoustic observation) is handed to the body
   as bot.ability.cognition.input {stimulus} (the product's envelope, source
-  "listening"; mosfet's interpretation terminal handoff), which the
+  "listening"; the original's interpretation terminal handoff), which the
   body grants a turn; the interpretation hands labelled non-speech over
   as its own bot.ability.cognition.input, and that and its
   bot.ability.listening.failed go on to the body unchanged. Either leaves
   from wherever perception is.
 
-  Efference copy: bot.ability.speaking.efference (mosfet's EfferenceData)
+  Efference copy: bot.ability.speaking.efference (the original's EfferenceData)
   goes to the sensitivity from wherever perception is: the report
   modulates perception, it does not interrupt it. The body sends it here
-  (its listening_abilities list, mosfet's Speaking listening peers) just
+  (its listening_abilities list, the original's Speaking listening peers) just
   before the bot's own speech comes back as environment.sound, so the bot
   can tell its own voice apart.
 
   Readiness: the entry into Perceiving sends bot.ability.offers {ability:
-  "listening", choices: []} to the body; it offers nothing (mosfet: the
+  "listening", choices: []} to the body; it offers nothing (the original: the
   listening's input is not a tool event).
 
   Contracts: the events it takes reference abilities/schemas/ by

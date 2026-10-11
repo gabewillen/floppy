@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Identity ability over text (mosfet abilities/identity): the
+  floppy's Identity ability over text (the reference abilities/identity): the
   bot's sense of its own name. The body (bots/floppy/floppy.scx) invokes it
   as its child "identity".
 
@@ -15,33 +15,33 @@
   invoker's <param name="name"> when it passes one (tests do; the body does
   not), else null.
 
-  recalling (mosfet Identity._recall_name): with a database (the <param>
+  recalling (the original Identity._recall_name): with a database (the <param>
   database, the memory database file) it invokes the memory ability
   (abilities/memory/memory.scx) to select the adopted names (query_tags
-  self_name, subject_ref self, oldest first, at most 50, mosfet
+  self_name, subject_ref self, oldest first, at most 50, the original
   identity/name.py) and sends bot.ability.identity.recalled {name} to
   #_internal with the last one, else with the name the session started
   with ({text, kind: "fact"}, or null). A recall that fails sends
   bot.ability.failed {message: "Identity could not recall a name from
   memory: ..."} to the parent and then recalls the session's name, as
-  mosfet does. Without a database it logs <log label="memory"
+  the original does. Without a database it logs <log label="memory"
   expr="'absent'"> and recalls the session's name.
 
-  Recognition (mosfet recognition.SpeechNameRecognizer): identity is one
+  Recognition (the original recognition.SpeechNameRecognizer): identity is one
   of the body's input abilities, so each environment.sound reaches it;
   with a name to look for, classifying invokes
   abilities/speech_decoding/speech_decoding.scx on the sound and
   <bot:recognize> looks for the name in the transcript (no transcript
   leaves the ability). A decoding failure answers the body with
-  bot.ability.failed {message} (mosfet _fail_from_stage) and goes back to
-  listening. Text (mosfet recognition.hears_name, decision D43): the
+  bot.ability.failed {message} (the original _fail_from_stage) and goes back to
+  listening. Text (the original recognition.hears_name, decision D43): the
   body also relays each outside bot.ability.communication.input to this
   ability. <bot:recognize> decides whether its text (a string content with
   a text/* content_type) names the bot: the name's case-folded
   letter-and-digit tokens appear as a whole run in the text's (so a bot
   named "Al" is not addressed by "always"). Addressed: the body gets
   bot.ability.cognition.input {stimulus} whose stimulus is
-  bot.ability.identity.addressed {name} from "identity" (mosfet's
+  bot.ability.identity.addressed {name} from "identity" (the original's
   _dispatch_addressed handoff), and grants it a turn. Not addressed, or no name yet, produces nothing: a
   nameless bot only hears words. Other communication content is not
   heard.
@@ -54,7 +54,7 @@
   onentry (<decision:choice> reads knowing's own transitions there,
   before a child is entered); the first offers are the ability's
   readiness. adopting
-  (mosfet Identity._adopt_name) writes the name down before answering to
+  (the original Identity._adopt_name) writes the name down before answering to
   it: with a database it inserts the name (scope long_term, kind fact,
   query_tags self_name, subject_ref self, and the recall orders ties in
   created_at by memory_id, so two adoptions in one second keep their
@@ -63,11 +63,11 @@
   #_internal; a write that fails sends bot.ability.identity.adopt.failed
   {message: "Identity could not remember the name it took: ..."} to
   #_internal, which answers the body with bot.ability.failed {message}
-  (mosfet _fail_from_stage), and the bot keeps its old name (fail-closed).
+  (the original _fail_from_stage), and the bot keeps its old name (fail-closed).
   Without a database it logs <log label="memory" expr="'absent'"> and
   sends adopted.
 
-  Deferral (mosfet's defer): communication input, sounds and adopt events
+  Deferral (the original's defer): communication input, sounds and adopt events
   that arrive while recalling or adopting, and input and sounds that
   arrive while recognizing, wait in the data model queue, in order;
   entering knowing (or listening, after recognizing) puts them back on the
@@ -103,7 +103,7 @@
     <data id="offered" expr="[]"/>
     <data id="offers_over" expr="false"/>
     <data id="offer_names" expr="''"/>
-    <!-- Memory: the database file (null: no memory) and mosfet's
+    <!-- Memory: the database file (null: no memory) and the original's
          statements (identity/name.py). The SQL runs on both
          engines (SQLite and Postgres). A memory id is the next row count
          as 32 zero-padded digits (neither engine's randomness is unique
@@ -226,7 +226,7 @@
 
     <!-- One recognition decision about one heard text or sound. -->
     <state id="recognizing" initial="recognized">
-      <!-- Input that arrives meanwhile waits (mosfet defers it). -->
+      <!-- Input that arrives meanwhile waits (the original defers it). -->
       <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
         <assign location="queue" expr="deferredQueue(_event)"/>
       </transition>
@@ -234,7 +234,7 @@
         <assign location="queue" expr="deferredQueue(_event)"/>
       </transition>
 
-      <!-- mosfet SpeechNameRecognizer: decode the sound, then look for
+      <!-- The reference SpeechNameRecognizer: decode the sound, then look for
            the name in the transcript; no transcript leaves this state. -->
       <state id="classifying">
         <invoke id="speech_decoding" type="scxml" src="../speech_decoding/speech_decoding.scx">

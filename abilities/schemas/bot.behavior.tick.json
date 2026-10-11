@@ -45,7 +45,7 @@
       "type": "string"
     },
     "output": {
-      "description": "Cognition event selections the routine emitted for this tick, each an object with event (required), target, data, and reason. At least one: mosfet's runtime fails a tick whose output is empty, and floppy's schema refuses one, so the routine's send of it fails.",
+      "description": "Cognition event selections the routine emitted for this tick, each an object with event (required), target, data, and reason. At least one: the original's runtime fails a tick whose output is empty, and floppy's schema refuses one, so the routine's send of it fails.",
       "examples": [
         [
           {

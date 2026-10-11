@@ -9,12 +9,12 @@ function hasDecodedText(_event) {
   return typeof Object(_event.data).text === 'string';
 }
 
-// mosfet's decoded speech, as words.
+// The original's decoded speech, as words.
 function decodedOutput(_event) {
   return ({text: _event.data.text});
 }
 
-// mosfet's FailureData.
+// The original's FailureData.
 function failedOutput(_event) {
   return ({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'SpeechDecoding failed.'});
 }

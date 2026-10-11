@@ -26,7 +26,7 @@ function silenceDelay() {
 }
 
 // seeding: the seed answered the turn with at least
-// one selection (mosfet _coerce_behavior_output: an empty one is unhandled).
+// one selection (the reference _coerce_behavior_output: an empty one is unhandled).
 function isBehaviorHandled(event) {
   return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected) && event.data.selected.length > 0;
 }
@@ -35,7 +35,7 @@ function seedSilentLog() {
   return 'SpeechHeard after ' + silence_ms + ' ms';
 }
 
-// mosfet _emit_native_start_failure.
+// the reference _emit_native_start_failure.
 function seedFailedReason(event) {
   return 'Autonomy native seed \'SpeechHeard\' failed: ' + event.name;
 }
@@ -57,7 +57,7 @@ function noMemoryLog() {
 
 // loading
 
-// mosfet _behavior_select_input.
+// the reference _behavior_select_input.
 function behaviorSelectStatements() {
   return [{sql: select_sql, parameters: [stimulus.event]}];
 }
@@ -90,7 +90,7 @@ function hasNoMatchAndNoCandidates() {
 
 // running
 
-// mosfet behavior_input_payload without focus and focus_candidates, which
+// the reference behavior_input_payload without focus and focus_candidates, which
 // running assigns after it.
 function behaviorInputPayload() {
   return (stimulus.data !== null && typeof stimulus.data === 'object' ? Object.assign({}, stimulus.data) : {event: stimulus.data});

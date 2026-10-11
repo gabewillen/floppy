@@ -55,7 +55,7 @@ fn normalized(text: &str) -> String {
     timestamps_normalized(&out.replace(&super::workspace().display().to_string(), "<workspace>"))
 }
 
-/// `text` with each UTC timestamp in mosfet's form
+/// `text` with each UTC timestamp in the original's form
 /// (`YYYY-MM-DDTHH:MM:SSZ`, the rows' `last_used_at` and the like, which
 /// the wall clock sets) replaced by `<timestamp>`.
 fn timestamps_normalized(text: &str) -> String {

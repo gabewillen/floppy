@@ -1,11 +1,11 @@
-//! The voice operations: mosfet's voice classifiers (`VoiceActivityClassifier`,
+//! The voice operations: the original's voice classifiers (`VoiceActivityClassifier`,
 //! `VoiceDiarizer`, and the voice identification `Classifier`) on `LocalAI`'s
-//! `OpenAI`-compatible voice API, and the three steps mosfet's
+//! `OpenAI`-compatible voice API, and the three steps the original's
 //! `Interpretation` takes on PCM bytes in place (`_pcm_sound_data`,
 //! `_append_open_speech`, `_voice_segment_from_detection`), which floppy,
 //! moving media by reference, takes here on files.
 //!
-//! mosfet runs its classifiers on local models (MLX Audio's streaming Silero
+//! The original runs its classifiers on local models (MLX Audio's streaming Silero
 //! VAD, pyannote's and MLX Audio's diarization pipelines, pyannote's
 //! `WeSpeaker` embeddings). `LocalAI` serves the same model families over
 //! HTTP, so the run chooses one of its endpoints through the `baseurl` slot:
@@ -42,17 +42,17 @@ pub const EMBED_PATH: &str = "/voice/embed";
 
 /// The rate voice detection samples are sent at: Silero VAD's 16 kHz.
 pub const VAD_SAMPLE_RATE_HZ: u32 = 16_000;
-/// mosfet's raw-PCM defaults for voice detection
+/// The original's raw-PCM defaults for voice detection
 /// (`VoiceActivityClassifier(sample_rate_hz=16_000, channels=1)`), used when
 /// the sound names neither.
 pub const DEFAULT_CHANNELS: u16 = 1;
 
-/// The voice spans of one clip (mosfet's `VoiceDetection.output_event`,
+/// The voice spans of one clip (the original's `VoiceDetection.output_event`,
 /// `ApplyData`).
 pub const DETECTION_OUTPUT_EVENT: &str = "bot.ability.hearing.voice.detection.output";
-/// The clipped voice segments (mosfet's `VoiceDiarization.output_event`).
+/// The clipped voice segments (the original's `VoiceDiarization.output_event`).
 pub const DIARIZATION_OUTPUT_EVENT: &str = "bot.ability.hearing.voice.diarization.output";
-/// The voice embeddings (mosfet's `VoiceIdentification.output_event`).
+/// The voice embeddings (the original's `VoiceIdentification.output_event`).
 pub const IDENTIFICATION_OUTPUT_EVENT: &str = "bot.ability.hearing.voice.identification.output";
 
 /// Upper bound on the frames an `append` joins and the segments an
@@ -63,7 +63,7 @@ pub const MAX_SAMPLE_RATE_HZ: u32 = 768_000;
 /// Upper bound on a channel count.
 pub const MAX_CHANNELS: u16 = 64;
 
-/// The media types mosfet reads as a WAV container (`_is_wav_sound`).
+/// The media types the original reads as a WAV container (`_is_wav_sound`).
 const WAV_TYPES: [&str; 3] = ["audio/wav", "audio/wave", "audio/x-wav"];
 
 /// A sound's format, each field only when known.
@@ -102,7 +102,7 @@ pub struct Diarization {
     pub output: Media,
 }
 
-/// One voice segment (mosfet's `VoiceSegment`): its clipped PCM and span.
+/// One voice segment (the original's `VoiceSegment`): its clipped PCM and span.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Segment {
     /// The clipped raw 16-bit PCM.
@@ -126,7 +126,7 @@ pub struct Identification {
     pub segments: Vec<Segment>,
 }
 
-/// A validated normalization (mosfet's `_pcm_sound_data`): the sound and
+/// A validated normalization (the original's `_pcm_sound_data`): the sound and
 /// where its PCM is written when it is a WAV container.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Normalization {
@@ -149,7 +149,7 @@ pub struct Frame {
     pub format: Format,
 }
 
-/// A validated append (mosfet's `_append_open_speech`, over the whole open
+/// A validated append (the original's `_append_open_speech`, over the whole open
 /// speech at once): the frames, in order, and the utterance file.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Appending {
@@ -157,12 +157,12 @@ pub struct Appending {
     pub frames: Vec<Frame>,
     /// The utterance's file.
     pub output: Media,
-    /// Whether the utterance is written as a WAV container (mosfet's
+    /// Whether the utterance is written as a WAV container (the original's
     /// `_speech_decoder_input`, which keeps a WAV ingress).
     pub wav: bool,
 }
 
-/// A validated clip (mosfet's `_voice_segment_from_detection`).
+/// A validated clip (the original's `_voice_segment_from_detection`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Clipping {
     /// The source PCM.
@@ -404,7 +404,7 @@ pub(crate) fn diarization(given: &Given<'_>) -> Result<Diarization, &'static str
     })
 }
 
-/// `identify`: `model` and `segments` (mosfet's voice identification
+/// `identify`: `model` and `segments` (the original's voice identification
 /// `InputData`: `[{audio, media_type, sample_rate_hz, channels,
 /// start_seconds, end_seconds}]`, ascending by start).
 pub(crate) fn identification(given: &Given<'_>) -> Result<Identification, &'static str> {
@@ -590,7 +590,7 @@ pub fn wav_pcm(audio: &[u8]) -> Option<(u32, u16, u16, u16, &[u8])> {
     None
 }
 
-/// A WAV container's signed 16-bit PCM and format (mosfet's
+/// A WAV container's signed 16-bit PCM and format (the original's
 /// `wave.open(...)` reads with sample width 2).
 ///
 /// # Errors
@@ -831,7 +831,7 @@ pub fn embedding_request(base_url: u32, api_key: u32, model: &str, wav: &[u8]) -
     json_post(base_url, api_key, EMBED_PATH, body.into_bytes())
 }
 
-/// Spans of an answer's `segments` (`start`/`end`, or mosfet's
+/// Spans of an answer's `segments` (`start`/`end`, or the original's
 /// `start_seconds`/`end_seconds`, and an optional `confidence`,
 /// `probability`, or `score`).
 fn answered_spans(body: &[u8]) -> Result<Vec<(f64, f64, Option<f64>)>, FailureCode> {
@@ -873,7 +873,7 @@ fn duration(pcm_bytes: usize, sample_rate_hz: u32, channels: u16) -> f64 {
 
 /// What a settled voice detection becomes: [`DETECTION_OUTPUT_EVENT`] with
 /// the clip-local spans (each clamped into the clip, empty ones dropped, in
-/// ascending start order, as mosfet's MLX Audio adapter folds them), or
+/// ascending start order, as the original's MLX Audio adapter folds them), or
 /// [`super::FAILED_EVENT`].
 #[must_use]
 pub fn detection_outcome(
@@ -912,7 +912,7 @@ pub fn detection_outcome(
 }
 
 /// Clips `[start, end)` of 16-bit PCM by whole frames (floor of the start,
-/// ceiling of the end), as mosfet's diarization adapters and
+/// ceiling of the end), as the original's diarization adapters and
 /// `_voice_segment_from_detection` do; `None` when the span holds no frame.
 #[must_use]
 pub fn clip_pcm(
@@ -950,7 +950,7 @@ pub fn indexed(output: &Media, index: usize) -> Media {
 /// What a settled voice diarization becomes: each segment's PCM written to
 /// `<output>-<index>`, then [`DIARIZATION_OUTPUT_EVENT`] (at least one
 /// segment, ascending by start), or [`super::FAILED_EVENT`] (a span outside
-/// the utterance fails it, as in mosfet's adapters).
+/// the utterance fails it, as in the original's adapters).
 #[must_use]
 pub fn diarization_outcome(
     direction: &'static str,
@@ -996,7 +996,7 @@ pub fn diarization_outcome(
     }
 }
 
-/// One answered embedding (mosfet's `VoiceEmbedding`): the answer's
+/// One answered embedding (the original's `VoiceEmbedding`): the answer's
 /// `embedding`, every value finite, at least one.
 ///
 /// # Errors
@@ -1040,7 +1040,7 @@ fn sound_data(audio: &str, media_type: Option<&str>, format: Format) -> String {
     }))
 }
 
-/// mosfet's `_pcm_sound_data`, on files: a WAV container (by media type) is
+/// The original's `_pcm_sound_data`, on files: a WAV container (by media type) is
 /// read and its signed 16-bit PCM written to `output`; raw PCM, `audio/l16`,
 /// `audio/raw`, or an unnamed type with a rate and channels is `audio/pcm`;
 /// anything else, or a container that cannot be read
@@ -1103,7 +1103,7 @@ pub fn normalized(
     ))
 }
 
-/// mosfet's open speech, on files: the frames' PCM appended in order to
+/// The original's open speech, on files: the frames' PCM appended in order to
 /// `output` (a WAV container when `wav`), the rate the first frame naming
 /// one, the channels the first frame's (1 when it names none). The done
 /// data is the utterance `{audio, media_type, sample_rate_hz, channels}`.
@@ -1154,7 +1154,7 @@ pub fn appended(
     ))
 }
 
-/// mosfet's `_voice_segment_from_detection`, on files: the span clamped to
+/// The original's `_voice_segment_from_detection`, on files: the span clamped to
 /// the audio's duration and clipped by whole frames to `output`. The done
 /// data is the voice segment.
 ///
@@ -1201,7 +1201,7 @@ pub fn clipped(
 
 /// The detection's samples and the clip's duration: the original WAV when
 /// the sound is one (by media type or bytes), else raw PCM in the sound's
-/// format, mosfet's 16 kHz mono when it names none.
+/// format, the original's 16 kHz mono when it names none.
 ///
 /// # Errors
 ///

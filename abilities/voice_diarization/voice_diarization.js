@@ -10,12 +10,12 @@ function hasSegments(_event) {
   return Array.isArray(Object(_event.data).segments);
 }
 
-// mosfet's OutputData.
+// The original's OutputData.
 function diarizedResult(_event) {
   return ({segments: _event.data.segments});
 }
 
-// mosfet's FailureData.
+// The original's FailureData.
 function failedResult(_event) {
   return ({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceDiarization failed.'});
 }

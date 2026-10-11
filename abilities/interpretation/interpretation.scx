@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Interpretation (mosfet abilities/listening/interpretation.py):
+  floppy's Interpretation (the reference abilities/listening/interpretation.py):
   the slow half of listening, which works out what a scored sound turns
   out to be. The listening (abilities/listening/listening.scx) invokes it
   as its long-lived child "interpretation" and hands it each scored sound.
@@ -20,22 +20,22 @@
         HandingOff -> Idle }
       Working -bot.ability.listening.stage.failed-> Idle }
 
-  Configuration (mosfet's constructor, as <data>): the voice activity
+  Configuration (the original's constructor, as <data>): the voice activity
   classifier is required, so voice detection always runs;
   sound_classification (KindSoundClassifier), speech_decoding,
   voice_diarization and voice_identification say which optional stages are
-  configured, product_threshold_db is mosfet's 3 dB, and stage_timeout_ms
-  is mosfet's 30 s stage operation timeout. floppy's bot configures voice
+  configured, product_threshold_db is the original's 3 dB, and stage_timeout_ms
+  is the original's 30 s stage operation timeout. floppy's bot configures voice
   detection, sound classification and speech decoding (the phase 6 plan:
   speech is decoded in listening). Voice identification with speech
-  decoding is refused, as mosfet's constructor refuses it (embedding
+  decoding is refused, as the original's constructor refuses it (embedding
   correlation would be lost): initializing ends in the final state
   degraded, and the listening degrades.
 
   Input: bot.ability.listening.sensitivity.output {sound, parent,
-  perceived_level_db} (mosfet's sensitivity OutputData) from the
+  perceived_level_db} (the original's sensitivity OutputData) from the
   listening. Scored sounds that arrive while Working wait, in order, in
-  the data model queue and are taken by Idle and HearingSpeech (mosfet
+  the data model queue and are taken by Idle and HearingSpeech (the original
   defers them): interpretation is serial, and the score was taken on
   arrival.
 
@@ -45,18 +45,18 @@
   timed out."} sent to this session after stage_timeout_ms.
 
   * DetectingVoice and FeedingSpeech invoke abilities/voice_detection/voice_detection.scx:
-    the sound normalized to PCM (mosfet's _pcm_sound_data; a WAV
+    the sound normalized to PCM (the original's _pcm_sound_data; a WAV
     container's PCM is written beside it as floppy-sound-<n>.pcm) and its
-    voice spans (mosfet's ApplyData). With no voice: dropped when only
+    voice spans (the original's ApplyData). With no voice: dropped when only
     speech decoding is configured, handed off as a silence observation
     when nothing else is, else classified. With voice: identified directly
     (voice identification without diarization), else the open-speech
-    window opens (mosfet's VAD Start).
+    window opens (the original's VAD Start).
   * HearingSpeech is the open-speech window: each scored sound goes to
     FeedingSpeech, still voiced it joins the utterance and the window stays
     open, and the first one without voice joins it and closes it
-    (mosfet's VAD End) in SpeechEnded. The utterance is the list
-    open_frames (each frame's PCM reference and format; mosfet appends the
+    (the original's VAD End) in SpeechEnded. The utterance is the list
+    open_frames (each frame's PCM reference and format; the original appends the
     bytes), and the loudest frame is open_sensed. While the window is open and neither speech
     decoding nor diarization owns the product, each frame is streamed as
     an acoustic bot.ability.listening.speech.output (its PCM, its voice
@@ -65,10 +65,10 @@
     speech service's append step when diarization or decoding will read
     it, then diarizes, else decodes, else returns to Idle. The utterance
     is a WAV container (floppy-utterance-<n>.wav) whenever its rate is
-    known: mosfet hands its decoder bytes in the ingress format, but floppy
+    known: the original hands its decoder bytes in the ingress format, but floppy
     hands the decoder a file, and transcription APIs read a container, not
     raw PCM. Without a rate it stays raw PCM (floppy-utterance-<n>.pcm),
-    and decoding then fails as mosfet's does.
+    and decoding then fails as the original's does.
   * ClassifyingSound invokes abilities/sound_classification/sound_classification.scx: a
     labelled sound is non-speech and is handed off as the original
     environment.sound's envelope; an unlabelled one is dropped when speech decoding
@@ -82,26 +82,26 @@
   * DecodingSpeech invokes abilities/speech_decoding/speech_decoding.scx (the speech
     service) on the utterance: decoding rewrites the observation into
     words.
-  * HandingOff is the one comparison (mosfet _is_audible_product): a
+  * HandingOff is the one comparison (the original _is_audible_product): a
     product whose perceived_level_db is null or at least
     product_threshold_db goes to the listening; a quieter one is dropped.
-    The products (mosfet _dispatch_product_cognition_input): decoded
+    The products (the original _dispatch_product_cognition_input): decoded
     speech as bot.ability.listening.speech.output with content the words
     and content_type text/plain (a sound with no sample rate fails, as in
-    mosfet); one speech product per diarized segment (its PCM, span,
+    the original); one speech product per diarized segment (its PCM, span,
     confidence, and, after identification, its embedding as its source
     identity); a silence observation as a speech product of the sound's
     PCM; a labelled sound, or a sound that is not PCM, as
     bot.ability.cognition.input {stimulus} whose stimulus is the original
     environment.sound's envelope (source "listening", the ability it hands
-    off for), as mosfet's interpretation hands it to the cognition.
+    off for), as the original's interpretation hands it to the cognition.
 
   Files are written in the directory of the sound's audio reference, the
   directory the run grants the speech service.
 
   Failure: a stage failure (its child's failure, an error, or its timer)
   answers the listening with bot.ability.listening.failed {stage, message}
-  (mosfet's FailedEventData) and returns to Idle; Idle clears the open
+  (the original's FailedEventData) and returns to Idle; Idle clears the open
   speech.
 
   Readiness: on start it sends bot.ability.offers {ability:
@@ -121,7 +121,7 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="interpretation" initial="initializing">
   <datamodel>
-    <!-- Configuration (mosfet's constructor). -->
+    <!-- Configuration (the original's constructor). -->
     <data id="product_threshold_db" expr="3.0"/>
     <data id="stage_timeout_ms" expr="30000"/>
     <data id="sound_classifier" expr="true"/>
@@ -141,7 +141,7 @@
     <data id="detection" expr="null"/>
     <data id="completion" expr="null"/>
     <data id="result" expr="null"/>
-    <!-- The open speech (mosfet's open utterance). -->
+    <!-- The open speech (the original's open utterance). -->
     <data id="open_frames" expr="[]"/>
     <data id="open_sensed" expr="null"/>
     <data id="active_source_ids" expr="[]"/>
@@ -158,7 +158,7 @@
   </datamodel>
   <script src="interpretation.js"/>
 
-  <!-- mosfet's constructor refuses identification with decoding. -->
+  <!-- The original's constructor refuses identification with decoding. -->
   <state id="initializing">
     <transition cond="refusesIdentificationWithDecoding()" target="degraded">
       <log label="interpretation.degraded" expr="'voice identification cannot be combined with speech decoding'"/>
@@ -253,7 +253,7 @@
             <content expr="stageFailure('Voice detection child produced a non-ApplyData terminal.')"/>
           </send>
         </transition>
-        <!-- mosfet's routes, in its order. -->
+        <!-- The original's routes, in its order. -->
         <transition cond="dropsSilence()"
                     target="Idle"/>
         <transition cond="handsOffSilence()"
@@ -276,7 +276,7 @@
         <onentry>
           <assign location="stage" expr="null"/>
           <!-- The frame just heard, streamed when Listening owns no
-               decoder (mosfet _emit_speech_product). -->
+               decoder (the original _emit_speech_product). -->
           <assign location="audible" expr="isAudible(detection.sensed)"/>
           <assign location="audible" expr="streamsFrame()"/>
           <if cond="streamsPcmFrame()">
@@ -625,7 +625,7 @@
         </transition>
         <!-- Labelled non-speech, or a sound that is not PCM: the
              completion's sound, normalized to PCM where detection did so
-             (mosfet hands off the completion chain's sensed sound). -->
+             (the original hands off the completion chain's sensed sound). -->
         <transition target="Idle">
           <bot:stimulus location="product" event="'environment.sound'" data="completion.sensed.sound" source="'listening'"/>
           <send event="bot.ability.cognition.input" target="#_parent">

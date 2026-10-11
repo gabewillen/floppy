@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.vocal.speech.encoding.output",
-  "description": "Speech audio encoded by vocal's SpeechEncoding. mosfet carries the encoded audio as bytes; floppy carries a reference to it and the sound fields of environment.sound, so playout can broadcast it as one.",
+  "description": "Speech audio encoded by vocal's SpeechEncoding. The original carries the encoded audio as bytes; floppy carries a reference to it and the sound fields of environment.sound, so playout can broadcast it as one.",
   "properties": {
     "audio": {
       "description": "Reference (a URI reference) to the encoded audio; floppy passes media by reference, never as bytes [floppy field].",
@@ -77,7 +77,7 @@
         }
       ],
       "default": null,
-      "description": "Seconds of sound, measured from the encoded audio rather than estimated (mosfet's EfferenceData.duration, which Speaking measures from linear PCM); null when the form does not say [floppy field].",
+      "description": "Seconds of sound, measured from the encoded audio rather than estimated (the original's EfferenceData.duration, which Speaking measures from linear PCM); null when the form does not say [floppy field].",
       "examples": [
         3.6,
         null

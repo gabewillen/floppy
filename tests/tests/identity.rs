@@ -181,7 +181,7 @@ fn a_named_bot_is_addressed_by_its_name() {
     assert_eq!(turns, strings(&[r#"addressed "Floppy""#, "ignore 1"]));
 }
 
-/// mosfet's SpeechNameRecognizer: a sound is decoded and the transcript
+/// The original's SpeechNameRecognizer: a sound is decoded and the transcript
 /// searched for the name. Only the identity hears the sound here (the
 /// body's input list without the listening), so the one turn is the
 /// addressed one.
@@ -215,7 +215,7 @@ fn a_named_bot_hears_its_name_in_a_sound() {
     );
     assert_eq!(texts(&records, "floppy.say"), strings(&["I am Floppy"]));
     // The bot hears its own playout too (every input ability hears the
-    // environment, as in mosfet); the speech double writes no audio, so
+    // environment, as in the original); the speech double writes no audio, so
     // decoding it fails, and the identity says so.
     run.until(WAIT, label_is("identity.recognition.failed"));
     assert_eq!(backend.decoded(), strings(&["hey floppy"]));

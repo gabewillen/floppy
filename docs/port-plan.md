@@ -1,6 +1,6 @@
-# mosfet to floppy port plan
+# The original to floppy port plan
 
-mosfet is a Python runtime for software robots: a bot is a **body** (lifetime,
+The original is a Python runtime for software robots: a bot is a **body** (lifetime,
 environment I/O, stimulus fan-out) and a **cognition** (interpretation,
 behavior selection, dispatch), every stateful concern is a `stateforward-hsm`
 state machine, abilities are the composition unit, devices face the
@@ -16,11 +16,11 @@ invoked service). The decisions behind this plan are in
 
 ## Concept map
 
-| mosfet | floppy |
+| The original | floppy |
 | --- | --- |
-| `mosfet.Bot` (body + cognition) | One root SCXML document per bot under `bots/<name>/`, run as a live session by scxml.rs's `scx run` (floppy has no runtime of its own, decision D14) |
+| `the original.Bot` (body + cognition) | One root SCXML document per bot under `bots/<name>/`, run as a live session by scxml.rs's `scx run` (floppy has no runtime of its own, decision D14) |
 | hsm state machines | SCXML documents (table below) |
-| Abilities (listening, speaking, cognition, memory, ...) | Invoked children, one `.scx` per mosfet machine in the flat `abilities/` directory: `<invoke id="<name>" type="scxml" src="../../abilities/<name>.scx">` from the body (a stage or sub-ability from its ability: `src="<name>.scx"`), literal `id` and `src`, talking to the parent through `#_parent` and to the child through `#_<invokeid>` (decisions D33, D34) |
+| Abilities (listening, speaking, cognition, memory, ...) | Invoked children, one `.scx` per the original machine in the flat `abilities/` directory: `<invoke id="<name>" type="scxml" src="../../abilities/<name>.scx">` from the body (a stage or sub-ability from its ability: `src="<name>.scx"`), literal `id` and `src`, talking to the parent through `#_parent` and to the child through `#_<invokeid>` (decisions D33, D34) |
 | Ability attachment protocol (`attachment.*`, `attachment.group.*`, `bot.ability.attachment.terminal`, yamux) | Not ported, and none of these names has a schema: `<invoke>` lifecycle is attach (start on state entry) and detach (cancel on state exit, `done.invoke.<id>` on completion); a group's attach is the body's parallel `<invoke>`s joined on each member's first `bot.ability.offers` (decision D6) |
 | Devices (phone, audio, smart phone) | Invoked services: `<invoke type="https://github.com/stateforward/floppy/services/<device>@<tag>">` (out of scope for now; phase 6 ported none) |
 | Providers (SDK owners) | Invoked services (`services/`) for every effect: anything asynchronous, I/O-bound, or long-running (decision D13); extension namespaces (`namespaces/`) only for synchronous, quick executable content (table below) |
@@ -29,13 +29,13 @@ invoked service). The decisions behind this plan are in
 | pydantic event data models | JSON Schema files referenced by `event:schema` on the transitions that take the event; scxml.rs checks them where the event is created (`<send>`, `<raise>`, a send between sessions) and on host input (decision D41) |
 | Hand-written payload validators (`model_validate`, field checks) | `event:schema` only; a `cond` correlates (which child, which turn, which timer) and never checks a payload's shape (decision D42) |
 | Helper functions (attention bias, envelopes, choice assembly and compaction, routing, confidence tuner, message commit) | floppy namespace elements that write to a `location` (`namespaces/bot`, `namespaces/conversation`, `namespaces/decision`; decision D40) |
-| Model-facing event choice lists and payload filling (Intuition, Processor) | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices; the `decision` service, invoked with it, asks a backend, fills the offered events' data to their schemas and validates it; `choose` emits the chosen event, `select` (mosfet's TypeSafe `Processor.process`, which intuition uses) emits `decision.selected` with every groundable event and its own confidence |
+| Model-facing event choice lists and payload filling (Intuition, Processor) | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices; the `decision` service, invoked with it, asks a backend, fills the offered events' data to their schemas and validates it; `choose` emits the chosen event, `select` (the original's TypeSafe `Processor.process`, which intuition uses) emits `decision.selected` with every groundable event and its own confidence |
 | Event names `bot.*`, `bot.ability.*`, `phone.*` | Unchanged, byte for byte |
-| Telemetry (`mosfet.telemetry`) | scxml.rs's OpenTelemetry facade (guests through the telemetry WIT; the native runtime, `scx`, through scxml.rs's own) |
+| Telemetry (`telemetry`) | scxml.rs's OpenTelemetry facade (guests through the telemetry WIT; the native runtime, `scx`, through scxml.rs's own) |
 
 ## hsm DSL to SCXML
 
-Usage counts are from `rg` over `mosfet.py/src/mosfet` and show what the port
+Usage counts are from `rg` over the reference implementation's source and show what the port
 has to cover.
 
 | hsm (uses) | SCXML |
@@ -52,7 +52,7 @@ has to cover.
 | `hsm.defer` (104) | No SCXML equivalent; modelled with a data-model queue (see [Phase 4 conventions](#phase-4-conventions)): in a deferring state, a targetless transition on E appends `<assign location="queue" expr="queue.concat([...])"/>`; in the state that handles them, an eventless `<transition cond="queue.length &gt; 0">` takes `queue.shift()`, one per return, in order (no `#_internal` replay) |
 | `hsm.after(duration)` (48) | `<send event="<state>.after" delay="..." id="<state>-after"/>` on entry, `<cancel sendid="<state>-after"/>` on exit, and a transition on the event |
 | `hsm.every(period)` (28) | a self-rescheduling loop: the transition on the tick re-sends the tick with the same `delay` |
-| `hsm.at(time)` (22) | `<send delayexpr>` computed from the absolute time and the data model's clock (`Date.now()` in ECMAScript); a routine's `at` schedule (time of day, weekdays, IANA zone) gets its next occurrence from `next_after(at, Date.now())` in its own data model, mosfet's `At.next_after` over the zone's POSIX TZ rule, since the ECMAScript data model has no time zone database (reflection's persistent routine contract gives the function) |
+| `hsm.at(time)` (22) | `<send delayexpr>` computed from the absolute time and the data model's clock (`Date.now()` in ECMAScript); a routine's `at` schedule (time of day, weekdays, IANA zone) gets its next occurrence from `next_after(at, Date.now())` in its own data model, the original's `At.next_after` over the zone's POSIX TZ rule, since the ECMAScript data model has no time zone database (reflection's persistent routine contract gives the function) |
 | `hsm.choice` (20) | a transient state with eventless `<transition cond>` branches (the last unconditional) |
 | `hsm.shallow_history` (1) | `<history type="shallow">` |
 | `hsm.start` (2) / `hsm.stop` (19) | `<invoke>` / reaching a `<final>` (or the invoking state exiting, which cancels the child) |
@@ -64,7 +64,7 @@ component code.
 
 ## Providers to namespaces and services
 
-| mosfet provider | floppy | Phase |
+| The original provider | floppy | Phase |
 | --- | --- | --- |
 | `openai_compat` | `services/generate`, OpenAI backend (`env:apikey`, `env:baseurl`) | 1 |
 | `gemini` (text) | `services/generate` through an OpenAI-compatible base URL | any (by `FLOPPY_BASE_URL`) |
@@ -92,20 +92,20 @@ in the gitignored `.env`), `decision` uses TypeSafe through its own
 | 0 | scxml.rs invoked services: slice 1 (`invoked-service` world, host and CLI binding, echo example) and slice 2 (WASI permissions and grants, event contracts, env slots on `<invoke>`, repository services), and unbound invoke types failing at invocation start; floppy repository scaffold (subtree, workspace, an embedder and its smoke test, namespace skeletons, rules, this plan; decision D14 deleted the embedder, and the smoke test now drives `scx run`) | Done. Services are now one async `invoke` export on WASI 0.3 that awaits `outbound-http.fetch` (decision D15, which deleted the `outbound-http.begin`/`take`/`wake` API), with no host time limit on their I/O: the invoking state's `<send delay>` bounds it, and leaving the state cancels the invocation and closes its connection (SCXML 6.4). Extension components get no WASI, by rule (decision D13), not as a gap |
 | 1 | Namespaces and services: `scxml` (now scxml.rs's embedded `scx` namespace, decision D17: `scx:validate` wrapping the validator component, returning canonical diagnostics and fixes), `generate` (OpenAI text and structured output), `decision` (enabled-transition candidates, TypeSafe ranking, schema fill and validation before emit) | `scxml` namespace implemented, then moved to scxml.rs as `scx` (`scx:validate`); `services/generate` implemented (one Chat Completions call per `<invoke>`, text or schema-validated structured output, `generate.result`/`generate.failed`, never blocking the session; `env:apikey`/`env:baseurl`); `decision` split per D13: the namespace's `decision:choice` (snapshot choices of `event:schema` transitions whose guards evaluate to true) and `services/decision` (request kinds `choose`, `rank`, `classify`; grounded per-member fill, validation against the choices' schema before emit, `decision.abstain`, `decision.failed`; TypeSafe `system_one` backend behind the `Backend` trait, `env:apikey`/`env:baseurl`) |
 | 2 | Builder bot: `bots/builder/` SCXML (intake, design, author, `scx:validate`, fix or regenerate with bounded retries as states, simulate the draft as an invoked child via `#_<invokeid>`, ending in the final states `done`/`failed` whose `<donedata>` carries the result), run with `scx run` | `bots/builder/builder.scx` implemented (contract schemas in `bots/builder/schemas`; design and author invoke the generate service and triage invokes the decision service on the `decision:choice` choices, each with `<finalize>`/`done.invoke` and a `builder.timeout` that preempts and cancels the call; cond-based fallback; simulation as an invoked child); runs with `scx run --env-file .env bots/builder/builder.scx` (decisions D14, D16; [bots/builder/README.md](../bots/builder/README.md#running)); deterministic harness in `tests/tests/builder_bot.rs`, which runs that command (including a timeout firing while a generation is in flight); live results in [live-proof.md](live-proof.md) |
-| 3 | Memory service on SQLite | Done: `services/sql` (`floppy_service_sql`), one SQLite transaction of mosfet's `Statement`s per `<invoke>` on a database file in a directory the run grants (`--dir URI=HOST::/memory`), answering `sql.result` or `sql.failed`; mosfet's Memory ability as `abilities/memory/memory.scx`, which migrates mosfet's schema and applies statements through it, answering `bot.ability.memory.output` or `bot.ability.failed`; reasoning recalls and retains cognitive episodes and standing directives, the identity recalls and remembers its adopted name, and the conversation recalls and remembers a relationship's memories (decisions D44 to D47, [plan](plans/phase3-memory.mdscript.md)). Reflection and behaviors use it in phase 5 |
-| 4 | Bot core: body and cognition as SCXML, abilities as invoked children, mosfet's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | Done through the script-validator cutover: the body `bots/floppy/floppy.scx`; `abilities/` cognition (autonomy seam, intuition, reasoning), communication (conversation, speaking in text mode); the `bot` and `conversation` namespaces and the decision elements; event contracts and runtime `event:schema` checks; no `<script>` (decisions D33 to D43, [Phase 4 conventions](#phase-4-conventions)). Identity, the phase 5 seams, and the saved live examples finish it ([plan](plans/phase4-bot-core.mdscript.md)) |
-| 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Done. The cognition runs reflection and routines beside its turns in every bot run (D80; with no database each logs `absent`). Autonomy runs the SpeechHeard seed and then the ACTIVE turn behaviors the stimulus triggers, each source by `<content expr>` under a 1 s silence bound, and records usage; reflection recalls the episodes and the inventory, selects at most one of `bot.behavior.create`, `change`, `break` through its enabled transitions, revises a behavior with the builder bot (which checks mosfet `check()`'s lifetime bounds and forces a routine's first tick) and stores it ACTIVE (or the rejected source DRAFT `validation`), and stores the turn's episode; routines reconciles the ACTIVE persistent rows into a chain of runners that passes `bot.behavior.tick` up. All of it is kept by the Memory ability (decisions D60 to D64, D73 to D75, D80, [plan](plans/phase5-behaviors.mdscript.md)) |
-| 6 | Speech, vision, and devices as services (`speech`, `vision`, `phone`, audio) | Done for speech and vision; devices are out of scope. `services/speech` (`floppy_service_speech`) decodes and encodes speech on OpenAI-compatible audio APIs and detects, diarizes and identifies voices on LocalAI's voice APIs (decisions D57, D66); the generate service reads images (D58). mosfet's hearing leaves, Listening (`Perceiving{Listening, Sensing}`, Sensitivity, Interpretation with the open-speech window; decision D67) and the SpeechHeard seed turn `environment.sound` into the turn's `bot.ability.listening.speech.output` stimulus and then `bot.ability.communication.input`; vocal and Speaking speak audio (D59, superseding D38); vision and Reading are ported, invoked by nothing yet as in mosfet ([Phase 6 conventions](#phase-6-conventions), [plan](plans/phase6-speech-vision.mdscript.md)) |
-| 7 | Defaults and release: PGlite memory, tagged releases with `SHA256SUMS` for repository namespaces and services (releases wait for going public) | Done except publishing. Memory on Postgres: `services/pgsql` behind the unchanged Memory ability, selected by its `database` (a `postgresql://` URI), migrating mosfet's full head schema in the Postgres dialect through the Alembic-style migration ability, with every ability's SQL portable to both engines and tested on Postgres 16; PGlite is reached over its socket server, not compiled into a component (decisions D48 to D51, D69 to D72). Defaults: README.md's [Defaults](../README.md#defaults) and `.env.example`, checked by `tests/tests/defaults.rs`; there is no default backend, so every run names its endpoint with `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (decision D31). Releases: canonical Linux builds, `SHA256SUMS` and a dry run of the release layout, prepared and checked locally ([release.md](release.md)); no tag, release or upload until the repositories are public ([plan](plans/phase7-pglite-defaults.mdscript.md)) |
+| 3 | Memory service on SQLite | Done: `services/sql` (`floppy_service_sql`), one SQLite transaction of the original's `Statement`s per `<invoke>` on a database file in a directory the run grants (`--dir URI=HOST::/memory`), answering `sql.result` or `sql.failed`; the original's Memory ability as `abilities/memory/memory.scx`, which migrates the original's schema and applies statements through it, answering `bot.ability.memory.output` or `bot.ability.failed`; reasoning recalls and retains cognitive episodes and standing directives, the identity recalls and remembers its adopted name, and the conversation recalls and remembers a relationship's memories (decisions D44 to D47, [plan](plans/phase3-memory.mdscript.md)). Reflection and behaviors use it in phase 5 |
+| 4 | Bot core: body and cognition as SCXML, abilities as invoked children, the original's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | Done through the script-validator cutover: the body `bots/floppy/floppy.scx`; `abilities/` cognition (autonomy seam, intuition, reasoning), communication (conversation, speaking in text mode); the `bot` and `conversation` namespaces and the decision elements; event contracts and runtime `event:schema` checks; no `<script>` (decisions D33 to D43, [Phase 4 conventions](#phase-4-conventions)). Identity, the phase 5 seams, and the saved live examples finish it ([plan](plans/phase4-bot-core.mdscript.md)) |
+| 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Done. The cognition runs reflection and routines beside its turns in every bot run (D80; with no database each logs `absent`). Autonomy runs the SpeechHeard seed and then the ACTIVE turn behaviors the stimulus triggers, each source by `<content expr>` under a 1 s silence bound, and records usage; reflection recalls the episodes and the inventory, selects at most one of `bot.behavior.create`, `change`, `break` through its enabled transitions, revises a behavior with the builder bot (which checks the reference `check()`'s lifetime bounds and forces a routine's first tick) and stores it ACTIVE (or the rejected source DRAFT `validation`), and stores the turn's episode; routines reconciles the ACTIVE persistent rows into a chain of runners that passes `bot.behavior.tick` up. All of it is kept by the Memory ability (decisions D60 to D64, D73 to D75, D80, [plan](plans/phase5-behaviors.mdscript.md)) |
+| 6 | Speech, vision, and devices as services (`speech`, `vision`, `phone`, audio) | Done for speech and vision; devices are out of scope. `services/speech` (`floppy_service_speech`) decodes and encodes speech on OpenAI-compatible audio APIs and detects, diarizes and identifies voices on LocalAI's voice APIs (decisions D57, D66); the generate service reads images (D58). The original's hearing leaves, Listening (`Perceiving{Listening, Sensing}`, Sensitivity, Interpretation with the open-speech window; decision D67) and the SpeechHeard seed turn `environment.sound` into the turn's `bot.ability.listening.speech.output` stimulus and then `bot.ability.communication.input`; vocal and Speaking speak audio (D59, superseding D38); vision and Reading are ported, invoked by nothing yet as in the original ([Phase 6 conventions](#phase-6-conventions), [plan](plans/phase6-speech-vision.mdscript.md)) |
+| 7 | Defaults and release: PGlite memory, tagged releases with `SHA256SUMS` for repository namespaces and services (releases wait for going public) | Done except publishing. Memory on Postgres: `services/pgsql` behind the unchanged Memory ability, selected by its `database` (a `postgresql://` URI), migrating the original's full head schema in the Postgres dialect through the Alembic-style migration ability, with every ability's SQL portable to both engines and tested on Postgres 16; PGlite is reached over its socket server, not compiled into a component (decisions D48 to D51, D69 to D72). Defaults: README.md's [Defaults](../README.md#defaults) and `.env.example`, checked by `tests/tests/defaults.rs`; there is no default backend, so every run names its endpoint with `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (decision D31). Releases: canonical Linux builds, `SHA256SUMS` and a dry run of the release layout, prepared and checked locally ([release.md](release.md)); no tag, release or upload until the repositories are public ([plan](plans/phase7-pglite-defaults.mdscript.md)) |
 
 ## Phase 4 event contracts
 
 Every phase 4 event has one JSON Schema 2020-12 file titled by its name,
-extracted from mosfet's own pydantic models
+extracted from the original's own pydantic models
 (`embeddable_json_schema(event_json_schema(E))` for each `hsm.Event` E):
 body events in `bots/floppy/schemas/`, ability events in
-`abilities/schemas/`, and the full list of mosfet's domain event names in
-`abilities/schemas/mosfet-event-names.json`. Documents reference these files
+`abilities/schemas/`, and the full list of the original's domain event names in
+`abilities/schemas/floppy-event-names.json`. Documents reference these files
 (`event:schema="schemas/<event>.json"`); they never carry inline copies. A
 schema reference is relative to its document and cannot leave the
 document's directory (no `..`), so an ability document lives directly in
@@ -119,20 +119,20 @@ The ability events the body receives (`bot.ability.offers`,
 twins (decision D37); `bot.reboot` lives with the abilities' events
 because the cognition takes it from the reflection too.
 
-The extraction script runs with mosfet's interpreter; it is kept outside
+The extraction script runs with the original's interpreter; it is kept outside
 this repository, with the floppy plans, as
 `~/.agents/projects/floppy/scripts/extract_phase4_contracts.py`:
 
 ```sh
-~/VSCode/stateforward/mosfet/mosfet.py/.venv/bin/python -I \
+python3 -I \
   ~/.agents/projects/floppy/scripts/extract_phase4_contracts.py ~/VSCode/stateforward/floppy
 ```
 
 Mapping rules (the byte-for-byte rule covers event names, not data shapes):
 
-- `title` is the event name and `$schema` is 2020-12; mosfet's
+- `title` is the event name and `$schema` is 2020-12; the original's
   descriptions and examples are kept.
-- mosfet's runtime-only fields are dropped (`operation_id`, `generation`,
+- The original's runtime-only fields are dropped (`operation_id`, `generation`,
   `parent_operation_id`, `parent_generation`, `token`, `request_id`,
   `actor_id`, `capability`): SCXML invoke cancellation replaces the
   cancel-token protocol. Fields pydantic marks `SkipJsonSchema` never
@@ -141,19 +141,19 @@ Mapping rules (the byte-for-byte rule covers event names, not data shapes):
   `bot.processing.*` results and the cognition cascade) require
   `turn`, a positive integer the body counts. `bot.ability.cognition.input`
   carries it only on the body's input to the cognition: an ability's
-  handoff of a stimulus to the body (mosfet's `cognition.InputEvent`
-  terminal) has no turn yet. mosfet's cognition
+  handoff of a stimulus to the body (the original's `cognition.InputEvent`
+  terminal) has no turn yet. The original's cognition
   `TurnData` object collapses into `turn` plus its `input`; a bare list
   payload (`bot.ability.cognition.output`) becomes `{turn, output}`. Tool
   events, whose data a model fills, carry no `turn`.
-- floppy fields that mosfet carried as runtime objects or process
+- floppy fields that the original carried as runtime objects or process
   configuration are added as data, marked `[floppy field]`:
   `bot.ability.cognition.input` requires `stimulus`, the envelope
   `{event, data, id?, source?, target?}` of the event the body took for the
-  turn (mosfet passed the live object, `SkipJsonSchema`), and may carry
+  turn (the original passed the live object, `SkipJsonSchema`), and may carry
   `choices`, the turn's choices the body assembled (its own and each
   ability's `bot.ability.offers`, tagged with the offering ability's
-  `target`; mosfet built its dispatch inventory from live actor
+  `target`; the original built its dispatch inventory from live actor
   snapshots); `bot.activate` takes an optional `model` the body hands to
   its model-backed abilities.
 - Media is a reference: `environment.sound`'s `audio` and
@@ -164,7 +164,7 @@ Mapping rules (the byte-for-byte rule covers event names, not data shapes):
 - A recursive "any JSON value" definition (conversation's
   `MessageContent`) becomes `{}`, which admits the same values, so every
   schema is ref-free.
-- A name with several mosfet models (`bot.ability.failed`) is their
+- A name with several the original models (`bot.ability.failed`) is their
   `anyOf`.
 - floppy-only names are marked `[floppy name]` at the start of the
   description (phase 4: `bot.ability.offers`).
@@ -179,10 +179,10 @@ the rules, the twins, and every `.scx` under `abilities/` and
 
 ## Phase 4 conventions
 
-How phase 4 writes a mosfet machine as SCXML. The decisions behind them are
+How phase 4 writes the original machine as SCXML. The decisions behind them are
 D33 to D43.
 
-- **Document structure.** One `.scx` per mosfet state machine, invoked by a
+- **Document structure.** One `.scx` per the original state machine, invoked by a
   literal `id` and a literal relative `src`. The bot root only composes
   (states, `<invoke>`s, `<send>`s). No `<script>` and no `function`; each
   `cond` and each `expr` outside `<data>` is at most 160 characters.
@@ -204,18 +204,18 @@ D33 to D43.
   logs `bot.processing.completed` and delivers each to `#_internal` or
   `#_<target>` with a visible `<foreach>`/`<send>` (logging `floppy.route`);
   one that cannot be placed fails the turn (`bot.processing.failed` with
-  mosfet's `SelectionRejectionError` message). Autonomy, intuition and
-  reasoning make the same checks before they answer, where mosfet
+  the original's `SelectionRejectionError` message). Autonomy, intuition and
+  reasoning make the same checks before they answer, where the original
   dispatches.
 - **Per-turn stage children.** The cognition invokes each stage (autonomy,
-  intuition, reasoning) per turn with `<param>`s named after the mosfet
+  intuition, reasoning) per turn with `<param>`s named after the original
   input event's fields and takes its result as `done.invoke.<stage>`
-  `<donedata>`; leaving the stage cancels it, which replaces mosfet's
+  `<donedata>`; leaving the stage cancels it, which replaces the original's
   cancel-token protocol. State a stage keeps across turns (the intuition's
   tuner) is passed in by `<param>` and returned in `<donedata>`.
 - **Partial selections.** A stage that leaves the turn unhandled may still
   hand out selections (the intuition's environment actions on
-  `low_confidence` or `deliberative_input`, mosfet `_environment_actions`)
+  `low_confidence` or `deliberative_input`, the reference `_environment_actions`)
   as the `selected` of its unhandled `<donedata>`. The cognition keeps them
   and puts them first in the turn's one `bot.ability.cognition.output`,
   before the handling stage's selections, so the body routes them first;
@@ -226,19 +226,19 @@ D33 to D43.
   with an eventless `cond="queue.length &gt; 0"` transition, one per
   return, in order. Nothing is replayed through `#_internal`, so a replayed
   event has no `from` field to check.
-- **Timers.** mosfet's operation machines (processing, attachment, hop and
+- **Timers.** The original's operation machines (processing, attachment, hop and
   reply operations) are a `<send delay id>` in the owning state, a
   `<cancel>` on exit, and a sendid or turn cond. They have no document of
   their own.
 - **Memory.** Each memory step is a compound state whose first child
   picks by `database` (the `<param>` the body passes, null without
   memory): with a database it invokes the memory ability
-  (`abilities/memory/memory.scx`, over `services/sql`) with mosfet's statements as
+  (`abilities/memory/memory.scx`, over `services/sql`) with the original's statements as
   SQL `<data>` and takes `bot.ability.memory.output` (its `event:schema`)
   or `bot.ability.failed` by invoke id; without one it
   answers itself at once through `#_internal` with
-  mosfet's event and logs `<log label="memory" expr="'absent'">`. Either
-  way the step ends with mosfet's event (`bot.ability.reasoning.recalled`,
+  the original's event and logs `<log label="memory" expr="'absent'">`. Either
+  way the step ends with the original's event (`bot.ability.reasoning.recalled`,
   `.retained`, `bot.ability.identity.recalled`, `.adopted`), so the
   topology does not change (decision D44).
 - **Speaking.** Phase 4 spoke in text mode (decision D38); phase 6
@@ -251,7 +251,7 @@ D33 to D43.
 
 ### Document structure map
 
-| mosfet unit | floppy artifact | kind |
+| The original unit | floppy artifact | kind |
 | --- | --- | --- |
 | `bot.py` Bot body | `bots/floppy/floppy.scx` | bot root `.scx` |
 | `bot.py` attachment Group, `_AttachmentOperation`, `_ProcessingOperation` | the body's `<invoke>`s in `live`, its offers bookkeeping and its delayed `<send>`/`<cancel>` | composition inside the body |
@@ -283,10 +283,10 @@ D33 to D43.
 | `listening` Sensitivity, Interpretation | `abilities/sensitivity/sensitivity.scx`, `abilities/interpretation/interpretation.scx` (listening's children) | ability `.scx` child |
 | `hearing` SpeechDecoding, SoundClassification, VoiceDetection, VoiceDiarization, VoiceIdentification | `abilities/speech_decoding/`, `sound_classification/`, `voice_detection/`, `voice_diarization/`, `voice_identification/` (the interpretation's children; all but sound classification invoke `services/speech`) | stage `.scx` child and service |
 | `communication/behaviors.py` SpeechHeard seed | `abilities/behaviors/speech_heard/speech_heard.scx`, which autonomy runs before the learned behaviors | turn behavior `.scx` |
-| `vision` VisualClassification, `reading` Reading | `abilities/vision/vision.scx` (reading's child), `abilities/reading/reading.scx` (image decoding through `services/generate`); nothing invokes reading, as in mosfet | ability `.scx` child and service |
+| `vision` VisualClassification, `reading` Reading | `abilities/vision/vision.scx` (reading's child), `abilities/reading/reading.scx` (image decoding through `services/generate`); nothing invokes reading, as in the original | ability `.scx` child and service |
 | `conversation/turn_detector` TurnDetector | `abilities/turn_detector/turn_detector.scx`, which the conversation invokes once per source of each input (its `turn_exchange`; decisions D76 to D79, [conventions](#turn-detector-conventions)) | ability `.scx` child |
 | Conversation's voice-centroid participant matching, devices | not ported: each embedding source is its own participant (D79), and devices are out of scope | open |
-| `learning` Learning; memory's ShortTermMemory, LongTermMemory, MemoryConsolidation, AssociativeMemory, MemoryClassification, MemoryGeneration; the body's short-term stimulus register (`stm_memory`); `language/text` TextGeneration | not ported: none is composed by mosfet's Bot by default (Learning and the memory variants are optional, the body's `stm_memory` defaults to none, and TextGeneration serves only host turns). floppy's memory is the base Memory; its schema still creates `bot_stm_memory` | open |
+| `learning` Learning; memory's ShortTermMemory, LongTermMemory, MemoryConsolidation, AssociativeMemory, MemoryClassification, MemoryGeneration; the body's short-term stimulus register (`stm_memory`); `language/text` TextGeneration | not ported: none is composed by the original's Bot by default (Learning and the memory variants are optional, the body's `stm_memory` defaults to none, and TextGeneration serves only host turns). floppy's memory is the base Memory; its schema still creates `bot_stm_memory` | open |
 | payload validators | `event:schema` on the receiving transition plus a short correlation cond | `event:schema` |
 
 ### Builder output
@@ -309,12 +309,12 @@ runs the ACTIVE turn behaviors the stimulus triggers with `turn` and
 
 ## Phase 6 conventions
 
-How phase 6 writes mosfet's hearing, listening, vocal, speaking, vision and
+How phase 6 writes the original's hearing, listening, vocal, speaking, vision and
 reading as SCXML. The phase 4 conventions hold; the decisions behind these
 are D52, D57 to D59, D66 and D67
 ([plan](plans/phase6-speech-vision.mdscript.md)).
 
-- **Media by reference.** mosfet's bytes fields (`SoundData.audio`,
+- **Media by reference.** The original's bytes fields (`SoundData.audio`,
   `VisualData.image`, the encoded speech) are URI references to files in a
   directory the run grants the service that reads or writes them
   (`--dir https://github.com/stateforward/floppy/services/speech=HOST::/media`,
@@ -333,55 +333,55 @@ are D52, D57 to D59, D66 and D67
   configured") and sends nothing
   (decisions D31, D57, D66). The models are each document's `model`
   `<data>` ([README Defaults](../README.md#speech-and-voice-models)).
-- **Hearing stages.** Each of mosfet's hearing leaves is its own `.scx`
+- **Hearing stages.** Each of the original's hearing leaves is its own `.scx`
   (`abilities/speech_decoding/`, `sound_classification/`,
   `voice_detection/`, `voice_diarization/`, `voice_identification/`),
   invoked by the interpretation per sound from the stage that needs it and
-  answering mosfet's output event (`bot.ability.hearing.*.output`) or
+  answering the original's output event (`bot.ability.hearing.*.output`) or
   `bot.ability.failed`; leaving the stage cancels it, and each stage is
-  bounded by the interpretation's `stage_timeout_ms` (mosfet's 30 s). The
-  media steps mosfet does on bytes in memory (normalizing to PCM, joining
+  bounded by the interpretation's `stage_timeout_ms` (the original's 30 s). The
+  media steps the original does on bytes in memory (normalizing to PCM, joining
   the open speech, clipping a voice span) are the speech service's
   `normalize`, `append` and `clip` on files (decision D66). Sound
-  classification is mosfet's `KindSoundClassifier`: the sound's `kind`
+  classification is the original's `KindSoundClassifier`: the sound's `kind`
   label, no model.
-- **Interpretation.** mosfet's machine in full: `Idle`, then `Working`
+- **Interpretation.** The original's machine in full: `Idle`, then `Working`
   (`DetectingVoice`, the open-speech window `HearingSpeech` /
   `FeedingSpeech` / `SpeechEnded`, `ClassifyingSound`, `DiarizingVoice`,
   `IdentifyingVoiceDirect`, `IdentifyingVoice`, `DecodingSpeech`, `HandingOff`). Its stages are
-  `<data>` switches named as mosfet's constructor names them
+  `<data>` switches named as the original's constructor names them
   (`sound_classifier` and `speech_decoder` on, `diarizer` and
   `voice_classifier` off); voice identification with speech decoding is
-  refused, as mosfet refuses it (decision D67).
+  refused, as the original refuses it (decision D67).
 - **Listening products.** The listening (`Perceiving{Listening, Sensing}`)
   scores each sound with its sensitivity against the efference copy, then
   interprets it. A product the body takes as a turn's stimulus is decoded
   speech, `bot.ability.listening.speech.output` (`content_type`
   `text/plain`), or labelled non-speech, passed through as
   `environment.sound`; either needs a perceived level of
-  `product_threshold_db` (mosfet's 3 dB). An unlabelled sound without voice
+  `product_threshold_db` (the original's 3 dB). An unlabelled sound without voice
   is dropped, and a sound that cannot be heard is
   `bot.ability.listening.failed`, which the body logs.
-- **SpeechHeard.** Autonomy runs mosfet's trusted seed
+- **SpeechHeard.** Autonomy runs the original's trusted seed
   (`abilities/behaviors/speech_heard/speech_heard.scx`) before the learned
   behaviors when the stimulus is `bot.ability.listening.speech.output`;
-  speech with a source id is handled with mosfet's selection
+  speech with a source id is handled with the original's selection
   `bot.ability.communication.input`, which the body routes to itself, so
   heard speech enters the conversation as text does.
-- **Speaking audio.** Speaking is mosfet's `idle` → `encoding` → `playing`
+- **Speaking audio.** Speaking is the original's `idle` → `encoding` → `playing`
   → `recording` (decision D59): vocal encodes through the speech service
-  with mosfet's encoder defaults (`gemini-3.1-flash-tts-preview`, `Kore`,
+  with the original's encoder defaults (`gemini-3.1-flash-tts-preview`, `Kore`,
   24 kHz mono `audio/pcm`), the efference copy
   `bot.ability.speaking.efference` leaves before the sound (the body
   carries it to each of `listening_abilities`), the words are logged as
   `floppy.say`, the audio is broadcast as `environment.sound` by reference,
   and the outbound message is recorded in the conversation. Every terminal
   failure is `bot.ability.failed {message}`.
-- **Vision and reading.** Reading is mosfet's `Reading{Unfocused,
+- **Vision and reading.** Reading is the original's `Reading{Unfocused,
   Focused{Classifying, DecodingText, DecodingImage,
   PreparingUnreadableOutput, EncodingOutput}}` with vision as its
   long-lived child; image decoding is the generate service with an image
-  part (decision D58). Nothing in the bot invokes reading, because mosfet
+  part (decision D58). Nothing in the bot invokes reading, because the original
   routes no `environment.visual` to it.
 - **Tests.** `tests/tests/speech_service.rs` (the service against a fake
   backend on 127.0.0.1, ElevenLabs included, and an ignored live round
@@ -393,12 +393,12 @@ are D52, D57 to D59, D66 and D67
 
 ## Turn detector conventions
 
-How mosfet's TurnDetector (`abilities/communication/conversation/turn_detector`)
+How the original's TurnDetector (`abilities/communication/conversation/turn_detector`)
 and the Conversation's `turn_detector` stage are written as SCXML; the
 decisions are D76 to D79.
 
-- **The machine.** `abilities/turn_detector/turn_detector.scx` is mosfet's
-  `idle`, `open`, `paused`, `closing` and `normalizing` with mosfet's
+- **The machine.** `abilities/turn_detector/turn_detector.scx` is the original's
+  `idle`, `open`, `paused`, `closing` and `normalizing` with the original's
   guards: a start addressed to its `participant_ref` opens a turn, an
   update, pause, end or start for the open turn (its `turn_ref`,
   `conversation_ref` and `source_participant_ref`) is taken, anything for
@@ -415,17 +415,17 @@ decisions are D76 to D79.
   `bot.ability.turn_detector.failed` (`stage` `turn`, D78), then clears
   the turn. There is no decoder (D77).
 - **The conversation's turns.** Each input is one turn per source, in
-  mosfet's identity order: `turn_exchange` invokes the detector for the
+  the original's identity order: `turn_exchange` invokes the detector for the
   source's track, waits for its readiness (`readiness`), sends the start
-  carrying mosfet's `_content_for_detector` stimulus and the end
+  carrying the original's `_content_for_detector` stimulus and the end
   (`exchange`), and takes the completed turn; each wait is bounded by
-  mosfet's 5 s (`turn_timeout_ms`). A failure, a timeout, or a start the
+  the original's 5 s (`turn_timeout_ms`). A failure, a timeout, or a start the
   detector's schema refuses answers `bot.ability.conversation.failed`
   `{stage: "turn_detector"}` and commits nothing. The committed message is
   the turns' product, each distinct text once, with the first turn's
   `turn_ref` (D79).
 - **The conversation's relationships and memory.** Each input first finds
-  its relationship as mosfet's `_relationship_for_input` does (targetless
+  its relationship as the original's `_relationship_for_input` does (targetless
   input shares the first ambient relationship, other input matches a
   relationship in either direction, and an ambient relationship whose
   participants include a target matches at the similarity threshold);
@@ -434,14 +434,14 @@ decisions are D76 to D79.
   writes) and the `session_ref` `relationship-` and that. The memory is
   kept under the relationship's `context_ref`: `recalling_memory` recalls
   it before the turns and `remembering_memory` remembers the input, as
-  mosfet's `Memory.to_json` writes it, after them, each its own invocation
+  the original's `Memory.to_json` writes it, after them, each its own invocation
   of the memory ability bounded by 5 s. The conversation answers
   `bot.ability.conversation.snapshot.request` with
   `bot.ability.conversation.snapshot.output {request_ref, detector_refs}`
   (its participants), and a repeated append (the same id, source and
   target) with its unchanged history. Input that arrives while one is in hand waits in the
   conversation's queue and is taken, in order, on the return to `waiting`
-  (mosfet defers it); before the turns every input without memory was
+  (the original defers it); before the turns every input without memory was
   committed in the macrostep it arrived in, so none could arrive.
 - **Tests.** `tests/tests/turn_detector.rs` runs the detector under
   `tests/fixtures/turn_detector/turn_detector_harness.scx` (assembly,

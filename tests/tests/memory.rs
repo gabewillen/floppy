@@ -1,8 +1,8 @@
-//! The memory ability (`abilities/memory/memory.scx`, mosfet's Memory) run as a
+//! The memory ability (`abilities/memory/memory.scx`, the original's Memory) run as a
 //! harness document's child through `scx run`: it migrates the database to
-//! mosfet's head schema and applies one transaction of statements through
+//! The original's head schema and applies one transaction of statements through
 //! the sql service (the migration ability, `abilities/migration/migration.scx`,
-//! brings it to mosfet's Alembic head first), answering its parent with `bot.ability.memory.output`
+//! brings it to the original's Alembic head first), answering its parent with `bot.ability.memory.output`
 //! (the statements' results only) or `bot.ability.failed`.
 //!
 //! The `postgres_` tests run the same cases on the Postgres engine (the
@@ -97,7 +97,7 @@ fn run(directory: &Path, document: &str) -> Finished {
 }
 
 #[test]
-fn a_fresh_database_is_migrated_to_mosfets_head_schema() {
+fn a_fresh_database_is_migrated_to_the_original_head_schema() {
     let directory = unique_scratch("memory");
     let finished = run(
         &directory,
@@ -197,7 +197,7 @@ fn output(results: &str) -> Vec<(String, String)> {
 
 #[test]
 #[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
-fn postgres_a_fresh_database_is_migrated_to_mosfets_head_schema() {
+fn postgres_a_fresh_database_is_migrated_to_the_original_head_schema() {
     let server = Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
     let database = server.database();
     let directory = unique_scratch("memory");

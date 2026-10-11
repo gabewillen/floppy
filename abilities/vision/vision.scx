@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's VisualClassification ability (mosfet abilities/vision
-  classification, with the rule-based classifier of mosfet's mlx_vlm
+  floppy's VisualClassification ability (the reference abilities/vision
+  classification, with the rule-based classifier of the original's mlx_vlm
   provider): it classifies a reading input before the reading pipeline
   routes it. Reading (abilities/reading/reading.scx) invokes it as its long-lived
   child "vision".
@@ -9,11 +9,11 @@
     Unclassified -bot.ability.vision.classification.input-> Classifying
       -bot.ability.vision.classification.apply.completed-> Unclassified
 
-  Classifying applies the classifier (mosfet's mlx_vlm VisualClassifier, no
+  Classifying applies the classifier (the original's mlx_vlm VisualClassifier, no
   model): a text input whose text is not blank is text, an image input with
   a reference is image, anything else is unreadable, each with confidence
   1.0 (the classifier's defaults). It sends its classification to itself
-  as bot.ability.vision.classification.apply.completed (mosfet's private
+  as bot.ability.vision.classification.apply.completed (the original's private
   completion), and the transition taking it answers the parent with
   bot.ability.vision.classification.output {kind, confidence}. This
   classifier cannot fail, so bot.ability.vision.classification.apply.failed
@@ -47,7 +47,7 @@
     </transition>
   </state>
 
-  <!-- The classifier: mosfet's mlx_vlm VisualClassifier rule. -->
+  <!-- The classifier: the original's mlx_vlm VisualClassifier rule. -->
   <state id="Classifying">
     <onentry>
       <if cond="classifiesAsText()">

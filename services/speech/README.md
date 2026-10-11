@@ -2,8 +2,8 @@
 
 The `speech` invoked service: one speech or voice operation per `<invoke>`,
 as a Wasm component (`https://github.com/stateforward/floppy/services/speech`).
-It is mosfet's `SpeechDecoder` and `SpeechEncoder` providers on one
-OpenAI-compatible audio API (decision D57), and mosfet's local voice
+It is the original's `SpeechDecoder` and `SpeechEncoder` providers on one
+OpenAI-compatible audio API (decision D57), and the original's local voice
 classifiers on LocalAI's voice APIs (decision D66). Its crate documentation
 ([src/lib.rs](src/lib.rs), and [src/voice.rs](src/voice.rs) for the voice
 operations) is the full contract: parameters, events, requests, bounds, and
@@ -13,7 +13,7 @@ telemetry.
 
 `<param name="operation">` picks one:
 
-| Operation | mosfet | Request | Answer |
+| Operation | The original | Request | Answer |
 | --- | --- | --- | --- |
 | `decode` | `SpeechDecoder` (hearing's `SpeechDecoding`) | `POST {base}/audio/transcriptions` | `bot.ability.hearing.speech.decoding.output {text}` |
 | `encode` | `SpeechEncoder` (vocal's `SpeechEncoding`) | `POST {base}/audio/speech`, or with `provider` `elevenlabs` its `text-to-speech/{voice}` API | `bot.ability.vocal.speech.encoding.output {audio, media_type, sample_rate_hz, channels, duration}` |
@@ -22,7 +22,7 @@ telemetry.
 | `identify` | the voice identification `Classifier` (`VoiceIdentification`) | `POST {base}/voice/embed` per segment | `bot.ability.hearing.voice.identification.output` |
 | `normalize`, `append`, `clip` | the interpretation's steps on PCM bytes | none: files in the granted directory | done data |
 
-A failure answers `bot.ability.failed {message}` (mosfet's `FailureData`).
+A failure answers `bot.ability.failed {message}` (the original's `FailureData`).
 A malformed or missing parameter rejects the start: the `<invoke>` raises
 `error.execution` and nothing is read, sent, or written. The event schemas
 are in [schemas/](schemas/).

@@ -1,7 +1,7 @@
 //! The `conversation` extension namespace: `<conversation:commit>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
-//! One conversation message as the conversation commits it (mosfet
+//! One conversation message as the conversation commits it (the original
 //! `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`,
 //! `_stable_context_ref`, `relationship_context_ref`, `MessageProvenance`),
 //! shared by the inbound path (`abilities/conversation/conversation.scx`)
@@ -41,16 +41,16 @@
 //!   with `audio/` (media never enters the model-facing history), else the
 //!   content as given; outbound, the content as given.
 //! * `provenance.id`, `source` and `target`: the provenance's, each when
-//!   it is a string, else `null` (mosfet's provenance of an append is its
+//!   it is a string, else `null` (the original's provenance of an append is its
 //!   event's id, source and target); `turn_ref` is the provenance's
 //!   `turn_ref`, else `null`.
 //! * `provenance.session_ref`: the provenance's `session_ref` when it is a
 //!   string; else, inbound, the message's own relationship reference
-//!   `relationship-<context_ref>` (mosfet `_new_relationship_ref`), and
+//!   `relationship-<context_ref>` (the reference `_new_relationship_ref`), and
 //!   outbound `null`.
 //!
 //! The relationship context reference (`context_ref`) of a message is
-//! mosfet's `relationship_context_ref` of its source and target ids
+//! The original's `relationship_context_ref` of its source and target ids
 //! ([`relationship_context_ref`]): the canonical JSON text
 //! `{"identity_groups":[<group>,<group>]}`, the same in either direction.
 //! `keylocation` (optional) receives it, the key the conversation's memory
@@ -495,7 +495,7 @@ fn is_identity(value: &Json) -> bool {
     }
 }
 
-/// One identity as mosfet's relationship key holds it: a name, or an
+/// One identity as the original's relationship key holds it: a name, or an
 /// embedding.
 #[derive(Clone, Debug, PartialEq)]
 enum Identity {
@@ -517,7 +517,7 @@ impl Identity {
         }
     }
 
-    /// mosfet `identity_sort_key`: names before embeddings, a name by its
+    /// The reference `identity_sort_key`: names before embeddings, a name by its
     /// text, an embedding by its compact Python JSON text.
     fn sort_key(&self) -> (u8, String) {
         match self {
@@ -537,11 +537,11 @@ impl Identity {
 }
 
 /// The relationship context reference of a source and a target identity
-/// set: mosfet `relationship_context_ref` of `_stable_identity_basis` of
+/// set: the reference `relationship_context_ref` of `_stable_identity_basis` of
 /// each (`_stable_context_ref`), the canonical JSON text
 /// `{"identity_groups":[<group>,<group>]}`. Each embedding is normalized to
 /// its unit vector twice, as that composition does (an embedding without
-/// one, empty or zero, is kept as given: mosfet refuses it at its input);
+/// one, empty or zero, is kept as given: the original refuses it at its input);
 /// each group drops repeated identities (a set) and is sorted by
 /// [`Identity::sort_key`]; the two groups are ordered by their keys, so the
 /// reference is the same in either direction. Numbers are written as
@@ -582,7 +582,7 @@ pub fn relationship_context_ref(source_ids: &[Json], target_ids: &[Json]) -> Str
     format!("{{\"identity_groups\":[{}]}}", groups.join(","))
 }
 
-/// mosfet `normalize_embedding`: the vector over its L2 norm (the squares
+/// The reference `normalize_embedding`: the vector over its L2 norm (the squares
 /// summed exactly, as `math.fsum`; scaled by the largest magnitude first
 /// when they overflow), each zero component a positive zero; an empty or
 /// zero vector is returned as given.

@@ -8,7 +8,7 @@ generation, decisions, memory, speech, devices) are invoked services:
 versioned Wasm components that never block the machine. Extension namespaces
 hold only synchronous, quick executable content.
 
-floppy is the successor of mosfet (a Python bot runtime of hsm state machines
+floppy is the successor of the original (a Python bot runtime of hsm state machines
 and Starlark behaviors); [docs/port-plan.md](docs/port-plan.md) maps one onto the
 other, and [docs/decisions.md](docs/decisions.md) records the decisions that shape it.
 
@@ -25,7 +25,7 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | `services/{sql,pgsql}/` | the memory engines (Wasm components: one SQLite or Postgres transaction per `<invoke>`, [sql](services/sql/README.md), [pgsql](services/pgsql/README.md)) |
 | `services/speech/` | the speech service (a Wasm component: speech decoding and encoding on OpenAI-compatible audio APIs, voice detection, diarization and identification on LocalAI's voice APIs; decisions D57, D66; [speech](services/speech/README.md)) |
 | `bots/builder/` | the builder bot: its SCXML document (`builder.scx`), schemas, and saved live examples |
-| `bots/floppy/` | the floppy bot: the body (`floppy.scx`, mosfet's Bot) and its event contracts |
+| `bots/floppy/` | the floppy bot: the body (`floppy.scx`, the original's Bot) and its event contracts |
 | `abilities/` | the abilities and stages the bots invoke, each `<name>/<name>.scx` with `<name>/<name>.js` (memory, migration, cognition, communication, listening, ...) |
 | `tests/` | `floppy-tests`: integration tests that run the bots, namespaces, and services through `scx run` |
 | `scripts/` | build and proof scripts |
@@ -81,7 +81,7 @@ memory is a file in the directory the run grants the `sql` service (create
 
 ## Memory engines
 
-The floppy bot's memory is mosfet's Memory ability,
+The floppy bot's memory is the original's Memory ability,
 [`abilities/memory/memory.scx`](abilities/memory/memory.scx), on one of two
 engines with the same contract, picked by the `database` it is given
 (decisions D51, D69 to D72):
@@ -96,11 +96,11 @@ ability grants both, as the quick start does. Before its statements, the
 Memory ability brings the database to the head revision through the
 migration ability
 ([`abilities/migration/migration.scx`](abilities/migration/migration.scx),
-Alembic's `command.upgrade` with `<migration:plan>`), with mosfet's
+Alembic's `command.upgrade` with `<migration:plan>`), with the original's
 revisions `0001` and `0002` in the engine's dialect
 ([`abilities/memory/sqlite/`](abilities/memory/sqlite/),
 [`abilities/memory/postgresql/`](abilities/memory/postgresql/)), and records
-the version in Alembic's `alembic_version`, so a mosfet database is used in
+the version in Alembic's `alembic_version`, so the original database is used in
 place. The bot ships with SQLite (the body's `database` `<data>`); Postgres
 support is tested on Postgres 16.
 
@@ -140,7 +140,7 @@ the `model` `<data>` of `bots/builder/builder.scx` (a `builder.request`'s
 `model` overrides it), `bots/floppy/floppy.scx` (a `bot.activate`'s `model`
 overrides it), `abilities/cognition/cognition.scx`, `abilities/reasoning/reasoning.scx` and
 `abilities/reflection/reflection.scx` (each takes its invoker's by `<param>`), and
-`abilities/reading/reading.scx` (mosfet's image decoder).
+`abilities/reading/reading.scx` (the original's image decoder).
 
 ### Speech and voice models
 
@@ -149,10 +149,10 @@ The listening's hearing leaves name the speech service's models:
 `silero-vad`, `abilities/voice_diarization/voice_diarization.scx`'s is
 `pyannote-diarization`,
 `abilities/voice_identification/voice_identification.scx`'s is
-`voice-detect-wespeaker-resnet34` (LocalAI's names for the models mosfet runs
+`voice-detect-wespeaker-resnet34` (LocalAI's names for the models the original runs
 locally), and `abilities/speech_decoding/speech_decoding.scx`'s `model`
 is `whisper-1`. `abilities/speaking/speaking.scx`'s `model` is
-`gemini-3.1-flash-tts-preview` and its `voice` is `Kore`, mosfet's speech
+`gemini-3.1-flash-tts-preview` and its `voice` is `Kore`, the original's speech
 encoder defaults, which it passes to vocal for the speech service
 (vocal's own are `null`: its invoker names them).
 
@@ -164,27 +164,27 @@ encoder defaults, which it passes to vocal for the speech service
 | `bots/builder/builder.scx` | `decision_timeout_ms` | `60000` | one triage decision |
 | `bots/builder/builder.scx` | `max_tests` | `8` | the test scripts one draft may carry |
 | `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
-| `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (mosfet's 30 s attachment timeout) |
-| `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (mosfet's 5 min processing timeout) |
-| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage (mosfet's 30 s) |
+| `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (the original's 30 s attachment timeout) |
+| `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (the original's 5 min processing timeout) |
+| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage (the original's 30 s) |
 | `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
-| `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (mosfet's `TURN_SILENCE_BOUND`) |
+| `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (the original's `TURN_SILENCE_BOUND`) |
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
-| `abilities/conversation/conversation.scx` | `memory_timeout_ms` | `5000` | each of the conversation's memory operations, the recall before the turns and the remember after them (mosfet's 5 s turn stage timeout) |
-| `abilities/communication/communication.scx` | `response_timeout_ms` | `6000` | saying one response (mosfet's 6 s) |
-| `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (mosfet's 30 s) |
-| `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `30000` | reflection's revising through the builder (mosfet's 30 s) |
-| `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (mosfet's 30 s) |
-| `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input (mosfet's 5 s) |
-| `abilities/turn_detector/turn_detector.scx` | `end_of_turn_silence_seconds` | `0.5` | the silence that closes an open or paused turn (mosfet's 0.5 s; at least 0.01 s) |
-| `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `5000` | one speech synthesis (mosfet's 5 s) |
-| `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation (mosfet's 5 s) |
-| `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound (mosfet's 30 s stage operation timeout) |
-| `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage (mosfet's 30 s) |
-| `abilities/interpretation/interpretation.scx` | `product_threshold_db` | `3.0` | the perceived level a listening product needs (mosfet's 3 dB) |
+| `abilities/conversation/conversation.scx` | `memory_timeout_ms` | `5000` | each of the conversation's memory operations, the recall before the turns and the remember after them (the original's 5 s turn stage timeout) |
+| `abilities/communication/communication.scx` | `response_timeout_ms` | `6000` | saying one response (the original's 6 s) |
+| `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (the original's 30 s) |
+| `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `30000` | reflection's revising through the builder (the original's 30 s) |
+| `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (the original's 30 s) |
+| `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input (the original's 5 s) |
+| `abilities/turn_detector/turn_detector.scx` | `end_of_turn_silence_seconds` | `0.5` | the silence that closes an open or paused turn (the original's 0.5 s; at least 0.01 s) |
+| `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `5000` | one speech synthesis (the original's 5 s) |
+| `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation (the original's 5 s) |
+| `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound (the original's 30 s stage operation timeout) |
+| `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage (the original's 30 s) |
+| `abilities/interpretation/interpretation.scx` | `product_threshold_db` | `3.0` | the perceived level a listening product needs (the original's 3 dB) |
 
 The cognition always runs reflection and routines beside its turns, as
-mosfet's bots compose them. The floppy bot's `database` is
+The original's bots compose them. The floppy bot's `database` is
 `/memory/floppy.sqlite`, so its runs grant the `sql` service a memory
 directory; without a database reflection and routines log `absent`.
 

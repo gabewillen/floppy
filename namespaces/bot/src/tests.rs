@@ -182,7 +182,7 @@ fn attention_falls_back_to_the_device_the_source_reports_from() {
         bias(&stimulus, &Json::Null),
         assigned(&Json::Null, &json!(["fan"]))
     );
-    // Any other event: the source's device only (mosfet
+    // Any other event: the source's device only (the original
     // `_interrupt_reference`), never a target_device in its data.
     let other = json!({"event": "bot.ability.conversation.output",
                        "data": {"target_device": "lamp"}, "source": "mic"});
@@ -637,7 +637,7 @@ fn verdict_removes_ignore_selections_and_passes_legal_ones() {
 }
 
 #[test]
-fn verdict_refuses_mosfets_illegal_focus_and_clear_selections() {
+fn verdict_refuses_the_original_illegal_focus_and_clear_selections() {
     let outside = "Processing selected focus_device outside available device candidates.";
     let invalid = "Processing selected invalid focus selection data for event: bot.focus_device: ";
     let cases: Vec<(Json, Json, String)> = vec![

@@ -1,4 +1,4 @@
-//! The floppy bot's body (`bots/floppy/floppy.scx`): mosfet's Bot lifecycle
+//! The floppy bot's body (`bots/floppy/floppy.scx`): the original's Bot lifecycle
 //! and processing turns, run through `scx run` on the wall clock.
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
@@ -22,7 +22,7 @@
 //! turn when one cannot be placed (`bot.processing.failed`). `tests/tests/communication.rs` covers
 //! what the communication does with what it is routed.
 //!
-//! One test sets `input` (mosfet's Bot input) to `['identity']` and puts
+//! One test sets `input` (the original's Bot input) to `['identity']` and puts
 //! `tests/fixtures/phase4/input_double.scx` in the identity's place; the
 //! double logs `input.sound` and `input.visual` for each `environment.*`
 //! stimulus the body fans out to it.
@@ -693,7 +693,7 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     );
     // Focused on the lamp, an input for the lamp again: clear_focus is
     // offered now. A focus on the fan, outside the turn's candidates, fails
-    // the turn (mosfet attention_selection_error) and is not routed.
+    // the turn (the reference attention_selection_error) and is not routed.
     run.event("bot.input", &device_input("focus", "fan", "lamp"));
     let records = run.until(WAIT, label_is("bot.processing.failed"));
     assert_eq!(
@@ -745,7 +745,7 @@ fn a_selection_the_turn_cannot_place_fails_the_turn() {
     activated(&mut run);
     // A respond (offered by the communication), then
     // bot.ability.reasoning.input, which no ability offers: the turn fails
-    // before anything is sent (mosfet SelectionRejectionError), so the
+    // before anything is sent (the reference SelectionRejectionError), so the
     // respond is not said.
     let labels = [
         "bot.processing.completed",
@@ -795,7 +795,7 @@ fn an_ignore_selection_is_not_dispatched_and_ends_the_turn() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    // mosfet without_ignore_selections: the turn completes with the ignore
+    // The reference without_ignore_selections: the turn completes with the ignore
     // as its output, and nothing is routed.
     run.event("bot.input", &input("ignore", "noise"));
     let records = run.until(WAIT, label_is("bot.processing.completed"));
@@ -969,7 +969,7 @@ fn a_selected_communication_input_reaches_the_communication() {
     let mut run = Run::start(&args, &[]);
     activated(&mut run);
     // Heard speech whose turn selects bot.ability.communication.input (as
-    // mosfet's SpeechHeard seed does): the body routes it to itself and
+    // The original's SpeechHeard seed does): the body routes it to itself and
     // relays it to the communication, whose conversation product is the
     // next turn's stimulus.
     let speech = json!({"audio": "media/admit.wav", "media_type": "audio/wav"});

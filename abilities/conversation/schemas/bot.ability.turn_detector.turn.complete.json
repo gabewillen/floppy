@@ -81,7 +81,7 @@
     },
     "audio": {
       "default": [],
-      "description": "The turn's audio chunks in arrival order, each a reference (a URI reference) to its audio; mosfet concatenates the raw bytes, floppy passes media by reference and leaves joining them to the reader (the speech service's append step) [floppy field].",
+      "description": "The turn's audio chunks in arrival order, each a reference (a URI reference) to its audio; the original concatenates the raw bytes, floppy passes media by reference and leaves joining them to the reader (the speech service's append step) [floppy field].",
       "items": {
         "format": "uri-reference",
         "type": "string"

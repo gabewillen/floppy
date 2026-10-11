@@ -4,7 +4,7 @@
 
 // Scoring: shared by quiet and producing.
 
-// mosfet _score_unproduced: the sound's received level, null when nothing
+// The original _score_unproduced: the sound's received level, null when nothing
 // was measured.
 function receivedLevel(sound) {
   return sound.received_level_db === undefined ? null : sound.received_level_db;
@@ -24,7 +24,7 @@ function isOffProducingMouth(stimulus, sensitivity_producing_mouth) {
   return stimulus.source !== sensitivity_producing_mouth;
 }
 
-// mosfet _score_against_prediction: the observed path gain, null with no
+// The original _score_against_prediction: the observed path gain, null with no
 // levels to compare.
 function observedGain(sound) {
   return sound.amplitude_db == null || sound.received_level_db == null ? null : sound.received_level_db - sound.amplitude_db;

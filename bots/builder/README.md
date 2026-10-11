@@ -30,9 +30,9 @@ final states and its parent receives that state's done data as
 
 | What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?, min_every_ms?, turn_after_bound_ms?}`: the specification, extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000), and mosfet `check()`'s lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, mosfet's `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`) |
+| `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?, min_every_ms?, turn_after_bound_ms?}`: the specification, extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000), and the reference `check()`'s lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, the original's `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, tests, report}`: the built document, its input event schemas (`{event, schema}`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
-| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL` or no `FLOPPY_API_KEY`; the first generation ends the build at once), `no-progress` (the same failure twice in a row), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, absent when no draft was rejected (mosfet's revision drafts the rejected source) |
+| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL` or no `FLOPPY_API_KEY`; the first generation ends the build at once), `no-progress` (the same failure twice in a row), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, absent when no draft was rejected (the original's revision drafts the rejected source) |
 
 The builder answers exactly once, by finishing. Run directly, `scx run`
 prints the done data in its `done` record and exits 0; invoked, the parent
@@ -93,7 +93,7 @@ intake -> design -> author -> validate -> simulate -> done
   `apply_fixes` takes them and validates again (at most 2 passes per draft);
   otherwise the error diagnostics feed back to `author`. With the
   request's `min_every_ms` and `turn_after_bound_ms`, a clean draft is then
-  checked against mosfet `check()`'s lifetime bounds (`instance.py`
+  checked against the reference `check()`'s lifetime bounds (`instance.py`
   `_lifetime_errors`, diagnostics of kind `lifetime`, code `E0009`): a
   draft that sends `bot.behavior.tick` is a persistent routine (decision
   D61), and a delayed send of an event that a transition sending the tick
@@ -118,14 +118,14 @@ intake -> design -> author -> validate -> simulate -> done
   its invocation is cancelled, dropped), and a control event an earlier run
   left on the queue (for example the `sim.drive` of a run whose invocation
   failed to start) is dropped. With the lifetime bounds, a persistent
-  routine also runs one more test, `first tick` (mosfet `verify_apply`,
+  routine also runs one more test, `first tick` (the reference `verify_apply`,
   which forces one tick on a fake timer clock): its first schedule's event
-  is sent to a fresh child at once, and within 2 s (mosfet's verify
+  is sent to a fresh child at once, and within 2 s (the original's verify
   timeout) the child must send `bot.behavior.tick` whose data carries
   `name`, `trigger` (`every` or `at`), `scheduled_at` and `fired_at`, and
   whose `output` is a non-empty list of selections (objects with an
   `event`) whose data reads the tick's own values; otherwise the
-  diagnostics are mosfet's (kind `apply`, code `E0008`). So a routine whose
+  diagnostics are the original's (kind `apply`, code `E0008`). So a routine whose
   schedule is minutes or days away is verified in the builder's own time,
   inside reflection's 30 s revision bound.
 * `done`: a final state whose `<donedata>` carries the result.

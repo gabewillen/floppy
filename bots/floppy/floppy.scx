@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  The floppy bot: mosfet's Bot body as the root SCXML session. It owns the
+  The floppy bot: the original's Bot body as the root SCXML session. It owns the
   bot lifecycle and processing turns; its abilities are invoked children
-  (decision D6: invoke lifecycle replaces mosfet's attachment protocol).
+  (decision D6: invoke lifecycle replaces the original's attachment protocol).
 
     inactive -bot.activate-> live { activating -> active { unfocused,
       focused, processing, cancelling_processing } }
     live -bot.deactivate-> deactivating -> inactive
     live -bot.reboot (the cognition asks for one)-> live (re-entered:
       every ability is cancelled and invoked again)
-    activating -bot.deactivate-> inactive (mosfet's activation_cleanup)
+    activating -bot.deactivate-> inactive (the original's activation_cleanup)
     cancelling_processing -cancel timeout-> degraded (a final sink)
 
   Abilities: live holds <invoke id="cognition">, <invoke
@@ -17,10 +17,10 @@
   conversation and speaking), <invoke id="identity">
   (abilities/identity/identity.scx, the bot's name) and <invoke id="listening">
   (abilities/listening/listening.scx, the ear); leaving live cancels every ability (SCXML
-  6.4), which replaces mosfet's cleanup states: an SCXML invoke cancel is
-  synchronous, so there is nothing for mosfet's 5 min deactivation
+  6.4), which replaces the original's cleanup states: an SCXML invoke cancel is
+  synchronous, so there is nothing for the original's 5 min deactivation
   timeout or its reboot preserve/reset cleanup to wait on, and every
-  reboot restarts the abilities from their documents (mosfet's reset). An ability is ready when it
+  reboot restarts the abilities from their documents (the original's reset). An ability is ready when it
   sends its first bot.ability.offers; the body is active when every
   expected ability is ready. A run-tagged activation timer
   (activation_timeout_ms), an error event, or an ability ending while
@@ -42,14 +42,14 @@
 
   Speaking: the communication relays speaking's playout, the efference
   copy bot.ability.speaking.efference (sent on to each Listening ability
-  in listening, mosfet's Speaking listening peers) and then
+  in listening, the original's Speaking listening peers) and then
   environment.sound, which the body puts into the environment: a log
   record labelled environment.sound (the root has no parent), and, as any
   sound there, a stimulus for each input ability (the bot hears itself).
 
   Environment: environment.sound (logged, as any sound in the
   environment) and environment.visual from outside, while active, go to
-  each input ability (input, mosfet's Bot input: the invoke ids
+  each input ability (input, the original's Bot input: the invoke ids
   of the abilities that perceive raw stimuli; the identity and the
   listening), in
   order, by <foreach>; never to the cognition, which hears of a stimulus
@@ -59,25 +59,25 @@
   bot.ability.listening.failed is logged.
 
   Turns: bot.input, or an ability's bot.ability.cognition.input handoff
-  (mosfet grants any ability product the turn, blind to its content), in
+  (the original grants any ability product the turn, blind to its content), in
   unfocused or focused starts a processing turn; the stimulus is the
   envelope {event, data, source} <bot:stimulus> writes for bot.input, or
   the handoff's stimulus as given. The body counts the turn, computes the
   turn's attention bias with <bot:attention> (focus, focus_candidates:
-  mosfet's attention_bias_for_turn from device identity only), assembles the turn's choices (below), sends bot.ability.cognition.input
+  the original's attention_bias_for_turn from device identity only), assembles the turn's choices (below), sends bot.ability.cognition.input
   {turn, stimulus, focus, focus_candidates, choices} to the cognition, and
   arms bot.processing.timed_out
   (processing_timeout_ms) for the turn. Replies count only when they carry
   the current turn. A timeout sends
   bot.ability.cognition.cancel {turn} and waits in cancelling_processing,
-  bounded by processing_timeout_ms clamped to 100..5000 ms (mosfet's
+  bounded by processing_timeout_ms clamped to 100..5000 ms (the original's
   cancel wait): the acknowledgement
   fails the turn (bot.processing.failed); no acknowledgement degrades the
   bot. Stimuli that arrive during a turn wait, as <bot:stimulus>
   envelopes, in the data model queue (in order) and start the next turns, one per return to unfocused or focused,
   before any later event.
 
-  Choices (mosfet's per-turn dispatch inventory, assembled by decision
+  Choices (the original's per-turn dispatch inventory, assembled by decision
   namespace elements): on processing entry the body reads its own choices
   with <decision:choice location="body_choices" events="bot.focus_device
   bot.clear_focus"> (the transitions on active, offered only while offering
@@ -94,24 +94,24 @@
   the cognition.
 
   Routing: the cognition's output goes through routing, which checks every
-  selection before the turn's outcome is logged, as mosfet's cognition
+  selection before the turn's outcome is logged, as the original's cognition
   does before it dispatches any (cognition.types.dispatch_selected_events):
   <bot:verdict> removes the bot.ability.cognition.ignore selections (the
-  cognition's own terminal product, never dispatched) and applies mosfet's
+  cognition's own terminal product, never dispatched) and applies the original's
   attention_selection_error to the focus and clear selections (the turn's
   focus and focus_candidates), then <decision:route> places each remaining
-  one on the target offering it in the turn's choices (mosfet
+  one on the target offering it in the turn's choices (the original
   _resolve_target): an event the body offered to itself (#_internal),
   else the ability whose invoke id is the selection's target, or the only
   ability offering it when the selection names none (#_<id>). The body
-  also places a selected bot.ability.communication.input on itself (mosfet
+  also places a selected bot.ability.communication.input on itself (the original
   dispatches the trusted SpeechHeard seed's selection to a declared event
   of the bot), which takes it as outside communication input. A selection
   that cannot be placed (refused by the attention policy, not offered this
   turn, offered by another target, or offered by several when it names
   none) fails the whole turn before anything is sent: bot.processing.failed
-  with mosfet's SelectionRejectionError message, never
-  bot.processing.completed (mosfet bot.py: illegal selections fail the
+  with the original's SelectionRejectionError message, never
+  bot.processing.completed (the reference bot.py: illegal selections fail the
   turn instead of silently dropping). The cognition's stages make the same
   checks before they answer (autonomy, intuition, reasoning), so this one
   catches what reaches the body unchecked (the trusted seed's selection).
@@ -128,7 +128,7 @@
   listening's bot.ability.listening.failed, any ability's
   bot.ability.failed that is not a turn's reply, and every
   environment.sound;
-  floppy's own records are labelled floppy.* (not mosfet events):
+  floppy's own records are labelled floppy.* (not the original events):
   floppy.output the turn's selected events (one record per completed turn),
   floppy.choices each turn's assembled
   choices as event@target, floppy.route each routed selection, and floppy.focus
@@ -151,7 +151,7 @@
   service) and FLOPPY_BASE_URL and FLOPPY_API_KEY (reasoning's generate
   service, no default backend); without them a turn fails.
 
-  Memory (mosfet's sqlite_memory): the body passes its database (a file in
+  Memory (the original's sqlite_memory): the body passes its database (a file in
   the directory the run grants the sql service at /memory, scx run's
   dir option) to the cognition, the communication and the identity as
   <param name="database">; reasoning recalls and retains cognitive
@@ -168,7 +168,7 @@
   <datamodel>
     <!-- Configuration. -->
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
-    <!-- The memory database file (mosfet's sqlite_memory
+    <!-- The memory database file (the original's sqlite_memory
          database), in the directory the run grants the service at /memory. -->
     <data id="database" expr="'/memory/floppy.sqlite'"/>
     <data id="activation_timeout_ms" expr="30000"/>
@@ -184,11 +184,11 @@
     <data id="offers" expr="({})"/>
     <data id="waiting" expr="[]"/>
     <!-- The input abilities each environment.* stimulus fans out to
-         (mosfet's Bot input, as invoke ids), and the one being sent to. -->
+         (the original's Bot input, as invoke ids), and the one being sent to. -->
     <data id="input" expr="['identity', 'listening']"/>
     <data id="ability" expr="null"/>
     <!-- The Listening abilities that receive speaking's efference copy
-         (mosfet's Speaking listening peers, as invoke ids). -->
+         (the original's Speaking listening peers, as invoke ids). -->
     <data id="listening_abilities" expr="['listening']"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
@@ -230,7 +230,7 @@
     </onentry>
     <onexit>
       <assign location="queue" expr="[]"/>
-      <!-- mosfet _clear_focus on every reboot and deactivate. -->
+      <!-- The original _clear_focus on every reboot and deactivate. -->
       <assign location="focused_device" expr="null"/>
     </onexit>
     <invoke id="cognition" type="scxml" src="../../abilities/cognition/cognition.scx">
@@ -282,7 +282,7 @@
         <log label="floppy.diagnostic" expr="activatingDoneDiagnostic(_event)"/>
         <log label="bot.activating.failed" expr="emptyDataJson()"/>
       </transition>
-      <!-- mosfet's activation_cleanup: back to inactive, with no
+      <!-- The original's activation_cleanup: back to inactive, with no
            bot.deactivated (the bot never became active). -->
       <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="inactive"/>
     </state>
@@ -341,7 +341,7 @@
       <transition event="bot.ability.conversation.failed" event:schema="schemas/bot.ability.conversation.failed.json">
         <log label="bot.ability.conversation.failed" expr="eventDataJson(_event)"/>
       </transition>
-      <!-- A conversation product that is not text (mosfet's bot grants no
+      <!-- A conversation product that is not text (the original's bot grants no
            turn for it). -->
       <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json">
         <log label="bot.ability.conversation.output" expr="eventDataJson(_event)"/>
@@ -350,11 +350,11 @@
       <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json">
         <log label="bot.ability.listening.failed" expr="eventDataJson(_event)"/>
       </transition>
-      <!-- The body's own choices (mosfet: focus on active, clear only while
+      <!-- The body's own choices (the original: focus on active, clear only while
            a device is focused), offered on processing entry and taken only
            as routed selections of the turn (<bot:verdict> has checked
            them; one that no longer applies, a second clear in one turn, is
-           ignored, as mosfet's guard ignores it). -->
+           ignored, as the original's guard ignores it). -->
       <transition event="bot.focus_device" event:schema="schemas/bot.focus_device.json"
                   cond="focusDeviceEnabled()">
         <if cond="isFocusCandidate(_event)">
@@ -565,7 +565,7 @@
   </state>
 
   <!-- A sink: the cognition did not acknowledge a cancel, or ended while
-       active. The bot takes no more turns. mosfet's degraded is a state
+       active. The bot takes no more turns. The original's degraded is a state
        with no way out; here it is a top-level final state (scx validate
        refuses a state that can never exit, LINT002), so the session ends
        with the reason as its result. -->

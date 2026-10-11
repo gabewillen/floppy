@@ -21,14 +21,14 @@
   Ticks: each bot.behavior.tick the routine sends its parent (#_parent)
   goes up to this runner's parent, as does each one the rest of the chain
   passes up, once, by one transition on running; a tick whose name is
-  none of the chain's routines is not forwarded (mosfet
+  none of the chain's routines is not forwarded (the original
   Routines._is_stale_tick). scxml.rs checks the tick against the
   transition's event:schema as it arrives.
 
   Stopping: a routine that ends, fails (error.communication.routine), or
   cannot start (a source that does not compile raises error.execution in
   this session), stays
-  stopped until its source changes (mosfet: "it stays stopped until
+  stopped until its source changes (the original: "it stays stopped until
   changed"), and the rest keep running. Each runner nests one level deeper
   (scxml.rs bounds the nested invoke depth at 32 below the root session),
   so a chain longer than that stops at the bound, logged as

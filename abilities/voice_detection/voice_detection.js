@@ -2,7 +2,7 @@
 // <script src="voice_detection.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// detecting: any failure ends the detection with mosfet's FailureData.
+// detecting: any failure ends the detection with the original's FailureData.
 
 function failedResult(_event) {
   return ({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceDetection failed.'});
@@ -31,7 +31,7 @@ function hasSegments(_event) {
   return Array.isArray(Object(_event.data).segments);
 }
 
-// The normalized sound and mosfet's ApplyData.
+// The normalized sound and the original's ApplyData.
 function detectedResult(_event) {
   return ({sound: sound, voice_detection: {segments: _event.data.segments}});
 }

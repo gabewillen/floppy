@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   floppy's Migration ability (Alembic's command.upgrade and
-  command.downgrade, which mosfet runs on its memory database): brings a
+  command.downgrade, which the original runs on its memory database): brings a
   database to a target revision, agnostic of the database engine. It knows
   revisions and never SQL: the revisions' statements are plain SQL for the
   engine the database is, and the sql or pgsql service runs them. An
@@ -32,7 +32,7 @@
 
   Output (to the parent): bot.ability.migration.output {from, to} (the
   revisions before and after, null for base), or bot.ability.failed
-  {message} (mosfet's FailureData) when nothing was committed. Then the
+  {message} (the original's FailureData) when nothing was committed. Then the
   session ends.
 
   Bindings: the migration namespace package and the sql and pgsql service

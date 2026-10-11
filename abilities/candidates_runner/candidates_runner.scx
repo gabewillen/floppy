@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   The candidates runner: the learned turn behaviors Autonomy
-  (abilities/autonomy/autonomy.scx) tries one at a time (mosfet
+  (abilities/autonomy/autonomy.scx) tries one at a time (the original
   _CandidateRun), as a chain of SCXML children. One runner runs the first
   candidate of its candidates <param> and, when that one does not answer
   the turn, invokes itself for the rest; Autonomy invokes the first
@@ -17,7 +17,7 @@
   candidate answered arrives in a state that does not take it, and one
   pending when the runner ends dies with the runner's session.
 
-  Input: the <param>s turn, input (mosfet behavior_input_payload, the
+  Input: the <param>s turn, input (the reference behavior_input_payload, the
   candidate's input), candidates (the behaviors left to try, in inventory
   order: [{name, source}], at least one), choices (the turn's assembled
   choices), database, silence_ms and memory_timeout_ms.
@@ -38,7 +38,7 @@
   Memory: each transaction invokes the Memory ability
   (abilities/memory/memory.scx); one that fails or outlasts
   memory_timeout_ms is logged and takes the same effect as one persisted
-  (mosfet persistence_failed).
+  (the reference persistence_failed).
 
   Bindings: the bot and decision namespace packages (the Memory ability
   binds the sql service).
@@ -95,7 +95,7 @@
     </transition>
   </state>
 
-  <!-- mosfet _dispatch_candidate_activity: the handled candidate's
+  <!-- the reference _dispatch_candidate_activity: the handled candidate's
        selections are checked before its use is persisted. -->
   <state id="dispatching">
     <onentry>
@@ -111,7 +111,7 @@
     </transition>
   </state>
 
-  <!-- mosfet behavior_usage: the handled candidate's use is persisted. -->
+  <!-- the reference behavior_usage: the handled candidate's use is persisted. -->
   <state id="using">
     <onentry>
       <send event="bot.ability.autonomy.behavior_usage.persistence_failed" delayexpr="memoryTimeoutDelay()"/>
@@ -123,7 +123,7 @@
     <!-- The update's results: nothing to keep. -->
     <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"/>
     <transition event="done.invoke.usage" target="answered"/>
-    <!-- mosfet: persistence_failed takes the same effect as persisted. -->
+    <!-- the original: persistence_failed takes the same effect as persisted. -->
     <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="answered">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
@@ -136,7 +136,7 @@
   </state>
 
   <!-- A failed candidate's failure is persisted, then the rest run; a
-       rejected one's, then the runner answers the rejection (mosfet
+       rejected one's, then the runner answers the rejection (the original
        persisting_dispatch_failed). -->
   <state id="recording_failure">
     <onentry>
@@ -148,7 +148,7 @@
     </invoke>
     <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"/>
     <transition event="done.invoke.failure" target="recorded_failure"/>
-    <!-- mosfet: persistence_failed takes the same effect as persisted. -->
+    <!-- the original: persistence_failed takes the same effect as persisted. -->
     <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="recorded_failure">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>

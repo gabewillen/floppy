@@ -1321,7 +1321,7 @@ fn route_places_every_selection_in_order() {
 }
 
 #[test]
-fn a_selection_that_cannot_be_placed_rejects_them_all_with_mosfets_message() {
+fn a_selection_that_cannot_be_placed_rejects_them_all_with_the_original_message() {
     let respond = json!({"event": "bot.ability.communication.respond", "data": {"text": "hi"}});
     for (selection, message) in [
         (
@@ -1666,7 +1666,7 @@ fn run_tuner(host: &mut FakeHost, observe: bool) {
 }
 
 #[test]
-fn the_tuner_keeps_mosfets_confidence_baseline() {
+fn the_tuner_keeps_the_original_confidence_baseline() {
     // During the warmup the threshold is the floor; a malformed state is
     // the initial one.
     for state in [

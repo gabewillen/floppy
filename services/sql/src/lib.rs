@@ -1,7 +1,7 @@
 //! The `sql` invoked service: one SQLite transaction of parameterized
 //! statements per `<invoke>`, as a `stateforward:scxml/invoked-service` Wasm
-//! component. It is the engine under mosfet's Memory ability
-//! (`mosfet/abilities/memory/store.py` on `providers/sqlite_memory`), which
+//! component. It is the engine under the original's Memory ability
+//! (`abilities/memory/store.py` on `providers/sqlite_memory`), which
 //! floppy runs as `abilities/memory/memory.scx`; it knows no schema of its own.
 //!
 //! Storage is I/O, so it is a service, never executable content: the
@@ -9,7 +9,7 @@
 //! runs in another session's component, a `<send delay>` in the invoking
 //! state bounds it, and leaving that state cancels it. One invocation is one
 //! transaction of ordered, parameterized statements that all commit or all
-//! roll back, mosfet's `InputData`; the invoking document owns its SQL.
+//! roll back, the original's `InputData`; the invoking document owns its SQL.
 //! Documents name [`SERVICE_URI`]:
 //!
 //! ```xml
@@ -34,7 +34,7 @@
 //!   optionally `rowcount` (a non-negative integer: the rowcount the
 //!   statement must have, else the whole transaction fails with code
 //!   `rowcount`; a guard such as a version row that must still be the one
-//!   read), and nothing else (mosfet's `Statement`, `extra="forbid"`, with
+//!   read), and nothing else (the original's `Statement`, `extra="forbid"`, with
 //!   its `StatementResult.rowcount` as the guard).
 //!
 //! * `transaction` (optional): `open` keeps the transaction open across
@@ -78,10 +78,10 @@
 //!
 //! * [`RESULT_EVENT`] `{"results": [{"rowcount": N, "rows": [{"columns":
 //!   [...], "values": [...]}]}]}`: one result per statement, in order
-//!   (mosfet's `OutputData`). A cell is its SQLite value as JSON (`NULL` as
+//!   (the original's `OutputData`). A cell is its SQLite value as JSON (`NULL` as
 //!   `null`, an integer or a real as a number, text as a string, a blob as
 //!   its lowercase hex text).
-//! * [`FAILED_EVENT`] `{"code": C, "message": M}` (mosfet's `FailureData`
+//! * [`FAILED_EVENT`] `{"code": C, "message": M}` (the original's `FailureData`
 //!   and a code a document can branch on): `code` is SQLite's primary
 //!   result-code name (`SQLITE_CONSTRAINT`, `SQLITE_BUSY`, ...), `rowcount`
 //!   (a statement's expected rowcount differed), or `bound`; `message` is
@@ -171,10 +171,10 @@ pub const SERVICE_NAME: &str = "sql";
 /// repository's latest release (decision D19); the manifest names it too.
 pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/sql";
 
-/// The event that carries a committed transaction's results (mosfet's
+/// The event that carries a committed transaction's results (the original's
 /// `OutputData`).
 pub const RESULT_EVENT: &str = "sql.result";
-/// The event that reports a transaction that did not commit (mosfet's
+/// The event that reports a transaction that did not commit (the original's
 /// `FailureData`).
 pub const FAILED_EVENT: &str = "sql.failed";
 /// The event that runs statements in an open transaction.
@@ -218,7 +218,7 @@ pub enum Parameter {
     Text(String),
 }
 
-/// One parameterized statement (mosfet's `Statement`).
+/// One parameterized statement (the original's `Statement`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Statement {
     /// Exactly one SQL statement with positional placeholders.
@@ -501,7 +501,7 @@ fn parameter_from_json(value: &Json) -> Result<Parameter, &'static str> {
 }
 
 /// Runs `statements` in one `BEGIN IMMEDIATE` transaction on `connection`
-/// and commits, returning mosfet's `OutputData` as JSON; on any failure
+/// and commits, returning the original's `OutputData` as JSON; on any failure
 /// nothing is committed.
 ///
 /// # Errors

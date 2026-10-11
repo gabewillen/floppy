@@ -307,7 +307,7 @@ fn history_carrying_turns(body: &Path) -> Run {
 }
 
 /// A product that is not text is no turn: the communication forwards the
-/// conversation's output itself, whose latest message is inbound (mosfet
+/// conversation's output itself, whose latest message is inbound (the original
 /// `_has_conversation_product`), and the body logs it.
 #[test]
 fn a_product_that_is_not_text_reaches_the_body_as_the_conversation_output() {
@@ -454,7 +454,7 @@ fn conversation_event(name: &str, data: &Json) -> (String, Json) {
 }
 
 /// The relationships' references in
-/// [`the_conversation_commits_each_message_into_its_history`]: mosfet's
+/// [`the_conversation_commits_each_message_into_its_history`]: the original's
 /// `relationship_context_ref`, the same in either direction.
 const FIRST: &str = r#"relationship-{"identity_groups":[["a\"b","bot"],["alice","zed",[0.447213595499958,0.894427190999916]]]}"#;
 const AMBIENT: &str = r#"relationship-{"identity_groups":[[],["alice"]]}"#;
@@ -607,7 +607,7 @@ fn the_conversation_commits_each_message_into_its_history() {
         );
     }
     assert_eq!(messages[1]["content"], Json::Null);
-    // Each source's turn (mosfet's identity order: names, then
+    // Each source's turn (the original's identity order: names, then
     // embeddings) is exchanged with its turn detector, and the turns'
     // texts are committed joined, each distinct text once (D79).
     assert_eq!(messages[0]["content"], json!("hello"));
@@ -647,10 +647,10 @@ fn the_conversation_commits_each_message_into_its_history() {
     );
 }
 
-/// The remembered input is mosfet's `Memory.to_json` (the expected texts
-/// are mosfet.py e305580's own).
+/// The remembered input is the original's `Memory.to_json` (the expected texts
+/// are its own).
 #[test]
-fn the_remembered_input_is_mosfets_memory_json() {
+fn the_remembered_input_is_the_original_memory_json() {
     let dir = unique_scratch("conversation-payload");
     std::fs::copy(
         workspace().join("abilities/conversation/conversation.js"),
@@ -694,7 +694,7 @@ fn a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing() {
     .expect("the harness is copyable");
     let input = "bot.ability.conversation.input";
     let mut run = Run::start(&[harness.display().to_string()], &[]);
-    // Sent in one macrostep, so the second and third wait for the first (mosfet
+    // Sent in one macrostep, so the second and third wait for the first (the original
     // defers them). White space only: the detector closes the turn with
     // nothing to show. Empty text: the start's text stimulus is refused
     // before the detector. Then text, stripped by the detector before it
@@ -981,7 +981,7 @@ fn a_response_is_spoken_through_the_speech_service() {
     assert_eq!(written.len(), 4800);
     let requests = requests.lock().expect("the request log").clone();
     assert_eq!(requests.len(), 1, "{requests:?}");
-    // speaking's defaults, mosfet's speech encoder model and voice.
+    // speaking's defaults, the original's speech encoder model and voice.
     assert_eq!(requests[0]["model"], "gemini-3.1-flash-tts-preview");
     assert_eq!(requests[0]["input"], "reply 1");
     assert_eq!(requests[0]["voice"], "Kore");

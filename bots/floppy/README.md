@@ -1,18 +1,18 @@
 # floppy
 
-The floppy bot is the port of mosfet's Bot: an SCXML machine,
+The floppy bot is the port of the original's Bot: an SCXML machine,
 [`floppy.scx`](floppy.scx), whose abilities are invoked children under
 [`../../abilities/`](../../abilities/). The body runs
 its lifecycle and processing turns, and its abilities are the
-[cognition](../../abilities/cognition/cognition.scx), mosfet's cascade of stages
-invoked per turn: [autonomy](../../abilities/autonomy/autonomy.scx) (mosfet's
+[cognition](../../abilities/cognition/cognition.scx), the original's cascade of stages
+invoked per turn: [autonomy](../../abilities/autonomy/autonomy.scx) (the original's
 SpeechHeard seed, then the learned turn behaviors the stimulus triggers,
 kept by memory), [intuition](../../abilities/intuition/intuition.scx) (the
 decision service selects every event it can ground, each with its
-confidence, gated by mosfet's self-tuning confidence tuner; low confidence
+confidence, gated by the original's self-tuning confidence tuner; low confidence
 hands out the environment actions and goes on to reasoning), and
 [reasoning](../../abilities/reasoning/reasoning.scx)
-(one structured model call over the turn's choices, prompted with mosfet's
+(one structured model call over the turn's choices, prompted with the original's
 model-facing XML; it recalls and
 retains cognitive episodes through memory), with
 [reflection](../../abilities/reflection/reflection.scx) (after each output it
@@ -30,25 +30,25 @@ by [vocal](../../abilities/vocal/vocal.scx) through the speech service, logged a
 `floppy.say`, played out as `environment.sound` after the efference copy to
 Listening, and recorded in the conversation), and the
 [listening](../../abilities/listening/listening.scx), its input ability
-(mosfet's Listening, phase 6: see Sound below). Each turn the body
+(the original's Listening, phase 6: see Sound below). Each turn the body
 assembles the choices (its own
 `bot.focus_device`, pinned to the turn's focus candidates, and
 `bot.clear_focus` while a device is focused, plus each ability's latest
 `bot.ability.offers`, tagged with the ability as `target`, compacted and
 held to 32 KiB) and routes each selected event of the turn's output to the
-body itself or to the ability that offered it. As in mosfet, an ignore
+body itself or to the ability that offered it. As in the original, an ignore
 selection is never dispatched, and a selection the body cannot place (a
 focus outside the turn's candidates, a clear with nothing focused, an
 event not offered this turn, a target that does not offer it, or several
 offerers and no target) fails the whole turn with
-`bot.processing.failed` (mosfet's `SelectionRejectionError` message)
+`bot.processing.failed` (the original's `SelectionRejectionError` message)
 before anything is sent; the cognition's stages make the same checks
 before they answer. A selected
 `bot.ability.communication.respond` is said through speaking and recorded
 in the conversation. Input addressed to the bot as
 `bot.ability.communication.input` is admitted into the conversation, whose
 updated history is the next turn's stimulus; so is a turn's selected
-`bot.ability.communication.input` (mosfet's SpeechHeard seed admits heard
+`bot.ability.communication.input` (the original's SpeechHeard seed admits heard
 speech this way), which the body routes to itself. The full Contract, Topology, Bindings, and Proof sections come
 with the phase's saved live examples.
 
@@ -81,7 +81,7 @@ is optional, `https://api.typesafe.ai` without it). Without the TypeSafe key
 every turn fails with `the decision failed (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
 `bot.activate` may name the model (`{"model": "..."}`); the default is
-`Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory/memory.scx`, mosfet's
+`Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory/memory.scx`, the original's
 Memory) keeps the bot's database, `/memory/floppy.sqlite`, through the sql
 service (`services/sql`, SQLite), in the directory the run grants that
 service: `--dir
@@ -111,11 +111,11 @@ bounds this bot ships with.
 
 Sound (phase 6): `environment.sound` `{audio, media_type, sample_rate_hz,
 channels, kind, ...}` goes to the [listening](../../abilities/listening/listening.scx),
-the body's input ability (mosfet's Listening), and speaking's efference copy
+the body's input ability (the original's Listening), and speaking's efference copy
 goes to it too, so the bot can tell its own voice apart. Its
 [sensitivity](../../abilities/sensitivity/sensitivity.scx) scores the sound against the
 body's prediction and its [interpretation](../../abilities/interpretation/interpretation.scx)
-(mosfet's Interpretation) works out what it was: voice detection on every
+(the original's Interpretation) works out what it was: voice detection on every
 sound, an open-speech window that joins voiced sounds into one utterance until
 a sound without voice closes it, then (as configured in its data) diarization,
 voice identification and speech decoding. floppy's default configuration is
@@ -144,7 +144,7 @@ the communication,
 `bot.ability.speaking.output` (what was said),
 `bot.ability.communication.failed`, `bot.ability.conversation.failed`
 and `environment.sound` (speaking's playout, by reference). floppy's own
-records, which are not mosfet events, are labelled `floppy.*`:
+records, which are not the original events, are labelled `floppy.*`:
 `floppy.output` is the turn's selected events, speaking logs the words as
 `floppy.say`, `floppy.choices` lists each turn's choices (`event` or `event@target`),
 `floppy.route` each routed selection, `floppy.focus` each focus
@@ -167,7 +167,7 @@ an earlier turn, `floppy.diagnostic` why activation failed, and
   against a fake backend (decoding, encoding, ElevenLabs, a missing grant,
   an unconfigured or failing backend, malformed parameters).
 - `cargo test -p floppy-tests --test reading`: reading and vision under a
-  harness, image decoding against a generate double (mosfet's Reading;
+  harness, image decoding against a generate double (the original's Reading;
   nothing in the bot invokes it yet).
 - `cargo test -p floppy-tests --test cognition`: the cascade against fake
   decision and model backends (each path, the tuner, failures, hop timeouts

@@ -1,9 +1,9 @@
 # sql
 
-The `sql` invoked service: one SQLite transaction of mosfet's `Statement`s
+The `sql` invoked service: one SQLite transaction of the original's `Statement`s
 per `<invoke>`, as a Wasm component
 (`https://github.com/stateforward/floppy/services/sql`, component
-`floppy_service_sql`). It is the SQLite engine under mosfet's Memory
+`floppy_service_sql`). It is the SQLite engine under the original's Memory
 ability, which floppy runs as
 [`abilities/memory/memory.scx`](../../abilities/memory/memory.scx), and it
 knows no schema of its own. Its crate documentation ([src/lib.rs](src/lib.rs))

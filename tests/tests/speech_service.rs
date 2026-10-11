@@ -7,7 +7,7 @@
 //! and `ElevenLabs`' `text-to-speech` (nothing reaches the network). Media
 //! moves by reference: the run grants the service a directory with
 //! `--dir URI=HOST::/media`, a decoding reads its audio from there, and an
-//! encoding writes its audio there. The service answers mosfet's
+//! encoding writes its audio there. The service answers the original's
 //! `bot.ability.hearing.speech.decoding.output`,
 //! `bot.ability.vocal.speech.encoding.output`, or `bot.ability.failed`,
 //! then completes.

@@ -25,7 +25,7 @@
 //! * the conversation, exactly one of `prompt` (a non-empty string: one
 //!   `user` message, used exactly) or `messages` (a non-empty JSON array of
 //!   objects with exactly `role`, one of `system`, `user`, `assistant`, and
-//!   `content`, a string or a non-empty array of mosfet's parts, see
+//!   `content`, a string or a non-empty array of the original's parts, see
 //!   "Images").
 //! * `system` (optional, a non-empty string): a `system` message before the
 //!   conversation.
@@ -37,7 +37,7 @@
 //!   schema **before** anything is returned. `schemaname` (a string matching
 //!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it) and `strict`
 //!   (a boolean, `false` without it) are sent with it and require it. A
-//!   strict schema is sent as [`strict_schema`] normalizes it (mosfet's
+//!   strict schema is sent as [`strict_schema`] normalizes it (the original's
 //!   OpenAI-compatible provider does the same): strict structured outputs
 //!   require every object property; the reply is still checked against the
 //!   schema as given.
@@ -46,7 +46,7 @@
 //!   [`DEFAULT_REASONING_EFFORT`] without it.
 //! * `stream` (optional, a boolean, `false` without it): `true` asks for a
 //!   streamed reply (`"stream": true`, server-sent events); without it the
-//!   call is one non-streamed completion, as mosfet's `OpenAI`-compatible
+//!   call is one non-streamed completion, as the original's `OpenAI`-compatible
 //!   provider makes it.
 //!
 //! Any other parameter, a parameter given twice, or a malformed value
@@ -55,10 +55,10 @@
 //!
 //! # Images
 //!
-//! A message's `content` may be an array of mosfet's parts (its reading
+//! A message's `content` may be an array of the original's parts (its reading
 //! input's `kind` and `content`): `{"kind": "text", "content": T}` and, in a
 //! `user` message, `{"kind": "image", "content": R}`, so a vision model reads
-//! an image as mosfet's `ImageDecoder` does (the document sends mosfet's
+//! an image as the original's `ImageDecoder` does (the document sends the original's
 //! prompt, "Read all visible text in this image. Return only the text.", as a
 //! text part). Media moves by reference: `R` is a path-only URI reference
 //! (no scheme, authority, query, fragment, or empty, `.`, or `..` segment),
@@ -122,7 +122,7 @@
 //! invocation (SCXML 6.4): the host drops it and closes the request's
 //! connection at once.
 //!
-//! A call is not streamed unless the invocation asks (`stream`), as mosfet's
+//! A call is not streamed unless the invocation asks (`stream`), as the original's
 //! provider calls the API. A streamed request (`"stream": true`,
 //! server-sent events) lets closing the connection stop the generation on
 //! the backend: a
@@ -322,7 +322,7 @@ impl Role {
     }
 }
 
-/// One part of a message's content: mosfet's reading parts, `kind` `text`
+/// One part of a message's content: the original's reading parts, `kind` `text`
 /// or `image`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ContentPart {
@@ -342,7 +342,7 @@ pub struct Image {
     pub url: String,
 }
 
-/// A message's content: a string, or mosfet's parts.
+/// A message's content: a string, or the original's parts.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Content {
     /// A string, sent as one.
@@ -469,7 +469,7 @@ fn text_parameter(value: &Data, invalid: &'static str) -> Result<String, &'stati
 }
 
 /// The messages of a JSON array: objects with exactly `role` and `content`,
-/// a string or a non-empty array of mosfet's parts (objects with exactly
+/// a string or a non-empty array of the original's parts (objects with exactly
 /// `kind`, `text` or `image`, and `content`, a string; an image's is a
 /// reference [`image_path`] resolves). An image part is read with `read`
 /// (its path and the bytes the images' bound has left) and is valid only in
@@ -528,7 +528,7 @@ pub fn messages_from_json(
         .collect()
 }
 
-/// One of mosfet's parts: `{"kind": "text", "content": T}` or
+/// One of the original's parts: `{"kind": "text", "content": T}` or
 /// `{"kind": "image", "content": R}` (in a `user` message only), its image
 /// read with `read` within the `left` bytes of the images' bound.
 fn content_part(
@@ -692,7 +692,7 @@ pub fn response_schema(
     })
 }
 
-/// `schema` as strict structured outputs take it (mosfet's
+/// `schema` as strict structured outputs take it (the original's
 /// `_normalize_openai_schema`): `default`, `examples` and `title` dropped,
 /// `oneOf` sent as `anyOf`, and every object schema closed
 /// (`additionalProperties: false`) with all its properties required, at
