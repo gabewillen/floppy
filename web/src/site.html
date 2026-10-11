@@ -23,6 +23,21 @@ nav button{border:1.5px solid transparent;background:none;padding:5px 12px;font:
 nav button[aria-current="page"]{border-color:var(--ink);color:var(--ink)}
 .wrap{max-width:1200px;margin:0 auto}
 
+/* below the hero */
+.more{padding:36px 0 48px;display:grid;gap:18px}
+.more h2{margin:18px 0 0;font:600 clamp(24px,3vw,34px)/1 var(--f-c);letter-spacing:.04em;text-transform:uppercase}
+.more h3{margin:0;font:600 18px var(--f-c);letter-spacing:.1em;text-transform:uppercase}
+.more p{margin:0;font-size:13px;line-height:1.65;color:var(--mute)}
+.flow,.why{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1.5px solid var(--ink);background:rgba(16,55,102,.9)}
+.flow li,.why li{padding:16px;display:grid;gap:8px;align-content:start;border-right:1px solid var(--mute)}
+.flow li:last-child,.why li:last-child{border-right:0}
+.flow b{font:600 34px/1 var(--f-c);color:var(--acc)}
+.why h3{color:var(--warn)}
+@media (max-width:900px){.flow,.why{grid-template-columns:repeat(2,minmax(0,1fr))}.flow li,.why li{border-bottom:1px solid var(--mute)}}
+@media (max-width:520px){.flow,.why{grid-template-columns:minmax(0,1fr)}.flow li,.why li{border-right:0}}
+.cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:8px}
+.cta a{color:var(--ink);font:600 16px var(--f-c);letter-spacing:.1em;text-transform:uppercase;padding:9px 16px;border:1.5px solid var(--ink);text-decoration:none}
+.cta a.go{background:var(--acc);border-color:var(--acc);color:var(--bg)}
 /* home */
 .home{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;padding-top:28px;align-items:start}
 @media (max-width:900px){.home{grid-template-columns:minmax(0,1fr)}}
@@ -232,7 +247,7 @@ class FloppySite extends hsm.from(HTMLElement) {
   static paint(_c, s, page) {
     const c = k => ALL.filter(p => p.kind === k).length;
     const nav = `<header class="hd"><button class="brand" data-go="home">floppy <span>■</span></button>
-      <nav aria-label="Site">${[["home", "Home"], ["register", "Parts register"]].map(([k, l]) => `<button data-go="${k}" ${k === "register" ? 'data-kind="all"' : ""} ${page === k || (k === "register" && page === "part") ? 'aria-current="page"' : ""}>${l}</button>`).join("")}<a href="workshop/">Workshop</a></nav></header>`;
+      <nav aria-label="Site">${[["home", "Home"], ["register", "Parts register"]].map(([k, l]) => `<button data-go="${k}" ${k === "register" ? 'data-kind="all"' : ""} ${page === k || (k === "register" && page === "part") ? 'aria-current="page"' : ""}>${l}</button>`).join("")}<a href="workshop/">Workshop</a><a href="https://github.com/gabewillen/floppy" rel="noopener">GitHub ↗</a></nav></header>`;
     let body = "";
     if (page === "home") body = `<section class="home"><floppy-robot></floppy-robot>
       <div class="pitch"><h1>SI powered <span>software robots</span></h1>
@@ -242,7 +257,21 @@ class FloppySite extends hsm.from(HTMLElement) {
       <pre>scx run --env-file .env \\
   --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" \\
   bots/builder/builder.scx</pre>
-      <div class="tiles">${[["service", "Services", "Wasm components"], ["namespace", "Namespaces", "typed building blocks"], ["element", "Elements", "executable content"]].map(([k, l, d]) => `<button data-go="register" data-kind="${k}"><b>${c(k)}</b><span>${l}</span><small>${d}</small></button>`).join("")}</div></div></section>`;
+      <div class="tiles">${[["service", "Services", "Wasm components"], ["namespace", "Namespaces", "typed building blocks"], ["element", "Elements", "executable content"]].map(([k, l, d]) => `<button data-go="register" data-kind="${k}"><b>${c(k)}</b><span>${l}</span><small>${d}</small></button>`).join("")}</div></div></section>
+      <section class="more" aria-labelledby="flow-h"><h2 id="flow-h">From idea to running robot</h2>
+        <ol class="flow">${[
+          ["Build", "Tell Bill, the builder, what your robot should do. Bill plans it, finds the parts in the register, sets them up and installs them."],
+          ["Workbench", "Every robot is a stack of blocks that notch together. Change anything by hand; a block only snaps in where it fits."],
+          ["TestBench", "Simulate the robot before it touches anything real. Send it events, skip the timers and watch each step light up."],
+          ["Observe", "Watch a running robot live: the block it's in right now and every event going in or out."]].map(([t, d], i) => `<li><b>${String(i + 1).padStart(2, "0")}</b><h3>${t}</h3><p>${d}</p></li>`).join("")}</ol>
+        <h2>Built to be trusted</h2>
+        <ul class="why">${[
+          ["Sandboxed parts", "Each SI powered part is a Wasm component. It reaches only what you grant it: a folder, a model server, a database."],
+          ["Keys stay yours", "Keys live in your environment. A robot names the variable, and only the parts that ask for it ever see the value."],
+          ["Runs where you are", "On your own device with one command, or in a browser tab with the same parts."],
+          ["Open source", "MIT or Apache 2.0, your choice. Read every part before you install it."]].map(([t, d]) => `<li><h3>${t}</h3><p>${d}</p></li>`).join("")}</ul>
+        <div class="cta"><a class="go" href="workshop/">Open the workshop</a><a href="https://github.com/gabewillen/floppy" rel="noopener">View floppy on GitHub ↗</a></div>
+      </section>`;
     else body = `<section class="reg"><floppy-register data-kind="${s.kind}" data-sel="${page === "part" ? s.part : ""}"></floppy-register><floppy-sheet></floppy-sheet></section>`;
     s.innerHTML = nav + `<div class="wrap">${body}</div>`;
     if (page !== "home") FloppySite.paintPart(s);
