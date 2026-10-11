@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- The memory document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/memory/irp/sources">
+  <assert id="memory-1" specnum="1" specid="#memory-1">
+    <![CDATA[Given a SQLite database path and statements, it migrates the database to head and runs the statements in one transaction, answering `bot.ability.memory.output` `{results}` (one result per statement, in order), then its session ends.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+  </assert>
+</assertions>

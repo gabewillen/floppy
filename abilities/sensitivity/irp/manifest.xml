@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!-- The sensitivity document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/sensitivity/irp/sources">
+  <assert id="sensitivity-1" specnum="1" specid="#sensitivity-1">
+    <![CDATA[On start it offers nothing: it sends `bot.ability.offers` `{ability: "sensitivity", choices: []}` to its parent.]]>
+    <test id="500" conformance="mandatory" manual="false">
+      <start uri="500/test500.scxml"/>
+    </test>
+  </assert>
+  <assert id="sensitivity-2" specnum="2" specid="#sensitivity-2">
+    <![CDATA[Every arrival scored (`bot.ability.listening.sensitivity.score` `{stimulus}`) comes back as `bot.ability.listening.sensitivity.output` `{sound, parent, perceived_level_db}`, its sound the stimulus's data and its parent the stimulus; quiet, the level is the sound's `received_level_db`, `null` when nothing was measured.]]>
+    <test id="510" conformance="mandatory" manual="false">
+      <start uri="510/test510.scxml"/>
+    </test>
+    <test id="511" conformance="mandatory" manual="false">
+      <start uri="511/test511.scxml"/>
+    </test>
+  </assert>
+  <assert id="sensitivity-3" specnum="3" specid="#sensitivity-3">
+    <![CDATA[`bot.ability.speaking.efference` `{mouth, duration}` opens a producing window on that mouth; inside it, an arrival from another source is scored by its `received_level_db`.]]>
+    <test id="520" conformance="mandatory" manual="false">
+      <start uri="520/test520.scxml"/>
+    </test>
+  </assert>
+  <assert id="sensitivity-4" specnum="4" specid="#sensitivity-4">
+    <![CDATA[Inside the window, an arrival from the producing mouth is scored against the prediction: with no levels to compare, 0; with no learned path gain yet, the observed gain (`received_level_db - amplitude_db`) is learned and the level is 0; afterwards the level is `|observed - learned|`, and the learned gain is never retaught.]]>
+    <test id="530" conformance="mandatory" manual="false">
+      <start uri="530/test530.scxml"/>
+    </test>
+    <test id="531" conformance="mandatory" manual="false">
+      <start uri="531/test531.scxml"/>
+    </test>
+  </assert>
+  <assert id="sensitivity-5" specnum="5" specid="#sensitivity-5">
+    <![CDATA[The window lasts the command's duration: once it has passed, an arrival from the mouth is scored as quiet.]]>
+    <test id="540" conformance="mandatory" manual="false">
+      <start uri="540/test540.scxml"/>
+    </test>
+  </assert>
+</assertions>
