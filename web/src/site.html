@@ -1,4 +1,11 @@
 <title>floppy · SI powered software robots</title>
+<meta name="description" content="Build SI powered software robots from sandboxed parts, in your browser or on your own device.">
+<meta name="theme-color" content="#103766">
+<meta property="og:type" content="website">
+<meta property="og:title" content="floppy · SI powered software robots">
+<meta property="og:description" content="Build SI powered software robots from sandboxed parts, in your browser or on your own device.">
+<meta property="og:url" content="https://gabewillen.github.io/floppy/">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%23103766%22/%3E%3Cpath%20d%3D%22M26%2044%2022%2022M38%2044%2042%2022%22%20stroke%3D%22%23e8f1ff%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22/%3E%3Ccircle%20cx%3D%2221%22%20cy%3D%2219%22%20r%3D%229%22%20fill%3D%22%23e8f1ff%22/%3E%3Ccircle%20cx%3D%2243%22%20cy%3D%2219%22%20r%3D%229%22%20fill%3D%22%23e8f1ff%22/%3E%3Ccircle%20cx%3D%2222%22%20cy%3D%2219%22%20r%3D%224%22%20fill%3D%22%237fd0ff%22/%3E%3Ccircle%20cx%3D%2244%22%20cy%3D%2219%22%20r%3D%224%22%20fill%3D%22%237fd0ff%22/%3E%3Crect%20x%3D%2222%22%20y%3D%2240%22%20width%3D%2220%22%20height%3D%2216%22%20rx%3D%223%22%20fill%3D%22%23e8f1ff%22/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
 <style>
@@ -23,6 +30,11 @@ nav button{border:1.5px solid transparent;background:none;padding:5px 12px;font:
 nav button[aria-current="page"]{border-color:var(--ink);color:var(--ink)}
 .wrap{max-width:1200px;margin:0 auto}
 
+.loading{max-width:1200px;margin:0 auto;padding:40px 0;font:600 18px var(--f-c);letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.foot{max-width:1200px;margin:24px auto 0;padding:18px 0 28px;border-top:1.5px solid var(--ink);display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;justify-content:space-between}
+.foot>span{font:600 22px var(--f-c);letter-spacing:.04em;text-transform:uppercase}
+.foot>span span{color:var(--acc)}
+.foot small{color:var(--mute);font-size:11.5px}
 /* below the hero */
 .more{padding:36px 0 48px;display:grid;gap:18px}
 .more h2{margin:18px 0 0;font:600 clamp(24px,3vw,34px)/1 var(--f-c);letter-spacing:.04em;text-transform:uppercase}
@@ -103,7 +115,7 @@ floppy-sheet .rel button,floppy-sheet .rel span{border:1px solid var(--mute);bac
 @media (max-width:600px){floppy-sheet .tblock{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 
-<floppy-site></floppy-site>
+<floppy-site><p class="loading">Loading floppy…</p><noscript><p class="loading">floppy needs JavaScript to run.</p></noscript></floppy-site>
 
 <!-- <floppy-bot>, bundled with esbuild; its machines run on the same hsm.ts. -->
 <script type="module">/*CRITTER*/</script>
@@ -273,7 +285,8 @@ class FloppySite extends hsm.from(HTMLElement) {
         <div class="cta"><a class="go" href="workshop/">Open the workshop</a><a href="https://github.com/gabewillen/floppy" rel="noopener">View floppy on GitHub ↗</a></div>
       </section>`;
     else body = `<section class="reg"><floppy-register data-kind="${s.kind}" data-sel="${page === "part" ? s.part : ""}"></floppy-register><floppy-sheet></floppy-sheet></section>`;
-    s.innerHTML = nav + `<div class="wrap">${body}</div>`;
+    const foot = `<footer class="foot"><span>floppy <span>■</span></span><nav aria-label="Footer"><button data-go="register" data-kind="all">Parts register</button><a href="workshop/">Workshop</a><a href="https://github.com/gabewillen/floppy" rel="noopener">GitHub</a></nav><small>Open source under MIT or Apache 2.0.</small></footer>`;
+    s.innerHTML = nav + `<div class="wrap">${body}</div>` + foot;
     if (page !== "home") FloppySite.paintPart(s);
   }
   static paintPart(s) {

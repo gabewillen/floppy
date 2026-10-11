@@ -1,4 +1,11 @@
 <title>floppy Workshop</title>
+<meta name="description" content="Build, test and watch your own software robots in the browser, with Bill the builder.">
+<meta name="theme-color" content="#103766">
+<meta property="og:type" content="website">
+<meta property="og:title" content="floppy workshop">
+<meta property="og:description" content="Build, test and watch your own software robots in the browser, with Bill the builder.">
+<meta property="og:url" content="https://gabewillen.github.io/floppy/workshop/">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%23103766%22/%3E%3Cpath%20d%3D%22M26%2044%2022%2022M38%2044%2042%2022%22%20stroke%3D%22%23e8f1ff%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22/%3E%3Ccircle%20cx%3D%2221%22%20cy%3D%2219%22%20r%3D%229%22%20fill%3D%22%23e8f1ff%22/%3E%3Ccircle%20cx%3D%2243%22%20cy%3D%2219%22%20r%3D%229%22%20fill%3D%22%23e8f1ff%22/%3E%3Ccircle%20cx%3D%2222%22%20cy%3D%2219%22%20r%3D%224%22%20fill%3D%22%237fd0ff%22/%3E%3Ccircle%20cx%3D%2244%22%20cy%3D%2219%22%20r%3D%224%22%20fill%3D%22%237fd0ff%22/%3E%3Crect%20x%3D%2222%22%20y%3D%2240%22%20width%3D%2220%22%20height%3D%2216%22%20rx%3D%223%22%20fill%3D%22%23e8f1ff%22/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
 <style>
@@ -49,17 +56,17 @@ floppy-canvas .pad{padding:22px 26px 80px;min-width:max-content}
 .status.ok{color:var(--ok)} .status.bad{color:var(--bad)}
 
 /* blocks */
-floppy-block{display:block;position:relative;isolation:isolate;width:max-content;color:var(--ink);font-size:12px}
+floppy-block{display:block;position:relative;isolation:isolate;width:max-content;color:var(--ink);font-size:13px}
 floppy-block>svg.shape{position:absolute;left:0;top:0;z-index:-1;overflow:visible;pointer-events:none}
-floppy-block>.hd{display:flex;align-items:center;gap:7px;padding:11px 10px 8px 12px;min-height:38px;white-space:nowrap;cursor:grab}
-floppy-block>.hd .tag{font:700 16px/1 var(--f-c);letter-spacing:.06em;text-transform:uppercase;color:#fff}
+floppy-block>.hd{display:flex;align-items:center;gap:7px;padding:12px 12px 9px 14px;min-height:44px;white-space:nowrap;cursor:grab}
+floppy-block>.hd .tag{font:700 19px/1 var(--f-c);letter-spacing:.06em;text-transform:uppercase;color:#fff}
 floppy-block>.hd .tag i{font-style:normal}
-floppy-block>.hd label{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:rgba(255,255,255,.88)}
-floppy-block>.hd input,floppy-block>.hd select{background:var(--field);color:var(--ink);border:0;border-bottom:1px solid var(--mute);border-radius:0;padding:1px 4px;font-family:var(--f-mono);font-size:11.5px;max-width:240px}
+floppy-block>.hd label{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,.9)}
+floppy-block>.hd input,floppy-block>.hd select{background:var(--field);color:var(--ink);border:0;border-bottom:1px solid var(--mute);border-radius:0;padding:3px 6px;font-family:var(--f-mono);font-size:13px;max-width:240px}
 floppy-block>.hd select option{background:var(--bg);color:var(--ink)}
 floppy-block>.hd .req-missing{border-bottom:1.5px dashed var(--bad);background:#3a2333}
-floppy-block>.hd select.add{width:26px;padding:0 4px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.85);appearance:none;text-align:center}
-floppy-block>.hd .x{border:1px solid rgba(255,255,255,.7);background:transparent;color:#fff;width:18px;height:18px;line-height:15px;font-size:12px;padding:0;margin-left:2px}
+floppy-block>.hd select.add{width:28px;height:24px;padding:0 4px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.85);appearance:none;text-align:center}
+floppy-block>.hd .x{border:1px solid rgba(255,255,255,.7);background:transparent;color:#fff;width:24px;height:24px;line-height:20px;font-size:14px;padding:0;margin-left:2px}
 floppy-block>.mouth{margin-left:16px;min-height:30px;position:relative;transition:min-height .12s}
 floppy-block>.mouth.empty{min-height:12px}
 floppy-block.sel>.mouth.empty,floppy-block[data-state="offering"]>.mouth.empty{min-height:30px}
@@ -106,6 +113,7 @@ pre.src mark{background:var(--hi);color:var(--warn)}
 .issues{list-style:none;margin:0;padding:0;display:grid;gap:6px}
 .issues li{font-size:12px;line-height:1.45;border-left:2px solid var(--bad);padding:4px 8px;background:var(--code)}
 .issues button{border:0;background:none;padding:0;color:var(--acc);text-decoration:underline;font-size:11.5px}
+.loading{max-width:1200px;margin:0 auto;padding:40px 0;font:600 18px var(--f-c);letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
 /* Bill */
 [hidden]{display:none!important}
 floppy-side{display:flex;flex-direction:column}
@@ -170,7 +178,7 @@ floppy-workshop[data-mode="testbench"] .grid>floppy-run{display:block}
 floppy-workshop[data-mode="observe"] .grid>floppy-observe{display:block}
 floppy-workshop[data-mode="build"] .grid{grid-template-columns:minmax(0,760px);justify-content:center}
 floppy-workshop[data-mode="build"] .grid>floppy-canvas{display:none}
-floppy-workshop[data-mode="workbench"] .grid{grid-template-columns:260px minmax(0,1fr) 330px}
+floppy-workshop[data-mode="workbench"] .grid{grid-template-columns:300px minmax(0,1fr) 330px}
 floppy-workshop[data-mode="testbench"] .grid{grid-template-columns:minmax(0,1fr) 360px}
 floppy-workshop[data-mode="observe"] .grid{grid-template-columns:minmax(0,1fr) 400px}
 floppy-workshop[data-mode="build"] .bill-hd .face{width:130px;height:150px}
@@ -192,7 +200,7 @@ floppy-observe .ph .dot.on{background:var(--ok);border-color:var(--ok)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
-<floppy-workshop></floppy-workshop>
+<floppy-workshop><p class="loading">Loading the workshop…</p><noscript><p class="loading">The workshop needs JavaScript to run.</p></noscript></floppy-workshop>
 
 <script type="module">/*CRITTER*/</script>
 <script type="module">
