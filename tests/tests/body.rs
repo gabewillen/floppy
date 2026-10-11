@@ -426,14 +426,20 @@ fn inputs_during_a_turn_wait_and_run_in_order() {
                 "double.input"
             ]
         ),
+        // Each state that holds an input logs it: processing holds both,
+        // cancelling_processing holds them again, and processing holds the
+        // third again while the second runs.
         pairs(&[
             ("floppy.deferred", "bot.input"),
             ("floppy.deferred", "bot.input"),
             ("bot.processing.timed_out", r#"{"turn":1}"#),
+            ("floppy.deferred", "bot.input"),
+            ("floppy.deferred", "bot.input"),
             (
                 "bot.processing.failed",
                 r#"{"message":"Bot processing timed out after 1.5 seconds.","turn":1}"#
             ),
+            ("floppy.deferred", "bot.input"),
             ("double.input", r#"2 reply "second""#),
             ("double.input", r#"3 reply "third""#),
         ])

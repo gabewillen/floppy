@@ -713,9 +713,11 @@ fn a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing() {
         }
         seen.get() == 3
     });
+    // The second and third wait for the first, then the third waits again
+    // for the second.
     assert_eq!(
         texts(&all, "conversation.deferred"),
-        strings(&[input, input])
+        strings(&[input, input, input])
     );
     let finished = run.close(WAIT);
     let failures: Vec<Json> = texts(&all, "harness.failed")
