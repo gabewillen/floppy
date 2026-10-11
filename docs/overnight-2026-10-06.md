@@ -200,7 +200,7 @@ c7b873a2 Compile no backend URL into generate or decision; require env:baseurl
 d2a02e61 Implement the generate namespace's <gen:generate> as an extension component
 df49b6d2 Implement the scxml namespace's <sx:validate> as an extension component
 4b0bd468 Let a nemobot config set the instruction fuel of one extension component call
-da7c41cf Document the mosfet to nemobot port plan, the decisions, and the builder bot's contract
+da7c41cf Document the original to nemobot port plan, the decisions, and the builder bot's contract
 f6892e47 Adopt scxml.rs's component rules and the port decisions as nemobot's AGENTS.md
 a5c59895 Build and verify components with scripts/build-components.sh and smoke-test nemobot-host on real sessions
 8b9e4045 Add nemobot-host: config, env-file values, package binding, compilation, and the live session thread

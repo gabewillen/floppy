@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's VoiceDiarization (mosfet abilities/hearing/voice/diarization.py):
+  floppy's VoiceDiarization (the reference abilities/hearing/voice/diarization.py):
   who spoke when in a closed utterance, through the speech service's
-  diarize operation (mosfet's VoiceDiarizer providers: pyannote's and MLX
+  diarize operation (the original's VoiceDiarizer providers: pyannote's and MLX
   Audio's pipelines; here LocalAI's POST {base}/audio/diarization, which
   serves pyannote segmentation and Sortformer models). The interpretation
   (abilities/interpretation/interpretation.scx) invokes it once per utterance from
@@ -17,11 +17,11 @@
   <output>-<index>), and model (LocalAI's pyannote-diarization by default).
 
   Output: <donedata>, received by the interpretation as
-  done.invoke.voice_diarization: {segments} (mosfet's OutputData: clipped
+  done.invoke.voice_diarization: {segments} (the original's OutputData: clipped
   PCM segments, each a reference with its format, span and optional
   confidence, ascending by start; raw speaker labels never enter) when the
   service answers bot.ability.hearing.voice.diarization.output, or
-  {message} (mosfet's FailureData) when it answers bot.ability.failed,
+  {message} (the original's FailureData) when it answers bot.ability.failed,
   answers something else, or cannot run.
 
   Bindings: the speech service package; env scopes FLOPPY_VOICE_BASE_URL

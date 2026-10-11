@@ -6,7 +6,7 @@ executable-content extension component (`floppy_conversation`). It reads its
 expressions and assigns its results through the data model; it never sends,
 never holds the history, and does no I/O.
 
-| Element | mosfet | Writes |
+| Element | The original | Writes |
 | --- | --- | --- |
 | `<conversation:commit location keylocation? direction event message sequence provenance?>` | `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`, `_stable_context_ref`, `relationship_context_ref`, `MessageProvenance` | the committed message (`location`) and its relationship context reference, `{"identity_groups":[...]}` (`keylocation`) |
 

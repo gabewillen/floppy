@@ -3,7 +3,7 @@
 #
 # Checks that every package under namespaces/ and services/ is the package of
 # release TAG (adapted from scxml.rs/scripts/check-namespace-versions.sh, and
-# the counterpart of mosfet.py's scripts/check_release_version.py):
+# the counterpart of the reference implementation's scripts/check_release_version.py):
 #
 #   * namespaces/<name>/package/<name>.extension.json binds the tagless URI
 #     https://github.com/stateforward/floppy/namespaces/<name> (a package's

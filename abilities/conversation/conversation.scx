@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Conversation ability in text mode (mosfet
+  floppy's Conversation ability in text mode (the original
   abilities/communication/conversation): the committed history of one
   conversation. The communication (abilities/communication/communication.scx) invokes it
   as its child "conversation", routes each admitted input to it as
   bot.ability.conversation.routed_input {parent} (parent: the
   communication's input event as an envelope {event, data}), and records
   each spoken response with bot.ability.conversation.append. A direct
-  bot.ability.conversation.input is taken too, as in mosfet.
+  bot.ability.conversation.input is taken too, as in the original.
 
     inactive -input-> active { waiting -input-> running -> waiting }
     running { recalling_from -> recalling_memory?
@@ -15,13 +15,13 @@
               -> remembering_from -> remembering_memory? -> committing }
     append, snapshot.request (any state)
 
-  Relationships (mosfet Conversation._relationship_for_input): each input
+  Relationships (the original Conversation._relationship_for_input): each input
   first finds its relationship, {session_ref, context_ref, source_ids,
   target_ids, participants, sequences}, kept in relationships in the order
   they began. Input without targets shares the first relationship without
   targets (the ambient one). Other input takes the best scoring
   relationship, ties by session_ref: an ambient one whose participants
-  include a target scores mosfet's similarity_threshold (0.85); any other
+  include a target scores the original's similarity_threshold (0.85); any other
   scores the lower of its source and target groups' match, in either
   direction (sources to sources and targets to targets, or swapped), the
   higher direction counting. Two groups match one to one, names equal and
@@ -29,37 +29,37 @@
   another assignment comes within similarity_margin (0.05); the score is
   the mean. With no match the input begins a relationship of its own:
   context_ref is its relationship context reference, which
-  <conversation:commit keylocation> writes (mosfet relationship_context_ref,
+  <conversation:commit keylocation> writes (the reference relationship_context_ref,
   {"identity_groups":[...]}, the same in either direction), and session_ref
   "relationship-" and that. A source becomes a participant once its
   detector is ready and stops being one when its turn fails (a failed
-  remember drops the participants this input added), as mosfet keeps a
-  participant while it has a detector. mosfet also matches an embedding
+  remember drops the participants this input added), as the original keeps a
+  participant while it has a detector. The original also matches an embedding
   source to an earlier participant's voice centroid; that inference is not
   ported, so each embedding is its own participant.
 
-  Memory (mosfet Conversation's memory stage, before and after the turns):
+  Memory (the original Conversation's memory stage, before and after the turns):
   with a database (the <param> database, the memory database file) it
   invokes the memory ability (abilities/memory/memory.scx) as "recall",
   before the turns, with the relationship's memories (content where
   query_tags conversation_memory and context_ref is the relationship's
-  context_ref, oldest first, at most 50, mosfet
+  context_ref, oldest first, at most 50, the original
   conversation_memory_recall_input), and as "remember", after them, with
-  the input (kind conversation, mosfet conversation_memory_insert_input)
-  as mosfet's Memory.to_json writes it: {content, content_type, source_ids,
+  the input (kind conversation, the reference conversation_memory_insert_input)
+  as the original's Memory.to_json writes it: {content, content_type, source_ids,
   target_ids} with sorted keys and compact separators, the identities in
-  mosfet's order without repeats (embedding components as Python floats),
+  the original's order without repeats (embedding components as Python floats),
   arrays and objects in the content tagged collision-safe
   (__stateforward_memory_content__ list and mapping). The recalled
-  memories are host-only (mosfet excludes them from the output) and are
+  memories are host-only (the original excludes them from the output) and are
   logged by count only, once remembered. Each is bounded by
-  memory_timeout_ms (mosfet's 5 s); a memory failure or timeout answers
+  memory_timeout_ms (the original's 5 s); a memory failure or timeout answers
   bot.ability.conversation.failed {stage: "memory", message} and commits
   nothing. Without a database it logs <log label="memory" expr="'absent'">
   once per input.
 
-  Turns (mosfet Conversation's turn_detector stage): each input is
-  one turn per source identity, in mosfet's identity order (names sorted,
+  Turns (the original Conversation's turn_detector stage): each input is
+  one turn per source identity, in the original's identity order (names sorted,
   then embeddings by their JSON), each exchanged with a turn detector
   (abilities/turn_detector/turn_detector.scx) invoked as "turn_detector"
   for that participant: its participant_ref is the participant's track
@@ -70,14 +70,14 @@
   self_participant_ref, source_participant_ref, content} and
   bot.ability.turn_detector.turn.end; turn_ref is
   "input-<n>:turn:<track>", n counting this conversation's inputs. The
-  content is mosfet's _content_for_detector: text/plain text as a text
+  content is the original's _content_for_detector: text/plain text as a text
   stimulus, audio/* content as an audio stimulus with its rate and
   channels, anything else as a content stimulus. Readiness and the turn
-  are each bounded by mosfet's 5 s (turn_timeout_ms). A detector failure
+  are each bounded by the original's 5 s (turn_timeout_ms). A detector failure
   (bot.ability.turn_detector.failed), a timeout, or a turn the detector
   cannot take (an error.* here: a start its schema refuses) answers
   bot.ability.conversation.failed {stage: "turn_detector", message} and
-  commits nothing. The turns' product is what is committed (mosfet
+  commits nothing. The turns' product is what is committed (the original
   _complete_turn): the turns' texts joined by spaces as text/plain when
   any has text, each distinct text once (D79); else no content for audio;
   else the input's content. The committed provenance's turn_ref is the
@@ -85,19 +85,19 @@
   dropped (media never enters the model-facing history). Input that
   arrives while one is in hand is held by <event:defer/> (scxml.rs
   namespaces/event) and is taken, in order, on the return to waiting
-  (mosfet defers it).
+  (the original defers it).
 
   Appends: outbound messages only, committed with the next sequence and
   provenance event bot.ability.conversation.append. An append is already
   committed when its id (non-empty), source and target, which the message's
-  provenance carries for the append event (mosfet's event id, source and
+  provenance carries for the append event (the original's event id, source and
   target), match a committed message's; it is not committed again, and
   either way the conversation answers bot.ability.conversation.output.
 
   Snapshot: bot.ability.conversation.snapshot.request {request_ref}, in
   any state, answers bot.ability.conversation.snapshot.output
   {request_ref, detector_refs}: [session_ref, source] of every
-  participant, ordered by relationship and then identity (mosfet
+  participant, ordered by relationship and then identity (the original
   detector_refs; floppy invokes a detector per turn, so a participant
   stands for its detector).
 
@@ -107,12 +107,12 @@
   history in causal order. An inbound commit of text (string content,
   content_type text/*) hands it to the parent as a stimulus,
   bot.ability.cognition.input {stimulus} (the product's envelope with
-  source "conversation", mosfet's text contribution handoff); every other
+  source "conversation", the original's text contribution handoff); every other
   commit sends the product itself, history only.
 
   Readiness: the session's start sends bot.ability.offers
   {ability: "conversation", choices: []} to the parent; it offers nothing
-  (mosfet's conversation input is not a tool event).
+  (the original's conversation input is not a tool event).
 
   Commits: <conversation:commit> (the conversation namespace) builds each
   committed message; the document appends it to history and the inbound
@@ -127,9 +127,9 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="conversation" initial="conversation">
   <datamodel>
-    <!-- mosfet's 5 s bound on each memory operation. -->
+    <!-- The original's 5 s bound on each memory operation. -->
     <data id="memory_timeout_ms" expr="5000"/>
-    <!-- Turns: mosfet's 5 s turn detector bound, the inputs taken so far,
+    <!-- Turns: the original's 5 s turn detector bound, the inputs taken so far,
          this input's sources in order, the one in hand, the completed
          turns, the turn timer, and the turns' product to commit. -->
     <data id="turn_timeout_ms" expr="5000"/>
@@ -142,9 +142,9 @@
     <!-- Input that arrived while one was in hand ({input, parent}), in
          order. -->
     <data id="history" expr="[]"/>
-    <!-- Relationships (mosfet _RelationshipProfile), in the order they
+    <!-- Relationships (the original _RelationshipProfile), in the order they
          began: {session_ref, context_ref, source_ids, target_ids,
-         participants, sequences}; mosfet's similarity threshold and
+         participants, sequences}; the original's similarity threshold and
          margin for matching embeddings; the input's own context_ref, the
          relationship in hand, and the participants this input added. -->
     <data id="relationships" expr="[]"/>
@@ -159,7 +159,7 @@
     <data id="input" expr="null"/>
     <!-- The message in hand. -->
     <data id="message" expr="null"/>
-    <!-- Memory: the database file (null: no memory) and mosfet's
+    <!-- Memory: the database file (null: no memory) and the original's
          statements (conversation/memory.py). The SQL runs on both
          engines (SQLite and Postgres). A memory id is the next row count
          as 32 zero-padded digits (neither engine's randomness is unique
@@ -226,7 +226,7 @@
           <assign location="turn_index" expr="0"/>
           <assign location="turns" expr="[]"/>
         </onentry>
-        <!-- Input that arrives meanwhile waits (mosfet defers it). -->
+        <!-- Input that arrives meanwhile waits (the original defers it). -->
         <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json">
           <event:defer/>
           <log label="conversation.deferred" expr="_event.name"/>

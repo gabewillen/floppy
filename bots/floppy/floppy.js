@@ -137,12 +137,12 @@ function turnJson() {
 
 // cancelling_processing
 
-// processing_timeout_ms clamped to 100..5000 ms (mosfet's cancel wait).
+// processing_timeout_ms clamped to 100..5000 ms (the original's cancel wait).
 function cancelDelay() {
   return delay(Math.min(5000, Math.max(100, processing_timeout_ms)));
 }
 
-// mosfet _dispatch_processing_timeout_failure, after an acknowledged cancel
+// The original _dispatch_processing_timeout_failure, after an acknowledged cancel
 // and after an unacknowledged one alike.
 function cancelledFailure() {
   return JSON.stringify({message: 'Bot processing timed out after ' + processing_timeout_ms / 1000 + ' seconds.', turn: turn});
@@ -160,13 +160,13 @@ function isAccepted() {
 }
 
 // The turn's choices, and bot.ability.communication.input placed on the
-// body itself (the trusted SpeechHeard seed's selection, mosfet's declared
+// body itself (the trusted SpeechHeard seed's selection, the original's declared
 // event of the bot), which takes it as outside communication input.
 function routeChoices() {
   return choices.concat([{event: 'bot.ability.communication.input', schema: {}}]);
 }
 
-// mosfet: a rejected selection fails the turn (bot.processing.failed).
+// The original: a rejected selection fails the turn (bot.processing.failed).
 function rejectionFailure() {
   return JSON.stringify({message: rejection, turn: turn});
 }

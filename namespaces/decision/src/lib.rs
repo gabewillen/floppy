@@ -74,7 +74,7 @@
 //! # `<decision:compact location="L" bound="N" overlocation="O"/>`
 //!
 //! Rewrites the choice array at `location` (required) in place to what a
-//! model needs to fill each event (mosfet `model_facing_event_json_schema`
+//! model needs to fill each event (the reference `model_facing_event_json_schema`
 //! and the offer bound): every entry becomes `{event, schema, description?,
 //! target?}`, canonical JSON, in order, and every schema loses `$schema`,
 //! `title` and `examples` at every level, keeping property names (the
@@ -99,7 +99,7 @@
 //! # `<decision:pin location="L" event="E" property="P" values="X"/>`
 //!
 //! Pins one property of one event's schema in the choice array at
-//! `location` (mosfet grounds `bot.focus_device`'s `device` in the turn's
+//! `location` (the original grounds `bot.focus_device`'s `device` in the turn's
 //! focus candidates): `values`, an expression that evaluates to a JSON
 //! array, becomes the `enum` of `schema.properties.<P>` of every entry whose
 //! event is `E`; when the array is empty those entries are removed instead
@@ -109,7 +109,7 @@
 //!
 //! # `<decision:assemble location="L" choices="X" offers="Y" bound="N" overlocation="O" sizelocation="S"/>`
 //!
-//! A turn's choices (mosfet `collect_offered_events` and the body's
+//! A turn's choices (the reference `collect_offered_events` and the body's
 //! dispatch inventory): the choices `choices` evaluates to (a document's
 //! own, kept untagged), then the choices of each member of the object
 //! `offers` evaluates to (offering invoke id → its latest offered choices),
@@ -127,20 +127,20 @@
 //! Places every selection (`{event, data?, target?}`) of the array
 //! `selections` evaluates to by the choices `choices` evaluates to (each
 //! choice's event is offered by its `target`, a choice without one by the
-//! document itself), in order, as mosfet's `dispatch_selected_events`
+//! document itself), in order, as the original's `dispatch_selected_events`
 //! resolves its targets (`fill_unique_selection_targets`, the offered-event
 //! check and `_resolve_target`): a selection that names a `target` goes to
 //! it when it offers the event; one that names none goes to the event's
 //! only offerer. A selection that cannot be placed fails all of them
-//! (mosfet's `SelectionRejectionError`, raised before anything is
+//! (the original's `SelectionRejectionError`, raised before anything is
 //! dispatched): `rejectionlocation` receives the first one's message,
-//! mosfet's `Processing selected unavailable event: <event>.` (an event
+//! The original's `Processing selected unavailable event: <event>.` (an event
 //! nobody offers, or one that names no target and is offered by several)
 //! or `Processing selected unavailable event for target <target>:
 //! <event>.` (a named target that does not offer it; also an event nobody
 //! offers, when it names one), or `Processing selected a malformed event
 //! selection.` for one that is not an object with a non-empty string
-//! `event` (floppy's text: mosfet refuses it while parsing), and
+//! `event` (floppy's text: the original refuses it while parsing), and
 //! `location` receives `[]`. Otherwise `rejectionlocation` receives `null`
 //! and `location` one `{event, data, target}` per selection (`data` `{}`
 //! when the selection has none or `null`; `target` `null` for the document
@@ -157,7 +157,7 @@
 //! # `<decision:selection location="L" choices="X"/>`
 //!
 //! `location` receives the strict structured-output schema a model fills
-//! to select among the choices `choices` evaluates to (mosfet
+//! to select among the choices `choices` evaluates to (the original
 //! `_selection_item_branch` and `dispatch_tool`): `{events: [anyOf one
 //! branch per offered event]}`, the events in choices order, each offered
 //! once. A branch is `{event (a one-value enum), data, reason, target}`:
@@ -173,7 +173,7 @@
 //!
 //! # `<decision:tuner location="L" thresholdlocation="T" observe="X"/>`
 //!
-//! mosfet's `ConfidenceTuner` on its 0–100 scale, with its defaults (floor
+//! The original's `ConfidenceTuner` on its 0–100 scale, with its defaults (floor
 //! [`TUNER_FLOOR`], EMA alpha [`TUNER_ALPHA`], `k_sigma` [`TUNER_K_SIGMA`],
 //! warmup [`TUNER_WARMUP`] observations, variance floor
 //! [`TUNER_VAR_FLOOR`]). `location` (required) holds the tuner state
@@ -242,25 +242,25 @@ pub const MAX_EVENT_NAME_BYTES: usize = wasm_bound(256);
 /// choice list phase 4 spike (b) relays through two sessions safely.
 pub const DEFAULT_COMPACT_BOUND: usize = 32_768;
 
-/// The tuner's absolute confidence floor (mosfet `_DEFAULT_CONFIDENCE_FLOOR`).
+/// The tuner's absolute confidence floor (the reference `_DEFAULT_CONFIDENCE_FLOOR`).
 pub const TUNER_FLOOR: f64 = 35.0;
 
-/// The tuner's EMA weight (mosfet `_DEFAULT_TUNER_ALPHA`).
+/// The tuner's EMA weight (the reference `_DEFAULT_TUNER_ALPHA`).
 pub const TUNER_ALPHA: f64 = 0.08;
 
-/// The tuner's standard deviations under the mean (mosfet
+/// The tuner's standard deviations under the mean (the original
 /// `_DEFAULT_TUNER_K_SIGMA`).
 pub const TUNER_K_SIGMA: f64 = 1.0;
 
-/// Observations before the tuner leaves its floor (mosfet
+/// Observations before the tuner leaves its floor (the original
 /// `_DEFAULT_TUNER_WARMUP`).
 pub const TUNER_WARMUP: u64 = 8;
 
-/// The tuner's variance floor and initial variance (mosfet
+/// The tuner's variance floor and initial variance (the original
 /// `_DEFAULT_TUNER_VAR_FLOOR`).
 pub const TUNER_VAR_FLOOR: f64 = 100.0;
 
-/// The tuner's initial mean (mosfet `_DEFAULT_TUNER_MEAN`).
+/// The tuner's initial mean (the reference `_DEFAULT_TUNER_MEAN`).
 pub const TUNER_MEAN: f64 = 70.0;
 
 /// One attribute of an element.
@@ -773,7 +773,7 @@ fn route<H: ChoiceHost>(
     Ok(Executed::Handled)
 }
 
-/// mosfet `_unavailable_message`.
+/// The reference `_unavailable_message`.
 fn unavailable(event: &str, target: Option<&str>) -> String {
     match target {
         None => format!("Processing selected unavailable event: {event}."),
@@ -1087,7 +1087,7 @@ fn tuner<H: ChoiceHost>(
     Ok(Executed::Handled)
 }
 
-/// mosfet's `ConfidenceTuner` state on the 0–100 scale: see the crate
+/// The original's `ConfidenceTuner` state on the 0–100 scale: see the crate
 /// documentation (`<decision:tuner>`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Tuner {

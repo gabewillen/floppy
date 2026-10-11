@@ -1,62 +1,62 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Intuition stage (mosfet abilities/cognition/intuition with the
+  floppy's Intuition stage (the reference abilities/cognition/intuition with the
   TypeSafe processor): the fast System 1 pick, made by the decision service
-  (never by a free-text model) over the turn's choices, with mosfet's
+  (never by a free-text model) over the turn's choices, with the original's
   self-tuning confidence gate. The cognition (abilities/cognition/cognition.scx)
   invokes it once per turn after autonomy left the turn unhandled.
 
     deciding (an invoked decision service) -> done
 
-  Processor (mosfet providers/typesafe Processor.process, the decision
+  Processor (the original providers/typesafe Processor.process, the decision
   service's kind select): the turn's choices, the <param> choices (the
   body's assembled snapshot choices: its own enabled event:schema
   transitions and each ability's latest offers, tagged with the offering
-  ability as target; mosfet collect_offered_events), less the deliberate
+  ability as target; the reference collect_offered_events), less the deliberate
   handoff bot.ability.reasoning.input (the processor never offers it), go
   to the decision service with the state document {turn: {envelope: {name},
-  data}} (mosfet _stimulus_document) and the stimulus data as evidence. It
+  data}} (the original _stimulus_document) and the stimulus data as evidence. It
   asks one batch over them plus its pass criterion __unhandled__, filling
   each event's required data from the stimulus data's value, else the
   schema's enum; an event it cannot fill is not offered, so a reply that
   needs free text goes on to reasoning (user answer, 2026-10-08). When the
   pass criterion wins (declined) or nothing could be filled (no-candidates)
-  the product is empty: the turn escalates with mosfet's reason
+  the product is empty: the turn escalates with the original's reason
   empty_product and the tuner observes nothing. Otherwise the service
   returns every groundable event, each with its data and its own
-  probability (decision.selected): mosfet's selections with their
+  probability (decision.selected): the original's selections with their
   per-event confidences.
 
-  Confidence (mosfet ConfidenceTuner, 0-100 scale): the tuner state
+  Confidence (the reference ConfidenceTuner, 0-100 scale): the tuner state
   {mean, var, n} comes in as a <param> and goes back in <donedata>, so
   it lives in the cognition across turns. The turn's confidence is the
   minimum of its selections' confidences, each its probability normalized
-  to a whole 0-100 number (mosfet selection_confidence,
+  to a whole 0-100 number (the reference selection_confidence,
   normalize_confidence). <decision:tuner> observes it first, then writes
-  the updated threshold (mosfet's defaults: the floor 35 during the warmup
+  the updated threshold (the original's defaults: the floor 35 during the warmup
   of 8 observations, then max(floor / 2, mean - k_sigma * std); EMA alpha
   0.08, variance floor 100) as a probability, and the turn escalates when
-  the confidence is below it (mosfet _tune_confidence, should_escalate).
+  the confidence is below it (the original _tune_confidence, should_escalate).
 
-  Classification (mosfet _classify_activity, its confidence_gate off, the
+  Classification (the original _classify_activity, its confidence_gate off, the
   default): a confident product is handled, every selection {event, data}
   (escalation reason none), which the body routes to the target offering
-  each (mosfet dispatches each to its single enabler). A low-confidence
+  each (the original dispatches each to its single enabler). A low-confidence
   product (low_confidence), or one holding bot.ability.reasoning.input
   (deliberative_input), is unhandled and escalates to reasoning, but hands
   out its environment actions first: its selections less the deliberate
-  handoff and bot.ability.cognition.ignore (mosfet _environment_actions),
+  handoff and bot.ability.cognition.ignore (the original _environment_actions),
   as selected in the donedata, which the cognition routes before
   reasoning's own selections. The decision timer is deciding.after
-  (floppy's own bound; mosfet's intuition has none).
+  (floppy's own bound; the original's intuition has none).
 
-  Dispatch (mosfet _dispatch_selections_activity,
+  Dispatch (the original _dispatch_selections_activity,
   cognition.types.dispatch_selected_events): the selections handed out are
   checked before the stage answers: <bot:verdict> removes ignore
   selections and applies attention_selection_error with the turn's focus
   and focus_candidates, then <decision:route> places each on the target
   offering it in the choices. One that cannot be placed fails the stage
-  with mosfet's "Selection rejected: <message>". mosfet first re-asks its
+  with the original's "Selection rejected: <message>". The original first re-asks its
   processor once with the rejection as feedback (routing_rejection); the
   decision service takes no such feedback, so that retry is not ported.
 

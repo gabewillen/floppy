@@ -26,7 +26,7 @@ function turnLog() {
   return 'turn ' + turn;
 }
 
-// The hop timer of the stage in hand, for the turn in hand (mosfet _is_child_hop_timeout).
+// The hop timer of the stage in hand, for the turn in hand (the original _is_child_hop_timeout).
 function isChildHopTimeout(_event) {
   return _event.sendid === hop_timer && _event.data.turn === turn;
 }
@@ -41,7 +41,7 @@ function hopDelay() {
   return child_operation_timeout_ms + 'ms';
 }
 
-// The stage's input param, and bot.ability.failed's input (mosfet _build_processing_input).
+// The stage's input param, and bot.ability.failed's input (the original _build_processing_input).
 function processingInput() {
   return ({focus: focus, focus_candidates: focus_candidates});
 }
@@ -70,7 +70,7 @@ function stageLog(outcome, _event) {
   return outcome + ' (' + _event.data.reason + ')';
 }
 
-// The failure of a stage that failed: its reason, else mosfet's
+// The failure of a stage that failed: its reason, else the original's
 // 'Cognition ability failed.' (_fail_child).
 function stageFailure(_event) {
   return (typeof _event.data.reason === 'string' && _event.data.reason.length > 0 ? _event.data.reason : 'Cognition ability failed.');
@@ -97,7 +97,7 @@ function intuitionFailure(_event) {
   return stageFailure(_event);
 }
 
-// An escalated intuition's environment actions (mosfet _environment_actions), else none.
+// An escalated intuition's environment actions (the original _environment_actions), else none.
 function environmentActions(_event) {
   return Array.isArray(_event.data.selected) ? _event.data.selected : [];
 }

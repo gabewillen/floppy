@@ -4,7 +4,7 @@
 
 // idle
 
-// mosfet SpeechHeard._has_admissible_speech: speech with at least one source_id.
+// The reference SpeechHeard._has_admissible_speech: speech with at least one source_id.
 function hasAdmissibleSpeech() {
   return stimulus.data.source_ids.length > 0;
 }

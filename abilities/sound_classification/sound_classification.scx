@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's SoundClassification (mosfet abilities/hearing/sound/
-  classification.py) with mosfet's KindSoundClassifier: non-speech sound
+  floppy's SoundClassification (the reference abilities/hearing/sound/
+  classification.py) with the original's KindSoundClassifier: non-speech sound
   labelled from the sound's kind, with no model. The interpretation
   (abilities/interpretation/interpretation.scx) invokes it once per sound from
   ClassifyingSound.
 
     applying -> applied (final)
 
-  Input: the <param>s audio, media_type and kind (mosfet's input is the
+  Input: the <param>s audio, media_type and kind (the original's input is the
   whole SoundData so the classifier can read its kind).
 
   applying labels the sound (KindSoundClassifier.classify): a kind that is
   null or blank is unlabeled, {labels: []}; any other kind, trimmed, is the
   one label with confidence 1.0, {labels: [kind], confidence: 1.0}
-  (mosfet's OutputData). The result is the <donedata>, received by the
+  (the original's OutputData). The result is the <donedata>, received by the
   interpretation as done.invoke.sound_classification.
 
   Bindings: none (no service, no I/O).

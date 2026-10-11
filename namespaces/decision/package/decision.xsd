@@ -36,7 +36,7 @@
                    the target offering it ({event, data, target}), or []
                    when one cannot be placed.
                    rejectionlocation (required): receives the first
-                   unplaceable selection's message (mosfet
+                   unplaceable selection's message (the original
                    SelectionRejectionError), else null.
                    selections, choices (required): expressions.
   decision:names   location (required): receives the choices' names

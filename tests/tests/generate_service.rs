@@ -327,7 +327,7 @@ fn media(dir: &Path) -> Vec<String> {
     ]
 }
 
-/// The parameters of mosfet's `ImageDecoder` reading the image `reference`.
+/// The parameters of the original's `ImageDecoder` reading the image `reference`.
 fn image_params(reference: &str) -> String {
     format!(
         r#"<param name="model" expr="'mock-model'"/>
@@ -766,9 +766,9 @@ fn live_generate_through_an_env_file() {
     assert!(pass, "the live generation did not pass");
 }
 
-/// One real image reading through an env file, as mosfet's `ImageDecoder`
+/// One real image reading through an env file, as the original's `ImageDecoder`
 /// reads (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, a vision model): the
-/// fixture `tests/fixtures/total-due.png` (mosfet's reading example, "Total
+/// fixture `tests/fixtures/total-due.png` (the original's reading example, "Total
 /// due: $14.21") is granted at `/media` and read by reference.
 /// Prints nothing but pass or fail.
 #[test]

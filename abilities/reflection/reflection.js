@@ -39,12 +39,12 @@ function hasNoDatabase() {
   return database === null;
 }
 
-// mosfet episodes.episode_select_input: the turn's focus or none.
+// The original episodes.episode_select_input: the turn's focus or none.
 function episodeSelectStatements() {
   return [{sql: select_episodes, parameters: [cognition_input.focus, cognition_input.focus]}];
 }
 
-// mosfet storage.select_all_behaviors_clauses appended: every behavior.
+// The original storage.select_all_behaviors_clauses appended: every behavior.
 function behaviorSelectStatements() {
   return statements.concat([{sql: select_behaviors, parameters: [null, null]}, {sql: select_triggers, parameters: [null, null]}]);
 }
@@ -71,7 +71,7 @@ function selectTimeoutDelay() {
   return select_timeout_ms + 'ms';
 }
 
-// mosfet SelectInput.
+// The reference SelectInput.
 function selectPrompt() {
   return JSON.stringify({cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, behaviors: behaviors});
 }
@@ -127,7 +127,7 @@ function isSelectHopTimeout(_event) {
   return _event.sendid === hop_timer;
 }
 
-// mosfet _fail_cancel_timeout: the select child is cancelled on the hop
+// The original _fail_cancel_timeout: the select child is cancelled on the hop
 // timeout (synchronously here, as leaving the invoking state cancels it).
 function selectTimedOutMessage() {
   return 'Reflection child cancellation timed out.';
@@ -135,7 +135,7 @@ function selectTimedOutMessage() {
 
 // breaking
 
-// mosfet _apply_break: the trimmed reason, by name.
+// The original _apply_break: the trimmed reason, by name.
 function breakBehaviorStatements() {
   return [{sql: break_behavior, parameters: [typeof behavior.reason === 'string' ? behavior.reason.trim() : '', behavior.name]}];
 }
@@ -163,7 +163,7 @@ function isCreate() {
   return create_intent !== null && !behaviors.some(function (b) { return b.name === intent.name; });
 }
 
-// mosfet revision._draft: the create stub.
+// The original revision._draft: the create stub.
 function insertDraftStatements() {
   return [{sql: insert_draft, parameters: [intent.name, intent.description || '']}];
 }
@@ -201,7 +201,7 @@ function revisionLog() {
   return (create_intent === null ? 'change ' : 'create ') + intent.name;
 }
 
-// mosfet ChangeWriteInput: the turn.
+// The reference ChangeWriteInput: the turn.
 function changeWriteInput() {
   return ({cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes});
 }
@@ -211,8 +211,8 @@ function changeWriteInputWithIntent() {
   return Object.assign(write, {intent: intent, existing_behavior: existing_behavior});
 }
 
-// mosfet CHANGE_INSTRUCTIONS with the ChangeWriteInput, for the builder,
-// which checks the document it builds against mosfet check()'s lifetime
+// The original CHANGE_INSTRUCTIONS with the ChangeWriteInput, for the builder,
+// which checks the document it builds against the original check()'s lifetime
 // bounds (min_every, turn_after_bound).
 function builderRequest() {
   return ({spec: change_instructions + '\n\n' + JSON.stringify(write), model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms});
@@ -222,7 +222,7 @@ function builderConstraints() {
   return [turn_contract, routineContract(), no_schema_files];
 }
 
-// mosfet schedule.At.next_after for an at schedule {time: 'HH:MM', days,
+// The original schedule.At.next_after for an at schedule {time: 'HH:MM', days,
 // tz, rule}: the first occurrence later than now (ms since the epoch) by
 // more than OCCURRENCE_TOLERANCE (1 s) within 8 days, as {ms, iso} (iso
 // the wall time with its offset), or null when days name no weekday. The
@@ -282,23 +282,23 @@ function isBuilt(_event) {
   return typeof Object(_event.data).reason !== 'string' && typeof Object(_event.data).scxml === 'string' && _event.data.scxml.length > 0;
 }
 
-// The builder's failed with the last draft it rejected (mosfet: a failed
+// The builder's failed with the last draft it rejected (the original: a failed
 // check, which drafts the rejected source).
 function hasRejectedDraft(_event) {
   return typeof Object(_event.data).reason === 'string' && typeof _event.data.scxml === 'string' && _event.data.scxml.length > 0;
 }
 
-// mosfet diagnostic.Report.render of the builder's diagnostics.
+// The original diagnostic.Report.render of the builder's diagnostics.
 function renderedReport(diagnostics) {
   return 'behavior validation failed:' + (Array.isArray(diagnostics) ? diagnostics : []).map(function (d) { return '\n  error[' + d.code + '] ' + d.kind + ': ' + d.message; }).join('');
 }
 
-// mosfet Revision._abandon: the same diagnostics after a fix.
+// The original Revision._abandon: the same diagnostics after a fix.
 function abandonedMessage(_event) {
   return _event.data.reason === 'no-progress' ? 'Reflection change abandoned: same diagnostic message after fix:\n' + renderedReport(_event.data.diagnostics) : 'Reflection change abandoned: ' + _event.data.reason + '.';
 }
 
-// mosfet _fail_child: the change call failed, with no draft.
+// The original _fail_child: the change call failed, with no draft.
 function builderFailedMessage(_event) {
   var d = Array.isArray(Object(_event.data).diagnostics) ? _event.data.diagnostics[0] : undefined;
   return revisionFailedMessage(String(Object(_event.data).reason) + (d === undefined ? '' : ': ' + d.message));
@@ -306,7 +306,7 @@ function builderFailedMessage(_event) {
 
 // accepting
 
-// mosfet _evidence_trigger_names: the turn's stimulus, then the prior episodes'.
+// The original _evidence_trigger_names: the turn's stimulus, then the prior episodes'.
 function evidenceStimulusNames() {
   return [cognition_input.stimulus.event].concat(prior_episodes.map(function (e) { return e.stimulus_name; }));
 }
@@ -320,7 +320,7 @@ function intentTriggers() {
   return Array.isArray(intent.triggers) ? intent.triggers : [];
 }
 
-// mosfet _grounded_triggers.
+// The original _grounded_triggers.
 function groundedTriggers() {
   return triggers.some(function (t) { return evidence.indexOf(t) >= 0; }) ? triggers.filter(function (t) { return evidence.indexOf(t) >= 0; }) : triggers.length === 0 ? [] : evidence.slice(0, 1);
 }
@@ -335,7 +335,7 @@ function writtenLifetime() {
   return written.indexOf('bot.behavior.tick') >= 0 ? 'persistent' : 'turn';
 }
 
-// mosfet _AppliedEventData.behavior.
+// The original _AppliedEventData.behavior.
 function appliedBehavior() {
   return ({event: intent.event, name: intent.name, triggers: triggers, description: intent.description || existing_behavior.description || null});
 }
@@ -357,7 +357,7 @@ function behaviorRowWithFailures() {
   return row.concat([String(existing_behavior.failed_count), existing_behavior.last_failed_at]);
 }
 
-// mosfet storage.replace_behavior_clauses: delete triggers, delete row.
+// The original storage.replace_behavior_clauses: delete triggers, delete row.
 function replaceBehaviorStatements() {
   return [{sql: delete_triggers, parameters: [intent.name]}, {sql: delete_behavior, parameters: [intent.name]}];
 }
@@ -376,7 +376,7 @@ function acceptedLog() {
 
 // abandoning
 
-// mosfet Revision._persist_draft: the rejected source, DRAFT validation.
+// The original Revision._persist_draft: the rejected source, DRAFT validation.
 function draftBehaviorStatements() {
   return [{sql: draft_behavior, parameters: [written, intent.name]}];
 }
@@ -387,12 +387,12 @@ function draftLog() {
 
 // storing
 
-// mosfet CognitiveEpisode: the turn's focus.
+// The reference CognitiveEpisode: the turn's focus.
 function cognitiveEpisode() {
   return ({focus: cognition_input.focus, focus_candidates: cognition_input.focus_candidates});
 }
 
-// mosfet episodes.episode_insert_input.
+// The original episodes.episode_insert_input.
 function insertEpisodeStatements() {
   return [{sql: insert_episode, parameters: [cognition_input.focus, JSON.stringify(episode)]}];
 }

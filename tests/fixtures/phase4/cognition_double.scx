@@ -33,7 +33,7 @@
     bot.ability.reasoning.input (offered by no ability the body invokes);
   * adopt: selects bot.ability.identity.adopt for the observation's data;
   * admit: selects bot.ability.communication.input naming no target, the
-    speech's words after the first from source "caller" (as mosfet's
+    speech's words after the first from source "caller" (as the original's
     SpeechHeard seed admits heard speech);
   * ignore: selects bot.ability.cognition.ignore for target cognition;
   * focus: selects bot.focus_device for the observation's data;

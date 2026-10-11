@@ -9,7 +9,7 @@ function trimmedKind() {
   return typeof kind === 'string' ? kind.trim() : '';
 }
 
-// Unlabeled for a blank kind, else the one label (mosfet's OutputData).
+// Unlabeled for a blank kind, else the one label (the original's OutputData).
 function classifiedOutput() {
   return label === '' ? ({labels: []}) : ({labels: [label], confidence: confidence});
 }

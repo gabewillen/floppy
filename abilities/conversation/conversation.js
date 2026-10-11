@@ -13,7 +13,7 @@ function inputEnvelopeOf(data) {
   return {event: 'bot.ability.conversation.input', data: data};
 }
 
-// Identities (mosfet identity/value.py)
+// Identities (the original identity/value.py)
 
 // Python's repr of a finite float: the shortest round-trip digits,
 // positional with a fraction when the decimal exponent is from -4 to 15,
@@ -37,7 +37,7 @@ function pythonVector(id) {
   return '[' + id.map(pythonFloat).join(',') + ']';
 }
 
-// mosfet identity_sort_key: names first, by their text; embeddings by
+// The reference identity_sort_key: names first, by their text; embeddings by
 // their compact Python JSON.
 function identityKey(id) {
   return typeof id === 'string' ? '0' + id : '1' + pythonVector(id);
@@ -56,7 +56,7 @@ function codePointOrder(left, right) {
   return a.length - b.length;
 }
 
-// mosfet's identity order (value.sorted_identities).
+// The original's identity order (value.sorted_identities).
 function sortedIdentities(ids) {
   return ids.slice().sort(function (left, right) {
     return codePointOrder(identityKey(left), identityKey(right));
@@ -72,7 +72,7 @@ function unitVector(id) {
   return norm > 0 ? id.map(function (component) { return component / norm; }) : null;
 }
 
-// mosfet value.cosine_similarity: null for vectors of other sizes.
+// The original value.cosine_similarity: null for vectors of other sizes.
 function cosineSimilarity(left, right) {
   var a = unitVector(left);
   var b = unitVector(right);
@@ -82,7 +82,7 @@ function cosineSimilarity(left, right) {
   return a.reduce(function (sum, component, i) { return sum + component * b[i]; }, 0);
 }
 
-// A participant's track (mosfet _new_track_ref): a name is its own track,
+// A participant's track (the original _new_track_ref): a name is its own track,
 // an embedding "track-" and its unit vector as JSON.
 function trackRef(id) {
   if (typeof id === 'string') {
@@ -92,7 +92,7 @@ function trackRef(id) {
   return 'track-' + JSON.stringify(id.map(function (component) { return component / norm; }));
 }
 
-// Relationships (mosfet Conversation._relationship_for_input)
+// Relationships (the original Conversation._relationship_for_input)
 
 // The relationship in hand.
 function relationship() {
@@ -148,7 +148,7 @@ function lowerScore(left, right) {
   return left === null || right === null ? null : Math.min(left, right);
 }
 
-// mosfet _identity_collection_score: the best one-to-one match of two
+// The original _identity_collection_score: the best one-to-one match of two
 // identity groups (names equal, embeddings at least similarity_threshold
 // alike), refused when another match comes within similarity_margin.
 function collectionScore(observed, expected) {
@@ -230,7 +230,7 @@ function relationshipsChanged(change) {
 }
 
 // The source in hand becomes a participant once its detector is ready
-// (mosfet keeps a participant while it has a detector).
+// (the original keeps a participant while it has a detector).
 function isNewParticipant() {
   return !relationship().participants.some(function (participant) { return sameIdentity(participant, turnSource()); });
 }
@@ -243,7 +243,7 @@ function relationshipsWithParticipant() {
   return relationshipsChanged(function (copy) { copy.participants.push(turnSource()); });
 }
 
-// Without the source in hand, whose detector failed (mosfet stops it).
+// Without the source in hand, whose detector failed (the original stops it).
 function relationshipsWithoutSource() {
   var source = turnSource();
   return relationshipsChanged(function (copy) {
@@ -251,7 +251,7 @@ function relationshipsWithoutSource() {
   });
 }
 
-// Without this input's new participants (mosfet stops the detectors it
+// Without this input's new participants (the original stops the detectors it
 // started for a turn whose memory failed).
 function relationshipsWithoutAdded() {
   return relationshipsChanged(function (copy) {
@@ -266,7 +266,7 @@ function relationshipsWithMessage() {
   return relationshipsChanged(function (copy) { copy.sequences.push(message.sequence); });
 }
 
-// mosfet Conversation.detector_refs: (relationship, source) of every
+// The original Conversation.detector_refs: (relationship, source) of every
 // participant, ordered by relationship and then identity.
 function detectorRefs() {
   var refs = [];
@@ -278,7 +278,7 @@ function detectorRefs() {
   });
 }
 
-// turn_exchange (mosfet Conversation's turn_detector stage)
+// turn_exchange (the original Conversation's turn_detector stage)
 
 function turnDelay() {
   return turn_timeout_ms + 'ms';
@@ -305,7 +305,7 @@ function turnRef() {
   return 'input-' + inputs + ':turn:' + trackRef(turnSource());
 }
 
-// The input as the source's stimulus (mosfet _content_for_detector).
+// The input as the source's stimulus (the original _content_for_detector).
 function turnContent() {
   var type = input.content_type.toLowerCase();
   if (type === 'text/plain' && typeof input.content === 'string') {
@@ -353,7 +353,7 @@ function memoryTimeoutDelay() {
   return memory_timeout_ms + 'ms';
 }
 
-// recalling_memory: the relationship's memories (mosfet
+// recalling_memory: the relationship's memories (the original
 // conversation_memory_recall_input), kept under its context_ref.
 function memoryRecallStatements() {
   return [{sql: memory_select, parameters: ['conversation_memory', relationship().context_ref]}];
@@ -363,25 +363,25 @@ function recalledCount(_event) {
   return _event.data.results[0].rowcount;
 }
 
-// remembering_memory: the input (mosfet conversation_memory_insert_input).
+// remembering_memory: the input (the reference conversation_memory_insert_input).
 function memoryInsertStatements() {
   return [{sql: memory_insert, parameters: ['memory', relationship().context_ref, 'conversation', 'standard', 'retain', memoryPayload(), 'application/json', 'conversation_memory']}];
 }
 
-// mosfet Memory.to_json: {content, content_type, source_ids, target_ids}
-// with sorted keys and compact separators, the identities in mosfet's
+// The original Memory.to_json: {content, content_type, source_ids, target_ids}
+// with sorted keys and compact separators, the identities in the original's
 // order (embeddings as floats) and the content encoded collision-safe.
 function memoryPayload() {
   return '{"content":' + pythonJson(memoryContent(input.content)) + ',"content_type":' + JSON.stringify(input.content_type) + ',"source_ids":' + identitiesJson(input.source_ids) + ',"target_ids":' + identitiesJson(input.target_ids) + '}';
 }
 
-// mosfet value.identities_json of an identity set.
+// The original value.identities_json of an identity set.
 function identitiesJson(ids) {
   var unique = sortedIdentities(ids).filter(function (id, i, all) { return i === 0 || !sameIdentity(all[i - 1], id); });
   return '[' + unique.map(function (id) { return typeof id === 'string' ? JSON.stringify(id) : pythonVector(id); }).join(',') + ']';
 }
 
-// mosfet _encode_content: arrays and objects tagged, an object's entries
+// The original _encode_content: arrays and objects tagged, an object's entries
 // ordered by their keys' JSON.
 function memoryContent(value) {
   if (Array.isArray(value)) {
@@ -428,7 +428,7 @@ function memoryFailedMessage(_event) {
 
 // committing
 
-// The turns' product in place of the input (mosfet _complete_turn): their
+// The turns' product in place of the input (the original _complete_turn): their
 // texts joined as text/plain when any has text, each text once (D79), else
 // no content for audio, else the input's content.
 function turnProduct() {
@@ -464,7 +464,7 @@ function isOutboundAppend(_event) {
   return _event.data.message.direction === 'outbound';
 }
 
-// An append already committed: mosfet matches its event's id, source and
+// An append already committed: the original matches its event's id, source and
 // target against each committed provenance (an append without an id is
 // never one).
 function isCommittedAppend(_event) {

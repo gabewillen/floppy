@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Speaking ability (mosfet abilities/speaking/speaking.py): it
+  floppy's Speaking ability (the reference abilities/speaking/speaking.py): it
   encodes text to speech, plays it out as environment.sound, and records
   the words in the conversation. The communication (abilities/
   communication/communication.scx) invokes it as its child "speaking" and routes each
-  selected response to it. Cognition never selects it directly (mosfet:
+  selected response to it. Cognition never selects it directly (the original:
   bot.ability.speaking.input is not offered).
 
     idle -bot.ability.speaking.input-> encoding -> playing -> recording
@@ -17,39 +17,39 @@
   media subtype (a path in the media directory the run grants the speech
   service). Its bot.ability.vocal.speech.encoding.output is the encoded
   speech: the audio reference with its media_type, sample_rate_hz and
-  channels (speaking's own, mosfet's 24000 Hz mono audio/pcm, where the
+  channels (speaking's own, the original's 24000 Hz mono audio/pcm, where the
   encoder leaves one null), and its duration when the encoder measured one
-  (the speech service measures it for linear PCM). Synthesis is bounded by mosfet's
+  (the speech service measures it for linear PCM). Synthesis is bounded by the original's
   5 s (encoding_timeout_ms); leaving encoding cancels vocal and its
   request.
 
-  playing issues the efference copy first (mosfet's entry action: the
+  playing issues the efference copy first (the original's entry action: the
   copy leaves before the sound does): bot.ability.speaking.efference
   {mouth, duration, media_type, sample_rate_hz, channels} to the parent,
   which carries it to the bot's Listening; mouth is "speaking", the sound's
-  source (mosfet's source when no speaker is injected; devices are out of
-  scope). As in mosfet, no copy is sent when the encoded form gives no
+  source (the original's source when no speaker is injected; devices are out of
+  scope). As in the original, no copy is sent when the encoded form gives no
   duration. Then the words are logged as floppy.say and the audio is
   broadcast: environment.sound {audio, media_type, sample_rate_hz,
   channels} to the parent, which the body puts into the environment.
 
   recording builds the outbound message with <conversation:commit>
-  (mosfet's Message: direction outbound, content the text, content_type
+  (the original's Message: direction outbound, content the text, content_type
   text/plain; sequence 0, the conversation numbers it) and sends
   bot.ability.conversation.append {message} to the parent, which holds the
   conversation (a sibling is out of a child's reach: SCXML sends go only to
-  #_parent and to a session's own children). It is bounded by mosfet's 5 s
+  #_parent and to a session's own children). It is bounded by the original's 5 s
   (recording_timeout_ms). Then it answers the parent with
   bot.ability.speaking.output {text, media_type, sample_rate_hz, channels}.
 
   Failures: a vocal failure (its bot.ability.failed), an encoding or
   recording timeout, or a vocal that cannot run answers the parent with
-  bot.ability.failed {message} (mosfet's terminal failure, FailureData)
+  bot.ability.failed {message} (the original's terminal failure, FailureData)
   and returns to idle. Timers are bot.ability.speaking.apply.failed
-  {message} sends (mosfet's own failure event), taken only by the timer
+  {message} sends (the original's own failure event), taken only by the timer
   in hand (_event.sendid). Input
   that arrives outside idle is held by <event:defer/> (scxml.rs
-  namespaces/event; mosfet defers it in encoding, playing and recording)
+  namespaces/event; the original defers it in encoding, playing and recording)
   and is taken, in order, on the return to idle.
 
   Contracts: the input's contract is schemas/bot.ability.speaking.input.json:
@@ -67,12 +67,14 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="speaking" initial="idle">
   <datamodel>
-    <!-- Configuration (mosfet's Speaking defaults and bounds). -->
+    <!-- Configuration (the original's Speaking defaults and bounds). -->
     <data id="sample_rate_hz" expr="24000"/>
     <data id="channels" expr="1"/>
     <data id="media_type" expr="'audio/pcm'"/>
-    <!-- The speech model and voice vocal asks the speech service for:
-         mosfet's speech encoder defaults. -->
+    <!-- The speech provider, model and voice vocal asks the speech
+         service for: the original's speech encoder defaults (its gemini
+         provider). -->
+    <data id="provider" expr="'gemini'"/>
     <data id="model" expr="'gemini-3.1-flash-tts-preview'"/>
     <data id="voice" expr="'Kore'"/>
     <data id="output_prefix" expr="'media/speaking-'"/>
@@ -112,7 +114,7 @@
     <onexit>
       <cancel sendidexpr="timer"/>
     </onexit>
-    <!-- mosfet speaks the stripped text and refuses a blank one. -->
+    <!-- The original speaks the stripped text and refuses a blank one. -->
     <transition cond="isBlankText()" target="idle">
       <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="'Speaking requires non-blank text.'"/>
@@ -120,6 +122,7 @@
     </transition>
     <invoke id="vocal" type="scxml" src="../vocal/vocal.scx">
       <param name="output" expr="outputPath()"/>
+      <param name="provider" expr="provider"/>
       <param name="model" expr="model"/>
       <param name="voice" expr="voice"/>
       <param name="media_type" expr="media_type"/>
@@ -153,7 +156,7 @@
         <param name="message" expr="encodingRunFailure(_event)"/>
       </send>
     </transition>
-    <!-- Input that arrives meanwhile waits (mosfet defers it). -->
+    <!-- Input that arrives meanwhile waits (the original defers it). -->
     <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
       <event:defer/>
       <log label="speaking.deferred" expr="_event.name"/>
@@ -188,7 +191,7 @@
         <param name="message" expr="playoutFailure(_event)"/>
       </send>
     </transition>
-    <!-- Input still waits (mosfet defers it here too); it was logged
+    <!-- Input still waits (the original defers it here too); it was logged
          when it arrived. -->
     <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
       <event:defer/>
@@ -229,7 +232,7 @@
         <param name="message" expr="recordingFailure(_event)"/>
       </send>
     </transition>
-    <!-- Input still waits (mosfet defers it here too); it was logged
+    <!-- Input still waits (the original defers it here too); it was logged
          when it arrived. -->
     <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
       <event:defer/>

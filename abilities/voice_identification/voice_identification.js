@@ -2,7 +2,7 @@
 // <script src="voice_identification.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// identifying: any failure ends the identification with mosfet's FailureData.
+// identifying: any failure ends the identification with the original's FailureData.
 
 function failedResult(_event) {
   return ({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceIdentification failed.'});
@@ -45,7 +45,7 @@ function hasEmbeddings(_event) {
   return Array.isArray(Object(_event.data).embeddings);
 }
 
-// The segments and mosfet's OutputData.
+// The segments and the original's OutputData.
 function identifiedResult(_event) {
   return ({segments: segments, embeddings: _event.data.embeddings});
 }

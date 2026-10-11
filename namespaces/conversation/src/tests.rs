@@ -312,10 +312,10 @@ fn the_key_location_is_optional() {
     assert_eq!(host.assigned[0].0, "committed");
 }
 
-/// `relationship_context_ref` against mosfet's own (`_stable_context_ref`
-/// of each input, computed by mosfet.py e305580).
+/// `relationship_context_ref` against the original's own (`_stable_context_ref`
+/// of each input, computed by the reference implementation).
 #[test]
-fn the_relationship_context_reference_is_mosfets() {
+fn the_relationship_context_reference_is_the_original() {
     for (source_ids, target_ids, expected) in [
         (
             json!(["zed", "alice", [0.5, 1]]),

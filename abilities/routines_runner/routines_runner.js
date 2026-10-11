@@ -28,7 +28,7 @@ function restRoutines() {
 
 // running
 
-// mosfet Routines._is_running_tick: a tick named as one of the chain's
+// The original Routines._is_running_tick: a tick named as one of the chain's
 // routines.
 function isRoutineTick(_event) {
   return routines.some(function (routine) { return routine.name === _event.data.name; });

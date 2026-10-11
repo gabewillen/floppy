@@ -20,7 +20,7 @@ function isCurrentTurn(_event) {
 
 // recalling
 
-// mosfet _context_ref_from_input: the stimulus's target_device, or null.
+// The original _context_ref_from_input: the stimulus's target_device, or null.
 function contextRefFromInput() {
   return typeof Object(Object(stimulus).data).target_device === 'string' ? stimulus.data.target_device : null;
 }
@@ -29,18 +29,18 @@ function hostInput() {
   return ({input: stimulus});
 }
 
-// mosfet episodes.py: the prior cognitive episodes.
+// The reference episodes.py: the prior cognitive episodes.
 function episodeSelectStatements() {
   return [{sql: episode_select, parameters: ['cognitive_episode', context_ref]}];
 }
 
-// mosfet directives.py: the standing directives appended.
+// The reference directives.py: the standing directives appended.
 function directiveSelectStatements() {
   return statements.concat([{sql: episode_select, parameters: ['standing_directive', context_ref]}]);
 }
 
 // The parsed contents of the rows of one statement's result; a row that is
-// not a JSON object is skipped (mosfet episodes_from_contents and
+// not a JSON object is skipped (the reference episodes_from_contents and
 // directives_from_contents skip rows that do not validate).
 function recalledContents(_event, index) {
   return _event.data.results[index].rows.map(function (row) { return parsedContent(row.values[0]); }).filter(function (content) { return content !== null; });
@@ -73,13 +73,13 @@ function choiceNamesLog() {
   return 'turn ' + turn + ': ' + choice_names;
 }
 
-// The model prompt: mosfet's model_facing_xml(ProcessorInput)
+// The model prompt: the original's model_facing_xml(ProcessorInput)
 // (abilities/cognition/event.py, processing.py InputData.model_facing_payload)
-// over floppy's JSON, as {prompt} or {failure} (mosfet's ValueError text).
+// over floppy's JSON, as {prompt} or {failure} (the original's ValueError text).
 // ProcessorInput is <cognition:processor_input> holding host_input (the
 // processing:input with the stimulus as its input field), prior_episodes and
 // standing_directives; the stimulus's data is untyped JSON here, so it
-// renders as mosfet renders a non-model payload (a content field).
+// renders as the original renders a non-model payload (a content field).
 function promptProjection() {
   try {
     var budget = {bytes: 0, nodes: 0, items: 0};
@@ -115,7 +115,7 @@ function projectionFailedResult() {
   return ({turn: turn, handled: false, failed: true, reason: projection.failure});
 }
 
-// mosfet _ProjectionBudget (262144 encoded bytes, 4096 nodes, 4096
+// The original _ProjectionBudget (262144 encoded bytes, 4096 nodes, 4096
 // collection items, 65536 characters per scalar).
 function budgetMarkup(budget, text) {
   budget.bytes += utf8Length(text);
@@ -168,7 +168,7 @@ function codePoints(text) {
   return count;
 }
 
-// One element (mosfet _element/_subelement), appended to parent when given.
+// One element (the original _element/_subelement), appended to parent when given.
 function xmlElement(parent, name, budget) {
   budget.nodes += 1;
   if (budget.nodes > 4096) {
@@ -204,7 +204,7 @@ function pythonNumber(value) {
   return String(value);
 }
 
-// mosfet _fill_field over a JSON value: null is skipped, a scalar is an
+// The original _fill_field over a JSON value: null is skipped, a scalar is an
 // attribute, an object is <name> of <entry key> elements (each value
 // filled as value), an array is <name count> of <item> scalars (other
 // items are not presentable and skipped).
@@ -241,7 +241,7 @@ function xmlField(element, name, value, budget) {
   }
 }
 
-// The stimulus envelope as mosfet's hsm.Event field: <input> holding its
+// The stimulus envelope as the original's hsm.Event field: <input> holding its
 // data as content, stamped stimulus:event, then stimulus:id, :source and
 // :target when set.
 function xmlStimulus(parent, envelope, budget) {
@@ -263,7 +263,7 @@ function xmlModels(parent, name, models, render, budget) {
   models.forEach(function (model) { list.children.push(render(model, budget)); });
 }
 
-// mosfet episodes.CognitiveEpisode: focus, focus_candidates, stimulus_name,
+// The original episodes.CognitiveEpisode: focus, focus_candidates, stimulus_name,
 // output (cognition.types.EventData), behavior.
 function xmlEpisode(episode, budget) {
   var element = xmlElement(null, 'cognition:cognitive_episode', budget);
@@ -278,14 +278,14 @@ function xmlEpisode(episode, budget) {
   return element;
 }
 
-// mosfet cognition.types.EventData: target, event, data, reason.
+// The reference cognition.types.EventData: target, event, data, reason.
 function xmlSelection(selection, budget) {
   var element = xmlElement(null, 'cognition:event', budget);
   ['target', 'event', 'data', 'reason'].forEach(function (key) { xmlField(element, key, Object(selection)[key], budget); });
   return element;
 }
 
-// mosfet behavior.events CreateData, ChangeData, BreakData.
+// The reference behavior.events CreateData, ChangeData, BreakData.
 function xmlBehavior(behavior, budget) {
   var kind = typeof behavior.event === 'string' ? behavior.event.split('.').pop() : 'create';
   var element = xmlElement(null, 'behavior:' + kind, budget);
@@ -294,7 +294,7 @@ function xmlBehavior(behavior, budget) {
   return element;
 }
 
-// mosfet directives.Directive: text, kind (instruction by default).
+// The original directives.Directive: text, kind (instruction by default).
 function xmlDirective(directive, budget) {
   var element = xmlElement(null, 'cognition:directive', budget);
   xmlField(element, 'text', directive.text, budget);
@@ -348,7 +348,7 @@ function isAccepted() {
   return rejection === null;
 }
 
-// mosfet: the rejection fails the stage with its message.
+// The original: the rejection fails the stage with its message.
 function rejectedResult() {
   return ({turn: turn, handled: false, failed: true, reason: rejection});
 }

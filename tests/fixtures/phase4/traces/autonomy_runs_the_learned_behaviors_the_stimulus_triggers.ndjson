@@ -6,14 +6,14 @@
 {"label":"floppy.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition","parent":"session","session":"session.1","text":"turn 1: bot.input","type":"log"}
 {"label":"autonomy","parent":"session.1","session":"session.15","text":"turn 1: 4 matched for bot.input","type":"log"}
-{"label":"autonomy.candidate","parent":"session.1","session":"session.15","text":"Asilent","type":"log"}
-{"label":"autonomy.candidate.silent","parent":"session.1","session":"session.15","text":"Asilent after 1000 ms","type":"log"}
-{"label":"autonomy.candidate","parent":"session.1","session":"session.15","text":"Bdeclines","type":"log"}
-{"label":"autonomy.candidate.advance","parent":"session.1","session":"session.15","text":"Bdeclines","type":"log"}
-{"label":"autonomy.candidate","parent":"session.1","session":"session.15","text":"Cbroken","type":"log"}
-{"label":"autonomy.candidate.failed","parent":"session.1","session":"session.15","text":"Cbroken (error.execution)","type":"log"}
-{"label":"autonomy.candidate","parent":"session.1","session":"session.15","text":"Ddouble","type":"log"}
-{"label":"behavior.double","parent":"session.15","session":"session.22","text":"turn 1","type":"log"}
+{"label":"autonomy.candidate","parent":"session.15","session":"session.18","text":"Asilent","type":"log"}
+{"label":"autonomy.candidate.silent","parent":"session.15","session":"session.18","text":"Asilent after 1000 ms","type":"log"}
+{"label":"autonomy.candidate","parent":"session.18","session":"session.20","text":"Bdeclines","type":"log"}
+{"label":"autonomy.candidate.advance","parent":"session.18","session":"session.20","text":"Bdeclines","type":"log"}
+{"label":"autonomy.candidate","parent":"session.20","session":"session.22","text":"Cbroken","type":"log"}
+{"label":"autonomy.candidate.failed","parent":"session.20","session":"session.22","text":"Cbroken (error.execution)","type":"log"}
+{"label":"autonomy.candidate","parent":"session.22","session":"session.25","text":"Ddouble","type":"log"}
+{"label":"behavior.double","parent":"session.25","session":"session.26","text":"turn 1","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy handled","type":"log"}
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}
 {"label":"floppy.output","session":"session","text":"{\"turn\":1,\"output\":[{\"data\":{},\"event\":\"bot.ability.cognition.ignore\",\"reason\":\"behavior: nothing to do\",\"target\":\"cognition\"}]}","type":"log"}

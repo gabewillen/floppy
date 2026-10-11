@@ -1,13 +1,14 @@
 //! The `speech` invoked service: one speech or voice operation per
 //! `<invoke>`, as a `stateforward:scxml/invoked-service` Wasm component. It
-//! is mosfet's `SpeechDecoder` (hearing's `SpeechDecoding`) and
+//! is the original's `SpeechDecoder` (hearing's `SpeechDecoding`) and
 //! `SpeechEncoder` (vocal's `SpeechEncoding`) providers in one service
-//! (decision D57): both directions are one `OpenAI`-compatible audio API.
-//! It is also the local models of mosfet's hearing that floppy cannot run
+//! (decision D57): both directions are one `OpenAI`-compatible audio API,
+//! or, with `provider` `gemini`, the Gemini API ([`gemini`], decision D94).
+//! It is also the local models of the original's hearing that floppy cannot run
 //! in a document: the voice activity classifier (`VoiceDetection`), the
 //! diarizer (`VoiceDiarization`) and the voice classifier
 //! (`VoiceIdentification`), through `LocalAI`'s voice APIs ([`voice`]), and
-//! the media steps mosfet's interpretation does on bytes in memory
+//! the media steps the original's interpretation does on bytes in memory
 //! (normalizing a sound to PCM, joining the open speech, clipping a voice
 //! span), which floppy does on files.
 //!
@@ -43,23 +44,26 @@
 //!
 //! # Parameters (`<param>`)
 //!
-//! * `operation` (required): `decode` (speech to text, mosfet's
-//!   `SpeechDecoder`), `encode` (text to speech, mosfet's
+//! * `operation` (required): `decode` (speech to text, the original's
+//!   `SpeechDecoder`), `encode` (text to speech, the original's
 //!   `SpeechEncoder`), or one of the voice operations `detect`, `diarize`,
 //!   `identify`, `normalize`, `append`, and `clip` ([`voice`] documents
 //!   their parameters, requests, and results).
 //! * `model` (required for decode and encode, optional for the backend
 //!   voice operations, refused by the media steps, a non-empty string): the
 //!   backend's model name.
-//! * decode: `audio` (required, a reference to the speech to decode) and
+//! * decode: `audio` (required, a reference to the speech to decode),
 //!   `media_type` (optional, a `type/subtype` sent as the file part's
-//!   `content-type`, `application/octet-stream` without it).
+//!   `content-type`, `application/octet-stream` without it, or as Gemini's
+//!   `mime_type`, `audio/wav` without it), and `provider` (optional,
+//!   exactly `gemini`: the original's `gemini` provider).
 //! * encode: `text` (required, a non-empty string), `voice` (required,
 //!   `[A-Za-z0-9_.-]{1,128}`), `output` (required, a reference to the file
 //!   the audio is written to, created or replaced), `media_type` (optional,
 //!   one of [`FORMATS`], `audio/mpeg` without it, the default of both
-//!   backends), and `provider` (optional, exactly `elevenlabs`: mosfet's
-//!   `elevenlabs` provider instead of the `OpenAI`-compatible API).
+//!   backends), and `provider` (optional, `elevenlabs` or `gemini`: the
+//!   original's provider of that name instead of the `OpenAI`-compatible
+//!   API; Gemini encodes only `audio/pcm` and `audio/wav`).
 //!
 //! A parameter whose value is `null` is not given. Any other parameter, a
 //! parameter given twice, one the operation does
@@ -84,6 +88,8 @@
 //!   `elevenlabs`, `POST {base}/text-to-speech/{voice}?output_format=F` with
 //!   `xi-api-key: <apikey>` and the body `{"model_id", "text"}` (its
 //!   `text-to-speech` API; `F` from [`FORMATS`]).
+//! * with `provider` `gemini`, either direction: `POST {base}/interactions`
+//!   with `x-goog-api-key: <apikey>` ([`gemini`] documents the bodies).
 //!
 //! # Events
 //!
@@ -92,7 +98,7 @@
 //! invoking session receives `done.invoke.<id>` after the event): with no
 //! data, except that a media step that succeeds writes no event and
 //! resolves with its result as the done data. The names and data are
-//! mosfet's (`services/speech/schemas/`):
+//! The original's (`services/speech/schemas/`):
 //!
 //! * [`DECODING_OUTPUT_EVENT`] `{"text": T}`: the decoded speech (empty when
 //!   the backend heard none).
@@ -102,11 +108,11 @@
 //!   are numbers only when known ([`sound`]: raw `pcm` is 24 kHz mono
 //!   16-bit, a WAV file declares its own, and `ElevenLabs` names its `mp3`
 //!   rate), else `null`. `D` is the seconds of sound measured from the bytes
-//!   of linear PCM, mosfet's `Speaking._playout_duration`.
+//!   of linear PCM, the original's `Speaking._playout_duration`.
 //! * [`voice::DETECTION_OUTPUT_EVENT`], [`voice::DIARIZATION_OUTPUT_EVENT`],
 //!   and [`voice::IDENTIFICATION_OUTPUT_EVENT`]: the voice operations'
 //!   results ([`voice`]).
-//! * [`FAILED_EVENT`] `{"message": M}` (mosfet's `FailureData`), `M` one
+//! * [`FAILED_EVENT`] `{"message": M}` (the original's `FailureData`), `M` one
 //!   closed message per [`FailureCode`] and direction.
 //!
 //! The service reads no event: it drops the event stream `invoke` receives.
@@ -141,6 +147,7 @@
 
 use std::io::Read as _;
 
+pub mod gemini;
 pub mod voice;
 
 use scxml_event_schema::canonical_json;
@@ -171,17 +178,24 @@ pub const DEFAULT_MEDIA_TYPE: &str = "audio/mpeg";
 /// The `content-type` of the decoded audio's file part when the invocation
 /// names none.
 pub const DEFAULT_AUDIO_MEDIA_TYPE: &str = "application/octet-stream";
+/// A Gemini decoding's audio `mime_type` when the invocation names none
+/// (the original's `gemini` `SpeechDecoder` default).
+pub const GEMINI_AUDIO_MEDIA_TYPE: &str = "audio/wav";
 
-/// The decoded speech (mosfet's `SpeechDecoding.output_event`).
+/// The decoded speech (the original's `SpeechDecoding.output_event`).
 pub const DECODING_OUTPUT_EVENT: &str = "bot.ability.hearing.speech.decoding.output";
-/// The encoded speech (mosfet's `SpeechEncoding.output_event`).
+/// The encoded speech (the original's `SpeechEncoding.output_event`).
 pub const ENCODING_OUTPUT_EVENT: &str = "bot.ability.vocal.speech.encoding.output";
-/// The failure (mosfet's `Ability.failed_event`, `FailureData`).
+/// The failure (the original's `Ability.failed_event`, `FailureData`).
 pub const FAILED_EVENT: &str = "bot.ability.failed";
 
 /// Upper bound on the audio a decoding reads (wasm builds only): the host's
 /// 4 MiB request-body bound less room for the form's other parts.
 pub const MAX_AUDIO_BYTES: usize = wasm_bound(4 * 1024 * 1024 - 16 * 1024);
+/// Upper bound on a request's body (wasm builds only): the host's 4 MiB
+/// request-body bound, which a Gemini decoding's base64 audio reaches
+/// before [`MAX_AUDIO_BYTES`] does.
+pub const MAX_REQUEST_BYTES: usize = wasm_bound(4 * 1024 * 1024);
 /// Upper bound on the text an encoding sends (wasm builds only).
 pub const MAX_TEXT_BYTES: usize = wasm_bound(16 * 1024);
 /// Upper bound on the text a decoding returns (wasm builds only): under
@@ -211,7 +225,7 @@ pub struct Format {
 
 /// The formats an encoding may ask for: the `OpenAI` speech API's
 /// `response_format`s; `ElevenLabs` encodes `mp3` as `mp3_44100_128`
-/// (mosfet's `ElevenLabs` default) and `pcm` as `pcm_24000`.
+/// (the original's `ElevenLabs` default) and `pcm` as `pcm_24000`.
 pub const FORMATS: [Format; 6] = [
     Format {
         media_type: "audio/mpeg",
@@ -295,13 +309,17 @@ pub struct Media {
     pub path: String,
 }
 
-/// The encoding backend (mosfet's provider packages).
+/// The backend's API (the original's provider packages).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Provider {
-    /// An `OpenAI`-compatible audio API (mosfet's `openai_compat`).
+    /// An `OpenAI`-compatible audio API (the original's `openai_compat`).
     OpenaiCompat,
-    /// `ElevenLabs`' `text-to-speech` API (mosfet's `elevenlabs`).
+    /// `ElevenLabs`' `text-to-speech` API (the original's `elevenlabs`),
+    /// encode only.
     Elevenlabs,
+    /// The Gemini API's Interactions API (the original's `gemini`)
+    /// ([`gemini`]).
+    Gemini,
 }
 
 /// A validated decoding: speech to text.
@@ -311,8 +329,11 @@ pub struct Decoding {
     pub model: String,
     /// The speech to decode.
     pub audio: Media,
-    /// The file part's `content-type`.
+    /// The file part's `content-type` (the audio part's `mime_type` for
+    /// Gemini).
     pub media_type: String,
+    /// The backend.
+    pub provider: Provider,
 }
 
 /// A validated encoding: text to speech.
@@ -675,10 +696,10 @@ pub fn parse_parameters<'a>(
     let model = model.ok_or("speech requires a model parameter")?;
     match operation {
         Data::String(name) if name == "decode" => {
-            if text.is_some() || voice.is_some() || output.is_some() || provider.is_some() {
-                return Err("speech decode takes model, audio, and media_type only");
+            if text.is_some() || voice.is_some() || output.is_some() {
+                return Err("speech decode takes model, audio, media_type, and provider only");
             }
-            decoding(model, audio, media_type).map(Operation::Decode)
+            decoding(model, audio, media_type, provider).map(Operation::Decode)
         }
         Data::String(name) if name == "encode" => {
             if audio.is_some() {
@@ -696,12 +717,19 @@ fn decoding(
     model: String,
     audio: Option<&Data>,
     media_type: Option<&Data>,
+    provider: Option<&Data>,
 ) -> Result<Decoding, &'static str> {
     let audio = media_parameter(
         audio.ok_or("speech decode requires an audio parameter")?,
         "speech audio must be a file reference",
     )?;
+    let provider = match provider {
+        None => Provider::OpenaiCompat,
+        Some(Data::String(name)) if name == "gemini" => Provider::Gemini,
+        Some(_) => return Err("speech decode provider must be gemini"),
+    };
     let media_type = match media_type {
+        None if provider == Provider::Gemini => GEMINI_AUDIO_MEDIA_TYPE.to_owned(),
         None => DEFAULT_AUDIO_MEDIA_TYPE.to_owned(),
         Some(Data::String(media_type)) if is_media_type(media_type) => media_type.clone(),
         Some(_) => return Err("speech media_type must be a type/subtype"),
@@ -710,6 +738,7 @@ fn decoding(
         model,
         audio,
         media_type,
+        provider,
     })
 }
 
@@ -747,7 +776,8 @@ fn encoding(
     let provider = match provider {
         None => Provider::OpenaiCompat,
         Some(Data::String(name)) if name == "elevenlabs" => Provider::Elevenlabs,
-        Some(_) => return Err("speech provider must be elevenlabs"),
+        Some(Data::String(name)) if name == "gemini" => Provider::Gemini,
+        Some(_) => return Err("speech encode provider must be elevenlabs or gemini"),
     };
     let format = match media_type {
         None => DEFAULT_MEDIA_TYPE,
@@ -757,7 +787,11 @@ fn encoding(
     let format = FORMATS
         .into_iter()
         .find(|known| known.media_type == format)
-        .filter(|known| provider == Provider::OpenaiCompat || known.elevenlabs.is_some())
+        .filter(|known| match provider {
+            Provider::OpenaiCompat => true,
+            Provider::Elevenlabs => known.elevenlabs.is_some(),
+            Provider::Gemini => matches!(known.response_format, "pcm" | "wav"),
+        })
         .ok_or("speech media_type is not one the backend encodes")?;
     Ok(Encoding {
         model,
@@ -856,6 +890,9 @@ fn bearer(api_key: u32) -> (String, Vec<Part>) {
 /// body of `model`, `response_format` (`json`), and `file` (`audio`).
 #[must_use]
 pub fn decoding_request(base_url: u32, api_key: u32, decoding: &Decoding, audio: &[u8]) -> Request {
+    if decoding.provider == Provider::Gemini {
+        return gemini::decoding_request(base_url, api_key, decoding, audio);
+    }
     let boundary = boundary(audio);
     let mut body = Vec::with_capacity(audio.len() + 512);
     for (name, value) in [
@@ -907,6 +944,9 @@ pub fn decoding_request(base_url: u32, api_key: u32, decoding: &Decoding, audio:
 /// with `xi-api-key` and the body `{"model_id", "text"}`.
 #[must_use]
 pub fn encoding_request(base_url: u32, api_key: u32, encoding: &Encoding) -> Request {
+    if encoding.provider == Provider::Gemini {
+        return gemini::encoding_request(base_url, api_key, encoding);
+    }
     let content_type = (
         "content-type".to_owned(),
         vec![Part::Literal("application/json".into())],
@@ -966,14 +1006,22 @@ pub fn decoding_outcome(
     operation: &Operation,
     answered: Result<Response, TransportFailure>,
 ) -> Returned {
+    let gemini =
+        matches!(operation, Operation::Decode(decoding) if decoding.provider == Provider::Gemini);
     let text = answered_body(answered).and_then(|body| {
-        let answer: Json = serde_json::from_slice(&body).map_err(|_| FailureCode::Malformed)?;
-        match answer.get("text") {
-            Some(Json::String(text)) if !exceeds_wasm_bound(text.len(), MAX_DECODED_TEXT_BYTES) => {
-                Ok(text.trim().to_owned())
+        let text = if gemini {
+            gemini::transcript(&body)?
+        } else {
+            let answer: Json = serde_json::from_slice(&body).map_err(|_| FailureCode::Malformed)?;
+            match answer.get("text") {
+                Some(Json::String(text)) => text.trim().to_owned(),
+                _ => return Err(FailureCode::Malformed),
             }
-            _ => Err(FailureCode::Malformed),
+        };
+        if exceeds_wasm_bound(text.len(), MAX_DECODED_TEXT_BYTES) {
+            return Err(FailureCode::Malformed);
         }
+        Ok(text)
     });
     match text {
         Ok(text) => Returned {
@@ -991,7 +1039,7 @@ pub struct Sound {
     pub sample_rate_hz: Option<u32>,
     /// Channels.
     pub channels: Option<u16>,
-    /// Seconds of sound, measured from the bytes of linear PCM (mosfet's
+    /// Seconds of sound, measured from the bytes of linear PCM (the original's
     /// `Speaking._playout_duration`).
     pub duration: Option<f64>,
 }
@@ -1107,6 +1155,13 @@ pub fn encoding_outcome(
         return Returned::failed(operation, FailureCode::Malformed);
     };
     let audio = match answered_body(answered) {
+        Ok(body) if encoding.provider == Provider::Gemini => match gemini::audio(&body) {
+            Ok(pcm) if encoding.format.response_format == "wav" => {
+                voice::wav_container(&pcm, PCM_SAMPLE_RATE_HZ, 1)
+            }
+            Ok(pcm) => pcm,
+            Err(code) => return Returned::failed(operation, code),
+        },
         Ok(audio) if !audio.is_empty() => audio,
         Ok(_) => return Returned::failed(operation, FailureCode::Malformed),
         Err(code) => return Returned::failed(operation, code),
@@ -1321,6 +1376,9 @@ mod guest {
                 };
                 let built = super::decoding_request(base_url, api_key, decoding, &audio);
                 drop(audio);
+                if scxml_types::exceeds_wasm_bound(built.body.len(), super::MAX_REQUEST_BYTES) {
+                    return failed(super::FailureCode::TooLarge);
+                }
                 let answered = fetch(built).await;
                 super::decoding_outcome(&operation, answered)
             }

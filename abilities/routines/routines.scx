@@ -1,28 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Routines ability (mosfet abilities/cognition/routines.py): it
+  floppy's Routines ability (the reference abilities/cognition/routines.py): it
   keeps the ACTIVE persistent routines of behavior inventory running and
   forwards their ticks. The cognition (abilities/cognition/cognition.scx) invokes it
-  as its long-lived child "routines" (mosfet's bots compose Routines), with
+  as its long-lived child "routines" (the original's bots compose Routines), with
   the database path as <param name="database">.
 
     active { inventory { reconciling { recalling } -> running
                          -bot.ability.routines.reconcile-> reconciling },
              chain { chain_off | chain_on } }
 
-  Reconciling (mosfet _reconcile_activity): with no database (null) it
+  Reconciling (the original _reconcile_activity): with no database (null) it
   logs <log label="routines" expr="'absent'"> and runs nothing. Otherwise
   it selects, through the Memory ability (abilities/memory/memory.scx), the
-  ACTIVE persistent bot_behavior rows in inventory order (mosfet
+  ACTIVE persistent bot_behavior rows in inventory order (the original
   select_active_behaviors_clauses(lifetime=persistent)) and raises
   bot.ability.routines.reconciled {running}; when the rows' names or
-  sources (mosfet inventory.revision) differ from the running set, the
+  sources (the reference inventory.revision) differ from the running set, the
   chain restarts on them: the routines that are gone or no longer ACTIVE
   stop, the changed ones restart and the new ones start. A recall that
   fails is logged as bot.ability.routines.reconcile.failed and keeps the
-  running set (mosfet: "persistent routines kept their running set"). A
+  running set (the original: "persistent routines kept their running set"). A
   reconcile that arrives while reconciling re-enters it, which cancels the
-  recall in hand and reads the inventory again (mosfet defers it to the
+  recall in hand and reads the inventory again (the original defers it to the
   same effect).
 
   Chain: SCXML holds a fixed set of invokes per state, so the routines run
@@ -32,10 +32,10 @@
 
   Ticks: each bot.behavior.tick the chain passes up goes to the cognition
   (#_parent), which hands it to the body as a stimulus: a new turn the bot
-  decides on (mosfet _forward_tick). A tick that arrives while reconciling
-  waits in the data model queue ticks (mosfet defers it) and is taken in
+  decides on (the original _forward_tick). A tick that arrives while reconciling
+  waits in the data model queue ticks (the original defers it) and is taken in
   running, in order: forwarded when its routine is in the running set,
-  else dropped as stale (mosfet _drop_stale_tick, logged routines.stale).
+  else dropped as stale (the original _drop_stale_tick, logged routines.stale).
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline).
@@ -49,7 +49,7 @@
   <datamodel>
     <!-- The memory database (the cognition's), or null. -->
     <data id="database" expr="null"/>
-    <!-- mosfet select_active_behaviors_clauses: plain rows, portable to both engines. -->
+    <!-- The reference select_active_behaviors_clauses: plain rows, portable to both engines. -->
     <data id="select_routines">SELECT name, source FROM bot_behavior WHERE status = ? AND lifetime = ? ORDER BY name</data>
     <!-- The rows the last recall selected, and the ones the chain runs. -->
     <data id="desired" expr="[]"/>

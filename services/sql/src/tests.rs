@@ -35,7 +35,7 @@ fn data(returned: &Returned) -> Json {
     serde_json::from_str(&returned.data).expect("the returned data is JSON")
 }
 
-/// The table the tests use (mosfet's `bot_memory`, abridged).
+/// The table the tests use (the original's `bot_memory`, abridged).
 const CREATE: &str = "CREATE TABLE IF NOT EXISTS bot_memory (memory_id TEXT PRIMARY KEY, scope TEXT DEFAULT 'memory' NOT NULL, subject_ref TEXT, kind TEXT, content TEXT NOT NULL, content_format TEXT DEFAULT 'text/plain' NOT NULL, metadata_json TEXT DEFAULT '{}' NOT NULL, query_tags TEXT, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL)";
 
 /// A database with [`CREATE`]'s table.
@@ -53,7 +53,7 @@ const INSERT_NAME: &str = "INSERT INTO bot_memory (memory_id, scope, subject_ref
 const SELECT_NAMES: &str = "SELECT content FROM bot_memory WHERE query_tags = ? AND subject_ref = ? ORDER BY created_at LIMIT 50";
 
 #[test]
-fn the_parameters_are_the_database_and_mosfets_statements() {
+fn the_parameters_are_the_database_and_the_original_statements() {
     let parsed = parse(&[
         ("database", text("/memory/floppy.sqlite")),
         (

@@ -367,7 +367,7 @@ fn routine_draft(delay: &str, output: &str) -> String {
 
 const CHIME: &str = "[{event: 'bot.speaking.say', data: {text: 'Hourly chime.'}}]";
 
-/// The request with mosfet check()'s lifetime bounds (`ROUTINE_MIN_EVERY`,
+/// The request with the original `check()`'s lifetime bounds (`ROUTINE_MIN_EVERY`,
 /// `TURN_SILENCE_BOUND`), as reflection sends it.
 fn lifetime_request() -> Json {
     json!({"spec": "chime every hour", "min_every_ms": 60000, "turn_after_bound_ms": 1000})
@@ -456,7 +456,7 @@ fn mock_reply(
         ("/slow/v1/chat/completions", Some("topology_plan")) => {
             Some(completion(if plans == 1 { LATE_PLAN } else { PLAN }))
         }
-        ("/slow/v1/chat/completions", Some("scxml_draft")) => {
+        ("/slow/v1/chat/completions" | "/afterbound/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&draft(&traffic_light(&green_separate(), "red"))))
         }
         ("/service/v1/chat/completions", Some("scxml_draft")) => Some(completion(&service_draft())),
@@ -478,9 +478,6 @@ fn mock_reply(
         }
         ("/emptytick/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&routine_draft("3600s", "[]")))
-        }
-        ("/afterbound/v1/chat/completions", Some("scxml_draft")) => {
-            Some(completion(&draft(&traffic_light(&green_separate(), "red"))))
         }
         ("/repair/v1/chat/completions", Some("scxml_draft")) => Some(completion(&match authors {
             1 => invalid_draft(),
@@ -1054,7 +1051,7 @@ fn the_same_diagnostic_twice_ends_the_build_with_no_progress() {
     assert_eq!(failed["reason"], "no-progress");
     assert_eq!(failed["diagnostics"][0]["kind"], "validate");
     assert_eq!(failed["diagnostics"][0]["code"], "SCXML005");
-    // The last draft the validator rejected (mosfet drafts the rejected
+    // The last draft the validator rejected (the original drafts the rejected
     // source).
     assert_eq!(
         failed["scxml"].as_str(),
@@ -1119,10 +1116,10 @@ fn without_a_model_base_url_the_build_fails_fast_unconfigured() {
     );
 }
 
-/// mosfet check() (E0009): with the request's lifetime bounds, a routine
+/// The original `check()` (E0009): with the request's lifetime bounds, a routine
 /// whose schedule is shorter than the minimum interval is rejected and
-/// repaired; the repaired routine is verified by one forced tick (mosfet
-/// verify_apply), its schedule's event delivered at once, whose output
+/// repaired; the repaired routine is verified by one forced tick (the original
+/// `verify_apply`), its schedule's event delivered at once, whose output
 /// selects an event.
 #[test]
 fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced() {
@@ -1164,7 +1161,7 @@ fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced
     assert_eq!(done["tests"].as_array().map(Vec::len), Some(1), "{done}");
 }
 
-/// mosfet runtime and verify: a routine tick that selects nothing fails
+/// The original runtime and verify: a routine tick that selects nothing fails
 /// (E0008), and the build ends with that draft in its failed data.
 #[test]
 fn a_routine_tick_with_no_selection_is_rejected_with_its_draft() {
@@ -1187,7 +1184,7 @@ fn a_routine_tick_with_no_selection_is_rejected_with_its_draft() {
     );
 }
 
-/// mosfet check() (E0009): with the request's lifetime bounds, a turn
+/// The original `check()` (E0009): with the request's lifetime bounds, a turn
 /// behavior's delayed send longer than the silence bound never fires, so
 /// the traffic light (a turn machine with 30 s, 3 s and 20 s timers) is
 /// rejected each time; without the bounds the same draft is built (the

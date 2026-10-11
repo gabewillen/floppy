@@ -3,7 +3,7 @@
 Read this first when picking the work up in a new session or account. It
 records where things stand, how to work, and what is open. The detailed
 history lives in [decisions.md](decisions.md) (numbered decisions),
-[port-plan.md](port-plan.md) (mosfet mapping and phases), and
+[port-plan.md](port-plan.md) (the original mapping and phases), and
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
@@ -13,13 +13,13 @@ Last updated: 2026-10-10.
 
 - **Selections the body can't place (audit item 4, 2026-10-10):** a turn
   whose selections cannot all be placed fails with `bot.processing.failed`
-  and mosfet's `SelectionRejectionError` message, never
+  and the original's `SelectionRejectionError` message, never
   `bot.processing.completed`; `floppy.route.dropped` is gone. `<bot:verdict>`
-  (ignore selections removed, mosfet `attention_selection_error`) and
-  `<decision:route rejectionlocation choices>` (mosfet `_resolve_target`)
-  run where mosfet dispatches: in autonomy before a learned behavior's use
+  (ignore selections removed, the reference `attention_selection_error`) and
+  `<decision:route rejectionlocation choices>` (the reference `_resolve_target`)
+  run where the original dispatches: in autonomy before a learned behavior's use
   is counted (a rejected one is counted failed and fails the turn),
-  intuition ("Selection rejected: ...", without mosfet's one retry),
+  intuition ("Selection rejected: ...", without the original's one retry),
   reasoning (before retaining), and in the body's `routing` before it logs
   the outcome (which catches the trusted seed's selection).
   `<decision:assemble>` lost `routeslocation`.
@@ -32,7 +32,7 @@ Last updated: 2026-10-10.
   URI, granted `inherit-network`), with the same `sql.result`/`sql.failed`
   contract, `rowcount` guards and open transactions. Migrations are
   Alembic's: `<migration:plan>` (`namespaces/migration`) and
-  `abilities/migration/migration.scx`, with mosfet's revisions per engine
+  `abilities/migration/migration.scx`, with the original's revisions per engine
   in `abilities/memory/{sqlite,postgresql}/` and the version in
   `alembic_version`. Every ability's SQL is portable to both. Postgres
   support is tested on Postgres 16 (`FLOPPY_POSTGRES_BIN=<bin dir>` runs the
@@ -87,21 +87,21 @@ Last updated: 2026-10-10.
 
 ## Intuition contract and reasoning prompt (2026-10-10)
 
-- **Intuition** uses the decision service's new kind `select` (mosfet's
+- **Intuition** uses the decision service's new kind `select` (the original's
   TypeSafe `Processor.process`): `decision.selected {selections: [{event,
   data, confidence}]}`, every groundable event with its own probability.
   Intuition observes their least confidence (0-100) with `<decision:tuner>`
-  first, then compares it with the updated threshold (mosfet
+  first, then compares it with the updated threshold (the original
   `_tune_confidence`). `low_confidence` and `deliberative_input` hand out
   the environment actions in the unhandled donedata's `selected`; the
   cognition routes them first in the turn's output. The service's pass
-  criterion is mosfet's `__unhandled__`, its state document mosfet's
+  criterion is the original's `__unhandled__`, its state document the original's
   `{"turn": {"envelope": {"name"}, "data"}}`, and data grounds from the
   non-null stimulus value then the enum (no `const`). `choose` lost its
   `threshold` (and `below-threshold`).
-- **Reasoning** sends mosfet's `model_facing_xml(ProcessorInput)` under
-  mosfet's budgets (`promptProjection()` in reasoning.js), checked
-  byte-for-byte against mosfet's renderer on sample inputs. The reasoning
+- **Reasoning** sends the original's `model_facing_xml(ProcessorInput)` under
+  the original's budgets (`promptProjection()` in reasoning.js), checked
+  byte-for-byte against the original's renderer on sample inputs. The reasoning
   and intuition system prompts still describe floppy's old inputs (gap 9,
   the maintainer's).
 - **Tests in worktrees:** a `target/` copied from another checkout keeps
@@ -115,7 +115,7 @@ Last updated: 2026-10-10.
 - **Branch:** `claude/project-thread-r7141w` (from `claude/project-thread-brkerr`),
   pushed to `gabewillen/floppy`; the phase 4 branch merges its commits.
 - **Done:** `services/sql` (one SQLite transaction per `<invoke>`, any
-  schema) and `abilities/memory/memory.scx` (mosfet's Memory: migrates mosfet's
+  schema) and `abilities/memory/memory.scx` (the original's Memory: migrates the original's
   schema and applies statements through the sql service), decisions D44 to
   D47. Reasoning, identity and conversation recall and remember through the
   memory ability, and the body passes its database `/memory/floppy.sqlite`
@@ -140,28 +140,28 @@ Last updated: 2026-10-10.
   as a chain of runners passing `bot.behavior.tick` up. Decisions D60 to
   D64, D73 to D75, D80 (the plan's D48, D49 and D55, renumbered past clashes).
   Plan: [plans/phase5-behaviors.mdscript.md](plans/phase5-behaviors.mdscript.md).
-- **Routines and revision, mosfet's behavior (2026-10-10):** a routine's
+- **Routines and revision, the original's behavior (2026-10-10):** a routine's
   `at` schedule computes its next occurrence in its own data model with
-  `next_after` (reflection.js, mosfet `At.next_after` over the zone's POSIX
+  `next_after` (reflection.js, the reference `At.next_after` over the zone's POSIX
   TZ rule: the ECMAScript data model has no `Intl` or time zone database);
   the builder, given `min_every_ms`/`turn_after_bound_ms`, rejects drafts
-  outside mosfet `check()`'s lifetime bounds (E0009) and forces a
+  outside the reference `check()`'s lifetime bounds (E0009) and forces a
   routine's first tick (E0008); the tick schema refuses an empty `output`;
   reflection drafts the builder's last rejected source and drafts nothing
   when the change call itself failed.
 - **Seams on (2026-10-10, D80):** the cognition always runs reflection and
-  routines (no gates, as mosfet composes them); with no database each logs
+  routines (no gates, as the original composes them); with no database each logs
   `absent`. Every bot turn with memory now ends with reflection's select
   call and the turn's episode.
 
 ## Conversation memory (2026-10-10)
 
-- **Done** on branch `wt-conversation`: the conversation keeps mosfet's
+- **Done** on branch `wt-conversation`: the conversation keeps the original's
   relationships (matched in either direction, targetless input in the
-  ambient one) and keys its memory by mosfet's `relationship_context_ref`
+  ambient one) and keys its memory by the original's `relationship_context_ref`
   (`{"identity_groups":[...]}`, written by `<conversation:commit
   keylocation>`), recalls before the turns and remembers after them (each
-  its own 5 s operation), and remembers mosfet's `Memory.to_json`. It
+  its own 5 s operation), and remembers the original's `Memory.to_json`. It
   answers `bot.ability.conversation.snapshot.request` and a repeated
   append; the communication forwards a non-text product whose latest
   message is inbound. Memories kept by earlier floppy runs, under the old
@@ -169,13 +169,13 @@ Last updated: 2026-10-10.
 
 ## Turn detectors (2026-10-10)
 
-- **Done** on branch `claude/project-thread-fubdvs`: mosfet's TurnDetector
+- **Done** on branch `claude/project-thread-fubdvs`: the original's TurnDetector
   as `abilities/turn_detector/turn_detector.scx` (its seven events'
   schemas in `abilities/schemas/`), and the conversation's
   `turn_exchange`, which runs one turn per source of each input through it
   before memory and commits the turns' product. Decisions D76 to D79;
   conventions: [port-plan.md](port-plan.md#turn-detector-conventions).
-- **Decided (D79):** mosfet commits a multi-source text input once per
+- **Decided (D79):** The original commits a multi-source text input once per
   source (`hello hello hello`); the maintainer chose to say it once, so
   floppy joins each distinct turn text once. The detector has no decoder
   (D77).
@@ -184,11 +184,11 @@ Last updated: 2026-10-10.
 
 - **Done on `main`** (`d569318`): `services/speech` (decode, encode, and the
   voice operations `detect`, `diarize`, `identify` with the media steps
-  `normalize`, `append`, `clip`); mosfet's hearing leaves, sensitivity,
+  `normalize`, `append`, `clip`); the original's hearing leaves, sensitivity,
   interpretation (open-speech window included) and listening, which the
   body invokes as its input ability; the SpeechHeard seed in autonomy;
   vocal and speaking in audio mode; image parts in the generate service;
-  vision and reading (invoked by nothing yet, as in mosfet). Decisions
+  vision and reading (invoked by nothing yet, as in the original). Decisions
   D52, D57 to D59, D66, D67; D38 is superseded.
   Plan: [plans/phase6-speech-vision.mdscript.md](plans/phase6-speech-vision.mdscript.md);
   conventions: [port-plan.md](port-plan.md#phase-6-conventions).
@@ -207,9 +207,11 @@ Last updated: 2026-10-10.
 - **Live:** `speech_service`'s `live_speech_round_trip_through_an_env_file`
   is the one live speech test (ignored; it needs a speech backend in
   `FLOPPY_LIVE_ENV_FILE`). Reading passed live on the CPA gateway
-  (2026-10-10, [live-proof.md](live-proof.md)); hearing, listening and
-  speaking have not run live, because neither the CPA gateway nor TypeSafe
-  serves `/audio/speech` or `/audio/transcriptions`.
+  (2026-10-10), and on the Gemini API (D94) the speech round trip
+  (speaking's encoder and hearing's decoder) and `floppy_live`'s
+  `live_chat` with real spoken audio passed (2026-10-11,
+  [live-proof.md](live-proof.md)); the listening has not run live, since
+  its voice detection needs LocalAI (`FLOPPY_VOICE_BASE_URL`).
 
 ## Repositories
 
@@ -218,7 +220,7 @@ Last updated: 2026-10-10.
 | floppy (this repo, formerly nemobot) | `~/VSCode/stateforward/floppy`, remote `github.com/gabewillen/floppy` (private) | `main` | bots, floppy's namespaces and services, docs; no runtime of its own (D14) |
 | scxml.rs | `~/VSCode/stateforward/scxml.rs` | `main` | engine, `scx` CLI, hosts, validator, resolver |
 | scxml.rs work branch | `~/VSCode/stateforward/scxml.rs-services` (git worktree) | `feat/invoke-services` | all scxml.rs changes are made here first |
-| mosfet (source of the port) | `~/VSCode/stateforward/mosfet/mosfet.py` | — | Python runtime being ported; reference only |
+| Reference implementation (source of the port) | not in this repository | — | Python runtime being ported; reference only |
 
 `scxml.rs/` inside floppy is a **squashed git subtree** of scxml.rs.
 
@@ -269,7 +271,7 @@ Last updated: 2026-10-10.
     reasoning back, so long generations time out (D24, D25, live-proof.md);
     a report for its maintainer was drafted in the 2026-10-07 session.
   - decision service: TypeSafe (`TYPESAFE_API_KEY` in
-    `~/VSCode/stateforward/mosfet/mosfet.py/.env`).
+    `.env.local`).
 - `.env` files are gitignored; never print or commit their values.
 
 ## Where things stand (2026-10-08)
@@ -331,14 +333,14 @@ inlines the browser `validate` options type so no unapproved
 
 - Phase 4 event contracts (floppy `cb4e47e0`): one JSON Schema file per
   event, body events in `bots/floppy/schemas/`, ability events in
-  `abilities/schemas/`, mosfet's domain names in
-  `abilities/schemas/mosfet-event-names.json`; documents reference them by
+  `abilities/schemas/`, the original's domain names in
+  `abilities/schemas/floppy-event-names.json`; documents reference them by
   `event:schema="schemas/<event>.json"`, never inline. A schema reference
   cannot contain `..`, so ability documents live flat as
   `abilities/<ability>.scx`. `tests/tests/contracts.rs` checks the schema
   set and every `.scx` under `abilities/` and `bots/floppy/`.
 
-- Phase 4 body and thin cognition: `bots/floppy/floppy.scx` (mosfet's Bot
+- Phase 4 body and thin cognition: `bots/floppy/floppy.scx` (the original's Bot
   lifecycle and turns as the root session: `inactive`, `live{activating,
   active{unfocused, focused, processing, cancelling_processing,
   returning}}`, `deactivating`, final sink `degraded`) invokes
@@ -358,7 +360,7 @@ inlines the browser `validate` options type so no unapproved
   invokes per turn `abilities/autonomy/autonomy.scx` (always unhandled without
   memory), `abilities/intuition/intuition.scx` (`<decision:choice>` of ignore or
   the reasoning handoff, decided by the decision service on TypeSafe, with
-  mosfet's ConfidenceTuner passed by `<param>` and returned in
+  the original's ConfidenceTuner passed by `<param>` and returned in
   `<donedata>`), and `abilities/reasoning/reasoning.scx` (memory steps around one
   strict structured `generate` call whose schema is built from
   `<decision:choice>`: respond and ignore until the body assembles
@@ -396,9 +398,9 @@ inlines the browser `validate` options type so no unapproved
   `bot.ability.conversation.append`, and defers input and responses while
   one is in flight; a waiting one passes the same checks when replayed
   (a blank waiting response fails and is not said). External `bot.ability.communication.input` goes
-  through the body to the conversation (as mosfet's
+  through the body to the conversation (as the original's
   `bot.ability.conversation.routed_input`), whose text product (its whole
-  history, as in mosfet) comes back as a `bot.ability.cognition.input`
+  history, as in the original) comes back as a `bot.ability.cognition.input`
   handoff the body grants a turn.
   Tests: `tests/tests/communication.rs` (8), the fake-backend end-to-end
   `a_reasoned_response_is_said_through_the_communication` in
@@ -420,7 +422,7 @@ inlines the browser `validate` options type so no unapproved
   change, and say so in the commit.
 
 - `<decision:compact location bound overlocation>` (floppy `8f2b2616`,
-  `008cd04a`): the shared offer compaction (mosfet
+  `008cd04a`): the shared offer compaction (the original
   `model_facing_event_json_schema` and the 32 KiB bound) in
   `namespaces/decision`. The cognition and communication offers use it;
   their `compactSchema`/`compactOffers` copies are gone, traces unchanged.
@@ -441,9 +443,9 @@ inlines the browser `validate` options type so no unapproved
   `attentionBias`, `envelope` (later slices).
 
 - `<decision:selection location choices>`, `<decision:tuner location
-  thresholdlocation observe>`: reasoning's strict dispatch schema (mosfet
+  thresholdlocation observe>`: reasoning's strict dispatch schema (the original
   `_selection_item_branch`/`dispatch_tool`) and intuition's
-  `ConfidenceTuner` (mosfet defaults as Rust constants; the threshold is
+  `ConfidenceTuner` (the original defaults as Rust constants; the threshold is
   written as a probability) are namespace elements; the stage results are
   plain `<assign>`s. Reasoning's `onChoices` cond is gone: the generate
   service's strict-schema check already fails an off-choices reply as
@@ -454,7 +456,7 @@ inlines the browser `validate` options type so no unapproved
   namespace (`https://github.com/stateforward/floppy/namespaces/bot`,
   component `floppy_bot`, imports `types`, `telemetry`,
   `data-model-host`): `<bot:attention location focuslocation stimulus
-  devices focus sources>` (mosfet `attention_bias_for_turn`) and
+  devices focus sources>` (the reference `attention_bias_for_turn`) and
   `<bot:stimulus location event data source target? id?>` (the cognition
   input's stimulus envelope, canonical JSON). The body's `attentionBias`
   and `envelope` functions and its processing-entry and deferral scripts
@@ -468,13 +470,13 @@ inlines the browser `validate` options type so no unapproved
   (`https://github.com/stateforward/floppy/namespaces/conversation`,
   component `floppy_conversation`, imports `types`, `telemetry`,
   `data-model-host`): `<conversation:commit location keylocation?
-  direction event message sequence provenance?>` (mosfet
+  direction event message sequence provenance?>` (the original
   `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`,
   `_stable_context_ref`, `MessageProvenance`) builds one committed message
   and its relationship key; it never holds the history (the extension
   boundary's values are bounded at 64 KiB on wasm), so the conversation
   appends with `history.concat([message])` and
-  `relationships[participants]` (since 2026-10-10 the key is mosfet's
+  `relationships[participants]` (since 2026-10-10 the key is the original's
   relationship context reference). The communication builds its outbound record
   with it (the append's provenance now carries explicit `null` source,
   target, session_ref and turn_ref; the committed history is unchanged).
@@ -488,7 +490,7 @@ Next: phase 4 (bot core and abilities), per
 
 ## Port run decisions (user, 2026-10-08)
 
-The remaining mosfet port runs as one ultracode run with these grants:
+The remaining the original port runs as one ultracode run with these grants:
 
 - **Commits:** commit locally; when the full proof is green, fast-forward
   scxml.rs `main` and subtree-pull into floppy. Never push, publish, or
@@ -527,9 +529,9 @@ The remaining mosfet port runs as one ultracode run with these grants:
 - **Live model while the Sparks are saturated:** CPA gateway via the
   gitignored `.env.cpa`, model `gabe-codex-1/gpt-6-luna` (fallback
   `gabe-xai/grok-4.6`).
-- **Behaviors and routines (phase 5) use the builder:** mosfet has the model
+- **Behaviors and routines (phase 5) use the builder:** The original has the model
   author behaviors and routines as Starlark HSM programs and compiles them at
-  runtime (`mosfet/behavior/compiler.py`). floppy mirrors that with
+  runtime (`behavior/compiler.py`). floppy mirrors that with
   `bots/builder`: a behavior or routine is an SCXML document the builder
   authors, validates, and hands back, and the bot then invokes it. No
   Starlark port.
@@ -555,15 +557,14 @@ The remaining mosfet port runs as one ultracode run with these grants:
   stdout default, file/WebSocket/OTLP packages. Low priority.
 - PGlite compiled into a component (D71: needs `scx`'s wasmtime with the
   `gc` and `gc-null` features, a proposed scxml.rs change not made).
-- Website (after the port): mosfet's animated robot (`mosfet/web/src/face`),
+- Website (after the port): the original's animated robot (`web/src/face`),
   web components + hsm.ts, marketplace of packages, a Mindstorms-style
   workshop whose pieces are inferred from element XSDs, live highlighting
   of running bots.
-- Live speech runs: hearing, listening and speaking (Gemini TTS, `Kore`)
-  have never run live; they need a speech backend at
-  `FLOPPY_SPEECH_BASE_URL` (and LocalAI at `FLOPPY_VOICE_BASE_URL` for
-  listening). Neither the CPA gateway nor TypeSafe serves one
-  (live-proof.md, 2026-10-10).
+- Live listening: voice detection (every sound) needs LocalAI at
+  `FLOPPY_VOICE_BASE_URL`, which no backend reachable from the cloud
+  session serves, so the listening has not run live end to end; speech
+  decoding and speaking have, on Gemini (live-proof.md, 2026-10-11).
 - Going public: CI, publishing the prepared releases with `SHA256SUMS`
   ([release.md](release.md)), per-platform `scx` binaries, IRP identity
   regeneration on Linux CI.

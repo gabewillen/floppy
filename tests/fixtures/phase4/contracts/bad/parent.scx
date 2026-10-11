@@ -1,5 +1,5 @@
 <!-- Contract fixture, broken on purpose: an inline event:schema, a send
-     to the child that no child transition takes, and a bot.* name mosfet
+     to the child that no child transition takes, and a bot.* name the original
      never declared. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"

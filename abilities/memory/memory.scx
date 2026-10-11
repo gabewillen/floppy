@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Memory ability (mosfet abilities/memory: memory.py Memory,
+  floppy's Memory ability (the reference abilities/memory: memory.py Memory,
   store.py MemoryStore on providers/sqlite_memory or
-  providers/postgres_memory): one transaction of mosfet's Statements
+  providers/postgres_memory): one transaction of the original's Statements
   against the bot's memory database, through the sql service (services/sql,
   SQLite) or the pgsql service (services/pgsql, Postgres over its wire
   protocol). An ability that remembers invokes it from the state that needs
@@ -13,7 +13,7 @@
 
     opening -> migrating -> applying -> applied (final)
 
-  Input: the <param>s database and statements (mosfet's
+  Input: the <param>s database and statements (the original's
   InputData.statements: [{sql, parameters?}], at least one). The database
   names the engine: a file path is a SQLite database in the directory the
   run grants the sql service; a Postgres connection URI
@@ -23,19 +23,19 @@
 
   opening picks the engine. migrating invokes the migration ability
   (abilities/migration/migration.scx, Alembic's upgrade head) with
-  mosfet's revisions 0001 and 0002 in the engine's dialect
+  the original's revisions 0001 and 0002 in the engine's dialect
   (abilities/memory/sqlite/ and
   abilities/memory/postgresql/: the same tables, columns, defaults and
-  indexes as mosfet's Alembic scripts, with the same revision ids; on
+  indexes as the original's Alembic scripts, with the same revision ids; on
   Postgres the defaulted created_at and updated_at are TIMESTAMPTZ DEFAULT
   NOW(), as postgres_memory declares created_at), so the database carries
-  Alembic's alembic_version as mosfet's does and a mosfet database is used
+  Alembic's alembic_version as the original's does and the original database is used
   in place. A database at a revision the history does not hold is refused
   untouched. applying then runs the statements in one transaction.
 
-  Output (to the parent, as mosfet's Memory answers): bot.ability.memory.output
-  {results} (mosfet's OutputData: one result per statement, in order), or
-  bot.ability.failed {message} (mosfet's FailureData) when nothing was
+  Output (to the parent, as the original's Memory answers): bot.ability.memory.output
+  {results} (the original's OutputData: one result per statement, in order), or
+  bot.ability.failed {message} (the original's FailureData) when nothing was
   committed. Then the session ends.
 
   Bindings: the migration namespace package (through the migration
@@ -51,7 +51,7 @@
     <!-- The invoker's <param>s. -->
     <data id="database" expr="null"/>
     <data id="statements" expr="[]"/>
-    <!-- The schema: mosfet's Alembic revisions, one file each per engine,
+    <!-- The schema: the original's Alembic revisions, one file each per engine,
          with the same revision ids. -->
     <data id="sqlite_0001" src="sqlite/0001_initial_memory_schema.json"/>
     <data id="sqlite_0002" src="sqlite/0002_behavior_lifetime.json"/>

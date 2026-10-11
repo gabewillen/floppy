@@ -11,7 +11,7 @@ function hasNoMemory() {
 
 // recalling
 
-// mosfet select_active_behaviors_clauses(lifetime=persistent).
+// The reference select_active_behaviors_clauses(lifetime=persistent).
 function routinesSelectStatements() {
   return [{sql: select_routines, parameters: ['ACTIVE', 'persistent']}];
 }
@@ -21,7 +21,7 @@ function routinesFromMemoryOutput(event) {
   return event.data.results[0].rows.map(function (r) { return {name: r.values[0], source: r.values[1]}; });
 }
 
-// mosfet inventory.revision: the recalled rows differ from the running set.
+// The reference inventory.revision: the recalled rows differ from the running set.
 function isRevisionChanged() {
   return JSON.stringify(desired) !== JSON.stringify(routines);
 }

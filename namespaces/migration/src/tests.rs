@@ -62,8 +62,8 @@ fn data(value: &Json) -> Data {
     }
 }
 
-/// mosfet's two revisions, with one marker statement each way.
-fn mosfet() -> Json {
+/// The original's two revisions, with one marker statement each way.
+fn reference_revisions() -> Json {
     json!([
         {"revision": "0002", "down_revision": "0001", "upgrade": [{"sql": "up 2"}], "downgrade": [{"sql": "down 2"}]},
         {"revision": "0001", "down_revision": null, "upgrade": [{"sql": "up 1"}], "downgrade": [{"sql": "down 1"}]}
@@ -104,7 +104,7 @@ fn the_package_binds_the_exact_uri_and_schema_and_declares_no_io() {
 #[test]
 fn upgrading_from_base_to_head_runs_every_upgrade_oldest_first() {
     assert_eq!(
-        plan_of(&mosfet(), None, "head"),
+        plan_of(&reference_revisions(), None, "head"),
         Ok(json!({"from": null, "to": "0002", "steps": [
             {"revision": "0001", "direction": "upgrade", "statements": [{"sql": "up 1"}]},
             {"revision": "0002", "direction": "upgrade", "statements": [{"sql": "up 2"}]}
@@ -115,7 +115,7 @@ fn upgrading_from_base_to_head_runs_every_upgrade_oldest_first() {
 #[test]
 fn at_the_target_there_is_nothing_to_do() {
     assert_eq!(
-        plan_of(&mosfet(), Some("0002"), "head"),
+        plan_of(&reference_revisions(), Some("0002"), "head"),
         Ok(json!({"from": "0002", "to": "0002", "steps": []}))
     );
     assert_eq!(
@@ -127,14 +127,14 @@ fn at_the_target_there_is_nothing_to_do() {
 #[test]
 fn downgrading_runs_the_downgrades_newest_first() {
     assert_eq!(
-        plan_of(&mosfet(), Some("0002"), "base"),
+        plan_of(&reference_revisions(), Some("0002"), "base"),
         Ok(json!({"from": "0002", "to": null, "steps": [
             {"revision": "0002", "direction": "downgrade", "statements": [{"sql": "down 2"}]},
             {"revision": "0001", "direction": "downgrade", "statements": [{"sql": "down 1"}]}
         ]}))
     );
     assert_eq!(
-        plan_of(&mosfet(), Some("0002"), "-1"),
+        plan_of(&reference_revisions(), Some("0002"), "-1"),
         Ok(json!({"from": "0002", "to": "0001", "steps": [
             {"revision": "0002", "direction": "downgrade", "statements": [{"sql": "down 2"}]}
         ]}))
@@ -144,27 +144,28 @@ fn downgrading_runs_the_downgrades_newest_first() {
 #[test]
 fn a_target_may_be_a_revision_or_a_relative_step() {
     assert_eq!(
-        plan_of(&mosfet(), None, "0001").map(|plan| plan["to"].clone()),
+        plan_of(&reference_revisions(), None, "0001").map(|plan| plan["to"].clone()),
         Ok(json!("0001"))
     );
     assert_eq!(
-        plan_of(&mosfet(), Some("0001"), "+1").map(|plan| plan["steps"].as_array().map(Vec::len)),
+        plan_of(&reference_revisions(), Some("0001"), "+1")
+            .map(|plan| plan["steps"].as_array().map(Vec::len)),
         Ok(Some(1))
     );
     assert_eq!(
-        plan_of(&mosfet(), Some("0001"), "+2"),
+        plan_of(&reference_revisions(), Some("0001"), "+2"),
         Err("migration:plan target steps past head")
     );
     assert_eq!(
-        plan_of(&mosfet(), None, "-1"),
+        plan_of(&reference_revisions(), None, "-1"),
         Err("migration:plan target steps past base")
     );
     assert_eq!(
-        plan_of(&mosfet(), None, "0003"),
+        plan_of(&reference_revisions(), None, "0003"),
         Err("migration:plan target is not a revision of the history")
     );
     assert_eq!(
-        plan_of(&mosfet(), Some("0009"), "head"),
+        plan_of(&reference_revisions(), Some("0009"), "head"),
         Err("migration:plan current is not a revision of the history")
     );
 }
@@ -211,7 +212,7 @@ fn only_a_linear_history_is_planned() {
 fn the_element_assigns_the_plan_to_its_location() {
     let mut host = FakeHost {
         values: BTreeMap::from([
-            ("revisions".to_owned(), data(&mosfet())),
+            ("revisions".to_owned(), data(&reference_revisions())),
             ("current".to_owned(), Data::String("0001".into())),
             ("null".to_owned(), Data::Null),
         ]),
@@ -246,7 +247,7 @@ fn the_element_assigns_the_plan_to_its_location() {
 fn malformed_elements_raise_error_execution() {
     let mut host = FakeHost {
         values: BTreeMap::from([
-            ("revisions".to_owned(), data(&mosfet())),
+            ("revisions".to_owned(), data(&reference_revisions())),
             ("number".to_owned(), Data::String(String::new())),
         ]),
         ..FakeHost::default()

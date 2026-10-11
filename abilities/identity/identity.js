@@ -15,7 +15,7 @@ function recalledName() {
   return typeof name === 'string' && name.length > 0 ? {text: name, kind: 'fact'} : null;
 }
 
-// mosfet identity/name.py: the adopted names, oldest first.
+// The original identity/name.py: the adopted names, oldest first.
 function nameSelectStatements() {
   return [{sql: name_select, parameters: ['self_name', 'self']}];
 }
@@ -39,7 +39,7 @@ function recalledNameLog() {
 
 // listening
 
-// mosfet Identity._can_recognize: a nameless bot only hears words.
+// The original Identity._can_recognize: a nameless bot only hears words.
 function canRecognize() {
   return name !== null;
 }
@@ -51,12 +51,12 @@ function heardText(data) {
 
 // recognizing
 
-// The speech decoding answered with a transcript (mosfet's decoded text).
+// The speech decoding answered with a transcript (the original's decoded text).
 function hasTranscript(_event) {
   return typeof Object(_event.data).text === 'string';
 }
 
-// mosfet _run_recognition: the recognizer's error, as the stage failure.
+// The original _run_recognition: the recognizer's error, as the stage failure.
 function recognitionFailedMessage(_event) {
   return typeof Object(_event.data).message === 'string' ? _event.data.message : 'Identity recognizer produced output that does not match its output schema.';
 }
@@ -75,7 +75,7 @@ function adoptedName() {
   return ({text: adopting_name, kind: 'fact'});
 }
 
-// mosfet identity/name.py: the insert's parameters ?1 to ?6.
+// The original identity/name.py: the insert's parameters ?1 to ?6.
 function nameInsertParameters() {
   return ['long_term', 'self', 'fact', 'standard', 'retain', JSON.stringify({text: adopting_name, kind: 'fact'})];
 }

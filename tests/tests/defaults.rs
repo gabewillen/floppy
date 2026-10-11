@@ -105,7 +105,7 @@ fn env_names(text: &str) -> BTreeSet<String> {
 }
 
 /// The documents whose `model` is the speech service's (an audio or voice
-/// model, mosfet's speech decoder, speech encoder and voice classifiers'
+/// model, the original's speech decoder, speech encoder and voice classifiers'
 /// own), not the generation model: each `model` `<data>` is `null` (the
 /// service's request names none of floppy's) or a model README.md's
 /// "Speech and voice models" names.

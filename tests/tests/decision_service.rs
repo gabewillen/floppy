@@ -447,7 +447,7 @@ fn choose_fires_another_transition_when_the_backend_prefers_it() {
     );
 }
 
-/// `select` (mosfet's `TypeSafe` processor): every groundable event comes
+/// `select` (the original's `TypeSafe` processor): every groundable event comes
 /// back in one `decision.selected`, each with its data and its own
 /// probability in the selection, and nothing is fired.
 #[test]

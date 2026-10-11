@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's TurnDetector (mosfet abilities/communication/conversation/
+  floppy's TurnDetector (the reference abilities/communication/conversation/
   turn_detector): one participant's turn lifecycle and content assembler.
   The conversation (abilities/conversation/conversation.scx) invokes it as
   its child "turn_detector" once per source participant of each input
-  (mosfet Conversation's turn_detector stage) and exchanges one
+  (the original Conversation's turn_detector stage) and exchanges one
   start/end pair with it; any parent may drive it the same way, or stream
   heard speech to it.
 
@@ -13,18 +13,18 @@
     open, paused -open.after, paused.after (end of turn silence)-> closing
       -silence.expired-> normalizing -> idle
 
-  Configuration: the <param>s participant_ref (mosfet's default "bot"),
+  Configuration: the <param>s participant_ref (the original's default "bot"),
   conversation_ref ("conversation") and end_of_turn_silence_seconds (0.5;
-  each timer waits at least 0.01 s, as mosfet's does).
+  each timer waits at least 0.01 s, as the original's does).
 
   Readiness: on start it sends bot.ability.turn_detector.ready
   {participant_ref, conversation_ref} to the parent, which may then send
-  it turns (an SCXML child cannot be sent to before it starts). mosfet
+  it turns (an SCXML child cannot be sent to before it starts). The original
   answers a ready.request once its attachment group is live; floppy has no
   attachment, so the request is not ported and the detector announces
   itself, as floppy's abilities announce their offers.
 
-  Turns (mosfet's guards and effects):
+  Turns (the original's guards and effects):
   * bot.ability.turn_detector.turn.start opens a turn when its
     self_participant_ref is this detector's participant_ref and no turn is
     open, taking its turn_ref, conversation_ref and source_participant_ref;
@@ -38,42 +38,42 @@
     the observation's audio while its content_type is audio/pcm (decoded
     words carry no frames); without voice spans it moves open to paused.
   * open and paused each wait end_of_turn_silence_seconds from their
-    entry (mosfet's hsm.after, re-armed on every re-entry); the timer
-    closes the turn through closing, which raises mosfet's
+    entry (the original's hsm.after, re-armed on every re-entry); the timer
+    closes the turn through closing, which raises the original's
     bot.ability.turn_detector.turn.silence.expired to itself.
-  * Content (mosfet _ingest_content): text is stripped and kept when not
+  * Content (the original _ingest_content): text is stripped and kept when not
     empty; audio chunks are kept in order by reference (the first chunk's
     sample_rate_hz and channels win); content, image and event stimuli
     replace the modality-neutral content (content_type the stimulus's,
     image/*, application/event).
 
   Output (normalizing): the closed turn answers the parent with
-  bot.ability.turn_detector.turn.complete (mosfet's TurnCompleteData): text
+  bot.ability.turn_detector.turn.complete (the original's TurnCompleteData): text
   the kept texts joined by spaces, audio the chunk references, content the
   text, else the audio, else the modality-neutral content, with
   content_type text/plain, audio/pcm or the content's. A turn closed with
-  none of them, or with both text and audio (mosfet's TurnCompleteData
+  none of them, or with both text and audio (the original's TurnCompleteData
   refuses them), answers bot.ability.turn_detector.failed {stage: "turn",
   message, participant_ref, conversation_ref, turn_ref,
   source_participant_ref}. Either way the turn is cleared and the detector
-  is idle again. floppy's detector has no decoder (mosfet's Conversation
+  is idle again. floppy's detector has no decoder (the original's Conversation
   builds its detectors without one; floppy decodes speech in listening), so
   normalizing hands the turn on as assembled.
 
   Contracts: the turn events reference abilities/schemas/ by event:schema
   (never inline); a send whose data a schema rejects is never routed here
   and raises error.execution in the sender. Fields a sender leaves out take
-  mosfet's defaults. Conds only correlate (which turn, which timer).
+  the original's defaults. Conds only correlate (which turn, which timer).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="turn_detector" initial="turn_detector">
   <datamodel>
-    <!-- The invoker's <param>s (mosfet's constructor defaults). -->
+    <!-- The invoker's <param>s (the original's constructor defaults). -->
     <data id="participant_ref" expr="'bot'"/>
     <data id="conversation_ref" expr="'conversation'"/>
     <data id="end_of_turn_silence_seconds" expr="0.5"/>
-    <!-- The open turn (mosfet's instance state). -->
+    <!-- The open turn (the original's instance state). -->
     <data id="turn_ref" expr="null"/>
     <data id="active_conversation_ref" expr="null"/>
     <data id="source_participant_ref" expr="'caller'"/>
@@ -84,7 +84,7 @@
     <data id="content" expr="null"/>
     <data id="content_type" expr="null"/>
     <!-- Turns opened by voice so far, the timer in hand, and the closed
-         turn's product (mosfet's TurnCompleteData or FailedEventData). -->
+         turn's product (the original's TurnCompleteData or FailedEventData). -->
     <data id="voice_turns" expr="0"/>
     <data id="timer" expr="null"/>
     <data id="closed" expr="null"/>
@@ -99,7 +99,7 @@
       </send>
     </onentry>
 
-    <!-- idle holds no turn (mosfet _clear_open). -->
+    <!-- idle holds no turn (the original _clear_open). -->
     <state id="idle">
       <onentry>
         <assign location="turn_ref" expr="null"/>
@@ -140,7 +140,7 @@
     </state>
 
     <!-- open and paused: the open turn, each waiting the end-of-turn
-         silence from its entry (mosfet's hsm.after). -->
+         silence from its entry (the original's hsm.after). -->
     <state id="open">
       <onentry>
         <send idlocation="timer" event="open.after" delayexpr="silenceDelay()"/>
@@ -248,7 +248,7 @@
       <transition event="paused.after" cond="isTimer(_event)" target="closing"/>
     </state>
 
-    <!-- The end-of-turn silence expired: mosfet's closing raises its
+    <!-- The end-of-turn silence expired: the original's closing raises its
          provenance to itself and ends the turn on it. -->
     <state id="closing">
       <onentry>

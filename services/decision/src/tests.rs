@@ -186,8 +186,8 @@ fn choose_asks_the_selection_and_the_grounded_members_in_one_batch() {
         selection,
         ["order.ship", "order.cancel", "order.hold", ABSTAIN_LABEL]
     );
-    // mosfet `_event_wording`: the description's first line, else the
-    // event name; the pass criterion's wording is mosfet's.
+    // The reference `_event_wording`: the description's first line, else the
+    // event name; the pass criterion's wording is the original's.
     let descriptions: Vec<&Json> = batch.questions[0]
         .criteria
         .iter()
@@ -309,7 +309,7 @@ fn select() -> Prepared {
 #[test]
 fn select_returns_every_offered_event_with_its_own_probability() {
     let prepared = select();
-    // The same batch as choose, with mosfet's selection instructions.
+    // The same batch as choose, with the original's selection instructions.
     assert_eq!(prepared.batch().questions.len(), 4);
     assert!(
         prepared.batch().questions[0]

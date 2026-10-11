@@ -6,10 +6,10 @@
 {"label":"floppy.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
 {"label":"cognition","parent":"session","session":"session.1","text":"turn 1: bot.input","type":"log"}
 {"label":"autonomy","parent":"session.1","session":"session.15","text":"turn 1: 1 matched for bot.input","type":"log"}
-{"label":"autonomy.candidate","parent":"session.1","session":"session.15","text":"Declines","type":"log"}
-{"label":"autonomy.candidate.advance","parent":"session.1","session":"session.15","text":"Declines","type":"log"}
+{"label":"autonomy.candidate","parent":"session.15","session":"session.18","text":"Declines","type":"log"}
+{"label":"autonomy.candidate.advance","parent":"session.15","session":"session.18","text":"Declines","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (unhandled)","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.19","text":"turn 1: bot.ability.cognition.ignore (confidence 80, threshold 0.35)","type":"log"}
+{"label":"intuition","parent":"session.1","session":"session.20","text":"turn 1: bot.ability.cognition.ignore (confidence 80, threshold 0.35)","type":"log"}
 {"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":80,\"n\":1,\"var\":100}","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition handled (none)","type":"log"}
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}

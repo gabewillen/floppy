@@ -2,29 +2,29 @@
 // root <script src="turn_detector.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// Shared: identities, mosfet's field defaults, and the timer in hand.
+// Shared: identities, the original's field defaults, and the timer in hand.
 
 // Two identities (a string, or an array of numbers) are the same identity.
 function sameIdentity(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-// A turn event's conversation_ref (mosfet's default "conversation").
+// A turn event's conversation_ref (the original's default "conversation").
 function conversationRef(_event) {
   return _event.data.conversation_ref === undefined ? 'conversation' : _event.data.conversation_ref;
 }
 
-// A turn event's source_participant_ref (mosfet's default "caller").
+// A turn event's source_participant_ref (the original's default "caller").
 function sourceRef(_event) {
   return _event.data.source_participant_ref === undefined ? 'caller' : _event.data.source_participant_ref;
 }
 
-// A turn start's self_participant_ref (mosfet's default "bot").
+// A turn start's self_participant_ref (the original's default "bot").
 function selfRef(_event) {
   return _event.data.self_participant_ref === undefined ? 'bot' : _event.data.self_participant_ref;
 }
 
-// mosfet's hsm.after delay: the end-of-turn silence, at least 10 ms.
+// The original's hsm.after delay: the end-of-turn silence, at least 10 ms.
 function silenceDelay() {
   return Math.max(Math.round(end_of_turn_silence_seconds * 1000), 10) + 'ms';
 }
@@ -33,7 +33,7 @@ function isTimer(_event) {
   return _event.sendid === timer;
 }
 
-// Guards (mosfet _has_start, _matches_active_turn, _has_voice).
+// Guards (the original _has_start, _matches_active_turn, _has_voice).
 
 // The event is for the open turn: its turn, conversation and source.
 function isActiveTurn(_event) {
@@ -50,12 +50,12 @@ function hasVoice(_event) {
   return (_event.data.voice_detection.segments || []).length > 0;
 }
 
-// The turn a voiced observation opens (mosfet: a fresh uuid).
+// The turn a voiced observation opens (the original: a fresh uuid).
 function voiceTurnRef() {
   return 'turn-' + voice_turns;
 }
 
-// Content (mosfet _ingest_content). A stimulus is the event's optional
+// Content (the original _ingest_content). A stimulus is the event's optional
 // content: {kind, source_participant_ref, content, ...}.
 
 function isKind(stimulus, kind) {
@@ -132,7 +132,7 @@ function voiceChannels(_event) {
 
 // closing
 
-// mosfet's _TurnSilenceExpiredData: the provenance of the expiry.
+// The original's _TurnSilenceExpiredData: the provenance of the expiry.
 function silenceExpired() {
   return {participant_ref: participant_ref, conversation_ref: active_conversation_ref, turn_ref: turn_ref, source_participant_ref: source_participant_ref};
 }
@@ -141,7 +141,7 @@ function isTurnSilenceExpired(_event) {
   return sameIdentity(_event.data.participant_ref, participant_ref) && _event.data.turn_ref === turn_ref && _event.data.conversation_ref === active_conversation_ref && sameIdentity(_event.data.source_participant_ref, source_participant_ref);
 }
 
-// normalizing (mosfet _on_end): the closed turn as {turn} (TurnCompleteData)
+// normalizing (the original _on_end): the closed turn as {turn} (TurnCompleteData)
 // or {failure} (FailedEventData) when it has nothing to show.
 function closedTurn() {
   var text = text_parts.join(' ').trim();
@@ -167,7 +167,7 @@ function closedTurn() {
   }};
 }
 
-// mosfet's FailedEventData for the open turn.
+// The original's FailedEventData for the open turn.
 function turnFailure(message) {
   return {stage: 'turn', message: message, participant_ref: participant_ref, conversation_ref: active_conversation_ref, turn_ref: turn_ref, source_participant_ref: source_participant_ref};
 }

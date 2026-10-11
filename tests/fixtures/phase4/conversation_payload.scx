@@ -2,7 +2,7 @@
 <!--
   Test harness of abilities/conversation/conversation.js
   (tests/tests/communication.rs,
-  the_remembered_input_is_mosfets_memory_json): copied beside the script,
+  the_remembered_input_is_the_original_memory_json): copied beside the script,
   it loads it and logs memoryPayload() of each external payload event's
   data as the input (payload).
 -->

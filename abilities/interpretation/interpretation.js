@@ -20,7 +20,7 @@ function soundChannels(sound) {
   return typeof sound.channels === 'number' ? sound.channels : 1;
 }
 
-// mosfet _is_audible_product: no level, or at least product_threshold_db.
+// The original _is_audible_product: no level, or at least product_threshold_db.
 function isAudible(scored) {
   return scored.perceived_level_db == null || scored.perceived_level_db >= product_threshold_db;
 }
@@ -67,7 +67,7 @@ function hasText(_event) {
   return typeof Object(_event.data).text === 'string';
 }
 
-// A speech product of a scored sound (mosfet _dispatch_product_cognition_input):
+// A speech product of a scored sound (the original _dispatch_product_cognition_input):
 // voice_embedding only when one is given.
 function speechProduct(content, contentType, scored, voiceDetection, sourceIds, voiceEmbedding) {
   var product = ({content: content, content_type: contentType, voice_detection: voiceDetection});
@@ -84,7 +84,7 @@ function speechProduct(content, contentType, scored, voiceDetection, sourceIds, 
 
 // initializing
 
-// mosfet's constructor refuses identification with decoding.
+// The original's constructor refuses identification with decoding.
 function refusesIdentificationWithDecoding() {
   return voice_classifier && speech_decoder;
 }
@@ -179,7 +179,7 @@ function openingFrames() {
 
 // HearingSpeech, SpeechEnded (the frame just heard)
 
-// Streamed when Listening owns no decoder (mosfet _emit_speech_product).
+// Streamed when Listening owns no decoder (the original _emit_speech_product).
 function streamsFrame() {
   return audible && !speech_decoder && !diarizer && hasSampleRate(detection.sensed.sound);
 }

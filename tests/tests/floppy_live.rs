@@ -209,7 +209,7 @@ fn live_choices() {
     );
 }
 
-/// One text turn through mosfet's communication path: a
+/// One text turn through the original's communication path: a
 /// `bot.ability.communication.input` addressed to the bot is admitted into
 /// the conversation, whose product is the turn's stimulus; the cascade
 /// selects `bot.ability.communication.respond`, which the body routes to

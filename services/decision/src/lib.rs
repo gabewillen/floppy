@@ -68,7 +68,7 @@
 //!
 //! # `choose` and `select`
 //!
-//! Both are mosfet's `TypeSafe` processor (`mosfet.providers.typesafe`
+//! Both are the original's `TypeSafe` processor (`providers.typesafe`
 //! `Processor.process`) asking one batch:
 //!
 //! * **Grounded data.** The data of each offered event is a JSON object
@@ -76,11 +76,11 @@
 //!   own question among grounded options, never authored: the evidence's
 //!   non-null member of that name (the evidence is `data`, else the state
 //!   when it is an object), then the property's non-null `enum` values
-//!   (mosfet `_candidate_values`). An event with a required member that has
+//!   (the reference `_candidate_values`). An event with a required member that has
 //!   no option is not offered.
 //! * **The batch.** The question `selection` criteria are every offered
 //!   event (described by the first line of its description, else by its
-//!   name: mosfet `_event_wording`) plus the pass criterion [`ABSTAIN_LABEL`]
+//!   name: the reference `_event_wording`) plus the pass criterion [`ABSTAIN_LABEL`]
 //!   ([`ABSTAIN_DESCRIPTION`]); each offered event's required member is its
 //!   own question `<event>::<member>` whose criteria are its options. When
 //!   nothing is offered, the service returns [`ABSTAIN_EVENT`]
@@ -90,7 +90,7 @@
 //! * **`select`** returns [`SELECTED_EVENT`]
 //!   `{"selections": [{"event": E, "data": D, "confidence": P}]}`: every
 //!   offered event, in choices order, with its filled data and its own
-//!   probability in the selection question (mosfet: "every groundable event
+//!   probability in the selection question (the original: "every groundable event
 //!   rides the response"); the invoking document owns what to dispatch.
 //! * **Validation before returning.** The filled data of every returned
 //!   event must satisfy its schema from the choices; otherwise the service
@@ -183,10 +183,10 @@ pub const RANKED_EVENT: &str = "decision.ranked";
 pub const CLASSIFIED_EVENT: &str = "decision.classified";
 /// The event a failed decision returns.
 pub const FAILED_EVENT: &str = "decision.failed";
-/// The selection's reserved pass criterion: no event fits (mosfet
+/// The selection's reserved pass criterion: no event fits (the original
 /// `_RESERVED_PASS_CRITERION`). The choices never name it.
 pub const ABSTAIN_LABEL: &str = "__unhandled__";
-/// The pass criterion's wording (mosfet `_DEFAULT_PASS_WORDING`).
+/// The pass criterion's wording (the reference `_DEFAULT_PASS_WORDING`).
 pub const ABSTAIN_DESCRIPTION: &str = "None of these: leave the turn unhandled.";
 
 /// The selection question's name in a `choose` batch.
@@ -196,9 +196,9 @@ const RANK_INSTRUCTIONS: &str =
     "Rank the candidates by how well each fits the state: give the best fit the most probability.";
 const CLASSIFY_INSTRUCTIONS: &str = "Classify the state: choose the label that describes it.";
 const CHOOSE_INSTRUCTIONS: &str = "Choose the single event the machine should take in this state: each criterion names an event it can take. Choose the pass criterion when none fits.";
-/// mosfet `_SELECTION_INSTRUCTIONS`.
+/// The reference `_SELECTION_INSTRUCTIONS`.
 const SELECT_INSTRUCTIONS: &str = "Choose the single criterion that answers this turn from the bot's own peripheral transducers: the criterion text names the situation. Choose the pass criterion when none offered fits.";
-/// mosfet `_PAYLOAD_KEY_INSTRUCTIONS`.
+/// The reference `_PAYLOAD_KEY_INSTRUCTIONS`.
 const FILL_INSTRUCTIONS: &str = "Fill one payload field for the selected event: the criteria are the exact values the evidence offers. Pick the value the turn supports.";
 
 /// Upper bound on one question's criteria (wasm builds only).
@@ -340,7 +340,7 @@ pub struct Candidate {
     pub description: Option<String>,
 }
 
-/// The first non-blank line of `text`, trimmed (mosfet `_event_wording`
+/// The first non-blank line of `text`, trimmed (the reference `_event_wording`
 /// takes the first line of a stripped description).
 fn first_line(text: &str) -> Option<String> {
     text.lines()
@@ -363,7 +363,7 @@ fn valid_event_name(name: &str) -> bool {
 /// `schema`, an optional `description`, and an optional `target` (the
 /// offering ability, as `<decision:assemble>` tags it).
 ///
-/// An event is one candidate however many targets offer it (mosfet
+/// An event is one candidate however many targets offer it (the original
 /// `collect_offered_events` keeps one event per name): it may be listed
 /// again only when every listing has a `target` and the same schema, and
 /// the first listing's description is kept. The target is the document's to
@@ -500,7 +500,7 @@ fn ground(
                 values.push(value.clone());
             }
         };
-        // mosfet `_candidate_values`: the evidence's value, then the
+        // The reference `_candidate_values`: the evidence's value, then the
         // schema's enum options, never null.
         if let Some(value) = evidence
             .and_then(|evidence| evidence.get(member))
@@ -817,7 +817,7 @@ enum Decide {
 
 const NO_ANSWER: FailureCode = FailureCode::Malformed;
 
-/// A member name as Python's `repr` writes a string (mosfet formats
+/// A member name as Python's `repr` writes a string (the original formats
 /// `{key!r}`): single quotes unless it holds a single quote and no double
 /// one.
 fn python_repr(text: &str) -> String {
@@ -845,7 +845,7 @@ fn python_repr(text: &str) -> String {
     repr
 }
 
-/// The questions of one `choose` or `select` batch (mosfet's `TypeSafe`
+/// The questions of one `choose` or `select` batch (the original's `TypeSafe`
 /// `Processor.process`): the selection (every offered event, then
 /// [`ABSTAIN_LABEL`]), then each offered event's member questions
 /// (`<event>::<member>`, each criterion described by the question's
@@ -1153,7 +1153,7 @@ fn decided_choice(
         let (name, data) = event(chosen)?;
         return Ok(Returned::new(name, &data));
     }
-    // mosfet: every groundable event rides the response with
+    // The original: every groundable event rides the response with
     // its own probability; the pass criterion never does.
     let selections = (0..offered.len())
         .map(|index| {

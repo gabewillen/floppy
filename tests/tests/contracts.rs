@@ -1,5 +1,5 @@
 //! Phase 4 event contracts: one canonical JSON Schema file per event,
-//! extracted from mosfet's pydantic models (docs/port-plan.md, "Phase 4
+//! extracted from the original's pydantic models (docs/port-plan.md, "Phase 4
 //! event contracts"). Body events live in `bots/floppy/schemas/`, ability
 //! events in `abilities/schemas/`: an `event:schema` file reference is
 //! relative to its document and cannot leave the document's directory, so
@@ -12,10 +12,10 @@
 //! * every schema is JSON Schema 2020-12, compiles, and is titled by its
 //!   file name; its examples satisfy it;
 //! * the set is exactly the phase 4 events, split body / abilities;
-//! * every name is mosfet's (`abilities/schemas/mosfet-event-names.json`,
+//! * every name is the original's (`abilities/schemas/floppy-event-names.json`,
 //!   the extracted list) or is marked `[floppy name]` in its description;
 //! * the mapping rules hold: correlated events require an integer `turn`,
-//!   mosfet's runtime-only fields are gone, and media is a reference.
+//!   the original's runtime-only fields are gone, and media is a reference.
 //!
 //! And over every `.scx` under `abilities/` and `bots/floppy/` (the body
 //! `bots/floppy/floppy.scx` and its abilities; the checks themselves are
@@ -26,7 +26,7 @@
 //! * every `event:schema` is a reference to an existing file, never inline;
 //! * every `#_parent` or `#_<invokeid>` send has a transition taking it in
 //!   the receiving document;
-//! * every `bot.*` or `environment.*` name used is mosfet's or a marked
+//! * every `bot.*` or `environment.*` name used is the original's or a marked
 //!   floppy name;
 //! * the layout rule (decision D65): the document is `<name>/<name>.scx`,
 //!   its only `<script>` is the root `<script src="<name>.js"/>` naming the
@@ -39,8 +39,9 @@
 //! * every `cond`, and every `expr` outside `<data>`, is at most 160
 //!   characters [floppy rule];
 //! * every `<invoke type="scxml">` has a literal `id` and either a
-//!   literal relative `src`, a `srcexpr`, or a `<content expr>` (autonomy
-//!   invokes a builder-produced behavior from its inventory row's source).
+//!   literal relative `src`, a `srcexpr`, or a `<content expr>` (the
+//!   candidates runner invokes a builder-produced behavior from its
+//!   inventory row's source).
 //!
 //! Builder output, the documents a `srcexpr` or `<content expr>` invokes,
 //! gets no schema files (scxml.rs reads them only for a literal `src`
@@ -141,13 +142,13 @@ const ABILITY_EVENTS: [&str; 76] = [
     "bot.ability.reflection.output",
     "bot.ability.routines.reconcile",
     "bot.ability.offers",
-    // Phase 3: the memory service's committed transaction (mosfet's
+    // Phase 3: the memory service's committed transaction (the original's
     // Memory.output_event), described where the abilities take it.
     "bot.ability.memory.output",
     // The migration ability's reached revision (Alembic's upgrade or
     // downgrade), described where the memory ability takes it.
     "bot.ability.migration.output",
-    // Phase 6: listening (mosfet's Listening, Sensitivity and
+    // Phase 6: listening (the original's Listening, Sensitivity and
     // Interpretation) and the efference copy it takes from speaking.
     "bot.ability.listening.speech.output",
     "bot.ability.listening.failed",
@@ -155,7 +156,7 @@ const ABILITY_EVENTS: [&str; 76] = [
     "bot.ability.listening.sensitivity.score",
     "bot.ability.listening.sensitivity.output",
     "bot.ability.listening.sensitivity.failed",
-    // Phase 6: mosfet's VisualClassification and Reading.
+    // Phase 6: the original's VisualClassification and Reading.
     "bot.ability.vision.classification.input",
     "bot.ability.vision.classification.output",
     "bot.ability.vision.classification.apply.completed",
@@ -168,7 +169,7 @@ const ABILITY_EVENTS: [&str; 76] = [
     "bot.ability.reading.image.decoded",
     "bot.ability.reading.unreadable.output.ready",
     "bot.ability.reading.output.encoded",
-    // mosfet's TurnDetector (the conversation's turn_detector stage).
+    // The original's TurnDetector (the conversation's turn_detector stage).
     "bot.ability.turn_detector.turn.start",
     "bot.ability.turn_detector.turn.update",
     "bot.ability.turn_detector.turn.pause",
@@ -201,7 +202,7 @@ const CORRELATED: [&str; 17] = [
     "bot.ability.reasoning.retained",
 ];
 
-/// mosfet's runtime-only correlation and cancel-token fields, which SCXML
+/// The original's runtime-only correlation and cancel-token fields, which SCXML
 /// invoke cancellation and `turn` replace.
 const RUNTIME_ONLY: [&str; 8] = [
     "operation_id",
@@ -214,7 +215,7 @@ const RUNTIME_ONLY: [&str; 8] = [
     "capability",
 ];
 
-const NAMES_FILE: &str = "mosfet-event-names.json";
+const NAMES_FILE: &str = "floppy-event-names.json";
 
 /// The ability events the body takes, twinned into `bots/floppy/schemas/`.
 const BODY_TWINS: [&str; 15] = [
@@ -296,7 +297,7 @@ fn all_schemas() -> BTreeMap<String, Json> {
     all
 }
 
-fn mosfet_names() -> BTreeSet<String> {
+fn reference_names() -> BTreeSet<String> {
     let names: Vec<String> = serde_json::from_value(read_json(&ability_schemas().join(NAMES_FILE)))
         .expect("the name list is an array of strings");
     names.into_iter().collect()
@@ -450,8 +451,8 @@ fn each_abilitys_twins_are_byte_identical_and_exactly_what_it_references() {
 }
 
 #[test]
-fn every_event_name_is_mosfets_or_a_marked_floppy_name() {
-    let mosfet = mosfet_names();
+fn every_event_name_is_the_original_or_a_marked_floppy_name() {
+    let reference = reference_names();
     let schemas = all_schemas();
     let floppy = floppy_names(&schemas);
     assert_eq!(
@@ -464,14 +465,14 @@ fn every_event_name_is_mosfets_or_a_marked_floppy_name() {
     );
     for event in schemas.keys() {
         assert!(
-            mosfet.contains(event) != floppy.contains(event),
-            "{event} is mosfet's, or floppy's and marked, never both"
+            reference.contains(event) != floppy.contains(event),
+            "{event} is the original's, or floppy's and marked, never both"
         );
     }
 }
 
 #[test]
-fn the_extracted_mosfet_name_list_is_sorted_domain_names_only() {
+fn the_extracted_name_list_is_sorted_domain_names_only() {
     let names: Vec<String> = serde_json::from_value(read_json(&ability_schemas().join(NAMES_FILE)))
         .expect("the name list is an array of strings");
     let mut sorted = names.clone();
@@ -736,7 +737,7 @@ fn unreceived_sends(document: &Parsed) -> Vec<String> {
 }
 
 /// The `bot.*` and `environment.*` names one document uses (transition
-/// descriptors, `<send>` and `<raise>` events) that are neither mosfet's
+/// descriptors, `<send>` and `<raise>` events) that are neither the original's
 /// nor a marked floppy name.
 fn unknown_domain_names(document: &Parsed, known: &BTreeSet<String>) -> Vec<String> {
     document.with(|root| {
@@ -754,7 +755,7 @@ fn unknown_domain_names(document: &Parsed, known: &BTreeSet<String>) -> Vec<Stri
             for token in event.value.split_whitespace() {
                 let name = token.strip_suffix(".*").unwrap_or(token);
                 let domain = name.starts_with("bot.") || name.starts_with("environment.");
-                // A descriptor may name a prefix of mosfet names (`bot.ability`).
+                // A descriptor may name a prefix of the original names (`bot.ability`).
                 let known_name = known
                     .iter()
                     .any(|known| known == name || known.starts_with(&format!("{name}.")));
@@ -927,7 +928,7 @@ fn contract_events() -> BTreeSet<String> {
 }
 
 fn known_names() -> BTreeSet<String> {
-    let mut known = mosfet_names();
+    let mut known = reference_names();
     known.extend(floppy_names(&all_schemas()));
     known
 }

@@ -15,7 +15,7 @@ function delay(ms) {
 
 // idle
 
-// mosfet speaking: data.text.strip().
+// The original speaking: data.text.strip().
 function spokenText(raw) {
   return String(raw).trim();
 }
@@ -66,7 +66,7 @@ function encodingRunFailure(_event) {
 
 // playing
 
-// mosfet sends no efference copy without a duration.
+// The original sends no efference copy without a duration.
 function hasDuration() {
   return typeof encoded.duration === 'number' && encoded.duration > 0;
 }

@@ -26,11 +26,11 @@
   (an invoked generate service: draft SCXML + event schemas + test scripts)
   -> validate (scx:validate; machine-applicable
   fixes through apply_fixes, at most 2 passes per draft; with the request's
-  min_every_ms and turn_after_bound_ms, mosfet check()'s lifetime bounds,
+  min_every_ms and turn_after_bound_ms, the original check()'s lifetime bounds,
   E0009) -> simulate (each test script drives the draft as an invoked
   child with its own invoke id; with those bounds, a persistent routine,
   a draft that sends bot.behavior.tick, also gets its first schedule's
-  event at once and must tick with a selection, mosfet verify_apply,
+  event at once and must tick with a selection, the reference verify_apply,
   E0008) -> done. Every failure goes through retry_gate, which takes its
   fingerprint and gives up (no-progress) when it equals the previous
   failure's, or at the request's optional max_attempts; triage then reads its enabled
@@ -82,7 +82,7 @@
     <data id="max_attempts" expr="null"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <data id="generate_timeout_ms" expr="300000"/>
-    <!-- mosfet check()'s lifetime bounds (min_every, turn_after_bound),
+    <!-- The original check()'s lifetime bounds (min_every, turn_after_bound),
          null (not checked) unless the request names them. -->
     <data id="min_every_ms" expr="null"/>
     <data id="turn_after_bound_ms" expr="null"/>
@@ -308,7 +308,7 @@
     <transition cond="hasSchemaErrors()" target="retry_gate">
       <assign location="diagnostics" expr="schemaErrorDiagnostics()"/>
     </transition>
-    <!-- mosfet check(): E0009 when the request names the bounds. -->
+    <!-- The original check(): E0009 when the request names the bounds. -->
     <transition cond="hasLifetimeErrors()" target="retry_gate">
       <assign location="diagnostics" expr="lifetime_errors"/>
     </transition>

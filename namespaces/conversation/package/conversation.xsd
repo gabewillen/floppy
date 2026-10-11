@@ -9,7 +9,7 @@
                        {sequence, direction, source_ids, target_ids,
                        content, content_type, provenance}.
                        keylocation (optional): receives its relationship
-                       context reference, mosfet's relationship_context_ref
+                       context reference, the original's relationship_context_ref
                        of its source and target ids.
                        direction (required): the literal inbound or
                        outbound.

@@ -207,7 +207,7 @@ function validatorFailedDiagnostics() {
   return [{kind: 'draft', code: 'validator-failed', message: 'the validator could not check the draft (an oversized or unreadable document)'}];
 }
 
-// validate: mosfet check()'s lifetime bounds (instance._lifetime_errors,
+// validate: the original check()'s lifetime bounds (instance._lifetime_errors,
 // E0009), checked only when the request names them.
 
 // The start tags <name ...> of text: their attributes, where they start
@@ -236,7 +236,7 @@ function delayMs(value) {
   return match === null ? null : Number(match[1]) * (match[2] === 's' ? 1000 : 1);
 }
 
-// mosfet lifetime: persistent when the document sends bot.behavior.tick
+// The original lifetime: persistent when the document sends bot.behavior.tick
 // (the persistent routine contract, decision D61), else turn.
 function draftLifetime(text) {
   return text.indexOf('bot.behavior.tick') >= 0 ? 'persistent' : 'turn';
@@ -264,12 +264,12 @@ function seconds(ms) {
   return (ms / 1000) + 's';
 }
 
-// mosfet diagnostic help for E0009.
+// The original diagnostic help for E0009.
 function lifetimeHelp() {
   return ' Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine\'s every interval must be at least the minimum the check names.';
 }
 
-// mosfet instance._lifetime_errors on the draft, as diagnostics.
+// The original instance._lifetime_errors on the draft, as diagnostics.
 function lifetimeErrors(text) {
   if (!isLifetimeChecked()) {
     return [];
@@ -297,9 +297,9 @@ function hasLifetimeErrors() {
 
 // simulate
 
-// mosfet verify_apply: a persistent routine is checked by one tick,
-// forced by delivering its first schedule's event at once (mosfet's timer
-// clock fires its first schedule wait at once), within mosfet's 2 s.
+// The reference verify_apply: a persistent routine is checked by one tick,
+// forced by delivering its first schedule's event at once (the original's timer
+// clock fires its first schedule wait at once), within the original's 2 s.
 function simTests() {
   return isLifetimeChecked() && draftLifetime(scxml_text) === 'persistent' && schedules.length > 0 ? draft.tests.concat([{name: 'first tick', events: [{name: schedules[0], data: '', delay_ms: 0}], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true}]) : draft.tests;
 }
@@ -362,9 +362,9 @@ function nextSimResults() {
   return sim_results.concat([(function (t) { var next = 0; var apply = applyErrors(t); observed.forEach(function (name) { if (next < t.expect_events.length && name === t.expect_events[next]) { next += 1; } }); return {name: t.name, invokeid: candidate_id, passed: sim_error === null && next === t.expect_events.length && child_done === t.expect_done && apply.length === 0, observed: observed, expected: t.expect_events, done: child_done, expect_done: t.expect_done, error: sim_error, apply: apply}; })(currentTest())]);
 }
 
-// mosfet verify._verify_tick on the forced tick: the routine ticked, and
+// The original verify._verify_tick on the forced tick: the routine ticked, and
 // its output selects at least one event whose data reads the tick's own
-// values (mosfet _selection_binding_errors), else E0008 messages.
+// values (the original _selection_binding_errors), else E0008 messages.
 function applyErrors(test) {
   if (test.tick !== true) {
     return [];
@@ -413,7 +413,7 @@ function diagnosticsFingerprint() {
 }
 
 // The last draft a check rejected (validate, lifetime, simulate, apply),
-// else rejected unchanged: mosfet drafts the rejected source.
+// else rejected unchanged: the original drafts the rejected source.
 function rejectedDraft() {
   return diagnostics.length > 0 && ['draft', 'validate', 'lifetime', 'simulate', 'apply'].indexOf(diagnostics[0].kind) >= 0 && typeof scxml_text === 'string' ? scxml_text : rejected;
 }

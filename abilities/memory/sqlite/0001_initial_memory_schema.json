@@ -1,7 +1,7 @@
 {
   "revision": "0001",
   "down_revision": null,
-  "doc": "Initial memory schema in SQLite (mosfet abilities/memory/migrations/versions/0001_initial_memory_schema.py).",
+  "doc": "Initial memory schema in SQLite (the reference abilities/memory/migrations/versions/0001_initial_memory_schema.py).",
   "upgrade": [
     {
       "sql": "CREATE TABLE bot_memory (memory_id TEXT NOT NULL, scope TEXT DEFAULT 'memory' NOT NULL, context_ref TEXT, subject_ref TEXT, kind TEXT, sensitivity TEXT, retention TEXT, content TEXT NOT NULL, content_format TEXT DEFAULT 'text/plain' NOT NULL, query_tags TEXT, metadata_json TEXT DEFAULT '{}' NOT NULL, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, PRIMARY KEY (memory_id))"

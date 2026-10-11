@@ -7,7 +7,7 @@
 //! and `ElevenLabs`' `text-to-speech` (nothing reaches the network). Media
 //! moves by reference: the run grants the service a directory with
 //! `--dir URI=HOST::/media`, a decoding reads its audio from there, and an
-//! encoding writes its audio there. The service answers mosfet's
+//! encoding writes its audio there. The service answers the original's
 //! `bot.ability.hearing.speech.decoding.output`,
 //! `bot.ability.vocal.speech.encoding.output`, or `bot.ability.failed`,
 //! then completes.
@@ -19,7 +19,9 @@
 //! `FLOPPY_SPEECH_BASE_URL` and `FLOPPY_SPEECH_API_KEY` (the service has no
 //! default backend). The models are `FLOPPY_LIVE_SPEECH_ENCODE_MODEL` and
 //! `FLOPPY_LIVE_SPEECH_DECODE_MODEL`, else `tts-1` and `whisper-1`, and
-//! the voice `FLOPPY_LIVE_SPEECH_VOICE`, else `alloy`. It reports pass or
+//! the voice `FLOPPY_LIVE_SPEECH_VOICE`, else `alloy`, and the API
+//! `FLOPPY_LIVE_SPEECH_PROVIDER` (`gemini`), else the `OpenAI`-compatible
+//! one. It reports pass or
 //! fail only; no value is ever printed.
 
 #![allow(
@@ -560,10 +562,15 @@ fn live_speech_round_trip_through_an_env_file() {
         "--dir".to_owned(),
         format!("{}={}::/media", speech(), media.display()),
     ]);
+    // `FLOPPY_LIVE_SPEECH_PROVIDER` (`gemini`, say) names the API; unset,
+    // the OpenAI-compatible one.
+    let provider = std::env::var("FLOPPY_LIVE_SPEECH_PROVIDER")
+        .map(|name| format!("\n      <param name=\"provider\" expr=\"'{name}'\"/>"))
+        .unwrap_or_default();
     let encoded = run_document(
         "speech.scx",
         &document(&format!(
-            r#"<param name="operation" expr="'encode'"/>
+            r#"<param name="operation" expr="'encode'"/>{provider}
       <param name="model" expr="'{}'"/>
       <param name="text" expr="'The quick brown fox jumps over the lazy dog.'"/>
       <param name="voice" expr="'{}'"/>
@@ -592,7 +599,7 @@ fn live_speech_round_trip_through_an_env_file() {
     let decoded = run_document(
         "speech.scx",
         &document(&format!(
-            r#"<param name="operation" expr="'decode'"/>
+            r#"<param name="operation" expr="'decode'"/>{provider}
       <param name="model" expr="'{}'"/>
       <param name="audio" expr="'media/said.wav'"/>
       <param name="media_type" expr="'audio/wav'"/>"#,

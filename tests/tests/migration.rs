@@ -1,6 +1,6 @@
 //! The migration ability (`abilities/migration/migration.scx`, Alembic's
 //! `command.upgrade` and `command.downgrade`) run as a harness document's
-//! child through `scx run`, with mosfet's memory revisions
+//! child through `scx run`, with the original's memory revisions
 //! (`abilities/memory/sqlite/*.json`, `abilities/memory/postgresql/*.json`):
 //! it moves a database between revisions in one transaction, keeps
 //! Alembic's `alembic_version`, and answers its
