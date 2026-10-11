@@ -158,7 +158,7 @@ class FloppyRegister extends hsm.from(HTMLElement) {
     hsm.initial(hsm.target("listing")),
     hsm.state("listing",
       hsm.entry(FloppyRegister.paint),
-      hsm.transition(hsm.on("filter"), hsm.effect((c, r, e) => { r.kind = e.data; FloppyRegister.paint(c, r); })),
+      hsm.transition(hsm.on("filter"), hsm.effect((c, r, e) => { r.kind = e.data; const site = r.closest("floppy-site"); if (site) site.kind = e.data; FloppyRegister.paint(c, r); })),
       hsm.transition(hsm.on("search"), hsm.effect((c, r, e) => { r.q = e.data; FloppyRegister.paintList(r); })),
       hsm.transition(hsm.on("mark"), hsm.effect((c, r, e) => { r.sel = e.data; FloppyRegister.paintList(r); }))));
   kind = "all"; q = ""; sel = null;
@@ -167,8 +167,9 @@ class FloppyRegister extends hsm.from(HTMLElement) {
     this.sel = this.dataset.sel || null;
     hsm.start(this, FloppyRegister.model);
     this.addEventListener("click", e => {
-      const k = e.target.closest("[data-kind]"); if (k) return hsm.live(this, "filter", k.dataset.kind);
-      const s = e.target.closest("[data-sel]"); if (s) this.dispatchEvent(new CustomEvent("floppy-open", { bubbles: true, detail: s.dataset.sel }));
+      /* Buttons only: the register element itself carries data-kind and data-sel. */
+      const k = e.target.closest("button[data-kind]"); if (k) return hsm.live(this, "filter", k.dataset.kind);
+      const s = e.target.closest("button[data-sel]"); if (s) this.dispatchEvent(new CustomEvent("floppy-open", { bubbles: true, detail: s.dataset.sel }));
     });
     this.addEventListener("input", e => { if (e.target.id === "reg-q") hsm.live(this, "search", e.target.value); });
   }
@@ -221,7 +222,7 @@ class FloppySite extends hsm.from(HTMLElement) {
   connectedCallback() {
     hsm.start(this, FloppySite.model);
     this.addEventListener("click", e => {
-      const n = e.target.closest("[data-go]"); if (n) { if (n.dataset.kind) this.kind = n.dataset.kind; return hsm.live(this, "go_" + n.dataset.go); }
+      const n = e.target.closest("[data-go]"); if (n) { if (n.dataset.kind) { this.kind = n.dataset.kind; this.part = null; } return hsm.live(this, "go_" + n.dataset.go); }
       const s = e.target.closest("floppy-sheet [data-sel]"); if (s) hsm.live(this, "open", s.dataset.sel);
     });
     this.addEventListener("floppy-open", e => hsm.live(this, "open", e.detail));
@@ -231,7 +232,7 @@ class FloppySite extends hsm.from(HTMLElement) {
   static paint(_c, s, page) {
     const c = k => ALL.filter(p => p.kind === k).length;
     const nav = `<header class="hd"><button class="brand" data-go="home">floppy <span>■</span></button>
-      <nav aria-label="Site">${[["home", "Home"], ["register", "Parts register"]].map(([k, l]) => `<button data-go="${k}" ${page === k || (k === "register" && page === "part") ? 'aria-current="page"' : ""}>${l}</button>`).join("")}<a href="workshop/">Workshop</a></nav></header>`;
+      <nav aria-label="Site">${[["home", "Home"], ["register", "Parts register"]].map(([k, l]) => `<button data-go="${k}" ${k === "register" ? 'data-kind="all"' : ""} ${page === k || (k === "register" && page === "part") ? 'aria-current="page"' : ""}>${l}</button>`).join("")}<a href="workshop/">Workshop</a></nav></header>`;
     let body = "";
     if (page === "home") body = `<section class="home"><floppy-robot></floppy-robot>
       <div class="pitch"><h1>SI powered <span>software robots</span></h1>
@@ -244,12 +245,12 @@ class FloppySite extends hsm.from(HTMLElement) {
       <div class="tiles">${[["service", "Services", "Wasm components"], ["namespace", "Namespaces", "typed building blocks"], ["element", "Elements", "executable content"]].map(([k, l, d]) => `<button data-go="register" data-kind="${k}"><b>${c(k)}</b><span>${l}</span><small>${d}</small></button>`).join("")}</div></div></section>`;
     else body = `<section class="reg"><floppy-register data-kind="${s.kind}" data-sel="${page === "part" ? s.part : ""}"></floppy-register><floppy-sheet></floppy-sheet></section>`;
     s.innerHTML = nav + `<div class="wrap">${body}</div>`;
-    s.kind = "all";
     if (page !== "home") FloppySite.paintPart(s);
   }
   static paintPart(s) {
     const reg = s.querySelector("floppy-register"), list = reg ? reg.list() : ALL;
-    const p = ALL.find(x => key(x) === s.part) || list[0] || ALL[0];
+    const p = list.find(x => key(x) === s.part) || ALL.find(x => key(x) === s.part) || list[0] || ALL[0];
+    if (reg && !list.includes(p)) hsm.live(reg, "filter", p.kind); /* a part linked from a sheet may sit outside the filter */
     if (reg) hsm.live(reg, "mark", key(p));
     s.querySelector("floppy-sheet").show(p);
   }
