@@ -15,15 +15,6 @@ function delay(ms) {
 
 // idle
 
-function hasQueued() {
-  return queue.length > 0;
-}
-
-// The text that waited longest.
-function queuedText() {
-  return spokenText(queue[0]);
-}
-
 // mosfet speaking: data.text.strip().
 function spokenText(raw) {
   return String(raw).trim();
@@ -31,10 +22,6 @@ function spokenText(raw) {
 
 function isBlankText() {
   return text.length === 0;
-}
-
-function remainingQueue() {
-  return queue.slice(1);
 }
 
 // encoding
@@ -75,11 +62,6 @@ function encodingTimedOutLog() {
 
 function encodingRunFailure(_event) {
   return 'Speech encoding could not run (' + _event.name + ').';
-}
-
-// The queue with the input's text appended.
-function deferredQueue(_event) {
-  return queue.concat([_event.data.text]);
 }
 
 // playing

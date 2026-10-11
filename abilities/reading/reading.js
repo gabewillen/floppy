@@ -2,18 +2,7 @@
 // <script src="reading.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// Unfocused
-
-function hasDeferredInput() {
-  return queue.length > 0;
-}
-
 // Focused
-
-// The queue with the input appended.
-function deferredQueue(_event) {
-  return queue.concat([_event.data]);
-}
 
 function stageFailureLog(_event) {
   return _event.data.stage + ': ' + _event.data.message;

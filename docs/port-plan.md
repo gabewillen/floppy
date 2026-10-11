@@ -49,7 +49,7 @@ has to cover.
 | `hsm.effect` (567) | executable content (synchronous and quick): `<assign>`, `<raise>`, `<send>`, `<log>`, `<foreach>`, `<if>`, and extension elements (`decision:*`, `bot:*`, `conversation:*`, `scx:validate`); never `<script>` in a floppy document (decision D39); an effect that does I/O becomes an `<invoke>` of a service |
 | `hsm.entry` (20) / `hsm.exit` (13) | `<onentry>` / `<onexit>` |
 | `hsm.activity` (138) | `<invoke>`: started on entry, cancelled on exit, `done.invoke.<id>` and `error.*` on completion or failure; every model call (the `generate` and `decision` services) is one |
-| `hsm.defer` (104) | No SCXML equivalent; modelled with a data-model queue (see [Phase 4 conventions](#phase-4-conventions)): in a deferring state, a targetless transition on E appends `<assign location="queue" expr="queue.concat([...])"/>`; in the state that handles them, an eventless `<transition cond="queue.length &gt; 0">` takes `queue.shift()`, one per return, in order (no `#_internal` replay) |
+| `hsm.defer` (104) | `<event:defer/>` (scxml.rs `namespaces/event`, decision D93): in a deferring state, a targetless transition on E holds the event; it comes back unchanged, in order, on the internal queue once the state is exited or a state inside it that handles E is entered (see [Phase 4 conventions](#phase-4-conventions)) |
 | `hsm.after(duration)` (48) | `<send event="<state>.after" delay="..." id="<state>-after"/>` on entry, `<cancel sendid="<state>-after"/>` on exit, and a transition on the event |
 | `hsm.every(period)` (28) | a self-rescheduling loop: the transition on the tick re-sends the tick with the same `delay` |
 | `hsm.at(time)` (22) | `<send delayexpr>` computed from the absolute time and the data model's clock (`Date.now()` in ECMAScript); a routine's `at` schedule (time of day, weekdays, IANA zone) gets its next occurrence from `next_after(at, Date.now())` in its own data model, mosfet's `At.next_after` over the zone's POSIX TZ rule, since the ECMAScript data model has no time zone database (reflection's persistent routine contract gives the function) |
@@ -220,12 +220,14 @@ D33 to D43.
   and puts them first in the turn's one `bot.ability.cognition.output`,
   before the handling stage's selections, so the body routes them first;
   the reflection gets the handling stage's selections only.
-- **Defer queue.** A deferring state appends the event (the body uses a
-  `<bot:stimulus>` envelope) to the `queue` data with
-  `queue.concat([...])`; the state that handles it takes `queue.shift()`
-  with an eventless `cond="queue.length &gt; 0"` transition, one per
-  return, in order. Nothing is replayed through `#_internal`, so a replayed
-  event has no `from` field to check.
+- **Deferral.** A deferring state holds the event with a targetless
+  transition whose content is `<event:defer/>` (and any `<log>`); the
+  state that handles it takes it by the same transition as on arrival, in
+  order, with its name, data and `invokeid` unchanged (D93). A state the
+  machine passes through on its way back (speaking's playing and
+  recording) defers it too, as mosfet's does. The routines keep their
+  `ticks` queue: its drain drops a tick whose routine left the running set
+  (mosfet `_drop_stale_tick`).
 - **Timers.** mosfet's operation machines (processing, attachment, hop and
   reply operations) are a `<send delay id>` in the owning state, a
   `<cancel>` on exit, and a sendid or turn cond. They have no document of

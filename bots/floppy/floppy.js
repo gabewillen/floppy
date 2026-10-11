@@ -96,21 +96,6 @@ function clearFocusEnabled() {
   return offering ? hasFocusedDevice() : routing_selections;
 }
 
-// unfocused, focused
-
-function hasQueuedStimulus() {
-  return queue.length > 0;
-}
-
-function queuedStimulus() {
-  return queue[0];
-}
-
-// queue without its first stimulus.
-function queueRest() {
-  return queue.slice(1);
-}
-
 // processing
 
 function nextTurn() {
@@ -148,15 +133,6 @@ function cognitionFailure(_event) {
 
 function turnJson() {
   return JSON.stringify({turn: turn});
-}
-
-// queue with the pending stimulus appended.
-function queueWithPending() {
-  return queue.concat([pending]);
-}
-
-function deferredCount() {
-  return String(queue.length);
 }
 
 // cancelling_processing

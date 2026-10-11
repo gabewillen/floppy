@@ -69,10 +69,10 @@
 
   Deferral (mosfet's defer): communication input, sounds and adopt events
   that arrive while recalling or adopting, and input and sounds that
-  arrive while recognizing, wait in the data model queue, in order;
-  entering knowing (or listening, after recognizing) puts them back on the
-  internal queue, where each is taken by the same transitions as on
-  arrival.
+  arrive while recognizing, are held by <event:defer/> (scxml.rs
+  namespaces/event) and come back, in order, once the configuration
+  changes, so knowing (or listening, after recognizing) takes each by the
+  same transitions as on arrival.
 
   Logs: identity.name (each name taken, recalled or adopted),
   identity.heard (whether a relayed text addressed the bot), and
@@ -114,9 +114,6 @@
     <data id="name_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
     <data id="recalled_name" expr="null"/>
     <data id="name_parameters" expr="[]"/>
-    <!-- Events deferred while recalling or adopting, as {event, data}. -->
-    <data id="queue" expr="[]"/>
-    <data id="deferred" expr="null"/>
   </datamodel>
   <script src="identity.js"/>
 
@@ -159,13 +156,13 @@
       </transition>
     </state>
     <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
-      <assign location="queue" expr="deferredQueue(_event)"/>
+      <event:defer/>
     </transition>
     <transition event="environment.sound" event:schema="schemas/environment.sound.json">
-      <assign location="queue" expr="deferredQueue(_event)"/>
+      <event:defer/>
     </transition>
     <transition event="bot.ability.identity.adopt" event:schema="schemas/bot.ability.identity.adopt.json">
-      <assign location="queue" expr="deferredQueue(_event)"/>
+      <event:defer/>
     </transition>
     <transition event="bot.ability.identity.recalled" event:schema="schemas/bot.ability.identity.recalled.json" target="knowing">
       <assign location="name" expr="recalledNameText(_event)"/>
@@ -188,14 +185,6 @@
         <param name="ability" expr="'identity'"/>
         <param name="choices" expr="offered"/>
       </send>
-      <!-- What waited, in order, back on the internal queue: each is
-           taken as if it arrived now, ahead of any later input. -->
-      <foreach array="queue" item="deferred">
-        <send eventexpr="deferred.event" target="#_internal">
-          <content expr="deferred.data"/>
-        </send>
-      </foreach>
-      <assign location="queue" expr="[]"/>
     </onentry>
     <!-- Offered for the whole time the ability is knowing: a bot can be
          given a name mid-sentence. -->
@@ -204,15 +193,6 @@
     </transition>
 
     <state id="listening">
-      <!-- What waited while recognizing, back on the internal queue. -->
-      <onentry>
-        <foreach array="queue" item="deferred">
-          <send eventexpr="deferred.event" target="#_internal">
-            <content expr="deferred.data"/>
-          </send>
-        </foreach>
-        <assign location="queue" expr="[]"/>
-      </onentry>
       <!-- A nameless bot hears words and nothing follows from them. -->
       <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json"
                   cond="canRecognize()" target="recognized">
@@ -228,10 +208,10 @@
     <state id="recognizing" initial="recognized">
       <!-- Input that arrives meanwhile waits (mosfet defers it). -->
       <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
-        <assign location="queue" expr="deferredQueue(_event)"/>
+        <event:defer/>
       </transition>
       <transition event="environment.sound" event:schema="schemas/environment.sound.json">
-        <assign location="queue" expr="deferredQueue(_event)"/>
+        <event:defer/>
       </transition>
 
       <!-- mosfet SpeechNameRecognizer: decode the sound, then look for
@@ -319,13 +299,13 @@
     </transition>
     <!-- After adopt.failed: the adopt descriptor also matches it. -->
     <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
-      <assign location="queue" expr="deferredQueue(_event)"/>
+      <event:defer/>
     </transition>
     <transition event="environment.sound" event:schema="schemas/environment.sound.json">
-      <assign location="queue" expr="deferredQueue(_event)"/>
+      <event:defer/>
     </transition>
     <transition event="bot.ability.identity.adopt" event:schema="schemas/bot.ability.identity.adopt.json">
-      <assign location="queue" expr="deferredQueue(_event)"/>
+      <event:defer/>
     </transition>
   </state>
 </scxml>

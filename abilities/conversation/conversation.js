@@ -13,21 +13,6 @@ function inputEnvelopeOf(data) {
   return {event: 'bot.ability.conversation.input', data: data};
 }
 
-// waiting and running: the defer queue.
-
-function hasQueuedInput() {
-  return queue.length > 0;
-}
-
-function remainingQueue() {
-  return queue.slice(1);
-}
-
-// The queue with an input and its parent envelope.
-function queuedWith(data, envelope) {
-  return queue.concat([{input: data, parent: envelope}]);
-}
-
 // Identities (mosfet identity/value.py)
 
 // Python's repr of a finite float: the shortest round-trip digits,

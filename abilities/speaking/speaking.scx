@@ -48,8 +48,9 @@
   and returns to idle. Timers are bot.ability.speaking.apply.failed
   {message} sends (mosfet's own failure event), taken only by the timer
   in hand (_event.sendid). Input
-  that arrives outside idle waits in the data model queue and is taken on
-  the return to idle (mosfet defers it).
+  that arrives outside idle is held by <event:defer/> (scxml.rs
+  namespaces/event; mosfet defers it in encoding, playing and recording)
+  and is taken, in order, on the return to idle.
 
   Contracts: the input's contract is schemas/bot.ability.speaking.input.json:
   a send whose data it rejects is never routed here and raises
@@ -78,7 +79,6 @@
     <data id="encoding_timeout_ms" expr="5000"/>
     <data id="recording_timeout_ms" expr="5000"/>
     <!-- The utterance in hand, its number, the encoded speech and timer. -->
-    <data id="queue" expr="[]"/>
     <data id="operation" expr="0"/>
     <data id="text" expr="null"/>
     <data id="encoded" expr="null"/>
@@ -95,10 +95,6 @@
         <param name="choices" expr="[]"/>
       </send>
     </onentry>
-    <transition cond="hasQueued()" target="encoding">
-      <assign location="text" expr="queuedText()"/>
-      <assign location="queue" expr="remainingQueue()"/>
-    </transition>
     <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json"
                 target="encoding">
       <assign location="text" expr="spokenText(_event.data.text)"/>
@@ -159,7 +155,7 @@
     </transition>
     <!-- Input that arrives meanwhile waits (mosfet defers it). -->
     <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
-      <assign location="queue" expr="deferredQueue(_event)"/>
+      <event:defer/>
       <log label="speaking.deferred" expr="_event.name"/>
     </transition>
   </state>
@@ -191,6 +187,11 @@
       <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="playoutFailure(_event)"/>
       </send>
+    </transition>
+    <!-- Input still waits (mosfet defers it here too); it was logged
+         when it arrived. -->
+    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
+      <event:defer/>
     </transition>
   </state>
 
@@ -227,6 +228,11 @@
       <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="recordingFailure(_event)"/>
       </send>
+    </transition>
+    <!-- Input still waits (mosfet defers it here too); it was logged
+         when it arrived. -->
+    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
+      <event:defer/>
     </transition>
   </state>
 </scxml>

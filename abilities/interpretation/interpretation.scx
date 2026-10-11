@@ -34,10 +34,10 @@
 
   Input: bot.ability.listening.sensitivity.output {sound, parent,
   perceived_level_db} (mosfet's sensitivity OutputData) from the
-  listening. Scored sounds that arrive while Working wait, in order, in
-  the data model queue and are taken by Idle and HearingSpeech (mosfet
-  defers them): interpretation is serial, and the score was taken on
-  arrival.
+  listening. Scored sounds that arrive while Working are held by
+  <event:defer/> (scxml.rs namespaces/event) and taken, in order, by Idle
+  and HearingSpeech (mosfet defers them): interpretation is serial, and
+  the score was taken on arrival.
 
   Stages, each a child invoked from its state (leaving the state cancels
   it, SCXML 6.4) and bounded by its own stage timer:
@@ -129,7 +129,6 @@
     <data id="diarizer" expr="false"/>
     <data id="voice_classifier" expr="false"/>
     <!-- Scored sounds waiting for the interpretation. -->
-    <data id="queue" expr="[]"/>
     <!-- The scored sound in hand, its stage, its directory, and a counter
          naming the files written for it. -->
     <data id="sensed" expr="null"/>
@@ -174,8 +173,8 @@
       </send>
     </onentry>
 
-    <!-- Scored sounds queue here, one at a time; the open speech is clear
-         whenever the interpretation is idle. -->
+    <!-- Scored sounds are taken here, one at a time; the open speech is
+         clear whenever the interpretation is idle. -->
     <state id="Idle">
       <onentry>
         <assign location="open_frames" expr="[]"/>
@@ -185,20 +184,16 @@
         <assign location="utterance" expr="null"/>
         <assign location="stage" expr="null"/>
       </onentry>
-      <transition cond="hasQueuedSound()" target="DetectingVoice">
-        <assign location="sensed" expr="queuedSound()"/>
-        <assign location="queue" expr="queueRest()"/>
-      </transition>
       <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json" target="DetectingVoice">
         <assign location="sensed" expr="_event.data"/>
       </transition>
     </state>
 
-    <!-- One busy region: the queue and the stage failure policy live
+    <!-- One busy region: the deferral and the stage failure policy live
          once, not on every stage. -->
     <state id="Working" initial="DetectingVoice">
       <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json">
-        <assign location="queue" expr="queueWithSound(_event)"/>
+        <event:defer/>
       </transition>
       <transition event="bot.ability.listening.stage.failed" event:schema="schemas/bot.ability.listening.stage.failed.json"
                   cond="isCurrentStageFailure(_event)" target="Idle">
@@ -286,10 +281,6 @@
             </send>
           </if>
         </onentry>
-        <transition cond="hasQueuedSound()" target="FeedingSpeech">
-          <assign location="sensed" expr="queuedSound()"/>
-          <assign location="queue" expr="queueRest()"/>
-        </transition>
         <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json" target="FeedingSpeech">
           <assign location="sensed" expr="_event.data"/>
         </transition>

@@ -53,9 +53,10 @@
   (stage_timeout_ms); leaving DecodingImage cancels the model call (SCXML
   6.4).
 
-  Defer queue (mosfet defers the input while Focused): an input arriving
-  while Focused is appended to queue, and Unfocused takes the oldest one
-  as it is entered.
+  Deferral (mosfet defers the input while Focused): an input arriving
+  while Focused is held by <event:defer/> (scxml.rs namespaces/event) and
+  comes back, in order, once Focused is exited, so Unfocused takes it as
+  on arrival.
 
   Media by reference: an image input's content is a reference (a URI
   reference) to the image file in the media directory the run grants the
@@ -94,7 +95,6 @@
     <data id="candidate" expr="null"/>
     <data id="stage_timer" expr="null"/>
     <data id="gen_id" expr="null"/>
-    <data id="queue" expr="[]"/>
   </datamodel>
   <script src="reading.js"/>
 
@@ -102,11 +102,6 @@
     <invoke id="vision" type="scxml" src="../vision/vision.scx"/>
 
     <state id="Unfocused">
-      <!-- An input that waited while Focused, oldest first. -->
-      <transition cond="hasDeferredInput()" target="Focused">
-        <assign location="input" expr="queue.shift()"/>
-        <log label="reading.focused" expr="input.kind"/>
-      </transition>
       <transition event="bot.ability.reading.input" event:schema="schemas/bot.ability.reading.input.json"
                   target="Focused">
         <assign location="input" expr="_event.data"/>
@@ -116,7 +111,7 @@
 
     <state id="Focused" initial="Classifying">
       <transition event="bot.ability.reading.input" event:schema="schemas/bot.ability.reading.input.json">
-        <assign location="queue" expr="deferredQueue(_event)"/>
+        <event:defer/>
       </transition>
       <transition event="bot.ability.reading.stage.failed" event:schema="schemas/bot.ability.reading.stage.failed.json"
                   target="Unfocused">

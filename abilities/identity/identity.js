@@ -8,11 +8,6 @@ function hasNoDatabase() {
   return database === null;
 }
 
-// The queue with the event appended, as {event, data}.
-function deferredQueue(_event) {
-  return queue.concat([{event: _event.name, data: _event.data}]);
-}
-
 // recalling
 
 // The name the session started with, as a fact, or null.

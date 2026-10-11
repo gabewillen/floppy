@@ -27,9 +27,9 @@
   bot.ability.listening.sensitivity.failed {stage: "sensitivity",
   message: "Listening sensitivity timed out."} sent to this session with
   that delay, answers the body with bot.ability.listening.failed. Sounds
-  that arrive outside Listening wait, in order, in the data model queue
-  (mosfet defers them): scoring is the only stop between the ear and the
-  prediction.
+  that arrive outside Listening are held by <event:defer/> (scxml.rs
+  namespaces/event) and taken by Listening, in order (mosfet defers them):
+  scoring is the only stop between the ear and the prediction.
 
   Products: the interpretation's bot.ability.listening.speech.output
   (mosfet's SpeechData: decoded speech, diarized or identified voice
@@ -68,7 +68,6 @@
     <data id="sensitivity_timeout_ms" expr="30000"/>
     <data id="children" expr="['sensitivity', 'interpretation']"/>
     <data id="ready" expr="({})"/>
-    <data id="queue" expr="[]"/>
     <!-- The sound being scored. -->
     <data id="sound" expr="null"/>
     <!-- A product's stimulus envelope, for the handoff. -->
@@ -99,7 +98,7 @@
         <log label="listening.degraded" expr="childCouldNotStartLog(_event)"/>
       </transition>
       <transition event="environment.sound" event:schema="schemas/environment.sound.json">
-        <assign location="queue" expr="queueWithSound(_event, queue)"/>
+        <event:defer/>
       </transition>
     </state>
 
@@ -137,10 +136,6 @@
       </transition>
 
       <state id="Listening">
-        <transition cond="hasQueuedSound(queue)" target="Sensing">
-          <assign location="sound" expr="queuedSound(queue)"/>
-          <assign location="queue" expr="queueRest(queue)"/>
-        </transition>
         <transition event="environment.sound" event:schema="schemas/environment.sound.json" target="Sensing">
           <assign location="sound" expr="_event.data"/>
         </transition>
@@ -160,7 +155,7 @@
           <cancel sendid="sensing-timer"/>
         </onexit>
         <transition event="environment.sound" event:schema="schemas/environment.sound.json">
-          <assign location="queue" expr="queueWithSound(_event, queue)"/>
+          <event:defer/>
         </transition>
         <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json" target="Listening">
           <send event="bot.ability.listening.sensitivity.output" target="#_interpretation">

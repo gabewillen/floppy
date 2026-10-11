@@ -83,8 +83,9 @@
   else the input's content. The committed provenance's turn_ref is the
   first turn's and its session_ref the relationship's; audio/* content is
   dropped (media never enters the model-facing history). Input that
-  arrives while one is in hand waits in the data model queue, in order,
-  and is taken on the return to waiting (mosfet defers it).
+  arrives while one is in hand is held by <event:defer/> (scxml.rs
+  namespaces/event) and is taken, in order, on the return to waiting
+  (mosfet defers it).
 
   Appends: outbound messages only, committed with the next sequence and
   provenance event bot.ability.conversation.append. An append is already
@@ -140,7 +141,6 @@
     <data id="turn_product" expr="null"/>
     <!-- Input that arrived while one was in hand ({input, parent}), in
          order. -->
-    <data id="queue" expr="[]"/>
     <data id="history" expr="[]"/>
     <!-- Relationships (mosfet _RelationshipProfile), in the order they
          began: {session_ref, context_ref, source_ids, target_ids,
@@ -196,12 +196,6 @@
 
     <state id="active" initial="waiting">
       <state id="waiting">
-        <!-- What waited, in order. -->
-        <transition cond="hasQueuedInput()" target="running">
-          <assign location="input" expr="queue[0].input"/>
-          <assign location="parent" expr="queue[0].parent"/>
-          <assign location="queue" expr="remainingQueue()"/>
-        </transition>
         <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json"
                     target="running">
           <assign location="input" expr="_event.data.parent.data"/>
@@ -234,11 +228,11 @@
         </onentry>
         <!-- Input that arrives meanwhile waits (mosfet defers it). -->
         <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json">
-          <assign location="queue" expr="queuedWith(_event.data.parent.data, _event.data.parent)"/>
+          <event:defer/>
           <log label="conversation.deferred" expr="_event.name"/>
         </transition>
         <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json">
-          <assign location="queue" expr="queuedWith(_event.data, inputEnvelopeOf(_event.data))"/>
+          <event:defer/>
           <log label="conversation.deferred" expr="_event.name"/>
         </transition>
         <!-- Recall the relationship's memories, before the turns. -->

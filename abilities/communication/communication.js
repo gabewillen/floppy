@@ -48,11 +48,6 @@ function routedParent(_event) {
   return {event: _event.name, data: _event.data};
 }
 
-// The queue with the event appended, as {event, data}.
-function deferredQueue(_event) {
-  return queue.concat([{event: _event.name, data: _event.data}]);
-}
-
 // active
 
 function hasRespond(_event) {

@@ -28,27 +28,6 @@ function childCouldNotStartLog(_event) {
   return 'a child could not start (' + _event.name + ')';
 }
 
-// The queue with the sound of _event last.
-function queueWithSound(_event, queue) {
-  return queue.concat([_event.data]);
-}
-
-// Listening
-
-function hasQueuedSound(queue) {
-  return queue.length > 0;
-}
-
-// The oldest waiting sound.
-function queuedSound(queue) {
-  return queue[0];
-}
-
-// The queue without its oldest sound.
-function queueRest(queue) {
-  return queue.slice(1);
-}
-
 // Sensing
 
 function scoreRequest(sound) {

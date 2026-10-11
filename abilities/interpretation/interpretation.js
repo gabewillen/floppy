@@ -25,19 +25,6 @@ function isAudible(scored) {
   return scored.perceived_level_db == null || scored.perceived_level_db >= product_threshold_db;
 }
 
-function hasQueuedSound() {
-  return queue.length > 0;
-}
-
-function queuedSound() {
-  return queue[0];
-}
-
-// queue without its first scored sound.
-function queueRest() {
-  return queue.slice(1);
-}
-
 function stageDelay() {
   return stage_timeout_ms + 'ms';
 }
@@ -103,10 +90,6 @@ function refusesIdentificationWithDecoding() {
 }
 
 // Working
-
-function queueWithSound(_event) {
-  return queue.concat([_event.data]);
-}
 
 // The current stage's failure.
 function isCurrentStageFailure(_event) {

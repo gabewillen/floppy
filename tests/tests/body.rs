@@ -427,8 +427,8 @@ fn inputs_during_a_turn_wait_and_run_in_order() {
             ]
         ),
         pairs(&[
-            ("floppy.deferred", "1"),
-            ("floppy.deferred", "2"),
+            ("floppy.deferred", "bot.input"),
+            ("floppy.deferred", "bot.input"),
             ("bot.processing.timed_out", r#"{"turn":1}"#),
             (
                 "bot.processing.failed",

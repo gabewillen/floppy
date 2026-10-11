@@ -73,9 +73,9 @@
   bounded by processing_timeout_ms clamped to 100..5000 ms (mosfet's
   cancel wait): the acknowledgement
   fails the turn (bot.processing.failed); no acknowledgement degrades the
-  bot. Stimuli that arrive during a turn wait, as <bot:stimulus>
-  envelopes, in the data model queue (in order) and start the next turns, one per return to unfocused or focused,
-  before any later event.
+  bot. Stimuli that arrive during a turn are held by <event:defer/>
+  (scxml.rs namespaces/event) and start the next turns, in order, one per
+  return to unfocused or focused, before any later event.
 
   Choices (mosfet's per-turn dispatch inventory, assembled by decision
   namespace elements): on processing entry the body reads its own choices
@@ -196,8 +196,6 @@
     <data id="stimulus" expr="null"/>
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
-    <data id="queue" expr="[]"/>
-    <data id="pending" expr="null"/>
     <!-- The turn's choices, its output, the selections dispatched, and
          why they were rejected (null when placed). -->
     <data id="offering" expr="false"/>
@@ -229,7 +227,6 @@
       <assign location="waiting" expr="expectedAbilities()"/>
     </onentry>
     <onexit>
-      <assign location="queue" expr="[]"/>
       <!-- mosfet _clear_focus on every reboot and deactivate. -->
       <assign location="focused_device" expr="null"/>
     </onexit>
@@ -374,10 +371,6 @@
         <onentry>
           <assign location="focused_device" expr="null"/>
         </onentry>
-        <transition cond="hasQueuedStimulus()" target="processing">
-          <assign location="stimulus" expr="queuedStimulus()"/>
-          <assign location="queue" expr="queueRest()"/>
-        </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
@@ -387,10 +380,6 @@
       </state>
 
       <state id="focused">
-        <transition cond="hasQueuedStimulus()" target="processing">
-          <assign location="stimulus" expr="queuedStimulus()"/>
-          <assign location="queue" expr="queueRest()"/>
-        </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json" target="processing">
           <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
         </transition>
@@ -447,14 +436,12 @@
           </send>
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json">
-          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
-          <assign location="queue" expr="queueWithPending()"/>
-          <log label="floppy.deferred" expr="deferredCount()"/>
+          <event:defer/>
+          <log label="floppy.deferred" expr="_event.name"/>
         </transition>
         <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json">
-          <assign location="pending" expr="_event.data.stimulus"/>
-          <assign location="queue" expr="queueWithPending()"/>
-          <log label="floppy.deferred" expr="deferredCount()"/>
+          <event:defer/>
+          <log label="floppy.deferred" expr="_event.name"/>
         </transition>
       </state>
 
@@ -485,14 +472,12 @@
           <assign location="degraded_reason" expr="cancelUnacknowledgedReason()"/>
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json">
-          <bot:stimulus location="pending" event="_event.name" data="_event.data" source="_event.invokeid"/>
-          <assign location="queue" expr="queueWithPending()"/>
-          <log label="floppy.deferred" expr="deferredCount()"/>
+          <event:defer/>
+          <log label="floppy.deferred" expr="_event.name"/>
         </transition>
         <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json">
-          <assign location="pending" expr="_event.data.stimulus"/>
-          <assign location="queue" expr="queueWithPending()"/>
-          <log label="floppy.deferred" expr="deferredCount()"/>
+          <event:defer/>
+          <log label="floppy.deferred" expr="_event.name"/>
         </transition>
       </state>
 

@@ -41,9 +41,10 @@
   body as bot.ability.speaking.output. A speaking failure
   (bot.ability.failed) or the hop timeout answers the body with
   bot.ability.communication.failed {message}. Input that arrives outside
-  active, and responses that arrive while one is in hand, wait in the data
-  model queue, in order, and go back on the internal queue on the return
-  to active, where they are taken as on arrival (mosfet defers them); a response in inactive is not taken (mosfet's inactive has
+  active, and responses that arrive while one is in hand, are held by
+  <event:defer/> (scxml.rs namespaces/event) and come back, in order, on
+  the return to active, where they are taken as on arrival (mosfet defers
+  them); a response in inactive is not taken (mosfet's inactive has
   no transition for it).
 
   Speaking's routes: speaking records the words it said as an outbound
@@ -86,8 +87,6 @@
          no memory). -->
     <data id="database" expr="null"/>
     <data id="ready" expr="({})"/>
-    <data id="queue" expr="[]"/>
-    <data id="deferred" expr="null"/>
     <!-- The response in hand: its number, words and hop timer. -->
     <data id="operation" expr="0"/>
     <data id="response" expr="null"/>
@@ -178,7 +177,7 @@
         <assign location="failure" expr="childStartFailure(_event)"/>
       </transition>
       <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
-        <assign location="queue" expr="deferredQueue(_event)"/>
+        <event:defer/>
         <log label="communication.deferred" expr="_event.name"/>
       </transition>
       <transition event="bot.ability.communication.activate" event:schema="schemas/bot.ability.communication.activate.json">
@@ -201,15 +200,6 @@
           <param name="ability" expr="'communication'"/>
           <param name="choices" expr="offered"/>
         </send>
-        <!-- What waited, in order, taken as on arrival (mosfet
-             re-dispatches a deferred event through the same guards): each
-             goes back on the internal queue, ahead of any later input. -->
-        <foreach array="queue" item="deferred">
-          <send eventexpr="deferred.event" target="#_internal">
-            <content expr="deferred.data"/>
-          </send>
-        </foreach>
-        <assign location="queue" expr="[]"/>
       </onentry>
       <transition event="bot.ability.communication.respond" event:schema="schemas/bot.ability.communication.respond.json"
                   cond="hasRespond(_event)" target="preparing_response">
@@ -274,7 +264,7 @@
         </send>
       </transition>
       <transition event="bot.ability.communication.input bot.ability.communication.respond">
-        <assign location="queue" expr="deferredQueue(_event)"/>
+        <event:defer/>
         <log label="communication.deferred" expr="_event.name"/>
       </transition>
     </state>
