@@ -64,8 +64,9 @@ floppy-block>.mouth{margin-left:16px;min-height:30px;position:relative;transitio
 floppy-block>.mouth.empty{min-height:12px}
 floppy-block.sel>.mouth.empty,floppy-block[data-state="offering"]>.mouth.empty{min-height:30px}
 floppy-canvas[data-fam="square"] .mouth[data-fam="square"],floppy-canvas[data-fam="trap"] .mouth[data-fam="trap"],floppy-canvas[data-fam="round"] .mouth[data-fam="round"],floppy-canvas[data-fam="tri"] .mouth[data-fam="tri"],floppy-canvas[data-fam="double"] .mouth[data-fam="double"],floppy-canvas[data-fam="wave"] .mouth[data-fam="wave"]{min-height:30px;background:#123f3a;outline:1.5px dashed var(--ok);outline-offset:-1px}
-floppy-block>.ft{height:14px}
+floppy-block>.ft{height:22px}
 floppy-block.sel>.hd{outline:1px dashed var(--ink);outline-offset:-3px}
+floppy-block.active{z-index:2}
 floppy-block>svg.hl{position:absolute;left:0;top:0;z-index:3;overflow:visible;pointer-events:none}
 floppy-block>svg.hl path{stroke:var(--led)}
 floppy-block[data-state="lifted"]{opacity:.4}
@@ -367,16 +368,16 @@ function shapeBlock(b) {
   if (!W) return; /* hidden: shaped again when its space is shown */
   const hd = b.querySelector(":scope>.hd"), mouth = b.querySelector(":scope>.mouth");
   const own = FAM.family.get(b.tag)?.shape, hat = b.tag === "scxml" || !own;
-  let d = `M0,${R}Q0,0 ${R},0`;
-  if (!hat) d += `L${NX},0` + seg(own, NX, 0, false);
-  d += `L${W - R},0Q${W},0 ${W},${R}`;
+  let top = `M0,${R}Q0,0 ${R},0`, cut = "", bottom = `L${W},${H - R}Q${W},${H} ${W - R},${H}`;
+  if (!hat) top += `L${NX},0` + seg(own, NX, 0, false);
+  top += `L${W - R},0Q${W},0 ${W},${R}`;
   if (mouth) {
     const y0 = hd.offsetHeight, y1 = y0 + mouth.offsetHeight, mx = mouth.offsetLeft, ms = FAM.mouth.get(b.tag).shape;
-    d += `L${W},${y0}L${mx + NX + NW},${y0}` + seg(ms, mx + NX, y0, true) + `L${mx + 3},${y0}Q${mx},${y0} ${mx},${y0 + 3}L${mx},${y1 - 3}Q${mx},${y1} ${mx + 3},${y1}L${W},${y1}`;
+    cut = `L${W},${y0}L${mx + NX + NW},${y0}` + seg(ms, mx + NX, y0, true) + `L${mx + 3},${y0}Q${mx},${y0} ${mx},${y0 + 3}L${mx},${y1 - 3}Q${mx},${y1} ${mx + 3},${y1}L${W},${y1}`;
   }
-  d += `L${W},${H - R}Q${W},${H} ${W - R},${H}`;
-  if (!hat) d += `L${NX + NW},${H}` + seg(own, NX, H, true);
-  d += `L${R},${H}Q0,${H} 0,${H - R}Z`;
+  if (!hat) bottom += `L${NX + NW},${H}` + seg(own, NX, H, true);
+  bottom += `L${R},${H}Q0,${H} 0,${H - R}Z`;
+  const d = top + cut + bottom, outer = top + bottom;
   let svg = b.querySelector(":scope>svg.shape");
   if (!svg) { svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("class", "shape"); svg.innerHTML = '<path stroke-width="2" stroke-linejoin="round"/>'; b.prepend(svg); }
   svg.setAttribute("width", W); svg.setAttribute("height", H + D + 2);
@@ -385,7 +386,7 @@ function shapeBlock(b) {
   let hl = b.querySelector(":scope>svg.hl");
   if (b.classList.contains("active")) {
     if (!hl) { hl = document.createElementNS("http://www.w3.org/2000/svg", "svg"); hl.setAttribute("class", "hl"); hl.setAttribute("aria-hidden", "true"); hl.innerHTML = '<path fill="none" stroke-width="3" stroke-linejoin="round"/>'; b.append(hl); }
-    hl.setAttribute("width", W); hl.setAttribute("height", H + D + 2); hl.firstChild.setAttribute("d", d);
+    hl.setAttribute("width", W); hl.setAttribute("height", H + D + 2); hl.firstChild.setAttribute("d", outer); /* the silhouette only, not the mouth the children sit in */
   } else hl?.remove();
 }
 function shapeAll(root) { root.querySelectorAll("floppy-block").forEach(shapeBlock); }
