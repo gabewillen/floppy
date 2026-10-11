@@ -111,12 +111,16 @@ Executable product semantics are Wasm components:
   (`https://github.com/stateforward/scxml.rs/namespaces/env`, unversioned and
   never fetched), documented with a schema for tools; not a package (see
   [namespaces/env/README.md](../namespaces/env/README.md));
-- `namespaces/event`: the host's `event` attribute vocabulary
+- `namespaces/event`: the host's `event` vocabulary
   (`https://github.com/stateforward/scxml.rs/namespaces/event`, unversioned
   and never fetched): `event:schema` (a JSON Schema, inline or from a file
   relative to the document, with an optional JSON Pointer) or
   `event:schemaexpr` on `<transition>`, `<send>`, `<raise>`, and
-  `<donedata>`, describing the event data each handles or creates. The pure
+  `<donedata>`, describing the event data each handles or creates, and
+  `<event:defer/>`, which the engine executes itself (Machine IR `defer`):
+  it holds a transition's event until the transition's source state is
+  exited or a state inside it that handles the event is entered, then
+  queues it on the internal queue again. The pure
   `scxml-event-schema` crate (behind the validator and compiler, with the
   `boon` crate's metaschema checks and compilation, with a URL loader that
   refuses every URL) resolves each
@@ -455,7 +459,7 @@ field and the exact supported constant, but never echo the supplied value.
 
 ### Event data schemas
 
-The validator checks the `event` attribute vocabulary
+The validator checks the `event` vocabulary
 ([namespaces/event](../namespaces/event/README.md), `EVENT001`-`EVENT008`)
 from the document and the bytes of the schema files it references, which the
 caller supplies (`Validator::with_event_schema_resources`,

@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  XML Schema of the host's `event` attribute vocabulary (namespaces/event).
+  XML Schema of the host's `event` vocabulary (namespaces/event).
 
-  The namespace has no elements: it is an attribute vocabulary only, never
-  fetched, with no component and no release asset. `<transition>`, `<send>`,
+  The namespace is never fetched, with no component and no release asset.
+  `<event:defer/>`, its one element, is executable content of a
+  `<transition>` with an `event` attribute that holds the event the
+  transition handles until the transition's state is exited or a state
+  inside it that handles the event is entered (README.md, "Deferred
+  events"). `<transition>`, `<send>`,
   `<raise>`, and `<donedata>` describe the event data they handle or create
   with
 
@@ -39,4 +43,12 @@
     whose value is the schema.
   -->
   <xs:attribute name="schemaexpr" type="xs:string"/>
+  <!--
+    `<event:defer/>`: hold the event the enclosing transition handles. No
+    attributes and no content; the validator checks where it is
+    (EVENT001).
+  -->
+  <xs:element name="defer">
+    <xs:complexType/>
+  </xs:element>
 </xs:schema>

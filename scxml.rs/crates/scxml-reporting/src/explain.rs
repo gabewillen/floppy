@@ -832,9 +832,9 @@ pub const CODES: &[CodeDoc] = &[
         spec: "SCXML 1.0 §6.4 <invoke>", url: "https://www.w3.org/TR/scxml/#invoke",
     ),
     doc!(
-        "EVENT001", "error", "semantic", "the `event` namespace is used outside the attributes of an element with event data",
-        why: "`https://github.com/stateforward/scxml.rs/namespaces/event` is the host's attribute vocabulary for describing event data: `event:schema` and `event:schemaexpr` on `<transition>` (the `_event.data` it handles), `<send>` and `<raise>` (the data their event is created with), and `<donedata>` (the data of the `done.state.<id>` event). It has no elements, no other attributes, and means nothing on any other element. The W3C schema admits attributes in other namespaces laxly, so only this rule catches a misplaced or misspelled one",
-        help: "move the attribute to the element whose event data it describes, correct its name, or remove it",
+        "EVENT001", "error", "semantic", "the `event` namespace is used outside the attributes of an element with event data or a transition's `<event:defer/>`",
+        why: "`https://github.com/stateforward/scxml.rs/namespaces/event` is the host's vocabulary for events: `event:schema` and `event:schemaexpr` on `<transition>` (the `_event.data` it handles), `<send>` and `<raise>` (the data their event is created with), and `<donedata>` (the data of the `done.state.<id>` event), and the empty `<event:defer/>` in the content of a `<transition>` with an `event` attribute (it holds the event the transition handles). It has no other elements or attributes, and they mean nothing anywhere else. The W3C schema admits attributes and elements in other namespaces laxly, so only this rule catches a misplaced or misspelled one",
+        help: "move the attribute to the element whose event data it describes, or `<event:defer/>` into the transition whose event it holds, correct the name, or remove it",
         bad: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" xmlns:event=\"https://github.com/stateforward/scxml.rs/namespaces/event\" version=\"1.0\" initial=\"s\"><state id=\"s\"><onentry event:schema=\"true\"/></state><final id=\"f\"/></scxml>",
         fixed: "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" xmlns:event=\"https://github.com/stateforward/scxml.rs/namespaces/event\" version=\"1.0\" initial=\"s\"><state id=\"s\"><transition event=\"go\" target=\"f\" event:schema=\"true\"/></state><final id=\"f\"/></scxml>",
         checked: true,

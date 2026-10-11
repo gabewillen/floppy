@@ -734,6 +734,9 @@ impl<'r> Builder<'r> {
         // Consume this element's document-order ordinal so later ordinals
         // stay aligned with source order; the element records none itself.
         self.order()?;
+        if element.name.namespace_uri.as_deref() == Some(EVENT_NAMESPACE_URI) {
+            return lower_event_action(element);
+        }
         if element.name.namespace_uri.as_deref() != Some(SCXML_NAMESPACE) {
             if element.name.namespace_uri.is_none() {
                 return Err(LowerError::UnsupportedElement(crate::safe_value(
@@ -1579,6 +1582,27 @@ fn is_foreign(element: &Element) -> bool {
         .namespace_uri
         .as_deref()
         .is_some_and(|namespace| namespace != SCXML_NAMESPACE)
+}
+
+/// The `event` vocabulary's one element, `<event:defer/>`: no attributes
+/// and no content (`namespaces/event`, "Deferred events").
+fn lower_event_action(element: &Element) -> Result<ExecutableContentIr, LowerError> {
+    if element.name.local_name != "defer" {
+        return Err(LowerError::UnsupportedElement(crate::safe_value(
+            &element.lexical_name,
+        )));
+    }
+    if !element.attributes.is_empty()
+        || element.children.iter().any(|node| match node {
+            Node::Text(text) => !scxml_syntax::is_xml_blank(&text.value),
+            Node::Element(_) => true,
+        })
+    {
+        return Err(LowerError::InvalidStructure(
+            "defer has no attributes and no content",
+        ));
+    }
+    Ok(ExecutableContentIr::Defer)
 }
 
 fn require_no_content(element: &Element) -> Result<(), LowerError> {

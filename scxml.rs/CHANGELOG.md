@@ -546,6 +546,21 @@ hard cutover.
   `scxml.host-wasmtime.session-snapshot` span. The browser host offers no
   executable-content snapshot (its `extension-snapshot-request` is always
   false).
+- `<event:defer/>`, the `event` vocabulary's one element
+  ([namespaces/event](namespaces/event/README.md#deferred-events)):
+  executable content of a `<transition>` with an `event` attribute that
+  holds the event the transition handles while the transition's source
+  state is active. The first later step whose configuration no longer
+  holds that state, or that enters a state inside it with a transition
+  matching the event, releases it, queued unchanged, oldest first, at the
+  back of the internal queue once the step completes; a microstep holds its
+  event once however many of its transitions defer it, and a finished
+  session discards its held events.
+  Machine IR gains the action kind `defer` (`ExecutableContentIr::Defer`,
+  decoded only in the content of a transition with an event descriptor),
+  the engine `Effect::Defer` and `Engine::defer` (the event and the
+  effect's block). `EVENT001` now admits it
+  there and rejects it anywhere else, or with attributes or content.
 - The host's `event` attribute vocabulary
   (`https://github.com/stateforward/scxml.rs/namespaces/event`, unversioned
   and never fetched; [namespaces/event](namespaces/event/README.md)):
@@ -1391,6 +1406,9 @@ hard cutover.
   children, and documents the browser host compiles, get none (inline
   schemas and `event:schemaexpr` only). A session snapshot never evaluates `event:schemaexpr`, and lists
   schemas on transitions only.
+- A session snapshot does not list the events `<event:defer/>` holds, and
+  the `event` vocabulary's implementation report plan does not test
+  `<event:defer/>` (the engine's and validator's tests do).
 - See "Known limitations (pending)" in docs/spec-errata.md: the ECMAScript
   engine gaps (run-time `<log>` side effects, reflective deletion of a
   system variable), a BasicHTTP location no external entity can use

@@ -247,9 +247,15 @@ fn table() -> Vec<Entry> {
         ),
         partly(
             "UnsupportedElement",
-            13,
+            14,
             vec![
                 (state(r#"<note xmlns=""/>"#), "XSD-"),
+                (
+                    state(&format!(
+                        r#"<transition xmlns:event="{EVENT}" event="e"><event:hold/></transition>"#
+                    )),
+                    "EVENT001",
+                ),
                 (state(r#"<raise event="e"/>"#), "XSD-cvc-complex-type.2.4"),
                 (
                     state(r#"<state id="i"><initial><final id="g"/></initial><state id="a"/></state>"#),
@@ -498,6 +504,40 @@ fn table() -> Vec<Entry> {
                         r#"<transition xmlns:event="{EVENT}" event="e" event:schema='{{"type":}}'/>"#
                     )),
                     "EVENT003",
+                ),
+            ],
+        ),
+        covered(
+            "defer has no attributes and no content",
+            1,
+            vec![
+                (
+                    state(&format!(
+                        r#"<transition xmlns:event="{EVENT}" event="e"><event:defer>x</event:defer></transition>"#
+                    )),
+                    "EVENT001",
+                ),
+                (
+                    state(&format!(
+                        r#"<transition xmlns:event="{EVENT}" event="e"><event:defer event:schema="true"/></transition>"#
+                    )),
+                    "EVENT001",
+                ),
+            ],
+        ),
+        covered(
+            "defer is only transition content of a transition with an event",
+            1,
+            vec![
+                (
+                    action(&format!(r#"<event:defer xmlns:event="{EVENT}"/>"#)),
+                    "EVENT001",
+                ),
+                (
+                    state(&format!(
+                        r#"<transition xmlns:event="{EVENT}" target="f"><event:defer/></transition>"#
+                    )),
+                    "EVENT001",
                 ),
             ],
         ),

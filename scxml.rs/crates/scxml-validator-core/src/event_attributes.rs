@@ -8,9 +8,12 @@
 //! W3C schema admits attributes in other namespaces laxly, so these rules
 //! check them:
 //!
-//! * `EVENT001`: an element in the `event` namespace (it has none), an
-//!   `event` attribute on any other element, or an attribute name the
-//!   vocabulary does not define.
+//! * `EVENT001`: an element in the `event` namespace other than
+//!   `<event:defer/>` in the executable content of a `<transition>` with an
+//!   `event` attribute (directly or inside its `<if>` and `<foreach>`), a
+//!   `<event:defer>` with attributes or content, an `event` attribute on
+//!   any other element, or an attribute name the vocabulary does not
+//!   define.
 //! * `EVENT002`: one element carries both `event:schema` and
 //!   `event:schemaexpr`.
 //! * `EVENT003`: the schema is not UTF-8 JSON.
@@ -38,12 +41,14 @@ use scxml_event_schema::{
     ReferenceReason, Resources, SCHEMA_ATTRIBUTE, SCHEMA_EXPR_ATTRIBUTE, SchemaError, Source,
 };
 use scxml_reporting::Applicability;
-use scxml_syntax::{Attribute, Document, Element, Span};
+use scxml_syntax::{Attribute, Document, Element, Node, Span};
 use scxml_types::EVENT_NAMESPACE_URI;
 
 use crate::spans::attribute_removal_span;
 use crate::{Diagnostic, DiagnosticCategory, Fix, Label, SCXML_NAMESPACE};
 
+/// The vocabulary's one element: hold the event a transition handles.
+const DEFER_ELEMENT: &str = "defer";
 /// The elements an `event` attribute may be on, as written in messages.
 const OWNERS: &str = "`<transition>`, `<send>`, `<raise>`, or `<donedata>`";
 const JSON_SPEC: &str = "RFC 8259 The JavaScript Object Notation (JSON) Data Interchange Format";
@@ -57,9 +62,29 @@ const VALIDATION_SPEC: &str = "JSON Schema 2020-12 Validation";
 #[must_use]
 pub fn event_attribute_diagnostics(document: &Document, resources: &Resources) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
+    let mut deferrals = Vec::new();
+    document.root.visit(&mut |element| {
+        if is_scxml(element, "transition") && element.attribute("event").is_some() {
+            collect_deferrals(element, &mut deferrals);
+        }
+    });
     document.root.visit(&mut |element| {
         if element.name.namespace_uri.as_deref() == Some(EVENT_NAMESPACE_URI) {
-            diagnostics.push(event_element(element));
+            if element.name.local_name != DEFER_ELEMENT {
+                diagnostics.push(event_element(element));
+            } else if !deferrals
+                .iter()
+                .any(|deferral| std::ptr::eq(*deferral, element))
+            {
+                diagnostics.push(misplaced_defer(element));
+            } else if !element.attributes.is_empty()
+                || element.children.iter().any(|node| match node {
+                    Node::Text(text) => !scxml_syntax::is_xml_blank(&text.value),
+                    Node::Element(_) => true,
+                })
+            {
+                diagnostics.push(defer_content(element));
+            }
             return;
         }
         let attributes: Vec<&Attribute> = element
@@ -97,6 +122,29 @@ pub fn event_attribute_diagnostics(document: &Document, resources: &Resources) -
     diagnostics
 }
 
+fn is_scxml(element: &Element, local_name: &str) -> bool {
+    element.name.namespace_uri.as_deref() == Some(SCXML_NAMESPACE)
+        && element.name.local_name == local_name
+}
+
+/// The `<event:defer>` elements of one transition's executable content:
+/// its own children and those of its `<if>` and `<foreach>` blocks, at any
+/// depth.
+fn collect_deferrals<'a>(element: &'a Element, deferrals: &mut Vec<&'a Element>) {
+    for node in &element.children {
+        let Node::Element(child) = node else {
+            continue;
+        };
+        if child.name.namespace_uri.as_deref() == Some(EVENT_NAMESPACE_URI)
+            && child.name.local_name == DEFER_ELEMENT
+        {
+            deferrals.push(child);
+        } else if is_scxml(child, "if") || is_scxml(child, "foreach") {
+            collect_deferrals(child, deferrals);
+        }
+    }
+}
+
 /// Whether `element` is an SCXML element that may carry the attributes.
 fn is_owner(element: &Element) -> bool {
     element.name.namespace_uri.as_deref() == Some(SCXML_NAMESPACE)
@@ -107,7 +155,7 @@ fn event_element(element: &Element) -> Diagnostic {
     Diagnostic::error(
         "EVENT001",
         format!(
-            "`<{}>` is an element in the `event` namespace, which has none",
+            "`<{}>` is not an element of the `event` vocabulary",
             element.lexical_name
         ),
         element.start_tag_span,
@@ -115,9 +163,41 @@ fn event_element(element: &Element) -> Diagnostic {
     .with_category(DiagnosticCategory::Semantic)
     .with_primary_message("not an element of any vocabulary")
     .with_note(format!(
-        "`{EVENT_NAMESPACE_URI}` is an attribute vocabulary only: `event:schema` or `event:schemaexpr` on {OWNERS} describes the event data the element handles or creates"
+        "`{EVENT_NAMESPACE_URI}` has one element, `<event:defer/>` in a transition's content, which holds the event the transition handles; `event:schema` or `event:schemaexpr` on {OWNERS} describes the event data the element handles or creates"
     ))
     .with_help("remove the element, and describe the event data with an `event:schema` attribute on the element that handles or creates it")
+}
+
+fn misplaced_defer(element: &Element) -> Diagnostic {
+    Diagnostic::error(
+        "EVENT001",
+        format!(
+            "`<{}>` is only allowed in the content of a `<transition>` with an `event` attribute",
+            element.lexical_name
+        ),
+        element.start_tag_span,
+    )
+    .with_category(DiagnosticCategory::Semantic)
+    .with_primary_message("no event here for it to hold")
+    .with_note("`<event:defer/>` holds the event the transition handles until the transition's state is exited or a state inside it that handles the event is entered; it is executable content of a `<transition event>` (directly or inside its `<if>` and `<foreach>`) only")
+    .with_help("move it into the transition that handles the event to hold, or remove it")
+}
+
+fn defer_content(element: &Element) -> Diagnostic {
+    Diagnostic::error(
+        "EVENT001",
+        format!(
+            "`<{}>` has no attributes and no content",
+            element.lexical_name
+        ),
+        element.start_tag_span,
+    )
+    .with_category(DiagnosticCategory::Semantic)
+    .with_primary_message("written with attributes or content")
+    .with_note(
+        "`<event:defer/>` always holds the event its transition handles, so it takes nothing",
+    )
+    .with_help("write it as an empty `<event:defer/>`")
 }
 
 fn misplaced(document: &Document, element: &Element, attribute: &Attribute) -> Diagnostic {
@@ -567,6 +647,24 @@ mod tests {
     fn placement_names_and_pairs_are_checked() {
         for (body, expected) in [
             ("<event:schema/>", &["EVENT001"][..]),
+            ("<onentry><event:defer/></onentry>", &["EVENT001"]),
+            (
+                r#"<transition target="f"><event:defer/></transition>"#,
+                &["EVENT001"],
+            ),
+            (
+                r#"<transition event="e"><event:defer>x</event:defer></transition>"#,
+                &["EVENT001"],
+            ),
+            (
+                r#"<transition event="e"><event:defer schema="true"/></transition>"#,
+                &["EVENT001"],
+            ),
+            (r#"<transition event="e"><event:defer/></transition>"#, &[]),
+            (
+                r#"<transition event="e"><if cond="true"><foreach array="[1]" item="i"><event:defer/></foreach><else/><event:defer/></if></transition>"#,
+                &[],
+            ),
             (r#"<onentry event:schema="true"/>"#, &["EVENT001"]),
             (
                 r#"<transition event="e" event:schma="true"/>"#,

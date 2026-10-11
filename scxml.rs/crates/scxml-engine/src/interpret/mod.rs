@@ -499,6 +499,8 @@ impl<'a, C: SessionCapabilities> Interpreter<'a, C> {
                 self.caps.run_script(source, event).map_err(recover::<C>)?;
             }
             Effect::ExecuteExtension(element) => self.execute_extension(engine, element, event)?,
+            // Applied with its block in `apply_effect`.
+            Effect::Defer => return Err(self.fatal(FailureCategory::Harness, "defer-unplanned")),
             Effect::Send(send) => self.send(engine, send, event)?,
             Effect::Cancel {
                 send_id,
@@ -689,6 +691,19 @@ impl<C: SessionCapabilities> crate::EffectExecutor for Interpreter<'_, C> {
         planned: &PlannedEffect,
         trigger: Option<&Event>,
     ) -> Result<(), EffectFailure<C::Error>> {
+        // namespaces/event: `<event:defer>` holds the event its transition
+        // (the effect's block) handles; with none bound there is nothing to
+        // hold, and a full deferred queue is the element's own failure.
+        if matches!(planned.effect, Effect::Defer) {
+            let Some(event) = trigger else {
+                return Err(EffectFailure::Block(PlatformError::Execution));
+            };
+            return match engine.defer(event.clone(), planned.context.block) {
+                Ok(()) => Ok(()),
+                Err(EngineError::QueueLimit) => Err(EffectFailure::Block(PlatformError::Execution)),
+                Err(cause) => Err(self.engine_fatal(cause, "engine-defer")),
+            };
+        }
         self.apply(engine, &planned.effect, trigger)
     }
 

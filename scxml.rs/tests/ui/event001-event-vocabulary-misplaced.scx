@@ -4,6 +4,7 @@
   <state id="idle" event:schema='{"type": "object"}'>
     <onentry>
       <event:schema/>
+      <event:defer/>
     </onentry>
     <transition event="order" target="done" event:schma="true"/>
   </state>

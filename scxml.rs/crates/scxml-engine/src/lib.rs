@@ -178,6 +178,13 @@ pub enum EngineStatus {
 pub enum Effect {
     /// Execute extension namespace content through its linked extension component.
     ExecuteExtension(XmlNodeIr),
+    /// Hold the event the transition handles (`<event:defer>`,
+    /// `namespaces/event`): the capability side hands it back through
+    /// [`Engine::defer`] with the effect's block, and the engine queues it
+    /// again on the internal queue once the transition's source state is no
+    /// longer active or a state inside it that handles the event is
+    /// entered.
+    Defer,
     /// Emit one implementation log after evaluating its optional expression.
     Log {
         /// Optional producer label.
@@ -498,6 +505,8 @@ pub struct Engine {
     /// preserving the macrostep rule that internal events process before
     /// externally generated ones.
     pending_external: VecDeque<Event>,
+    /// The events `<event:defer>` holds (`namespaces/event`).
+    deferral: Deferral,
     current_event: Option<Event>,
     stable: bool,
     /// Stored history values keyed by history-state table index (SCXML 3.11).
@@ -539,6 +548,26 @@ pub struct Engine {
     /// The literal `event:schema` contracts `<send>` and `<raise>` check
     /// (`contracts`), with the schemas compiled so far.
     contracts: contracts::EventContracts,
+}
+
+/// The events `<event:defer>` holds (`namespaces/event`, "Deferred
+/// events").
+#[derive(Clone, Debug, Default)]
+struct Deferral {
+    /// Held events, oldest first, each with the source state of the
+    /// transition that deferred it: each returns to the back of the
+    /// internal queue after the first later command that releases it
+    /// ([`Engine::releases`]). Bounded by [`MAX_NESTED_ITEMS`].
+    held: VecDeque<(StateId, Event)>,
+    /// The events the applying command releases; queued when it commits.
+    releasing: VecDeque<Event>,
+    /// Whether the applying microstep already deferred its event, so a
+    /// second `<event:defer>` (another region's transition) holds it once.
+    current: bool,
+    /// The executable-content block of each transition the applying
+    /// microstep takes, with the transition's source state: the state an
+    /// [`Effect::Defer`] in that block holds its event for.
+    sources: Vec<(u64, StateId)>,
 }
 
 /// One started invocation owned by an active invoking state (SCXML 6.4).
@@ -838,6 +867,7 @@ impl Engine {
                 active_states: Vec::new(),
                 internal: VecDeque::new(),
                 pending_external: VecDeque::new(),
+                deferral: Deferral::default(),
                 current_event: None,
                 stable: true,
                 history_values: std::collections::BTreeMap::new(),
@@ -1460,6 +1490,49 @@ impl Engine {
         Ok(())
     }
 
+    /// Holds `event`, the event the applying transition handles, for an
+    /// executed [`Effect::Defer`] (`<event:defer>`, `namespaces/event`) of
+    /// executable-content block `block`.
+    ///
+    /// The event is held while the source state of the transition whose
+    /// block deferred it stays active: the first later command whose
+    /// configuration no longer holds that state, or that enters a state
+    /// inside it with a transition matching the event, queues it again, unchanged,
+    /// at the back of the internal queue, after the events that command
+    /// queued itself. A microstep holds its event once however many of its
+    /// transitions defer it (for the first of them in document order).
+    ///
+    /// # Errors
+    ///
+    /// Rejects calls outside an applying effect phase or for a block that
+    /// is no transition of the applying microstep, and
+    /// [`EngineError::QueueLimit`] when [`MAX_NESTED_ITEMS`] events are
+    /// already held.
+    pub fn defer(&mut self, event: Event, block: u64) -> Result<(), EngineError> {
+        if !matches!(self.effect_phase, EffectPhase::Applying { .. }) {
+            return Err(EngineError::EffectProtocol);
+        }
+        let source = self
+            .deferral
+            .sources
+            .iter()
+            .find(|(owner, _)| *owner == block)
+            .map(|(_, source)| source.clone())
+            .ok_or(EngineError::EffectProtocol)?;
+        if self.deferral.current {
+            return Ok(());
+        }
+        if scxml_types::exceeds_wasm_bound(
+            self.deferral.held.len().saturating_add(1),
+            MAX_NESTED_ITEMS,
+        ) {
+            return Err(EngineError::QueueLimit);
+        }
+        self.deferral.held.push_back((source, event));
+        self.deferral.current = true;
+        Ok(())
+    }
+
     /// Starts the capability-side application phase for one engine-produced step.
     ///
     /// The caller must apply [`CommandResult::planned_effects`] in document order, install
@@ -1497,6 +1570,21 @@ impl Engine {
             .map(|planned| planned.context.block)
             .collect();
         self.pending_step = None;
+        // A held event whose deferring state is no longer active, or that
+        // a state the command entered inside it handles, is released; one
+        // this command defers itself stays held.
+        if !self.deferral.held.is_empty() {
+            let mut held = VecDeque::new();
+            for (source, event) in std::mem::take(&mut self.deferral.held) {
+                if self.releases(&source, &event, step)? {
+                    self.deferral.releasing.push_back(event);
+                } else {
+                    held.push_back((source, event));
+                }
+            }
+            self.deferral.held = held;
+        }
+        self.deferral.current = false;
         self.effect_phase = EffectPhase::Applying {
             pending_raises,
             planned_effects: step.planned_effects.len(),
@@ -1526,6 +1614,19 @@ impl Engine {
                 return Err(EngineError::EffectProtocol);
             }
         }
+        // Released deferred events queue after the microstep's own.
+        if !self.deferral.releasing.is_empty() {
+            if scxml_types::exceeds_wasm_bound(
+                self.internal
+                    .len()
+                    .saturating_add(self.deferral.releasing.len()),
+                MAX_NESTED_ITEMS,
+            ) {
+                return Err(EngineError::QueueLimit);
+            }
+            self.internal.append(&mut self.deferral.releasing);
+            self.stable = false;
+        }
         self.effect_phase = EffectPhase::Idle;
         self.issued_blocks.clear();
         // Emitted invocations that were not reported started failed to
@@ -1533,6 +1634,7 @@ impl Engine {
         self.awaiting_invocations.clear();
         if self.status == EngineStatus::Finished {
             self.internal.clear();
+            self.deferral.held.clear();
             self.pending_external.clear();
             self.states_to_invoke.clear();
             self.pending_dispatch = None;
@@ -2771,6 +2873,7 @@ impl Engine {
     ) -> Result<CommandResult, EngineError> {
         let mut items = VecDeque::new();
         let mut block_counter = self.next_effect_block;
+        self.deferral.sources.clear();
         // SCXML 3.13: "It MUST then execute the executable content contained
         // in the transitions in document order." Appendix D (informative)
         // runs it in the order the atomic states selected the transitions
@@ -2784,6 +2887,7 @@ impl Engine {
             for transition in &in_document_order {
                 let block = block_counter;
                 block_counter = block_counter.saturating_add(1);
+                self.record_transition_source(block, transition)?;
                 if !transition.actions.is_empty() {
                     flatten_actions(
                         &mut items,
@@ -2875,6 +2979,7 @@ impl Engine {
         for transition in &in_document_order {
             let block = block_counter;
             block_counter = block_counter.saturating_add(1);
+            self.record_transition_source(block, transition)?;
             if !transition.actions.is_empty() {
                 flatten_actions(
                     &mut items,
@@ -2991,6 +3096,49 @@ impl Engine {
             exited_ids,
             entered_ids,
         )
+    }
+
+    /// Whether `step` releases `event`, held for `source`: the step's
+    /// configuration no longer holds `source`, or the step entered a
+    /// proper descendant of it with a transition whose event descriptor
+    /// matches the event (conditions are not evaluated).
+    fn releases(
+        &self,
+        source: &StateId,
+        event: &Event,
+        step: &CommandResult,
+    ) -> Result<bool, EngineError> {
+        if !step.configuration.contains(source) {
+            return Ok(true);
+        }
+        let source = self.state_index_by_id(source)?;
+        for entered in &step.entered_states {
+            let entered = self.state_index_by_id(entered)?;
+            if !self.is_proper_descendant(entered, source)? {
+                continue;
+            }
+            for &transition in &self.state_by_index(entered)?.transitions {
+                let transition = self.transition(transition)?;
+                if !transition.events.is_empty() && transition_matches(transition, Some(event)) {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    /// Records the source state of the transition whose content is
+    /// executable-content block `block`, for [`Self::defer`].
+    fn record_transition_source(
+        &mut self,
+        block: u64,
+        transition: &TransitionIr,
+    ) -> Result<(), EngineError> {
+        let source =
+            usize::try_from(transition.source).map_err(|_| EngineError::BrokenInvariant)?;
+        let source = self.state_id_by_index(source)?;
+        self.deferral.sources.push((block, source));
+        Ok(())
     }
 
     /// Appends entry-phase plan items for one computed entry set in entry
@@ -3947,6 +4095,7 @@ fn validate_actions_bounded_inner(
             Ok(())
         }
         ExecutableContentIr::Raise { .. }
+        | ExecutableContentIr::Defer
         | ExecutableContentIr::Log { .. }
         | ExecutableContentIr::Assign { .. }
         | ExecutableContentIr::Send { .. }
@@ -4330,6 +4479,7 @@ fn action_effect(action: ExecutableContentIr) -> Result<Option<Effect>, EngineEr
             Effect::ExecuteScript(body)
         })),
         ExecutableContentIr::Extension { element } => Ok(Some(Effect::ExecuteExtension(element))),
+        ExecutableContentIr::Defer => Ok(Some(Effect::Defer)),
         ExecutableContentIr::If { .. } => Err(EngineError::UnsupportedModel),
     }
 }
@@ -6009,6 +6159,7 @@ mod tests {
                 Effect::Send(_) => applied.push("send".to_owned()),
                 Effect::Cancel { .. } => applied.push("cancel".to_owned()),
                 Effect::ExecuteExtension(_) => applied.push("extension".to_owned()),
+                Effect::Defer => applied.push("defer".to_owned()),
                 Effect::DoneEvent { .. } => applied.push("done-event".to_owned()),
                 Effect::ReturnDoneEvent(_) => applied.push("return-done-event".to_owned()),
                 Effect::BindStateData { state, .. } => {
