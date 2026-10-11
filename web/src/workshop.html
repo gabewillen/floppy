@@ -686,7 +686,7 @@ customElements.define("floppy-run", FloppyRun);
 ---------------------------------------------------------------- */
 class FloppyCanvas extends HTMLElement {
   paint(ws) {
-    const sim = ws.mode === "observe" ? ws.live : ws.sim, ids = stateIds(ws.doc), active = new Set(sim ? sim.active.map(n => n.id) : []);
+    const sim = ws.mode === "observe" ? ws.live : ws.mode === "testbench" ? ws.sim : null, ids = stateIds(ws.doc), active = new Set(sim ? sim.active.map(n => n.id) : []); /* the white outline is for running only */
     this.innerHTML = `<div class="pad${ws.mode === "workbench" ? "" : " ro"}">${FloppyBlock.html(ws.doc, ids, { sel: ws.selected, active })}</div><p class="status ${ws.statusKind}" role="status">${esc(ws.status)}</p>`;
     requestAnimationFrame(() => shapeAll(this));
   }
