@@ -75,7 +75,9 @@ floppy-block>.hd .x{border:1px solid rgba(255,255,255,.7);background:transparent
 floppy-block>.mouth{margin-left:16px;min-height:30px;position:relative;transition:min-height .12s}
 floppy-block>.mouth.empty{min-height:12px}
 floppy-block.sel>.mouth.empty,floppy-block[data-state="offering"]>.mouth.empty{min-height:30px}
-floppy-canvas[data-fam="square"] .mouth[data-fam="square"],floppy-canvas[data-fam="trap"] .mouth[data-fam="trap"],floppy-canvas[data-fam="round"] .mouth[data-fam="round"],floppy-canvas[data-fam="tri"] .mouth[data-fam="tri"],floppy-canvas[data-fam="double"] .mouth[data-fam="double"],floppy-canvas[data-fam="wave"] .mouth[data-fam="wave"]{min-height:30px;background:#123f3a;outline:1.5px dashed var(--ok);outline-offset:-1px}
+/* While a block is dragged, blocks that can take it keep their color and show their mouth; the rest dim. */
+floppy-canvas[data-dragging] floppy-block:not(.can)>:is(svg.shape,.hd){filter:saturate(.2) brightness(.45);transition:filter .12s}
+floppy-canvas[data-dragging] floppy-block.can>.mouth{min-height:30px;background:#123f3a;outline:1.5px dashed var(--ok);outline-offset:-1px}
 floppy-block>.ft{height:22px}
 floppy-block.sel>.hd{outline:1px dashed var(--ink);outline-offset:-3px}
 floppy-block.active{z-index:2}
@@ -1075,7 +1077,9 @@ class FloppyWorkshop extends hsm.from(HTMLElement) {
   static select(_c, w, e) { w.selected = e.data; w.repaint(); const el = w.canvas.querySelector(`[data-id="${e.data}"]`); el?.scrollIntoView({ block: "nearest", inline: "nearest" }); }
   static lift(_c, w, e) {
     w.drag = e.data;
-    w.canvas.dataset.fam = FAM.family.get(e.data.tag)?.shape || "";
+    const moving = e.data.move && find(w.doc, e.data.move).node;
+    w.canvas.querySelectorAll("floppy-block").forEach(b => b.classList.toggle("can", fits(b.dataset.tag, e.data.tag).ok && !(moving && contains(moving, find(w.doc, b.dataset.id).node))));
+    w.canvas.dataset.dragging = "";
     if (e.data.move) { const el = w.canvas.querySelector(`floppy-block[data-id="${e.data.move}"]`); if (el) hsm.live(el, "lift"); }
   }
   static dropFits(_c, w, e) { return !!e.data && fits(e.data.parentTag, w.drag.tag).ok && !(w.drag.move && contains(find(w.doc, w.drag.move).node, find(w.doc, e.data.into).node)); }
@@ -1088,14 +1092,14 @@ class FloppyWorkshop extends hsm.from(HTMLElement) {
       const dest = find(w.doc, into).node; const at = (dest === f.parent && from < index) ? index - 1 : index;
       dest.kids.splice(at, 0, node);
     } else find(w.doc, into).node.kids.splice(index, 0, node);
-    w.say(fits(e.data.parentTag, node.tag).why, "ok"); w.selected = node.id; w.drag = null; delete w.canvas.dataset.fam; w.sim = new Interp(w.doc); w.repaint();
+    w.say(fits(e.data.parentTag, node.tag).why, "ok"); w.selected = node.id; w.drag = null; delete w.canvas.dataset.dragging; w.sim = new Interp(w.doc); w.repaint();
   }
   static refuse(_c, w, e) {
     if (e.data?.remove && w.drag.move) { const f = find(w.doc, w.drag.move); f.parent.kids.splice(f.parent.kids.indexOf(f.node), 1); w.say(`Removed ${nm(f.node.tag)}.`); w.sim = new Interp(w.doc); }
     else w.say(e.data ? (w.drag.move && contains(find(w.doc, w.drag.move).node, find(w.doc, e.data.into).node) ? "A block can't go inside itself." : fits(e.data.parentTag, w.drag.tag).why) : "Dropped outside a mouth.", e.data?.remove ? "" : "bad");
-    w.drag = null; delete w.canvas.dataset.fam; w.repaint();
+    w.drag = null; delete w.canvas.dataset.dragging; w.repaint();
   }
-  static settle(_c, w) { w.drag = null; delete w.canvas.dataset.fam; w.repaint(); }
+  static settle(_c, w) { w.drag = null; delete w.canvas.dataset.dragging; w.repaint(); }
 
   wire() {
     /* palette and canvas clicks */
