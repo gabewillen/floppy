@@ -90,7 +90,8 @@ disagree are in [spec-errata.md](spec-errata.md).
   sequence; it is not a general equivalence claim.
 - Executable content lowered into Machine IR and executed by the engine covers
   `log`, `raise`, `assign`, inline and external (`src`) `script`,
-  `if`/`elseif`/`else`, `foreach`, `send`, and `cancel`. Failing executable
+  `if`/`elseif`/`else`, `foreach`, `send`, and `cancel`, plus the `event`
+  vocabulary's `<event:defer/>`. Failing executable
   content raises `error.execution` and aborts the rest of its own block only;
   later `<onentry>`, `<onexit>`, and transition blocks of the same engine command still
   run. The engine decides this in `Engine::run`, the one execution entry
@@ -386,6 +387,13 @@ In detail:
   schema compiles every `pattern` it holds as a regular expression; the
   work of compiling a pathological pattern is bounded only by the schema's
   size (and, in the components, fuel), not by a pattern-specific bound.
+- The events `<event:defer/>` holds
+  ([namespaces/event](../namespaces/event/README.md#deferred-events)) are
+  not in a session snapshot (`scxml.session-snapshot/v2` lists the internal
+  and external queues only), and the `event` vocabulary's implementation
+  report plan has no statement for `<event:defer/>`:
+  `crates/scxml-engine/tests/interpret.rs` and the validator's
+  `event_attributes` tests cover it.
 - Run-time `event:schema` contracts
   ([namespaces/event](../namespaces/event/README.md#at-run-time)) are not
   checked for an `<invoke autoforward>` copy, the events an invoked

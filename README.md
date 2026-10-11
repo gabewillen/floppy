@@ -333,7 +333,7 @@ policy is the "Versioning policy" section of
 | [Live sessions](docs/live-session.md) | `scx run`, its JSON protocol, record and replay, BasicHTTP networking, the host API |
 | [Session snapshots](docs/session-snapshot.md) | the snapshot and diff documents and the `snapshot` commands |
 | [Executable content extensions](docs/executable-content-extensions.md) | writing an extension component, `env` slots, loading an element from a repository |
-| [`event` vocabulary](namespaces/event/README.md) | JSON Schemas for event data (`event:schema`, `event:schemaexpr`): resolution, references, snapshots, and validator codes |
+| [`event` vocabulary](namespaces/event/README.md) | JSON Schemas for event data (`event:schema`, `event:schemaexpr`): resolution, references, snapshots, and validator codes; deferred events (`<event:defer/>`) |
 | [`scx` namespace](namespaces/scx/README.md) | `<scx:validate>`: the validator as an extension element, embedded in `scx` |
 | [Wasm script components](docs/wasm-scripts.md) | `<script src>` backed by a Wasm component |
 | [Implementation-defined choices and limits](docs/limits.md) | where SCXML leaves a choice to the platform, fuel, and resource bounds |
@@ -371,6 +371,7 @@ The full list, with evidence, is in
   fuel cap ends the session.
 - `event:schema` contracts are not checked for autoforwarded copies,
   invoked services' events, BasicHTTP sends, donedata, or `event:schemaexpr`.
+- A session snapshot does not list the events `<event:defer/>` holds.
 - There is no save or restore of session state, in process or durable;
   SCXML defines no persistence.
 - The compiler component's packaging path is not exercised under Wasmtime.

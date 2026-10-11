@@ -82,6 +82,7 @@ fn action_requires_data_model(action: &ExecutableContentIr) -> bool {
             ..
         } => true,
         ExecutableContentIr::Raise { .. }
+        | ExecutableContentIr::Defer
         | ExecutableContentIr::Cancel {
             sendidexpr: None, ..
         }

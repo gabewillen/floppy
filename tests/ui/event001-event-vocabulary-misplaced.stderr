@@ -11,27 +11,36 @@ help: remove `event:schema`
 4 -   <state id="idle" event:schema='{"type": "object"}'>
 4 +   <state id="idle">
 
-error[EVENT001]: `<event:schema>` is an element in the `event` namespace, which has none
+error[EVENT001]: `<event:schema>` is not an element of the `event` vocabulary
  --> tests/ui/event001-event-vocabulary-misplaced.scx:6:8
   |
 6 |       <event:schema/>
   |        ^^^^^^^^^^^^ not an element of any vocabulary
   |
-  = note: `https://github.com/stateforward/scxml.rs/namespaces/event` is an attribute vocabulary only: `event:schema` or `event:schemaexpr` on `<transition>`, `<send>`, `<raise>`, or `<donedata>` describes the event data the element handles or creates
+  = note: `https://github.com/stateforward/scxml.rs/namespaces/event` has one element, `<event:defer/>` in a transition's content, which holds the event the transition handles; `event:schema` or `event:schemaexpr` on `<transition>`, `<send>`, `<raise>`, or `<donedata>` describes the event data the element handles or creates
   = help: remove the element, and describe the event data with an `event:schema` attribute on the element that handles or creates it
 
-error[EVENT001]: `event:schma` is not an attribute of the `event` vocabulary
- --> tests/ui/event001-event-vocabulary-misplaced.scx:8:45
+error[EVENT001]: `<event:defer>` is only allowed in the content of a `<transition>` with an `event` attribute
+ --> tests/ui/event001-event-vocabulary-misplaced.scx:7:8
   |
-8 |     <transition event="order" target="done" event:schma="true"/>
+7 |       <event:defer/>
+  |        ^^^^^^^^^^^ no event here for it to hold
+  |
+  = note: `<event:defer/>` holds the event the transition handles until the transition's state is exited or a state inside it that handles the event is entered; it is executable content of a `<transition event>` (directly or inside its `<if>` and `<foreach>`) only
+  = help: move it into the transition that handles the event to hold, or remove it
+
+error[EVENT001]: `event:schma` is not an attribute of the `event` vocabulary
+ --> tests/ui/event001-event-vocabulary-misplaced.scx:9:45
+  |
+9 |     <transition event="order" target="done" event:schma="true"/>
   |                                             ^^^^^^^^^^^^^^^^^^ unknown on `<transition>`
   |
   = note: the `event` vocabulary has exactly two attributes: `event:schema` (a JSON Schema, inline or by reference) and `event:schemaexpr` (an expression whose value is the schema)
   = help: did you mean `schema`?
 help: use `schema`
   |
-8 |     <transition event="order" target="done" event:schema="true"/>
+9 |     <transition event="order" target="done" event:schema="true"/>
   |                                                   ~~~~~~
 
-diagnostic summary: 3 error(s), 0 warning(s), 0 note(s), 3 total
+diagnostic summary: 4 error(s), 0 warning(s), 0 note(s), 4 total
 For more information about this error, try `scx --explain EVENT001`.

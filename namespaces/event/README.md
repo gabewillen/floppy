@@ -1,11 +1,14 @@
-# `event` attribute vocabulary
+# `event` vocabulary
 
 `https://github.com/stateforward/scxml.rs/namespaces/event` is the host's
-attribute vocabulary for describing event data with JSON Schema: which
-`_event.data` a transition handles, which data a `<send>` or `<raise>`
-creates its event with, and which data the `done.state.<id>` event of a
-`<donedata>` carries. It is not an extension package. The namespace has
-attributes only: no elements, no executable content, no extension component,
+vocabulary for events: two attributes describe event data with JSON Schema
+(which `_event.data` a transition handles, which data a `<send>` or
+`<raise>` creates its event with, and which data the `done.state.<id>`
+event of a `<donedata>` carries), and one element, `<event:defer/>`, holds
+the event a transition handles until the transition's state is exited or
+a state inside it that handles the event is entered
+([Deferred events](#deferred-events)). It is not an extension package: the
+engine executes `<event:defer/>` itself, so there is no extension component,
 no package manifest, and no release asset. It is never fetched; the toolchain
 recognises the URI byte for byte (`scxml_types::EVENT_NAMESPACE_URI`). This
 folder exists so the URI names a real path in the repository, like every
@@ -13,7 +16,7 @@ other `namespaces/<name>` URI.
 
 | Path | What |
 |---|---|
-| `package/event.xsd` | the schema, for readers and tools that resolve a namespace to a schema (it declares the two attributes as strings; the validator does not load it) |
+| `package/event.xsd` | the schema, for readers and tools that resolve a namespace to a schema (it declares the two attributes as strings and the empty `defer` element; the validator does not load it) |
 | `examples/order.scx` | a machine with a file schema and JSON Pointer, and inline schemas on a `<send>`, a transition, and a `<donedata>` |
 | `examples/schemas/order.json` | the schema file the example references |
 
@@ -113,6 +116,56 @@ on the transitions that handle them; a service package declares no
 events; see
 [docs/invoked-services.md](../../docs/invoked-services.md#event-schemas).
 
+## Deferred events
+
+```xml
+<state id="busy">
+  <transition event="request"><event:defer/></transition>
+  <transition event="finished" target="idle"/>
+</state>
+<state id="idle">
+  <transition event="request" target="busy"/>
+</state>
+```
+
+`<event:defer/>` is executable content that holds the event its transition
+handles (`_event`) instead of dropping it: a `request` that arrives while
+`busy` waits, and is taken by `idle` once `finished` moves the machine
+there.
+
+- It is allowed only in the content of a `<transition>` with an `event`
+  attribute, directly or inside that content's `<if>` and `<foreach>`, and
+  has no attributes and no content (`EVENT001` otherwise). Machine IR
+  carries it as `{"kind":"defer"}`, and decoding rejects one anywhere else.
+- Executing it holds the event, unchanged (name, type, data, `sendid`,
+  `origin`, `origintype`, `invokeid`), at the back of the session's
+  deferred events, for the transition's source state. A microstep holds its
+  event once, for the first of its transitions (in document order) that
+  executes `<event:defer/>`, however many do (in different regions of a
+  `<parallel>`), and whatever its other transitions do with the event.
+- The event is held while that state is active, so an event a compound
+  state defers keeps waiting while the state's children change. The first
+  later step whose configuration no longer holds the state, or that enters
+  a state inside it with a transition whose event descriptor matches the
+  event (its `cond` is not evaluated), releases it: when the step
+  completes, the events it releases are queued, oldest first, at the back
+  of the internal queue, after the events the step queued itself, so they
+  are processed in the same macrostep, ahead of any later external event.
+  A transition that holds its event keeps it through its own microstep,
+  even when its target exits its state.
+- A released event is selected again like any other: a transition that
+  defers it again holds it again, for its own state. A held event is never
+  selected while it waits, so it never loops.
+- Released events go through the internal queue only: they do not run an
+  `<invoke>`'s `<finalize>` again, are not forwarded again by
+  `autoforward`, and are not checked against `event:schema` again.
+- Without an event to hold (none is bound) it raises `error.execution`,
+  as does holding more than the Machine IR nested-item bound of events.
+- A session that finishes discards its held events.
+
+The deferred events are the session's own state; a session snapshot does
+not list them yet ([docs/limitations.md](../../docs/limitations.md)).
+
 ## Compile time
 
 `validate` and `compile` (and `snapshot run` and `run`, which compile first)
@@ -192,9 +245,11 @@ of `18446744073709551616`) is read, compared, and embedded as the nearest
 
 ## Validator codes
 
-- `EVENT001`: an element in the `event` namespace, an `event` attribute on
-  any other element (with a removal fix), or an attribute other than
-  `schema` and `schemaexpr` (with a "did you mean" fix).
+- `EVENT001`: an element in the `event` namespace other than `defer`, an
+  `<event:defer>` outside the content of a `<transition>` with an `event`
+  attribute or with attributes or content, an `event` attribute on any
+  other element (with a removal fix), or an attribute other than `schema`
+  and `schemaexpr` (with a "did you mean" fix).
 - `EVENT002`: both `event:schema` and `event:schemaexpr` on one element.
 - `EVENT003`: the schema is not UTF-8 JSON (an inline schema at the exact
   byte, a file with its line and column).
@@ -228,7 +283,8 @@ own implementation report plan ([`irp/`](irp/README.md), below).
   `event:schemaexpr` are allowed on `<transition>`, `<send>`, `<raise>`, and
   `<donedata>` only: an `event` attribute on any other element, an
   attribute other than `schema` and `schemaexpr`, or an element in the
-  `event` namespace is rejected (`EVENT001`).
+  `event` namespace other than `<event:defer/>` in a transition's content
+  ([Deferred events](#deferred-events)) is rejected (`EVENT001`).
 - <a id="event-2"></a>**event-2** (one attribute). An element has at most
   one of `event:schema` and `event:schemaexpr` (`EVENT002`).
 - <a id="event-3"></a>**event-3** (inline schemas). A value whose first
@@ -272,7 +328,9 @@ own implementation report plan ([`irp/`](irp/README.md), below).
   and `<donedata>` are unchanged: no schema is checked when an event is
   selected or a done event is generated.
 
-Not covered by the suite: the Machine IR and session snapshot forms
+Not covered by the suite: `<event:defer/>` ([Deferred events](#deferred-events)),
+which `crates/scxml-engine/tests/interpret.rs` and the validator's
+`event_attributes` tests cover; the Machine IR and session snapshot forms
 ([Where it shows](#where-it-shows)), which no document observes
 (`scxml-compiler-core` and `scxml-host-wasmtime` tests cover them);
 `SCXML038` for an `event:schemaexpr` that does not parse, which needs the

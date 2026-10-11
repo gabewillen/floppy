@@ -522,6 +522,12 @@ pub enum ExecutableContentIr {
         /// Inline or pinned script text.
         body: String,
     },
+    /// `<event:defer>` ([`scxml_types::EVENT_NAMESPACE_URI`]): hold the
+    /// event the transition handles while the transition's source state is
+    /// active and enters no state that handles it, then queue it again
+    /// (`namespaces/event`, "Deferred events").
+    /// Only in the content of a transition with an event descriptor.
+    Defer,
     /// Namespace-defined executable content preserved without reinterpretation.
     Extension {
         /// Executable-content extension including all nested content.
@@ -974,7 +980,9 @@ impl MachineIr {
             }
             bounded_optional("condition", transition.cond.as_deref())?;
             validate_event_schema(transition.event_schema.as_ref())?;
-            validate_actions(&transition.actions, 0)?;
+            // `<event:defer>` holds the event a transition handles, so only
+            // the content of a transition with an event descriptor has one.
+            validate_actions(&transition.actions, 0, !transition.events.is_empty())?;
             validate_multi_target(
                 &transition.targets,
                 &self.states,
@@ -1462,7 +1470,7 @@ fn validate_initial(
         ));
     }
     validate_index_list("initial targets", &initial.targets, states.len(), false)?;
-    validate_actions(&initial.actions, 0)?;
+    validate_actions(&initial.actions, 0, false)?;
     validate_multi_target(&initial.targets, states, hierarchy, multi_target_budget)?;
     for target in &initial.targets {
         let target = checked_index("initial target", *target, states.len())?;
@@ -1785,7 +1793,7 @@ fn validate_action_blocks(blocks: &[ActionBlockIr]) -> Result<(), LowerError> {
             ));
         }
         prior = Some(block.document_order);
-        validate_actions(&block.actions, 0)?;
+        validate_actions(&block.actions, 0, false)?;
     }
     Ok(())
 }
@@ -1831,7 +1839,11 @@ fn validate_script_source(src: &ScriptSourceIr, body: &str) -> Result<(), LowerE
     clippy::too_many_lines,
     reason = "all typed executable-content variants share one recursive bounded validator"
 )]
-fn validate_actions(actions: &[ExecutableContentIr], depth: usize) -> Result<(), LowerError> {
+fn validate_actions(
+    actions: &[ExecutableContentIr],
+    depth: usize,
+    defers: bool,
+) -> Result<(), LowerError> {
     if scxml_types::exceeds_wasm_bound(depth, MAX_CONTENT_DEPTH) {
         return Err(LowerError::LimitExceeded {
             field: "executable content depth",
@@ -1895,14 +1907,14 @@ fn validate_actions(actions: &[ExecutableContentIr], depth: usize) -> Result<(),
                 else_actions,
             } => {
                 bounded_expression("if condition", cond)?;
-                validate_actions(actions, depth.saturating_add(1))?;
+                validate_actions(actions, depth.saturating_add(1), defers)?;
                 bounded_count("elseif branches", elseif.len(), MAX_NESTED_ITEMS)?;
                 for branch in elseif {
                     bounded_expression("elseif condition", &branch.cond)?;
-                    validate_actions(&branch.actions, depth.saturating_add(1))?;
+                    validate_actions(&branch.actions, depth.saturating_add(1), defers)?;
                 }
                 if let Some(actions) = else_actions {
-                    validate_actions(actions, depth.saturating_add(1))?;
+                    validate_actions(actions, depth.saturating_add(1), defers)?;
                 }
             }
             ExecutableContentIr::Foreach {
@@ -1914,7 +1926,7 @@ fn validate_actions(actions: &[ExecutableContentIr], depth: usize) -> Result<(),
                 bounded_expression("foreach array", array)?;
                 bounded_expression("foreach item", item)?;
                 bounded_optional("foreach index", index.as_deref())?;
-                validate_actions(actions, depth.saturating_add(1))?;
+                validate_actions(actions, depth.saturating_add(1), defers)?;
             }
             ExecutableContentIr::Send { value } => {
                 if let Some(event) = &value.event {
@@ -2002,6 +2014,13 @@ fn validate_actions(actions: &[ExecutableContentIr], depth: usize) -> Result<(),
                 bounded_optional("script body", Some(body))?;
                 if let Some(src) = src {
                     validate_script_source(src, body)?;
+                }
+            }
+            ExecutableContentIr::Defer => {
+                if !defers {
+                    return Err(LowerError::InvalidStructure(
+                        "defer is only transition content of a transition with an event",
+                    ));
                 }
             }
             ExecutableContentIr::Extension { element } => {
@@ -2184,7 +2203,7 @@ fn validate_invokes(invokes: &[InvokeIr]) -> Result<(), LowerError> {
                 }
                 InvokeChildIr::Finalize { actions } => {
                     finalize_count = finalize_count.saturating_add(1);
-                    validate_actions(actions, 0)?;
+                    validate_actions(actions, 0, false)?;
                 }
             }
         }

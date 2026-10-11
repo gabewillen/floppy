@@ -1669,6 +1669,192 @@ fn an_immediate_basichttp_refusal_carries_the_send_id() {
     }
 }
 
+// ---------------------------------------------------------------- defer
+
+/// `xmlns:event` and an initial state, for the `<event:defer>` machines.
+fn defer_machine(initial: &str, body: &str) -> MachineIr {
+    machine(
+        &format!(
+            r#"initial="{initial}" xmlns:event="{}""#,
+            scxml_types::EVENT_NAMESPACE_URI
+        ),
+        body,
+    )
+}
+
+/// The events selection processed, in order.
+fn processed(session: &Session) -> Vec<&str> {
+    session
+        .caps
+        .observations
+        .iter()
+        .filter_map(|observation| observation.strip_prefix("processed:"))
+        .collect()
+}
+
+#[test]
+fn deferred_events_wait_for_their_deferring_state_to_be_exited_in_order() {
+    let mut session = Session::started(
+        defer_machine(
+            "busy",
+            r#"<state id="busy">
+                 <transition event="a"><event:defer/></transition>
+                 <transition event="b"><event:defer/></transition>
+                 <transition event="done" target="idle"/>
+               </state>
+               <state id="idle"><transition event="a" target="took_a"/></state>
+               <state id="took_a"><transition event="b" target="pass"/></state>
+               <final id="pass"/>"#,
+        ),
+        Mock::default(),
+    );
+    session.send(&external("a")).expect("a is deferred");
+    session.send(&external("b")).expect("b is deferred");
+    assert_eq!(session.active(), ["busy"]);
+    assert_eq!(processed(&session), ["a", "b"]);
+    session.send(&external("done")).expect("done releases them");
+    assert_eq!(session.active(), ["pass"]);
+    assert_eq!(processed(&session), ["a", "b", "done", "a", "b"]);
+}
+
+#[test]
+fn a_deferred_event_keeps_waiting_through_changes_inside_the_deferring_state() {
+    // `p` holds `x` while its children change; it comes back once `p` is
+    // exited.
+    let mut session = Session::started(
+        defer_machine(
+            "p",
+            r#"<state id="p" initial="c1">
+                 <transition event="x"><event:defer/></transition>
+                 <state id="c1"><transition event="next" target="c2"/></state>
+                 <state id="c2"><transition event="leave" target="q"/></state>
+               </state>
+               <state id="q"><transition event="x" target="pass"/></state>
+               <final id="pass"/>"#,
+        ),
+        Mock::default(),
+    );
+    session.send(&external("x")).expect("x is deferred");
+    session.send(&external("next")).expect("c1 to c2");
+    assert_eq!(session.active(), ["c2"]);
+    session.send(&external("leave")).expect("p is exited");
+    assert_eq!(session.active(), ["pass"]);
+    assert_eq!(processed(&session), ["x", "next", "leave", "x"]);
+}
+
+#[test]
+fn entering_a_state_inside_the_deferring_state_that_handles_the_event_releases_it() {
+    let mut session = Session::started(
+        defer_machine(
+            "working",
+            r#"<state id="working" initial="busy">
+                 <transition event="x"><event:defer/></transition>
+                 <state id="busy"><transition event="next" target="hearing"/></state>
+                 <state id="hearing"><transition event="x" target="pass"/></state>
+               </state>
+               <final id="pass"/>"#,
+        ),
+        Mock::default(),
+    );
+    session.send(&external("x")).expect("working holds x");
+    session.send(&external("next")).expect("hearing takes x");
+    assert_eq!(session.active(), ["pass"]);
+    assert_eq!(processed(&session), ["x", "next", "x"]);
+}
+
+#[test]
+fn a_released_event_another_state_defers_is_held_again() {
+    // `b` defers what `a` released, inside `<if>`, until it is exited too.
+    let mut session = Session::started(
+        defer_machine(
+            "a",
+            r#"<state id="a">
+                 <transition event="x"><event:defer/></transition>
+                 <transition event="next" target="b"/>
+               </state>
+               <state id="b">
+                 <transition event="x"><if cond="true"><event:defer/></if></transition>
+                 <transition event="next" target="c"/>
+               </state>
+               <state id="c"><transition event="x" target="pass"/></state>
+               <final id="pass"/>"#,
+        ),
+        Mock {
+            conditions: [("true".to_owned(), true)].into(),
+            ..Mock::default()
+        },
+    );
+    session.send(&external("x")).expect("a holds x");
+    session.send(&external("next")).expect("b holds x again");
+    assert_eq!(session.active(), ["b"]);
+    session.send(&external("next")).expect("c takes x");
+    assert_eq!(session.active(), ["pass"]);
+    assert_eq!(processed(&session), ["x", "next", "x", "next", "x"]);
+}
+
+#[test]
+fn the_microstep_that_defers_an_event_does_not_release_it() {
+    let mut session = Session::started(
+        defer_machine(
+            "s",
+            r#"<state id="s"><transition event="x" target="t"><event:defer/></transition></state>
+               <state id="t">
+                 <transition event="x" target="fail"/>
+                 <transition event="go" target="u"/>
+               </state>
+               <state id="u"><transition event="x" target="pass"/></state>
+               <final id="pass"/><final id="fail"/>"#,
+        ),
+        Mock::default(),
+    );
+    session.send(&external("x")).expect("x is taken and held");
+    assert_eq!(session.active(), ["t"]);
+    session.send(&external("go")).expect("t to u releases x");
+    assert_eq!(session.active(), ["pass"]);
+}
+
+#[test]
+fn regions_that_both_defer_an_event_hold_it_once() {
+    let mut session = Session::started(
+        defer_machine(
+            "both",
+            r#"<parallel id="both">
+                 <state id="r1"><transition event="x"><event:defer/></transition></state>
+                 <state id="r2"><transition event="x"><event:defer/></transition></state>
+                 <transition event="go" target="idle"/>
+               </parallel>
+               <state id="idle"><transition event="x" target="once"/></state>
+               <state id="once">
+                 <transition event="x" target="fail"/>
+                 <transition event="check" target="pass"/>
+               </state>
+               <final id="pass"/><final id="fail"/>"#,
+        ),
+        Mock::default(),
+    );
+    session.send(&external("x")).expect("x is deferred");
+    session.send(&external("go")).expect("go releases x");
+    assert_eq!(session.active(), ["once"]);
+    session.send(&external("check")).expect("x came back once");
+    assert_eq!(session.active(), ["pass"]);
+}
+
+#[test]
+fn defer_outside_a_transition_with_an_event_is_not_machine_ir() {
+    for body in [
+        r#"<state id="s"><onentry><event:defer/></onentry></state>"#,
+        r#"<state id="s"><transition target="s"><event:defer/></transition></state>"#,
+    ] {
+        let source = format!(
+            r#"<scxml xmlns="{SCXML_NAMESPACE}" xmlns:event="{}" version="1.0" initial="s">{body}</scxml>"#,
+            scxml_types::EVENT_NAMESPACE_URI
+        );
+        let document = parse_xml(SourceText::new(SOURCE, "m.scxml", source))
+            .expect("fixture SCXML is well-formed XML");
+        assert!(lower(&document).is_err(), "{body}");
+    }
+}
+
 // ---------------------------------------------------------------- cancel
 
 #[test]
