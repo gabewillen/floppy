@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- bot-2: an undefined source is null and an undefined target is left out. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="stimulus" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <bot:stimulus location="stimulus" event="'bot.input'" data="{}" source="undefined" target="undefined"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="stimulus.source === null &amp;&amp; !('target' in stimulus)" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

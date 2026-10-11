@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!-- decision-7: a selection goes to the target it names, one without a target to the event's only offerer, and the document's own events to null. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision">
+<datamodel>
+  <data id="choices" expr='[{"event": "bot.say", "schema": {}}, {"event": "tool.go", "schema": {}, "target": "a"}, {"event": "tool.go", "schema": {}, "target": "b"}, {"event": "tool.only", "schema": {}, "target": "a"}]'/>
+  <data id="selections" expr='[{"event": "tool.go", "target": "b", "data": {"x": 1}}, {"event": "tool.only"}, {"event": "bot.say", "data": null}]'/>
+  <data id="placed" expr="null"/>
+  <data id="rejection" expr="'unset'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <decision:route location="placed" rejectionlocation="rejection" selections="selections" choices="choices"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="rejection === null &amp;&amp; placed.length === 3 &amp;&amp; placed[0].target === 'b' &amp;&amp; placed[0].data.x === 1 &amp;&amp; placed[1].target === 'a' &amp;&amp; placed[2].target === null &amp;&amp; JSON.stringify(placed[2].data) === '{}'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

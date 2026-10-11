@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-3: without a provenance, an inbound message's session_ref is its relationship reference and an outbound one's is null. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="inbound" expr="{&#34;source_ids&#34;: [&#34;user&#34;], &#34;target_ids&#34;: [&#34;bot&#34;], &#34;content_type&#34;: &#34;text/plain&#34;}"/>
+  <data id="i" expr="null"/>
+  <data id="o" expr="null"/>
+  <data id="k" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:commit location="i" keylocation="k" direction="inbound" event="'e'" message="inbound" sequence="0"/>
+    <conversation:commit location="o" direction="outbound" event="'e'" message="inbound" sequence="1"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="i.provenance.session_ref === 'relationship-' + k &amp;&amp; o.provenance.session_ref === null &amp;&amp; i.provenance.id === null &amp;&amp; i.provenance.turn_ref === null" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

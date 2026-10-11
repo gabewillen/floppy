@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- decision-7: a selection that is not an object with an event fails as malformed. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="choices" expr="[{&#34;event&#34;: &#34;bot.say&#34;, &#34;schema&#34;: {}}, {&#34;event&#34;: &#34;tool.go&#34;, &#34;schema&#34;: {}, &#34;target&#34;: &#34;a&#34;}, {&#34;event&#34;: &#34;tool.go&#34;, &#34;schema&#34;: {}, &#34;target&#34;: &#34;b&#34;}, {&#34;event&#34;: &#34;tool.only&#34;, &#34;schema&#34;: {}, &#34;target&#34;: &#34;a&#34;}]"/>
+  <data id="selections" expr="[{&#34;data&#34;: {}}]"/>
+  <data id="placed" expr="null"/>
+  <data id="rejection" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <decision:route location="placed" rejectionlocation="rejection" selections="selections" choices="choices"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="rejection === 'Processing selected a malformed event selection.' &amp;&amp; placed.length === 0" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- bot-5: a missing name or a name with no tokens is never heard. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="a" expr="null"/>
+  <data id="b" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <bot:recognize location="a" name="null" text="'hi'"/>
+    <bot:recognize location="b" name="'!!'" text="'!!'"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="a === false &amp;&amp; b === false" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

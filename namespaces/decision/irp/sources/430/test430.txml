@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- decision-5: pinning sets the enum of the property of every entry for the event. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision">
+<datamodel>
+  <data id="choices" expr='[{"event": "bot.focus_device", "schema": {"type": "object", "properties": {"device": {"type": "string"}}}}, {"event": "bot.say", "schema": {"type": "object"}}]'/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <decision:pin location="choices" event="bot.focus_device" property="device" values="['kitchen', 'hall']"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="choices.length === 2 &amp;&amp; choices[0].schema.properties.device.enum.join(',') === 'kitchen,hall'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

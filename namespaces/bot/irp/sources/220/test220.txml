@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!-- bot-3: a focus among the devices is the first candidate and the focus; a bot.input's target_device among the devices is appended. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot">
+<datamodel>
+  <data id="devices" expr='["kitchen", "hall"]'/>
+  <data id="stimulus" expr='{"event": "bot.input", "data": {"target_device": "hall"}, "source": null}'/>
+  <data id="candidates" expr="null"/>
+  <data id="focus" expr="'unset'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <bot:attention location="candidates" focuslocation="focus" stimulus="stimulus" devices="devices" focus="'kitchen'"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="focus === 'kitchen' &amp;&amp; candidates.join(',') === 'kitchen,hall'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- bot-3: without a target_device, the device the sources map the stimulus's source to is the candidate. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="devices" expr="[&#34;kitchen&#34;, &#34;hall&#34;]"/>
+  <data id="stimulus" expr="{&#34;event&#34;: &#34;bot.ability.listening.output&#34;, &#34;data&#34;: {}, &#34;source&#34;: &#34;mic1&#34;}"/>
+  <data id="sources" expr="{&#34;mic1&#34;: &#34;hall&#34;}"/>
+  <data id="candidates" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <bot:attention location="candidates" stimulus="stimulus" devices="devices" focus="null" sources="sources"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="candidates.length === 1 &amp;&amp; candidates[0] === 'hall'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

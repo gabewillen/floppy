@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-4: a provenance's string id, source, target, session_ref and its turn_ref are taken; a non-string one is null. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="msg" expr="{&#34;source_ids&#34;: [&#34;user&#34;], &#34;target_ids&#34;: [&#34;bot&#34;], &#34;content&#34;: &#34;hello&#34;, &#34;content_type&#34;: &#34;text/plain&#34;, &#34;extra&#34;: 1}"/>
+  <data id="p" expr="{&#34;id&#34;: &#34;ev1&#34;, &#34;source&#34;: &#34;listening&#34;, &#34;target&#34;: 7, &#34;session_ref&#34;: &#34;s1&#34;, &#34;turn_ref&#34;: {&#34;turn&#34;: 2}}"/>
+  <data id="m" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:commit location="m" direction="inbound" event="'e'" message="msg" sequence="0" provenance="p"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="m.provenance.id === 'ev1' &amp;&amp; m.provenance.source === 'listening' &amp;&amp; m.provenance.target === null &amp;&amp; m.provenance.session_ref === 's1' &amp;&amp; m.provenance.turn_ref.turn === 2" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

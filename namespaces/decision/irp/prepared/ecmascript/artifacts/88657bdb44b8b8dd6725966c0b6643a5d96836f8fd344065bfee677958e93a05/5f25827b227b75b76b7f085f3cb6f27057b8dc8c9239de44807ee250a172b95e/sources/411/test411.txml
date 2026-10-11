@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- decision-2: events keeps only the choices a descriptor matches. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event">
+<datamodel>
+  <data id="choices" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <decision:choice location="choices" events="tool.beta"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition event="tool.alpha" event:schema='{"type": "object", "description": "Alpha the thing.\nMore.", "title": "Alpha"}' target="s0"/>
+  <transition event="tool.beta.*" event:schema='{"type": "object", "title": "Beta"}' target="s0"/>
+  <transition event="*" event:schema='{"type": "object"}' target="s0"/>
+  <transition event="untyped" target="s0"/>
+  <transition cond="choices.length === 1 &amp;&amp; choices[0].event === 'tool.beta'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

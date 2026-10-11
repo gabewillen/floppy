@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- decision-2: an event an earlier transition of the same state already takes is offered once. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="choices" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <decision:choice location="choices"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition event="tool.alpha" event:schema="{&#34;type&#34;: &#34;object&#34;, &#34;title&#34;: &#34;First&#34;}" target="s0"/>
+  <transition event="tool.alpha" event:schema="{&#34;type&#34;: &#34;object&#34;, &#34;title&#34;: &#34;Second&#34;}" target="s0"/>
+  <transition cond="choices.length === 1 &amp;&amp; choices[0].event === 'tool.alpha' &amp;&amp; choices[0].schema.title === 'First'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

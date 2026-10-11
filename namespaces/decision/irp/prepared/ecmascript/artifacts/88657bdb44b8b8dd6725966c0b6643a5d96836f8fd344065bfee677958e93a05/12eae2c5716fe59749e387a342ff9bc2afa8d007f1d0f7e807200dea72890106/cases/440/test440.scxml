@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- decision-6: assembling keeps the document's own choices untagged, then each offer's in member-name order tagged with its name, and reports the size. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="own" expr="[{&#34;event&#34;: &#34;bot.say&#34;, &#34;schema&#34;: {&#34;type&#34;: &#34;object&#34;}}]"/>
+  <data id="offers" expr="{&#34;zeta&#34;: [{&#34;event&#34;: &#34;z.go&#34;, &#34;schema&#34;: {&#34;type&#34;: &#34;object&#34;}}], &#34;alpha&#34;: [{&#34;event&#34;: &#34;a.go&#34;, &#34;schema&#34;: {&#34;type&#34;: &#34;object&#34;}}]}"/>
+  <data id="choices" expr="null"/>
+  <data id="over" expr="null"/>
+  <data id="size" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <decision:assemble location="choices" choices="own" offers="offers" overlocation="over" sizelocation="size"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="over === false &amp;&amp; size &gt; 0 &amp;&amp; choices.map(function (c) { return c.event + '@' + (c.target || ''); }).join(',') === 'bot.say@,a.go@alpha,z.go@zeta'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

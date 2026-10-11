@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- bot-4: the ignore selections are removed, the others kept in order, and nothing is refused. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot">
+<datamodel>
+  <data id="selections" expr='[{"event": "bot.ability.cognition.ignore", "data": {}}, {"event": "bot.say", "data": {"text": "hi"}}]'/>
+  <data id="dispatching" expr="null"/>
+  <data id="rejection" expr="'unset'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <bot:verdict location="dispatching" rejectionlocation="rejection" selections="selections" focus="null" candidates="[]"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="rejection === null &amp;&amp; dispatching.length === 1 &amp;&amp; dispatching[0].event === 'bot.say'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

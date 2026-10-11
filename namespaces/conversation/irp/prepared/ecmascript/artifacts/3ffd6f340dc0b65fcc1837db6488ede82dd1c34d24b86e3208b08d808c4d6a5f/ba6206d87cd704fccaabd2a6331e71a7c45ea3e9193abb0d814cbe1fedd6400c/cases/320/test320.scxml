@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-3: the relationship context reference groups the identities, is the same in either direction, and is assigned to keylocation. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="inbound" expr="{&#34;source_ids&#34;: [&#34;user&#34;], &#34;target_ids&#34;: [&#34;bot&#34;], &#34;content_type&#34;: &#34;text/plain&#34;}"/>
+  <data id="outbound" expr="{&#34;source_ids&#34;: [&#34;bot&#34;], &#34;target_ids&#34;: [&#34;user&#34;], &#34;content_type&#34;: &#34;text/plain&#34;}"/>
+  <data id="i" expr="null"/>
+  <data id="o" expr="null"/>
+  <data id="ki" expr="null"/>
+  <data id="ko" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:commit location="i" keylocation="ki" direction="inbound" event="'e'" message="inbound" sequence="0"/>
+    <conversation:commit location="o" keylocation="ko" direction="outbound" event="'e'" message="outbound" sequence="1"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="ki === ko &amp;&amp; ki === '{&#34;identity_groups&#34;:[[&#34;bot&#34;],[&#34;user&#34;]]}'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

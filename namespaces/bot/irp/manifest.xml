@@ -1,0 +1,89 @@
+<?xml version="1.0"?>
+<!-- The bot namespace's implementation report plan: each assertion is a
+     numbered statement of namespaces/bot/README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/bot/irp/sources">
+  <assert id="bot-1" specnum="1" specid="#bot-1">
+    <![CDATA[Each element (attention, verdict, stimulus, recognize) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/bot.xsd, rejects it before any run under scx validate).]]>
+    <test id="200" conformance="mandatory" manual="false">
+      <start uri="200/test200.txml"/>
+    </test>
+    <test id="201" conformance="mandatory" manual="false">
+      <start uri="201/test201.txml"/>
+    </test>
+    <test id="202" conformance="mandatory" manual="false">
+      <start uri="202/test202.txml"/>
+    </test>
+    <test id="203" conformance="mandatory" manual="false">
+      <start uri="203/test203.txml"/>
+    </test>
+  </assert>
+  <assert id="bot-2" specnum="2" specid="#bot-2">
+    <![CDATA[<bot:stimulus> writes the envelope {event, data, source, target?, id?}: event a non-empty string, source null when it evaluates to null, undefined or the empty string, and target and id included when given and not undefined; an empty event raises error.execution and assigns nothing.]]>
+    <test id="210" conformance="mandatory" manual="false">
+      <start uri="210/test210.txml"/>
+    </test>
+    <test id="211" conformance="mandatory" manual="false">
+      <start uri="211/test211.txml"/>
+    </test>
+    <test id="212" conformance="mandatory" manual="false">
+      <start uri="212/test212.txml"/>
+    </test>
+    <test id="213" conformance="mandatory" manual="false">
+      <start uri="213/test213.txml"/>
+    </test>
+  </assert>
+  <assert id="bot-3" specnum="3" specid="#bot-3">
+    <![CDATA[<bot:attention> writes the focus (the given focus when it is a configured device, else null) as the first candidate, then the stimulus's device (a bot.input's data.target_device, else the device sources maps its source to) when it is configured and not a candidate already; devices that are not an array raise error.execution and assign nothing.]]>
+    <test id="220" conformance="mandatory" manual="false">
+      <start uri="220/test220.txml"/>
+    </test>
+    <test id="221" conformance="mandatory" manual="false">
+      <start uri="221/test221.txml"/>
+    </test>
+    <test id="222" conformance="mandatory" manual="false">
+      <start uri="222/test222.txml"/>
+    </test>
+    <test id="223" conformance="mandatory" manual="false">
+      <start uri="223/test223.txml"/>
+    </test>
+    <test id="224" conformance="mandatory" manual="false">
+      <start uri="224/test224.txml"/>
+    </test>
+  </assert>
+  <assert id="bot-4" specnum="4" specid="#bot-4">
+    <![CDATA[<bot:verdict> writes the selections without bot.ability.cognition.ignore ones, and the original's message for the first one the attention policy refuses (a focus_device outside the candidates or with invalid data, a clear_focus for another target or with no focus), else null.]]>
+    <test id="230" conformance="mandatory" manual="false">
+      <start uri="230/test230.txml"/>
+    </test>
+    <test id="231" conformance="mandatory" manual="false">
+      <start uri="231/test231.txml"/>
+    </test>
+    <test id="232" conformance="mandatory" manual="false">
+      <start uri="232/test232.txml"/>
+    </test>
+    <test id="233" conformance="mandatory" manual="false">
+      <start uri="233/test233.txml"/>
+    </test>
+    <test id="234" conformance="mandatory" manual="false">
+      <start uri="234/test234.txml"/>
+    </test>
+    <test id="235" conformance="mandatory" manual="false">
+      <start uri="235/test235.txml"/>
+    </test>
+  </assert>
+  <assert id="bot-5" specnum="5" specid="#bot-5">
+    <![CDATA[<bot:recognize> writes true exactly when the name's case-folded letter-and-digit tokens appear as a whole run among the text's; a missing name or one with no tokens is never heard, and a text that is neither a string nor null raises error.execution and assigns nothing.]]>
+    <test id="240" conformance="mandatory" manual="false">
+      <start uri="240/test240.txml"/>
+    </test>
+    <test id="241" conformance="mandatory" manual="false">
+      <start uri="241/test241.txml"/>
+    </test>
+    <test id="242" conformance="mandatory" manual="false">
+      <start uri="242/test242.txml"/>
+    </test>
+    <test id="243" conformance="mandatory" manual="false">
+      <start uri="243/test243.txml"/>
+    </test>
+  </assert>
+</assertions>

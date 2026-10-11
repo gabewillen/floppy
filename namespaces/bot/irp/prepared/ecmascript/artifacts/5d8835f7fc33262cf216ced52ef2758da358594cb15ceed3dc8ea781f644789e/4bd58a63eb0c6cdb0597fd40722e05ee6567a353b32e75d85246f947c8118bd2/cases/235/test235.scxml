@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- bot-4: a focus_device among the candidates and a clear_focus with a focus pass. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="selections" expr="[{&#34;event&#34;: &#34;bot.focus_device&#34;, &#34;data&#34;: {&#34;device&#34;: &#34;kitchen&#34;}}, {&#34;event&#34;: &#34;bot.clear_focus&#34;, &#34;target&#34;: &#34;bot&#34;}]"/>
+  <data id="dispatching" expr="null"/>
+  <data id="rejection" expr="'unset'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <bot:verdict location="dispatching" rejectionlocation="rejection" selections="selections" focus="'kitchen'" candidates="['kitchen']"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="rejection === null &amp;&amp; dispatching.length === 2" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

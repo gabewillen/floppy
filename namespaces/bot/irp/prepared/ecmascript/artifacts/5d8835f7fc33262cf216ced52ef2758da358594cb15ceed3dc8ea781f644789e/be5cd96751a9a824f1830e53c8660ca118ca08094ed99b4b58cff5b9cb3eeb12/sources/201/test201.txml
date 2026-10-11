@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- bot-1: a verdict with an attribute the schema does not declare raises error.execution and assigns nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot">
+<datamodel>
+  <data id="l" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <bot:verdict location="l" rejectionlocation="r" selections="[]" focus="null" candidates="[]" policy="strict"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="l === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

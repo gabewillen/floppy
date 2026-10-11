@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- migration-5: a history with two heads raises error.execution and assigns nothing. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:migration="https://github.com/stateforward/floppy/namespaces/migration" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="revisions" expr="[{&#34;revision&#34;: &#34;a&#34;, &#34;down_revision&#34;: null, &#34;upgrade&#34;: [], &#34;downgrade&#34;: []}, {&#34;revision&#34;: &#34;b&#34;, &#34;down_revision&#34;: &#34;a&#34;, &#34;upgrade&#34;: [], &#34;downgrade&#34;: []}, {&#34;revision&#34;: &#34;c&#34;, &#34;down_revision&#34;: &#34;a&#34;, &#34;upgrade&#34;: [], &#34;downgrade&#34;: []}]"/>
+  <data id="plan" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <migration:plan location="plan" revisions="revisions" current="null"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="plan === 'untouched'" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

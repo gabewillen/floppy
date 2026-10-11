@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- conversation-2: a message without content commits null content. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="msg" expr='{"source_ids": ["user"], "target_ids": ["bot"], "content_type": "text/plain"}'/>
+  <data id="m" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:commit location="m" direction="inbound" event="'e'" message="msg" sequence="0"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="('content' in m) &amp;&amp; m.content === null" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-2: an inbound commit holds the sequence, direction, identities, content and content type, and drops other members. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="msg" expr="{&#34;source_ids&#34;: [&#34;user&#34;], &#34;target_ids&#34;: [&#34;bot&#34;], &#34;content&#34;: &#34;hello&#34;, &#34;content_type&#34;: &#34;text/plain&#34;, &#34;extra&#34;: 1}"/>
+  <data id="m" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:commit location="m" direction="inbound" event="'bot.ability.conversation.input'" message="msg" sequence="3"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="m.sequence === 3 &amp;&amp; m.direction === 'inbound' &amp;&amp; m.source_ids[0] === 'user' &amp;&amp; m.target_ids[0] === 'bot' &amp;&amp; m.content === 'hello' &amp;&amp; m.content_type === 'text/plain' &amp;&amp; !('extra' in m) &amp;&amp; m.provenance.event === 'bot.ability.conversation.input'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

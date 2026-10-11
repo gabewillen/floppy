@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- bot-4: a clear_focus for a target other than the bot is refused. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot">
+<datamodel>
+  <data id="selections" expr='[{"event": "bot.clear_focus", "target": "speaking"}]'/>
+  <data id="dispatching" expr="null"/>
+  <data id="rejection" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <bot:verdict location="dispatching" rejectionlocation="rejection" selections="selections" focus="'kitchen'" candidates="['kitchen']"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="rejection === 'Processing selected clear_focus for a non-bot target.'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

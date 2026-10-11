@@ -23,3 +23,15 @@ into the dev package cache. The conversation
 inbound and outbound messages with it, and the speaking
 ([`abilities/speaking/speaking.scx`](../../abilities/speaking/speaking.scx)) builds
 the outbound record it appends.
+
+## Statements
+
+The contract above as numbered statements, each tested by the namespace's
+own implementation report plan ([`irp/`](irp/README.md)), in the format and
+through the pipeline of scxml.rs's namespace suites.
+
+- <a id="conversation-1"></a>**conversation-1**. `<conversation:commit>` takes location, direction (exactly inbound or outbound), event, message and sequence, optionally keylocation and provenance, no other attribute and no content: a malformed element raises `error.execution` and assigns nothing (its schema, [`package/conversation.xsd`](package/conversation.xsd), rejects it before any run under `scx validate`).
+- <a id="conversation-2"></a>**conversation-2**. The committed message is {sequence, direction, source_ids, target_ids, content, content_type, provenance}, without the message's other members; inbound audio content is null, other content is kept as given, and absent content is null.
+- <a id="conversation-3"></a>**conversation-3**. The relationship context reference is {"identity_groups":[...]} over the sorted source and target identity groups, the same in either direction, written to keylocation; without a provenance, an inbound message's session_ref is relationship-<reference> and an outbound one's is null.
+- <a id="conversation-4"></a>**conversation-4**. A provenance's id, source, target and session_ref are taken when they are strings, else null, and its turn_ref is taken as given.
+- <a id="conversation-5"></a>**conversation-5**. A malformed value (a negative sequence, an empty event, a message without a content_type) raises `error.execution` and assigns nothing.

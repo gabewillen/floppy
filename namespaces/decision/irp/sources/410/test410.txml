@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- decision-2: the choices are the events of the active transitions that carry an event:schema, with their schema and description, in document order; * and schemaless transitions are not offered. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event">
+<datamodel>
+  <data id="choices" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <decision:choice location="choices"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition event="tool.alpha" event:schema='{"type": "object", "description": "Alpha the thing.\nMore.", "title": "Alpha"}' target="s0"/>
+  <transition event="tool.beta.*" event:schema='{"type": "object", "title": "Beta"}' target="s0"/>
+  <transition event="*" event:schema='{"type": "object"}' target="s0"/>
+  <transition event="untyped" target="s0"/>
+  <transition cond="choices.length === 2 &amp;&amp; choices[0].event === 'tool.alpha' &amp;&amp; choices[0].description === 'Alpha the thing.' &amp;&amp; choices[0].schema.title === 'Alpha' &amp;&amp; choices[1].event === 'tool.beta' &amp;&amp; choices[1].description === 'Beta'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

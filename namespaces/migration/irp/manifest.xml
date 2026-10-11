@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<!-- The migration namespace's implementation report plan: each assertion is a
+     numbered statement of namespaces/migration/README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/migration/irp/sources">
+  <assert id="migration-1" specnum="1" specid="#migration-1">
+    <![CDATA[A <migration:plan> takes location, revisions and current, optionally target, each non-empty, no other attribute and no content: a malformed element raises error.execution and assigns nothing (its schema, package/migration.xsd, rejects it before any run under scx validate).]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.txml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.txml"/>
+    </test>
+    <test id="102" conformance="mandatory" manual="false">
+      <start uri="102/test102.txml"/>
+    </test>
+    <test id="103" conformance="mandatory" manual="false">
+      <start uri="103/test103.txml"/>
+    </test>
+  </assert>
+  <assert id="migration-2" specnum="2" specid="#migration-2">
+    <![CDATA[Upgrading plans each revision after current up to the target, oldest first, each step {revision, direction: upgrade, statements: its upgrade statements}; from is current (null for base), to the target revision, and the target defaults to head.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.txml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.txml"/>
+    </test>
+  </assert>
+  <assert id="migration-3" specnum="3" specid="#migration-3">
+    <![CDATA[Downgrading plans each revision from current down to the one after the target, newest first, each with its downgrade statements and direction downgrade; to is null for base.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.txml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.txml"/>
+    </test>
+  </assert>
+  <assert id="migration-4" specnum="4" specid="#migration-4">
+    <![CDATA[A relative target +N or -N moves N revisions from current, and a plan already at its target has no steps.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.txml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.txml"/>
+    </test>
+    <test id="132" conformance="mandatory" manual="false">
+      <start uri="132/test132.txml"/>
+    </test>
+  </assert>
+  <assert id="migration-5" specnum="5" specid="#migration-5">
+    <![CDATA[Revisions must be an array forming one linear history (one first revision, every down_revision known, no revision followed by two, no cycle, no revision named twice); otherwise the element raises error.execution and assigns nothing.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.txml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.txml"/>
+    </test>
+    <test id="142" conformance="mandatory" manual="false">
+      <start uri="142/test142.txml"/>
+    </test>
+    <test id="143" conformance="mandatory" manual="false">
+      <start uri="143/test143.txml"/>
+    </test>
+    <test id="144" conformance="mandatory" manual="false">
+      <start uri="144/test144.txml"/>
+    </test>
+  </assert>
+  <assert id="migration-6" specnum="6" specid="#migration-6">
+    <![CDATA[A current or target revision the history does not hold, or a relative step past base or head, raises error.execution and assigns nothing.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.txml"/>
+    </test>
+    <test id="151" conformance="mandatory" manual="false">
+      <start uri="151/test151.txml"/>
+    </test>
+    <test id="152" conformance="mandatory" manual="false">
+      <start uri="152/test152.txml"/>
+    </test>
+    <test id="153" conformance="mandatory" manual="false">
+      <start uri="153/test153.txml"/>
+    </test>
+  </assert>
+</assertions>

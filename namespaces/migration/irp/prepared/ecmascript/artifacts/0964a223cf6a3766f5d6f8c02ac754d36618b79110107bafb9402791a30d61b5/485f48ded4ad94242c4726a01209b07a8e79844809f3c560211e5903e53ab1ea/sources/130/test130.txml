@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- migration-4: a relative step +N upgrades N revisions from the current one. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:migration="https://github.com/stateforward/floppy/namespaces/migration">
+<datamodel>
+  <data id="revisions" expr='[{"revision": "a", "down_revision": null, "upgrade": [{"sql": "up a"}], "downgrade": [{"sql": "down a"}]}, {"revision": "b", "down_revision": "a", "upgrade": [{"sql": "up b"}], "downgrade": [{"sql": "down b"}]}, {"revision": "c", "down_revision": "b", "upgrade": [{"sql": "up c"}], "downgrade": [{"sql": "down c"}]}]'/>
+  <data id="plan" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <migration:plan location="plan" revisions="revisions" current="'a'" target="'+1'"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="plan.to === 'b' &amp;&amp; plan.steps.map(function (s) { return s.revision + ':' + s.direction + ':' + s.statements[0].sql; }).join(',') === 'b:upgrade:up b'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

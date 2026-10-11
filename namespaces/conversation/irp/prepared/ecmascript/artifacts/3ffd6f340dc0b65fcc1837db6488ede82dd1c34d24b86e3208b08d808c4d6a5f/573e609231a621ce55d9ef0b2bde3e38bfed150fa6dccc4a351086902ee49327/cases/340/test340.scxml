@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-5: a negative sequence raises error.execution and assigns nothing. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="msg" expr="{&#34;source_ids&#34;: [&#34;user&#34;], &#34;target_ids&#34;: [&#34;bot&#34;], &#34;content&#34;: &#34;hello&#34;, &#34;content_type&#34;: &#34;text/plain&#34;, &#34;extra&#34;: 1}"/>
+  <data id="m" expr="'untouched'"/>
+  <data id="k" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:commit location="m" keylocation="k" direction="inbound" event="'e'" message="msg" sequence="-1"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="m === 'untouched' &amp;&amp; k === 'untouched'" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

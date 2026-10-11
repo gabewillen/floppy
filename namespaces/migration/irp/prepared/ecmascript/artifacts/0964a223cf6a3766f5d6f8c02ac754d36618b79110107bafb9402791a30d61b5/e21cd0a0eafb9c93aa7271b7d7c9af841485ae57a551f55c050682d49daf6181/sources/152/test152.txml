@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- migration-6: a relative step past head raises error.execution and assigns nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:migration="https://github.com/stateforward/floppy/namespaces/migration">
+<datamodel>
+  <data id="revisions" expr='[{"revision": "a", "down_revision": null, "upgrade": [{"sql": "up a"}], "downgrade": [{"sql": "down a"}]}, {"revision": "b", "down_revision": "a", "upgrade": [{"sql": "up b"}], "downgrade": [{"sql": "down b"}]}, {"revision": "c", "down_revision": "b", "upgrade": [{"sql": "up c"}], "downgrade": [{"sql": "down c"}]}]'/>
+  <data id="plan" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <migration:plan location="plan" revisions="revisions" current="'b'" target="'+2'"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="plan === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>
