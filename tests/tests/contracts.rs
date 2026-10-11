@@ -39,8 +39,9 @@
 //! * every `cond`, and every `expr` outside `<data>`, is at most 160
 //!   characters [floppy rule];
 //! * every `<invoke type="scxml">` has a literal `id` and either a
-//!   literal relative `src`, a `srcexpr`, or a `<content expr>` (autonomy
-//!   invokes a builder-produced behavior from its inventory row's source).
+//!   literal relative `src`, a `srcexpr`, or a `<content expr>` (the
+//!   candidates runner invokes a builder-produced behavior from its
+//!   inventory row's source).
 //!
 //! Builder output, the documents a `srcexpr` or `<content expr>` invokes,
 //! gets no schema files (scxml.rs reads them only for a literal `src`
