@@ -186,7 +186,14 @@ fn malformed_parameters_reject_the_start() {
         ),
         (
             with("decode", &[("audio", text("a")), ("voice", text("alloy"))]),
-            "speech decode takes model, audio, and media_type only",
+            "speech decode takes model, audio, media_type, and provider only",
+        ),
+        (
+            with(
+                "decode",
+                &[("audio", text("a")), ("provider", text("elevenlabs"))],
+            ),
+            "speech decode provider must be gemini",
         ),
     ]);
 }
@@ -248,10 +255,22 @@ fn malformed_encoding_parameters_reject_the_start() {
                     encoding[0].clone(),
                     encoding[1].clone(),
                     encoding[2].clone(),
+                    ("provider", text("openai")),
+                ],
+            ),
+            "speech encode provider must be elevenlabs or gemini",
+        ),
+        (
+            with(
+                "encode",
+                &[
+                    encoding[0].clone(),
+                    encoding[1].clone(),
+                    encoding[2].clone(),
                     ("provider", text("gemini")),
                 ],
             ),
-            "speech provider must be elevenlabs",
+            "speech media_type is not one the backend encodes",
         ),
         (
             with(
@@ -583,4 +602,163 @@ fn the_package_manifest_binds_the_exact_uri_and_artifacts() {
         "floppy_service_speech.virtualized.wasm"
     );
     assert_eq!(manifest.env_slots, [API_KEY_SLOT, BASE_URL_SLOT]);
+}
+
+fn gemini_decode() -> Operation {
+    parse(&[
+        ("operation", text("decode")),
+        ("model", text("gemini-3.5-flash")),
+        ("audio", text("media/heard.wav")),
+        ("provider", text("gemini")),
+    ])
+    .expect("a valid Gemini decoding")
+}
+
+fn gemini_encode(media_type: &str) -> Operation {
+    parse(&[
+        ("operation", text("encode")),
+        ("model", text("gemini-3.1-flash-tts-preview")),
+        ("text", text("Hello there.")),
+        ("voice", text("Kore")),
+        ("output", text("/media/said.pcm")),
+        ("media_type", text(media_type)),
+        ("provider", text("gemini")),
+    ])
+    .expect("a valid Gemini encoding")
+}
+
+fn json_body(request: &Request) -> Json {
+    serde_json::from_slice(&request.body).expect("the body is JSON")
+}
+
+#[test]
+fn a_gemini_decoding_is_an_interaction_with_the_audio_inline() {
+    let Operation::Decode(decoding) = gemini_decode() else {
+        panic!("a decoding");
+    };
+    assert_eq!(decoding.media_type, GEMINI_AUDIO_MEDIA_TYPE);
+    let request = decoding_request(2, 1, &decoding, b"RIFF-audio");
+    assert_eq!(
+        request.url,
+        [
+            Part::Reference(2),
+            Part::Literal(gemini::INTERACTIONS_PATH.into())
+        ]
+    );
+    assert_eq!(
+        request.headers[0],
+        ("x-goog-api-key".to_owned(), vec![Part::Reference(1)])
+    );
+    assert_eq!(
+        json_body(&request),
+        serde_json::json!({
+            "input": [
+                {"text": gemini::DECODING_PROMPT, "type": "text"},
+                {"data": "UklGRi1hdWRpbw==", "mime_type": "audio/wav", "type": "audio"},
+            ],
+            "model": "gemini-3.5-flash",
+            "store": false,
+        })
+    );
+}
+
+#[test]
+fn a_gemini_encoding_is_an_interaction_answering_audio() {
+    let Operation::Encode(encoding) = gemini_encode("audio/pcm") else {
+        panic!("an encoding");
+    };
+    let request = encoding_request(2, 1, &encoding);
+    assert_eq!(
+        request.url,
+        [
+            Part::Reference(2),
+            Part::Literal(gemini::INTERACTIONS_PATH.into())
+        ]
+    );
+    assert_eq!(
+        json_body(&request),
+        serde_json::json!({
+            "generation_config": {"speech_config": [{"voice": "Kore"}]},
+            "input": "Hello there.",
+            "model": "gemini-3.1-flash-tts-preview",
+            "response_format": {"type": "audio"},
+            "store": false,
+        })
+    );
+}
+
+#[test]
+fn a_gemini_transcript_is_the_text_of_its_model_output() {
+    let operation = gemini_decode();
+    for (body, expected) in [
+        (
+            br#"{"steps":[{"type":"thought","signature":"x"},{"type":"model_output","content":[{"type":"text","text":" Hello there! "}]}]}"#.as_slice(),
+            r#"{"text":"Hello there!"}"#,
+        ),
+        (br#"{"output_text":"hi","steps":[]}"#.as_slice(), r#"{"text":"hi"}"#),
+    ] {
+        let returned = decoding_outcome(&operation, ok(body));
+        assert_eq!(returned.name, DECODING_OUTPUT_EVENT);
+        assert_eq!(returned.data, expected);
+    }
+    let silent = decoding_outcome(
+        &operation,
+        ok(br#"{"steps":[{"type":"model_output","content":[]}]}"#),
+    );
+    assert_eq!(silent.data, r#"{"text":""}"#);
+    for body in [b"not json".as_slice(), br#"{"steps":[{"type":"thought"}]}"#] {
+        assert_eq!(decoding_outcome(&operation, ok(body)).name, FAILED_EVENT);
+    }
+}
+
+#[test]
+fn gemini_audio_is_written_raw_or_in_a_wav_container() {
+    // Two 16-bit samples, base64 of [1, 0, 2, 0].
+    let answer = br#"{"steps":[{"type":"model_output","content":[{"type":"audio","data":"AQACAA==","sample_rate":24000,"channels":1,"mime_type":"audio/l16; rate=24000; channels=1"}]}]}"#;
+    let mut written = None;
+    let returned = encoding_outcome(&gemini_encode("audio/pcm"), ok(answer), |path, audio| {
+        written = Some((path.to_owned(), audio.to_vec()));
+        Ok(())
+    });
+    assert_eq!(
+        written,
+        Some(("/media/said.pcm".to_owned(), vec![1, 0, 2, 0]))
+    );
+    assert_eq!(data(&returned)["sample_rate_hz"], 24_000);
+    assert_eq!(data(&returned)["channels"], 1);
+
+    let mut wav = Vec::new();
+    let returned = encoding_outcome(&gemini_encode("audio/wav"), ok(answer), |_, audio| {
+        wav = audio.to_vec();
+        Ok(())
+    });
+    assert_eq!(returned.name, ENCODING_OUTPUT_EVENT);
+    assert_eq!(&wav[..4], b"RIFF");
+    assert_eq!(&wav[wav.len() - 4..], &[1, 0, 2, 0]);
+    assert_eq!(data(&returned)["media_type"], "audio/wav");
+
+    for body in [
+        br#"{"steps":[]}"#.as_slice(),
+        br#"{"steps":[{"content":[{"type":"audio","data":"AQACAA==","sample_rate":16000}]}]}"#,
+        br#"{"steps":[{"content":[{"type":"audio","data":"not*base64"}]}]}"#,
+    ] {
+        let returned = encoding_outcome(&gemini_encode("audio/pcm"), ok(body), |_, _| Ok(()));
+        assert_eq!(
+            returned.name,
+            FAILED_EVENT,
+            "{}",
+            String::from_utf8_lossy(body)
+        );
+    }
+}
+
+#[test]
+fn base64_round_trips() {
+    for bytes in [&b""[..], b"a", b"ab", b"abc", b"RIFF-audio"] {
+        assert_eq!(
+            gemini::base64_decoded(&voice::base64(bytes)).as_deref(),
+            Some(bytes)
+        );
+    }
+    assert_eq!(gemini::base64_decoded("A"), None);
 }

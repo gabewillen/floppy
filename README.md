@@ -150,11 +150,16 @@ The listening's hearing leaves name the speech service's models:
 `pyannote-diarization`,
 `abilities/voice_identification/voice_identification.scx`'s is
 `voice-detect-wespeaker-resnet34` (LocalAI's names for the models the original runs
-locally), and `abilities/speech_decoding/speech_decoding.scx`'s `model`
-is `whisper-1`. `abilities/speaking/speaking.scx`'s `model` is
-`gemini-3.1-flash-tts-preview` and its `voice` is `Kore`, the original's speech
-encoder defaults, which it passes to vocal for the speech service
-(vocal's own are `null`: its invoker names them).
+locally), and `abilities/speech_decoding/speech_decoding.scx`'s
+`provider` is `gemini` and its `model` `gemini-3.5-flash` (the original's
+Gemini speech decoder default). `abilities/speaking/speaking.scx`'s
+`provider` is `gemini`, its `model` `gemini-3.1-flash-tts-preview` and its
+`voice` `Kore`, the original's speech encoder defaults, which it passes to
+vocal for the speech service (vocal's own are `null`: its invoker names
+them). Both directions therefore call the Gemini API, so
+`FLOPPY_SPEECH_BASE_URL` is its version root,
+`https://generativelanguage.googleapis.com/v1beta` (decision D94); a
+`provider` of `null` is the OpenAI-compatible API (`whisper-1`, `tts-1`).
 
 ### Timeouts and bounds
 

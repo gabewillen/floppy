@@ -3,7 +3,8 @@
 The `speech` invoked service: one speech or voice operation per `<invoke>`,
 as a Wasm component (`https://github.com/stateforward/floppy/services/speech`).
 It is the original's `SpeechDecoder` and `SpeechEncoder` providers on one
-OpenAI-compatible audio API (decision D57), and the original's local voice
+OpenAI-compatible audio API (decision D57) or, with `provider` `gemini`, the
+Gemini API's Interactions API (decision D94), and the original's local voice
 classifiers on LocalAI's voice APIs (decision D66). Its crate documentation
 ([src/lib.rs](src/lib.rs), and [src/voice.rs](src/voice.rs) for the voice
 operations) is the full contract: parameters, events, requests, bounds, and
@@ -15,8 +16,8 @@ telemetry.
 
 | Operation | The original | Request | Answer |
 | --- | --- | --- | --- |
-| `decode` | `SpeechDecoder` (hearing's `SpeechDecoding`) | `POST {base}/audio/transcriptions` | `bot.ability.hearing.speech.decoding.output {text}` |
-| `encode` | `SpeechEncoder` (vocal's `SpeechEncoding`) | `POST {base}/audio/speech`, or with `provider` `elevenlabs` its `text-to-speech/{voice}` API | `bot.ability.vocal.speech.encoding.output {audio, media_type, sample_rate_hz, channels, duration}` |
+| `decode` | `SpeechDecoder` (hearing's `SpeechDecoding`) | `POST {base}/audio/transcriptions`, or with `provider` `gemini` `POST {base}/interactions` | `bot.ability.hearing.speech.decoding.output {text}` |
+| `encode` | `SpeechEncoder` (vocal's `SpeechEncoding`) | `POST {base}/audio/speech`, or with `provider` `elevenlabs` its `text-to-speech/{voice}` API, or with `gemini` `POST {base}/interactions` (`audio/pcm` or `audio/wav`) | `bot.ability.vocal.speech.encoding.output {audio, media_type, sample_rate_hz, channels, duration}` |
 | `detect` | `VoiceActivityClassifier` (`VoiceDetection`) | `POST {base}/vad` | `bot.ability.hearing.voice.detection.output` |
 | `diarize` | `VoiceDiarizer` (`VoiceDiarization`) | `POST {base}/audio/diarization` | `bot.ability.hearing.voice.diarization.output` |
 | `identify` | the voice identification `Classifier` (`VoiceIdentification`) | `POST {base}/voice/embed` per segment | `bot.ability.hearing.voice.identification.output` |

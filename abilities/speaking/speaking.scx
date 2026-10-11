@@ -70,8 +70,10 @@
     <data id="sample_rate_hz" expr="24000"/>
     <data id="channels" expr="1"/>
     <data id="media_type" expr="'audio/pcm'"/>
-    <!-- The speech model and voice vocal asks the speech service for:
-         the original's speech encoder defaults. -->
+    <!-- The speech provider, model and voice vocal asks the speech
+         service for: the original's speech encoder defaults (its gemini
+         provider). -->
+    <data id="provider" expr="'gemini'"/>
     <data id="model" expr="'gemini-3.1-flash-tts-preview'"/>
     <data id="voice" expr="'Kore'"/>
     <data id="output_prefix" expr="'media/speaking-'"/>
@@ -124,6 +126,7 @@
     </transition>
     <invoke id="vocal" type="scxml" src="../vocal/vocal.scx">
       <param name="output" expr="outputPath()"/>
+      <param name="provider" expr="provider"/>
       <param name="model" expr="model"/>
       <param name="voice" expr="voice"/>
       <param name="media_type" expr="media_type"/>

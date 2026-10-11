@@ -7,6 +7,25 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-11, speaking and speech decoding on the Gemini API (decision D94)
+
+The runs used floppy's working tree on commit `365f38c6` with the speech
+service's `gemini` provider (D94). The cloud session reaches
+`generativelanguage.googleapis.com` only through its HTTPS proxy, which
+adds the key, so a local relay forwarded `http://127.0.0.1:8789/v1beta` to
+it; `.env.gemini` sets `FLOPPY_SPEECH_BASE_URL` to the relay and
+`FLOPPY_SPEECH_API_KEY` to a placeholder. The chat also had `.env.cpa`
+(the CPA gateway and TypeSafe through their relays, as on 2026-10-10).
+
+| Run | Model | Result | Runs used | Note |
+| --- | --- | --- | --- | --- |
+| `live_speech_round_trip_through_an_env_file` | `gemini-3.1-flash-tts-preview` (voice `Kore`), then `gemini-3.5-flash` | pass | 1 | 36 s; `FLOPPY_LIVE_SPEECH_PROVIDER=gemini`: "The quick brown fox jumps over the lazy dog." encoded to `audio/wav` and decoded back with "fox" and "lazy" |
+| `floppy_live` `live_chat` | `gabe-codex-1/gpt-6-luna`, speech on Gemini | pass | 1 | 53 s; `FLOPPY_LIVE_ENV_FILE=.env.cpa:.env.gemini`: floppy said "Hello! Great to hear from you." and speaking encoded it with its defaults to `media/speaking-1.pcm` (24 kHz mono `audio/pcm`, `bot.ability.speaking.output`); the listening heard the bot's own sound and failed at voice detection (`the backend is not configured`: no LocalAI) |
+
+The listening has not run live: voice detection, which every sound goes
+through, needs LocalAI at `FLOPPY_VOICE_BASE_URL`, and no backend the
+session reaches serves it.
+
 ## 2026-10-10, reading, hearing and speaking through the CPA gateway, model `gabe-codex-1/gpt-6-luna`
 
 The run used floppy commit `9a611e48` with wasi-sdk 25. The cloud session

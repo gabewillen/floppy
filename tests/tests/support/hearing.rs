@@ -1,8 +1,9 @@
 //! A deterministic fake hearing backend on 127.0.0.1 for the listening
 //! tests. It speaks what the speech service (`services/speech`) sends:
 //! `LocalAI`'s `POST /v1/vad` (voice detection), `POST /v1/audio/diarization`
-//! and `POST /v1/voice/embed` (voice identification), and the
-//! `OpenAI`-compatible `POST /v1/audio/transcriptions` (speech decoding).
+//! and `POST /v1/voice/embed` (voice identification), and the Gemini API's
+//! `POST /v1/interactions` (speech decoding, floppy's default) or the
+//! `OpenAI`-compatible `POST /v1/audio/transcriptions`.
 //!
 //! A test chooses what is heard by writing it into the audio: [`voiced`]
 //! spells text as signed 16-bit samples, one run of [`SAMPLES_PER_CHAR`]
@@ -33,10 +34,11 @@ pub const SAMPLES_PER_CHAR: usize = 160;
 const VAD_RATE_HZ: f64 = 16_000.0;
 
 /// One request: its `request_line`, whether it carried the fake key
-/// (`keyed`), and what it asked: `heard` (the text read from its audio),
-/// `model`, and per endpoint `form` (transcription and diarization:
-/// `model`, `response_format`, `filename`, `content_type`) or `samples`
-/// (voice detection).
+/// (`keyed`: as the bearer, or Gemini's `x-goog-api-key`), and what it
+/// asked: `heard` (the text read from its audio), `model`, and per
+/// endpoint `form` (transcription and diarization: `model`,
+/// `response_format`, `filename`, `content_type`), `prompt` and
+/// `mime_type` (interactions), or `samples` (voice detection).
 pub type Request = Json;
 
 /// The running fake backend.
@@ -300,8 +302,13 @@ impl Backend {
 
     /// The texts the backend was asked to transcribe, in order.
     pub fn decoded(&self) -> Vec<String> {
-        self.received_at("/audio/transcriptions")
-            .iter()
+        self.received()
+            .into_iter()
+            .filter(|request| {
+                ["/interactions", "/audio/transcriptions"]
+                    .iter()
+                    .any(|path| request["request_line"] == format!("POST /v1{path} HTTP/1.1"))
+            })
             .map(|request| request["heard"].as_str().unwrap_or_default().to_owned())
             .collect()
     }
@@ -365,23 +372,43 @@ fn answered(
                 json!({"embedding": embedding, "dim": 2, "model": request["model"]}),
             ))
         }
+        "/v1/interactions" => {
+            let request: Json = serde_json::from_slice(body).unwrap_or(Json::Null);
+            let audio = &request["input"][1];
+            let text =
+                spelled(&samples_of(&unbase64(audio["data"].as_str().unwrap_or_default())).0);
+            record["model"] = request["model"].clone();
+            record["prompt"] = request["input"][0]["text"].clone();
+            record["mime_type"] = audio["mime_type"].clone();
+            record["heard"] = json!(text);
+            transcribed(
+                &text,
+                json!({"steps": [{"type": "model_output", "content": [{"type": "text", "text": text}]}]}),
+            )
+        }
         _ => {
             let (fields, file) = form(body, content_type);
             let text = spelled(&samples_of(&file).0);
             record["model"] = fields["model"].clone();
             record["form"] = fields;
             record["heard"] = json!(text);
-            if text.starts_with("hang") {
-                None
-            } else if text.starts_with("fail") {
-                Some((
-                    "500 Internal Server Error",
-                    json!({"error": {"message": "boom"}}),
-                ))
-            } else {
-                Some((ok, json!({"text": text})))
-            }
+            transcribed(&text, json!({"text": text}))
         }
+    }
+}
+
+/// A transcription's answer: never for text starting with `hang`, 500 for
+/// text starting with `fail`, else `ok`.
+fn transcribed(text: &str, ok: Json) -> Option<(&'static str, Json)> {
+    if text.starts_with("hang") {
+        None
+    } else if text.starts_with("fail") {
+        Some((
+            "500 Internal Server Error",
+            json!({"error": {"message": "boom"}}),
+        ))
+    } else {
+        Some(("200 OK", ok))
     }
 }
 
@@ -424,7 +451,8 @@ fn answer(mut stream: std::net::TcpStream, log: &Mutex<Vec<Request>>) {
         .to_owned();
     let mut record = json!({
         "request_line": request_line.trim_end(),
-        "keyed": header("authorization").as_deref() == Some(&format!("Bearer {FAKE_KEY}")),
+        "keyed": header("authorization").as_deref() == Some(&format!("Bearer {FAKE_KEY}"))
+            || header("x-goog-api-key").as_deref() == Some(FAKE_KEY),
     });
     let reply = answered(
         &path,

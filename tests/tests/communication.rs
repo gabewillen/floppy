@@ -871,9 +871,10 @@ fn speech_encoding_is_bounded_by_its_timeout() {
     close(run, "speech_encoding_is_bounded_by_its_timeout");
 }
 
-/// A fake `OpenAI`-compatible speech backend on 127.0.0.1: every
-/// `POST /v1/audio/speech` answers a tenth of a second of raw 24 kHz mono
-/// 16-bit PCM (4800 bytes), and its request bodies are recorded.
+/// A fake Gemini speech backend on 127.0.0.1: every
+/// `POST /v1/interactions` answers a tenth of a second of raw 24 kHz mono
+/// 16-bit PCM (4800 bytes, base64 in its audio part), and its request
+/// bodies are recorded.
 fn speech_backend() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Json>>>) {
     use std::io::{BufRead as _, BufReader, Read as _, Write as _};
     let listener =
@@ -905,13 +906,17 @@ fn speech_backend() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Json>>>) {
             log.lock()
                 .expect("the request log")
                 .push(serde_json::from_slice(&body).unwrap_or(Json::Null));
-            let audio = vec![0_u8; 4800];
+            // 4800 zero bytes in base64.
+            let answer = json!({"steps": [{"type": "model_output", "content": [{
+                "type": "audio", "data": "A".repeat(6400), "sample_rate": 24000,
+                "channels": 1, "mime_type": "audio/l16; rate=24000; channels=1",
+            }]}]})
+            .to_string();
             let _ = write!(
                 stream,
-                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
-                audio.len()
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{answer}",
+                answer.len()
             );
-            let _ = stream.write_all(&audio);
         }
     });
     (origin, requests)
@@ -981,10 +986,13 @@ fn a_response_is_spoken_through_the_speech_service() {
     assert_eq!(written.len(), 4800);
     let requests = requests.lock().expect("the request log").clone();
     assert_eq!(requests.len(), 1, "{requests:?}");
-    // speaking's defaults, the original's speech encoder model and voice.
+    // speaking's defaults, the original's gemini speech encoder, model and voice.
     assert_eq!(requests[0]["model"], "gemini-3.1-flash-tts-preview");
     assert_eq!(requests[0]["input"], "reply 1");
-    assert_eq!(requests[0]["voice"], "Kore");
-    assert_eq!(requests[0]["response_format"], "pcm");
+    assert_eq!(
+        requests[0]["generation_config"],
+        json!({"speech_config": [{"voice": "Kore"}]})
+    );
+    assert_eq!(requests[0]["response_format"], json!({"type": "audio"}));
     close(run, "a_response_is_spoken_through_the_speech_service");
 }

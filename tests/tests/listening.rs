@@ -188,17 +188,15 @@ fn a_heard_utterance_is_decoded_into_a_speech_product() {
     assert_eq!(detected[0]["model"], "silero-vad");
     assert_eq!(detected[0]["keyed"], true, "the env-file key is the bearer");
     assert_eq!(detected[0]["samples"], 19 * hearing::SAMPLES_PER_CHAR);
-    let decoded = backend.received_at("/audio/transcriptions");
+    let decoded = backend.received_at("/interactions");
     assert_eq!(decoded.len(), 1, "the utterance is decoded once");
     assert_eq!(decoded[0]["keyed"], true);
+    // speech decoding's defaults, the original's gemini speech decoder.
+    assert_eq!(decoded[0]["model"], "gemini-3.5-flash");
+    assert_eq!(decoded[0]["mime_type"], "audio/wav");
     assert_eq!(
-        decoded[0]["form"],
-        json!({
-            "model": "whisper-1",
-            "response_format": "json",
-            "filename": "floppy-utterance-2.wav",
-            "content_type": "audio/wav"
-        })
+        decoded[0]["prompt"],
+        "Generate a transcript of the speech. Return only the spoken words as plain text."
     );
     assert_eq!(decoded[0]["heard"], "what is the weather");
     assert_eq!(
@@ -361,8 +359,8 @@ fn speech_with_no_sample_rate_cannot_be_placed_on_a_timeline() {
         "speech_with_no_sample_rate_cannot_be_placed_on_a_timeline",
     );
     assert_eq!(
-        backend.received_at("/audio/transcriptions")[0]["form"]["filename"],
-        "floppy-utterance-2.pcm"
+        backend.received_at("/interactions")[0]["mime_type"],
+        "audio/pcm"
     );
     assert_eq!(
         json_texts(&finished.all, "harness.failed"),

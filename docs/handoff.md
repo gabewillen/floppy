@@ -207,9 +207,11 @@ Last updated: 2026-10-10.
 - **Live:** `speech_service`'s `live_speech_round_trip_through_an_env_file`
   is the one live speech test (ignored; it needs a speech backend in
   `FLOPPY_LIVE_ENV_FILE`). Reading passed live on the CPA gateway
-  (2026-10-10, [live-proof.md](live-proof.md)); hearing, listening and
-  speaking have not run live, because neither the CPA gateway nor TypeSafe
-  serves `/audio/speech` or `/audio/transcriptions`.
+  (2026-10-10), and on the Gemini API (D94) the speech round trip
+  (speaking's encoder and hearing's decoder) and `floppy_live`'s
+  `live_chat` with real spoken audio passed (2026-10-11,
+  [live-proof.md](live-proof.md)); the listening has not run live, since
+  its voice detection needs LocalAI (`FLOPPY_VOICE_BASE_URL`).
 
 ## Repositories
 
@@ -559,11 +561,10 @@ The remaining the original port runs as one ultracode run with these grants:
   web components + hsm.ts, marketplace of packages, a Mindstorms-style
   workshop whose pieces are inferred from element XSDs, live highlighting
   of running bots.
-- Live speech runs: hearing, listening and speaking (Gemini TTS, `Kore`)
-  have never run live; they need a speech backend at
-  `FLOPPY_SPEECH_BASE_URL` (and LocalAI at `FLOPPY_VOICE_BASE_URL` for
-  listening). Neither the CPA gateway nor TypeSafe serves one
-  (live-proof.md, 2026-10-10).
+- Live listening: voice detection (every sound) needs LocalAI at
+  `FLOPPY_VOICE_BASE_URL`, which no backend reachable from the cloud
+  session serves, so the listening has not run live end to end; speech
+  decoding and speaking have, on Gemini (live-proof.md, 2026-10-11).
 - Going public: CI, publishing the prepared releases with `SHA256SUMS`
   ([release.md](release.md)), per-platform `scx` binaries, IRP identity
   regeneration on Linux CI.

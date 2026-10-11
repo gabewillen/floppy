@@ -12,8 +12,9 @@
 
   Input: bot.ability.vocal.speech.encoding.input {text} (the original's input is
   the text's UTF-8 bytes). applying invokes the speech service with the
-  <param>s operation "encode", model and voice (the speech service
-  requires both: the invoker names them), text, output (where the
+  <param>s operation "encode", provider (the invoker's, null for the
+  OpenAI-compatible API), model and voice (the speech service requires
+  both: the invoker names them), text, output (where the
   service writes the audio: a path in the media directory the run grants
   it, which the invoker names) and media_type, and answers the parent with
   the service's bot.ability.vocal.speech.encoding.output {audio,
@@ -38,7 +39,8 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="vocal" initial="idle">
   <datamodel>
-    <!-- The invoker's <param>s. -->
+    <!-- The invoker's <param>s (provider null: the OpenAI-compatible API). -->
+    <data id="provider" expr="null"/>
     <data id="model" expr="null"/>
     <data id="voice" expr="null"/>
     <data id="output" expr="null"/>
@@ -71,6 +73,7 @@
     <invoke id="speech" type="https://github.com/stateforward/floppy/services/speech"
             env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">
       <param name="operation" expr="'encode'"/>
+      <param name="provider" expr="provider"/>
       <param name="model" expr="model"/>
       <param name="text" expr="text"/>
       <param name="voice" expr="voice"/>
