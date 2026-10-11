@@ -181,7 +181,7 @@ fn a_named_bot_is_addressed_by_its_name() {
     assert_eq!(turns, strings(&[r#"addressed "Floppy""#, "ignore 1"]));
 }
 
-/// The original's SpeechNameRecognizer: a sound is decoded and the transcript
+/// The original's `SpeechNameRecognizer`: a sound is decoded and the transcript
 /// searched for the name. Only the identity hears the sound here (the
 /// body's input list without the listening), so the one turn is the
 /// addressed one.
@@ -189,12 +189,12 @@ fn a_named_bot_is_addressed_by_its_name() {
 fn a_named_bot_hears_its_name_in_a_sound() {
     let test = "a_named_bot_hears_its_name_in_a_sound";
     let body = layout(Some("'Floppy'"));
-    let text = std::fs::read_to_string(&body).expect("the body is readable");
+    let document = std::fs::read_to_string(&body).expect("the body is readable");
     let inputs = r#"<data id="input" expr="['identity', 'listening']"/>"#;
-    assert!(text.contains(inputs), "the body's input abilities");
+    assert!(document.contains(inputs), "the body's input abilities");
     std::fs::write(
         &body,
-        text.replacen(inputs, r#"<data id="input" expr="['identity']"/>"#, 1),
+        document.replacen(inputs, r#"<data id="input" expr="['identity']"/>"#, 1),
     )
     .expect("the body copy is writable");
     let backend = hearing::Backend::start();

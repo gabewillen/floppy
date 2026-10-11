@@ -865,7 +865,7 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
 /// The original's Autonomy dispatches a handled behavior's selections before it
 /// counts the use: one the turn cannot place (here an event nobody offers)
 /// marks the behavior failed, not used, and fails the turn with the original's
-/// SelectionRejectionError message; intuition never runs.
+/// `SelectionRejectionError` message; intuition never runs.
 #[test]
 fn a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn() {
     let mock = Mock::start();

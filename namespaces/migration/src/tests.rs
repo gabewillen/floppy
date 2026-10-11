@@ -148,7 +148,8 @@ fn a_target_may_be_a_revision_or_a_relative_step() {
         Ok(json!("0001"))
     );
     assert_eq!(
-        plan_of(&reference_revisions(), Some("0001"), "+1").map(|plan| plan["steps"].as_array().map(Vec::len)),
+        plan_of(&reference_revisions(), Some("0001"), "+1")
+            .map(|plan| plan["steps"].as_array().map(Vec::len)),
         Ok(Some(1))
     );
     assert_eq!(

@@ -207,7 +207,7 @@ fn next_after_finds_the_occurrences_zoneinfo_finds() {
 
 /// A routine on an `at` schedule (the reference `hsm.at`), written as the
 /// persistent routine contract says: its data model computes the next
-/// weekday 08:00 in America/New_York with `next_after` and ticks there with
+/// weekday 08:00 in `America/New_York` with `next_after` and ticks there with
 /// `scheduled_at` that occurrence. A routine whose tick selects nothing has
 /// its send refused by the tick's schema (the original's runtime fails that
 /// tick), so nothing reaches the runner's parent.
