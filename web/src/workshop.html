@@ -66,7 +66,8 @@ floppy-block.sel>.mouth.empty,floppy-block[data-state="offering"]>.mouth.empty{m
 floppy-canvas[data-fam="square"] .mouth[data-fam="square"],floppy-canvas[data-fam="trap"] .mouth[data-fam="trap"],floppy-canvas[data-fam="round"] .mouth[data-fam="round"],floppy-canvas[data-fam="tri"] .mouth[data-fam="tri"],floppy-canvas[data-fam="double"] .mouth[data-fam="double"],floppy-canvas[data-fam="wave"] .mouth[data-fam="wave"]{min-height:30px;background:#123f3a;outline:1.5px dashed var(--ok);outline-offset:-1px}
 floppy-block>.ft{height:14px}
 floppy-block.sel>.hd{outline:1px dashed var(--ink);outline-offset:-3px}
-floppy-block.active>svg.shape path{stroke:var(--led)!important;stroke-width:3.5}
+floppy-block>svg.hl{position:absolute;left:0;top:0;z-index:3;overflow:visible;pointer-events:none}
+floppy-block>svg.hl path{stroke:var(--led)}
 floppy-block[data-state="lifted"]{opacity:.4}
 floppy-block[data-state="offering"]>.mouth{outline:1.5px dashed var(--ok);outline-offset:-2px}
 floppy-block[data-state="refusing"]>.mouth{outline:1.5px dashed var(--bad);outline-offset:-2px}
@@ -363,6 +364,7 @@ function colorOf(tag) {
 }
 function shapeBlock(b) {
   const W = b.offsetWidth, H = b.offsetHeight, R = 5;
+  if (!W) return; /* hidden: shaped again when its space is shown */
   const hd = b.querySelector(":scope>.hd"), mouth = b.querySelector(":scope>.mouth");
   const own = FAM.family.get(b.tag)?.shape, hat = b.tag === "scxml" || !own;
   let d = `M0,${R}Q0,0 ${R},0`;
@@ -379,6 +381,12 @@ function shapeBlock(b) {
   if (!svg) { svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("class", "shape"); svg.innerHTML = '<path stroke-width="2" stroke-linejoin="round"/>'; b.prepend(svg); }
   svg.setAttribute("width", W); svg.setAttribute("height", H + D + 2);
   const p = svg.firstChild; p.setAttribute("d", d); p.style.stroke = "var(--edge)"; p.style.fill = colorOf(b.tag); b.style.setProperty("--fam", colorOf(b.tag));
+  /* The active outline is its own layer above nested blocks, so they never cover it. */
+  let hl = b.querySelector(":scope>svg.hl");
+  if (b.classList.contains("active")) {
+    if (!hl) { hl = document.createElementNS("http://www.w3.org/2000/svg", "svg"); hl.setAttribute("class", "hl"); hl.setAttribute("aria-hidden", "true"); hl.innerHTML = '<path fill="none" stroke-width="3" stroke-linejoin="round"/>'; b.append(hl); }
+    hl.setAttribute("width", W); hl.setAttribute("height", H + D + 2); hl.firstChild.setAttribute("d", d);
+  } else hl?.remove();
 }
 function shapeAll(root) { root.querySelectorAll("floppy-block").forEach(shapeBlock); }
 
@@ -1005,6 +1013,7 @@ class FloppyWorkshop extends hsm.from(HTMLElement) {
     if (mode === "observe") { if (!this.live) { this.live = new Interp(this.doc); o.reset(); o.seen = 0; } hsm.live(o, "watch"); }
     else hsm.live(o, "leave");
     if (this.canvas) this.repaint();
+    requestAnimationFrame(() => shapeAll(this));
   }
   static loadDoc(_c, w, e) { w.doc = e.data.doc; w.selected = null; w.sim = new Interp(w.doc); w.live = null; w.robot = e.data.robot || { name: e.data.path.split("/")[0], place: "device", event: null }; w.querySelector(".top .doc").textContent = e.data.path; w.say(FloppyWorkshop.HINT[w.mode], "ok"); w.repaint(); }
 
