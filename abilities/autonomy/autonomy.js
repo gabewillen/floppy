@@ -2,11 +2,7 @@
 // <script src="autonomy.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// Shared by seeding, loading, running, using and recording_failure.
-
-function isTimerEvent(event) {
-  return event.sendid === timer;
-}
+// loading
 
 function memoryTimeoutDelay() {
   return memory_timeout_ms + 'ms';
@@ -29,7 +25,7 @@ function silenceDelay() {
   return silence_ms + 'ms';
 }
 
-// Shared by seeding and running: the child answered the turn with at least
+// seeding: the seed answered the turn with at least
 // one selection (mosfet _coerce_behavior_output: an empty one is unhandled).
 function isBehaviorHandled(event) {
   return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected) && event.data.selected.length > 0;
@@ -94,77 +90,31 @@ function hasNoMatchAndNoCandidates() {
 
 // running
 
-// The name of the behavior at index.
-function candidateName() {
-  return rows[index].values[0];
-}
-
-// The SCXML source of the behavior at index.
-function candidateSource() {
-  return rows[index].values[1];
-}
-
-function triedWithCandidate() {
-  return tried.concat([candidateName()]);
-}
-
 // mosfet behavior_input_payload without focus and focus_candidates, which
 // running assigns after it.
 function behaviorInputPayload() {
   return (stimulus.data !== null && typeof stimulus.data === 'object' ? Object.assign({}, stimulus.data) : {event: stimulus.data});
 }
 
-function candidateSilentLog() {
-  return candidateName() + ' after ' + silence_ms + ' ms';
+// The matched rows as the runner's candidates, [{name, source}].
+function candidateRows() {
+  return rows.map(function (row) { return {name: row.values[0], source: row.values[1]}; });
 }
 
-function candidateFailedLog(event) {
-  return candidateName() + ' (' + event.name + ')';
+function isRunHandled(event) {
+  return event.data.handled === true;
 }
 
-// dispatching and recorded_failure
-
-// No selection of the handled behavior was rejected.
-function isAccepted() {
-  return rejection === null;
+function isRunRejected(event) {
+  return event.data.rejection !== null;
 }
 
-function isRejected() {
-  return rejection !== null;
+function triedWithRun(event) {
+  return tried.concat(event.data.tried);
 }
 
-function candidateRejectedLog() {
-  return candidateName() + ' (' + rejection + ')';
-}
-
-// advancing
-
-function nextIndex() {
-  return index + 1;
-}
-
-function hasNextCandidate() {
-  return index < rows.length;
-}
-
-// using and recording_failure
-
-// mosfet _prepare_used_persistence.
-function usedPersistenceStatements() {
-  return [{sql: used_sql, parameters: [candidateName()]}];
-}
-
-// mosfet _prepare_failed_persistence.
-function failedPersistenceStatements() {
-  return [{sql: failed_sql, parameters: [candidateName()]}];
-}
-
-function usageFailedReason(detail) {
-  return 'Autonomy behavior usage failed: ' + detail;
-}
-
-function usageTimedOutReason() {
-  return 'Autonomy behavior usage timed out after ' + memory_timeout_ms + ' ms';
+function runFailedLog(event) {
+  return rows[0].values[0] + ' (' + event.name + ')';
 }
 
 // done, unhandled, answered, failed

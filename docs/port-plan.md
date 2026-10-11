@@ -268,7 +268,7 @@ D33 to D43.
 | `model_facing_xml`, `InputData.model_facing_payload` (reasoning's `ProcessorInput` prompt and its budgets) | `promptProjection()` in `abilities/reasoning/reasoning.js` | ability script |
 | `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`, `_stable_context_ref`, `relationship_context_ref`, `MessageProvenance` | `<conversation:commit>` (its `keylocation` receives the relationship context reference) | `namespaces/conversation` element |
 | `cognition.py` Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |
-| `autonomy.py` Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<content expr>` children) | stage `.scx` child |
+| `autonomy.py` Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<content expr>` children of the chain `abilities/candidates_runner/candidates_runner.scx`, D93) | stage `.scx` child |
 | `intuition.py` Intuition | `abilities/intuition/intuition.scx` invoking `services/decision` | stage `.scx` child and service |
 | `reasoning.py` Reasoning | `abilities/reasoning/reasoning.scx` invoking `services/generate` | stage `.scx` child and service |
 | `communication.py` Communication | `abilities/communication/communication.scx` | ability `.scx` child |
