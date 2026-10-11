@@ -61,6 +61,11 @@ floppy-block>svg.shape{position:absolute;left:0;top:0;z-index:-1;overflow:visibl
 floppy-block>.hd{display:flex;align-items:center;gap:7px;padding:12px 12px 9px 14px;min-height:44px;white-space:nowrap;cursor:grab}
 floppy-block>.hd .tag{font:700 19px/1 var(--f-c);letter-spacing:.06em;text-transform:uppercase;color:#fff}
 floppy-block>.hd .tag i{font-style:normal}
+floppy-block>.hd .tag .ico{display:inline-block;min-width:1.3em;margin-right:6px;font:700 15px/1 var(--f-mono);text-align:center}
+floppy-workshop:not([data-show-details]) floppy-block>.hd .tag{text-transform:none;letter-spacing:.02em;font-size:20px}
+.details{display:inline-flex;align-items:center;gap:6px;margin-left:auto;font:600 14px var(--f-c);letter-spacing:.12em;text-transform:uppercase;color:var(--mute);cursor:pointer}
+.details input{accent-color:var(--acc);width:16px;height:16px}
+.top .details+floppy-modes{margin-left:0}
 floppy-block>.hd label{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,.9)}
 floppy-block>.hd input,floppy-block>.hd select{background:var(--field);color:var(--ink);border:0;border-bottom:1px solid var(--mute);border-radius:0;padding:3px 6px;font-family:var(--f-mono);font-size:13px;max-width:240px}
 floppy-block>.hd select option{background:var(--bg);color:var(--ink)}
@@ -293,7 +298,26 @@ const FAM = (() => {
 })();
 
 /* What people read: the root block is the bot; other blocks go by their name. */
-const nm = tag => tag === "scxml" ? "bot" : tag;
+/* What people read. By default blocks speak in plain words with an icon;
+   the Details toggle shows the real element and attribute names. */
+const VIEW = { details: false };
+const WORDS = {
+  scxml: ["🤖", "robot"], state: ["◻", "state"], parallel: ["⧉", "all at once"], final: ["⚑", "the end"], initial: ["▶", "start"], history: ["↺", "remember where"],
+  transition: ["➜", "when"], onentry: ["⤵", "on entering"], onexit: ["⤴", "on leaving"], invoke: ["⚙", "use part"], datamodel: ["▤", "memory"], data: ["▢", "value"],
+  donedata: ["✓", "result"], content: ["¶", "content"], param: ["→", "give"], finalize: ["⧗", "when the part answers"], send: ["✉", "send"], raise: ["⚡", "signal"],
+  log: ["✎", "note"], assign: ["=", "set"], if: ["?", "if"], elseif: ["?", "else if"], else: ["⋯", "else"], foreach: ["⟳", "for each"], script: ["</>", "script"], cancel: ["✕", "cancel"],
+};
+const FIELDS = {
+  "transition.event": "", "transition.target": "go to", "transition.cond": "only if", "send.event": "message", "send.target": "to", "send.delay": "after",
+  "scxml.initial": "starts at", "scxml.datamodel": "language", "state.initial": "starts at", "invoke.type": "part", "log.expr": "text", "assign.location": "into",
+  "foreach.array": "each of", "foreach.item": "as", "raise.event": "message", "data.expr": "value", "cancel.sendid": "message",
+  "event:schema": "message shape", id: "name", cond: "only if", expr: "value", location: "into", label: "label", name: "name", delay: "after", event: "event",
+};
+const FAMWORD = { structure: "steps", "executable content": "actions", parameters: "inputs", data: "values", "scx:validate content": "checks" };
+const CATWORD = { structure: "Steps", exec: "Actions", params: "Inputs", data: "Values", services: "Parts" };
+const nm = tag => VIEW.details ? (tag === "scxml" ? "bot" : tag) : (WORDS[tag]?.[1] ?? tag.split(":").pop());
+const fieldName = (tag, k) => VIEW.details ? k : (FIELDS[tag + "." + k] ?? FIELDS[k] ?? k);
+const famName = name => VIEW.details ? name : (FAMWORD[name] ?? name);
 function xsdAllows(parent, child) {
   const p = SPECS.get(parent), c = SPECS.get(child);
   if (!p || !c) return false;
@@ -303,8 +327,8 @@ function fits(parent, child) {
   const m = FAM.mouth.get(parent), f = FAM.family.get(child);
   if (!m) return { ok: false, why: `${nm(parent)} takes no blocks inside.` };
   if (!xsdAllows(parent, child)) return { ok: false, why: `${nm(child)} doesn't go inside ${nm(parent)}.` };
-  if (m !== f) return { ok: false, why: `${nm(parent)} takes ${m.name}; ${nm(child)} has a ${f ? f.name : "different"} notch.` };
-  return { ok: true, why: `${nm(child)} fits ${nm(parent)} (${m.name}).` };
+  if (m !== f) return { ok: false, why: `${nm(parent)} takes ${famName(m.name)}; ${nm(child)} has a ${f ? famName(f.name) : "different"} notch.` };
+  return { ok: true, why: `${nm(child)} fits ${nm(parent)} (${famName(m.name)}).` };
 }
 
 /* ---------------------------------------------------------------
@@ -436,14 +460,15 @@ class FloppyBlock extends hsm.from(HTMLElement) {
       if (a.type === "IDREFS" || (n.tag === "transition" && k === "target")) ctl = `<select ${data}${cls} aria-label="${esc(k)}"><option value=""></option>${ids.map(i => `<option ${i === v ? "selected" : ""}>${esc(i)}</option>`).join("")}</select>`;
       else if (a.enum) ctl = `<select ${data}${cls} aria-label="${esc(k)}"><option value=""></option>${a.enum.map(i => `<option ${i === v ? "selected" : ""}>${esc(i)}</option>`).join("")}</select>`;
       else ctl = `<input ${data}${cls} value="${esc(v)}" size="${Math.max(4, Math.min(34, String(v).length + 1))}" aria-label="${esc(k)}">`;
-      return `<label><span>${esc(k)}</span>${ctl}</label>`;
+      const word = fieldName(n.tag, k);
+      return `<label>${word ? `<span>${esc(word)}</span>` : ""}${ctl}</label>`;
     };
     const addable = [
       ...spec.attrs.filter(a => a.use !== "required" && !(a.name in n.attrs)).map(a => a.name),
       ...CATALOG.globalAttrs.map(g => g.prefix + ":" + g.name).filter(k => !(k in n.attrs) && (k.startsWith("event:") ? n.tag === "transition" : n.tag === "data" || n.tag === "datamodel")),
       ...(n.tag === "invoke" ? ["env:apikey", "env:baseurl"].filter(k => !(k in n.attrs)) : []),
     ];
-    const tagLabel = n.tag.includes(":") ? `<i>${esc(n.tag.split(":")[0])}:</i>${esc(n.tag.split(":")[1])}` : esc(nm(n.tag));
+    const tagLabel = VIEW.details ? (n.tag.includes(":") ? `<i>${esc(n.tag.split(":")[0])}:</i>${esc(n.tag.split(":")[1])}` : esc(nm(n.tag))) : `<b class="ico" aria-hidden="true">${WORDS[n.tag]?.[0] ?? "◆"}</b>${esc(nm(n.tag))}`;
     const mouth = FAM.mouth.get(n.tag);
     return `<floppy-block data-tag="${esc(n.tag)}" data-id="${n.id}" ${opts.preview ? `data-preview="${esc(opts.preview)}" draggable="true"` : ""} class="${opts.sel === n.id ? "sel" : ""} ${opts.active?.has(n.id) ? "active" : ""}">
       <div class="hd" ${opts.preview ? "" : 'draggable="true"'}><span class="tag">${tagLabel}</span>${shown.map(field).join("")}
@@ -493,8 +518,8 @@ class FloppyPalette extends hsm.from(HTMLElement) {
     p.presets = Object.fromEntries(items.map(i => [i.key, i.node]));
     p.innerHTML = `<div class="ph">Blocks</div>
       <div class="legend"><p>Notches show what fits where. A block snaps into any mouth with the same notch.</p><ul>
-      ${FAM.clusters.map(c => `<li><svg width="34" height="14" viewBox="-5 -2 34 14" aria-hidden="true"><path d="M-5,0L0,0${seg(c.shape, 0, 0, false)}L29,0L29,${-2}" fill="none" stroke="currentColor" stroke-width="2"/></svg>${esc(c.name)} <span style="color:var(--mute)">(${c.members.length})</span></li>`).join("")}</ul></div>
-      <div class="cats" role="group" aria-label="Category">${CATS.map(c => `<button data-cat="${c.key}" aria-pressed="${c.key === p.cat}">${esc(c.label)}</button>`).join("")}</div>
+      ${FAM.clusters.map(c => `<li><svg width="34" height="14" viewBox="-5 -2 34 14" aria-hidden="true"><path d="M-5,0L0,0${seg(c.shape, 0, 0, false)}L29,0L29,${-2}" fill="none" stroke="currentColor" stroke-width="2"/></svg>${esc(famName(c.name))} <span style="color:var(--mute)">(${c.members.length})</span></li>`).join("")}</ul></div>
+      <div class="cats" role="group" aria-label="Category">${CATS.map(c => `<button data-cat="${c.key}" aria-pressed="${c.key === p.cat}">${esc(VIEW.details ? c.label : CATWORD[c.key] ?? c.label)}</button>`).join("")}</div>
       <div class="items"><p class="hint">Drag onto a mouth, or select a block and click.</p>${items.map(i => FloppyBlock.html(i.node, [], { preview: i.key })).join("")}</div>`;
     requestAnimationFrame(() => shapeAll(p));
   }
@@ -992,7 +1017,7 @@ class FloppyWorkshop extends hsm.from(HTMLElement) {
 
   connectedCallback() {
     this.innerHTML = `<div class="top"><h1>floppy <span>workshop</span></h1><span class="doc">bots/builder/examples/traffic_light/traffic_light.scx</span>
-      <floppy-modes></floppy-modes></div>
+      <label class="details"><input type="checkbox" data-details> Details</label><floppy-modes></floppy-modes></div>
       <div class="grid"><floppy-bill class="panel"></floppy-bill><floppy-palette class="panel"></floppy-palette><floppy-canvas></floppy-canvas><floppy-run class="panel"></floppy-run><floppy-observe class="panel"></floppy-observe></div>`;
     this.sim = new Interp(this.doc);
     hsm.start(this, FloppyWorkshop.model);
@@ -1090,6 +1115,7 @@ class FloppyWorkshop extends hsm.from(HTMLElement) {
       else if (d.select) { hsm.live(this, "select", d.select); }
     });
     this.addEventListener("change", e => {
+      if (e.target.matches("[data-details]")) { VIEW.details = e.target.checked; this.toggleAttribute("data-show-details", VIEW.details); hsm.live(this.palette, "category", this.palette.cat); this.repaint(); return; }
       const t = e.target, b = t.closest("floppy-canvas floppy-block"); if (!b) return;
       if (t.dataset.addattr !== undefined) { if (t.value) { const f = find(this.doc, b.dataset.id); f.node.attrs[t.value] = t.value === "event:schema" ? '{"type":"object"}' : ""; this.repaint(); } return; }
       if (t.dataset.attr) hsm.live(this, "set_attr", { id: b.dataset.id, key: t.dataset.attr, value: t.value.trim() });
