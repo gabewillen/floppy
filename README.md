@@ -175,6 +175,7 @@ them). Both directions therefore call the Gemini API, so
 | `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
 | `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (the original's `TURN_SILENCE_BOUND`) |
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
+| `abilities/candidates_runner/candidates_runner.scx` | `memory_timeout_ms` | `10000` | one candidate's memory transaction (autonomy passes its own) |
 | `abilities/conversation/conversation.scx` | `memory_timeout_ms` | `5000` | each of the conversation's memory operations, the recall before the turns and the remember after them (the original's 5 s turn stage timeout) |
 | `abilities/communication/communication.scx` | `response_timeout_ms` | `6000` | saying one response (the original's 6 s) |
 | `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (the original's 30 s) |
