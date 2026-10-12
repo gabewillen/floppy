@@ -1,6 +1,9 @@
 # The voice_detection's statements and cases (tests/irp/harness.py writes them).
 
 S = suite
+# sound.wav and sound.raw: 1 s of 8 kHz mono 16-bit PCM, constant non-zero
+# samples (WAV container, raw); bad.wav: no WAV container.
+S.media({"sound.wav": wav(1000, 1, 8000), "sound.raw": pcm(1000, 1, 8000), "bad.wav": b"not a WAV container\n"})
 DONE = "done.invoke.voice_detection"
 VAD = "/v1/vad"
 

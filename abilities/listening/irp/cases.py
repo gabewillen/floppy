@@ -7,6 +7,7 @@
 # backend answers voice detection and speech decoding in order.
 
 S = suite
+S.media({"voiced.wav": wav(1000), "voiced2.wav": wav(1000), "silence.wav": wav(), "ring.wav": wav()})
 SOUND = "environment.sound"
 EFFERENCE = "bot.ability.speaking.efference"
 COGNITION = "bot.ability.cognition.input"

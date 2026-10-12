@@ -6,6 +6,8 @@
 # stage asks, in order.
 
 S = suite
+S.media({"voiced.wav": wav(1000), "voiced2.wav": wav(1000), "silence.wav": wav(), "ring.wav": wav(), "hum.wav": wav(),
+         "voiced.pcm": pcm(1000), "silence.pcm": pcm()})
 SCORED = "bot.ability.listening.sensitivity.output"
 SPEECH = "bot.ability.listening.speech.output"
 COGNITION = "bot.ability.cognition.input"

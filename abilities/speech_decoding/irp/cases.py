@@ -1,6 +1,9 @@
 # The speech_decoding's statements and cases (tests/irp/harness.py writes them).
 
 S = suite
+# speech.wav: 0.1 s of 16 kHz mono 16-bit WAV, constant non-zero samples;
+# empty.wav: no bytes.
+S.media({"speech.wav": wav(1000), "empty.wav": b""})
 DONE = "done.invoke.speech_decoding"
 AUDIO = ("audio", "'media/speech.wav'")
 WHISPER = [("provider", "null"), ("model", "'whisper-1'")]

@@ -29,12 +29,21 @@ step is one of
 
 and the case passes when every expect was met in order. Any other event
 the harness receives (error.* included) fails it, logging the event.
+
+A suite's media is a library of files, `S.media({name: bytes})` (built
+with wav, pcm and png below): each case's irp/sources/<id>/media/ holds
+exactly the library files its document or backend names as `media/<name>`,
+so a name the library lacks (an output, or a file a case expects missing)
+is never there.
 """
 
 import json
 import os
+import re
 import runpy
+import struct
 import sys
+import zlib
 from xml.sax.saxutils import escape, quoteattr
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -67,11 +76,40 @@ def js(value):
     return json.dumps(value, sort_keys=False)
 
 
+def pcm(sample=0, seconds=0.1, rate=16000, channels=1):
+    """Raw signed 16-bit little-endian PCM, every sample `sample`."""
+    return struct.pack("<h", sample) * (round(seconds * rate) * channels)
+
+
+def wav(sample=0, seconds=0.1, rate=16000, channels=1):
+    """A canonical PCM WAV container of pcm(sample, seconds, rate, channels)."""
+    data = pcm(sample, seconds, rate, channels)
+    return (b"RIFF" + struct.pack("<I", 36 + len(data)) + b"WAVE"
+            + b"fmt " + struct.pack("<IHHIIHH", 16, 1, channels, rate, rate * channels * 2, channels * 2, 16)
+            + b"data" + struct.pack("<I", len(data)) + data)
+
+
+def png(width=1, height=1):
+    """A white 8-bit RGB PNG."""
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+    rows = b"".join(b"\x00" + b"\xff" * (3 * width) for _ in range(height))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows, 9)) + chunk(b"IEND", b""))
+
+
+MEDIA_NAME = re.compile(r"media/([A-Za-z0-9_.-]+)")
+
+
 class Suite:
     def __init__(self, kind, name):
         self.kind, self.name = kind, name
         self.statements = []
         self.cases = []
+        self.library = {}
+
+    def media(self, files):
+        self.library.update(files)
 
     def statement(self, number, text):
         self.statements.append((f"{self.name}-{number}", text))
@@ -159,6 +197,21 @@ class Suite:
         ]
         return "\n".join(lines)
 
+    def write_media(self, case, directory, document):
+        named = set(MEDIA_NAME.findall(document + json.dumps(case["backend"] or [])))
+        files = {name: self.library[name] for name in sorted(named) if name in self.library}
+        if os.path.isdir(directory):
+            for stale in set(os.listdir(directory)) - set(files):
+                os.remove(os.path.join(directory, stale))
+        if not files:
+            if os.path.isdir(directory):
+                os.rmdir(directory)
+            return
+        os.makedirs(directory, exist_ok=True)
+        for name, content in files.items():
+            with open(os.path.join(directory, name), "wb") as out:
+                out.write(content)
+
     def write(self):
         suite = os.path.join(ROOT, self.kind, self.name, "irp")
         sources = os.path.join(suite, "sources")
@@ -168,8 +221,9 @@ class Suite:
             directory = os.path.join(sources, str(case["id"]))
             os.makedirs(directory, exist_ok=True)
             listed.add(str(case["id"]))
+            document = self.document(case)
             with open(os.path.join(directory, f"test{case['id']}.scxml"), "w") as out:
-                out.write(self.document(case))
+                out.write(document)
             script = os.path.join(directory, "backend.json")
             if case["backend"] is not None or case["clock"]:
                 with open(script, "w") as out:
@@ -177,6 +231,7 @@ class Suite:
                     out.write("\n")
             elif os.path.exists(script):
                 os.remove(script)
+            self.write_media(case, os.path.join(directory, "media"), document)
         for stale in set(os.listdir(sources)) - listed:
             raise SystemExit(f"{sources}/{stale} is no case of cases.py")
         manifest = [
@@ -220,7 +275,7 @@ class Suite:
 def load(kind, name):
     path = os.path.join(ROOT, kind, name, "irp", "cases.py")
     suite = Suite(kind, name)
-    runpy.run_path(path, init_globals=dict(suite=suite, send=send, expect=expect, wait=wait, js=js))
+    runpy.run_path(path, init_globals=dict(suite=suite, send=send, expect=expect, wait=wait, js=js, wav=wav, pcm=pcm, png=png))
     return suite
 
 

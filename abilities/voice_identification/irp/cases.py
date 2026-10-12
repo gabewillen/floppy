@@ -3,6 +3,9 @@
 import json
 
 S = suite
+# sound.raw: 1 s of 8 kHz mono 16-bit PCM, constant non-zero samples;
+# first.raw and second.raw: 0.5 s each.
+S.media({"sound.raw": pcm(1000, 1, 8000), "first.raw": pcm(1000, 0.5, 8000), "second.raw": pcm(1000, 0.5, 8000)})
 DONE = "done.invoke.voice_identification"
 EMBED = "/v1/voice/embed"
 DEFAULT_MODEL = "voice-detect-wespeaker-resnet34"

@@ -1,6 +1,8 @@
 # The reading's statements and cases (tests/irp/harness.py writes them).
 
 S = suite
+# receipt.png: a 1x1 white PNG (the fake backend reads it).
+S.media({"receipt.png": png()})
 INPUT = "bot.ability.reading.input"
 OUTPUT = "bot.ability.reading.output"
 FAILED = "bot.ability.reading.failed"
