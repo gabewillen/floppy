@@ -77,4 +77,10 @@
       <start uri="162/test162.scxml"/>
     </test>
   </assert>
+  <assert id="reasoning-8" specnum="8" specid="#reasoning-8">
+    <![CDATA[Its model call streams its reply (`stream`), and each `generate.progress` the generate service returns while the reply arrives is sent on to the parent unchanged, so the cognition can bound the stage by inactivity (decision D101).]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+  </assert>
 </assertions>

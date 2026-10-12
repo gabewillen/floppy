@@ -113,7 +113,7 @@ fn break_selection(name: &str) -> Json {
 fn selection(route: &str) -> Option<Json> {
     match route {
         "none" => Some(json!([])),
-        "create" | "buildfail" | "genfail" => Some(create_selection()),
+        "create" | "buildfail" | "genfail" | "slowbuild" | "stallbuild" => Some(create_selection()),
         "break" => Some(break_selection("GreetOnKnock")),
         "breakunknown" => Some(break_selection("Nobody")),
         "two" => Some(json!([
@@ -197,7 +197,36 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     }
     let target = request_line.split(' ').nth(1).unwrap_or("").to_owned();
     let body: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
-    let reply = answer(&target, &body);
+    // The builder's generations on the slow routes stream slowly but
+    // steadily (seven pieces 1.5 s apart), or stall after their first
+    // piece.
+    let schema = body
+        .pointer("/response_format/json_schema/name")
+        .and_then(Json::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    for (route, stall) in [("slowbuild", false), ("stallbuild", true)] {
+        let content = match schema.as_str() {
+            "topology_plan" => PLAN.to_owned(),
+            "scxml_draft" => draft(BEHAVIOR),
+            _ => continue,
+        };
+        if target == format!("/{route}/v1/chat/completions") {
+            log.lock()
+                .expect("the log lock")
+                .push(Received { body: body.clone() });
+            support::answer_slowly(
+                &mut stream,
+                &body,
+                &content,
+                7,
+                Duration::from_millis(1_500),
+                stall && schema == "scxml_draft",
+            );
+            return;
+        }
+    }
+    let reply = answer(&target, &body).map(|text| support::stream_if_asked(&body, text));
     log.lock().expect("the log lock").push(Received { body });
     let (status, text) = reply.map_or_else(
         || {
@@ -269,6 +298,18 @@ const SQLITE: &str = "/memory/floppy.sqlite";
 /// statements expression) on `database` and an env file for `route`;
 /// returns the harness's path and the env file's.
 fn layout(mock: &Mock, route: &str, seed: &str, database: &str) -> (PathBuf, PathBuf) {
+    layout_bounded(mock, route, seed, database, "({})")
+}
+
+/// [`layout`], the harness passing the reflection `bounds` (the
+/// cognition's `<param>` of bot.activate's time bounds, decision D101).
+fn layout_bounded(
+    mock: &Mock,
+    route: &str,
+    seed: &str,
+    database: &str,
+    bounds: &str,
+) -> (PathBuf, PathBuf) {
     let dir = unique_scratch("reflection");
     support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
     copy_dir(&workspace().join("bots/builder"), &dir.join("bots/builder"));
@@ -276,13 +317,20 @@ fn layout(mock: &Mock, route: &str, seed: &str, database: &str) -> (PathBuf, Pat
         &workspace().join("bots/builder/schemas"),
         &dir.join("bots/builder/schemas"),
     );
-    let harness =
-        std::fs::read_to_string(workspace().join("tests/fixtures/phase5/reflection_harness.scx"))
-            .expect("the harness is readable")
-            .replace(
-                r#"<data id="seed" expr="[]"/>"#,
-                &format!(r#"<data id="seed" expr="{seed}"/>"#),
-            );
+    let harness = std::fs::read_to_string(
+        workspace().join("tests/fixtures/phase5/reflection_harness.scx"),
+    )
+    .expect("the harness is readable")
+    .replace(
+        r#"<data id="seed" expr="[]"/>"#,
+        &format!(r#"<data id="seed" expr="{seed}"/>"#),
+    )
+    .replace(
+        r#"<param name="model" expr="'fake-model'"/>"#,
+        &format!(
+            r#"<param name="model" expr="'fake-model'"/><param name="bounds" expr="{bounds}"/>"#
+        ),
+    );
     let path = dir.join("abilities/reflection_harness.scx");
     std::fs::write(&path, harness).expect("the harness is writable");
     support::use_database(&path, database);
@@ -678,6 +726,63 @@ fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
     assert!(
         contract.contains("never handled true with an empty list"),
         "{contract}"
+    );
+}
+
+/// A revision is bounded by inactivity (decision D101): the builder's
+/// generations stream slowly but steadily (about 9 s each), and each stage
+/// and each progress it reports starts the 8 s bound over, so a build of
+/// some twenty seconds in all is accepted.
+#[test]
+fn a_build_that_keeps_making_progress_outlasts_the_inactivity_bound() {
+    let mock = Mock::start();
+    let (harness, env) = layout_bounded(
+        &mock,
+        "slowbuild",
+        "[]",
+        SQLITE,
+        "({revising_timeout_ms: 8000})",
+    );
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    assert_eq!(
+        texts(&records, "reflection.inventory"),
+        [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
+    );
+    let generations = [mock.requests("topology_plan"), mock.requests("scxml_draft")].concat();
+    assert!(!generations.is_empty());
+    assert!(
+        generations
+            .iter()
+            .all(|request| request.body["stream"] == true),
+        "the builder streams its generations"
+    );
+}
+
+/// A build whose generation stops arriving fails the revision at the
+/// inactivity bound (decision D101), with the original's message.
+#[test]
+fn a_build_that_stalls_fails_at_the_inactivity_bound() {
+    let mock = Mock::start();
+    let (harness, env) = layout_bounded(
+        &mock,
+        "stallbuild",
+        "[]",
+        SQLITE,
+        "({revising_timeout_ms: 8000})",
+    );
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.failed"),
+        ["Reflection child cancellation timed out."]
     );
 }
 

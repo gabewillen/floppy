@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- builder-7: a design generation that does not answer within generate_timeout_ms is a timeout design-timeout diagnostic. -->
+<!-- builder-7: a design generation that makes no progress within generate_timeout_ms is a timeout design-timeout diagnostic. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="builder" type="scxml" src="../../../builder.scx"/>

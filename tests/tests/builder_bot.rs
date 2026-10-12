@@ -654,7 +654,8 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>, arrived: &
         }
         counts
     };
-    let reply = mock_reply(&path, request.schema_name(), authors, plans, &body);
+    let reply = mock_reply(&path, request.schema_name(), authors, plans, &body)
+        .map(|reply| support::stream_if_asked(&request.body, reply));
     let (status, reply) = reply.map_or(("404 Not Found", "{}".to_owned()), |reply| {
         ("200 OK", reply)
     });

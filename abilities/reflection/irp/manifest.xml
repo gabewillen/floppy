@@ -15,7 +15,7 @@
     </test>
   </assert>
   <assert id="reflection-3" specnum="3" specid="#reflection-3">
-    <![CDATA[More than one selected event fails the turn with `bot.ability.failed` `{message: "Reflection select must return at most one behavior event."}`; a failed select call fails it with `Reflection select failed (<code>)`; a select call that does not answer within `select_timeout_ms` fails it with `Reflection child cancellation timed out.`.]]>
+    <![CDATA[More than one selected event fails the turn with `bot.ability.failed` `{message: "Reflection select must return at most one behavior event."}`; a failed select call fails it with `Reflection select failed (<code>)`; a select call that makes no progress for `select_timeout_ms` (its streamed reply's `generate.progress` starts it over) or runs `select_ceiling_ms` in all fails it with `Reflection child cancellation timed out.` (decision D101).]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
@@ -57,7 +57,7 @@
     </test>
   </assert>
   <assert id="reflection-7" specnum="7" specid="#reflection-7">
-    <![CDATA[`revising` is bounded by `revising_timeout_ms`: when it passes, the revision is cancelled and the turn fails with `Reflection child cancellation timed out.`.]]>
+    <![CDATA[`revising` is bounded by `revising_timeout_ms` without progress (each `builder.progress` the builder, invoked with `progress_target` `'#_parent'`, sends starts it over) and by `revising_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101): when one passes, the revision is cancelled and the turn fails with `Reflection child cancellation timed out.`.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>

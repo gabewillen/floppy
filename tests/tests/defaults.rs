@@ -239,37 +239,108 @@ fn millis(path: &str, id: &str) -> u64 {
         .unwrap_or_else(|_| panic!("{path}: {id} is a whole number of milliseconds"))
 }
 
-/// The slowest reasoning call measured live (113.1 s, the CPA gateway on
-/// 2026-10-12; docs/live-proof.md): the original's 30 s stage bound
-/// rebooted the bot on it.
-const SLOWEST_LIVE_REASONING_MS: u64 = 113_100;
-/// The slowest reflection revision through the builder measured live
-/// (plan, three drafts, validation and simulation: 39 s, 2026-10-12).
-const SLOWEST_LIVE_BUILD_MS: u64 = 39_000;
+/// The time bounds `bot.activate` may set (decision D101): its `*_ms`
+/// fields are exactly the cognition's stage bounds and reflection's
+/// revising bounds, each a `<data>` of its document, and the body passes
+/// exactly those on.
+const ACTIVATION_BOUNDS: [(&str, &str); 4] = [
+    (
+        "abilities/cognition/cognition.scx",
+        "child_operation_timeout_ms",
+    ),
+    (
+        "abilities/cognition/cognition.scx",
+        "child_operation_ceiling_ms",
+    ),
+    ("abilities/reflection/reflection.scx", "revising_timeout_ms"),
+    ("abilities/reflection/reflection.scx", "revising_ceiling_ms"),
+];
 
-/// The model-bound stages outlast the calls measured live, with margin,
-/// and a turn's stages fit inside the body's turn bound (decision D101).
 #[test]
-fn the_model_bound_stages_outlast_the_calls_measured_live() {
+fn bot_activate_sets_exactly_the_bounds_the_documents_declare() {
+    let schema: serde_json::Value =
+        serde_json::from_str(&read(Path::new("bots/floppy/schemas/bot.activate.json")))
+            .expect("bot.activate.json is JSON");
+    let fields: BTreeSet<String> = schema["properties"]
+        .as_object()
+        .expect("bot.activate has properties")
+        .keys()
+        .filter(|name| name.ends_with("_ms"))
+        .cloned()
+        .collect();
+    let bounds: BTreeSet<String> = ACTIVATION_BOUNDS
+        .iter()
+        .map(|(_, id)| (*id).to_owned())
+        .collect();
+    assert_eq!(fields, bounds);
+    for (document, id) in ACTIVATION_BOUNDS {
+        assert!(
+            data(&read(Path::new(document))).contains_key(id),
+            "{document} declares <data id=\"{id}\">"
+        );
+        assert!(
+            read(Path::new("bots/floppy/floppy.js")).contains(&format!("'{id}'")),
+            "the body passes {id} on"
+        );
+    }
+}
+
+/// Each inactivity bound has a backstop above it, and a turn's stages fit
+/// inside the body's turn bound, so the turn's bound never cuts off a stage
+/// that is still within its own (decision D101).
+#[test]
+fn every_inactivity_bound_has_a_backstop_and_the_stages_nest_in_the_turn() {
+    for (document, inactivity, ceiling) in [
+        (
+            "abilities/cognition/cognition.scx",
+            "child_operation_timeout_ms",
+            "child_operation_ceiling_ms",
+        ),
+        (
+            "abilities/reflection/reflection.scx",
+            "select_timeout_ms",
+            "select_ceiling_ms",
+        ),
+        (
+            "abilities/reflection/reflection.scx",
+            "revising_timeout_ms",
+            "revising_ceiling_ms",
+        ),
+        (
+            "bots/builder/builder.scx",
+            "generate_timeout_ms",
+            "generate_ceiling_ms",
+        ),
+    ] {
+        assert!(
+            millis(document, inactivity) < millis(document, ceiling),
+            "{document}: {inactivity} is below its backstop {ceiling}"
+        );
+    }
+    // A revision may simulate one test without progress for the builder's
+    // whole per-test cap.
+    assert!(
+        millis("abilities/reflection/reflection.scx", "revising_timeout_ms")
+            > millis("bots/builder/builder.scx", "sim_test_cap_ms"),
+        "a simulation test fits inside the revision's inactivity bound"
+    );
+    // The stages before reasoning answer inside the stage's inactivity bound.
     let stage = millis(
         "abilities/cognition/cognition.scx",
         "child_operation_timeout_ms",
     );
-    let revising = millis("abilities/reflection/reflection.scx", "revising_timeout_ms");
-    assert!(
-        stage > SLOWEST_LIVE_REASONING_MS,
-        "a cascade stage ({stage} ms) outlasts the slowest live reasoning call"
-    );
-    assert!(
-        revising >= 3 * SLOWEST_LIVE_BUILD_MS,
-        "reflection's revising ({revising} ms) is at least three times the slowest live build"
-    );
-    // Autonomy's memory, the intuition's decision and reasoning's stage,
-    // one after another, end before the body times the turn out.
+    assert!(millis("abilities/autonomy/autonomy.scx", "memory_timeout_ms") < stage);
+    assert!(millis("abilities/intuition/intuition.scx", "decision_timeout_ms") < stage);
+    // Autonomy's memory, the intuition's decision and reasoning's stage at
+    // its backstop, one after another, end before the body times the turn
+    // out.
     let turn = millis("bots/floppy/floppy.scx", "processing_timeout_ms");
     let cascade = millis("abilities/autonomy/autonomy.scx", "memory_timeout_ms")
         + millis("abilities/intuition/intuition.scx", "decision_timeout_ms")
-        + stage;
+        + millis(
+            "abilities/cognition/cognition.scx",
+            "child_operation_ceiling_ms",
+        );
     assert!(
         cascade < turn,
         "the cascade ({cascade} ms) ends inside the turn ({turn} ms)"

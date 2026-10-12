@@ -45,13 +45,17 @@
   terminal). A turn whose reasoning fails or is cancelled routes none of
   them (the original would already have dispatched them).
 
-  Hop timeouts: each stage substate arms
-  bot.ability.cognition.child.hop.timed_out (child_operation_timeout_ms,
-  120 s, decision D101: the original's child_operation_timeout is 30 s,
-  and a live reasoning call took 113 s)
-  and cancels it on exit; the transition takes only the timer of the stage
-  in hand (_event.sendid, SCXML 5.10.1). A timeout goes to rebooting, which
-  sends bot.reboot {reason: "cognition_child_teardown_failed"} to the body.
+  Hop timeouts (decision D101): each stage substate arms two
+  bot.ability.cognition.child.hop.timed_out timers and cancels both on
+  exit: one of inactivity (child_operation_timeout_ms, the original's
+  child_operation_timeout), which reasoning re-arms with each
+  generate.progress it sends on while its streamed reply arrives, so a
+  slow model that keeps answering is never cut off, and a backstop
+  (child_operation_ceiling_ms) for the stage as a whole. Both are <param>s
+  the body passes from bot.activate. The transition takes only the timers
+  of the stage in hand (_event.sendid, SCXML 5.10.1). A timeout goes to
+  rebooting, which sends bot.reboot {reason:
+  "cognition_child_teardown_failed"} to the body.
 
   Cancel: bot.ability.cognition.cancel for the turn in hand moves to
   cancelling/<stage>; leaving the stage's substate already cancelled it, so
@@ -129,7 +133,12 @@
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <!-- The memory database file, for autonomy, reasoning, reflection and routines (null: no memory). -->
     <data id="database" expr="null"/>
-    <data id="child_operation_timeout_ms" expr="120000"/>
+    <!-- A stage's inactivity bound and its backstop (decision D101). -->
+    <data id="child_operation_timeout_ms" expr="30000"/>
+    <data id="child_operation_ceiling_ms" expr="240000"/>
+    <!-- The bounds bot.activate overrides (the body's <param>): these two
+         and reflection's revising_timeout_ms and revising_ceiling_ms. -->
+    <data id="bounds" expr="({})"/>
     <!-- The turn in hand. -->
     <data id="turn" expr="0"/>
     <data id="stimulus" expr="null"/>
@@ -138,9 +147,10 @@
     <data id="choices" expr="[]"/>
     <!-- The intuition's confidence tuner (the reference ConfidenceTuner). -->
     <data id="tuner" expr="({mean: 70, var: 100, n: 0})"/>
-    <!-- The stage in hand: its name, hop timer, and answer. -->
+    <!-- The stage in hand: its name, hop timers, and answer. -->
     <data id="stage" expr="null"/>
     <data id="hop_timer" expr="null"/>
+    <data id="ceiling_timer" expr="null"/>
     <data id="selected" expr="[]"/>
     <!-- An escalated intuition's environment actions, routed first. -->
     <data id="environment_actions" expr="[]"/>
@@ -208,7 +218,7 @@
     <!-- A stage that does not answer in time: ask the body for a reboot. -->
     <transition event="bot.ability.cognition.child.hop.timed_out" event:schema="schemas/bot.ability.cognition.child.hop.timed_out.json"
                 cond="isChildHopTimeout(_event)" target="rebooting">
-      <log label="cognition.hop.timed_out" expr="hopTimeoutLog()"/>
+      <log label="cognition.hop.timed_out" expr="hopTimeoutLog(_event)"/>
       <assign location="reboot_reason" expr="'cognition_child_teardown_failed'"/>
     </transition>
 
@@ -218,9 +228,13 @@
         <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
           <param name="turn" expr="turn"/>
         </send>
+        <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
+          <param name="turn" expr="turn"/>
+        </send>
       </onentry>
       <onexit>
         <cancel sendidexpr="hop_timer"/>
+        <cancel sendidexpr="ceiling_timer"/>
       </onexit>
       <invoke id="autonomy" type="scxml" src="../autonomy/autonomy.scx">
         <param name="turn" expr="turn"/>
@@ -252,9 +266,13 @@
         <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
           <param name="turn" expr="turn"/>
         </send>
+        <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
+          <param name="turn" expr="turn"/>
+        </send>
       </onentry>
       <onexit>
         <cancel sendidexpr="hop_timer"/>
+        <cancel sendidexpr="ceiling_timer"/>
       </onexit>
       <invoke id="intuition" type="scxml" src="../intuition/intuition.scx">
         <param name="turn" expr="turn"/>
@@ -294,9 +312,13 @@
         <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
           <param name="turn" expr="turn"/>
         </send>
+        <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
+          <param name="turn" expr="turn"/>
+        </send>
       </onentry>
       <onexit>
         <cancel sendidexpr="hop_timer"/>
+        <cancel sendidexpr="ceiling_timer"/>
       </onexit>
       <invoke id="reasoning" type="scxml" src="../reasoning/reasoning.scx">
         <param name="turn" expr="turn"/>
@@ -309,6 +331,14 @@
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_reasoning"/>
+      <!-- Reasoning's streamed reply is arriving: the inactivity bound
+           starts over (decision D101). -->
+      <transition event="generate.progress">
+        <cancel sendidexpr="hop_timer"/>
+        <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
+          <param name="turn" expr="turn"/>
+        </send>
+      </transition>
       <transition event="done.invoke.reasoning" cond="isHandled(_event)" target="completing">
         <log label="cognition.stage" expr="'reasoning handled'"/>
         <assign location="selected" expr="_event.data.selected"/>
@@ -382,6 +412,7 @@
       <invoke id="reflection" type="scxml" src="../reflection/reflection.scx">
         <param name="database" expr="database"/>
         <param name="model" expr="model"/>
+        <param name="bounds" expr="bounds"/>
       </invoke>
       <transition event="bot.ability.reflection.output" event:schema="schemas/bot.ability.reflection.output.json">
         <log label="bot.ability.reflection.output" expr="turnLog()"/>

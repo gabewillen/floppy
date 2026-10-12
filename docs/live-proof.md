@@ -7,6 +7,37 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-12, `live_conversation` with streamed model calls bounded by inactivity (D101)
+
+The runs used floppy with scxml.rs's `outbound-http.send` (subtree pull
+`33ee9dc2`): reasoning, reflection's select and the builder's generations
+stream their replies, and each stage's bound is one of inactivity with a
+backstop. A local relay passed each response through as it arrived and
+logged each chunk's arrival time.
+
+On the CPA gateway (`gabe-codex-1/gpt-6-luna`, `.env:.env.cpa`), a streamed
+request is answered with `: ping` keep-alive comments every 20 s and no
+content (also without a schema, without `reasoning_effort`, with
+`stream_options`, and for `gabe-codex-1/gpt-5.6-sol`); the one run there
+(`stream 1`) counted those bytes as progress, so reasoning ran to the 240 s
+backstop and the bot rebooted. The generate service now counts only `data:`
+events as progress. The other runs used the maintainer's vLLM (`.env`
+only, `Qwen/Qwen3.8-Flash-Next`), which streams at once.
+
+| Run | Backend | Bounds | Turns 1-4 | Longest gap between chunks | Longest wait for the first chunk | Note |
+| --- | --- | --- | --- | --- | --- | --- |
+| stream 1 | CPA gateway | inactivity 60 s (counting bytes), stage backstop 240 s | turn 1 rebooted at the backstop | 20 s (pings only) | - | |
+| local 1 | vLLM | stage 60 s / 240 s, revising 60 s / 600 s | empty outputs on turns 1-3; turn 3's create authored one draft that streamed for 555 s | 4.7 s | 4.0 s | the test's 10 min wait for reflection ran out first |
+| local 2 | vLLM | the same | turn 3 "pong" (reasoning), turn 4 "Your favorite color is green!" | 4.3 s | 2.4 s | reflection selected nothing: fails the behavior assertion |
+| local 3 | vLLM | stage 30 s / 240 s, revising 150 s / 600 s | turn 3 "pong", turn 4 "Your favorite color is green!"; the turn 2 create and turn 3 change ran to the 600 s revising backstop while still streaming, the turn 4 change was accepted ACTIVE | 6.2 s | 4.3 s | no stage timed out without progress; fails the behavior assertion (learned on turn 4, not 2) |
+
+No reasoning stage hit its inactivity bound in the vLLM runs (33 calls).
+The local model writes very long replies (an author generation of 814 KB
+over 548 s), so its builds outlast fixed totals while never pausing; the
+backstops were raised to 1200 s (a builder generation) and 1800 s (a
+revision) after these runs, and `bot.activate` sets the stage's and the
+revision's bounds per run.
+
 ## 2026-10-12, `live_conversation` learning the ping/pong behavior (D100, D101, D96), model `gabe-codex-1/gpt-6-luna`
 
 The same relay, now logging each call's start and end. Two measuring runs

@@ -13,8 +13,12 @@ Last updated: 2026-10-10.
 
 - **Behavior learning proven live (2026-10-12, D100, D101, D96):** reflection
   offers change and break only for inventory names (neither on an empty
-  inventory); the cascade stage and reflection's revising bounds are
-  120 s, measured live; the turn behavior contract names `parent.data` as a
+  inventory); the cascade stage, reflection's select and revising, and the
+  builder's generations are bounded by inactivity with a backstop (the
+  model calls stream; scxml.rs's `outbound-http.send` delivers their bodies
+  as they arrive, the generate service returns `generate.progress`, and
+  the builder `builder.progress`), configurable through `bot.activate`; the
+  turn behavior contract names `parent.data` as a
   conversation turn's message. Two `live_conversation` runs passed: the
   behavior was learned on turn 2, answered "pong" on turn 3 through
   autonomy, and left turn 4 to reasoning, which recalled "green".

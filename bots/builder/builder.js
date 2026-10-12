@@ -92,7 +92,17 @@ function generationFailedDiagnostics(stage, product) {
 }
 
 function generationTimeoutDiagnostics(stage) {
-  return [{kind: 'timeout', code: stage + '-timeout', message: 'the ' + stage + ' generation did not answer within ' + generate_timeout_ms + ' ms and was cancelled'}];
+  return [{kind: 'timeout', code: stage + '-timeout', message: 'the ' + stage + ' generation made no progress for ' + generate_timeout_ms + ' ms or ran past ' + generate_ceiling_ms + ' ms in all, and was cancelled'}];
+}
+
+// Whether the builder reports its progress to an invoker (progress_target).
+function reportsProgress() {
+  return progress_target !== null;
+}
+
+// builder.progress's data: the stage the build is in.
+function progressData(stage) {
+  return ({stage: stage});
 }
 
 function generationStartFailedDiagnostics(stage) {

@@ -25,7 +25,9 @@
 //!   "logical", "answers": [{"path": SUFFIX, "status": N, "body": JSON},
 //!   ...]}`. A request takes the first unused answer whose `path` ends its
 //!   target (the last one for a path repeats); a request no answer matches
-//!   is answered 404. Every service's base URL points at it;
+//!   is answered 404; a 200 completion answers a streamed request
+//!   (`"stream": true`) as its server-sent-event stream
+//!   ([`support::stream_if_asked`]). Every service's base URL points at it;
 //! * `irp/sources/<id>/media/` (optional) is the media the generate and
 //!   speech services find at `/media` (a fresh copy per case; an empty
 //!   directory without it).
@@ -169,6 +171,7 @@ fn serve(mut stream: TcpStream, state: &Arc<Script>) {
         return;
     }
     let target = request_line.split(' ').nth(1).unwrap_or("").to_owned();
+    let request: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
     let (status, text) = {
         let mut guard = state.lock().expect("the script lock");
         let (answers, used) = &mut *guard;
@@ -190,6 +193,12 @@ fn serve(mut stream: TcpStream, state: &Arc<Script>) {
                 (answers[index].status, answers[index].body.clone())
             },
         )
+    };
+    // A streamed request gets its scripted completion as a stream.
+    let text = if status == 200 {
+        support::stream_if_asked(&request, text)
+    } else {
+        text
     };
     let _written = write!(
         stream,

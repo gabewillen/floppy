@@ -46,7 +46,10 @@
   the original's message (for example "prompt projection encoded byte budget
   exceeded"). applying ends on the generate service's done.invoke, which
   stands in for the original's private bot.ability.reasoning.reasoned
-  completion.
+  completion. The call streams its reply (stream), and each
+  generate.progress the service returns while the reply arrives is sent
+  on to the parent cognition, whose stage bound is one of inactivity
+  (decision D101).
 
   Choices: the body's assembled choices for the turn (the <param>
   choices: the body's own and each ability's offers, tagged with the
@@ -211,8 +214,16 @@
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
       <param name="strict" expr="true"/>
+      <param name="stream" expr="true"/>
     </invoke>
 
+    <!-- The reply streams: each progress goes to the cognition, which bounds
+         this stage by inactivity (decision D101). -->
+    <transition event="generate.progress">
+      <send event="generate.progress" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
     <transition event="generate.result">
       <assign location="selected" expr="generatedSelection(_event)"/>
     </transition>

@@ -62,6 +62,18 @@ S.statement(5, "A prompt over the original's projection budgets (262144 encoded 
 S.statement(6, "Selections the attention policy refuses fail the turn before anything is retained, with the original's message: a `bot.focus_device` outside the focus candidates, or a `bot.clear_focus` with no focused device; a focus selection within the policy is returned.")
 S.statement(7, "With a database it recalls prior episodes and standing directives before the model call and writes nothing (reflection stores the turn's episode, decision D97), and the turn is handled as without one; a memory that fails fails the turn with reason `Reasoning memory recall failed: ...` without a model call.")
 
+S.statement(8, "Its model call streams its reply (`stream`), and each `generate.progress` the generate service returns while the reply arrives is sent on to the parent unchanged, so the cognition can bound the stage by inactivity (decision D101).")
+
+# Every other case drops the streamed reply's progress (statement 8).
+_case = S.case
+
+
+def _case_dropping_progress(*args, ignore=(), **kwargs):
+    return _case(*args, ignore=tuple(ignore) + ("generate.progress",), **kwargs)
+
+
+S.case = _case_dropping_progress
+
 S.case(100, 1, "a reasoned turn ends with its turn number, handled.",
        [expect(DONE, "_event.data.turn === 7 && _event.data.handled === true && _event.data.selected.length === 1")],
        params=turn(number=7), backend=selection(SAY))
@@ -135,3 +147,7 @@ S.case(162, 7, "a database that cannot be opened fails the recall without a mode
        [failed_starting("Reasoning memory recall failed: ")],
        params=turn(extra=[("database", "'/nowhere/floppy.sqlite'")]), backend=selection(SAY))
 
+_case(170, 8, "a streamed reply's progress reaches the parent before the turn ends, handled.",
+      [expect("generate.progress", "_event.data.received > 0"),
+       expect(DONE, "_event.data.turn === 1 && _event.data.handled === true && _event.data.selected.length === 1")],
+      params=turn(), backend=selection(SAY))

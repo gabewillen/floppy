@@ -76,6 +76,10 @@ function selectTimeoutDelay() {
   return select_timeout_ms + 'ms';
 }
 
+function selectCeilingDelay() {
+  return select_ceiling_ms + 'ms';
+}
+
 // The reference SelectInput.
 function selectPrompt() {
   return JSON.stringify({cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, behaviors: behaviors});
@@ -129,7 +133,7 @@ function generateFailedMessage() {
 }
 
 function isSelectHopTimeout(_event) {
-  return _event.sendid === hop_timer;
+  return _event.sendid === hop_timer || _event.sendid === ceiling_timer;
 }
 
 // The original _fail_cancel_timeout: the select child is cancelled on the hop
@@ -433,6 +437,12 @@ function episodeStoreFailedMessage(detail) {
 
 // revising
 
+// The revision's inactivity bound and its backstop: bot.activate's (bounds),
+// else this document's defaults (decision D101).
 function revisingTimeoutDelay() {
-  return revising_timeout_ms + 'ms';
+  return (bounds.revising_timeout_ms === undefined ? revising_timeout_ms : bounds.revising_timeout_ms) + 'ms';
+}
+
+function revisingCeilingDelay() {
+  return (bounds.revising_ceiling_ms === undefined ? revising_ceiling_ms : bounds.revising_ceiling_ms) + 'ms';
 }

@@ -872,3 +872,140 @@ impl Drop for Pglite {
         let _waited = self.child.wait();
     }
 }
+
+/// `text`, a fake backend's answer to the Chat Completions `request`, as
+/// the backend sends it: when the request asks for a streamed reply
+/// (`"stream": true`, as every model call of reasoning, reflection and the
+/// builder does, decision D101) and `text` is a completion, the
+/// server-sent-event stream of the same reply (a role chunk, its content,
+/// its finish, then `data: [DONE]`); any other answer unchanged.
+pub fn stream_if_asked(request: &Json, text: String) -> String {
+    if request["stream"] != true {
+        return text;
+    }
+    let Ok(completion) = serde_json::from_str::<Json>(&text) else {
+        return text;
+    };
+    let choice = &completion["choices"][0];
+    let Some(content) = choice["message"]["content"].as_str() else {
+        return text;
+    };
+    let chunk = |delta: Json, finish: Json| {
+        format!(
+            "data: {}\n\n",
+            serde_json::json!({
+                "object": "chat.completion.chunk",
+                "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+            })
+        )
+    };
+    [
+        chunk(
+            serde_json::json!({"role": "assistant", "content": ""}),
+            Json::Null,
+        ),
+        chunk(serde_json::json!({"content": content}), Json::Null),
+        chunk(serde_json::json!({}), choice["finish_reason"].clone()),
+        "data: [DONE]\n\n".to_owned(),
+    ]
+    .concat()
+}
+
+/// Answers the Chat Completions `request` on `stream` with `content` the
+/// way a slow backend does: a streamed request (`"stream": true`) gets its
+/// head at once and then `content` in `pieces` server-sent-event chunks
+/// `gap` apart, then its finish and `data: [DONE]`; with `stall`, only the
+/// first piece, and then nothing until the client closes the connection
+/// (at most two minutes). A request that is not streamed gets the whole
+/// completion once all of it is ready, `pieces` × `gap` later, as a
+/// backend that answers only when it has finished. The body ends when the
+/// connection closes.
+pub fn answer_slowly(
+    stream: &mut std::net::TcpStream,
+    request: &Json,
+    content: &str,
+    pieces: usize,
+    gap: std::time::Duration,
+    stall: bool,
+) {
+    use std::io::Write as _;
+    let streamed = request["stream"] == true;
+    let head = format!(
+        "HTTP/1.1 200 OK\r\ncontent-type: {}\r\nconnection: close\r\n\r\n",
+        if streamed {
+            "text/event-stream"
+        } else {
+            "application/json"
+        }
+    );
+    if !streamed {
+        std::thread::sleep(gap * u32::try_from(pieces).unwrap_or(u32::MAX));
+        let completion = serde_json::json!({
+            "object": "chat.completion",
+            "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": content}}],
+        });
+        let _ = write!(stream, "{head}{completion}");
+        return;
+    }
+    let chunk = |delta: Json, finish: Json| {
+        format!(
+            "data: {}\n\n",
+            serde_json::json!({
+                "object": "chat.completion.chunk",
+                "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+            })
+        )
+    };
+    let text: Vec<char> = content.chars().collect();
+    let size = text.len().div_ceil(pieces.max(1)).max(1);
+    if stream
+        .write_all(head.as_bytes())
+        .and_then(|()| stream.flush())
+        .is_err()
+    {
+        return;
+    }
+    for (index, piece) in text.chunks(size).enumerate() {
+        if index > 0 {
+            if stall {
+                std::thread::sleep(std::time::Duration::from_secs(120));
+                return;
+            }
+            std::thread::sleep(gap);
+        }
+        let piece: String = piece.iter().collect();
+        let written = stream
+            .write_all(chunk(serde_json::json!({"content": piece}), Json::Null).as_bytes())
+            .and_then(|()| stream.flush());
+        if written.is_err() {
+            return;
+        }
+    }
+    let _ = write!(
+        stream,
+        "{}data: [DONE]\n\n",
+        chunk(serde_json::json!({}), Json::String("stop".to_owned()))
+    );
+}
+
+/// Answers a streamed request on `stream` as a gateway does while its model
+/// says nothing: the head at once, then only keep-alive comments
+/// (`: ping`) every `gap`, for at most a minute.
+pub fn answer_with_pings(stream: &mut std::net::TcpStream, gap: std::time::Duration) {
+    use std::io::Write as _;
+    let head = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n";
+    if stream.write_all(head.as_bytes()).is_err() {
+        return;
+    }
+    let started = std::time::Instant::now();
+    while started.elapsed() < std::time::Duration::from_secs(60) {
+        if stream
+            .write_all(b": ping\n\n")
+            .and_then(|()| stream.flush())
+            .is_err()
+        {
+            return;
+        }
+        std::thread::sleep(gap);
+    }
+}

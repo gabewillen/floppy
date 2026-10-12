@@ -26,19 +26,35 @@ function turnLog() {
   return 'turn ' + turn;
 }
 
-// The hop timer of the stage in hand, for the turn in hand (the original _is_child_hop_timeout).
+// A hop timer of the stage in hand, for the turn in hand (the original _is_child_hop_timeout).
 function isChildHopTimeout(_event) {
-  return _event.sendid === hop_timer && _event.data.turn === turn;
+  return (_event.sendid === hop_timer || _event.sendid === ceiling_timer) && _event.data.turn === turn;
 }
 
-function hopTimeoutLog() {
-  return 'turn ' + turn + ': ' + stage + ' after ' + child_operation_timeout_ms + ' ms';
+function hopTimeoutLog(_event) {
+  return _event.sendid === ceiling_timer
+    ? 'turn ' + turn + ': ' + stage + ' after ' + ceilingMs() + ' ms in all'
+    : 'turn ' + turn + ': ' + stage + ' after ' + inactivityMs() + ' ms without progress';
 }
 
 // running_autonomy, running_intuition, running_reasoning
 
+// A stage's inactivity bound and its backstop: bot.activate's, else this
+// document's defaults (decision D101).
+function inactivityMs() {
+  return bounds.child_operation_timeout_ms === undefined ? child_operation_timeout_ms : bounds.child_operation_timeout_ms;
+}
+
+function ceilingMs() {
+  return bounds.child_operation_ceiling_ms === undefined ? child_operation_ceiling_ms : bounds.child_operation_ceiling_ms;
+}
+
 function hopDelay() {
-  return child_operation_timeout_ms + 'ms';
+  return inactivityMs() + 'ms';
+}
+
+function ceilingDelay() {
+  return ceilingMs() + 'ms';
 }
 
 // The stage's input param, and bot.ability.failed's input (the original _build_processing_input).

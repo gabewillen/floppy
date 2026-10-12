@@ -48,7 +48,9 @@
   storing; more than one fails; one is sent to this session (#_internal),
   where scxml.rs checks its data against the event's schema and the
   transition taking it applies it. The model call is bounded by
-  bot.ability.reflection.select.hop.timed_out (the original's 30 s).
+  bot.ability.reflection.select.hop.timed_out: select_timeout_ms without
+  progress (the call streams its reply; each generate.progress starts it
+  over) or select_ceiling_ms in all (decision D101).
 
   breaking (the original _apply_break): status BROKEN with the trimmed reason
   and status_updated_at; the row stays for a later change. An unknown
@@ -78,10 +80,13 @@
   fix:" and the rendered diagnostics after no progress. Its failed with no
   draft (no backend, generation failures) fails the turn with no draft,
   as the original's failed change call. revising is bounded by
-  revising_timeout_ms (120 s, decision D101: the original's 30 s child
-  operation timeout cut off live builds of 27 to 39 s): when it
-  fires, leaving revising cancels the revision and the turn fails with
-  the original's "Reflection child cancellation timed out.".
+  inactivity (decision D101): revising_timeout_ms without progress, where
+  the builder (invoked with progress_target '#_parent') sends
+  builder.progress for each stage it enters and each progress of its
+  streamed generations, and revising_ceiling_ms in all; bot.activate may
+  set both (bounds). When either fires, leaving revising cancels the
+  revision and the turn fails with the original's "Reflection child
+  cancellation timed out.".
 
   Reboots: the original's reflection asks for bot.reboot when a cancel does not
   finish in time or its revision asks for one. An SCXML invoke cancel is
@@ -113,8 +118,14 @@
     <!-- The cognition's <param>s. -->
     <data id="database" expr="null"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <!-- The select call's and the revision's inactivity bounds and their
+         backstops (decision D101); bounds holds bot.activate's revising
+         ones (the cognition's <param>). -->
     <data id="select_timeout_ms" expr="30000"/>
-    <data id="revising_timeout_ms" expr="120000"/>
+    <data id="select_ceiling_ms" expr="600000"/>
+    <data id="revising_timeout_ms" expr="150000"/>
+    <data id="revising_ceiling_ms" expr="1800000"/>
+    <data id="bounds" expr="({})"/>
     <!-- The turn in hand (the reference InputData). -->
     <data id="turn" expr="0"/>
     <data id="cognition_input" expr="null"/>
@@ -129,6 +140,9 @@
     <data id="selected" expr="null"/>
     <data id="gen_failure" expr="null"/>
     <data id="hop_timer" expr="null"/>
+    <data id="ceiling_timer" expr="null"/>
+    <!-- The revision's inactivity timer. -->
+    <data id="revising_timer" expr="null"/>
     <!-- The applied inventory event (the original _AppliedEventData.behavior). -->
     <data id="behavior" expr="null"/>
     <!-- Revision (the reference ChangeWriteInput): the intent, whether it was a
@@ -275,9 +289,11 @@
       <assign location="selected" expr="null"/>
       <assign location="gen_failure" expr="null"/>
       <send idlocation="hop_timer" event="bot.ability.reflection.select.hop.timed_out" delayexpr="selectTimeoutDelay()"/>
+      <send idlocation="ceiling_timer" event="bot.ability.reflection.select.hop.timed_out" delayexpr="selectCeilingDelay()"/>
     </onentry>
     <onexit>
       <cancel sendidexpr="hop_timer"/>
+      <cancel sendidexpr="ceiling_timer"/>
     </onexit>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
@@ -287,7 +303,14 @@
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
       <param name="strict" expr="true"/>
+      <param name="stream" expr="true"/>
     </invoke>
+    <!-- The reply streams: its progress starts the inactivity bound over
+         (decision D101). -->
+    <transition event="generate.progress" cond="isGenerate(_event)">
+      <cancel sendidexpr="hop_timer"/>
+      <send idlocation="hop_timer" event="bot.ability.reflection.select.hop.timed_out" delayexpr="selectTimeoutDelay()"/>
+    </transition>
     <!-- The answer of this hop's call (gen_id: a late answer from an
          earlier hop's cancelled call is not this one). -->
     <transition event="generate.result" cond="isGenerate(_event)">
@@ -367,15 +390,24 @@
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
-      <send id="revising-after" event="revising.after" delayexpr="revisingTimeoutDelay()"/>
+      <send idlocation="revising_timer" event="revising.after" delayexpr="revisingTimeoutDelay()"/>
+      <send id="revising-ceiling" event="revising.after" delayexpr="revisingCeilingDelay()"/>
     </onentry>
     <onexit>
-      <cancel sendid="revising-after"/>
+      <cancel sendidexpr="revising_timer"/>
+      <cancel sendid="revising-ceiling"/>
     </onexit>
-    <!-- The original's child operation bound: leaving revising cancels the
-         revision, and the turn fails as the original's timing_out does. -->
+    <!-- The original's child operation bound, as one of inactivity and a
+         backstop (decision D101): leaving revising cancels the revision,
+         and the turn fails as the original's timing_out does. -->
     <transition event="revising.after" target="failing">
       <assign location="failure" expr="'Reflection child cancellation timed out.'"/>
+    </transition>
+    <!-- The builder made progress (a stage, or its streamed generation):
+         the inactivity bound starts over. -->
+    <transition event="builder.progress">
+      <cancel sendidexpr="revising_timer"/>
+      <send idlocation="revising_timer" event="revising.after" delayexpr="revisingTimeoutDelay()"/>
     </transition>
     <!-- The original Revision._prepare: a create's DRAFT stub, then the row. -->
     <state id="preparing">
@@ -414,7 +446,9 @@
           <send event="bot.ability.reflection.revision.requested"/>
         </if>
       </onentry>
-      <invoke id="builder" type="scxml" src="../../bots/builder/builder.scx"/>
+      <invoke id="builder" type="scxml" src="../../bots/builder/builder.scx">
+        <param name="progress_target" expr="'#_parent'"/>
+      </invoke>
       <transition event="bot.ability.reflection.revision.failed" target="failing"/>
       <transition event="bot.ability.reflection.revision.requested">
         <!-- The original _grounded_triggers, before the build: the builder is

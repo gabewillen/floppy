@@ -96,11 +96,22 @@ enum Generation {
     Fail,
     /// Never answers.
     Hang,
+    /// An ignore selection, streamed slowly but steadily: sixteen pieces a
+    /// second apart, sixteen seconds in all ([`support::answer_slowly`]).
+    Slow,
+    /// An ignore selection whose stream stops after its first piece.
+    Stall,
+    /// A stream of keep-alive comments only, as a gateway sends while its
+    /// model says nothing ([`support::answer_with_pings`]).
+    Pings,
 }
 
 impl Generation {
     const fn path(self) -> &'static str {
         match self {
+            Self::Slow => "gslow",
+            Self::Stall => "gstall",
+            Self::Pings => "gpings",
             Self::Ignore => "gignore",
             Self::OffChoice => "offchoice",
             Self::Respond => "grespond",
@@ -254,7 +265,39 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     }
     let target = request_line.split(' ').nth(1).unwrap_or("").to_owned();
     let body: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
-    let reply = answer(&target, &body);
+    if target == format!("/{}/v1/chat/completions", Generation::Pings.path())
+        && !is_reflection(&body)
+    {
+        log.lock().expect("the log lock").push(Received {
+            target,
+            body: body.clone(),
+        });
+        support::answer_with_pings(&mut stream, Duration::from_millis(500));
+        return;
+    }
+    for (generation, stall) in [(Generation::Slow, false), (Generation::Stall, true)] {
+        if target == format!("/{}/v1/chat/completions", generation.path()) && !is_reflection(&body)
+        {
+            log.lock().expect("the log lock").push(Received {
+                target,
+                body: body.clone(),
+            });
+            let ignore = json!({"events": [
+                {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}
+            ]});
+            support::answer_slowly(
+                &mut stream,
+                &body,
+                &ignore.to_string(),
+                16,
+                Duration::from_secs(1),
+                stall,
+            );
+            return;
+        }
+    }
+    let reply = answer(&target, &body)
+        .map(|(status, text)| (status, support::stream_if_asked(&body, text)));
     log.lock()
         .expect("the log lock")
         .push(Received { target, body });
@@ -407,6 +450,11 @@ fn layout(
 }
 
 fn start(bot: &Bot) -> Run {
+    start_activated(bot, &json!({}))
+}
+
+/// [`start`] with `activation` as `bot.activate`'s data.
+fn start_activated(bot: &Bot, activation: &Json) -> Run {
     let mut run = Run::start(
         &[
             "--env-file".to_owned(),
@@ -415,7 +463,7 @@ fn start(bot: &Bot) -> Run {
         ],
         &[],
     );
-    run.event("bot.activate", &json!({}));
+    run.event("bot.activate", activation);
     run.until(WAIT, label_is("bot.activated"));
     run
 }
@@ -1590,7 +1638,9 @@ fn reboots_on_a_silent_stage(
     let records = run.until(WAIT, label_is("bot.activated"));
     assert_eq!(
         texts(&records, "cognition.hop.timed_out"),
-        [format!("turn 1: {stage} after {hop_ms} ms")]
+        [format!(
+            "turn 1: {stage} after {hop_ms} ms without progress"
+        )]
     );
     assert_eq!(
         texts(&records, "bot.reboot"),
@@ -1598,6 +1648,107 @@ fn reboots_on_a_silent_stage(
     );
     assert!(texts(&records, "floppy.output").is_empty());
     close(run, &mock, test);
+}
+
+/// Reasoning's reply streams (decision D101): a model that keeps answering
+/// is never cut off, however long the whole reply takes. Its stream,
+/// sixteen seconds in all, outlasts the 8 s bound of a stage without
+/// progress (long enough for the earlier stages on a loaded machine), and
+/// the turn is reasoned.
+#[test]
+fn a_reasoning_reply_that_keeps_streaming_outlasts_the_inactivity_bound() {
+    let mock = Mock::start();
+    let bot = layout(
+        &mock,
+        Decision::Abstain,
+        Generation::Slow,
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[("child_operation_timeout_ms", "8000")],
+        )],
+    );
+    let mut run = start(&bot);
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "intuition unhandled (empty_product)",
+            "reasoning handled"
+        ]),
+        "{records:?}"
+    );
+    assert!(texts(&records, "cognition.hop.timed_out").is_empty());
+    assert!(texts(&records, "bot.reboot").is_empty());
+    let request = &reasoning_requests(&mock)[0].body;
+    assert_eq!(request["stream"], true, "reasoning streams its reply");
+    drop(run.close(WAIT));
+}
+
+/// A reasoning reply that stops arriving ends the stage at the inactivity
+/// bound (decision D101), here `bot.activate`'s: the cognition asks the
+/// body for a reboot.
+#[test]
+fn a_reasoning_reply_that_stalls_reboots_at_the_inactivity_bound() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Stall, &[]);
+    let mut run = start_activated(&bot, &json!({"child_operation_timeout_ms": 8000}));
+    say(&mut run, "hello");
+    let records = run.until(WAIT, label_is("bot.activated"));
+    assert_eq!(
+        texts(&records, "cognition.hop.timed_out"),
+        ["turn 1: reasoning after 8000 ms without progress"]
+    );
+    assert_eq!(
+        texts(&records, "bot.reboot"),
+        strings(&[r#"{"reason":"cognition_child_teardown_failed"}"#])
+    );
+    drop(run.close(WAIT));
+}
+
+/// Keep-alive comments are not progress (decision D101): a backend that
+/// only keeps its connection alive while its model says nothing ends the
+/// stage at the inactivity bound.
+#[test]
+fn a_reasoning_reply_of_keep_alive_comments_only_reboots_at_the_inactivity_bound() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Pings, &[]);
+    let mut run = start_activated(&bot, &json!({"child_operation_timeout_ms": 8000}));
+    say(&mut run, "hello");
+    let records = run.until(WAIT, label_is("bot.activated"));
+    assert_eq!(
+        texts(&records, "cognition.hop.timed_out"),
+        ["turn 1: reasoning after 8000 ms without progress"]
+    );
+    drop(run.close(WAIT));
+}
+
+/// The backstop (decision D101): a stage that keeps making progress still
+/// ends once it has run `child_operation_ceiling_ms` in all.
+#[test]
+fn a_reasoning_reply_that_streams_past_the_ceiling_reboots() {
+    let mock = Mock::start();
+    let bot = layout(
+        &mock,
+        Decision::Abstain,
+        Generation::Slow,
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[
+                ("child_operation_timeout_ms", "8000"),
+                ("child_operation_ceiling_ms", "10000"),
+            ],
+        )],
+    );
+    let mut run = start(&bot);
+    say(&mut run, "hello");
+    let records = run.until(WAIT, label_is("bot.activated"));
+    assert_eq!(
+        texts(&records, "cognition.hop.timed_out"),
+        ["turn 1: reasoning after 10000 ms in all"]
+    );
+    drop(run.close(WAIT));
 }
 
 #[test]

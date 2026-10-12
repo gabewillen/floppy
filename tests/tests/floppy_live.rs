@@ -422,7 +422,9 @@ fn live_conversation() {
         );
         let goal = index + 1;
         let waited = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            run.until(Duration::from_mins(10), |record| {
+            // Longer than reflection's revising backstop (30 min), so a
+            // revision that reaches it still settles the turn.
+            run.until(Duration::from_mins(32), |record| {
                 if record["type"] == "log"
                     && matches!(
                         record["label"].as_str(),

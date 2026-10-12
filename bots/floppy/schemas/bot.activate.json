@@ -3,10 +3,34 @@
   "title": "bot.activate",
   "description": "No-payload command that activates a bot.",
   "properties": {
+    "child_operation_ceiling_ms": {
+      "description": "How long a cognition stage may take in all before the bot reboots, in milliseconds (the backstop; the turn's own processing_timeout_ms still bounds the whole turn); absent, the cognition's default (decision D101) [floppy field].",
+      "maximum": 86400000,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "child_operation_timeout_ms": {
+      "description": "How long a cognition stage may go without progress before the bot reboots, in milliseconds; a streamed reasoning reply's progress starts it over; absent, the cognition's default (decision D101) [floppy field].",
+      "maximum": 86400000,
+      "minimum": 1,
+      "type": "integer"
+    },
     "model": {
       "description": "The model the bot's model-backed abilities ask the generate service for; absent, each ability's default [floppy field].",
       "minLength": 1,
       "type": "string"
+    },
+    "revising_ceiling_ms": {
+      "description": "How long reflection's revision through the builder may take in all before it fails, in milliseconds (the backstop); absent, reflection's default (decision D101) [floppy field].",
+      "maximum": 86400000,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "revising_timeout_ms": {
+      "description": "How long reflection's revision through the builder may go without progress before it fails, in milliseconds; each builder stage and each streamed generation's progress starts it over; absent, reflection's default (decision D101) [floppy field].",
+      "maximum": 86400000,
+      "minimum": 1,
+      "type": "integer"
     }
   },
   "type": "object",

@@ -63,7 +63,7 @@
     </test>
   </assert>
   <assert id="builder-7" specnum="7" specid="#builder-7">
-    <![CDATA[A generation that fails (`generate.failed`) is a `generate` diagnostic `<stage>-failed`; one that does not answer within `generate_timeout_ms` is cancelled, a `timeout` diagnostic `<stage>-timeout`.]]>
+    <![CDATA[A generation that fails (`generate.failed`) is a `generate` diagnostic `<stage>-failed`; one that makes no progress for `generate_timeout_ms` (its streamed reply's `generate.progress` starts it over) or runs `generate_ceiling_ms` in all is cancelled, a `timeout` diagnostic `<stage>-timeout` (decision D101).]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>

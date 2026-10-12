@@ -43,11 +43,16 @@
   Model calls are invoked services, never executable content: each runs
   while the session keeps processing events, a transition records the
   result event, and done.invoke moves on. Bounds on time live in the
-  topology: design and author arm builder.timeout after
-  generate_timeout_ms and triage after decision_timeout_ms (each tagged with
-  its stage run and cancelled on exit), and a timeout that fires first
-  leaves the state, which cancels the in-flight call (its late answer
-  reaches no one). The simulation is bounded the same way: each test runs
+  topology: design and author stream their replies and arm builder.timeout
+  after generate_timeout_ms without progress (each generate.progress
+  re-arms it) and after generate_ceiling_ms in all (decision D101), and
+  triage after decision_timeout_ms (each tagged with its stage run and
+  cancelled on exit), and a timeout that fires first leaves the state,
+  which cancels the in-flight call (its late answer reaches no one).
+  Invoked with progress_target '#_parent' (reflection does), the builder
+  sends its invoker builder.progress {stage} as it enters design, author,
+  validate, each simulation run and triage, and with each progress of a
+  streamed generation, so the invoker can bound the build by inactivity. The simulation is bounded the same way: each test runs
   at most sim_test_cap_ms, and simulate-timeout fires only after
   max_tests * sim_test_cap_ms plus a margin.
 
@@ -81,7 +86,14 @@
     <!-- An optional failure cap; null (no cap) unless the request sets it. -->
     <data id="max_attempts" expr="null"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <!-- A generation's inactivity bound (a streamed reply's progress starts
+         it over) and its backstop (decision D101). -->
     <data id="generate_timeout_ms" expr="300000"/>
+    <data id="generate_ceiling_ms" expr="1200000"/>
+    <!-- Where the builder reports its progress (a stage entered, a
+         generation's reply arriving) as builder.progress: '#_parent' for an
+         invoker that bounds the build by inactivity, null for none. -->
+    <data id="progress_target" expr="null"/>
     <!-- The original check()'s lifetime bounds (min_every, turn_after_bound),
          null (not checked) unless the request names them. -->
     <data id="min_every_ms" expr="null"/>
@@ -106,6 +118,8 @@
     <!-- Model calls: the invocation in flight, its failure code, and the
          stage run its builder.timeout carries. -->
     <data id="gen_id" expr="null"/>
+    <!-- The generation's inactivity timer (re-armed on progress). -->
+    <data id="generate_timer" expr="null"/>
     <data id="gen_failure" expr="null"/>
     <data id="decision_id" expr="null"/>
     <data id="choices" expr="[]"/>
@@ -187,12 +201,21 @@
       <assign location="gen_failure" expr="null"/>
       <assign location="stage_run" expr="increment(stage_run)"/>
       <log label="design" expr="designLog()"/>
-      <send id="design-timeout" event="builder.timeout" delayexpr="delay(generate_timeout_ms)">
+      <send idlocation="generate_timer" event="builder.timeout" delayexpr="delay(generate_timeout_ms)">
         <param name="run" expr="stage_run"/>
       </send>
+      <send id="design-ceiling" event="builder.timeout" delayexpr="delay(generate_ceiling_ms)">
+        <param name="run" expr="stage_run"/>
+      </send>
+      <if cond="reportsProgress()">
+        <send event="builder.progress" targetexpr="progress_target">
+          <content expr="progressData('design')"/>
+        </send>
+      </if>
     </onentry>
     <onexit>
-      <cancel sendid="design-timeout"/>
+      <cancel sendidexpr="generate_timer"/>
+      <cancel sendid="design-ceiling"/>
     </onexit>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
@@ -202,7 +225,21 @@
       <param name="schema" expr="plan_schema"/>
       <param name="schemaname" expr="'topology_plan'"/>
       <param name="strict" expr="true"/>
+      <param name="stream" expr="true"/>
     </invoke>
+    <!-- The reply streams: its progress starts the inactivity bound over
+         and is reported (decision D101). -->
+    <transition event="generate.progress" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.progress","description":"The reply of a streamed generation is arriving: received counts its bytes so far.","type":"object","properties":{"received":{"type":"integer","minimum":0}},"required":["received"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
+      <cancel sendidexpr="generate_timer"/>
+      <send idlocation="generate_timer" event="builder.timeout" delayexpr="delay(generate_timeout_ms)">
+        <param name="run" expr="stage_run"/>
+      </send>
+      <if cond="reportsProgress()">
+        <send event="builder.progress" targetexpr="progress_target">
+          <content expr="progressData('design')"/>
+        </send>
+      </if>
+    </transition>
     <!-- The two events of this call of the generate service, each recorded
          (gen_id: a late event of an earlier attempt's call is not this one). -->
     <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service: text without a requested schema, or the JSON value that satisfies the requested schema.","oneOf":[{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},{"type":"object","properties":{"json":true},"required":["json"],"additionalProperties":false}]}' cond="isFrom(_event, gen_id)">
@@ -244,12 +281,21 @@
       <assign location="draft" expr="null"/>
       <assign location="gen_failure" expr="null"/>
       <assign location="stage_run" expr="increment(stage_run)"/>
-      <send id="author-timeout" event="builder.timeout" delayexpr="delay(generate_timeout_ms)">
+      <send idlocation="generate_timer" event="builder.timeout" delayexpr="delay(generate_timeout_ms)">
         <param name="run" expr="stage_run"/>
       </send>
+      <send id="author-ceiling" event="builder.timeout" delayexpr="delay(generate_ceiling_ms)">
+        <param name="run" expr="stage_run"/>
+      </send>
+      <if cond="reportsProgress()">
+        <send event="builder.progress" targetexpr="progress_target">
+          <content expr="progressData('author')"/>
+        </send>
+      </if>
     </onentry>
     <onexit>
-      <cancel sendid="author-timeout"/>
+      <cancel sendidexpr="generate_timer"/>
+      <cancel sendid="author-ceiling"/>
     </onexit>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
@@ -259,7 +305,19 @@
       <param name="schema" expr="draft_schema"/>
       <param name="schemaname" expr="'scxml_draft'"/>
       <param name="strict" expr="true"/>
+      <param name="stream" expr="true"/>
     </invoke>
+    <transition event="generate.progress" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.progress","description":"The reply of a streamed generation is arriving: received counts its bytes so far.","type":"object","properties":{"received":{"type":"integer","minimum":0}},"required":["received"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
+      <cancel sendidexpr="generate_timer"/>
+      <send idlocation="generate_timer" event="builder.timeout" delayexpr="delay(generate_timeout_ms)">
+        <param name="run" expr="stage_run"/>
+      </send>
+      <if cond="reportsProgress()">
+        <send event="builder.progress" targetexpr="progress_target">
+          <content expr="progressData('author')"/>
+        </send>
+      </if>
+    </transition>
     <!-- The two events of this call of the generate service, each recorded
          (gen_id: a late event of an earlier attempt's call is not this one). -->
     <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service: text without a requested schema, or the JSON value that satisfies the requested schema.","oneOf":[{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},{"type":"object","properties":{"json":true},"required":["json"],"additionalProperties":false}]}' cond="isFrom(_event, gen_id)">
@@ -296,6 +354,11 @@
   <state id="validate">
     <onentry>
       <log label="validate" expr="'validating the draft'"/>
+      <if cond="reportsProgress()">
+        <send event="builder.progress" targetexpr="progress_target">
+          <content expr="progressData('validate')"/>
+        </send>
+      </if>
       <assign location="report" expr="null"/>
       <assign location="fixed" expr="null"/>
       <assign location="schema_errors" expr="schemaErrors(draft.schemas)"/>
@@ -373,6 +436,11 @@
          on the queue counts) for the script's settle time. -->
     <state id="sim_run">
       <onentry>
+        <if cond="reportsProgress()">
+          <send event="builder.progress" targetexpr="progress_target">
+            <content expr="progressData('simulate')"/>
+          </send>
+        </if>
         <assign location="observed" expr="[]"/>
         <assign location="child_done" expr="false"/>
         <assign location="sim_error" expr="null"/>
@@ -475,6 +543,11 @@
       <assign location="stage_run" expr="increment(stage_run)"/>
       <decision:choice location="choices"/>
       <log label="triage" expr="triageLog()"/>
+      <if cond="reportsProgress()">
+        <send event="builder.progress" targetexpr="progress_target">
+          <content expr="progressData('triage')"/>
+        </send>
+      </if>
       <send id="triage-timeout" event="builder.timeout" delayexpr="delay(decision_timeout_ms)">
         <param name="run" expr="stage_run"/>
       </send>

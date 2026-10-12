@@ -81,7 +81,14 @@ is optional, `https://api.typesafe.ai` without it). Without the TypeSafe key
 every turn fails with `the decision failed (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
 `bot.activate` may name the model (`{"model": "..."}`); the default is
-`Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory/memory.scx`, the original's
+`Qwen/Qwen3.8-Flash-Next`. It may also set the time bounds of the
+model-bound stages (decision D101), each in milliseconds:
+`child_operation_timeout_ms` (a cognition stage without progress; a
+streamed reasoning reply's progress starts it over),
+`child_operation_ceiling_ms` (a stage in all), `revising_timeout_ms`
+(reflection's revision through the builder without progress) and
+`revising_ceiling_ms` (a revision in all); absent, each is the ability's
+default (the root README's "Timeouts and bounds"). The memory ability (`abilities/memory/memory.scx`, the original's
 Memory) keeps the bot's database, `/memory/floppy.sqlite`, through the sql
 service (`services/sql`, SQLite), in the directory the run grants that
 service: `--dir

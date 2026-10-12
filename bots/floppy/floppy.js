@@ -26,6 +26,14 @@ function activationModel(_event) {
   return _event.data.model === undefined ? model : _event.data.model;
 }
 
+// The time bounds bot.activate sets, by name (decision D101).
+function activationBounds(_event) {
+  var names = ['child_operation_timeout_ms', 'child_operation_ceiling_ms', 'revising_timeout_ms', 'revising_ceiling_ms'];
+  var given = {};
+  names.forEach(function (name) { if (_event.data[name] !== undefined) { given[name] = _event.data[name]; } });
+  return given;
+}
+
 // live
 
 function nextLiveRun() {
