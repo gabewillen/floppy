@@ -37,8 +37,10 @@
   _environment_actions, which the original's intuition dispatches before the
   turn goes on to reasoning) as the selected of its unhandled donedata.
   The cognition keeps them and puts them first in the turn's output, before
-  reasoning's own selections, so the body routes them first; the turn's
-  one answer stays one bot.ability.cognition.output. The reflection gets
+  reasoning's own selections, so the body routes them first; a reasoning
+  selection that repeats one of them (the same event and data) is left out,
+  since the original had dispatched it before reasoning ran, so a turn acts
+  once; the turn's one answer stays one bot.ability.cognition.output. The reflection gets
   reasoning's selections only (the original's cognition output is reasoning's
   terminal). A turn whose reasoning fails or is cancelled routes none of
   them (the original would already have dispatched them).

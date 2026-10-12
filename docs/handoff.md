@@ -94,7 +94,10 @@ Last updated: 2026-10-10.
   first, then compares it with the updated threshold (the original
   `_tune_confidence`). `low_confidence` and `deliberative_input` hand out
   the environment actions in the unhandled donedata's `selected`; the
-  cognition routes them first in the turn's output. The service's pass
+  cognition routes them first in the turn's output, and leaves out a
+  reasoning selection that repeats one (same event and data), so a turn
+  acts once (2026-10-11, from `live_choices` on 2026-10-12, where
+  `bot.focus_device` was routed twice). The service's pass
   criterion is the original's `__unhandled__`, its state document the original's
   `{"turn": {"envelope": {"name"}, "data"}}`, and data grounds from the
   non-null stimulus value then the enum (no `const`). `choose` lost its

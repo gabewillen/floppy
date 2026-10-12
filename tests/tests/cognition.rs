@@ -89,6 +89,9 @@ enum Generation {
     OffChoice,
     /// A response for the communication to say.
     Respond,
+    /// The communication's respond with the text `hi`: the same action a
+    /// low-confidence intuition hands out for the stimulus `hi`.
+    Repeat,
     /// Answers 500.
     Fail,
     /// Never answers.
@@ -101,6 +104,7 @@ impl Generation {
             Self::Ignore => "gignore",
             Self::OffChoice => "offchoice",
             Self::Respond => "grespond",
+            Self::Repeat => "grepeat",
             Self::Fail => "gfail",
             Self::Hang => "ghang",
         }
@@ -212,6 +216,9 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
         ])),
         "/grespond/v1/chat/completions" => selection(json!([
             {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet", "target": "communication"}
+        ])),
+        "/grepeat/v1/chat/completions" => selection(json!([
+            {"event": RESPOND, "data": {"text": "hi"}, "reason": "answer", "target": "communication"}
         ])),
         "/offchoice/v1/chat/completions" => selection(json!([
             {"event": "bot.focus_device", "data": {"device": "lamp"}, "reason": "look"}
@@ -1298,10 +1305,9 @@ fn offered_schema(event: &str) -> Json {
 /// under the floor 35 with respond (ignore is no environment action); the
 /// cognition routes respond first, then reasoning's selection. Reasoning's
 /// prompt is the original's model-facing XML of its `ProcessorInput`.
-#[test]
-fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
-    let mock = Mock::start();
-    let bot = layout(&mock, Decision::Low, Generation::Ignore, &[]);
+/// Runs one `hi` turn, offering ignore and respond, through the cognition
+/// harness of `bot` and returns its records up to the harness's output.
+fn low_confidence_turn(bot: &Bot) -> (Run, Vec<Json>) {
     let abilities = bot
         .body
         .parent()
@@ -1338,6 +1344,14 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
         }),
     );
     let records = run.until(WAIT, label_is("harness.output"));
+    (run, records)
+}
+
+#[test]
+fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Low, Generation::Ignore, &[]);
+    let (run, records) = low_confidence_turn(&bot);
     assert_eq!(
         texts(&records, "intuition"),
         strings(&[&format!(
@@ -1386,6 +1400,38 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
         run,
         &mock,
         "low_confidence_hands_out_the_environment_actions_before_reasoning",
+    );
+}
+
+/// A turn acts once (docs/live-proof.md, 2026-10-12, `live_choices`): when
+/// reasoning selects the very action the escalated intuition already
+/// handed out (respond with `hi`, as intuition's environment action), the
+/// output holds it once, the environment action, since the original had
+/// already dispatched it before reasoning ran. The reflection still gets
+/// reasoning's selections.
+#[test]
+fn reasoning_does_not_repeat_an_environment_action() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Low, Generation::Repeat, &[]);
+    let (run, records) = low_confidence_turn(&bot);
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "intuition unhandled (low_confidence)",
+            "reasoning handled"
+        ])
+    );
+    assert_eq!(
+        json_text(&records, "harness.output"),
+        json!({"turn": 1, "output": [
+            {"event": RESPOND, "data": {"text": "hi"}},
+        ]})
+    );
+    close(
+        run,
+        &mock,
+        "reasoning_does_not_repeat_an_environment_action",
     );
 }
 
