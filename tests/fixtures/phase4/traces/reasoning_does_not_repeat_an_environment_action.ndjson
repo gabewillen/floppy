@@ -9,7 +9,6 @@
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition unhandled (low_confidence)","type":"log"}
 {"label":"memory","parent":"session.1","session":"session.6","text":"absent","type":"log"}
 {"label":"reasoning","parent":"session.1","session":"session.6","text":"turn 1: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication","type":"log"}
-{"label":"memory","parent":"session.1","session":"session.6","text":"absent","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.1","text":"reasoning handled","type":"log"}
 {"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}
 {"label":"harness.output","session":"session","text":"{\"output\":[{\"data\":{\"text\":\"hi\"},\"event\":\"bot.ability.communication.respond\"}],\"turn\":1}","type":"log"}
