@@ -1128,6 +1128,60 @@ fn prompts(mock: &Mock) -> Vec<String> {
         .collect()
 }
 
+/// Tells the bot `content` as gabe, through the communication, once
+/// reflection has settled every earlier output (as [`say`]).
+fn tell(run: &mut Run, content: &str) {
+    settle_reflection(run);
+    run.event(
+        "bot.ability.communication.input",
+        &json!({
+            "source_ids": ["gabe"],
+            "target_ids": ["floppy"],
+            "content": content,
+            "content_type": "text/plain"
+        }),
+    );
+}
+
+/// The original renders a conversation's messages (models) into the
+/// prompt: a turn the conversation hands reasoning carries its history, so
+/// the next turn's prompt holds what the user said before and what the bot
+/// said back (decision D99), beside the one episode reflection stored.
+#[test]
+fn a_conversation_turn_carries_its_history_to_reasoning() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Respond, &[]);
+    support::use_database(&bot.body, DATABASE);
+    let mut run = start(&bot);
+    tell(&mut run, "My favorite color is green.");
+    run.until(WAIT, turn_ended);
+    tell(&mut run, "What is my favorite color?");
+    run.until(WAIT, turn_ended);
+    let prompts = prompts(&mock);
+    assert_eq!(prompts.len(), 2, "{prompts:?}");
+    for said in [
+        "My favorite color is green.",
+        "Hi! I am floppy.",
+        "What is my favorite color?",
+    ] {
+        assert!(
+            prompts[1].contains(&format!("<entry key=\"content\" value=\"{said}\" />")),
+            "{said}: {}",
+            prompts[1]
+        );
+    }
+    assert!(
+        prompts[1].contains("\n  <prior_episodes count=\"1\">\n"),
+        "{}",
+        prompts[1]
+    );
+    close(
+        run,
+        &mock,
+        "a_conversation_turn_carries_its_history_to_reasoning",
+    );
+}
+
 /// The original's Reasoning recall: a reasoned turn's episode, which
 /// reflection stores (decision D97), is the one the next turn's prompt
 /// carries: each turn records one episode.

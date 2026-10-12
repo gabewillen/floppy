@@ -348,6 +348,23 @@ fn json_log(records: &[Json], label: &str) -> Json {
     serde_json::from_str(&text).expect("the log text is JSON")
 }
 
+/// The turn's episode when it applied no behavior: an empty selection, or
+/// a reflection that failed (decision D97).
+fn unapplied_episode() -> Json {
+    json!({
+        "focus": "door",
+        "focus_candidates": ["door"],
+        "stimulus_name": "environment.sound",
+        "output": input(1)["cognition_output"],
+        "behavior": null,
+    })
+}
+
+/// The logged episodes when `episode` is the only one stored.
+fn stored(episode: &Json) -> Json {
+    json!([{"context_ref": "door", "scope": "memory", "kind": "task", "content": episode}])
+}
+
 /// A seed of one ACTIVE turn behavior named `GreetOnKnock`, used once.
 const SEED_BEHAVIOR: &str = "[{sql: &quot;INSERT INTO bot_behavior (name, source, description, status, used_count, last_used_at) VALUES ('GreetOnKnock', '&lt;scxml/&gt;', 'Say hello.', 'ACTIVE', '1', '2026-10-09T00:00:00Z')&quot;}, {sql: &quot;INSERT INTO bot_behavior_trigger (behavior_name, \\&quot;trigger\\&quot;) VALUES ('GreetOnKnock', 'environment.sound')&quot;}]";
 
@@ -373,17 +390,8 @@ fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(databas
     assert_eq!(texts(&first, "harness.output"), ["answered"]);
     assert_eq!(texts(&first, "reflection.selected"), ["none"]);
     assert_eq!(json_log(&first, "inventory"), json!([]));
-    let episode = json!({
-        "focus": "door",
-        "focus_candidates": ["door"],
-        "stimulus_name": "environment.sound",
-        "output": input(1)["cognition_output"],
-        "behavior": null,
-    });
-    assert_eq!(
-        json_log(&first, "episodes"),
-        json!([{"context_ref": "door", "scope": "memory", "kind": "task", "content": episode}])
-    );
+    let episode = unapplied_episode();
+    assert_eq!(json_log(&first, "episodes"), stored(&episode));
     let second = reflect(&mut run, 2);
     assert_eq!(texts(&second, "harness.output"), ["answered"], "{second:?}");
     assert_eq!(
@@ -478,8 +486,8 @@ fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
     );
 }
 
-/// A break of a behavior the inventory does not hold fails the turn and
-/// stores nothing.
+/// A break of a behavior the inventory does not hold fails the turn, and
+/// the turn's episode is still stored, with no behavior (decision D97).
 #[test]
 fn a_break_of_an_unknown_behavior_fails() {
     a_break_of_an_unknown_behavior_fails_on(SQLITE);
@@ -502,7 +510,7 @@ fn a_break_of_an_unknown_behavior_fails_on(database: &str) {
         texts(&records, "harness.failed"),
         ["Reflection break failed: Reflection break selected unknown behavior: Nobody."]
     );
-    assert_eq!(json_log(&records, "episodes"), json!([]));
+    assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }
 
 /// The original's select returns at most one inventory event.
@@ -642,7 +650,8 @@ fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
 
 /// A build that fails its checks drafts the rejected source as DRAFT with
 /// `status_reason` validation, and the turn fails with the original's abandon
-/// message and rendered report (the reference `_abandon`, `_persist_draft`).
+/// message and rendered report (the reference `_abandon`, `_persist_draft`);
+/// the turn's episode is stored with no behavior (decision D97).
 #[test]
 fn a_failed_build_leaves_a_validation_draft() {
     a_failed_build_leaves_a_validation_draft_on(SQLITE);
@@ -679,12 +688,13 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
             "triggers": ["environment.sound", "phone.incoming_call"],
         }])
     );
-    assert_eq!(json_log(&records, "episodes"), json!([]));
+    assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }
 
 /// A change call that fails without a draft to check (every generation
 /// fails) fails the turn and drafts nothing: the create's stub stays as
-/// The original's `_prepare` stored it (the reference `_fail_child`).
+/// The original's `_prepare` stored it (the reference `_fail_child`). The
+/// turn's episode is stored with no behavior (decision D97).
 #[test]
 fn a_failed_change_call_drafts_nothing() {
     a_failed_change_call_drafts_nothing_on(SQLITE);
@@ -724,5 +734,5 @@ fn a_failed_change_call_drafts_nothing_on(database: &str) {
             "triggers": ["environment.sound", "phone.incoming_call"],
         }])
     );
-    assert_eq!(json_log(&records, "episodes"), json!([]));
+    assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }

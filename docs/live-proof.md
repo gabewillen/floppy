@@ -7,6 +7,34 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-12, `live_conversation` on `main` and on `fix/e2e-live-findings`, model `gabe-codex-1/gpt-6-luna`
+
+Each run went through a local logging relay in front of the CPA gateway
+(an extra env file set `FLOPPY_BASE_URL` to it; it logged request and
+response bodies, never headers), so every reasoning and reflection prompt
+was read. No speech backend was configured, so each reply's speaking
+failed ("the backend is not configured"), as expected.
+
+| Run | Commit | Turn 4 answer | Behavior learned by turn 2 | Episodes recalled by reflection | Note |
+| --- | --- | --- | --- | --- | --- |
+| main 1 | `2ddb8968` | "I don't know yet" | no (selected nothing every turn) | 1, 3, 5, 7 | turn 4's prompt held "I'll remember that your favorite color is green" twice in its episodes |
+| main 2 | `2ddb8968` | "You told me your favorite color is green." | no (`bot.behavior.create` on turn 3, revision timed out at 30 s) | 1, 3, 5, 6 | |
+| branch 1 | `80f85c4f` | none: reasoning timed out at 30 s and the body rebooted | no (turn 2 selected `bot.behavior.break` of an unknown `PingPong` and failed) | 0, 1, 1 | the failed reflection stored no episode, so turn 3 recalled only turn 1's; turn 4's reply, which came after the hop, said "I don't know your favorite color yet" because "the prior response only claimed green without evidence" |
+| fixed 1 | D99 and D97 amended | "Your favorite color is green." | no (`bot.behavior.create`; the revision timed out at 30 s) | 0, 1, 2, 3 | test fails on the new behavior assertion |
+| fixed 2 | D99 and D97 amended | "Your favorite color is green." | no (`bot.behavior.break` of an unknown `PingPong` on turns 2 and 3, both failed) | 0, 1, 2, 3 | the failed turns' episodes were kept; test fails on the new behavior assertion |
+
+The earlier branch run's "I don't know yet" was not a regression of D96
+to D98: `main` answers the same way. Reasoning's episodes (reflection's
+since D97, the same shape as reasoning's before) carry only the bot's own
+selections, and the conversation's history, which the conversation hands
+reasoning in `messages`, rendered as `<value count="N" />` only (D99), so
+the model saw its own claim "I'll remember that your favorite color is
+green" and nothing the user said. With D99 both runs answered from the
+history. Learning the ping/pong request stays model-dependent: reflection
+selected nothing, selected a break of a behavior the inventory does not
+hold, or selected a create whose revision outlasted `revising_timeout_ms`
+(30 s), in every run here.
+
 ## 2026-10-12, the whole bot over four turns, model `gabe-codex-1/gpt-6-luna`
 
 The runs used floppy commit `b8526d0c` (main) with wasi-sdk 25. Local relays

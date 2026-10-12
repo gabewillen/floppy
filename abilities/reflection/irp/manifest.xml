@@ -63,7 +63,7 @@
     </test>
   </assert>
   <assert id="reflection-8" specnum="8" specid="#reflection-8">
-    <![CDATA[A memory transaction that fails (here the recall, on a database the run does not grant) fails the turn with `Reflection memory recall failed: <detail>`; after any failure the reflection is idle again and takes the next input.]]>
+    <![CDATA[A memory transaction that fails (here the recall, on a database the run does not grant) fails the turn with `Reflection memory recall failed: <detail>`; after any failure the turn's episode is stored with no behavior (unless storing it is what failed; decision D97) and the reflection is idle again and takes the next input.]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
     </test>

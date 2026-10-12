@@ -35,7 +35,9 @@
   (cognition:directive), each list with its count; no focus (the original's
   ProcessorInput has none). The stimulus's data is JSON here, so it renders
   as the original renders a payload that is not a model: a content field, an
-  object as entry elements, an array as item elements. ElementTree's
+  object as entry elements, an array as item elements, each object or
+  array item filled as one, as the original renders a model item (so a
+  conversation's messages reach the model; decision D99). ElementTree's
   indent and serialization (two spaces, an empty element as <name />) are
   reproduced. The original's budgets hold: 262144 encoded bytes, 4096 nodes, 4096
   collection items and 65536 characters per scalar for the projection, and

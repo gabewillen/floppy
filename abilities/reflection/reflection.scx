@@ -17,7 +17,8 @@
         authoring -> accepting | abandoning } -> storing
       processing -empty selection-> storing
     storing -> idle (bot.ability.reflection.output to the cognition)
-    any failure -> failing (bot.ability.failed {message}) -> idle
+    any failure -> failing (the episode stored, behavior null, unless
+      storing failed; bot.ability.failed {message}) -> idle
     an input outside idle waits in deferred and runs from idle, in order
       (the original defers it in every busy state)
 
@@ -86,6 +87,10 @@
   storing (the original _store_activity): one CognitiveEpisode {focus,
   focus_candidates, stimulus_name, output, behavior} inserted with
   query_tags cognitive_episode, then bot.ability.reflection.output.
+  Reflection alone records the turn (decision D97), so a failure after the
+  recall still stores the turn's episode, with behavior null, before it
+  reports bot.ability.failed; a failure of that store, or of storing
+  itself, is not retried, and the failure reported is the first.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline). The builder's answer is its <donedata>,
@@ -201,6 +206,7 @@
       <assign location="behaviors" expr="[]"/>
       <assign location="behavior" expr="null"/>
       <assign location="failure" expr="null"/>
+      <assign location="episode" expr="null"/>
     </transition>
     <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json"
                 target="recalling">
@@ -211,6 +217,7 @@
       <assign location="behaviors" expr="[]"/>
       <assign location="behavior" expr="null"/>
       <assign location="failure" expr="null"/>
+      <assign location="episode" expr="null"/>
     </transition>
   </state>
 
@@ -487,10 +494,7 @@
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
-      <assign location="episode" expr="cognitiveEpisode()"/>
-      <assign location="episode.stimulus_name" expr="cognition_input.stimulus.event"/>
-      <assign location="episode.output" expr="cognition_output"/>
-      <assign location="episode.behavior" expr="behavior"/>
+      <assign location="episode" expr="cognitiveEpisode(behavior)"/>
       <assign location="statements" expr="insertEpisodeStatements()"/>
     </onentry>
     <invoke id="storing_memory" type="scxml" src="../memory/memory.scx">
@@ -509,17 +513,40 @@
     </transition>
   </state>
 
-  <!-- The original _fail_from_stage: the failure goes to the cognition. -->
-  <state id="failing">
+  <!-- The original _fail_from_stage: the failure goes to the cognition,
+       after the turn's episode is stored with no behavior when storing has
+       not been tried (decision D97: reflection alone records the turn). -->
+  <state id="failing" initial="failing_from">
     <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
-    <onentry>
-      <log label="reflection.failed" expr="failure"/>
-      <send event="bot.ability.failed" target="#_parent">
-        <param name="message" expr="failure"/>
-      </send>
-    </onentry>
-    <transition target="idle"/>
+    <state id="failing_from">
+      <transition cond="isEpisodeUnstored()" target="failing_storing"/>
+      <transition target="failing_reported"/>
+    </state>
+    <state id="failing_storing">
+      <onentry>
+        <assign location="episode" expr="cognitiveEpisode(null)"/>
+        <assign location="statements" expr="insertEpisodeStatements()"/>
+      </onentry>
+      <invoke id="failing_memory" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="statements"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="failing_reported">
+        <log label="reflection.stored" expr="storedLog()"/>
+      </transition>
+      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing_reported"/>
+      <transition event="error.*" target="failing_reported"/>
+    </state>
+    <state id="failing_reported">
+      <onentry>
+        <log label="reflection.failed" expr="failure"/>
+        <send event="bot.ability.failed" target="#_parent">
+          <param name="message" expr="failure"/>
+        </send>
+      </onentry>
+      <transition target="idle"/>
+    </state>
   </state>
 </scxml>

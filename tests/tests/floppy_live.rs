@@ -392,7 +392,12 @@ fn transcript(records: &[Json]) -> String {
 /// answers from memory. Each turn waits for its reflection to settle
 /// (or the turn to fail) before the next. Records go to
 /// `target/floppy-live/live_conversation.json` and a readable transcript
-/// to `live_conversation.txt`; it asserts only that every turn completed.
+/// to `live_conversation.txt`. It asserts that every turn completed, that
+/// reflection learned a behavior by the end of the second turn, and that the
+/// fourth turn's answer names green (the first turn's fact, which the
+/// conversation's history carries to reasoning, decision D99). The last two
+/// depend on the model's choices: a model that never learns the request,
+/// or that does not answer from the history, fails the run.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_conversation() {
@@ -456,5 +461,28 @@ fn live_conversation() {
     assert!(
         failed.is_empty() && completed >= inputs.len(),
         "a turn failed (target/floppy-live/live_conversation.txt)"
+    );
+    let logged = logs(&all);
+    let third = logged
+        .iter()
+        .enumerate()
+        .filter(|(_, (label, _))| label == "bot.processing.completed")
+        .nth(2)
+        .map_or(logged.len(), |(index, _)| index);
+    assert!(
+        logged[..third]
+            .iter()
+            .any(|(label, text)| label == "reflection.inventory"
+                && text.contains(" ACTIVE ")
+                && text.ends_with("(accept)")),
+        "no behavior was learned by the second turn (target/floppy-live/live_conversation.txt)"
+    );
+    let answer = texts(&all, "bot.processing.completed")
+        .get(3)
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        answer.to_lowercase().contains("green"),
+        "the fourth turn did not recall green (target/floppy-live/live_conversation.txt)"
     );
 }

@@ -402,9 +402,15 @@ function draftLog() {
 
 // storing
 
-// The reference CognitiveEpisode: the turn's focus.
-function cognitiveEpisode() {
-  return ({focus: cognition_input.focus, focus_candidates: cognition_input.focus_candidates});
+// The reference CognitiveEpisode, with the behavior the turn applied (null: none).
+function cognitiveEpisode(applied) {
+  var input = cognition_input;
+  return ({focus: input.focus, focus_candidates: input.focus_candidates, stimulus_name: input.stimulus.event, output: cognition_output, behavior: applied});
+}
+
+// Whether a failing turn has not tried to store its episode yet.
+function isEpisodeUnstored() {
+  return episode === null;
 }
 
 // The original episodes.episode_insert_input.

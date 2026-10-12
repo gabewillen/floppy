@@ -206,8 +206,9 @@ function pythonNumber(value) {
 
 // The original _fill_field over a JSON value: null is skipped, a scalar is an
 // attribute, an object is <name> of <entry key> elements (each value
-// filled as value), an array is <name count> of <item> scalars (other
-// items are not presentable and skipped).
+// filled as value), an array is <name count> of <item> elements: a scalar
+// item as its text, an object or array item filled as item, as the
+// original renders a model item (a conversation's messages; decision D99).
 function xmlField(element, name, value, budget) {
   if (value === null || value === undefined) {
     return;
@@ -227,6 +228,8 @@ function xmlField(element, name, value, budget) {
         var text = typeof item === 'boolean' ? (item ? 'true' : 'false') : (typeof item === 'number' ? pythonNumber(item) : item);
         budgetScalar(budget, text);
         xmlElement(list, 'item', budget).text = text;
+      } else {
+        xmlField(list, 'item', item, budget);
       }
     });
   } else if (typeof value === 'object') {

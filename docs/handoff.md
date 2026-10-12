@@ -11,6 +11,15 @@ Last updated: 2026-10-10.
 
 ## Current state (2026-10-09) — resume here
 
+- **Conversation history in reasoning's prompt (2026-10-12, D99, D97):**
+  reasoning's prompt renders object items of JSON arrays, so the
+  conversation's `messages` (the history, replies included) reach the
+  model; before, only `<value count="N" />` did, and the fourth
+  `live_conversation` turn could not recall the first turn's fact on main
+  or this branch. Reflection now stores a failed turn's episode (behavior
+  null), so a turn whose reflection fails is not lost to the next turn's
+  recall. `live_conversation` now asserts a behavior learned by turn 2 and
+  "green" in turn 4's answer (model-dependent).
 - **Speaking bound and self-hearing (2026-10-12, D98):** speaking's
   `encoding_timeout_ms` is 30 s (the communication passes 30 s and bounds
   a response by 36 s), since Gemini's unstreamed synthesis of a sentence
@@ -164,7 +173,8 @@ Last updated: 2026-10-10.
   routines (no gates, as the original composes them); with no database each logs
   `absent`. Every bot turn with memory now ends with reflection's select
   call and the turn's episode, which reflection alone stores (D97: reasoning
-  retains none, so each turn records one episode).
+  retains none, so each turn records one episode, a failed reflection's
+  included).
 
 ## Conversation memory (2026-10-10)
 
