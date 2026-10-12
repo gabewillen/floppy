@@ -165,21 +165,24 @@ decides where they go:
   longer answers when it falls due takes the same path in batch and live
   runs alike.
 - Invoked services' HTTP responses: an invoked service's
-  `outbound-http.fetch` is an `async func` that suspends only the calling
-  task ([invoked-services.md](invoked-services.md#outbound-http)). A live
+  `outbound-http.fetch` and `outbound-http.send` are `async func`s that
+  suspend only the calling task
+  ([invoked-services.md](invoked-services.md#outbound-http)). A live
   session performs each admitted request through the transport
   `ServiceComponents::with_outbound_http` grants, on a transport thread of
   its own, and keeps taking events and firing timers meanwhile.
   `LiveHttp::on_http_response` is called from any thread when a response
-  arrives, so the embedder calls `deliver_http_responses`: at the session's
-  current time (due deadlines fire first), each response reaches the
-  invocation that waits for it, whose event loop runs until it waits again,
-  and every session runs to a stable configuration. A response of an
+  (or a part of a `send`'s streamed response) arrives, so the embedder calls
+  `deliver_http_responses` until it returns `None`: each call delivers the
+  earliest one, at the session's current time (due deadlines fire first),
+  to the invocation that waits for it, whose event loop runs until it waits
+  again, and every session runs to a stable configuration. A response of an
   invocation that was cancelled (its state exited) or ended meanwhile is
   dropped, and cancelling it closed that request's connection, so its
   thread ended instead of waiting. A recording session records each
-  delivered response (`HttpResponse`); a replaying session performs no
-  request and delivers each response from the record.
+  delivered response or part (`HttpResponse`, `HttpResponsePart`); a
+  replaying session performs no request and delivers each from the
+  record.
 - `receive_http(request)` delivers one inbound message. Its target, in
   origin form or absolute, must end in `/sessions/{_sessionid}/basichttp`
   (so a proxy may mount the listener under a prefix). The message is queued
@@ -392,7 +395,10 @@ decoded `event`: `name`, optional
 `session`, invoke-id `path`, and the failed send's `sendid`), `outbound`
 (`accepted`), or `http-response` (`at_ms`, the invocation's invoke-id
 `path`, `request`, and either `status` with `body` (UTF-8) or `body_hex`,
-or `failure`: `not-allowed`, `transport`, or `response-too-large`). A final
+or `failure`: `not-allowed`, `transport`, or `response-too-large`), or
+`http-response-part` (`at_ms`, `path`, `request`, and exactly one of
+`status`, `body` (UTF-8) or `body_hex`, `end` (`true`), or `failure`: one
+delivered part of an `outbound-http.send` response). A final
 `{"type":"close","reason":…}` line marks the end. The log holds every
 input's payload, including each inbound message's data, raw text, and W3C
 carrier as received, and each service response's body, so it needs the

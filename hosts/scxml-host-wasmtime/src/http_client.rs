@@ -343,17 +343,20 @@ impl ExtensionHttpClient {
         if cancel.is_cancelled() {
             return Err(crate::ExtensionHttpFailure::Transport);
         }
-        // An agent of its own: its one connection is the one `cancel`
-        // closes, and it is never pooled for another request.
-        let agent = ureq::Agent::with_parts(
+        perform(&self.cancellable_agent(cancel), request)
+    }
+
+    /// An agent of its own: its one connection is the one `cancel` closes,
+    /// and it is never pooled for another request.
+    fn cancellable_agent(&self, cancel: &Arc<crate::service::CancelSignal>) -> ureq::Agent {
+        ureq::Agent::with_parts(
             self.agent.config().clone(),
             ureq::unversioned::transport::Connector::chain(
                 cancellable::Connector::new(Arc::clone(cancel)),
                 ureq::unversioned::transport::RustlsConnector::default(),
             ),
             ureq::unversioned::resolver::DefaultResolver::default(),
-        );
-        perform(&agent, request)
+        )
     }
 }
 
@@ -370,6 +373,92 @@ impl crate::ExtensionHttp for ExtensionHttpClient {
             None => perform(&self.agent, request),
         }
     }
+
+    /// Hands each read of the body to `part` as it arrives (at most 64 KiB
+    /// a read), within [`crate::MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES`] in
+    /// all, on a connection the invocation's cancel closes, as
+    /// [`crate::ExtensionHttp::fetch`].
+    fn send(
+        &self,
+        request: &crate::ExtensionHttpRequest,
+        part: &mut dyn FnMut(Result<crate::ExtensionHttpPart, crate::ExtensionHttpFailure>),
+    ) {
+        match crate::service::request_cancel() {
+            Some(cancel) if cancel.is_cancelled() => {
+                part(Err(crate::ExtensionHttpFailure::Transport));
+            }
+            Some(cancel) => stream(&self.cancellable_agent(&cancel), request, part),
+            None => stream(&self.agent, request, part),
+        }
+    }
+}
+
+/// Bytes of one body read of a streamed response.
+const STREAM_READ_BYTES: usize = 64 * 1024;
+
+/// Sends one checked request through `agent` and streams its response to
+/// `part`: its status, each body read, and its end, or the failure that
+/// ends it.
+fn stream(
+    agent: &ureq::Agent,
+    request: &crate::ExtensionHttpRequest,
+    part: &mut dyn FnMut(Result<crate::ExtensionHttpPart, crate::ExtensionHttpFailure>),
+) {
+    use std::io::Read as _;
+    let mut response = match call(agent, request) {
+        Ok(response) => response,
+        Err(failure) => return part(Err(failure)),
+    };
+    part(Ok(crate::ExtensionHttpPart::Status(
+        response.status().as_u16(),
+    )));
+    let mut reader = response.body_mut().as_reader();
+    let mut received = 0_usize;
+    let mut buffer = vec![0_u8; STREAM_READ_BYTES];
+    loop {
+        let read = match reader.read(&mut buffer) {
+            Ok(0) => return part(Ok(crate::ExtensionHttpPart::End)),
+            Ok(read) => read,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => return part(Err(crate::ExtensionHttpFailure::Transport)),
+        };
+        received = received.saturating_add(read);
+        if received > crate::MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES {
+            return part(Err(crate::ExtensionHttpFailure::ResponseTooLarge));
+        }
+        let Some(bytes) = buffer.get(..read) else {
+            return part(Err(crate::ExtensionHttpFailure::Transport));
+        };
+        part(Ok(crate::ExtensionHttpPart::Body(bytes.to_vec())));
+    }
+}
+
+/// Sends one checked request through `agent`: its response head, or the
+/// failure.
+fn call(
+    agent: &ureq::Agent,
+    request: &crate::ExtensionHttpRequest,
+) -> Result<ureq::http::Response<ureq::Body>, crate::ExtensionHttpFailure> {
+    let Some(url) = parse_http_url(&request.url) else {
+        return Err(crate::ExtensionHttpFailure::NotAllowed);
+    };
+    let response = match request.method {
+        crate::ExtensionHttpMethod::Get => {
+            let mut builder = agent.get(url.as_str());
+            for (name, value) in &request.headers {
+                builder = builder.header(name.as_str(), value.as_str());
+            }
+            builder.call()
+        }
+        crate::ExtensionHttpMethod::Post => {
+            let mut builder = agent.post(url.as_str());
+            for (name, value) in &request.headers {
+                builder = builder.header(name.as_str(), value.as_str());
+            }
+            builder.send(request.body.as_slice())
+        }
+    };
+    response.map_err(|_| crate::ExtensionHttpFailure::Transport)
 }
 
 /// Performs one checked request through `agent`, reading the body within
@@ -379,26 +468,7 @@ fn perform(
     request: &crate::ExtensionHttpRequest,
 ) -> Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure> {
     {
-        let Some(url) = parse_http_url(&request.url) else {
-            return Err(crate::ExtensionHttpFailure::NotAllowed);
-        };
-        let response = match request.method {
-            crate::ExtensionHttpMethod::Get => {
-                let mut builder = agent.get(url.as_str());
-                for (name, value) in &request.headers {
-                    builder = builder.header(name.as_str(), value.as_str());
-                }
-                builder.call()
-            }
-            crate::ExtensionHttpMethod::Post => {
-                let mut builder = agent.post(url.as_str());
-                for (name, value) in &request.headers {
-                    builder = builder.header(name.as_str(), value.as_str());
-                }
-                builder.send(request.body.as_slice())
-            }
-        };
-        let mut response = response.map_err(|_| crate::ExtensionHttpFailure::Transport)?;
+        let mut response = call(agent, request)?;
         let status = response.status().as_u16();
         let limit = u64::try_from(crate::MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES)
             .map_err(|_| crate::ExtensionHttpFailure::Transport)?;

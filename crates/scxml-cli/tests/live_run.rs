@@ -1167,7 +1167,8 @@ fn fetch_binding(endpoint: &str) -> Vec<String> {
 }
 
 /// `s0` invokes the echo service with its `endpoint` slot; `fetch` makes it
-/// GET the slot's URL with `outbound-http.fetch`, `ping` is echoed, `leave`
+/// GET the slot's URL with `outbound-http.fetch` (`send`: streamed with
+/// `outbound-http.send`, each body read logged as `received`), `ping` is echoed, `leave`
 /// exits `s0` (cancelling the invocation, SCXML 6.4), and the 1 s timer
 /// `fetch` arms fires on the logical clock only once no request is in
 /// flight.
@@ -1175,7 +1176,7 @@ fn fetch_document(directory: &Path) -> PathBuf {
     document(
         directory,
         &format!(
-            r##"<state id="s0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"><invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/><transition event="fetch"><send event="fetch" target="#_echo"/><send event="timer" delay="1s"/></transition><transition event="ping"><send event="ping" target="#_echo"/></transition><transition event="echo.ping"><log label="ping" expr="_event.name"/></transition><transition event="echo.fetched"><log label="fetched" expr="_event.data"/></transition><transition event="timer" target="done"><log label="timer" expr="'fired'"/></transition><transition event="leave" target="away"/></state><state id="away"><transition event="timer"><log label="timer" expr="'fired'"/></transition></state><final id="done"/>"##
+            r##"<state id="s0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"><invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/><transition event="fetch"><send event="fetch" target="#_echo"/><send event="timer" delay="1s"/></transition><transition event="send"><send event="send" target="#_echo"/><send event="timer" delay="1s"/></transition><transition event="echo.received"><log label="received" expr="_event.data"/></transition><transition event="ping"><send event="ping" target="#_echo"/></transition><transition event="echo.ping"><log label="ping" expr="_event.name"/></transition><transition event="echo.fetched"><log label="fetched" expr="_event.data"/></transition><transition event="timer" target="done"><log label="timer" expr="'fired'"/></transition><transition event="leave" target="away"/></state><state id="away"><transition event="timer"><log label="timer" expr="'fired'"/></transition></state><final id="done"/>"##
         ),
     )
 }
@@ -1404,6 +1405,64 @@ fn a_recorded_service_fetch_replays_without_the_network() {
         "the response is a recorded input"
     );
     // A replay takes its clock from the log; nothing listens on the port.
+    let mut replay_args = binding;
+    replay_args.drain(0..2);
+    replay_args.extend(["--replay".into(), log_arg]);
+    let replay_args: Vec<&str> = replay_args.iter().map(String::as_str).collect();
+    let replayed = run(&doc, &replay_args, "");
+    assert_eq!(replayed.status.code(), Some(0), "{}", stderr(&replayed));
+    assert_eq!(parse_records(&recorded)[1..], parse_records(&replayed)[1..]);
+}
+
+/// A service's streamed response is recorded part by part: `--record`
+/// writes one `http-response-part` per delivered part of a `send`, and
+/// `--replay` reproduces the session from them with nothing listening.
+#[test]
+fn a_recorded_service_send_replays_its_parts_without_the_network() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
+    let port = listener.local_addr().expect("an address").port();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("the service connects");
+        read_head(&mut stream);
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n5\r\nhello\r\n",
+            )
+            .expect("the head and a chunk are written");
+        stream.flush().expect("flushed");
+        std::thread::sleep(Duration::from_millis(300));
+        stream
+            .write_all(b"6\r\n world\r\n0\r\n\r\n")
+            .expect("the rest is written");
+    });
+    let directory = scratch("send-record");
+    let doc = fetch_document(&directory);
+    let log = directory.join("session.ndjson");
+    let log_arg = log.display().to_string();
+    let binding = fetch_binding(&format!("http://127.0.0.1:{port}/stream"));
+    let recorded_args = [binding.clone(), vec!["--record".into(), log_arg.clone()]].concat();
+    let recorded_args: Vec<&str> = recorded_args.iter().map(String::as_str).collect();
+    let recorded = run(&doc, &recorded_args, "{\"name\":\"send\"}\n");
+    server.join().expect("the server ends");
+    assert_eq!(recorded.status.code(), Some(0), "{}", stderr(&recorded));
+    let logged = log_lines(&parse_records(&recorded));
+    let received: u64 = logged
+        .iter()
+        .filter_map(|line| line.strip_prefix("received: "))
+        .map(|count| count.parse::<u64>().expect("a byte count"))
+        .sum();
+    assert_eq!(received, 11, "{logged:?}");
+    assert_eq!(
+        &logged[logged.len() - 2..],
+        ["fetched: 200", "timer: fired"],
+        "{logged:?}"
+    );
+    let text = fs::read_to_string(&log).expect("the log is readable");
+    assert!(
+        text.contains("\"http-response-part\""),
+        "each part is a recorded input"
+    );
+    assert!(text.contains("\"end\":true"), "the end is recorded: {text}");
     let mut replay_args = binding;
     replay_args.drain(0..2);
     replay_args.extend(["--replay".into(), log_arg]);

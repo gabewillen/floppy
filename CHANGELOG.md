@@ -62,6 +62,23 @@ hard cutover.
 
 ### Added
 
+- `outbound-http.send`: an invoked service's request whose response is
+  streamed (`async func send(http-request) -> result<tuple<u16,
+  stream<u8>, future<result<_, component-error>>>, component-error>`,
+  named after `wasi:http`'s `client.send`), admitted and bounded exactly as
+  `fetch`: `ok` once the status has arrived, the body as it arrives, and a
+  future that resolves when the body has ended (`err` for a transport
+  failure or a body past 16 MiB). Each part reaches the invocation as an
+  input at the logical time it arrived; a live session records each one
+  (`InputRecord::HttpResponsePart`, the `http-response-part` replay log
+  record, body bytes that arrived since the last delivery joined) and a
+  replay delivers them from the log. The host's transport trait gains
+  `ExtensionHttp::send` (its default answers `fetch`'s response whole),
+  which `ExtensionHttpClient` implements by reading the body as it
+  arrives; `ExtensionHttpPart` and `ExtensionHttpAnswer` name what a
+  transport answered. The echo example's `send` event streams a GET and
+  returns `echo.received` per body read. Telemetry operation
+  `service-http-send`. `fetch` is unchanged.
 - Data-model packages: a data model other than the built-in `ecmascript`,
   `null`, and `xpath` is a package. The new built-in `datamodel` attribute
   vocabulary (`https://github.com/stateforward/scxml.rs/namespaces/datamodel`,

@@ -523,7 +523,8 @@ from any server (the `http` feature's `BasicHttpListener` is a minimal
 built-in one), `deliver_communication_errors` delivers the
 `error.communication` owed for sends that failed after acceptance, and
 `deliver_http_responses` delivers the HTTP responses of invoked services'
-`outbound-http.fetch` requests.
+`outbound-http.fetch` requests and the parts of their `outbound-http.send`
+responses, one per call.
 `SessionHost::run` (batch) drives the same engine through the same stepwise
 scheduler calls with the logical clock unbounded, and always uses the
 deterministic in-process loopback.

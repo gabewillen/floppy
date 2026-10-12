@@ -868,22 +868,56 @@ mod live {
                         }
                         .finish()
                     }
-                    Err(failure) => object
-                        .string(
-                            "failure",
-                            match failure {
-                                scxml_host_wasmtime::ExtensionHttpFailure::NotAllowed => {
-                                    "not-allowed"
-                                }
-                                scxml_host_wasmtime::ExtensionHttpFailure::Transport => "transport",
-                                scxml_host_wasmtime::ExtensionHttpFailure::ResponseTooLarge => {
-                                    "response-too-large"
-                                }
-                            },
-                        )
-                        .finish(),
+                    Err(failure) => object.string("failure", failure_name(*failure)).finish(),
                 }
             }
+            InputRecord::HttpResponsePart {
+                at_ms,
+                path,
+                request,
+                part,
+            } => {
+                let object = Object::record("http-response-part")
+                    .number("at_ms", *at_ms)
+                    .raw("path", &json::strings(path))
+                    .number("request", *request);
+                match part {
+                    Ok(scxml_host_wasmtime::ExtensionHttpPart::Status(status)) => {
+                        object.number("status", u64::from(*status)).finish()
+                    }
+                    // A UTF-8 body part is written as text, any other as hex.
+                    Ok(scxml_host_wasmtime::ExtensionHttpPart::Body(body)) => {
+                        match std::str::from_utf8(body) {
+                            Ok(text) => object.string("body", text),
+                            Err(_) => object.string("body_hex", &hex_encode(body)),
+                        }
+                        .finish()
+                    }
+                    Ok(scxml_host_wasmtime::ExtensionHttpPart::End) => {
+                        object.boolean("end", true).finish()
+                    }
+                    Err(failure) => object.string("failure", failure_name(*failure)).finish(),
+                }
+            }
+        })
+    }
+
+    /// The record name of a transport failure.
+    const fn failure_name(failure: scxml_host_wasmtime::ExtensionHttpFailure) -> &'static str {
+        match failure {
+            scxml_host_wasmtime::ExtensionHttpFailure::NotAllowed => "not-allowed",
+            scxml_host_wasmtime::ExtensionHttpFailure::Transport => "transport",
+            scxml_host_wasmtime::ExtensionHttpFailure::ResponseTooLarge => "response-too-large",
+        }
+    }
+
+    /// The transport failure a record names.
+    fn read_failure(failure: &str) -> Result<scxml_host_wasmtime::ExtensionHttpFailure, String> {
+        Ok(match failure {
+            "not-allowed" => scxml_host_wasmtime::ExtensionHttpFailure::NotAllowed,
+            "transport" => scxml_host_wasmtime::ExtensionHttpFailure::Transport,
+            "response-too-large" => scxml_host_wasmtime::ExtensionHttpFailure::ResponseTooLarge,
+            _ => return Err("an http-response `failure` is not a failure".into()),
         })
     }
 
@@ -1187,16 +1221,7 @@ mod live {
                 ])?;
                 let path = read_path(fields.get("path"))?;
                 let response = match (fields.get("failure"), fields.get("status")) {
-                    (Some(serde_json::Value::String(failure)), None) => {
-                        Err(match failure.as_str() {
-                            "not-allowed" => scxml_host_wasmtime::ExtensionHttpFailure::NotAllowed,
-                            "transport" => scxml_host_wasmtime::ExtensionHttpFailure::Transport,
-                            "response-too-large" => {
-                                scxml_host_wasmtime::ExtensionHttpFailure::ResponseTooLarge
-                            }
-                            _ => return Err("an http-response `failure` is not a failure".into()),
-                        })
-                    }
+                    (Some(serde_json::Value::String(failure)), None) => Err(read_failure(failure)?),
                     (None, Some(_)) => {
                         let status = u16::try_from(number("status")?)
                             .map_err(|_| "`status` must be an HTTP status".to_owned())?;
@@ -1227,6 +1252,54 @@ mod live {
                     path,
                     request: number("request")?,
                     response,
+                }))
+            }
+            Some("http-response-part") => {
+                only(&[
+                    "type", "at_ms", "path", "request", "status", "body", "body_hex", "end",
+                    "failure",
+                ])?;
+                let path = read_path(fields.get("path"))?;
+                let part = match (
+                    fields.get("status"),
+                    fields.get("body"),
+                    fields.get("body_hex"),
+                    fields.get("end"),
+                    fields.get("failure"),
+                ) {
+                    (Some(_), None, None, None, None) => {
+                        Ok(scxml_host_wasmtime::ExtensionHttpPart::Status(
+                            u16::try_from(number("status")?)
+                                .map_err(|_| "`status` must be an HTTP status".to_owned())?,
+                        ))
+                    }
+                    (None, Some(serde_json::Value::String(body)), None, None, None) => Ok(
+                        scxml_host_wasmtime::ExtensionHttpPart::Body(body.as_bytes().to_vec()),
+                    ),
+                    (None, None, Some(serde_json::Value::String(body)), None, None) => {
+                        Ok(scxml_host_wasmtime::ExtensionHttpPart::Body(
+                            hex_decode(body)
+                                .ok_or("an http-response-part `body_hex` is not hex")?,
+                        ))
+                    }
+                    (None, None, None, Some(serde_json::Value::Bool(true)), None) => {
+                        Ok(scxml_host_wasmtime::ExtensionHttpPart::End)
+                    }
+                    (None, None, None, None, Some(serde_json::Value::String(failure))) => {
+                        Err(read_failure(failure)?)
+                    }
+                    _ => {
+                        return Err(
+                            "an http-response-part needs exactly one of `status`, `body`, `body_hex`, `end` (true), and `failure`"
+                                .into(),
+                        );
+                    }
+                };
+                Ok(Some(InputRecord::HttpResponsePart {
+                    at_ms: number("at_ms")?,
+                    path,
+                    request: number("request")?,
+                    part,
                 }))
             }
             Some("close") => {
@@ -1656,13 +1729,19 @@ mod live {
             }
         }
 
-        /// Delivers every HTTP response of an invoked service's request that
-        /// arrived to its invocation (cause `http-response`).
+        /// Delivers every answer to an invoked service's request that
+        /// arrived (a response, or a part of a streamed one) to its
+        /// invocation, each in a call of its own (cause `http-response`).
         fn http_responses(&mut self) -> Result<Option<End>, Box<dyn std::error::Error>> {
-            match self.session.deliver_http_responses() {
-                Ok(None) => Ok(None),
-                Ok(Some(step)) => self.outcome("http-response", Ok(step), None),
-                Err(error) => self.outcome("http-response", Err(error), None),
+            loop {
+                let ended = match self.session.deliver_http_responses() {
+                    Ok(None) => return Ok(None),
+                    Ok(Some(step)) => self.outcome("http-response", Ok(step), None)?,
+                    Err(error) => self.outcome("http-response", Err(error), None)?,
+                };
+                if ended.is_some() {
+                    return Ok(ended);
+                }
             }
         }
 
@@ -1961,7 +2040,9 @@ mod live {
                     InputRecord::Snapshot { .. } => "snapshot",
                     InputRecord::Http { .. } => "http",
                     InputRecord::CommunicationErrors { .. } => "communication-error",
-                    InputRecord::HttpResponse { .. } => "http-response",
+                    InputRecord::HttpResponse { .. } | InputRecord::HttpResponsePart { .. } => {
+                        "http-response"
+                    }
                     InputRecord::OutboundHttp { .. } => "outbound",
                     InputRecord::Start { .. } => "start",
                 };
@@ -1971,6 +2052,7 @@ mod live {
                         | InputRecord::Http { .. }
                         | InputRecord::CommunicationErrors { .. }
                         | InputRecord::HttpResponse { .. }
+                        | InputRecord::HttpResponsePart { .. }
                 );
                 let mut applied = self.session.apply(record);
                 if settles && records.peek() == Some(&&InputRecord::Idle) {

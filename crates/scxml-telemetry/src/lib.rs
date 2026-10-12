@@ -431,6 +431,9 @@ pub enum Operation {
     /// One outbound HTTP request an invoked service made through the
     /// host-granted `outbound-http.fetch`, from admission to its response.
     HostWasmtimeServiceHttpFetch,
+    /// One outbound HTTP request an invoked service made through the
+    /// host-granted `outbound-http.send`, from admission to its status.
+    HostWasmtimeServiceHttpSend,
     /// Performs one invoked service's admitted request through the
     /// embedder's transport.
     HostWasmtimeServiceHttpRequest,
@@ -668,6 +671,7 @@ impl Operation {
             Self::HostWasmtimeServiceWaitUntil => "scxml.host-wasmtime.service-wait-until",
             Self::HostWasmtimeServiceCancel => "scxml.host-wasmtime.service-cancel",
             Self::HostWasmtimeServiceHttpFetch => "scxml.host-wasmtime.service-http-fetch",
+            Self::HostWasmtimeServiceHttpSend => "scxml.host-wasmtime.service-http-send",
             Self::HostWasmtimeServiceHttpRequest => "scxml.host-wasmtime.service-http-request",
             Self::HostWasmtimeDataModelInstantiate => "scxml.host-wasmtime.data-model-instantiate",
             Self::HostWasmtimeBasicHttpInstantiate => "scxml.host-wasmtime.basichttp-instantiate",
