@@ -7,6 +7,30 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-12, `live_conversation` learning the ping/pong behavior (D100, D101, D96), model `gabe-codex-1/gpt-6-luna`
+
+The same relay, now logging each call's start and end. Two measuring runs
+had both bounds raised to 600 s, to see the calls whole; the two final
+runs used the shipped bounds (120 s). Times are from each run's first
+model call.
+
+| Run | Result | Reasoning calls | Revision (select's end to the last draft's end) | Turn 3 | Turn 4 |
+| --- | --- | --- | --- | --- | --- |
+| measure 1 | fail ("green") | 1.9 to 4.2 s, and 113.1 s on turn 1 | 38.6 s: plan 10.7 s, drafts 9.6, 8.7, 8.5 s | `ExactPingPong` answered "pong" | `ExactPingPong` answered "pong" again: it tested whether any inbound message in `messages` was "ping" |
+| measure 2 | pass | 2.3 to 2.7 s | 26.9 s: plan 6.2 s, drafts 9.7, 10.6 s | `PingPongExactReply` answered "pong" | the behavior was unhandled; reasoning: "Your favorite color is green." |
+| final 1 | pass | 2.2 to 16.4 s | 28.2 s: plan 7.1 s, drafts 10.6, 10.1 s | `ExactPingPong` answered "pong" | unhandled; reasoning: "Your favorite color is green." |
+| final 2 | pass | 2.1 to 2.5 s | 17.4 s: plan 7.8 s, draft 9.4 s | `ExactPingPong` answered "pong" | unhandled; reasoning: "Your favorite color is green." |
+
+Every run's reflection selected `bot.behavior.create` on turn 2 and stored
+the behavior ACTIVE under `bot.ability.conversation.output` (its select
+offered only create: the inventory was empty, D100), and autonomy ran it
+on turn 3: the D96 contract held live. Measure 1's 113 s call would have
+timed out the 30 s stage and rebooted the bot, one revision outlasted the
+30 s bound and another came within 2 s of it (D101). After
+measure 1 the turn behavior contract names `parent.data` as the message a
+conversation turn answers (D96); both final runs' behaviors left turn 4
+unhandled.
+
 ## 2026-10-12, `live_conversation` on `main` and on `fix/e2e-live-findings`, model `gabe-codex-1/gpt-6-luna`
 
 Each run went through a local logging relay in front of the CPA gateway

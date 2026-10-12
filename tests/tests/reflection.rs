@@ -35,7 +35,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use serde_json::{Value as Json, json};
+use serde_json::{Map, Value as Json, json};
 use support::{Run, logs, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup and a builder run
@@ -118,7 +118,7 @@ fn selection(route: &str) -> Option<Json> {
         "breakunknown" => Some(break_selection("Nobody")),
         "two" => Some(json!([
             break_selection("GreetOnKnock")[0].clone(),
-            break_selection("Other")[0].clone()
+            create_selection()[0].clone()
         ])),
         _ => None,
     }
@@ -414,28 +414,34 @@ fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(databas
     assert_eq!(prompt(0)["behaviors"], json!([]));
     assert_eq!(prompt(0)["cognition_input"], input(1)["cognition_input"]);
     assert_eq!(prompt(1)["prior_episodes"], json!([episode]));
-    // The offered events are exactly the three inventory events.
-    let schema = &selects[0].body["response_format"]["json_schema"]["schema"];
-    let mut offered: Vec<String> = schema["properties"]["events"]["items"]["anyOf"]
+    // With an empty inventory only a create is offered: nothing could be
+    // changed or broken (decision D100).
+    assert_eq!(
+        offered_names(&selects[0].body),
+        json!({"bot.behavior.create": null})
+    );
+}
+
+/// The inventory events the select call offers, each with the `enum` its
+/// `name` is pinned to (`null`: any name).
+fn offered_names(body: &Json) -> Json {
+    let schema = &body["response_format"]["json_schema"]["schema"];
+    schema["properties"]["events"]["items"]["anyOf"]
         .as_array()
         .expect("one branch per offered event")
         .iter()
         .map(|branch| {
-            branch["properties"]["event"]["enum"][0]
+            let event = branch["properties"]["event"]["enum"][0]
                 .as_str()
                 .expect("the branch's event")
-                .to_owned()
+                .to_owned();
+            (
+                event,
+                branch["properties"]["data"]["properties"]["name"]["enum"].clone(),
+            )
         })
-        .collect();
-    offered.sort();
-    assert_eq!(
-        offered,
-        [
-            "bot.behavior.break",
-            "bot.behavior.change",
-            "bot.behavior.create"
-        ]
-    );
+        .collect::<Map<String, Json>>()
+        .into()
 }
 
 /// The reference `_apply_break`: the row is kept, BROKEN with the trimmed reason,
@@ -479,6 +485,16 @@ fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
     let prompt: Json = serde_json::from_str(&mock.requests("dispatch")[0].message("user"))
         .expect("the select prompt is JSON");
     assert_eq!(prompt["behaviors"][0]["name"], "GreetOnKnock");
+    // A change or a break names a behavior the inventory holds (decision
+    // D100).
+    assert_eq!(
+        offered_names(&mock.requests("dispatch")[0].body),
+        json!({
+            "bot.behavior.create": null,
+            "bot.behavior.change": ["GreetOnKnock"],
+            "bot.behavior.break": ["GreetOnKnock"],
+        })
+    );
     assert_eq!(prompt["behaviors"][0]["used_count"], 1);
     assert_eq!(
         prompt["behaviors"][0]["triggers"],
@@ -486,21 +502,23 @@ fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
     );
 }
 
-/// A break of a behavior the inventory does not hold fails the turn, and
-/// the turn's episode is still stored, with no behavior (decision D97).
+/// A break of a behavior the inventory does not hold is not offered
+/// (decision D100), so a model that selects one fails the select call as
+/// schema-mismatch, and the turn's episode is still stored, with no
+/// behavior (decision D97).
 #[test]
-fn a_break_of_an_unknown_behavior_fails() {
-    a_break_of_an_unknown_behavior_fails_on(SQLITE);
+fn a_break_outside_the_inventory_is_refused() {
+    a_break_outside_the_inventory_is_refused_on(SQLITE);
 }
 
 #[test]
 #[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
-fn postgres_a_break_of_an_unknown_behavior_fails() {
+fn postgres_a_break_outside_the_inventory_is_refused() {
     let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
-    a_break_of_an_unknown_behavior_fails_on(&server.database());
+    a_break_outside_the_inventory_is_refused_on(&server.database());
 }
 
-fn a_break_of_an_unknown_behavior_fails_on(database: &str) {
+fn a_break_outside_the_inventory_is_refused_on(database: &str) {
     let mock = Mock::start();
     let (harness, env) = layout(&mock, "breakunknown", "[]", database);
     let mut run = start(&harness, &env);
@@ -508,7 +526,7 @@ fn a_break_of_an_unknown_behavior_fails_on(database: &str) {
     drop(run.close(WAIT));
     assert_eq!(
         texts(&records, "harness.failed"),
-        ["Reflection break failed: Reflection break selected unknown behavior: Nobody."]
+        ["Reflection select failed (schema-mismatch)"]
     );
     assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }
@@ -646,6 +664,21 @@ fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
         "{contract}"
     );
     assert!(!contract.contains("and the stimulus"), "{contract}");
+    // A conversation's output carries the whole history: the behavior
+    // decides from the message this turn answers, and a turn it does not
+    // apply to is unhandled (decision D96; the 2026-10-12 live run's
+    // behavior answered every later turn because an earlier message
+    // matched).
+    assert!(
+        contract.contains(
+            "parent.data is the message this turn answers and messages is the whole conversation so far"
+        ),
+        "{contract}"
+    );
+    assert!(
+        contract.contains("never handled true with an empty list"),
+        "{contract}"
+    );
 }
 
 /// A build that fails its checks drafts the rejected source as DRAFT with

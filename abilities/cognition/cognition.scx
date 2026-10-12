@@ -47,7 +47,8 @@
 
   Hop timeouts: each stage substate arms
   bot.ability.cognition.child.hop.timed_out (child_operation_timeout_ms,
-  the original's child_operation_timeout, 30 s)
+  120 s, decision D101: the original's child_operation_timeout is 30 s,
+  and a live reasoning call took 113 s)
   and cancels it on exit; the transition takes only the timer of the stage
   in hand (_event.sendid, SCXML 5.10.1). A timeout goes to rebooting, which
   sends bot.reboot {reason: "cognition_child_teardown_failed"} to the body.
@@ -128,7 +129,7 @@
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <!-- The memory database file, for autonomy, reasoning, reflection and routines (null: no memory). -->
     <data id="database" expr="null"/>
-    <data id="child_operation_timeout_ms" expr="30000"/>
+    <data id="child_operation_timeout_ms" expr="120000"/>
     <!-- The turn in hand. -->
     <data id="turn" expr="0"/>
     <data id="stimulus" expr="null"/>

@@ -171,7 +171,7 @@ them). Both directions therefore call the Gemini API, so
 | `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
 | `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (the original's 30 s attachment timeout) |
 | `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (the original's 5 min processing timeout) |
-| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage (the original's 30 s) |
+| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `120000` | each cascade stage (the original's 30 s rebooted the bot on a 113 s live reasoning call; decision D101) |
 | `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
 | `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (the original's `TURN_SILENCE_BOUND`) |
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
@@ -180,7 +180,7 @@ them). Both directions therefore call the Gemini API, so
 | `abilities/communication/communication.scx` | `response_timeout_ms` | `36000` | saying one response (speaking's 30 s synthesis bound plus the original's 6 s; decision D98) |
 | `abilities/communication/communication.scx` | `encoding_timeout_ms` | `30000` | speaking's speech synthesis (communication passes its own; decision D98) |
 | `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (the original's 30 s) |
-| `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `30000` | reflection's revising through the builder (the original's 30 s) |
+| `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `120000` | reflection's revising through the builder (live builds took 27 to 39 s, past the original's 30 s; decision D101) |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (the original's 30 s) |
 | `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input (the original's 5 s) |
 | `abilities/turn_detector/turn_detector.scx` | `end_of_turn_silence_seconds` | `0.5` | the silence that closes an open or paused turn (the original's 0.5 s; at least 0.01 s) |

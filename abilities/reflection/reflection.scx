@@ -39,7 +39,10 @@
 
   processing (the original _dispatch_select, SELECT_INSTRUCTIONS): its
   transitions for the three inventory events are the enabled transitions
-  <decision:choice> reads, and <decision:selection> builds the strict
+  <decision:choice> reads; <decision:pin> pins a change's and a break's
+  name to the recalled inventory's names and drops both when it is empty
+  (decision D100: the original offers both with any name, and a model
+  broke behaviors that did not exist), and <decision:selection> builds the strict
   schema the generate service fills from {cognition_input,
   cognition_output, prior_episodes, behaviors}. An empty selection goes to
   storing; more than one fails; one is sent to this session (#_internal),
@@ -75,7 +78,8 @@
   fix:" and the rendered diagnostics after no progress. Its failed with no
   draft (no backend, generation failures) fails the turn with no draft,
   as the original's failed change call. revising is bounded by
-  revising_timeout_ms (the original's 30 s child operation timeout): when it
+  revising_timeout_ms (120 s, decision D101: the original's 30 s child
+  operation timeout cut off live builds of 27 to 39 s): when it
   fires, leaving revising cancels the revision and the turn fails with
   the original's "Reflection child cancellation timed out.".
 
@@ -110,7 +114,7 @@
     <data id="database" expr="null"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <data id="select_timeout_ms" expr="30000"/>
-    <data id="revising_timeout_ms" expr="30000"/>
+    <data id="revising_timeout_ms" expr="120000"/>
     <!-- The turn in hand (the reference InputData). -->
     <data id="turn" expr="0"/>
     <data id="cognition_input" expr="null"/>
@@ -154,7 +158,7 @@
     <!-- The original CHANGE_INSTRUCTIONS, for the builder: the program is an
          SCXML document. -->
     <data id="change_instructions" expr="'Author or revise the SCXML program of the stored behavior. existing_behavior is the current inventory row (source may be empty for a new create stub; status may be DRAFT or BROKEN for unfinished or retired behaviors). If existing_behavior.source is empty, write a full new program from this turn, prior_episodes, and intent: invent event contracts, guards, and effects from the observed pattern only. If source is non-empty, rewrite or patch it so it better fits this turn and prior_episodes. The output is a cognition event selection object (keys: event, target?, data?, reason?) or a list of such objects, matching the shape of prior episode and this-turn outputs. Derive input fields, guards, and selection field names from the observed pattern. At runtime, fill selection data from the live input; never hardcode identifier values copied from episode examples. A turn behavior (default) answers one matching turn. When the intent or the turn calls for something recurring or time-based (or the user asked for it), write a persistent routine instead, scheduled by every or at delayed sends whose transitions send bot.behavior.tick with its selections: a persistent routine is checked by one forced tick, not the live turn, and needs no triggers.'"/>
-    <data id="turn_contract" expr="'Write a turn behavior: its datamodel declares turn and input, which its invoker sets with param elements ; its invoker runs it only for a turn whose stimulus event is one of its triggers TRIGGERS, and no stimulus, event name or trigger reaches it, so it never tests one: input is the stimulus data (its fields, or {event: the data} when the data is not an object) with focus and focus_candidates added, and for this turn input is INPUT; it sends nothing to its invoker and ends within one second in a top-level final state whose donedata content is the object {turn, handled, selected}: handled true with selected the list of selections, or handled false with selected an empty list. Its tests drive no input events and expect it to finish.'"/>
+    <data id="turn_contract" expr="'Write a turn behavior: its datamodel declares turn and input, which its invoker sets with param elements ; its invoker runs it only for a turn whose stimulus event is one of its triggers TRIGGERS, and no stimulus, event name or trigger reaches it, so it never tests one: input is the stimulus data (its fields, or {event: the data} when the data is not an object) with focus and focus_candidates added, and for this turn input is INPUT; when input holds messages and parent (a conversation\'s output), parent.data is the message this turn answers and messages is the whole conversation so far, earlier turns included, so it decides from parent.data; it sends nothing to its invoker and ends within one second in a top-level final state whose donedata content is the object {turn, handled, selected}: handled true with selected the list of selections, or handled false with selected an empty list when the behavior does not apply to this turn (never handled true with an empty list). Its tests drive no input events and expect it to finish.'"/>
     <!-- The original's persistent routine (lifetime persistent, hsm.every and
          hsm.at, behavior/schedule.py): an at schedule's occurrences are
          computed in the routine's data model by next_after (reflection.js,
@@ -263,6 +267,10 @@
     <onentry>
       <decision:choice location="choices" events="bot.behavior.create bot.behavior.change bot.behavior.break"/>
       <decision:compact location="choices"/>
+      <!-- A change or a break names a behavior the inventory holds; with
+           none, neither is offered (decision D100). -->
+      <decision:pin location="choices" event="bot.behavior.change" property="name" values="behaviorNames()"/>
+      <decision:pin location="choices" event="bot.behavior.break" property="name" values="behaviorNames()"/>
       <decision:selection location="schema" choices="choices"/>
       <assign location="selected" expr="null"/>
       <assign location="gen_failure" expr="null"/>

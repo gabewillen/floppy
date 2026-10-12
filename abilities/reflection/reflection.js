@@ -53,6 +53,11 @@ function recalledEpisodes(_event) {
   return _event.data.results[0].rows.map(function (r) { return JSON.parse(r.values[0]); });
 }
 
+// The recalled inventory's names, which a change or a break may name.
+function behaviorNames() {
+  return behaviors.map(function (b) { return b.name; });
+}
+
 function recalledBehaviors(_event) {
   return assembledBehaviors(_event.data.results[1].rows, _event.data.results[2].rows);
 }

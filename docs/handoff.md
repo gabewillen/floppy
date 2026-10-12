@@ -11,6 +11,13 @@ Last updated: 2026-10-10.
 
 ## Current state (2026-10-09) — resume here
 
+- **Behavior learning proven live (2026-10-12, D100, D101, D96):** reflection
+  offers change and break only for inventory names (neither on an empty
+  inventory); the cascade stage and reflection's revising bounds are
+  120 s, measured live; the turn behavior contract names `parent.data` as a
+  conversation turn's message. Two `live_conversation` runs passed: the
+  behavior was learned on turn 2, answered "pong" on turn 3 through
+  autonomy, and left turn 4 to reasoning, which recalled "green".
 - **Conversation history in reasoning's prompt (2026-10-12, D99, D97):**
   reasoning's prompt renders object items of JSON arrays, so the
   conversation's `messages` (the history, replies included) reach the

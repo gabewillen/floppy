@@ -229,3 +229,49 @@ fn the_readme_states_every_timeout_and_bound_the_documents_ship() {
         }
     }
 }
+
+/// One `<data>` of a document, as milliseconds.
+fn millis(path: &str, id: &str) -> u64 {
+    data(&read(Path::new(path)))
+        .get(id)
+        .unwrap_or_else(|| panic!("{path}: a {id} <data>"))
+        .parse()
+        .unwrap_or_else(|_| panic!("{path}: {id} is a whole number of milliseconds"))
+}
+
+/// The slowest reasoning call measured live (113.1 s, the CPA gateway on
+/// 2026-10-12; docs/live-proof.md): the original's 30 s stage bound
+/// rebooted the bot on it.
+const SLOWEST_LIVE_REASONING_MS: u64 = 113_100;
+/// The slowest reflection revision through the builder measured live
+/// (plan, three drafts, validation and simulation: 39 s, 2026-10-12).
+const SLOWEST_LIVE_BUILD_MS: u64 = 39_000;
+
+/// The model-bound stages outlast the calls measured live, with margin,
+/// and a turn's stages fit inside the body's turn bound (decision D101).
+#[test]
+fn the_model_bound_stages_outlast_the_calls_measured_live() {
+    let stage = millis(
+        "abilities/cognition/cognition.scx",
+        "child_operation_timeout_ms",
+    );
+    let revising = millis("abilities/reflection/reflection.scx", "revising_timeout_ms");
+    assert!(
+        stage > SLOWEST_LIVE_REASONING_MS,
+        "a cascade stage ({stage} ms) outlasts the slowest live reasoning call"
+    );
+    assert!(
+        revising >= 3 * SLOWEST_LIVE_BUILD_MS,
+        "reflection's revising ({revising} ms) is at least three times the slowest live build"
+    );
+    // Autonomy's memory, the intuition's decision and reasoning's stage,
+    // one after another, end before the body times the turn out.
+    let turn = millis("bots/floppy/floppy.scx", "processing_timeout_ms");
+    let cascade = millis("abilities/autonomy/autonomy.scx", "memory_timeout_ms")
+        + millis("abilities/intuition/intuition.scx", "decision_timeout_ms")
+        + stage;
+    assert!(
+        cascade < turn,
+        "the cascade ({cascade} ms) ends inside the turn ({turn} ms)"
+    );
+}

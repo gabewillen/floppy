@@ -9,7 +9,7 @@
     </test>
   </assert>
   <assert id="reflection-2" specnum="2" specid="#reflection-2">
-    <![CDATA[With a database, `recalling` reads the prior episodes and the behavior inventory in one memory transaction and `processing` asks the generate service (schema `dispatch`) to select at most one of `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break`; an empty selection goes to `storing`, which stores the turn's episode and answers `bot.ability.reflection.output`.]]>
+    <![CDATA[With a database, `recalling` reads the prior episodes and the behavior inventory in one memory transaction and `processing` asks the generate service (schema `dispatch`) to select at most one of `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break` (a change's and a break's `name` pinned to the inventory's names, and neither offered when the inventory is empty; decision D100); an empty selection goes to `storing`, which stores the turn's episode and answers `bot.ability.reflection.output`.]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -27,7 +27,7 @@
     </test>
   </assert>
   <assert id="reflection-4" specnum="4" specid="#reflection-4">
-    <![CDATA[A selected `bot.behavior.break` (`breaking`) marks the named behavior BROKEN with its trimmed reason and keeps the row, then stores the episode and answers `bot.ability.reflection.output`; a break of a name the inventory does not hold fails with `Reflection break failed: Reflection break selected unknown behavior: <name>.`.]]>
+    <![CDATA[A selected `bot.behavior.break` (`breaking`) marks the named behavior BROKEN with its trimmed reason and keeps the row, then stores the episode and answers `bot.ability.reflection.output`; a break of a name the inventory does not hold is not offered, so a model that selects one fails the select with `Reflection select failed (schema-mismatch)`.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -36,7 +36,7 @@
     </test>
   </assert>
   <assert id="reflection-5" specnum="5" specid="#reflection-5">
-    <![CDATA[A selected `bot.behavior.create` (`revising`) stores a DRAFT stub for a new name, invokes the builder bot with a `builder.request`, and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built document, then stores the episode and answers `bot.ability.reflection.output`; a `bot.behavior.change` of a stored name revises it the same way, and a change of a name the inventory does not hold fails with `Revision selected unknown behavior: <name>.`.]]>
+    <![CDATA[A selected `bot.behavior.create` (`revising`) stores a DRAFT stub for a new name, invokes the builder bot with a `builder.request`, and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built document, then stores the episode and answers `bot.ability.reflection.output`; a `bot.behavior.change` of a stored name revises it the same way, and a change of a name the inventory does not hold is not offered, so a model that selects one fails the select with `Reflection select failed (schema-mismatch)`.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
