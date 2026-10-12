@@ -6,7 +6,7 @@
   against the bot's memory database, through the sql service (services/sql,
   SQLite) or the pgsql service (services/pgsql, Postgres over its wire
   protocol). An ability that remembers invokes it from the state that needs
-  memory (reasoning's recalling and retaining, the identity's recalling and
+  memory (reasoning's recalling, reflection's recalling and storing, the identity's recalling and
   adopting, the conversation's recalling), so attaching memory is implicit:
   the invocation is the attachment, and leaving the invoking state cancels
   it.

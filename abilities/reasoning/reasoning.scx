@@ -5,26 +5,25 @@
   per turn that intuition left unhandled.
 
     recalling -> applying (an invoked generate service) -> dispatching ->
-      retaining -> done
+      done
 
-  Memory (the original Reasoning._recall_activity and _retain_activity): with a
+  Memory (the original Reasoning._recall_activity): with a
   database (the <param> database, the memory database file), recalling
   invokes the memory ability (abilities/memory/memory.scx) with one
   transaction of the original's two selects, prior cognitive episodes
   (query_tags cognitive_episode) and standing directives (query_tags
   standing_directive), each for the turn's context or none, oldest first,
   at most 50, and sends itself bot.ability.reasoning.recalled with them and
-  memory_consulted true; retaining inserts the turn's episode
-  ({focus, focus_candidates, stimulus_name, output, behavior} as JSON,
-  query_tags cognitive_episode) and sends itself
-  bot.ability.reasoning.retained with memory_written true. The context is
+  memory_consulted true. Reasoning writes nothing: the turn's episode is
+  stored once, by reflection after the turn's output (decision D97; the
+  original's _retain_activity inserted a second copy of it). The context is
   the stimulus's target_device (the original _context_ref_from_input). A recalled
   row that is not a JSON object is skipped, as the original skips one that does
   not validate. A memory failure fails the stage ("Reasoning memory recall
   failed: ..."). Without
-  a database (the original's Reasoning without a memory collaborator) each step
+  a database (the original's Reasoning without a memory collaborator) recalling
   logs <log label="memory" expr="'absent'"> and sends its event with
-  memory_consulted and memory_written false and nothing recalled.
+  memory_consulted false and nothing recalled.
 
   Prompt (the reference processing.py InputData.model_facing_payload over
   cognition/event.py model_facing_xml): the user message is the original's
@@ -67,8 +66,7 @@
   focus_candidates, then <decision:route> places each on the target
   offering it in the choices (_resolve_target: a selection that names no
   target needs exactly one offerer). A selection that cannot be placed
-  fails the stage with the original's SelectionRejectionError message, before
-  anything is retained.
+  fails the stage with the original's SelectionRejectionError message.
 
   Input: the <param>s turn, stimulus, focus, focus_candidates, choices,
   model and database. Output: <donedata>, received by the cognition as
@@ -117,19 +115,15 @@
     <data id="dispatch_selections" expr="[]"/>
     <data id="rejection" expr="null"/>
     <!-- Memory: the database file (null: no memory) and the original's
-         statements (episodes.py, directives.py), with ?2 the context. The SQL runs on both
-         engines (SQLite and Postgres). A memory id is the next row count
-         as 32 zero-padded digits (neither engine's randomness is unique
-         across invocations in Wasm); JSON rows are told by their
+         select (episodes.py, directives.py), with ?2 the context. The SQL runs on both
+         engines (SQLite and Postgres); JSON rows are told by their
          content_format, oldest first by created_at, then memory_id. -->
     <data id="database" expr="null"/>
     <data id="context_ref" expr="null"/>
     <data id="prior_episodes" expr="[]"/>
     <data id="standing_directives" expr="[]"/>
     <data id="statements" expr="[]"/>
-    <data id="episode" expr="null"/>
     <data id="episode_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR context_ref IS NULL OR context_ref = ?2) AND content_format = \'application/json\' ORDER BY created_at, memory_id LIMIT 50'"/>
-    <data id="episode_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
   </datamodel>
   <script src="reasoning.js"/>
 
@@ -232,7 +226,7 @@
     </transition>
   </state>
 
-  <!-- The selections are checked before anything is retained. -->
+  <!-- The selections are checked before they are returned. -->
   <state id="dispatching">
     <onentry>
       <bot:verdict location="dispatch_selections" rejectionlocation="rejection" selections="selected"
@@ -241,57 +235,11 @@
         <decision:route location="dispatch_selections" rejectionlocation="rejection" selections="dispatch_selections" choices="choices"/>
       </if>
     </onentry>
-    <transition cond="isAccepted()" target="retaining"/>
+    <transition cond="isAccepted()" target="done">
+      <assign location="result" expr="selectedResult()"/>
+    </transition>
     <transition target="done">
       <assign location="result" expr="rejectedResult()"/>
-    </transition>
-  </state>
-
-  <!-- Retain the turn's episode, or nothing without a database. -->
-  <state id="retaining" initial="retaining_from">
-    <state id="retaining_from">
-      <transition cond="hasNoDatabase()" target="retaining_nothing"/>
-      <transition target="retaining_memory"/>
-    </state>
-    <state id="retaining_nothing">
-      <onentry>
-        <log label="memory" expr="'absent'"/>
-        <send event="bot.ability.reasoning.retained" target="#_internal">
-          <param name="turn" expr="turn"/>
-          <param name="result" expr="selected"/>
-          <param name="memory_consulted" expr="false"/>
-          <param name="memory_written" expr="false"/>
-          <param name="input" expr="focusInput()"/>
-        </send>
-      </onentry>
-    </state>
-    <state id="retaining_memory">
-      <onentry>
-        <assign location="episode" expr="episodeContent()"/>
-      </onentry>
-      <invoke id="retain" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="episodeInsertStatements()"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json">
-        <send event="bot.ability.reasoning.retained" target="#_internal">
-          <param name="turn" expr="turn"/>
-          <param name="result" expr="selected"/>
-          <param name="memory_consulted" expr="true"/>
-          <param name="memory_written" expr="true"/>
-          <param name="input" expr="focusInput()"/>
-        </send>
-      </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="done">
-        <assign location="result" expr="retainFailedResult(_event.data.message)"/>
-      </transition>
-      <transition event="error.*" target="done">
-        <assign location="result" expr="retainFailedResult(_event.name)"/>
-      </transition>
-    </state>
-    <transition event="bot.ability.reasoning.retained" event:schema="schemas/bot.ability.reasoning.retained.json"
-                cond="isCurrentTurn(_event)" target="done">
-      <assign location="result" expr="selectedResult()"/>
     </transition>
   </state>
 

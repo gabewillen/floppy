@@ -2,18 +2,18 @@
 // <script src="reasoning.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// Shared by recalling and retaining.
+// Shared by the steps.
 
 function hasNoDatabase() {
   return database === null;
 }
 
-// The input of bot.ability.reasoning.recalled and .retained.
+// The input of bot.ability.reasoning.recalled.
 function focusInput() {
   return ({focus: focus, focus_candidates: focus_candidates});
 }
 
-// This turn's bot.ability.reasoning.recalled or .retained.
+// This turn's bot.ability.reasoning.recalled.
 function isCurrentTurn(_event) {
   return _event.data.turn === turn;
 }
@@ -353,21 +353,7 @@ function rejectedResult() {
   return ({turn: turn, handled: false, failed: true, reason: rejection});
 }
 
-// retaining
-
-
-// The turn's episode, as JSON.
-function episodeContent() {
-  return JSON.stringify({focus: context_ref, focus_candidates: [], stimulus_name: stimulus.event, output: selected, behavior: null});
-}
-
-function episodeInsertStatements() {
-  return [{sql: episode_insert, parameters: ['memory', context_ref, 'task', 'standard', 'retain', episode, 'application/json', 'cognitive_episode']}];
-}
-
-function retainFailedResult(detail) {
-  return ({turn: turn, handled: false, failed: true, reason: 'Reasoning memory retain failed: ' + detail});
-}
+// done
 
 function selectedResult() {
   return ({turn: turn, handled: true, selected: selected});

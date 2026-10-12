@@ -60,7 +60,7 @@ S.statement(3, "With choices it makes one structured generate call whose strict 
 S.statement(4, "A generate call that fails fails the turn with reason `the reasoning failed (<code>)`, the generate service's failure code: `status` for an error status, `schema-mismatch` for a selection outside the choices, `truncated` for a reply cut short, `malformed` for an answer that is no chat completion.")
 S.statement(5, "A prompt over the original's projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar) fails the turn without a model call, its reason the original's message (for example `prompt projection collection item budget exceeded`).")
 S.statement(6, "Selections the attention policy refuses fail the turn before anything is retained, with the original's message: a `bot.focus_device` outside the focus candidates, or a `bot.clear_focus` with no focused device; a focus selection within the policy is returned.")
-S.statement(7, "With a database it recalls prior episodes and standing directives before the model call and retains the turn's episode after it, and the turn is handled as without one; a memory that fails fails the turn with reason `Reasoning memory recall failed: ...` without a model call.")
+S.statement(7, "With a database it recalls prior episodes and standing directives before the model call and writes nothing (reflection stores the turn's episode, decision D97), and the turn is handled as without one; a memory that fails fails the turn with reason `Reasoning memory recall failed: ...` without a model call.")
 
 S.case(100, 1, "a reasoned turn ends with its turn number, handled.",
        [expect(DONE, "_event.data.turn === 7 && _event.data.handled === true && _event.data.selected.length === 1")],
@@ -124,7 +124,7 @@ S.case(152, 6, "a focus_device within the candidates is returned.",
                      " && _event.data.selected[0].data.device === 'lamp'")],
        params=turn(candidates=["desk", "lamp"]), backend=selection({"event": FOCUS, "data": {"device": "lamp"}, "reason": "look"}))
 
-S.case(160, 7, "with a fresh database the turn recalls, reasons and retains, handled.",
+S.case(160, 7, "with a fresh database the turn recalls and reasons, handled.",
        [expect(DONE, "_event.data.turn === 1 && _event.data.handled === true && _event.data.selected.length === 1"
                      " && _event.data.selected[0].data.text === 'Hi! I am floppy.'")],
        params=turn(extra=[DB]), backend=selection(SAY))
