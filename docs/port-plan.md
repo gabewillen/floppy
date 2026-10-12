@@ -219,7 +219,10 @@ D33 to D43.
   as the `selected` of its unhandled `<donedata>`. The cognition keeps them
   and puts them first in the turn's one `bot.ability.cognition.output`,
   before the handling stage's selections, so the body routes them first;
-  the reflection gets the handling stage's selections only.
+  a handling-stage selection that repeats one of them (the same event and
+  data) is not put in again, since the original had dispatched it before
+  reasoning ran, so a turn acts once; the reflection gets the handling
+  stage's selections only.
 - **Deferral.** A deferring state holds the event with a targetless
   transition whose content is `<event:defer/>` (and any `<log>`); the
   state that handles it takes it by the same transition as on arrival, in
