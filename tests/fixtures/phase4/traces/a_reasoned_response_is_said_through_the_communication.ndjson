@@ -19,7 +19,7 @@
 {"label":"reflection","parent":"session.1","session":"session.2","text":"turn 1: 0 episodes, 0 behaviors","type":"log"}
 {"label":"speech.encode","parent":"session.24","session":"session.25","text":"encode Hi! I am floppy. -> media/speaking-1.pcm","type":"log"}
 {"label":"floppy.say","parent":"session.6","session":"session.8","text":"Hi! I am floppy.","type":"log"}
-{"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}","type":"log"}
+{"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"source\":\"speaking\"}","type":"log"}
 {"label":"communication.offers","parent":"session","session":"session.6","text":"bot.ability.communication.respond","type":"log"}
 {"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"text\":\"Hi! I am floppy.\"}","type":"log"}
 {"label":"conversation","parent":"session.6","session":"session.7","text":"outbound 0","type":"log"}

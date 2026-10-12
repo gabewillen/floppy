@@ -11,6 +11,14 @@ Last updated: 2026-10-10.
 
 ## Current state (2026-10-09) — resume here
 
+- **Speaking bound and self-hearing (2026-10-12, D98):** speaking's
+  `encoding_timeout_ms` is 30 s (the communication passes 30 s and bounds
+  a response by 36 s), since Gemini's unstreamed synthesis of a sentence
+  outlasted the original's 5 s; `environment.sound` carries an optional
+  `source` [floppy field], which speaking stamps with its mouth, so the
+  listening's sensitivity scores the bot's own sound against the efference
+  copy and the interpretation withholds its product. Voice detection still
+  runs on it and fails without `FLOPPY_VOICE_BASE_URL`, as designed.
 - **Selections the body can't place (audit item 4, 2026-10-10):** a turn
   whose selections cannot all be placed fails with `bot.processing.failed`
   and the original's `SelectionRejectionError` message, never

@@ -212,7 +212,7 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
     assert_eq!(
         texts(&records, "environment.sound"),
         strings(&[
-            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
+            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"source":"speaking"}"#
         ])
     );
     assert_eq!(
@@ -783,7 +783,7 @@ fn a_spoken_response_reaches_listening_as_its_efference_copy_before_its_sound() 
     assert_eq!(
         texts(&records, "input.sound"),
         strings(&[
-            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
+            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"source":"speaking"}"#
         ])
     );
     let order: Vec<String> = logs(&records)
@@ -874,10 +874,12 @@ fn speech_encoding_is_bounded_by_its_timeout() {
 }
 
 /// A fake Gemini speech backend on 127.0.0.1: every
-/// `POST /v1/interactions` answers a tenth of a second of raw 24 kHz mono
-/// 16-bit PCM (4800 bytes, base64 in its audio part), and its request
-/// bodies are recorded.
-fn speech_backend() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Json>>>) {
+/// `POST /v1/interactions` answers, after `latency`, a tenth of a second
+/// of raw 24 kHz mono 16-bit PCM (4800 bytes, base64 in its audio part),
+/// and its request bodies are recorded. Gemini's speech generation is not
+/// streamed: the answer comes once the whole clip is synthesized, so
+/// `latency` stands for a sentence's synthesis time.
+fn speech_backend(latency: Duration) -> (String, std::sync::Arc<std::sync::Mutex<Vec<Json>>>) {
     use std::io::{BufRead as _, BufReader, Read as _, Write as _};
     let listener =
         std::net::TcpListener::bind("127.0.0.1:0").expect("the backend binds a loopback port");
@@ -908,6 +910,7 @@ fn speech_backend() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Json>>>) {
             log.lock()
                 .expect("the request log")
                 .push(serde_json::from_slice(&body).unwrap_or(Json::Null));
+            std::thread::sleep(latency);
             // 4800 zero bytes in base64.
             let answer = json!({"steps": [{"type": "model_output", "content": [{
                 "type": "audio", "data": "A".repeat(6400), "sample_rate": 24000,
@@ -924,8 +927,14 @@ fn speech_backend() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Json>>>) {
     (origin, requests)
 }
 
-#[test]
-fn a_response_is_spoken_through_the_speech_service() {
+/// The bot with the real vocal ability (which invokes the speech service)
+/// and `with_listening`'s input double, started against
+/// [`speech_backend`] with `latency` and activated; returns the run, the
+/// backend's request log, and the media directory the run grants the
+/// speech service.
+fn spoken_through_the_speech_service(
+    latency: Duration,
+) -> (Run, std::sync::Arc<std::sync::Mutex<Vec<Json>>>, PathBuf) {
     let body = layout(&Speaking::Real, &[]);
     with_listening(&body);
     let abilities = body
@@ -934,7 +943,6 @@ fn a_response_is_spoken_through_the_speech_service() {
         .and_then(Path::parent)
         .expect("the body is under bots/floppy/")
         .join("abilities");
-    // The real vocal ability, which invokes the speech service.
     std::fs::copy(
         workspace().join("abilities/vocal/vocal.scx"),
         abilities.join("vocal/vocal.scx"),
@@ -942,7 +950,7 @@ fn a_response_is_spoken_through_the_speech_service() {
     .expect("the vocal ability is copyable");
     std::fs::remove_file(abilities.join("vocal/speech_double.scx"))
         .expect("the double is removable");
-    let (origin, requests) = speech_backend();
+    let (origin, requests) = speech_backend(latency);
     let media = unique_scratch("speaking-media");
     let env = media.join("speech.env");
     std::fs::write(
@@ -968,6 +976,12 @@ fn a_response_is_spoken_through_the_speech_service() {
     );
     run.event("bot.activate", &json!({}));
     run.until(WAIT, label_is("bot.activated"));
+    (run, requests, media)
+}
+
+#[test]
+fn a_response_is_spoken_through_the_speech_service() {
+    let (mut run, requests, media) = spoken_through_the_speech_service(Duration::ZERO);
     run.event("bot.input", &input("reply"));
     let records = until_all(&run, &["input.sound", "bot.ability.speaking.output"]);
     // 4800 bytes of 24 kHz mono 16-bit PCM: a tenth of a second, measured.
@@ -977,10 +991,12 @@ fn a_response_is_spoken_through_the_speech_service() {
             r#"{"channels":1,"duration":0.1,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
         ])
     );
+    // The sound's source is the copy's mouth: the listening's sensitivity
+    // scores it as the bot's own.
     assert_eq!(
         texts(&records, "input.sound"),
         strings(&[
-            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#
+            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"source":"speaking"}"#
         ])
     );
     assert_eq!(texts(&records, "floppy.say"), strings(&["reply 1"]));
@@ -997,4 +1013,36 @@ fn a_response_is_spoken_through_the_speech_service() {
     );
     assert_eq!(requests[0]["response_format"], json!({"type": "audio"}));
     close(run, "a_response_is_spoken_through_the_speech_service");
+}
+
+/// The 2026-10-12 live run (docs/live-proof.md): the first reply, a
+/// sentence, failed with "Speech encoding timed out." because Gemini's
+/// unstreamed synthesis outlasted the 5 s bound. With the shipped bounds
+/// (speaking's encoding through the communication, and the communication's
+/// response hop around it) a reply whose synthesis takes 8 s, as a
+/// sentence's can, is spoken.
+#[test]
+fn a_reply_whose_synthesis_takes_seconds_is_spoken_with_the_default_bounds() {
+    let (mut run, requests, _media) = spoken_through_the_speech_service(Duration::from_secs(8));
+    run.event("bot.input", &input("reply"));
+    let records = run.until(WAIT, |record| {
+        label_is("bot.ability.speaking.output")(record)
+            || label_is("bot.ability.communication.failed")(record)
+    });
+    assert!(
+        texts(&records, "bot.ability.communication.failed").is_empty(),
+        "{:?}",
+        texts(&records, "bot.ability.communication.failed")
+    );
+    assert_eq!(
+        texts(&records, "bot.ability.speaking.output"),
+        strings(&[
+            r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 1"}"#
+        ])
+    );
+    assert_eq!(requests.lock().expect("the request log").len(), 1);
+    close(
+        run,
+        "a_reply_whose_synthesis_takes_seconds_is_spoken_with_the_default_bounds",
+    );
 }

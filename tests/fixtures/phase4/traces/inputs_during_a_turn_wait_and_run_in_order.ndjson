@@ -27,14 +27,14 @@
 {"label":"communication.deferred","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}
 {"label":"speech.encode","parent":"session.11","session":"session.12","text":"encode reply 2 -> media/speaking-1.pcm","type":"log"}
 {"label":"floppy.say","parent":"session.2","session":"session.4","text":"reply 2","type":"log"}
-{"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}","type":"log"}
+{"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"source\":\"speaking\"}","type":"log"}
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}
 {"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"text\":\"reply 2\"}","type":"log"}
 {"label":"conversation","parent":"session.2","session":"session.3","text":"outbound 0","type":"log"}
 {"label":"communication.history","parent":"session","session":"session.2","text":"1","type":"log"}
 {"label":"speech.encode","parent":"session.13","session":"session.14","text":"encode reply 3 -> media/speaking-2.pcm","type":"log"}
 {"label":"floppy.say","parent":"session.2","session":"session.4","text":"reply 3","type":"log"}
-{"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-2.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}","type":"log"}
+{"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-2.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"source\":\"speaking\"}","type":"log"}
 {"label":"communication.offers","parent":"session","session":"session.2","text":"bot.ability.communication.respond","type":"log"}
 {"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"text\":\"reply 3\"}","type":"log"}
 {"label":"conversation","parent":"session.2","session":"session.3","text":"outbound 1","type":"log"}

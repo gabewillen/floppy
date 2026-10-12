@@ -177,14 +177,14 @@ them). Both directions therefore call the Gemini API, so
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
 | `abilities/candidates_runner/candidates_runner.scx` | `memory_timeout_ms` | `10000` | one candidate's memory transaction (autonomy passes its own) |
 | `abilities/conversation/conversation.scx` | `memory_timeout_ms` | `5000` | each of the conversation's memory operations, the recall before the turns and the remember after them (the original's 5 s turn stage timeout) |
-| `abilities/communication/communication.scx` | `response_timeout_ms` | `6000` | saying one response (the original's 6 s) |
-| `abilities/communication/communication.scx` | `encoding_timeout_ms` | `5000` | speaking's speech synthesis (communication passes its own) |
+| `abilities/communication/communication.scx` | `response_timeout_ms` | `36000` | saying one response (speaking's 30 s synthesis bound plus the original's 6 s; decision D98) |
+| `abilities/communication/communication.scx` | `encoding_timeout_ms` | `30000` | speaking's speech synthesis (communication passes its own; decision D98) |
 | `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (the original's 30 s) |
 | `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `30000` | reflection's revising through the builder (the original's 30 s) |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (the original's 30 s) |
 | `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input (the original's 5 s) |
 | `abilities/turn_detector/turn_detector.scx` | `end_of_turn_silence_seconds` | `0.5` | the silence that closes an open or paused turn (the original's 0.5 s; at least 0.01 s) |
-| `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `5000` | one speech synthesis (the original's 5 s) |
+| `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `30000` | one speech synthesis: Gemini answers only once the whole clip is synthesized, which outlasts the original's 5 s for a sentence, so the original's 30 s stage operation timeout (decision D98) |
 | `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation (the original's 5 s) |
 | `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound (the original's 30 s stage operation timeout) |
 | `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage (the original's 30 s) |

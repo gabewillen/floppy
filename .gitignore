@@ -2,6 +2,8 @@ target/
 .env*
 node_modules/
 media/
+# A document IRP case's media is checked-in input (tests/tests/document_irp.rs).
+!abilities/listening/irp/sources/*/media/
 
 # .env.example names every variable the bots read; it holds no values.
 !.env.example

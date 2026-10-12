@@ -119,6 +119,23 @@
         6.0
       ],
       "title": "Received Level Db"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional acoustic source: the transducer this sound came off, as its emitter stamps it (speaking stamps its mouth, \"speaking\", the mouth its efference copy names). The original carries it as the sound event's source; an SCXML event relayed through the body keeps only its data, so floppy carries it in the sound [floppy field]. Listening scores an arrival against an efference copy only when this is the producing mouth; a sound without one is never the bot's own.",
+      "examples": [
+        "speaking"
+      ],
+      "title": "Source"
     }
   },
   "required": [

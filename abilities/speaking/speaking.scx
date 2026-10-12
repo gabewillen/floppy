@@ -19,19 +19,25 @@
   speech: the audio reference with its media_type, sample_rate_hz and
   channels (speaking's own, the original's 24000 Hz mono audio/pcm, where the
   encoder leaves one null), and its duration when the encoder measured one
-  (the speech service measures it for linear PCM). Synthesis is bounded by the original's
-  5 s (encoding_timeout_ms); leaving encoding cancels vocal and its
-  request.
+  (the speech service measures it for linear PCM). Synthesis is bounded
+  by encoding_timeout_ms, 30 s (decision D98: the original's 5 s is
+  shorter than Gemini's unstreamed synthesis of a sentence, which answers
+  only once the whole clip exists; 30 s is the original's stage operation
+  timeout); leaving encoding cancels vocal and its request.
 
   playing issues the efference copy first (the original's entry action: the
   copy leaves before the sound does): bot.ability.speaking.efference
   {mouth, duration, media_type, sample_rate_hz, channels} to the parent,
-  which carries it to the bot's Listening; mouth is "speaking", the sound's
-  source (the original's source when no speaker is injected; devices are out of
-  scope). As in the original, no copy is sent when the encoded form gives no
-  duration. Then the words are logged as floppy.say and the audio is
-  broadcast: environment.sound {audio, media_type, sample_rate_hz,
-  channels} to the parent, which the body puts into the environment.
+  which carries it to the bot's Listening; mouth is the <data> mouth,
+  "speaking", the sound's source (the original's source when no speaker is
+  injected; devices are out of scope). As in the original, no copy is sent
+  when the encoded form gives no duration. Then the words are logged as
+  floppy.say and the audio is broadcast: environment.sound {audio,
+  media_type, sample_rate_hz, channels, source} to the parent, which the
+  body puts into the environment. source is the mouth (the original stamps
+  it as the sound event's source; a relayed SCXML event keeps only its
+  data, so it travels in the sound): it is how the listening's sensitivity
+  tells the bot's own voice from a sound that only arrives while it speaks.
 
   recording builds the outbound message with <conversation:commit>
   (the original's Message: direction outbound, content the text, content_type
@@ -78,7 +84,10 @@
     <data id="model" expr="'gemini-3.1-flash-tts-preview'"/>
     <data id="voice" expr="'Kore'"/>
     <data id="output_prefix" expr="'media/speaking-'"/>
-    <data id="encoding_timeout_ms" expr="5000"/>
+    <!-- The mouth: the efference copy's mouth and the sound's source, so
+         the listening can tell its own voice apart. -->
+    <data id="mouth" expr="'speaking'"/>
+    <data id="encoding_timeout_ms" expr="30000"/>
     <data id="recording_timeout_ms" expr="5000"/>
     <!-- The utterance in hand, its number, the encoded speech and timer. -->
     <data id="operation" expr="0"/>
@@ -168,7 +177,7 @@
     <onentry>
       <if cond="hasDuration()">
         <send event="bot.ability.speaking.efference" target="#_parent">
-          <param name="mouth" expr="'speaking'"/>
+          <param name="mouth" expr="mouth"/>
           <param name="duration" expr="encoded.duration"/>
           <param name="media_type" expr="encoded.media_type"/>
           <param name="sample_rate_hz" expr="encoded.sample_rate_hz"/>
@@ -181,6 +190,7 @@
         <param name="media_type" expr="encoded.media_type"/>
         <param name="sample_rate_hz" expr="encoded.sample_rate_hz"/>
         <param name="channels" expr="encoded.channels"/>
+        <param name="source" expr="mouth"/>
       </send>
       <assign location="product" expr="speechProduct()"/>
       <raise event="bot.ability.speaking.apply.completed"/>

@@ -897,7 +897,7 @@ fn environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition() {
             ("double.input", r#"1 reply "after""#),
             (
                 "input.sound",
-                r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000}"#,
+                r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"source":"speaking"}"#,
             ),
         ])
     );

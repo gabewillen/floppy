@@ -20,7 +20,7 @@
     <onentry>
       <send event="bot.ability.speaking.input" target="#_speaking"><content expr='{"text": "hi"}'/></send>
     </onentry>
-    <transition event="environment.sound" cond="_event.data.audio === 'media/speaking-1.mpeg' &amp;&amp; _event.data.media_type === 'audio/mpeg' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step2"/>
+    <transition event="environment.sound" cond="_event.data.audio === 'media/speaking-1.mpeg' &amp;&amp; _event.data.media_type === 'audio/mpeg' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step2"/>
   </state>
   <state id="step2">
     <transition event="bot.ability.conversation.append" cond="_event.data.message.direction === 'outbound' &amp;&amp; _event.data.message.content === &quot;hi&quot; &amp;&amp; _event.data.message.content_type === 'text/plain' &amp;&amp; _event.data.message.sequence === 0 &amp;&amp; _event.data.message.source_ids.length === 0 &amp;&amp; _event.data.message.target_ids.length === 0 &amp;&amp; _event.data.message.provenance.id === 'speaking-1' &amp;&amp; _event.data.message.provenance.event === 'bot.ability.conversation.append'" target="step3"/>

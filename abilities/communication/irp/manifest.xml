@@ -33,7 +33,7 @@
     </test>
   </assert>
   <assert id="communication-5" specnum="5" specid="#communication-5">
-    <![CDATA[`bot.ability.communication.respond` `{text}` (non-blank) in active is said through speaking: the body gets speaking's playout in order, `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}` then `environment.sound` `{audio, media_type, sample_rate_hz, channels}`, then `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}`; the communication is active again and offers again, and the outbound record goes to the conversation as history only.]]>
+    <![CDATA[`bot.ability.communication.respond` `{text}` (non-blank) in active is said through speaking: the body gets speaking's playout in order, `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}` then `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: "speaking"}`, then `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}`; the communication is active again and offers again, and the outbound record goes to the conversation as history only.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
@@ -54,7 +54,7 @@
     </test>
   </assert>
   <assert id="communication-8" specnum="8" specid="#communication-8">
-    <![CDATA[A response is bounded by `response_timeout_ms` (6000 by default, a `<param>`): when it passes before speaking answers, the body gets `bot.ability.communication.failed` `{message: "Speaking response timed out."}` and the communication is active again; speaking's late answer is not forwarded. `encoding_timeout_ms` (5000 by default, a `<param>`) is passed to speaking as its encoding bound.]]>
+    <![CDATA[A response is bounded by `response_timeout_ms` (36000 by default, a `<param>`: speaking's 30 s encoding bound plus the original's 6 s): when it passes before speaking answers, the body gets `bot.ability.communication.failed` `{message: "Speaking response timed out."}` and the communication is active again; speaking's late answer is not forwarded. `encoding_timeout_ms` (30000 by default, a `<param>`; decision D98) is passed to speaking as its encoding bound.]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
     </test>
