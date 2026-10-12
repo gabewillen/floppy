@@ -48,7 +48,9 @@ SQLite, reflection with the builder, routines, speaking on Gemini):
 Each turn the listening heard the bot's own speech and failed at voice
 detection (no LocalAI), as on 2026-10-11. Reflection's recalled episode
 count grew by two per turn (1, 3, 5, 7), since reasoning and reflection
-both insert a `cognitive_episode` row.
+both insert a `cognitive_episode` row. Decision D96 fixed it: reflection alone stores
+the turn's episode, and `a_reasoned_turn_is_recalled_by_the_next` pins one
+episode per turn on the fake backends.
 
 ## 2026-10-11, speaking and speech decoding on the Gemini API (decision D94)
 

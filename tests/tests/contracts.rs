@@ -91,7 +91,7 @@ const BODY_EVENTS: [&str; 13] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 76] = [
+const ABILITY_EVENTS: [&str; 75] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -108,7 +108,6 @@ const ABILITY_EVENTS: [&str; 76] = [
     "bot.ability.reasoning.input",
     "bot.ability.reasoning.output",
     "bot.ability.reasoning.recalled",
-    "bot.ability.reasoning.retained",
     "bot.ability.communication.input",
     "bot.ability.communication.activate",
     "bot.ability.communication.respond",
@@ -182,7 +181,7 @@ const ABILITY_EVENTS: [&str; 76] = [
 /// The correlated events of one processing turn: each requires `turn`.
 /// Tool events (the ones a model chooses, such as
 /// `bot.ability.cognition.ignore`) never do: their data is the model's.
-const CORRELATED: [&str; 17] = [
+const CORRELATED: [&str; 16] = [
     "bot.processing.completed",
     "bot.processing.failed",
     "bot.processing.timed_out",
@@ -199,7 +198,6 @@ const CORRELATED: [&str; 17] = [
     "bot.ability.reflection.input",
     "bot.ability.reasoning.output",
     "bot.ability.reasoning.recalled",
-    "bot.ability.reasoning.retained",
 ];
 
 /// The original's runtime-only correlation and cancel-token fields, which SCXML

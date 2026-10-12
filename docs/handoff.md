@@ -20,7 +20,7 @@ Last updated: 2026-10-10.
   run where the original dispatches: in autonomy before a learned behavior's use
   is counted (a rejected one is counted failed and fails the turn),
   intuition ("Selection rejected: ...", without the original's one retry),
-  reasoning (before retaining), and in the body's `routing` before it logs
+  reasoning (before returning its selections), and in the body's `routing` before it logs
   the outcome (which catches the trusted seed's selection).
   `<decision:assemble>` lost `routeslocation`.
 - **Phase 7 (2026-10-10):** done except publishing
@@ -152,7 +152,8 @@ Last updated: 2026-10-10.
 - **Seams on (2026-10-10, D80):** the cognition always runs reflection and
   routines (no gates, as the original composes them); with no database each logs
   `absent`. Every bot turn with memory now ends with reflection's select
-  call and the turn's episode.
+  call and the turn's episode, which reflection alone stores (D96: reasoning
+  retains none, so each turn records one episode).
 
 ## Conversation memory (2026-10-10)
 

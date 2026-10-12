@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- reasoning-7: with a fresh database the turn recalls, reasons and retains, handled. -->
+<!-- reasoning-7: with a fresh database the turn recalls and reasons, handled. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reasoning" type="scxml" src="../../../reasoning.scx">

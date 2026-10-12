@@ -13,11 +13,11 @@ confidence, gated by the original's self-tuning confidence tuner; low confidence
 hands out the environment actions and goes on to reasoning), and
 [reasoning](../../abilities/reasoning/reasoning.scx)
 (one structured model call over the turn's choices, prompted with the original's
-model-facing XML; it recalls and
-retains cognitive episodes through memory), with
+model-facing XML; it recalls the
+cognitive episodes reflection stored through memory), with
 [reflection](../../abilities/reflection/reflection.scx) (after each output it
 creates, changes or breaks a learned behavior through the builder bot and
-stores the turn's episode) and [routines](../../abilities/routines/routines.scx)
+stores the turn's one episode) and [routines](../../abilities/routines/routines.scx)
 (the ACTIVE persistent behaviors, whose ticks become turns) running beside
 the turns, and the [communication](../../abilities/communication/communication.scx),
 which holds the [conversation](../../abilities/conversation/conversation.scx) (the

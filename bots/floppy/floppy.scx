@@ -154,8 +154,8 @@
   Memory (the original's sqlite_memory): the body passes its database (a file in
   the directory the run grants the sql service at /memory, scx run's
   dir option) to the cognition, the communication and the identity as
-  <param name="database">; reasoning recalls and retains cognitive
-  episodes, the identity its adopted names, and the conversation its
+  <param name="database">; reasoning recalls the cognitive episodes
+  reflection stores, the identity its adopted names, and the conversation its
   relationship memories (abilities/memory/memory.scx over services/sql, one
   SQLite transaction per invocation). A run without the grant is refused
   before it starts.
