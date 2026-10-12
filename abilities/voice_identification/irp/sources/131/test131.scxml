@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- voice_identification-4: a sound that is not there cannot be clipped. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="voice_identification" type="scxml" src="../../../voice_identification.scx">
+    <param name="audio" expr="'media/missing.raw'"/>
+    <param name="sample_rate_hz" expr="8000"/>
+    <param name="channels" expr="1"/>
+    <param name="start_seconds" expr="0"/>
+    <param name="end_seconds" expr="1"/>
+    <param name="output" expr="'media/clip'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="done.invoke.voice_identification" cond='_event.data.message === "Voice identification opening segment conversion failed: Voice segment clipping failed: the audio cannot be read." &amp;&amp; Object.keys(_event.data).length === 1' target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

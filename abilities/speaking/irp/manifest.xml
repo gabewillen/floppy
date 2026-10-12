@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<!-- The speaking document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/speaking/irp/sources">
+  <assert id="speaking-1" specnum="1" specid="#speaking-1">
+    <![CDATA[Every entry into `idle` (its start, and the end of each utterance, spoken or failed) sends `bot.ability.offers` `{ability: "speaking", choices: []}` to its parent: it offers nothing.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+  </assert>
+  <assert id="speaking-2" specnum="2" specid="#speaking-2">
+    <![CDATA[`bot.ability.speaking.input` `{text}` is encoded by the vocal child with the speaking's `provider`, `model`, `voice` and `media_type` (by default the original's gemini encoder, `audio/pcm`), written to `output_prefix` + the utterance's number + `.` + the media subtype (`media/speaking-<n>.pcm`), the text stripped first.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+  </assert>
+  <assert id="speaking-3" specnum="3" specid="#speaking-3">
+    <![CDATA[`playing` sends the efference copy `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}` before the sound, `environment.sound` `{audio, media_type, sample_rate_hz, channels}`, to its parent; with no measured duration no copy is sent, and a rate or channel count the encoder leaves null is the speaking's own (24000 Hz mono).]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+  </assert>
+  <assert id="speaking-4" specnum="4" specid="#speaking-4">
+    <![CDATA[`recording` sends `bot.ability.conversation.append` `{message}` to its parent, the outbound message `<conversation:commit>` builds (content the text, content_type `text/plain`, sequence 0, provenance id `speaking-<n>` and event `bot.ability.conversation.append`), then answers `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}` and returns to `idle`.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+  </assert>
+  <assert id="speaking-5" specnum="5" specid="#speaking-5">
+    <![CDATA[A blank text (after stripping) is refused before any encoding: `bot.ability.failed` `{message: "Speaking requires non-blank text."}`, and back to `idle`; an empty text never arrives: the input's schema refuses it at the send, raising `error.execution` in the sender.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.scxml"/>
+    </test>
+  </assert>
+  <assert id="speaking-6" specnum="6" specid="#speaking-6">
+    <![CDATA[A vocal failure (its `bot.ability.failed`) answers the parent with `bot.ability.failed` `{message}` carrying the vocal's message, and back to `idle`, where the next input is spoken.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+    <test id="151" conformance="mandatory" manual="false">
+      <start uri="151/test151.scxml"/>
+    </test>
+  </assert>
+  <assert id="speaking-7" specnum="7" specid="#speaking-7">
+    <![CDATA[Encoding is bounded by `encoding_timeout_ms` (the original's 5 s): its timer answers `bot.ability.failed` `{message: "Speech encoding timed out."}` and returns to `idle`.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+  </assert>
+  <assert id="speaking-8" specnum="8" specid="#speaking-8">
+    <![CDATA[Input that arrives outside `idle` is held (`<event:defer/>`) and taken, in order, on the return to `idle`.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+  </assert>
+</assertions>

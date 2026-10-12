@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<!-- The reading document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/reading/irp/sources">
+  <assert id="reading-1" specnum="1" specid="#reading-1">
+    <![CDATA[It offers nothing and answers only what it is given: on start it sends its parent nothing, and an input `bot.ability.reading.input` `{kind, content}` whose data its schema refuses (a kind other than `text` or `image`) is never routed to it (`error.execution` in the sender).]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+  </assert>
+  <assert id="reading-2" specnum="2" specid="#reading-2">
+    <![CDATA[A text input whose text is not blank is classified as text (confidence 1) and comes back as `bot.ability.reading.output` `{text, source_kind: "text", confidence}`, its text the input's content unchanged; no model is called.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+  </assert>
+  <assert id="reading-3" specnum="3" specid="#reading-3">
+    <![CDATA[A text input whose text is blank, or an image input with an empty reference, is classified as unreadable and comes back as `bot.ability.reading.output` `{text: "", source_kind: "unreadable", confidence: 1}`; no model is called.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+  </assert>
+  <assert id="reading-4" specnum="4" specid="#reading-4">
+    <![CDATA[An image input with a reference is classified as image and read by the generate service (one user message: the original's ImageDecoder prompt as a text part and the reference as an image part, the image read from the granted media directory); the reply, trimmed, comes back as `bot.ability.reading.output` `{text, source_kind: "image", confidence: 1}`.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+  </assert>
+  <assert id="reading-5" specnum="5" specid="#reading-5">
+    <![CDATA[A model call that fails answers `bot.ability.reading.failed` `{stage: "image_decoding", message: "Reading image decoder failed: <code>."}`, the generate service's failure code in the message, and the reading returns to Unfocused, taking the next input as on arrival.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.scxml"/>
+    </test>
+  </assert>
+  <assert id="reading-6" specnum="6" specid="#reading-6">
+    <![CDATA[An image reference the generate service cannot read (no such file in the granted media directory) rejects the model call's start: the reading answers `bot.ability.reading.failed` `{stage: "image_decoding", message: "the image decoding could not run (error.execution)"}`.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+  </assert>
+  <assert id="reading-7" specnum="7" specid="#reading-7">
+    <![CDATA[DecodingImage is bounded by `stage_timeout_ms` (30000 by default, a `<param>`): when it passes first, the reading answers `bot.ability.reading.failed` `{stage: "image_decoding", message: "the image decoding timed out after <stage_timeout_ms> ms"}` and the model call is cancelled.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+  </assert>
+  <assert id="reading-8" specnum="8" specid="#reading-8">
+    <![CDATA[An input that arrives while Focused is deferred: it is taken, in order, once the reading is back in Unfocused, so every input gets exactly one answer in the order the inputs arrived.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+    <test id="171" conformance="mandatory" manual="false">
+      <start uri="171/test171.scxml"/>
+    </test>
+  </assert>
+</assertions>

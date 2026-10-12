@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- routines_runner-4: a nested runner drops a tick named for a routine above it: the chain [Alpha, Beta] does not forward Beta's routine ticking as Alpha. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="routines_runner" type="scxml" src="../../../routines_runner.scx">
+    <param name="routines" expr="[{&quot;name&quot;: &quot;Alpha&quot;, &quot;source&quot;: &quot;&lt;scxml xmlns=\&quot;http://www.w3.org/2005/07/scxml\&quot; version=\&quot;1.0\&quot; datamodel=\&quot;ecmascript\&quot; initial=\&quot;s\&quot;&gt;&lt;state id=\&quot;s\&quot;&gt;&lt;onentry&gt;&lt;send event=\&quot;bot.behavior.tick\&quot; target=\&quot;#_parent\&quot;&gt;&lt;content expr=\&quot;({name: 'Alpha', trigger: 'every', scheduled_at: '2026-10-05T08:00:00-04:00', fired_at: '2026-10-05T08:00:00-04:00', output: [{event: 'bot.speaking.say', target: 'speaker', data: {text: 'first'}}]})\&quot;/&gt;&lt;/send&gt;&lt;/onentry&gt;&lt;transition target=\&quot;end\&quot;/&gt;&lt;/state&gt;&lt;final id=\&quot;end\&quot;/&gt;&lt;/scxml&gt;&quot;}, {&quot;name&quot;: &quot;Beta&quot;, &quot;source&quot;: &quot;&lt;scxml xmlns=\&quot;http://www.w3.org/2005/07/scxml\&quot; version=\&quot;1.0\&quot; datamodel=\&quot;ecmascript\&quot; initial=\&quot;s\&quot;&gt;&lt;state id=\&quot;s\&quot;&gt;&lt;onentry&gt;&lt;send event=\&quot;bot.behavior.tick\&quot; target=\&quot;#_parent\&quot;&gt;&lt;content expr=\&quot;({name: 'Alpha', trigger: 'every', scheduled_at: '2026-10-05T08:00:00-04:00', fired_at: '2026-10-05T08:00:00-04:00', output: [{event: 'bot.speaking.say', target: 'speaker', data: {text: 'posing'}}]})\&quot;/&gt;&lt;/send&gt;&lt;/onentry&gt;&lt;transition target=\&quot;end\&quot;/&gt;&lt;/state&gt;&lt;final id=\&quot;end\&quot;/&gt;&lt;/scxml&gt;&quot;}]"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.behavior.tick" cond='_event.data.name === "Alpha" &amp;&amp; _event.data.output[0].data.text === "first"' target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="harness.waited" delay="1s"/>
+    </onentry>
+    <transition event="harness.waited" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

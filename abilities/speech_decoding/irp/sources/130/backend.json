@@ -1,0 +1,14 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/interactions",
+      "status": 500,
+      "body": {
+        "error": {
+          "message": "boom"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/systemone",
+      "status": 200,
+      "body": {
+        "answers": {}
+      }
+    }
+  ]
+}

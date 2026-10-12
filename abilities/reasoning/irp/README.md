@@ -1,0 +1,21 @@
+# `reasoning` implementation report plan
+
+The implementation report plan of [`reasoning.scx`](../reasoning.scx): the W3C SCXML IRP's
+manifest format and `Outcome` oracle over the document's numbered
+statements below, one assertion each in [`manifest.xml`](manifest.xml),
+tested by the harness documents in [`sources/`](sources). Each harness
+invokes the document as its child, drives it, and ends in `pass` (logging
+`Outcome` `pass`) or `fail`. `tests/tests/document_irp.rs` runs every case
+through `scx run` with the real invoked services (a case's
+`backend.json` scripts the fake HTTP backend they reach), and
+`tests/irp/harness.py` writes the cases from [`cases.py`](cases.py).
+
+## Statements
+
+- <a id="reasoning-1"></a>**reasoning-1**. It runs one turn (the `<param>`s turn, stimulus, focus, focus_candidates, choices, model and database) and ends: its `<donedata>`, received as `done.invoke.reasoning`, is `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.
+- <a id="reasoning-2"></a>**reasoning-2**. With no choices it fails the turn without a model call: reason `the reasoning has no choices to select from`.
+- <a id="reasoning-3"></a>**reasoning-3**. With choices it makes one structured generate call whose strict schema allows only the offered events (with their targets); the reply's selections, once checked (see 6), are returned as the model gave them with `handled: true`, each `{event, data, reason, target?}`, `bot.ability.cognition.ignore` selections included (the body routes them; dispatching only checks); an empty selection is handled with nothing selected.
+- <a id="reasoning-4"></a>**reasoning-4**. A generate call that fails fails the turn with reason `the reasoning failed (<code>)`, the generate service's failure code: `status` for an error status, `schema-mismatch` for a selection outside the choices, `truncated` for a reply cut short, `malformed` for an answer that is no chat completion.
+- <a id="reasoning-5"></a>**reasoning-5**. A prompt over the original's projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar) fails the turn without a model call, its reason the original's message (for example `prompt projection collection item budget exceeded`).
+- <a id="reasoning-6"></a>**reasoning-6**. Selections the attention policy refuses fail the turn before anything is retained, with the original's message: a `bot.focus_device` outside the focus candidates, or a `bot.clear_focus` with no focused device; a focus selection within the policy is returned.
+- <a id="reasoning-7"></a>**reasoning-7**. With a database it recalls prior episodes and standing directives before the model call and retains the turn's episode after it, and the turn is handled as without one; a memory that fails fails the turn with reason `Reasoning memory recall failed: ...` without a model call.

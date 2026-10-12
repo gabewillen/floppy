@@ -1,0 +1,17 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/interactions",
+      "body": {
+        "output_text": "wrong backend"
+      }
+    },
+    {
+      "path": "/v1/audio/transcriptions",
+      "body": {
+        "text": "transcribed"
+      }
+    }
+  ]
+}

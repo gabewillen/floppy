@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- intuition-3: a low-confidence product escalates with its environment actions, the ignore dropped. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="intuition" type="scxml" src="../../../intuition.scx">
+    <param name="turn" expr="4"/>
+    <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "body"}'/>
+    <param name="focus" expr="null"/>
+    <param name="choices" expr='[{"event": "bot.say", "schema": {}, "target": "speaking"}, {"event": "bot.ability.cognition.ignore", "schema": {}, "target": "cognition"}]'/>
+    <param name="decision_timeout_ms" expr="150000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="done.invoke.intuition" cond="_event.data.turn === 4 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === &quot;low_confidence&quot; &amp;&amp; typeof _event.data.tuner === 'object' &amp;&amp; JSON.stringify(_event.data.selected) === &quot;[{\&quot;data\&quot;:{},\&quot;event\&quot;:\&quot;bot.say\&quot;}]&quot; &amp;&amp; _event.data.tuner.n === 1" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

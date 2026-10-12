@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<!-- The floppy document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/bots/floppy/irp/sources">
+  <assert id="floppy-1" specnum="1" specid="#floppy-1">
+    <![CDATA[`bot.activate` enters `live`, which invokes the abilities (`cognition`, `communication`, `identity`, `listening`); the bot is `active`, and takes a turn's input, only once every expected ability (the data `expected`) has sent its first `bot.ability.offers`.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+  </assert>
+  <assert id="floppy-2" specnum="2" specid="#floppy-2">
+    <![CDATA[While `activating`, an `error.*` event, an ability's `done.invoke`, or the activation timer (`activation_timeout_ms`) fails the activation back to `inactive`, where no input is taken until the next `bot.activate`.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+    <test id="112" conformance="mandatory" manual="false">
+      <start uri="112/test112.scxml"/>
+    </test>
+  </assert>
+  <assert id="floppy-3" specnum="3" specid="#floppy-3">
+    <![CDATA[`bot.deactivate` leaves `live` for `inactive`, from `active` or `activating`; a later `bot.activate` makes the bot live again.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+  </assert>
+  <assert id="floppy-4" specnum="4" specid="#floppy-4">
+    <![CDATA[`bot.reboot` `{reason}` re-enters `live`: the abilities are invoked again and the bot waits for their offers again before it takes input; the turn count goes on.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+  </assert>
+  <assert id="floppy-5" specnum="5" specid="#floppy-5">
+    <![CDATA[In `unfocused` or `focused`, `bot.input` or a `bot.ability.cognition.input` `{stimulus}` handoff starts a `processing` turn, counted from 1; the cognition's `bot.ability.cognition.output` or `bot.ability.failed` for the current turn ends it (back to attention), and one for another turn is dropped.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.scxml"/>
+    </test>
+    <test id="142" conformance="mandatory" manual="false">
+      <start uri="142/test142.scxml"/>
+    </test>
+    <test id="143" conformance="mandatory" manual="false">
+      <start uri="143/test143.scxml"/>
+    </test>
+  </assert>
+  <assert id="floppy-6" specnum="6" specid="#floppy-6">
+    <![CDATA[`bot.processing.timed_out` for the current turn moves to `cancelling_processing`; the acknowledgement (`bot.ability.cognition.cancelled` or `bot.ability.processing.cancelled` for the turn) ends the turn; `bot.processing.cancel.timed_out` for it degrades the bot: the session ends in the final state `degraded` with `{reason: "turn <n>: the cognition did not acknowledge its cancel"}`. A timer for another turn is not taken.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+    <test id="151" conformance="mandatory" manual="false">
+      <start uri="151/test151.scxml"/>
+    </test>
+    <test id="152" conformance="mandatory" manual="false">
+      <start uri="152/test152.scxml"/>
+    </test>
+  </assert>
+  <assert id="floppy-7" specnum="7" specid="#floppy-7">
+    <![CDATA[An input that arrives during a turn waits and starts the next turn when the bot returns to attention.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+  </assert>
+  <assert id="floppy-8" specnum="8" specid="#floppy-8">
+    <![CDATA[An ability that ends while the bot is active (`done.invoke.<id>`) degrades it: the session ends in `degraded` with `{reason: "the ability <id> ended while active"}`.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+  </assert>
+</assertions>

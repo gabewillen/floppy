@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- interpretation-4: a labelled sound without voice is handed off as the normalized environment.sound. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="interpretation" type="scxml" src="../../../interpretation.scx">
+    <param name="stage_timeout_ms" expr="600000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'interpretation' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.listening.sensitivity.output" target="#_interpretation"><content expr='{"sound": {"audio": "media/ring.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1, "kind": " phone.ringing "}, "parent": {"event": "environment.sound", "data": {"audio": "media/ring.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1, "kind": " phone.ringing "}}, "perceived_level_db": null}'/></send>
+    </onentry>
+    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'environment.sound' &amp;&amp; _event.data.stimulus.source === 'listening' &amp;&amp; _event.data.stimulus.data.audio === 'media/floppy-sound-1.pcm' &amp;&amp; _event.data.stimulus.data.media_type === 'audio/pcm' &amp;&amp; _event.data.stimulus.data.sample_rate_hz === 16000 &amp;&amp; _event.data.stimulus.data.channels === 1 &amp;&amp; _event.data.stimulus.data.kind === ' phone.ringing '" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

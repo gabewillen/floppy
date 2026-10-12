@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- floppy-8: an ability that ends while the bot is active degrades it. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="floppy" type="scxml" src="../../../floppy.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.activate" target="#_floppy"><content expr="{}"/></send>
+      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "cognition", "choices": []}'/></send>
+      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "communication", "choices": []}'/></send>
+      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "identity", "choices": []}'/></send>
+      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "listening", "choices": []}'/></send>
+      <send event="done.invoke.listening" target="#_floppy"><content expr="{}"/></send>
+    </onentry>
+    <transition event="done.invoke.floppy" cond="/^the ability .* ended while active$/.test(_event.data.reason)" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

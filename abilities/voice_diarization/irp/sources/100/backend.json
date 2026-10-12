@@ -1,0 +1,23 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/audio/diarization",
+      "body": {
+        "segments": [
+          {
+            "start": 0.5,
+            "end": 0.9,
+            "speaker": "SPEAKER_01",
+            "confidence": 0.8
+          },
+          {
+            "start": 0.1,
+            "end": 0.4,
+            "speaker": "SPEAKER_00"
+          }
+        ]
+      }
+    }
+  ]
+}

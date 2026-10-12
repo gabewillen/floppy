@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- autonomy-5: a load that outlasts memory_timeout_ms matches nothing, and the turn goes on. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="autonomy" type="scxml" src="../../../autonomy.scx">
+    <param name="turn" expr="8"/>
+    <param name="input" expr='{"focus": null, "focus_candidates": []}'/>
+    <param name="stimulus" expr='{"event": "bot.ability.listening.speech.output", "data": {"content": "what is the weather like?", "content_type": "text/plain", "voice_detection": {"segments": [{"start_seconds": 0.0, "end_seconds": 0.4, "confidence": 0.9}]}, "media_type": "audio/pcm", "sample_rate_hz": 48000, "channels": 1, "source_ids": []}, "source": "listening"}'/>
+    <param name="choices" expr="[]"/>
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="memory_timeout_ms" expr="0"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="done.invoke.autonomy" cond='_event.data.turn === 8 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "unhandled" &amp;&amp; JSON.stringify(_event.data.candidates) === "[\"SpeechHeard\"]" &amp;&amp; _event.data.selected === undefined' target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

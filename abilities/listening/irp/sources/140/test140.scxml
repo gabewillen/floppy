@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- listening-5: while the efference copy's window is open a sound is scored at its received level, not as the mouth's. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="listening" type="scxml" src="../../../listening.scx">
+    <param name="sensitivity_timeout_ms" expr="600000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'listening' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.speaking.efference" target="#_listening"><content expr='{"mouth": "speaking", "duration": 60}'/></send>
+      <send event="environment.sound" target="#_listening"><content expr='{"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1, "amplitude_db": 60, "received_level_db": 54}'/></send>
+      <send event="environment.sound" target="#_listening"><content expr='{"audio": "media/silence.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1, "received_level_db": 54}'/></send>
+    </onentry>
+    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.listening.speech.output' &amp;&amp; _event.data.stimulus.source === 'listening' &amp;&amp; _event.data.stimulus.data.content === &quot;cut in&quot; &amp;&amp; _event.data.stimulus.data.content_type === 'text/plain' &amp;&amp; _event.data.stimulus.data.media_type === 'audio/pcm' &amp;&amp; _event.data.stimulus.data.sample_rate_hz === 16000 &amp;&amp; _event.data.stimulus.data.channels === 1 &amp;&amp; _event.data.stimulus.data.source_ids.length === 0 &amp;&amp; _event.data.stimulus.data.parent.event === 'environment.sound' &amp;&amp; _event.data.stimulus.data.parent.data.audio === 'media/voiced.wav'" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

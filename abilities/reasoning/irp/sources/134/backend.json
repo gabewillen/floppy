@@ -1,0 +1,12 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "nothing": true
+      }
+    }
+  ]
+}

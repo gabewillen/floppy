@@ -1,0 +1,12 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/audio/diarization",
+      "status": 503,
+      "body": {
+        "error": "busy"
+      }
+    }
+  ]
+}

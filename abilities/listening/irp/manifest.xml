@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<!-- The listening document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/listening/irp/sources">
+  <assert id="listening-1" specnum="1" specid="#listening-1">
+    <![CDATA[It waits for both children, the sensitivity and the interpretation (each ready with its first `bot.ability.offers`), then sends `bot.ability.offers` `{ability: "listening", choices: []}` to its parent: it offers nothing.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+  </assert>
+  <assert id="listening-2" specnum="2" specid="#listening-2">
+    <![CDATA[Each `environment.sound` is scored by the sensitivity (`bot.ability.listening.sensitivity.score` `{stimulus: {event: "environment.sound", data: <the sound>}}`) and the score goes on to the interpretation; the interpretation's speech product is handed to the parent as `bot.ability.cognition.input` `{stimulus: {event: "bot.ability.listening.speech.output", data: <the product>, source: "listening"}}`, the product's parent the sound's envelope.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+  </assert>
+  <assert id="listening-3" specnum="3" specid="#listening-3">
+    <![CDATA[A sound is scored at its `received_level_db`: a product the interpretation finds below its threshold is dropped, a louder one handed on.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+  </assert>
+  <assert id="listening-4" specnum="4" specid="#listening-4">
+    <![CDATA[The interpretation's own `bot.ability.cognition.input` (labelled non-speech) and its `bot.ability.listening.failed` `{stage, message}` go on to the parent unchanged.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+  </assert>
+  <assert id="listening-5" specnum="5" specid="#listening-5">
+    <![CDATA[`bot.ability.speaking.efference` goes to the sensitivity from wherever perception is, without interrupting it; the score request names no source, so a sound is never scored as the mouth's own and is scored at its received level while the copy's window is open.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+  </assert>
+  <assert id="listening-6" specnum="6" specid="#listening-6">
+    <![CDATA[Sounds that arrive before the children are ready, or while one is being scored, are held (`<event:defer/>`) and taken in order.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+  </assert>
+  <assert id="listening-7" specnum="7" specid="#listening-7">
+    <![CDATA[Scoring is bounded by `sensitivity_timeout_ms` (the original's 30 s): its timer answers `bot.ability.listening.failed` `{stage: "sensitivity", message: "Listening sensitivity timed out."}` and returns to `Listening`.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+  </assert>
+  <assert id="listening-8" specnum="8" specid="#listening-8">
+    <![CDATA[A sound its schema refuses (no audio reference) is never routed here: the send raises `error.execution` in the sender.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+  </assert>
+</assertions>

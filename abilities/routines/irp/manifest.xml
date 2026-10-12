@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<!-- The routines document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/routines/irp/sources">
+  <assert id="routines-1" specnum="1" specid="#routines-1">
+    <![CDATA[With no `database` `<param>` (null) it reconciles to nothing: it runs no routine and sends its parent nothing; it is long-lived and never reaches a final state.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+  </assert>
+  <assert id="routines-2" specnum="2" specid="#routines-2">
+    <![CDATA[With a database it recalls the ACTIVE persistent `bot_behavior` rows through the Memory ability (which brings the database to the head revision); an empty inventory runs no routine and sends its parent nothing (the Memory ability's answers stay with the routines).]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+  </assert>
+  <assert id="routines-3" specnum="3" specid="#routines-3">
+    <![CDATA[`bot.ability.routines.reconcile` `{}` reads the inventory again, any number of times, back to back (a reconcile while reconciling re-enters it); it answers the parent nothing.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+  </assert>
+  <assert id="routines-4" specnum="4" specid="#routines-4">
+    <![CDATA[A recall that fails (a database the Memory ability refuses) is logged `bot.ability.routines.reconcile.failed` and keeps the running set; nothing reaches the parent and later reconciles still work.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+  </assert>
+  <assert id="routines-5" specnum="5" specid="#routines-5">
+    <![CDATA[A reconcile whose data its schema rejects (any field: it carries no data) is `error.execution` in its sender and never reaches the routines.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+  </assert>
+</assertions>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- builder-3: a draft with a machine-applicable fix is fixed and built in one attempt. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="builder" type="scxml" src="../../../builder.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="builder.request" target="#_builder"><content expr='{"spec": "a pinger: answer a ping with pong and finish"}'/></send>
+    </onentry>
+    <transition event="done.invoke.builder" cond="typeof _event.data.scxml === 'string' &amp;&amp; _event.data.scxml.indexOf('pinger') &gt;= 0 &amp;&amp; _event.data.report.simulation.every(function (r) { return r.passed; }) &amp;&amp; _event.data.report.attempts === 1 &amp;&amp; _event.data.report.failures === 0 &amp;&amp; _event.data.report.fixes_applied === 1 &amp;&amp; _event.data.scxml.indexOf('ping poke') &gt;= 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

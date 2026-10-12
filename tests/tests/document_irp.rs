@@ -381,37 +381,6 @@ fn every_document_suite_passes() {
     );
 }
 
-/// The documents without a suite yet; a suite added makes this list
-/// shorter, and a document added without one fails here.
-const WITHOUT_SUITE: &[&str] = &[
-    "builder",
-    "floppy",
-    "autonomy",
-    "candidates_runner",
-    "cognition",
-    "communication",
-    "conversation",
-    "identity",
-    "interpretation",
-    "intuition",
-    "listening",
-    "migration",
-    "reading",
-    "reasoning",
-    "reflection",
-    "routines",
-    "routines_runner",
-    "sound_classification",
-    "speaking",
-    "speech_decoding",
-    "turn_detector",
-    "vision",
-    "vocal",
-    "voice_detection",
-    "voice_diarization",
-    "voice_identification",
-];
-
 #[test]
 fn every_document_has_a_suite() {
     let missing: Vec<String> = documents()
@@ -425,9 +394,8 @@ fn every_document_has_a_suite() {
         })
         .map(|(_, name)| name)
         .collect();
-    let expected: Vec<String> = WITHOUT_SUITE
-        .iter()
-        .map(|name| (*name).to_owned())
-        .collect();
-    assert_eq!(missing, expected, "the documents without a suite");
+    assert!(
+        missing.is_empty(),
+        "the documents without a suite: {missing:?}"
+    );
 }

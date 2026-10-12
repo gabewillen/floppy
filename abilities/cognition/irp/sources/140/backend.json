@@ -1,0 +1,14 @@
+{
+  "clock": "logical",
+  "answers": [
+    {
+      "path": "/v1/systemone",
+      "status": 500,
+      "body": {
+        "error": {
+          "message": "boom"
+        }
+      }
+    }
+  ]
+}

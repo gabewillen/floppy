@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- turn_detector-6: a turn with nothing to show fails, and the detector takes the next turn. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="turn_detector" type="scxml" src="../../../turn_detector.scx">
+    <param name="end_of_turn_silence_seconds" expr="60"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.turn_detector.ready" cond='JSON.stringify(_event.data.participant_ref) === "\"bot\"" &amp;&amp; JSON.stringify(_event.data.conversation_ref) === "\"conversation\"" &amp;&amp; Object.keys(_event.data).length === 2' target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.turn_detector.turn.start" target="#_turn_detector"><content expr='{"conversation_ref": "call", "turn_ref": "t1", "content": {"kind": "text", "source_participant_ref": "caller", "content": "   "}}'/></send>
+      <send event="bot.ability.turn_detector.turn.end" target="#_turn_detector"><content expr='{"conversation_ref": "call", "turn_ref": "t1"}'/></send>
+    </onentry>
+    <transition event="bot.ability.turn_detector.failed" cond='JSON.stringify(_event.data.stage) === "\"turn\"" &amp;&amp; JSON.stringify(_event.data.message) === "\"Turn closed with neither text, audio, nor modality-neutral content.\"" &amp;&amp; JSON.stringify(_event.data.participant_ref) === "\"bot\"" &amp;&amp; JSON.stringify(_event.data.conversation_ref) === "\"call\"" &amp;&amp; JSON.stringify(_event.data.turn_ref) === "\"t1\"" &amp;&amp; JSON.stringify(_event.data.source_participant_ref) === "\"caller\""' target="step2"/>
+  </state>
+  <state id="step2">
+    <onentry>
+      <send event="bot.ability.turn_detector.turn.start" target="#_turn_detector"><content expr='{"turn_ref": "t2", "content": {"kind": "text", "source_participant_ref": "caller", "content": "ok"}}'/></send>
+      <send event="bot.ability.turn_detector.turn.end" target="#_turn_detector"><content expr='{"turn_ref": "t2"}'/></send>
+    </onentry>
+    <transition event="bot.ability.turn_detector.turn.complete" cond='JSON.stringify(_event.data.turn_ref) === "\"t2\"" &amp;&amp; JSON.stringify(_event.data.text) === "\"ok\""' target="step3"/>
+  </state>
+  <state id="step3">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

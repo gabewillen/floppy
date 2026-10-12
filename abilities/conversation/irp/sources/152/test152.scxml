@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- conversation-6: an inbound append is not taken: nothing is committed or answered. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="conversation" type="scxml" src="../../../conversation.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'conversation' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"sequence": 0, "direction": "inbound", "source_ids": ["alice"], "target_ids": [], "content": "x", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "i-1"}}}'/></send>
+      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"sequence": 0, "direction": "outbound", "source_ids": ["bot"], "target_ids": ["alice"], "content": "after", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-2"}}}'/></send>
+    </onentry>
+    <transition event="bot.ability.conversation.output" cond="_event.data.messages.length === 1 &amp;&amp; _event.data.messages[0].content === 'after'" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

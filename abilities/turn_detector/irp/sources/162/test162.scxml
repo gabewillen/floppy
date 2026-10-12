@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- turn_detector-7: voiced speech feeds a started turn's audio; the end closes it. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="turn_detector" type="scxml" src="../../../turn_detector.scx">
+    <param name="end_of_turn_silence_seconds" expr="60"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.turn_detector.ready" cond='JSON.stringify(_event.data.participant_ref) === "\"bot\"" &amp;&amp; JSON.stringify(_event.data.conversation_ref) === "\"conversation\"" &amp;&amp; Object.keys(_event.data).length === 2' target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.turn_detector.turn.start" target="#_turn_detector"><content expr='{"turn_ref": "t1", "content": {"kind": "audio", "source_participant_ref": "caller", "content": "media/a.pcm"}}'/></send>
+      <send event="bot.ability.listening.speech.output" target="#_turn_detector"><content expr='{"content": "media/b.pcm", "content_type": "audio/pcm", "voice_detection": {"segments": [{"start_seconds": 0.0, "end_seconds": 0.2, "confidence": 0.9}]}, "sample_rate_hz": 16000, "media_type": "audio/pcm", "channels": 1, "source_ids": []}'/></send>
+      <send event="bot.ability.turn_detector.turn.end" target="#_turn_detector"><content expr='{"turn_ref": "t1"}'/></send>
+    </onentry>
+    <transition event="bot.ability.turn_detector.turn.complete" cond='JSON.stringify(_event.data.turn_ref) === "\"t1\"" &amp;&amp; JSON.stringify(_event.data.audio) === "[\"media/a.pcm\",\"media/b.pcm\"]" &amp;&amp; JSON.stringify(_event.data.sample_rate_hz) === "16000" &amp;&amp; JSON.stringify(_event.data.channels) === "1"' target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

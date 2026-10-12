@@ -1,0 +1,35 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/systemone",
+      "status": 200,
+      "body": {
+        "model": "fake",
+        "answers": {
+          "selection": {
+            "type": "choice",
+            "choice": "bot.focus_device",
+            "confidence": 0.9,
+            "probabilities": {
+              "bot.focus_device": 0.9,
+              "__unhandled__": 0.1
+            }
+          },
+          "bot.focus_device::device": {
+            "type": "choice",
+            "choice": "kitchen",
+            "confidence": 1.0,
+            "probabilities": {
+              "kitchen": 1.0
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 1,
+          "output_tokens": 1
+        }
+      }
+    }
+  ]
+}

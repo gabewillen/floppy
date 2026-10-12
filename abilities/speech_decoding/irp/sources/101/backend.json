@@ -1,0 +1,34 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/interactions",
+      "body": {
+        "steps": [
+          {
+            "type": "user_input",
+            "content": [
+              {
+                "type": "text",
+                "text": "ignored"
+              }
+            ]
+          },
+          {
+            "type": "model_output",
+            "content": [
+              {
+                "type": "text",
+                "text": " hello "
+              },
+              {
+                "type": "text",
+                "text": "there"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

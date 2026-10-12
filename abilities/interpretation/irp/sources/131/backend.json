@@ -1,0 +1,48 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/vad",
+      "status": 200,
+      "body": {
+        "segments": []
+      }
+    },
+    {
+      "path": "/vad",
+      "status": 200,
+      "body": {
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "path": "/vad",
+      "status": 200,
+      "body": {
+        "segments": []
+      }
+    },
+    {
+      "path": "/interactions",
+      "status": 200,
+      "body": {
+        "steps": [
+          {
+            "type": "model_output",
+            "content": [
+              {
+                "type": "text",
+                "text": "hello"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

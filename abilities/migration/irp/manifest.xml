@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<!-- The migration document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/migration/irp/sources">
+  <assert id="migration-1" specnum="1" specid="#migration-1">
+    <![CDATA[It reads the database's revision from Alembic's `alembic_version` (creating the table when the database lacks it; no row is base) and, with no `target` <param>, upgrades to head: it answers its parent `bot.ability.migration.output` `{from, to}`, the revisions before and after (`null` for base).]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+  </assert>
+  <assert id="migration-2" specnum="2" specid="#migration-2">
+    <![CDATA[The `target` <param> is Alembic's: `head`, `base`, a revision, or a relative `+N` / `-N` from the revision read.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+    <test id="112" conformance="mandatory" manual="false">
+      <start uri="112/test112.scxml"/>
+    </test>
+  </assert>
+  <assert id="migration-3" specnum="3" specid="#migration-3">
+    <![CDATA[The planned steps' statements run oldest first, after the version row's guard, in one transaction on the database's engine; a statement the engine refuses answers `bot.ability.failed` `{message}` with the engine's message.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+    <test id="122" conformance="mandatory" manual="false">
+      <start uri="122/test122.scxml"/>
+    </test>
+  </assert>
+  <assert id="migration-4" specnum="4" specid="#migration-4">
+    <![CDATA[At the target already, nothing is applied: it answers `{from, to}` with both the revision read.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+  </assert>
+  <assert id="migration-5" specnum="5" specid="#migration-5">
+    <![CDATA[A target the history does not hold, a relative step past base or head, or revisions that are not one linear history answer `bot.ability.failed` `{message: "Migration could not plan from <current> to <target>"}`.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.scxml"/>
+    </test>
+    <test id="142" conformance="mandatory" manual="false">
+      <start uri="142/test142.scxml"/>
+    </test>
+    <test id="143" conformance="mandatory" manual="false">
+      <start uri="143/test143.scxml"/>
+    </test>
+  </assert>
+  <assert id="migration-6" specnum="6" specid="#migration-6">
+    <![CDATA[A transaction that fails with a lost race's code (`rowcount`, `SQLITE_BUSY`, `23505`, `40001`, `40P01`) is read, planned and applied again once; failing again, it answers `bot.ability.failed` with the engine's message.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+  </assert>
+  <assert id="migration-7" specnum="7" specid="#migration-7">
+    <![CDATA[A database the engine cannot open answers `bot.ability.failed` `{message}`; the database names the engine (a `postgresql://` URI the pgsql service, else the sql service's SQLite file).]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+    <test id="161" conformance="mandatory" manual="false">
+      <start uri="161/test161.scxml"/>
+    </test>
+  </assert>
+  <assert id="migration-8" specnum="8" specid="#migration-8">
+    <![CDATA[After its one answer (`bot.ability.migration.output` or `bot.ability.failed`) the session ends.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+    <test id="171" conformance="mandatory" manual="false">
+      <start uri="171/test171.scxml"/>
+    </test>
+  </assert>
+</assertions>

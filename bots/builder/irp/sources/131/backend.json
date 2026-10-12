@@ -1,0 +1,94 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"name\": \"pinger\", \"summary\": \"Answer a ping with a pong, then finish.\", \"states\": [{\"id\": \"idle\", \"kind\": \"atomic\", \"parent\": \"\", \"purpose\": \"Wait for a ping.\"}, {\"id\": \"done\", \"kind\": \"final\", \"parent\": \"\", \"purpose\": \"Finished.\"}], \"events\": [{\"name\": \"ping\", \"direction\": \"input\", \"description\": \"A ping.\"}, {\"name\": \"pong\", \"direction\": \"output\", \"description\": \"The answer.\"}], \"transitions\": [{\"source\": \"idle\", \"event\": \"ping\", \"target\": \"done\", \"description\": \"Answer and finish.\"}]}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"scxml\": \"<scxml xmlns=\\\"http://www.w3.org/2005/07/scxml\\\" xmlns:event=\\\"https://github.com/stateforward/scxml.rs/namespaces/event\\\" version=\\\"1.0\\\" datamodel=\\\"ecmascript\\\" name=\\\"pinger\\\" initial=\\\"idle\\\">\\n  <state id=\\\"idle\\\">\\n    <transition event=\\\"ping\\\" event:schema='{\\\"type\\\":\\\"object\\\"}' target=\\\"nowhere\\\">\\n      <send target=\\\"#_parent\\\" event=\\\"pong\\\"/>\\n    </transition>\\n  </state>\\n  <final id=\\\"done\\\"/>\\n</scxml>\", \"schemas\": [{\"event\": \"ping\", \"schema\": \"{\\\"type\\\":\\\"object\\\"}\"}], \"tests\": [{\"name\": \"a ping is answered\", \"events\": [{\"name\": \"ping\", \"data\": \"{}\", \"delay_ms\": 0}], \"settle_ms\": 1000, \"expect_events\": [\"pong\"], \"expect_done\": true}]}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"name\": \"pinger\", \"summary\": \"Answer a ping with a pong, then finish.\", \"states\": [{\"id\": \"idle\", \"kind\": \"atomic\", \"parent\": \"\", \"purpose\": \"Wait for a ping.\"}, {\"id\": \"done\", \"kind\": \"final\", \"parent\": \"\", \"purpose\": \"Finished.\"}], \"events\": [{\"name\": \"ping\", \"direction\": \"input\", \"description\": \"A ping.\"}, {\"name\": \"pong\", \"direction\": \"output\", \"description\": \"The answer.\"}], \"transitions\": [{\"source\": \"idle\", \"event\": \"ping\", \"target\": \"done\", \"description\": \"Answer and finish.\"}]}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"scxml\": \"<scxml xmlns=\\\"http://www.w3.org/2005/07/scxml\\\" xmlns:event=\\\"https://github.com/stateforward/scxml.rs/namespaces/event\\\" version=\\\"1.0\\\" datamodel=\\\"ecmascript\\\" name=\\\"pinger\\\" initial=\\\"idle\\\">\\n  <state id=\\\"idle\\\">\\n    <transition event=\\\"ping\\\" event:schema='{\\\"type\\\":\\\"object\\\"}' target=\\\"done\\\">\\n      <send target=\\\"#_parent\\\" event=\\\"pong\\\"/>\\n    </transition>\\n  </state>\\n  <final id=\\\"done\\\"/>\\n</scxml>\", \"schemas\": [{\"event\": \"ping\", \"schema\": \"{\\\"type\\\":\\\"object\\\"}\"}], \"tests\": [{\"name\": \"a ping is answered\", \"events\": [{\"name\": \"ping\", \"data\": \"{}\", \"delay_ms\": 0}], \"settle_ms\": 1000, \"expect_events\": [\"pong\"], \"expect_done\": true}]}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/v1/systemone",
+      "status": 200,
+      "body": {
+        "model": "fake",
+        "answers": {
+          "selection": {
+            "type": "choice",
+            "choice": "triage.redesign",
+            "confidence": 0.9,
+            "probabilities": {
+              "triage.redesign": 0.9
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 1,
+          "output_tokens": 1
+        }
+      }
+    }
+  ]
+}

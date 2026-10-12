@@ -1,0 +1,98 @@
+<?xml version="1.0"?>
+<!-- The interpretation document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/interpretation/irp/sources">
+  <assert id="interpretation-1" specnum="1" specid="#interpretation-1">
+    <![CDATA[On start it sends `bot.ability.offers` `{ability: "interpretation", choices: []}` to its parent: it offers nothing.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+  </assert>
+  <assert id="interpretation-2" specnum="2" specid="#interpretation-2">
+    <![CDATA[Voice identification (`voice_classifier`) with speech decoding (`speech_decoder`) is refused, as the original's constructor refuses it: the interpretation ends in its final state `degraded` without offering.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+  </assert>
+  <assert id="interpretation-3" specnum="3" specid="#interpretation-3">
+    <![CDATA[With the default configuration (voice detection, sound classification, speech decoding), a voiced scored sound opens the open-speech window, each further voiced sound joins it, and the first sound without voice closes it; the utterance is joined into a WAV file, decoded, and answered as `bot.ability.listening.speech.output` `{content: <words>, content_type: "text/plain", voice_detection, sample_rate_hz, channels, media_type: "audio/pcm", source_ids: [], parent}`, its parent the loudest frame's (the first with a level when none is louder).]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+  </assert>
+  <assert id="interpretation-4" specnum="4" specid="#interpretation-4">
+    <![CDATA[A sound without voice is classified: a labelled one (a non-blank kind) is handed to the parent as `bot.ability.cognition.input` `{stimulus}`, the stimulus `{event: "environment.sound", data: <the sound as voice detection normalized it, its PCM written beside it as floppy-sound-<n>.pcm>, source: "listening"}`; an unlabelled one is dropped while speech decoding is configured.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+  </assert>
+  <assert id="interpretation-5" specnum="5" specid="#interpretation-5">
+    <![CDATA[A product is handed off only when audible: its `perceived_level_db` null or at least `product_threshold_db` (3 dB); a quieter one is dropped.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+  </assert>
+  <assert id="interpretation-6" specnum="6" specid="#interpretation-6">
+    <![CDATA[With neither speech decoding nor sound classification, a sound without voice is a silence observation: a speech product of the sound's PCM (`content` its floppy-sound-<n>.pcm, `content_type` `audio/pcm`, no voice spans); a PCM sound with no sample rate is handed off as the `environment.sound` stimulus instead. While the window is open and neither decoding nor diarization owns the product, each frame (the closing one too) is streamed as such a speech product with its voice spans.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+    <test id="151" conformance="mandatory" manual="false">
+      <start uri="151/test151.scxml"/>
+    </test>
+    <test id="152" conformance="mandatory" manual="false">
+      <start uri="152/test152.scxml"/>
+    </test>
+  </assert>
+  <assert id="interpretation-7" specnum="7" specid="#interpretation-7">
+    <![CDATA[With diarization the closed utterance is diarized: one speech product per clipped segment (`content` floppy-diarized-<n>-<index>, its span, `confidence`, a `voice_detection` of its own length, `voice_embedding` null and no source ids), or, with voice identification too, each identified by its embedding (`source_ids` `[embedding]`, `voice_embedding` the embedding); with speech decoding too, the utterance is decoded instead.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+    <test id="161" conformance="mandatory" manual="false">
+      <start uri="161/test161.scxml"/>
+    </test>
+    <test id="162" conformance="mandatory" manual="false">
+      <start uri="162/test162.scxml"/>
+    </test>
+  </assert>
+  <assert id="interpretation-8" specnum="8" specid="#interpretation-8">
+    <![CDATA[Voice identification without diarization identifies the opening voice span directly: its one embedding is the window's source identity, carried by every streamed frame; a sound that is not PCM with a sample rate cannot be identified and fails the `voice_identification` stage.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+    <test id="171" conformance="mandatory" manual="false">
+      <start uri="171/test171.scxml"/>
+    </test>
+  </assert>
+  <assert id="interpretation-9" specnum="9" specid="#interpretation-9">
+    <![CDATA[A stage failure (its child's failure, an error, or its timer) answers `bot.ability.listening.failed` `{stage, message}` and returns to `Idle`, where the next sound is interpreted; decoded speech of a sound with no sample rate fails the `speech_decoding` stage.]]>
+    <test id="180" conformance="mandatory" manual="false">
+      <start uri="180/test180.scxml"/>
+    </test>
+    <test id="181" conformance="mandatory" manual="false">
+      <start uri="181/test181.scxml"/>
+    </test>
+    <test id="182" conformance="mandatory" manual="false">
+      <start uri="182/test182.scxml"/>
+    </test>
+  </assert>
+  <assert id="interpretation-10" specnum="10" specid="#interpretation-10">
+    <![CDATA[Scored sounds that arrive while one is being interpreted are held (`<event:defer/>`) and taken in order.]]>
+    <test id="190" conformance="mandatory" manual="false">
+      <start uri="190/test190.scxml"/>
+    </test>
+  </assert>
+  <assert id="interpretation-11" specnum="11" specid="#interpretation-11">
+    <![CDATA[Each stage is bounded by `stage_timeout_ms` (the original's 30 s): its timer fails it with `{stage, message: "Listening <stage> timed out."}`.]]>
+    <test id="200" conformance="mandatory" manual="false">
+      <start uri="200/test200.scxml"/>
+    </test>
+  </assert>
+</assertions>

@@ -83,6 +83,8 @@
        version="1.0" datamodel="ecmascript" name="communication" initial="communication">
   <datamodel>
     <data id="response_timeout_ms" expr="6000"/>
+    <!-- Speaking's encoding bound, passed to it. -->
+    <data id="encoding_timeout_ms" expr="5000"/>
     <!-- The memory database file, for the conversation (null:
          no memory). -->
     <data id="database" expr="null"/>
@@ -106,7 +108,9 @@
     <invoke id="conversation" type="scxml" src="../conversation/conversation.scx">
       <param name="database" expr="database"/>
     </invoke>
-    <invoke id="speaking" type="scxml" src="../speaking/speaking.scx"/>
+    <invoke id="speaking" type="scxml" src="../speaking/speaking.scx">
+      <param name="encoding_timeout_ms" expr="encoding_timeout_ms"/>
+    </invoke>
 
     <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json">
       <assign location="ready[_event.data.ability]" expr="true"/>

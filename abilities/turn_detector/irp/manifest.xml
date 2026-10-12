@@ -1,0 +1,125 @@
+<?xml version="1.0"?>
+<!-- The turn_detector document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/turn_detector/irp/sources">
+  <assert id="turn_detector-1" specnum="1" specid="#turn_detector-1">
+    <![CDATA[On start it sends `bot.ability.turn_detector.ready` `{participant_ref, conversation_ref}` to its parent: its `<param>`s `participant_ref` (default `"bot"`) and `conversation_ref` (default `"conversation"`). It is long-lived: it never reaches a final state.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+  </assert>
+  <assert id="turn_detector-2" specnum="2" specid="#turn_detector-2">
+    <![CDATA[In `idle`, `bot.ability.turn_detector.turn.start` whose `self_participant_ref` (default `"bot"`) is the detector's `participant_ref` opens the turn (`open`), taking its `turn_ref`, `conversation_ref` (default `"conversation"`) and `source_participant_ref` (default `"caller"`); a start for another participant opens nothing.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+    <test id="112" conformance="mandatory" manual="false">
+      <start uri="112/test112.scxml"/>
+    </test>
+    <test id="113" conformance="mandatory" manual="false">
+      <start uri="113/test113.scxml"/>
+    </test>
+  </assert>
+  <assert id="turn_detector-3" specnum="3" specid="#turn_detector-3">
+    <![CDATA[`bot.ability.turn_detector.turn.end` for the open turn adds its content and closes it: `normalizing` answers the parent with `bot.ability.turn_detector.turn.complete` `{conversation_ref, turn_ref, participant_ref, self_participant_ref, source_participant_ref, text, audio, content, content_type, sample_rate_hz, channels}`, and the detector is `idle` again. Text stimuli are stripped and kept when not empty, joined by spaces; a turn with text has content the text and content_type `text/plain`.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+  </assert>
+  <assert id="turn_detector-4" specnum="4" specid="#turn_detector-4">
+    <![CDATA[`bot.ability.turn_detector.turn.update` and a repeated `start` for the open turn add their content; `bot.ability.turn_detector.turn.pause` moves it to `paused`, from which update and start reopen it and end closes it. An update, pause or end whose `turn_ref`, `conversation_ref` or `source_participant_ref` is not the open turn's is ignored.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+    <test id="132" conformance="mandatory" manual="false">
+      <start uri="132/test132.scxml"/>
+    </test>
+    <test id="133" conformance="mandatory" manual="false">
+      <start uri="133/test133.scxml"/>
+    </test>
+  </assert>
+  <assert id="turn_detector-5" specnum="5" specid="#turn_detector-5">
+    <![CDATA[Audio stimuli are kept in order by reference: the turn's audio and content are the references, content_type `audio/pcm`, and its sample_rate_hz and channels the first chunk's that carries them. Content, image and event stimuli replace the modality-neutral content: a content stimulus's content and content_type, an image's reference with `image/*`, an event as `{event, payload}` (payload default `{}`) with `application/event`; with no text or audio the turn hands that content on.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.scxml"/>
+    </test>
+    <test id="142" conformance="mandatory" manual="false">
+      <start uri="142/test142.scxml"/>
+    </test>
+    <test id="143" conformance="mandatory" manual="false">
+      <start uri="143/test143.scxml"/>
+    </test>
+    <test id="144" conformance="mandatory" manual="false">
+      <start uri="144/test144.scxml"/>
+    </test>
+  </assert>
+  <assert id="turn_detector-6" specnum="6" specid="#turn_detector-6">
+    <![CDATA[A turn closed with neither text, audio nor modality-neutral content, or with both text and audio, answers `bot.ability.turn_detector.failed` `{stage: "turn", message, participant_ref, conversation_ref, turn_ref, source_participant_ref}` instead; the detector is `idle` again and takes the next turn.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+    <test id="151" conformance="mandatory" manual="false">
+      <start uri="151/test151.scxml"/>
+    </test>
+  </assert>
+  <assert id="turn_detector-7" specnum="7" specid="#turn_detector-7">
+    <![CDATA[`bot.ability.listening.speech.output` with voice spans opens a turn in `idle` (its turn_ref the next `turn-<n>`, the detector's conversation_ref, source `caller`) and, in `open` or `paused`, adds the observation's content as an audio chunk while its content_type is `audio/pcm` (decoded words carry no frames), with its sample_rate_hz and channels (default 1); without voice spans it opens nothing in `idle` and moves `open` to `paused`.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+    <test id="161" conformance="mandatory" manual="false">
+      <start uri="161/test161.scxml"/>
+    </test>
+    <test id="162" conformance="mandatory" manual="false">
+      <start uri="162/test162.scxml"/>
+    </test>
+    <test id="163" conformance="mandatory" manual="false">
+      <start uri="163/test163.scxml"/>
+    </test>
+  </assert>
+  <assert id="turn_detector-8" specnum="8" specid="#turn_detector-8">
+    <![CDATA[`open` and `paused` each wait `end_of_turn_silence_seconds` (at least 10 ms) from their entry, re-armed on every re-entry; when it passes, `closing` raises `bot.ability.turn_detector.turn.silence.expired` to itself and the turn is closed and answered as by an end.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+    <test id="171" conformance="mandatory" manual="false">
+      <start uri="171/test171.scxml"/>
+    </test>
+    <test id="172" conformance="mandatory" manual="false">
+      <start uri="172/test172.scxml"/>
+    </test>
+    <test id="173" conformance="mandatory" manual="false">
+      <start uri="173/test173.scxml"/>
+    </test>
+  </assert>
+  <assert id="turn_detector-9" specnum="9" specid="#turn_detector-9">
+    <![CDATA[A started turn's `conversation_ref` becomes the detector's own: a later turn opened by voice takes it.]]>
+    <test id="180" conformance="mandatory" manual="false">
+      <start uri="180/test180.scxml"/>
+    </test>
+  </assert>
+  <assert id="turn_detector-10" specnum="10" specid="#turn_detector-10">
+    <![CDATA[A turn event whose data its schema rejects (e.g. a start with an empty text stimulus, an update with no content) is `error.execution` in its sender and never reaches the detector.]]>
+    <test id="190" conformance="mandatory" manual="false">
+      <start uri="190/test190.scxml"/>
+    </test>
+    <test id="191" conformance="mandatory" manual="false">
+      <start uri="191/test191.scxml"/>
+    </test>
+  </assert>
+</assertions>

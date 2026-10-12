@@ -853,7 +853,7 @@ fn speech_encoding_is_bounded_by_its_timeout() {
         &[
             ("abilities/vocal/speech_double.scx", &[("mode", "'silent'")]),
             (
-                "abilities/speaking/speaking.scx",
+                "abilities/communication/communication.scx",
                 &[("encoding_timeout_ms", "300")],
             ),
         ],

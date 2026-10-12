@@ -1,0 +1,39 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"name\": \"pinger\", \"summary\": \"Answer a ping with a pong, then finish.\", \"states\": [{\"id\": \"idle\", \"kind\": \"atomic\", \"parent\": \"\", \"purpose\": \"Wait for a ping.\"}, {\"id\": \"done\", \"kind\": \"final\", \"parent\": \"\", \"purpose\": \"Finished.\"}], \"events\": [{\"name\": \"ping\", \"direction\": \"input\", \"description\": \"A ping.\"}, {\"name\": \"pong\", \"direction\": \"output\", \"description\": \"The answer.\"}], \"transitions\": [{\"source\": \"idle\", \"event\": \"ping\", \"target\": \"done\", \"description\": \"Answer and finish.\"}]}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"scxml\": \"<scxml xmlns=\\\"http://www.w3.org/2005/07/scxml\\\" version=\\\"1.0\\\" datamodel=\\\"ecmascript\\\" name=\\\"Hourly\\\" initial=\\\"waiting\\\">\\n  <state id=\\\"waiting\\\">\\n    <onentry><send id=\\\"every\\\" event=\\\"hourly.every\\\" delay=\\\"3600s\\\"/></onentry>\\n    <onexit><cancel sendid=\\\"every\\\"/></onexit>\\n    <transition event=\\\"hourly.every\\\" target=\\\"waiting\\\">\\n      <send event=\\\"bot.behavior.tick\\\" target=\\\"#_parent\\\">\\n        <content expr=\\\"({name: 'Hourly', trigger: 'every', scheduled_at: new Date().toISOString(), fired_at: new Date().toISOString(), output: []})\\\"/>\\n      </send>\\n    </transition>\\n  </state>\\n</scxml>\", \"schemas\": [], \"tests\": [{\"name\": \"waits\", \"events\": [], \"settle_ms\": 500, \"expect_events\": [], \"expect_done\": false}]}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

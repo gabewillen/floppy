@@ -1,0 +1,12 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/vad",
+      "status": 500,
+      "body": {
+        "error": "never asked"
+      }
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- autonomy-1: with no memory and no seed, nothing runs. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="autonomy" type="scxml" src="../../../autonomy.scx">
+    <param name="turn" expr="1"/>
+    <param name="input" expr='{"focus": null, "focus_candidates": []}'/>
+    <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "listening"}'/>
+    <param name="choices" expr="[]"/>
+    <param name="database" expr="null"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="done.invoke.autonomy" cond='_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "no-behaviors" &amp;&amp; JSON.stringify(_event.data.candidates) === "[]" &amp;&amp; _event.data.selected === undefined' target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="harness.waited" delay="300ms"/>
+    </onentry>
+    <transition event="harness.waited" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

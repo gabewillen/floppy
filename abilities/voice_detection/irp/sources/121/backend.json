@@ -1,0 +1,16 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/vad",
+      "body": {
+        "segments": [
+          {
+            "start": 1.5,
+            "end": 2.0
+          }
+        ]
+      }
+    }
+  ]
+}

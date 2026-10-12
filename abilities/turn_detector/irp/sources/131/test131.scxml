@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- turn_detector-4: a paused turn takes an update and closes on its end. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="turn_detector" type="scxml" src="../../../turn_detector.scx">
+    <param name="end_of_turn_silence_seconds" expr="60"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.turn_detector.ready" cond='JSON.stringify(_event.data.participant_ref) === "\"bot\"" &amp;&amp; JSON.stringify(_event.data.conversation_ref) === "\"conversation\"" &amp;&amp; Object.keys(_event.data).length === 2' target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.turn_detector.turn.start" target="#_turn_detector"><content expr='{"turn_ref": "t1", "content": {"kind": "text", "source_participant_ref": "caller", "content": "a"}}'/></send>
+      <send event="bot.ability.turn_detector.turn.pause" target="#_turn_detector"><content expr='{"turn_ref": "t1", "duration_seconds": 0.2}'/></send>
+      <send event="bot.ability.turn_detector.turn.update" target="#_turn_detector"><content expr='{"turn_ref": "t1", "content": {"kind": "text", "source_participant_ref": "caller", "content": "b"}}'/></send>
+      <send event="bot.ability.turn_detector.turn.pause" target="#_turn_detector"><content expr='{"turn_ref": "t1"}'/></send>
+      <send event="bot.ability.turn_detector.turn.end" target="#_turn_detector"><content expr='{"turn_ref": "t1", "content": {"kind": "text", "source_participant_ref": "caller", "content": "c"}}'/></send>
+    </onentry>
+    <transition event="bot.ability.turn_detector.turn.complete" cond='JSON.stringify(_event.data.turn_ref) === "\"t1\"" &amp;&amp; JSON.stringify(_event.data.text) === "\"a b c\""' target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

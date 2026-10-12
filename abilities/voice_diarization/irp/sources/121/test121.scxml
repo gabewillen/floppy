@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- voice_diarization-3: an answer with no spans is malformed. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="voice_diarization" type="scxml" src="../../../voice_diarization.scx">
+    <param name="audio" expr="'media/utterance.wav'"/>
+    <param name="media_type" expr="'audio/wav'"/>
+    <param name="output" expr="'media/segment'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="done.invoke.voice_diarization" cond="_event.data.message === &quot;Voice diarization failed: the backend's answer is malformed.&quot; &amp;&amp; Object.keys(_event.data).length === 1" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

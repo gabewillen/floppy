@@ -1,0 +1,23 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/voice/embed",
+      "body": {
+        "embedding": [
+          0.1
+        ],
+        "dim": 1
+      }
+    },
+    {
+      "path": "/v1/voice/embed",
+      "body": {
+        "embedding": [
+          0.2
+        ],
+        "dim": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+<?xml version="1.0"?>
+<!-- The candidates_runner document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/candidates_runner/irp/sources">
+  <assert id="candidates_runner-1" specnum="1" specid="#candidates_runner-1">
+    <![CDATA[It runs the first of its `candidates` <param> (`[{name, source}]`) as the child `candidate` from its source, with the <param>s `turn` and `input`. A candidate that answers by its donedata `{turn, handled: true, selected}` for this turn with at least one selection, all accepted, has its use persisted, and the runner ends with donedata `{tried: [name], handled: true, selected, rejection: null}`, `selected` the candidate's own selections; it sends its parent nothing else.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+  </assert>
+  <assert id="candidates_runner-2" specnum="2" specid="#candidates_runner-2">
+    <![CDATA[The handled candidate's selections are checked before its use is persisted: `<bot:verdict>` drops `bot.ability.cognition.ignore` selections and applies the attention policy with `input.focus` and `input.focus_candidates`, then `<decision:route>` places each remaining one on the target offering it in the `choices` <param>.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+  </assert>
+  <assert id="candidates_runner-3" specnum="3" specid="#candidates_runner-3">
+    <![CDATA[An answer that does not handle this turn (`handled` not `true`, no selections, or another turn) is not handled: with no candidates left, the runner ends with `{tried: [name], handled: false, selected: null, rejection: null}`.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+    <test id="122" conformance="mandatory" manual="false">
+      <start uri="122/test122.scxml"/>
+    </test>
+  </assert>
+  <assert id="candidates_runner-4" specnum="4" specid="#candidates_runner-4">
+    <![CDATA[When its candidate does not handle the turn and candidates are left, the runner invokes itself for the rest (with the same turn, input, choices, database and bounds) and ends with the rest's donedata, its own candidate first in `tried`.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+    <test id="132" conformance="mandatory" manual="false">
+      <start uri="132/test132.scxml"/>
+    </test>
+  </assert>
+  <assert id="candidates_runner-5" specnum="5" specid="#candidates_runner-5">
+    <![CDATA[A candidate that does not answer within `silence_ms` is passed over, and the rest run.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.scxml"/>
+    </test>
+  </assert>
+  <assert id="candidates_runner-6" specnum="6" specid="#candidates_runner-6">
+    <![CDATA[A candidate whose source cannot run has its failure persisted, and the rest run.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+    <test id="151" conformance="mandatory" manual="false">
+      <start uri="151/test151.scxml"/>
+    </test>
+  </assert>
+  <assert id="candidates_runner-7" specnum="7" specid="#candidates_runner-7">
+    <![CDATA[A handled candidate whose selection the verdict or the route rejects has its failure persisted, and the runner ends with `{tried: [name], handled: false, selected: null, rejection}`, the rejection's message; the rest do not run.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+    <test id="161" conformance="mandatory" manual="false">
+      <start uri="161/test161.scxml"/>
+    </test>
+  </assert>
+  <assert id="candidates_runner-8" specnum="8" specid="#candidates_runner-8">
+    <![CDATA[Each persistence is one transaction of the Memory ability on the `database` <param>; one that fails or outlasts `memory_timeout_ms` takes the same effect as one persisted.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+    <test id="171" conformance="mandatory" manual="false">
+      <start uri="171/test171.scxml"/>
+    </test>
+    <test id="172" conformance="mandatory" manual="false">
+      <start uri="172/test172.scxml"/>
+    </test>
+    <test id="173" conformance="mandatory" manual="false">
+      <start uri="173/test173.scxml"/>
+    </test>
+  </assert>
+</assertions>

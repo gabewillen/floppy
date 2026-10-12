@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<!-- The voice_detection document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/voice_detection/irp/sources">
+  <assert id="voice_detection-1" specnum="1" specid="#voice_detection-1">
+    <![CDATA[It normalizes the sound, then detects its voice: a WAV container's signed 16-bit PCM is written to `output` and the sound becomes `{audio: output, media_type: "audio/pcm", sample_rate_hz, channels}` (the container's own format); the speech service's `detect` (`POST {base}/vad`, model `silero-vad` by default) answers `bot.ability.hearing.voice.detection.output` `{segments}`, and the done data (`done.invoke.voice_detection`) is exactly `{sound, voice_detection: {segments}}`, each segment `{start_seconds, end_seconds, confidence}` (the answer's `confidence`, `probability` or `score`, else `null`) in ascending start order, clamped to the clip.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+  </assert>
+  <assert id="voice_detection-2" specnum="2" specid="#voice_detection-2">
+    <![CDATA[Raw, `audio/l16` or unnamed audio with a rate and channels normalizes to `audio/pcm` in place (the same `audio`); any other media type, or a WAV container that cannot be read, leaves the sound unchanged, and the detection still runs on it.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+    <test id="112" conformance="mandatory" manual="false">
+      <start uri="112/test112.scxml"/>
+    </test>
+    <test id="113" conformance="mandatory" manual="false">
+      <start uri="113/test113.scxml"/>
+    </test>
+  </assert>
+  <assert id="voice_detection-3" specnum="3" specid="#voice_detection-3">
+    <![CDATA[A clip with no voice (no spans answered, or only spans outside the clip) is not a failure: its `voice_detection` is `{segments: []}`.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+  </assert>
+  <assert id="voice_detection-4" specnum="4" specid="#voice_detection-4">
+    <![CDATA[When the detection answers `bot.ability.failed` `{message}` (an error status, a malformed answer, audio that cannot be read), the done data is exactly the original's FailureData `{message}`, with no sound.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+    <test id="132" conformance="mandatory" manual="false">
+      <start uri="132/test132.scxml"/>
+    </test>
+  </assert>
+  <assert id="voice_detection-5" specnum="5" specid="#voice_detection-5">
+    <![CDATA[When the normalization fails (`bot.ability.failed`, such as an `output` that cannot be written) it ends with that `{message}` and nothing is detected; when a step cannot run (a missing `output`, or a malformed `model`, rejects its start with `error.execution`), the done data is `{message: "VoiceDetection could not run (<error event>)"}`.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.scxml"/>
+    </test>
+    <test id="142" conformance="mandatory" manual="false">
+      <start uri="142/test142.scxml"/>
+    </test>
+  </assert>
+</assertions>

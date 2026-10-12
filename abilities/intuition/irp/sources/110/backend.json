@@ -1,0 +1,28 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/systemone",
+      "status": 200,
+      "body": {
+        "model": "fake",
+        "answers": {
+          "selection": {
+            "type": "choice",
+            "choice": "bot.say",
+            "confidence": 0.6,
+            "probabilities": {
+              "bot.say": 0.6,
+              "bot.ability.cognition.ignore": 0.38,
+              "__unhandled__": 0.02
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 1,
+          "output_tokens": 1
+        }
+      }
+    }
+  ]
+}

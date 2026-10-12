@@ -1,0 +1,16 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/audio/diarization",
+      "body": {
+        "segments": [
+          {
+            "start": 0.2,
+            "end": 0.6
+          }
+        ]
+      }
+    }
+  ]
+}

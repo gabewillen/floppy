@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- identity-6: a sound whose transcript does not name it produces nothing. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="identity" type="scxml" src="../../../identity.scx">
+    <param name="name" expr='"Floppy"'/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'identity' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.identity.adopt' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.required[0] === 'name' &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.properties.reason.examples === undefined &amp;&amp; typeof _event.data.choices[0].description === 'string'" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="environment.sound" target="#_identity"><content expr='{"audio": "media/hey.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}'/></send>
+      <send event="harness.waited" delay="1s"/>
+    </onentry>
+    <transition event="harness.waited" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

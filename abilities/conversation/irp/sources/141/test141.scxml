@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- conversation-5: each ready source is a participant, ordered by relationship and then identity. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="conversation" type="scxml" src="../../../conversation.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'conversation' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.conversation.input" target="#_conversation"><content expr='{"source_ids": ["zed", "alice"], "target_ids": [], "content": "aside", "content_type": "text/plain"}'/></send>
+    </onentry>
+    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.conversation.output' &amp;&amp; _event.data.stimulus.source === 'conversation' &amp;&amp; _event.data.stimulus.data.messages.length === 1 &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].sequence === 0 &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].direction === 'inbound' &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].content === &quot;aside&quot; &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].content_type === 'text/plain' &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].provenance.turn_ref === &quot;input-1:turn:alice&quot; &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].provenance.session_ref === &quot;relationship-{\&quot;identity_groups\&quot;:[[],[\&quot;alice\&quot;,\&quot;zed\&quot;]]}&quot; &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].provenance.event === &quot;bot.ability.conversation.input&quot; &amp;&amp; _event.data.stimulus.data.parent.event === &quot;bot.ability.conversation.input&quot;" target="step2"/>
+  </state>
+  <state id="step2">
+    <onentry>
+      <send event="bot.ability.conversation.input" target="#_conversation"><content expr='{"source_ids": ["alice"], "target_ids": ["bot"], "content": "to bot", "content_type": "text/plain"}'/></send>
+    </onentry>
+    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.conversation.output' &amp;&amp; _event.data.stimulus.source === 'conversation' &amp;&amp; _event.data.stimulus.data.messages.length === 2 &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].sequence === 1 &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].direction === 'inbound' &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].content === &quot;to bot&quot; &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].content_type === 'text/plain' &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].provenance.turn_ref === &quot;input-2:turn:alice&quot; &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].provenance.session_ref === &quot;relationship-{\&quot;identity_groups\&quot;:[[\&quot;alice\&quot;],[\&quot;bot\&quot;]]}&quot; &amp;&amp; _event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].provenance.event === &quot;bot.ability.conversation.input&quot; &amp;&amp; _event.data.stimulus.data.parent.event === &quot;bot.ability.conversation.input&quot;" target="step3"/>
+  </state>
+  <state id="step3">
+    <onentry>
+      <send event="bot.ability.conversation.snapshot.request" target="#_conversation"><content expr='{"request_ref": "s-1"}'/></send>
+    </onentry>
+    <transition event="bot.ability.conversation.snapshot.output" cond='_event.data.request_ref === "s-1" &amp;&amp; JSON.stringify(_event.data.detector_refs) === "[[\"relationship-{\\\"identity_groups\\\":[[\\\"alice\\\"],[\\\"bot\\\"]]}\",\"alice\"],[\"relationship-{\\\"identity_groups\\\":[[],[\\\"alice\\\",\\\"zed\\\"]]}\",\"alice\"],[\"relationship-{\\\"identity_groups\\\":[[],[\\\"alice\\\",\\\"zed\\\"]]}\",\"zed\"]]"' target="step4"/>
+  </state>
+  <state id="step4">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

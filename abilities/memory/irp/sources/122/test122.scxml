@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- memory-3: a statement whose rowcount is not the one it expects fails the transaction. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="memory" type="scxml" src="../../../memory.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="statements" expr="[{&quot;sql&quot;: &quot;UPDATE bot_memory SET content = 'x' WHERE memory_id = 'nope'&quot;, &quot;rowcount&quot;: 1}]"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.failed" cond="typeof _event.data.message === 'string' &amp;&amp; _event.data.message === &quot;a statement's rowcount is not the one it expects&quot;" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition event="done.invoke.memory" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

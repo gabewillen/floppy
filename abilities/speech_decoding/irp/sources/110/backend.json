@@ -1,0 +1,16 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/interactions",
+      "body": {
+        "steps": [
+          {
+            "type": "model_output",
+            "content": []
+          }
+        ]
+      }
+    }
+  ]
+}

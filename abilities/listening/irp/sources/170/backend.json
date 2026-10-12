@@ -1,0 +1,12 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/vad",
+      "status": 200,
+      "body": {
+        "segments": []
+      }
+    }
+  ]
+}

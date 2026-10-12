@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- migration-5: two revisions following the same one are no linear history. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="migration" type="scxml" src="../../../migration.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="revisions" expr="[{&quot;revision&quot;: &quot;a&quot;, &quot;down_revision&quot;: null, &quot;upgrade&quot;: [{&quot;sql&quot;: &quot;CREATE TABLE t (x TEXT)&quot;}], &quot;downgrade&quot;: [{&quot;sql&quot;: &quot;DROP TABLE t&quot;}]}, {&quot;revision&quot;: &quot;b&quot;, &quot;down_revision&quot;: &quot;a&quot;, &quot;upgrade&quot;: [{&quot;sql&quot;: &quot;INSERT INTO t (x) VALUES ('b')&quot;}], &quot;downgrade&quot;: [{&quot;sql&quot;: &quot;DELETE FROM t&quot;}]}, {&quot;revision&quot;: &quot;b2&quot;, &quot;down_revision&quot;: &quot;a&quot;, &quot;upgrade&quot;: [{&quot;sql&quot;: &quot;INSERT INTO t (x) VALUES ('b')&quot;}], &quot;downgrade&quot;: [{&quot;sql&quot;: &quot;DELETE FROM t&quot;}]}]"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.failed" cond="typeof _event.data.message === 'string' &amp;&amp; _event.data.message === 'Migration could not plan from null to head'" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition event="done.invoke.migration" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

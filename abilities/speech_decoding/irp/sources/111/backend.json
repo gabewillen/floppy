@@ -1,0 +1,11 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/audio/transcriptions",
+      "body": {
+        "text": "   "
+      }
+    }
+  ]
+}

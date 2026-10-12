@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- voice_identification-5: an empty embedding is malformed. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="voice_identification" type="scxml" src="../../../voice_identification.scx">
+    <param name="segments" expr='[{"audio":"media/first.raw","channels":1,"end_seconds":0.5,"media_type":"audio/pcm","sample_rate_hz":8000,"start_seconds":0},{"audio":"media/second.raw","channels":1,"end_seconds":1,"media_type":"audio/pcm","sample_rate_hz":8000,"start_seconds":0.5}]'/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="done.invoke.voice_identification" cond="_event.data.message === &quot;Voice identification failed: the backend's answer is malformed.&quot; &amp;&amp; Object.keys(_event.data).length === 1" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

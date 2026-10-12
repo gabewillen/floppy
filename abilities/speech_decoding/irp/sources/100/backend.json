@@ -1,0 +1,11 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/interactions",
+      "body": {
+        "output_text": "  hello there \n"
+      }
+    }
+  ]
+}

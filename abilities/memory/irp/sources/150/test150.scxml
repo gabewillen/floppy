@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- memory-6: after its output the session ends, and nothing else is sent. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="memory" type="scxml" src="../../../memory.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="statements" expr='[{"sql": "SELECT 1"}]'/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.memory.output" cond="_event.data.results.length === 1 &amp;&amp; _event.data.results[0].rows[0].values[0] === 1" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition event="done.invoke.memory" target="step2"/>
+  </state>
+  <state id="step2">
+    <onentry>
+      <send event="harness.waited" delay="300ms"/>
+    </onentry>
+    <transition event="harness.waited" target="step3"/>
+  </state>
+  <state id="step3">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

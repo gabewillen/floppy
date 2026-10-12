@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<!-- The vocal document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/vocal/irp/sources">
+  <assert id="vocal-1" specnum="1" specid="#vocal-1">
+    <![CDATA[On start, and on every later entry into `idle`, it offers nothing: it sends `bot.ability.offers` `{ability: "vocal", choices: []}` to its parent.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+  </assert>
+  <assert id="vocal-2" specnum="2" specid="#vocal-2">
+    <![CDATA[`bot.ability.vocal.speech.encoding.input` `{text}` in `idle` is encoded by the speech service's `encode` with the `<param>`s `model`, `voice`, `output` and `media_type` (`audio/pcm` by default); with provider `null` (the default) that is the OpenAI-compatible `POST {base}/audio/speech`. The service's answer is sent to the parent as `bot.ability.vocal.speech.encoding.output` `{audio, media_type, sample_rate_hz, channels, duration}` (the audio as the `output` reference; raw PCM is 24 kHz mono, its duration measured from its bytes; a format the service cannot measure has `null`s), and it returns to `idle`.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+  </assert>
+  <assert id="vocal-3" specnum="3" specid="#vocal-3">
+    <![CDATA[The `provider` `<param>` names the original's provider instead: `elevenlabs` is `POST {base}/text-to-speech/{voice}?output_format=…`, `gemini` is `POST {base}/interactions` (its answer's base64 audio part), each answered as above.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+  </assert>
+  <assert id="vocal-4" specnum="4" specid="#vocal-4">
+    <![CDATA[When the service answers `bot.ability.failed` `{message}` (an error status, an empty answer, an `output` that cannot be written), it sends the parent `bot.ability.failed` with the service's message and returns to `idle`.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+    <test id="132" conformance="mandatory" manual="false">
+      <start uri="132/test132.scxml"/>
+    </test>
+  </assert>
+  <assert id="vocal-5" specnum="5" specid="#vocal-5">
+    <![CDATA[When the service cannot run (a missing `voice`, rejecting its start with `error.execution`), it sends the parent `bot.ability.failed` `{message: "The speech service could not run (<error event>)."}` and returns to `idle`.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+  </assert>
+  <assert id="vocal-6" specnum="6" specid="#vocal-6">
+    <![CDATA[An input that arrives while `applying` is dropped: only the input in hand is encoded and answered.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+  </assert>
+  <assert id="vocal-7" specnum="7" specid="#vocal-7">
+    <![CDATA[Each input is a new encoding: after an answer or a failure, the next input in `idle` is encoded again.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+    <test id="161" conformance="mandatory" manual="false">
+      <start uri="161/test161.scxml"/>
+    </test>
+  </assert>
+</assertions>

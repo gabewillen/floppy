@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<!-- The vision document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/vision/irp/sources">
+  <assert id="vision-1" specnum="1" specid="#vision-1">
+    <![CDATA[On start it waits in `Unclassified` and sends nothing; it is long-lived: it never reaches a final state.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+  </assert>
+  <assert id="vision-2" specnum="2" specid="#vision-2">
+    <![CDATA[`bot.ability.vision.classification.input` `{kind: "text", content}` whose text is not blank is classified as text: it answers its parent with `bot.ability.vision.classification.output` `{kind: "text", confidence: 1.0}`.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+  </assert>
+  <assert id="vision-3" specnum="3" specid="#vision-3">
+    <![CDATA[An input `{kind: "image", content}` with a reference (non-empty content) is classified as image: `{kind: "image", confidence: 1.0}`; classifying reads nothing, so the reference need not name a file.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+  </assert>
+  <assert id="vision-4" specnum="4" specid="#vision-4">
+    <![CDATA[Anything else is unreadable: blank text or an image with an empty reference is answered `{kind: "unreadable", confidence: 1.0}`.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+    <test id="132" conformance="mandatory" manual="false">
+      <start uri="132/test132.scxml"/>
+    </test>
+  </assert>
+  <assert id="vision-5" specnum="5" specid="#vision-5">
+    <![CDATA[After answering it is back in `Unclassified`: every input is answered once, in order.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+  </assert>
+  <assert id="vision-6" specnum="6" specid="#vision-6">
+    <![CDATA[An input whose data does not satisfy its schema (`kind` other than text or image, or a missing `content`) is `error.execution` in its sender and is never classified.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+    <test id="151" conformance="mandatory" manual="false">
+      <start uri="151/test151.scxml"/>
+    </test>
+  </assert>
+</assertions>

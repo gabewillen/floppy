@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- floppy-2: an ability ending while activating fails the activation. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="floppy" type="scxml" src="../../../floppy.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.activate" target="#_floppy"><content expr="{}"/></send>
+      <send event="done.invoke.listening" target="#_floppy"><content expr="{}"/></send>
+      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "cognition", "choices": []}'/></send>
+      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "communication", "choices": []}'/></send>
+      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "identity", "choices": []}'/></send>
+      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "listening", "choices": []}'/></send>
+      <send event="bot.input" target="#_floppy"><content expr='{"observation": {"event": "text", "data": "taken"}}'/></send>
+      <send event="bot.ability.failed" target="#_floppy"><content expr='{"turn": 1, "message": "taken"}'/></send>
+      <send event="bot.activate" target="#_floppy"><content expr="{}"/></send>
+      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "cognition", "choices": []}'/></send>
+      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "communication", "choices": []}'/></send>
+      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "identity", "choices": []}'/></send>
+      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "listening", "choices": []}'/></send>
+      <send event="bot.input" target="#_floppy"><content expr='{"observation": {"event": "text", "data": "probe"}}'/></send>
+      <send event="bot.processing.timed_out" target="#_floppy"><content expr='{"turn": 1}'/></send>
+      <send event="bot.processing.cancel.timed_out" target="#_floppy"><content expr='{"turn": 1}'/></send>
+    </onentry>
+    <transition event="done.invoke.floppy" cond='_event.data.reason === "turn 1: the cognition did not acknowledge its cancel"' target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>
