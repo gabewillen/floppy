@@ -140,9 +140,12 @@ expected_imports() {
         # read from the directory the run grants. Like the sql service it
         # keeps exactly the filesystem it imports for the host (linked only
         # under `--dir`); wasi:cli and the 0.2 monotonic clock are denied by
-        # the composed provider (services/sql/wasi-cli-deny.wat).
+        # the composed provider (services/sql/wasi-cli-deny.wat). It reads
+        # the world's 0.3 monotonic clock (the session's logical clock) to
+        # space a streamed call's progress events (decision D101).
         floppy_service_generate)
             printf '%s\n' \
+                'wasi:clocks/monotonic-clock@0.3.0' \
                 'stateforward:scxml/types@0.2.0' \
                 'stateforward:scxml/outbound-http@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0' \

@@ -89,12 +89,22 @@
 //! # Events
 //!
 //! `invoke` (the component's one export, an `async func`) writes exactly one
-//! event to the stream it returns, then resolves its result future with no
-//! data (the invoking session receives `done.invoke.<id>` after the event):
+//! result event to the stream it returns, then resolves its result future
+//! with no data (the invoking session receives `done.invoke.<id>` after the
+//! event):
 //!
 //! * [`RESULT_EVENT`] `{"text": T}` (no schema) or `{"json": V}` (with a
 //!   schema; `V` satisfies it).
 //! * [`FAILED_EVENT`] `{"code": C}` with one closed [`FailureCode`].
+//!
+//! A streamed call (`stream`) first returns [`PROGRESS_EVENT`]
+//! `{"received": N}` (the reply's bytes received so far) while its reply
+//! arrives: when a read brings new `data:` events ([`data_lines`]; a
+//! gateway's keep-alive comments are not progress), for the first such read
+//! and then at most once a second of the session's logical clock
+//! ([`progress_due`], decision D101), so an
+//! invoking document can bound the call by inactivity (a `<send delay>`
+//! re-armed on each progress event) rather than by its whole duration.
 //!
 //! The invoking document describes both with `event:schema` on the
 //! transitions that take them (`bots/builder/builder.scxml`). The service
@@ -116,9 +126,10 @@
 //!  "response_format":{"json_schema":{"name":"result","schema":{…},"strict":false},"type":"json_schema"}}
 //! ```
 //!
-//! The request never blocks the session: `outbound-http.fetch` is an
-//! `async func`, so awaiting it suspends only the invocation's own task
-//! while the session keeps running. Leaving the invoking state cancels the
+//! The request never blocks the session: `outbound-http.fetch` (and, for a
+//! streamed call, `outbound-http.send`, whose body arrives as the backend
+//! writes it) is an `async func`, so awaiting it suspends only the
+//! invocation's own task while the session keeps running. Leaving the invoking state cancels the
 //! invocation (SCXML 6.4): the host drops it and closes the request's
 //! connection at once.
 //!
@@ -229,6 +240,14 @@ pub const MAX_SCHEMA_NAME_BYTES: usize = 64;
 pub const RESULT_EVENT: &str = "generate.result";
 /// The event that reports a failed generation.
 pub const FAILED_EVENT: &str = "generate.failed";
+/// The event a streamed generation returns while its reply arrives.
+pub const PROGRESS_EVENT: &str = "generate.progress";
+/// The least logical time between two [`PROGRESS_EVENT`]s, in nanoseconds
+/// (one second): the invoking documents' inactivity bounds are tens of
+/// seconds, so a second's resolution loses nothing, and a reply that streams
+/// a token at a time returns at most one event a second instead of one per
+/// read.
+pub const PROGRESS_INTERVAL_NS: u64 = 1_000_000_000;
 
 /// Upper bound on the conversation's bytes, the system message included
 /// (wasm builds only). Its JSON encoding stays inside the host's request-body
@@ -458,6 +477,49 @@ impl Returned {
             name: FAILED_EVENT,
             data: canonical_json(&serde_json::json!({ "code": code.name() })),
         }
+    }
+
+    /// [`PROGRESS_EVENT`] with the reply's bytes received so far.
+    #[must_use]
+    pub fn progress(received: usize) -> Self {
+        Self {
+            name: PROGRESS_EVENT,
+            data: canonical_json(&serde_json::json!({ "received": received })),
+        }
+    }
+}
+
+/// The server-sent events of a streamed reply's body that carry data, in
+/// its complete lines from byte `from` on: their count and where the next
+/// incomplete line starts. Comments (`: ping`, a gateway's keep-alive) and
+/// blank lines are not progress: a backend that only keeps its connection
+/// alive while the model says nothing is not answering.
+#[must_use]
+pub fn data_lines(body: &[u8], from: usize) -> (usize, usize) {
+    let mut count = 0;
+    let mut start = from;
+    for (offset, byte) in body.iter().enumerate().skip(from) {
+        if *byte == b'\n' {
+            if body
+                .get(start..offset)
+                .is_some_and(|line| line.starts_with(b"data:"))
+            {
+                count += 1;
+            }
+            start = offset + 1;
+        }
+    }
+    (count, start)
+}
+
+/// Whether a read at the logical time `now` (nanoseconds) returns a
+/// [`PROGRESS_EVENT`]: the first read does, and then one at most every
+/// [`PROGRESS_INTERVAL_NS`] after the last one returned.
+#[must_use]
+pub const fn progress_due(last: Option<u64>, now: u64) -> bool {
+    match last {
+        None => true,
+        Some(last) => now.saturating_sub(last) >= PROGRESS_INTERVAL_NS,
     }
 }
 
@@ -1235,6 +1297,7 @@ mod guest {
     };
 
     use super::{Generation, ImageReadFailure, Part, Response, Returned, TransportFailure};
+    use wasi::clocks::monotonic_clock;
 
     /// The invocation's result: `ok` (no done data), or its error.
     type Done = Result<Option<DataValue>, ComponentError>;
@@ -1401,16 +1464,21 @@ mod guest {
                     Plan::Return(reply) => reply,
                     // Suspends only this task, never the invoking session.
                     Plan::Fetch(generation, http) => {
-                        let answered = outbound_http::fetch(http)
-                            .await
-                            .map(|response| Response {
-                                status: response.status,
-                                body: response.body,
-                            })
-                            .map_err(|failure| match failure.code {
-                                ErrorCode::PayloadTooLarge => TransportFailure::TooLarge,
-                                _ => TransportFailure::Unavailable,
-                            });
+                        let answered = if generation.stream {
+                            match receive(http, &mut returned).await {
+                                Some(answered) => answered,
+                                // The invoking session stopped reading.
+                                None => return,
+                            }
+                        } else {
+                            outbound_http::fetch(http)
+                                .await
+                                .map(|response| Response {
+                                    status: response.status,
+                                    body: response.body,
+                                })
+                                .map_err(|failure| transport_failure(&failure))
+                        };
                         super::outcome(&generation, answered)
                     }
                 };
@@ -1433,6 +1501,69 @@ mod guest {
             });
             Ok((returned_reader, done_reader))
         }
+    }
+
+    /// Bytes of one read of a streamed reply's body.
+    const READ_BYTES: usize = 64 * 1024;
+
+    /// What a transport failure is for the reply.
+    fn transport_failure(failure: &ComponentError) -> TransportFailure {
+        match failure.code {
+            ErrorCode::PayloadTooLarge => TransportFailure::TooLarge,
+            _ => TransportFailure::Unavailable,
+        }
+    }
+
+    /// Sends a streamed request (`outbound-http.send`) and reads its reply
+    /// as it arrives, returning [`super::PROGRESS_EVENT`] on `returned` when
+    /// new data events arrived ([`super::data_lines`]) as
+    /// [`super::progress_due`] says; the whole reply once its body ended, or
+    /// `None` when the invoking session stopped reading `returned`.
+    async fn receive(
+        http: HttpRequest,
+        returned: &mut wit_bindgen::StreamWriter<Event>,
+    ) -> Option<Result<Response, TransportFailure>> {
+        let (status, mut body, end) = match outbound_http::send(http).await {
+            Ok(opened) => opened,
+            Err(failure) => return Some(Err(transport_failure(&failure))),
+        };
+        let mut bytes = Vec::new();
+        let mut last = None;
+        let mut scanned = 0;
+        let mut events = 0;
+        let mut reported = 0;
+        loop {
+            let (result, read) = body.read(Vec::with_capacity(READ_BYTES)).await;
+            if !read.is_empty() {
+                bytes.extend_from_slice(&read);
+                let (more, next) = super::data_lines(&bytes, scanned);
+                events += more;
+                scanned = next;
+                let now = monotonic_clock::now();
+                if events > reported && super::progress_due(last, now) {
+                    reported = events;
+                    last = Some(now);
+                    if returned
+                        .write_one(event(&Returned::progress(bytes.len())))
+                        .await
+                        .is_some()
+                    {
+                        return None;
+                    }
+                }
+            }
+            if !matches!(result, wit_bindgen::StreamResult::Complete(_)) {
+                break;
+            }
+        }
+        drop(body);
+        Some(match end.await {
+            Ok(()) => Ok(Response {
+                status,
+                body: bytes,
+            }),
+            Err(failure) => Err(transport_failure(&failure)),
+        })
     }
 
     /// One call's closed telemetry: its outcome and one event (no attribute

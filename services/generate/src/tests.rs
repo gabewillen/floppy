@@ -803,3 +803,32 @@ fn the_package_manifest_binds_the_exact_uri_and_artifacts() {
     );
     assert_eq!(manifest.env_slots, [API_KEY_SLOT, BASE_URL_SLOT]);
 }
+
+#[test]
+fn a_streamed_reply_reports_progress_at_most_once_a_second() {
+    assert!(super::progress_due(None, 0), "the first read reports");
+    assert!(!super::progress_due(
+        Some(0),
+        super::PROGRESS_INTERVAL_NS - 1
+    ));
+    assert!(super::progress_due(Some(0), super::PROGRESS_INTERVAL_NS));
+    assert!(
+        !super::progress_due(Some(5), 3),
+        "a clock behind the last report"
+    );
+    let progress = super::Returned::progress(42);
+    assert_eq!(progress.name, super::PROGRESS_EVENT);
+    assert_eq!(progress.data, r#"{"received":42}"#);
+}
+
+#[test]
+fn only_data_events_count_as_a_streamed_reply_s_progress() {
+    let body = b": ping\n\n: ping\n\ndata: {\"a\":1}\n\nda";
+    let (count, next) = super::data_lines(body, 0);
+    assert_eq!(count, 1, "the comments are not progress");
+    assert_eq!(&body[next..], b"da", "the incomplete line waits");
+    let mut more = body.to_vec();
+    more.extend_from_slice(b"ta: [DONE]\n\n");
+    assert_eq!(super::data_lines(&more, next), (1, more.len()));
+    assert_eq!(super::data_lines(b": ping\n\n", 0), (0, 8));
+}
