@@ -36,7 +36,8 @@
   bot.ability.speaking.input {text} to the speaking child
   (dispatching_response), and waits in responding, bounded by the hop
   timer bot.ability.communication.response.hop.timed_out
-  (response_timeout_ms, the original's 6 s; the transition takes only the timer
+  (response_timeout_ms, 36 s: speaking's 30 s encoding bound plus the
+  original's 6 s, decision D96; the transition takes only the timer
   of the response in hand, _event.sendid). Speaking's output goes on to the
   body as bot.ability.speaking.output. A speaking failure
   (bot.ability.failed) or the hop timeout answers the body with
@@ -82,9 +83,9 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="communication" initial="communication">
   <datamodel>
-    <data id="response_timeout_ms" expr="6000"/>
-    <!-- Speaking's encoding bound, passed to it. -->
-    <data id="encoding_timeout_ms" expr="5000"/>
+    <data id="response_timeout_ms" expr="36000"/>
+    <!-- Speaking's encoding bound, passed to it (decision D96). -->
+    <data id="encoding_timeout_ms" expr="30000"/>
     <!-- The memory database file, for the conversation (null:
          no memory). -->
     <data id="database" expr="null"/>

@@ -46,7 +46,13 @@ SQLite, reflection with the builder, routines, speaking on Gemini):
    "Your favorite color is green."
 
 Each turn the listening heard the bot's own speech and failed at voice
-detection (no LocalAI), as on 2026-10-11. Reflection's recalled episode
+detection (no LocalAI), as on 2026-10-11. Decision D96 (after this run,
+not rerun live) fixes two of these: speaking's encoding bound is 30 s
+(floppy's side of an utterance measured 0.06 to 0.17 s against a fake
+backend, so the 5 s went to Gemini's unstreamed synthesis), and the bot's own sound now names its source,
+so its product is withheld instead of scored as an outside sound. Voice
+detection still runs on it and fails without a voice backend, by design.
+Reflection's recalled episode
 count grew by two per turn (1, 3, 5, 7), since reasoning and reflection
 both insert a `cognitive_episode` row.
 

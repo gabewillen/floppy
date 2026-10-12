@@ -33,7 +33,7 @@ def efference(duration="0.1"):
 
 def sound(n, media="pcm", media_type="audio/pcm"):
     return expect(SOUND, f"_event.data.audio === 'media/speaking-{n}.{media}' && _event.data.media_type === '{media_type}'"
-                  " && _event.data.sample_rate_hz === 24000 && _event.data.channels === 1")
+                  " && _event.data.sample_rate_hz === 24000 && _event.data.channels === 1 && _event.data.source === 'speaking'")
 
 
 def appended(text, n):
@@ -55,11 +55,11 @@ def spoken(text, n):
 
 S.statement(1, "Every entry into `idle` (its start, and the end of each utterance, spoken or failed) sends `bot.ability.offers` `{ability: \"speaking\", choices: []}` to its parent: it offers nothing.")
 S.statement(2, "`bot.ability.speaking.input` `{text}` is encoded by the vocal child with the speaking's `provider`, `model`, `voice` and `media_type` (by default the original's gemini encoder, `audio/pcm`), written to `output_prefix` + the utterance's number + `.` + the media subtype (`media/speaking-<n>.pcm`), the text stripped first.")
-S.statement(3, "`playing` sends the efference copy `bot.ability.speaking.efference` `{mouth: \"speaking\", duration, media_type, sample_rate_hz, channels}` before the sound, `environment.sound` `{audio, media_type, sample_rate_hz, channels}`, to its parent; with no measured duration no copy is sent, and a rate or channel count the encoder leaves null is the speaking's own (24000 Hz mono).")
+S.statement(3, "`playing` sends the efference copy `bot.ability.speaking.efference` `{mouth: \"speaking\", duration, media_type, sample_rate_hz, channels}` before the sound, `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: \"speaking\"}` (its source the copy's mouth, so the listening can tell its own voice apart), to its parent; with no measured duration no copy is sent, and a rate or channel count the encoder leaves null is the speaking's own (24000 Hz mono).")
 S.statement(4, "`recording` sends `bot.ability.conversation.append` `{message}` to its parent, the outbound message `<conversation:commit>` builds (content the text, content_type `text/plain`, sequence 0, provenance id `speaking-<n>` and event `bot.ability.conversation.append`), then answers `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}` and returns to `idle`.")
 S.statement(5, "A blank text (after stripping) is refused before any encoding: `bot.ability.failed` `{message: \"Speaking requires non-blank text.\"}`, and back to `idle`; an empty text never arrives: the input's schema refuses it at the send, raising `error.execution` in the sender.")
 S.statement(6, "A vocal failure (its `bot.ability.failed`) answers the parent with `bot.ability.failed` `{message}` carrying the vocal's message, and back to `idle`, where the next input is spoken.")
-S.statement(7, "Encoding is bounded by `encoding_timeout_ms` (the original's 5 s): its timer answers `bot.ability.failed` `{message: \"Speech encoding timed out.\"}` and returns to `idle`.")
+S.statement(7, "Encoding is bounded by `encoding_timeout_ms` (30 s by default, decision D96; the original's 5 s is shorter than Gemini's unstreamed synthesis of a sentence): its timer answers `bot.ability.failed` `{message: \"Speech encoding timed out.\"}` and returns to `idle`.")
 S.statement(8, "Input that arrives outside `idle` is held (`<event:defer/>`) and taken, in order, on the return to `idle`.")
 
 S.case(100, 1, "the speaking offers nothing on start.", [READY])

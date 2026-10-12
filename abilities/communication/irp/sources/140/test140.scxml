@@ -20,7 +20,7 @@
     <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0.1 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step2"/>
   </state>
   <state id="step2">
-    <transition event="environment.sound" cond="_event.data.audio === &quot;media/speaking-1.pcm&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step3"/>
+    <transition event="environment.sound" cond="_event.data.audio === &quot;media/speaking-1.pcm&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step3"/>
   </state>
   <state id="step3">
     <transition event="bot.ability.speaking.output" cond="_event.data.text === &quot;Hi! I am floppy.&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step4"/>

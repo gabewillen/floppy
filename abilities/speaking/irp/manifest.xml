@@ -21,7 +21,7 @@
     </test>
   </assert>
   <assert id="speaking-3" specnum="3" specid="#speaking-3">
-    <![CDATA[`playing` sends the efference copy `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}` before the sound, `environment.sound` `{audio, media_type, sample_rate_hz, channels}`, to its parent; with no measured duration no copy is sent, and a rate or channel count the encoder leaves null is the speaking's own (24000 Hz mono).]]>
+    <![CDATA[`playing` sends the efference copy `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}` before the sound, `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: "speaking"}` (its source the copy's mouth, so the listening can tell its own voice apart), to its parent; with no measured duration no copy is sent, and a rate or channel count the encoder leaves null is the speaking's own (24000 Hz mono).]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
@@ -57,7 +57,7 @@
     </test>
   </assert>
   <assert id="speaking-7" specnum="7" specid="#speaking-7">
-    <![CDATA[Encoding is bounded by `encoding_timeout_ms` (the original's 5 s): its timer answers `bot.ability.failed` `{message: "Speech encoding timed out."}` and returns to `idle`.]]>
+    <![CDATA[Encoding is bounded by `encoding_timeout_ms` (30 s by default, decision D96; the original's 5 s is shorter than Gemini's unstreamed synthesis of a sentence): its timer answers `bot.ability.failed` `{message: "Speech encoding timed out."}` and returns to `idle`.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>

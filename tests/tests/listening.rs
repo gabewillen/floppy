@@ -452,9 +452,9 @@ fn the_efference_copy_opens_a_window_that_closes_itself() {
             ("silence.wav", silent_wav()),
         ],
     );
-    // While the mouth produces, an arrival that is not off it (the
-    // listening's stimulus names no source) is scored as unproduced: all of
-    // it survives.
+    // While the mouth produces, an arrival that is not off it (the sound
+    // names no source, so its stimulus names none) is scored as unproduced:
+    // all of it survives.
     run.event(
         "bot.ability.speaking.efference",
         &json!({"mouth": "mouth-1", "duration": 0.2}),
@@ -478,6 +478,51 @@ fn the_efference_copy_opens_a_window_that_closes_itself() {
     assert_eq!(
         json_texts(&finished.all, "harness.speech"),
         vec![speech("cut in", &cut_in), speech("after", &after)]
+    );
+    assert!(texts(&finished.all, "harness.failed").is_empty());
+}
+
+/// The bot's own speech, as speaking emits it (its source the mouth its
+/// efference copy names, no levels to compare), is scored against the
+/// prediction while the copy's window is open: it is still interpreted
+/// (the original runs the pipeline on its own voice), but fully predicted,
+/// its product is withheld. A sound from no source arriving in the same
+/// window is still heard.
+#[test]
+fn the_bots_own_speech_is_scored_as_the_mouths_and_withheld() {
+    let harness = layout(&[]);
+    let (mut run, backend) = started(
+        &harness,
+        "the_bots_own_speech_is_scored_as_the_mouths_and_withheld",
+        &[
+            ("own.wav", spoken_wav("own voice")),
+            ("cut-in.wav", spoken_wav("cut in")),
+            ("silence.wav", silent_wav()),
+        ],
+    );
+    run.event(
+        "bot.ability.speaking.efference",
+        &json!({"mouth": "speaking", "duration": 60}),
+    );
+    let own = sound("own.wav", &json!({"source": "speaking"}));
+    let own_silence = sound("silence.wav", &json!({"source": "speaking"}));
+    utter(&mut run, &own, &own_silence);
+    let cut_in = sound("cut-in.wav", &json!({}));
+    utter(&mut run, &cut_in, &sound("silence.wav", &json!({})));
+    run.until(WAIT, |record| {
+        label_is("harness.speech")(record)
+            && record["text"]
+                .as_str()
+                .is_some_and(|t| t.contains("cut in"))
+    });
+    let finished = close(
+        run,
+        "the_bots_own_speech_is_scored_as_the_mouths_and_withheld",
+    );
+    assert_eq!(backend.decoded(), vec!["own voice", "cut in"]);
+    assert_eq!(
+        json_texts(&finished.all, "harness.speech"),
+        vec![speech("cut in", &cut_in)]
     );
     assert!(texts(&finished.all, "harness.failed").is_empty());
 }

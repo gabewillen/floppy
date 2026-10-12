@@ -20,7 +20,8 @@
 
   Sensing: environment.sound {audio, ...} from the body goes to the
   sensitivity as bot.ability.listening.sensitivity.score {stimulus} (the
-  sound's envelope {event, data}), bounded by the original's 30 s stage
+  sound's envelope {event, data, source}: source is the sound's own, the
+  transducer it came off, and absent when it names none), bounded by the original's 30 s stage
   operation timeout (sensitivity_timeout_ms): the sensitivity's
   bot.ability.listening.sensitivity.output goes on to the interpretation
   and Sensing returns to Listening; the timer,
@@ -46,7 +47,13 @@
   modulates perception, it does not interrupt it. The body sends it here
   (its listening_abilities list, the original's Speaking listening peers) just
   before the bot's own speech comes back as environment.sound, so the bot
-  can tell its own voice apart.
+  can tell its own voice apart: while the copy's window is open the
+  sensitivity scores a sound whose source is the copy's mouth against the
+  prediction (fully predicted its level is 0, below the interpretation's
+  threshold, so its product is withheld), and any other sound at its
+  received level. The interpretation still runs on the bot's own voice
+  (the original: the one comparison is made at the end of the pipeline),
+  so a voice detection backend the run does not configure fails it there.
 
   Readiness: the entry into Perceiving sends bot.ability.offers {ability:
   "listening", choices: []} to the body; it offers nothing (the original: the
