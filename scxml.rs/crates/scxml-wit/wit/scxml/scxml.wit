@@ -1702,8 +1702,8 @@ interface executable-content-extension-api {
 /// `unavailable`. A granting host sends only to the targets its embedder
 /// allowlists, follows no redirect (a redirect status is returned as the
 /// response), and adds no ambient credentials, cookies, or proxy. `fetch`
-/// is asynchronous: a call suspends only the calling task (the invoking
-/// session and the service's other tasks go on). The granting host bounds
+/// and `send` are asynchronous: a call suspends only the calling task (the
+/// invoking session and the service's other tasks go on). The granting host bounds
 /// its connect and total time, and closes the connection of a request when
 /// the invocation is cancelled. The URL, headers, and bodies are component
 /// payload: hosts never put them into telemetry. The capability works only
@@ -1764,6 +1764,21 @@ interface outbound-http {
   /// or the call is made outside an invocation;
   /// `payload-too-large` when the response body exceeds its bound.
   fetch: async func(request: http-request) -> result<http-response, component-error>;
+  /// Performs one request and streams its response, as `wasi:http`'s
+  /// `client.send` does: `ok` once the final status (100..=599) has arrived,
+  /// with the body as the host receives it and a future that resolves when
+  /// the body has ended: `ok` after its last byte, `err` with `unavailable`
+  /// when the transport failed or `payload-too-large` when the body passed
+  /// its bound (16777216 bytes in all, as `fetch`'s). The body's parts reach
+  /// the service as inputs of its invocation, in order, each at the session's
+  /// logical time it arrived (a live session records each one), so a
+  /// service can report progress while a long response is still arriving.
+  /// The request is admitted and bounded exactly as `fetch`'s, it counts
+  /// against the requests in flight until its body has ended, and the call's
+  /// own errors are `fetch`'s. A body the service stops reading is still
+  /// received, within its bound, until it ends or the invocation is
+  /// cancelled.
+  send: async func(request: http-request) -> result<tuple<u16, stream<u8>, future<result<_, component-error>>>, component-error>;
 }
 
 /// Resolves repository packages for the CLI: an extension namespace URI or

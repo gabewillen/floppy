@@ -1992,16 +1992,16 @@ impl RunEngine {
                 continue;
             };
             let request = item.request;
-            let outcome = item.outcome.clone();
+            let answer = item.answer.clone();
             let mut answered = false;
             self.sessions.with_invoked_sessions(
                 self.scheduler.invoked_sessions_mut(),
                 |sessions| {
                     sessions.service_input(
                         key,
-                        scxml_telemetry::Operation::HostWasmtimeServiceHttpFetch,
+                        answer_operation(&item.answer),
                         |service, now, requests| {
-                            let step = service.respond(request, item.outcome, now, requests);
+                            let step = service.respond(request, item.answer, now, requests);
                             answered = step.is_some();
                             step
                         },
@@ -2012,14 +2012,14 @@ impl RunEngine {
                 delivered.push(super::RecordedResponse {
                     path,
                     request,
-                    outcome,
+                    answer,
                 });
             }
         }
         Ok(delivered)
     }
 
-    /// Delivers one recorded response to the invoked service at `path` (a
+    /// Delivers one recorded answer to the invoked service at `path` (a
     /// replay); `false` when no live invocation of that lineage waits for
     /// that request.
     ///
@@ -2040,19 +2040,15 @@ impl RunEngine {
             return Ok(false);
         };
         let mut answered = false;
-        let outcome = response.outcome.clone();
+        let answer = response.answer.clone();
         let request = response.request;
         self.sessions
             .with_invoked_sessions(self.scheduler.invoked_sessions_mut(), |sessions| {
-                sessions.service_input(
-                    key,
-                    scxml_telemetry::Operation::HostWasmtimeServiceHttpFetch,
-                    |service, now, requests| {
-                        let step = service.respond(request, outcome, now, requests);
-                        answered = step.is_some();
-                        step
-                    },
-                )
+                sessions.service_input(key, answer_operation(&answer), |service, now, requests| {
+                    let step = service.respond(request, answer, now, requests);
+                    answered = step.is_some();
+                    step
+                })
             })?;
         Ok(answered)
     }
@@ -2290,4 +2286,17 @@ pub(crate) fn fatal(shared: &RunShared, failure: RunFailure) -> ComponentError {
     };
     shared.fault(failure);
     crate::component::component_error(code, "session host failure")
+}
+
+/// The operation that delivers `answer`: a `fetch`'s response, or a part of
+/// a `send`'s.
+const fn answer_operation(answer: &crate::ExtensionHttpAnswer) -> scxml_telemetry::Operation {
+    match answer {
+        crate::ExtensionHttpAnswer::Response(_) => {
+            scxml_telemetry::Operation::HostWasmtimeServiceHttpFetch
+        }
+        crate::ExtensionHttpAnswer::Part(_) => {
+            scxml_telemetry::Operation::HostWasmtimeServiceHttpSend
+        }
+    }
 }

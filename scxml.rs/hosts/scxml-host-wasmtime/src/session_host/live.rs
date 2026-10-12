@@ -333,6 +333,22 @@ pub enum InputRecord {
         /// The response, or the transport's failure.
         response: Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure>,
     },
+    /// [`LiveSession::deliver_http_responses`] of one part of the streamed
+    /// response to one request an invoked service made
+    /// (`outbound-http.send`), delivered at `at_ms`: its status, its next
+    /// body bytes (those that arrived since the last delivery, joined), or
+    /// its end. A replay delivers it from the record instead of the network.
+    HttpResponsePart {
+        /// The logical time.
+        at_ms: u64,
+        /// The invoke ids from the root to the invoked service: its
+        /// lineage, as [`InputRecord::HttpResponse`]'s.
+        path: Vec<String>,
+        /// The request's number within its invocation.
+        request: u64,
+        /// The part, or the transport's failure, which ends the response.
+        part: Result<crate::ExtensionHttpPart, crate::ExtensionHttpFailure>,
+    },
 }
 
 /// What [`LiveSession::apply`] produced.
@@ -1015,7 +1031,22 @@ impl LiveSession {
                     &super::RecordedResponse {
                         path: path.clone(),
                         request: *request,
-                        outcome: response.clone(),
+                        answer: crate::ExtensionHttpAnswer::Response(response.clone()),
+                    },
+                )
+                .map(Applied::Call),
+            InputRecord::HttpResponsePart {
+                at_ms,
+                path,
+                request,
+                part,
+            } => self
+                .replay_http_response(
+                    *at_ms,
+                    &super::RecordedResponse {
+                        path: path.clone(),
+                        request: *request,
+                        answer: crate::ExtensionHttpAnswer::Part(part.clone()),
                     },
                 )
                 .map(Applied::Call),
@@ -1303,64 +1334,70 @@ impl LiveSession {
         )
     }
 
-    /// Delivers every HTTP response of an invoked service's request that
-    /// arrived since the last call (`outbound-http.fetch`, see
-    /// [`LiveHttp::on_http_response`]), each as one external input: at the
-    /// session's current time (a timed session's clock first, firing what it
-    /// reached), the response reaches the invocation that waits for it,
-    /// whose event loop then runs until it waits again, and every session
-    /// runs to a stable configuration. A response of an invocation that was
-    /// cancelled or ended meanwhile is dropped. A recording session records
-    /// each delivered response ([`InputRecord::HttpResponse`]). Returns the
-    /// last delivery's call result, or `None` when nothing had arrived.
+    /// Delivers the earliest answer to an invoked service's request that
+    /// arrived and is not yet delivered (a `fetch`'s response, or one part
+    /// of a `send`'s; see [`LiveHttp::on_http_response`]) as one external
+    /// input: at the session's current time (a timed session's clock first,
+    /// firing what it reached), the answer reaches the invocation that waits
+    /// for it, whose event loop then runs until it waits again, and every
+    /// session runs to a stable configuration. An answer of an invocation
+    /// that was cancelled or ended meanwhile is dropped. A recording session
+    /// records the delivered answer ([`InputRecord::HttpResponse`],
+    /// [`InputRecord::HttpResponsePart`]), so each delivery is one call of
+    /// the record and of its replay. Returns the delivery's call result, or
+    /// `None` when nothing waits for delivery; the embedder calls again
+    /// while it returns one.
     ///
     /// # Errors
     ///
     /// As [`Self::send`], failing the session.
     pub fn deliver_http_responses(&mut self) -> Result<Option<LiveCallResult>, SessionHostError> {
         self.require_open()?;
-        let settled = self
+        if self.status != LiveStatus::Running {
+            return Ok(None);
+        }
+        let Some(item) = self
             .engine
             .shared()
             .http
             .http_responses
             .as_ref()
-            .map(|responses| responses.take())
-            .unwrap_or_default();
-        if settled.is_empty() || self.status != LiveStatus::Running {
+            .and_then(|responses| responses.take_first())
+        else {
             return Ok(None);
-        }
+        };
         let at_ms = self.time()?;
-        let mut last = None;
-        for item in settled {
-            if self.status != LiveStatus::Running {
-                break;
-            }
-            let mut delivered = Vec::new();
-            let step = self.step(
-                Some(Operation::HostWasmtimeSessionHttpResponse),
-                at_ms,
-                |engine| {
-                    if engine.drain(Horizon::Until(at_ms), &mut no_hook())? == DrainStop::Finished {
-                        return Ok(Ok(()));
-                    }
-                    engine.advance_clock_to(at_ms)?;
-                    delivered = engine.deliver_http_responses(vec![item])?;
-                    engine.drain(Horizon::Until(at_ms), &mut no_hook())?;
-                    Ok(Ok(()))
-                },
-            );
-            for response in delivered {
-                self.record(InputRecord::HttpResponse {
+        let mut delivered = Vec::new();
+        let step = self.step(
+            Some(Operation::HostWasmtimeSessionHttpResponse),
+            at_ms,
+            |engine| {
+                if engine.drain(Horizon::Until(at_ms), &mut no_hook())? == DrainStop::Finished {
+                    return Ok(Ok(()));
+                }
+                engine.advance_clock_to(at_ms)?;
+                delivered = engine.deliver_http_responses(vec![item])?;
+                engine.drain(Horizon::Until(at_ms), &mut no_hook())?;
+                Ok(Ok(()))
+            },
+        );
+        for response in delivered {
+            self.record(match response.answer {
+                crate::ExtensionHttpAnswer::Response(outcome) => InputRecord::HttpResponse {
                     at_ms,
                     path: response.path,
                     request: response.request,
-                    response: response.outcome,
-                });
-            }
-            last = Some(step?);
+                    response: outcome,
+                },
+                crate::ExtensionHttpAnswer::Part(part) => InputRecord::HttpResponsePart {
+                    at_ms,
+                    path: response.path,
+                    request: response.request,
+                    part,
+                },
+            });
         }
-        Ok(last)
+        Ok(Some(step?))
     }
 
     /// Replays one recorded HTTP response at its recorded time to the

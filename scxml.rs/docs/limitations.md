@@ -144,19 +144,25 @@ disagree are in [spec-errata.md](spec-errata.md).
   so the validator component reports every literal service type as unbound
   (`PKG004`, a warning); and the browser host binds no service
   (`start-invocation` of a service answers `unavailable`).
-- Invoked services' outbound HTTP: `outbound-http.fetch` is an `async func`
-  that suspends only the calling task. A batch run performs the request
-  through the embedder's transport (`ServiceComponents::with_outbound_http`);
-  a live session performs it on a transport thread of its own and delivers
-  the response as a recorded external input (`http-response`), which a
-  replay delivers from its log. Proven by the `service_invoke` tests
+- Invoked services' outbound HTTP: `outbound-http.fetch` and
+  `outbound-http.send` are `async func`s that suspend only the calling
+  task. A batch run performs the request through the embedder's transport
+  (`ServiceComponents::with_outbound_http`); a live session performs it on
+  a transport thread of its own and delivers the response as a recorded
+  external input (`http-response`), or a `send`'s status, body bytes, and
+  end each as one as they arrive (`http-response-part`), which a replay
+  delivers from its log. Proven by the `service_invoke` tests
   (`a_fetch_suspends_only_its_task_and_its_response_arrives_as_an_external_input`,
   `leaving_the_invoking_state_drops_a_request_in_flight`,
-  `a_recorded_http_response_replays_without_the_network`, and
+  `a_recorded_http_response_replays_without_the_network`,
+  `a_streamed_response_reaches_the_service_part_by_part_and_replays`,
+  `a_streamed_response_that_fails_midway_fails_the_invocation`,
+  `a_streamed_response_arrives_while_the_server_still_writes`, and
   `cancelling_the_invoking_state_closes_the_streaming_connection_and_ends_its_thread`,
   which proves the connection closes and its thread ends within 2 s) and
   the CLI's `live_run` service fetch tests, against loopback servers. Gaps:
-  responses are delivered whole (no streaming); a cancelled request still
+  a batch run delivers a `send`'s body whole, after the request ended (it
+  performs each request at once); a cancelled request still
   resolving or connecting ends only when the operating system answers or
   gives up (nothing is sent); and the browser host offers none. A request
   has no time limit of its own: the invocation's lifetime bounds it

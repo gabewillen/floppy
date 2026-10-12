@@ -91,8 +91,8 @@ use crate::outbound_http::ExtensionHttp;
 use crate::session::{native_event, native_value};
 use crate::{
     ArtifactError, ArtifactKind, AuthenticatedComponent, ExtensionHttpFailure,
-    ExtensionHttpRequest, ExtensionHttpResponse, HostError, InvalidLimit, LifecycleLease,
-    TelemetryProviders, WasmtimeHostConfig,
+    ExtensionHttpRequest, HostError, InvalidLimit, LifecycleLease, TelemetryProviders,
+    WasmtimeHostConfig,
 };
 
 pub(crate) mod service_bindings {
@@ -399,11 +399,107 @@ struct Timer {
     waker: Option<Waker>,
 }
 
-/// One request the service waits on (`fetch`).
+/// How a service asked for one request: `fetch` (the whole response) or
+/// `send` (its status, then its body streamed).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RequestKind {
+    /// `outbound-http.fetch`.
+    Fetch,
+    /// `outbound-http.send`.
+    Send,
+}
+
+/// One request the service waits on (`fetch` or `send`).
 #[derive(Default)]
 struct Pending {
+    /// A `fetch`'s response.
     outcome: Option<Result<outbound_http::HttpResponse, ComponentError>>,
+    /// Whether a `send`'s status arrived (or its request failed first).
+    status_seen: bool,
+    /// A `send`'s status, until the call takes it.
+    status: Option<Result<u16, ComponentError>>,
+    /// A `send`'s body bytes received and not yet read.
+    body: Vec<u8>,
+    /// A `send`'s body bytes received in all.
+    received: usize,
+    /// A `send`'s end, once it arrived (or the body passed its bound).
+    end: Option<Result<(), ComponentError>>,
+    /// The service dropped the body stream: nothing more is kept for it.
+    body_closed: bool,
+    /// The service took the end, or dropped the future.
+    end_closed: bool,
     waker: Option<Waker>,
+    body_waker: Option<Waker>,
+    end_waker: Option<Waker>,
+}
+
+impl Pending {
+    /// Whether the transport still answers this request.
+    const fn in_flight(&self) -> bool {
+        self.outcome.is_none() && self.end.is_none()
+    }
+
+    /// Whether nothing of this request is left for the service.
+    const fn settled(&self) -> bool {
+        self.end.is_some() && self.body_closed && self.end_closed
+    }
+
+    /// Takes one part of a `send`'s response, within its bounds: a status
+    /// outside 100..=599, a part out of order, or a transport failure ends
+    /// the response with `unavailable`, and a body past
+    /// [`crate::MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES`] in all with
+    /// `payload-too-large`; nothing after the end is taken.
+    fn take_part(&mut self, part: Result<crate::ExtensionHttpPart, ExtensionHttpFailure>) {
+        if self.end.is_some() {
+            return;
+        }
+        let failure = match part {
+            Ok(crate::ExtensionHttpPart::Status(status)) if !self.status_seen => {
+                self.status_seen = true;
+                match crate::outbound_http::settle_status(status) {
+                    Ok(status) => {
+                        self.status = Some(Ok(status));
+                        None
+                    }
+                    Err((error, _)) => {
+                        self.status = Some(Err(error.clone()));
+                        Some(error)
+                    }
+                }
+            }
+            Ok(crate::ExtensionHttpPart::Body(bytes)) if self.status_seen => {
+                self.received = self.received.saturating_add(bytes.len());
+                if self.received > crate::MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES {
+                    self.body = Vec::new();
+                    Some(
+                        crate::outbound_http::failure_error(ExtensionHttpFailure::ResponseTooLarge)
+                            .0,
+                    )
+                } else {
+                    if !self.body_closed {
+                        self.body.extend_from_slice(&bytes);
+                    }
+                    None
+                }
+            }
+            Ok(crate::ExtensionHttpPart::End) if self.status_seen => {
+                self.end = Some(Ok(()));
+                None
+            }
+            Ok(_) => Some(crate::outbound_http::failure_error(ExtensionHttpFailure::Transport).0),
+            Err(failure) => Some(crate::outbound_http::failure_error(failure).0),
+        };
+        if let Some(error) = failure {
+            if !self.status_seen {
+                self.status_seen = true;
+                self.status = Some(Err(error.clone()));
+            }
+            self.end = Some(Err(error));
+        }
+        Io::wake(&mut self.waker);
+        Io::wake(&mut self.body_waker);
+        Io::wake(&mut self.end_waker);
+    }
 }
 
 /// The state shared by one invocation's host functions, its streams, and
@@ -428,7 +524,7 @@ struct Io {
     timers: BTreeMap<u64, Timer>,
     next_timer: u64,
     /// Requests admitted since the last report.
-    requests: Vec<(u64, ExtensionHttpRequest)>,
+    requests: Vec<(u64, ExtensionHttpRequest, RequestKind)>,
     pending: BTreeMap<u64, Pending>,
     next_request: u64,
     /// The pump refuels the store at its next poll.
@@ -727,65 +823,82 @@ impl crate::bindings::stateforward::scxml::types::Host for ServiceStoreData {}
 
 impl outbound_http::Host for ServiceStoreData {}
 
+/// Admits one request of the invocation `accessor` runs as `kind`, under
+/// a boundary span of `operation`: its number and the invocation's shared
+/// state, or the `outbound-http` error that refuses it.
+fn admit<U>(
+    accessor: &Accessor<U, HasSelf<ServiceStoreData>>,
+    request: outbound_http::HttpRequest,
+    kind: RequestKind,
+    operation: Operation,
+) -> Result<(u64, SharedIo), ComponentError> {
+    // The span covers admission; the transport's own span covers the
+    // request (`service-http-request`), and the response arrives as an
+    // input of the invocation.
+    let span = scxml_telemetry::observe(Module::HostWasmtime, operation);
+    let admitted = accessor.with(|mut access| {
+        let data = access.get();
+        crate::outbound_http::admit_request(
+            request,
+            &data.references,
+            &data.allow,
+            data.http_offered,
+            |_| {},
+        )
+        .map(|admitted| (admitted, Arc::clone(&data.io)))
+    });
+    let admitted = match admitted {
+        Ok((admitted, io)) => {
+            let mut state = lock(&io);
+            if state
+                .pending
+                .values()
+                .filter(|pending| pending.in_flight())
+                .count()
+                >= MAX_REQUESTS_IN_FLIGHT
+            {
+                Err((
+                    component_error(
+                        ErrorCode::CapacityExhausted,
+                        "the invocation has as many requests in flight as it may",
+                    ),
+                    ErrorCategory::Budget,
+                ))
+            } else {
+                let id = state.next_request;
+                state.next_request = id.saturating_add(1);
+                state.requests.push((id, admitted, kind));
+                state.pending.insert(id, Pending::default());
+                drop(state);
+                Ok((id, io))
+            }
+        }
+        Err(rejected) => Err(rejected),
+    };
+    match admitted {
+        Ok(admitted) => {
+            span.event(SignalEvent::TransformationCompleted);
+            Ok(admitted)
+        }
+        Err((error, category)) => {
+            span.event(SignalEvent::InputRejected);
+            span.fail(category);
+            Err(error)
+        }
+    }
+}
+
 impl<U> outbound_http::HostWithStore<U> for HasSelf<ServiceStoreData> {
     async fn fetch(
         accessor: &Accessor<U, Self>,
         request: outbound_http::HttpRequest,
     ) -> Result<outbound_http::HttpResponse, ComponentError> {
-        // The span covers admission; the transport's own span covers the
-        // request (`service-http-request`), and the response arrives as an
-        // input of the invocation.
-        let admitted = {
-            let span = scxml_telemetry::observe(
-                Module::HostWasmtime,
-                Operation::HostWasmtimeServiceHttpFetch,
-            );
-            let admitted = accessor.with(|mut access| {
-                let data = access.get();
-                crate::outbound_http::admit_request(
-                    request,
-                    &data.references,
-                    &data.allow,
-                    data.http_offered,
-                    |_| {},
-                )
-                .map(|admitted| (admitted, Arc::clone(&data.io)))
-            });
-            let admitted = match admitted {
-                Ok((admitted, io)) => {
-                    let mut state = lock(&io);
-                    if state.pending.len() >= MAX_REQUESTS_IN_FLIGHT {
-                        Err((
-                            component_error(
-                                ErrorCode::CapacityExhausted,
-                                "the invocation has as many requests in flight as it may",
-                            ),
-                            ErrorCategory::Budget,
-                        ))
-                    } else {
-                        let id = state.next_request;
-                        state.next_request = id.saturating_add(1);
-                        state.requests.push((id, admitted));
-                        state.pending.insert(id, Pending::default());
-                        drop(state);
-                        Ok((id, io))
-                    }
-                }
-                Err(rejected) => Err(rejected),
-            };
-            match admitted {
-                Ok(admitted) => {
-                    span.event(SignalEvent::TransformationCompleted);
-                    admitted
-                }
-                Err((error, category)) => {
-                    span.event(SignalEvent::InputRejected);
-                    span.fail(category);
-                    return Err(error);
-                }
-            }
-        };
-        let (id, io) = admitted;
+        let (id, io) = admit(
+            accessor,
+            request,
+            RequestKind::Fetch,
+            Operation::HostWasmtimeServiceHttpFetch,
+        )?;
         std::future::poll_fn(|cx| {
             let mut state = lock(&io);
             let Some(pending) = state.pending.get_mut(&id) else {
@@ -803,6 +916,170 @@ impl<U> outbound_http::HostWithStore<U> for HasSelf<ServiceStoreData> {
             }
         })
         .await
+    }
+
+    async fn send(
+        accessor: &Accessor<U, Self>,
+        request: outbound_http::HttpRequest,
+    ) -> Result<
+        (
+            u16,
+            StreamReader<u8>,
+            wasmtime::component::FutureReader<Result<(), ComponentError>>,
+        ),
+        ComponentError,
+    > {
+        let (id, io) = admit(
+            accessor,
+            request,
+            RequestKind::Send,
+            Operation::HostWasmtimeServiceHttpSend,
+        )?;
+        let status = std::future::poll_fn(|cx| {
+            let mut state = lock(&io);
+            let Some(pending) = state.pending.get_mut(&id) else {
+                return Poll::Ready(Err(component_error(
+                    ErrorCode::Unavailable,
+                    "the HTTP transport failed",
+                )));
+            };
+            match pending.status.take() {
+                Some(Ok(status)) => Poll::Ready(Ok(status)),
+                Some(Err(error)) => {
+                    state.pending.remove(&id);
+                    Poll::Ready(Err(error))
+                }
+                None => {
+                    pending.waker = Some(cx.waker().clone());
+                    Poll::Pending
+                }
+            }
+        })
+        .await?;
+        let opened = accessor.with(|mut access| -> wasmtime::Result<_> {
+            let body = StreamReader::new(&mut access, Body::new(&io, id))?;
+            let end = wasmtime::component::FutureReader::new(&mut access, BodyEnd::new(&io, id))?;
+            Ok((body, end))
+        });
+        opened.map(|(body, end)| (status, body, end)).map_err(|_| {
+            lock(&io).pending.remove(&id);
+            component_error(ErrorCode::Platform, "the response body could not be opened")
+        })
+    }
+}
+
+/// The body stream of one `send`: the bytes its invocation received, in
+/// order, until the end.
+struct Body {
+    io: SharedIo,
+    id: u64,
+}
+
+impl Body {
+    fn new(io: &SharedIo, id: u64) -> Self {
+        Self {
+            io: Arc::clone(io),
+            id,
+        }
+    }
+}
+
+impl Drop for Body {
+    /// A body the service dropped keeps nothing more.
+    fn drop(&mut self) {
+        let mut state = lock(&self.io);
+        if let Some(pending) = state.pending.get_mut(&self.id) {
+            pending.body_closed = true;
+            pending.body = Vec::new();
+            if pending.settled() {
+                state.pending.remove(&self.id);
+            }
+        }
+    }
+}
+
+impl<D> StreamProducer<D> for Body {
+    type Item = u8;
+    type Buffer = VecBuffer<u8>;
+
+    fn poll_produce<'a>(
+        self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        _store: StoreContextMut<'a, D>,
+        mut destination: Destination<'a, u8, VecBuffer<u8>>,
+        finish: bool,
+    ) -> Poll<wasmtime::Result<StreamResult>> {
+        let mut state = lock(&self.io);
+        let Some(pending) = state.pending.get_mut(&self.id) else {
+            return Poll::Ready(Ok(StreamResult::Dropped));
+        };
+        if !pending.body.is_empty() {
+            destination.set_buffer(std::mem::take(&mut pending.body).into());
+            return Poll::Ready(Ok(StreamResult::Completed));
+        }
+        if pending.end.is_some() {
+            return Poll::Ready(Ok(StreamResult::Dropped));
+        }
+        if finish {
+            return Poll::Ready(Ok(StreamResult::Cancelled));
+        }
+        pending.body_waker = Some(cx.waker().clone());
+        Poll::Pending
+    }
+}
+
+/// The future of one `send`'s end: `ok` after the body's last byte, or the
+/// failure that ended it.
+struct BodyEnd {
+    io: SharedIo,
+    id: u64,
+}
+
+impl BodyEnd {
+    fn new(io: &SharedIo, id: u64) -> Self {
+        Self {
+            io: Arc::clone(io),
+            id,
+        }
+    }
+}
+
+impl Drop for BodyEnd {
+    fn drop(&mut self) {
+        let mut state = lock(&self.io);
+        if let Some(pending) = state.pending.get_mut(&self.id) {
+            pending.end_closed = true;
+            if pending.settled() {
+                state.pending.remove(&self.id);
+            }
+        }
+    }
+}
+
+impl<D> wasmtime::component::FutureProducer<D> for BodyEnd {
+    type Item = Result<(), ComponentError>;
+
+    fn poll_produce(
+        self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        _store: StoreContextMut<D>,
+        finish: bool,
+    ) -> Poll<wasmtime::Result<Option<Self::Item>>> {
+        let mut state = lock(&self.io);
+        let Some(pending) = state.pending.get_mut(&self.id) else {
+            return Poll::Ready(Ok(Some(Err(component_error(
+                ErrorCode::Unavailable,
+                "the HTTP transport failed",
+            )))));
+        };
+        if let Some(end) = pending.end.clone() {
+            return Poll::Ready(Ok(Some(end)));
+        }
+        if finish {
+            return Poll::Ready(Ok(None));
+        }
+        pending.end_waker = Some(cx.waker().clone());
+        Poll::Pending
     }
 }
 
@@ -886,8 +1163,11 @@ enum Input {
     Event(Box<WitEvent>),
     /// The logical clock moved; every timer due by then fires.
     Timers,
-    /// The response (or transport failure) of the request `id`.
-    Response(u64, Result<outbound_http::HttpResponse, ComponentError>),
+    /// What the transport answered the request `id`: a `fetch`'s response
+    /// (or failure), or one part of a `send`'s.
+    Answer(u64, crate::ExtensionHttpAnswer),
+    /// The request `id` fails at once (no transport).
+    Refused(u64, ComponentError),
 }
 
 /// One input with the session's logical time it is applied at.
@@ -902,7 +1182,7 @@ pub(crate) struct Report {
     /// The events it returned, validated and stamped, in order.
     pub(crate) events: Vec<WitEvent>,
     /// The requests it made, admitted, in order.
-    pub(crate) requests: Vec<(u64, ExtensionHttpRequest)>,
+    pub(crate) requests: Vec<(u64, ExtensionHttpRequest, RequestKind)>,
     /// Its earliest timer, in logical ms.
     pub(crate) next_deadline: Option<u64>,
     /// How it stands.
@@ -1116,10 +1396,36 @@ fn run_invocation(
                     }
                 }
             }
-            Input::Response(id, outcome) => {
+            Input::Answer(id, answer) => {
                 if let Some(pending) = state.pending.get_mut(&id) {
-                    pending.outcome = Some(outcome);
+                    match answer {
+                        crate::ExtensionHttpAnswer::Response(outcome) => {
+                            pending.outcome = Some(
+                                crate::outbound_http::settle_response(outcome)
+                                    .map_err(|(error, _)| error),
+                            );
+                            Io::wake(&mut pending.waker);
+                        }
+                        crate::ExtensionHttpAnswer::Part(part) => {
+                            pending.take_part(part);
+                            if pending.settled() {
+                                state.pending.remove(&id);
+                            }
+                        }
+                    }
+                }
+            }
+            Input::Refused(id, error) => {
+                if let Some(pending) = state.pending.get_mut(&id) {
+                    pending.outcome = Some(Err(error.clone()));
+                    if !pending.status_seen {
+                        pending.status_seen = true;
+                        pending.status = Some(Err(error.clone()));
+                    }
+                    pending.end = Some(Err(error));
                     Io::wake(&mut pending.waker);
+                    Io::wake(&mut pending.body_waker);
+                    Io::wake(&mut pending.end_waker);
                 }
             }
         }
@@ -1203,8 +1509,9 @@ pub(crate) struct Settled {
     pub(crate) invocation: u64,
     /// Its id within that invocation.
     pub(crate) request: u64,
-    /// What the transport answered.
-    pub(crate) outcome: Result<ExtensionHttpResponse, ExtensionHttpFailure>,
+    /// What the transport answered: a `fetch`'s response, or one part of
+    /// a `send`'s (consecutive body parts waiting for delivery are joined).
+    pub(crate) answer: crate::ExtensionHttpAnswer,
 }
 
 /// The settled requests of one live run, shared by the session thread and
@@ -1224,13 +1531,12 @@ impl HttpResponses {
         })
     }
 
-    /// Takes every settled request, in settling order.
-    pub(crate) fn take(&self) -> Vec<Settled> {
+    /// Takes the earliest settled answer.
+    pub(crate) fn take_first(&self) -> Option<Settled> {
         self.settled
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .drain(..)
-            .collect()
+            .pop_front()
     }
 
     /// Whether a settled request waits for delivery.
@@ -1242,11 +1548,28 @@ impl HttpResponses {
             .is_empty()
     }
 
+    /// Queues one answer. Body bytes of a `send` join the request's last
+    /// queued answer when that is body bytes too, so a response that
+    /// trickles in reaches its invocation as one input per delivery, not
+    /// one per transport read (an amplification guard).
     fn push(&self, settled: Settled) {
-        self.settled
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push_back(settled);
+        let mut queue = self.settled.lock().unwrap_or_else(PoisonError::into_inner);
+        let last = queue.iter_mut().rev().find(|queued| {
+            queued.invocation == settled.invocation && queued.request == settled.request
+        });
+        if let (
+            Some(Settled {
+                answer: crate::ExtensionHttpAnswer::Part(Ok(crate::ExtensionHttpPart::Body(queued))),
+                ..
+            }),
+            crate::ExtensionHttpAnswer::Part(Ok(crate::ExtensionHttpPart::Body(bytes))),
+        ) = (last, &settled.answer)
+        {
+            queued.extend_from_slice(bytes);
+        } else {
+            queue.push_back(settled);
+        }
+        drop(queue);
         if let Some(notify) = &self.notify {
             notify();
         }
@@ -1456,29 +1779,33 @@ impl ServiceHandle {
         self.settle(report, now_ms, mode)
     }
 
-    /// The response of the request `request`, delivered at `now_ms`: from a
+    /// What the transport answered the request `request` (a `fetch`'s
+    /// response, or one part of a `send`'s), delivered at `now_ms`: from a
     /// live run's transport or a replay's record. `None` when the
-    /// invocation ended or holds no such request (the response is dropped).
+    /// invocation ended or holds no such request (the answer is dropped).
     pub(crate) fn respond(
         &mut self,
         request: u64,
-        outcome: Result<ExtensionHttpResponse, ExtensionHttpFailure>,
+        answer: crate::ExtensionHttpAnswer,
         now_ms: u64,
         mode: &RequestMode,
     ) -> Option<ServiceStep> {
         let known =
-            self.in_flight.remove(&request).is_some() || self.awaiting_record.remove(&request);
+            self.in_flight.contains_key(&request) || self.awaiting_record.contains(&request);
         if !known || self.ended {
             return None;
         }
-        let outcome = crate::outbound_http::settle_response(outcome).map_err(|(error, _)| error);
-        let report = self.deliver(now_ms, Input::Response(request, outcome));
+        if answer.is_final() {
+            self.in_flight.remove(&request);
+            self.awaiting_record.remove(&request);
+        }
+        let report = self.deliver(now_ms, Input::Answer(request, answer));
         Some(self.settle(report, now_ms, mode))
     }
 
     /// Settles one report: the start's, or an input's. Its requests are
     /// carried out as `mode` says (a batch run performs them now and
-    /// delivers each response before anything else runs).
+    /// delivers each answer before anything else runs).
     pub(crate) fn settle(
         &mut self,
         report: Option<Report>,
@@ -1509,43 +1836,25 @@ impl ServiceHandle {
             }
             match mode {
                 RequestMode::Immediate(transport) => {
-                    // One request at a time, its response delivered at once;
-                    // the requests still waiting go before the ones the
-                    // next report makes.
-                    let mut requests = current.requests.into_iter();
-                    let Some((id, request)) = requests.next() else {
-                        return ServiceStep {
-                            events,
-                            state: ReportState::Running,
-                        };
-                    };
-                    let span = scxml_telemetry::observe(
-                        Module::HostWasmtime,
-                        Operation::HostWasmtimeServiceHttpRequest,
+                    report = self.perform_first(
+                        transport.as_ref(),
+                        current.requests,
+                        now_ms,
+                        &mut events,
                     );
-                    let outcome = transport.fetch(&request);
-                    record_request(&span, &outcome);
-                    let outcome =
-                        crate::outbound_http::settle_response(outcome).map_err(|(error, _)| error);
-                    report = self.deliver(now_ms, Input::Response(id, outcome));
-                    if let Some(next) = report.as_mut() {
-                        let later = std::mem::take(&mut next.requests);
-                        next.requests = requests.chain(later).collect();
-                    }
                 }
                 RequestMode::Threaded {
                     transport,
                     responses,
                 } => {
-                    for (id, request) in current.requests {
+                    for (id, request, kind) in current.requests {
                         let cancel = Arc::new(CancelSignal::default());
                         self.in_flight.insert(id, Arc::clone(&cancel));
                         spawn_request(
                             Arc::clone(transport),
                             responses,
                             self.invocation,
-                            id,
-                            request,
+                            (id, request, kind),
                             cancel,
                         );
                     }
@@ -1556,7 +1865,7 @@ impl ServiceHandle {
                 }
                 RequestMode::Recorded => {
                     self.awaiting_record
-                        .extend(current.requests.into_iter().map(|(id, _)| id));
+                        .extend(current.requests.into_iter().map(|(id, _, _)| id));
                     return ServiceStep {
                         events,
                         state: ReportState::Running,
@@ -1566,15 +1875,15 @@ impl ServiceHandle {
                     // Unreachable by construction (the invocation refuses
                     // every request without a transport); fail closed.
                     let mut failed = None;
-                    for (id, _) in current.requests {
+                    for (id, _, _) in current.requests {
                         failed = self.deliver(
                             now_ms,
-                            Input::Response(
+                            Input::Refused(
                                 id,
-                                Err(component_error(
+                                component_error(
                                     ErrorCode::Unavailable,
                                     "the host offers this component no outbound HTTP",
-                                )),
+                                ),
                             ),
                         );
                     }
@@ -1582,6 +1891,48 @@ impl ServiceHandle {
                 }
             }
         }
+    }
+
+    /// A batch run's step: performs the first of `requests` at once and
+    /// delivers each of its answers in order, keeping the events the
+    /// deliveries before the last returned in `events`; returns the last
+    /// delivery's report, whose requests are the ones still waiting, then
+    /// the ones the deliveries made.
+    fn perform_first(
+        &mut self,
+        transport: &dyn ExtensionHttp,
+        requests: Vec<(u64, ExtensionHttpRequest, RequestKind)>,
+        now_ms: u64,
+        events: &mut Vec<WitEvent>,
+    ) -> Option<Report> {
+        let mut waiting: VecDeque<_> = requests.into();
+        let (id, request, kind) = waiting.pop_front()?;
+        let span = scxml_telemetry::observe(
+            Module::HostWasmtime,
+            Operation::HostWasmtimeServiceHttpRequest,
+        );
+        let answers = perform(transport, &request, kind);
+        record_request(&span, answers.last());
+        let mut answers = answers.into_iter();
+        let mut next = answers
+            .next()
+            .and_then(|answer| self.deliver(now_ms, Input::Answer(id, answer)));
+        for answer in answers {
+            let Some(delivered) = next.as_mut() else {
+                break;
+            };
+            if !matches!(delivered.state, ReportState::Running) {
+                break;
+            }
+            events.append(&mut delivered.events);
+            waiting.extend(std::mem::take(&mut delivered.requests));
+            next = self.deliver(now_ms, Input::Answer(id, answer));
+        }
+        if let Some(delivered) = next.as_mut() {
+            waiting.extend(std::mem::take(&mut delivered.requests));
+            delivered.requests = waiting.into();
+        }
+        next
     }
 
     /// The invocation's earliest timer, in logical ms.
@@ -1612,12 +1963,17 @@ impl ServiceHandle {
     }
 }
 
-/// Ends one transport request's span with its outcome.
-fn record_request(
-    span: &scxml_telemetry::FunctionSpan,
-    outcome: &Result<ExtensionHttpResponse, ExtensionHttpFailure>,
-) {
-    if outcome.is_ok() {
+/// Ends one transport request's span with its last answer: completed for
+/// a response or a body that ended, rejected for a failure.
+fn record_request(span: &scxml_telemetry::FunctionSpan, last: Option<&crate::ExtensionHttpAnswer>) {
+    let completed = matches!(
+        last,
+        Some(
+            crate::ExtensionHttpAnswer::Response(Ok(_))
+                | crate::ExtensionHttpAnswer::Part(Ok(crate::ExtensionHttpPart::End))
+        )
+    );
+    if completed {
         span.event(SignalEvent::TransformationCompleted);
     } else {
         span.event(SignalEvent::InputRejected);
@@ -1625,14 +1981,52 @@ fn record_request(
     }
 }
 
+/// Performs one admitted request through `transport` at once: a `fetch`'s
+/// one answer, or every part of a `send`'s, consecutive body parts joined.
+fn perform(
+    transport: &dyn ExtensionHttp,
+    request: &ExtensionHttpRequest,
+    kind: RequestKind,
+) -> Vec<crate::ExtensionHttpAnswer> {
+    match kind {
+        RequestKind::Fetch => vec![crate::ExtensionHttpAnswer::Response(
+            transport.fetch(request),
+        )],
+        RequestKind::Send => {
+            let mut answers = Vec::new();
+            transport.send(request, &mut |part| {
+                push_part(&mut answers, part);
+            });
+            answers
+        }
+    }
+}
+
+/// Appends one part of a `send`'s response to `answers`, joining it to the
+/// last one when both are body bytes.
+fn push_part(
+    answers: &mut Vec<crate::ExtensionHttpAnswer>,
+    part: Result<crate::ExtensionHttpPart, ExtensionHttpFailure>,
+) {
+    if let (
+        Some(crate::ExtensionHttpAnswer::Part(Ok(crate::ExtensionHttpPart::Body(last)))),
+        Ok(crate::ExtensionHttpPart::Body(bytes)),
+    ) = (answers.last_mut(), &part)
+    {
+        last.extend_from_slice(bytes);
+        return;
+    }
+    answers.push(crate::ExtensionHttpAnswer::Part(part));
+}
+
 /// Performs one admitted request on a transport thread of its own and
-/// queues its outcome for delivery; `cancel` closes its connection.
+/// queues each of its answers for delivery as it arrives; `cancel` closes
+/// its connection.
 fn spawn_request(
     transport: Arc<dyn ExtensionHttp>,
     responses: &Arc<HttpResponses>,
     invocation: u64,
-    request_id: u64,
-    request: ExtensionHttpRequest,
+    (request_id, request, kind): (u64, ExtensionHttpRequest, RequestKind),
     cancel: Arc<CancelSignal>,
 ) {
     let parent = Context::current();
@@ -1646,21 +2040,46 @@ fn spawn_request(
                 Operation::HostWasmtimeServiceHttpRequest,
             );
             REQUEST_CANCEL.with_borrow_mut(|slot| *slot = Some(cancel));
-            let outcome = transport.fetch(&request);
+            let last = match kind {
+                RequestKind::Fetch => {
+                    let answer = crate::ExtensionHttpAnswer::Response(transport.fetch(&request));
+                    queue.push(Settled {
+                        invocation,
+                        request: request_id,
+                        answer: answer.clone(),
+                    });
+                    Some(answer)
+                }
+                RequestKind::Send => {
+                    let mut last = None;
+                    transport.send(&request, &mut |part| {
+                        let answer = crate::ExtensionHttpAnswer::Part(part);
+                        last = Some(answer.clone());
+                        queue.push(Settled {
+                            invocation,
+                            request: request_id,
+                            answer,
+                        });
+                    });
+                    last
+                }
+            };
             REQUEST_CANCEL.with_borrow_mut(|slot| *slot = None);
-            record_request(&span, &outcome);
-            queue.push(Settled {
-                invocation,
-                request: request_id,
-                outcome,
-            });
+            record_request(&span, last.as_ref());
         });
     if spawned.is_err() {
         // A thread that could not start sent nothing: the request fails.
         responses.push(Settled {
             invocation,
             request: request_id,
-            outcome: Err(ExtensionHttpFailure::Transport),
+            answer: match kind {
+                RequestKind::Fetch => {
+                    crate::ExtensionHttpAnswer::Response(Err(ExtensionHttpFailure::Transport))
+                }
+                RequestKind::Send => {
+                    crate::ExtensionHttpAnswer::Part(Err(ExtensionHttpFailure::Transport))
+                }
+            },
         });
     }
 }
@@ -1724,8 +2143,11 @@ fn bind_references(
 
 #[cfg(test)]
 mod tests {
-    use super::{CancelSignal, HttpResponses, Settled, event_bytes};
-    use crate::{ExtensionHttpFailure, ExtensionHttpResponse};
+    use super::{CancelSignal, HttpResponses, Pending, Settled, event_bytes};
+    use crate::bindings::stateforward::scxml::types::ErrorCode;
+    use crate::{
+        ExtensionHttpAnswer, ExtensionHttpFailure, ExtensionHttpPart, ExtensionHttpResponse,
+    };
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -1754,23 +2176,140 @@ mod tests {
         queue.push(Settled {
             invocation: 1,
             request: 0,
-            outcome: Ok(ExtensionHttpResponse {
+            answer: ExtensionHttpAnswer::Response(Ok(ExtensionHttpResponse {
                 status: 200,
                 body: b"ok".to_vec(),
-            }),
+            })),
         });
         queue.push(Settled {
             invocation: 1,
             request: 1,
-            outcome: Err(ExtensionHttpFailure::Transport),
+            answer: ExtensionHttpAnswer::Response(Err(ExtensionHttpFailure::Transport)),
         });
         assert!(queue.has_settled());
-        let settled = queue.take();
+        let settled: Vec<_> = std::iter::from_fn(|| queue.take_first()).collect();
         assert_eq!(settled.len(), 2);
         assert_eq!((settled[0].invocation, settled[0].request), (1, 0));
-        assert_eq!(settled[1].outcome, Err(ExtensionHttpFailure::Transport));
+        assert_eq!(
+            settled[1].answer,
+            ExtensionHttpAnswer::Response(Err(ExtensionHttpFailure::Transport))
+        );
         assert!(!queue.has_settled());
         assert_eq!(notified.load(Ordering::Acquire), 2);
+    }
+
+    fn part(request: u64, part: ExtensionHttpPart) -> Settled {
+        Settled {
+            invocation: 1,
+            request,
+            answer: ExtensionHttpAnswer::Part(Ok(part)),
+        }
+    }
+
+    #[test]
+    fn queued_body_bytes_of_one_request_join_until_delivered() {
+        let queue = HttpResponses::new(None);
+        queue.push(part(0, ExtensionHttpPart::Status(200)));
+        queue.push(part(0, ExtensionHttpPart::Body(b"ab".to_vec())));
+        queue.push(part(1, ExtensionHttpPart::Status(204)));
+        queue.push(part(0, ExtensionHttpPart::Body(b"cd".to_vec())));
+        queue.push(part(1, ExtensionHttpPart::Body(b"x".to_vec())));
+        let answers: Vec<_> = std::iter::from_fn(|| queue.take_first())
+            .map(|settled| (settled.request, settled.answer))
+            .collect();
+        assert_eq!(
+            answers,
+            [
+                (
+                    0,
+                    ExtensionHttpAnswer::Part(Ok(ExtensionHttpPart::Status(200)))
+                ),
+                (
+                    0,
+                    ExtensionHttpAnswer::Part(Ok(ExtensionHttpPart::Body(b"abcd".to_vec())))
+                ),
+                (
+                    1,
+                    ExtensionHttpAnswer::Part(Ok(ExtensionHttpPart::Status(204)))
+                ),
+                (
+                    1,
+                    ExtensionHttpAnswer::Part(Ok(ExtensionHttpPart::Body(b"x".to_vec())))
+                ),
+            ]
+        );
+        // Delivered bytes start a new answer.
+        queue.push(part(0, ExtensionHttpPart::Body(b"e".to_vec())));
+        queue.push(part(0, ExtensionHttpPart::End));
+        queue.push(part(0, ExtensionHttpPart::Body(b"late".to_vec())));
+        assert_eq!(
+            std::iter::from_fn(|| queue.take_first()).count(),
+            3,
+            "nothing joins across the end"
+        );
+        assert!(ExtensionHttpAnswer::Part(Ok(ExtensionHttpPart::End)).is_final());
+        assert!(!ExtensionHttpAnswer::Part(Ok(ExtensionHttpPart::Body(Vec::new()))).is_final());
+    }
+
+    #[test]
+    fn a_streamed_response_keeps_its_order_and_bounds() {
+        let mut pending = Pending::default();
+        pending.take_part(Ok(ExtensionHttpPart::Body(b"early".to_vec())));
+        assert_eq!(
+            pending
+                .status
+                .as_ref()
+                .map(|status| status.as_ref().map_err(|error| error.code)),
+            Some(Err(ErrorCode::Unavailable)),
+            "a body before the status fails the request"
+        );
+        assert!(!pending.in_flight());
+
+        let mut pending = Pending::default();
+        pending.take_part(Ok(ExtensionHttpPart::Status(700)));
+        assert!(
+            matches!(pending.status, Some(Err(_))),
+            "a status outside 100..=599"
+        );
+
+        let mut pending = Pending::default();
+        pending.take_part(Ok(ExtensionHttpPart::Status(200)));
+        pending.take_part(Ok(ExtensionHttpPart::Body(b"ab".to_vec())));
+        pending.take_part(Ok(ExtensionHttpPart::Body(b"cd".to_vec())));
+        assert!(pending.in_flight());
+        pending.take_part(Ok(ExtensionHttpPart::End));
+        pending.take_part(Ok(ExtensionHttpPart::Body(b"late".to_vec())));
+        assert_eq!(pending.body, b"abcd");
+        assert!(matches!(pending.end, Some(Ok(()))));
+        assert!(!pending.in_flight());
+
+        let mut pending = Pending::default();
+        pending.take_part(Ok(ExtensionHttpPart::Status(200)));
+        pending.take_part(Ok(ExtensionHttpPart::Body(vec![
+            0;
+            crate::MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES
+        ])));
+        assert!(pending.end.is_none(), "the bound itself is within it");
+        pending.take_part(Ok(ExtensionHttpPart::Body(vec![0])));
+        assert_eq!(
+            pending
+                .end
+                .as_ref()
+                .map(|end| end.as_ref().map_err(|error| error.code)),
+            Some(Err(ErrorCode::PayloadTooLarge))
+        );
+        assert!(pending.body.is_empty(), "nothing past the bound is kept");
+
+        let mut pending = Pending::default();
+        pending.take_part(Ok(ExtensionHttpPart::Status(200)));
+        pending.take_part(Err(ExtensionHttpFailure::Transport));
+        assert_eq!(
+            pending
+                .end
+                .as_ref()
+                .map(|end| end.as_ref().map_err(|error| error.code)),
+            Some(Err(ErrorCode::Unavailable))
+        );
     }
 
     #[test]

@@ -128,7 +128,9 @@ Invoked services add the Wasmtime host's boundary spans
 an invocation's `events` stream), `service-wait-until` (per firing of an
 invocation's due timers, `wasi:clocks/monotonic-clock`), `service-cancel`
 (per cancelled invocation), `service-http-fetch` (per `outbound-http.fetch`
-a service makes, from admission to its response), `service-http-request`
+a service makes, from admission to its response), `service-http-send` (per
+`outbound-http.send` a service makes, from admission to its status, and per
+delivery of a later part of its response), `service-http-request`
 (per admitted request the embedder's transport performs), and
 `session-http-response` (per delivery of a service's HTTP response to a
 live session), and

@@ -24,7 +24,12 @@
 //!     `echo.fetched` carrying the response status; without a bound
 //!     `endpoint`, or when the request fails, the future resolves with an
 //!     error (`error.communication`). The component holds only the slots'
-//!     references, never their values.
+//!     references, never their values;
+//!   * `send`, which GETs the same URL through `outbound-http.send` and
+//!     streams the response: it returns `echo.received` carrying the number
+//!     of body bytes each read took, as they arrive, then `echo.fetched`
+//!     carrying the status once the body has ended; a request or a body that
+//!     fails resolves the future with that error.
 //!
 //! When the invoking state exits first, the host cancels the invocation
 //! (SCXML 6.4) and drops its instance: there is nothing to release.
@@ -59,6 +64,11 @@ pub const TICK_EVENT: &str = "echo.tick";
 pub const FETCH_EVENT: &str = "fetch";
 /// The event a fetch returns, carrying the response status.
 pub const FETCHED_EVENT: &str = "echo.fetched";
+/// The event name that GETs the `endpoint` slot's URL, streamed.
+pub const SEND_EVENT: &str = "send";
+/// The event a streamed GET returns for each body read, carrying its byte
+/// count.
+pub const RECEIVED_EVENT: &str = "echo.received";
 /// The `env` slot whose value is the URL `fetch` requests.
 pub const ENDPOINT_SLOT: &str = "endpoint";
 /// The `env` slot whose value `fetch` sends as a bearer token.
@@ -83,6 +93,14 @@ pub enum EchoAction {
         /// empty).
         path: String,
     },
+    /// GET the `endpoint` slot's URL followed by `path` with its response
+    /// streamed: [`Echo::received`] for each body read, then
+    /// [`Echo::fetched`] with the status.
+    Send {
+        /// What follows the endpoint (the `send` event's string data, else
+        /// empty).
+        path: String,
+    },
 }
 
 /// Why the service rejected an input.
@@ -95,7 +113,7 @@ pub enum EchoError {
     InvalidEventName,
     /// The service already completed.
     NotRunning,
-    /// `fetch` without an `endpoint` slot reference.
+    /// `fetch` or `send` without an `endpoint` slot reference.
     NoEndpoint,
 }
 
@@ -157,13 +175,17 @@ impl Echo {
         if !self.running {
             return Err(EchoError::NotRunning);
         }
-        if name == FETCH_EVENT {
+        if name == FETCH_EVENT || name == SEND_EVENT {
             return if self.endpoint {
                 let path = match data {
                     DataValue::String(path) => path,
                     _ => String::new(),
                 };
-                Ok(EchoAction::Fetch { path })
+                Ok(if name == FETCH_EVENT {
+                    EchoAction::Fetch { path }
+                } else {
+                    EchoAction::Send { path }
+                })
             } else {
                 Err(EchoError::NoEndpoint)
             };
@@ -212,6 +234,25 @@ impl Echo {
         let name =
             EventName::new(FETCHED_EVENT.to_owned()).map_err(|_| EchoError::InvalidEventName)?;
         let data = scxml_types::FiniteNumber::new(f64::from(status))
+            .map_or(DataValue::Absent, DataValue::Number);
+        Ok(EchoAction::Return { name, data })
+    }
+
+    /// A streamed GET read `bytes` body bytes: returns [`RECEIVED_EVENT`]
+    /// with the count.
+    ///
+    /// # Errors
+    ///
+    /// [`EchoError::NotRunning`] after completion.
+    pub fn received(&mut self, bytes: usize) -> Result<EchoAction, EchoError> {
+        if !self.running {
+            return Err(EchoError::NotRunning);
+        }
+        let name =
+            EventName::new(RECEIVED_EVENT.to_owned()).map_err(|_| EchoError::InvalidEventName)?;
+        // The count saturates at `u32::MAX` (documented saturation).
+        let count = u32::try_from(bytes).unwrap_or(u32::MAX);
+        let data = scxml_types::FiniteNumber::new(f64::from(count))
             .map_or(DataValue::Absent, DataValue::Number);
         Ok(EchoAction::Return { name, data })
     }
@@ -462,51 +503,92 @@ mod guest {
                 push(outputs, Output::Done(Ok(Some(wit_value(data)))));
                 true
             }
-            Ok(EchoAction::Fetch { path }) => {
-                let Some(reference) = slots.endpoint else {
-                    push(
-                        outputs,
-                        Output::Done(Err(echo_error(EchoError::NoEndpoint))),
-                    );
-                    return true;
-                };
-                // Suspends only this task: the service keeps reading events.
-                let echo = Rc::clone(echo);
-                let outputs = Rc::clone(outputs);
-                wit_bindgen::spawn(async move {
-                    let mut url = vec![TextPart::Reference(reference)];
-                    if !path.is_empty() {
-                        url.push(TextPart::Literal(path));
-                    }
-                    let headers = slots
-                        .token
-                        .map(|token| HttpHeader {
-                            name: "authorization".to_owned(),
-                            value: vec![
-                                TextPart::Literal("Bearer ".to_owned()),
-                                TextPart::Reference(token),
-                            ],
-                        })
-                        .into_iter()
-                        .collect();
-                    let response = outbound_http::fetch(HttpRequest {
-                        method: "GET".to_owned(),
-                        url,
-                        headers,
-                        body: Vec::new(),
-                    })
-                    .await;
-                    match response {
-                        Ok(response) => {
-                            let action = echo.borrow_mut().fetched(response.status);
-                            carry_out(action, &echo, &outputs, slots);
-                        }
-                        Err(failure) => push(&outputs, Output::Done(Err(failure))),
-                    }
-                });
-                false
+            Ok(EchoAction::Fetch { path }) => get(path, false, echo, outputs, slots),
+            Ok(EchoAction::Send { path }) => get(path, true, echo, outputs, slots),
+        }
+    }
+
+    /// GETs the `endpoint` slot's URL followed by `path` (`streamed`:
+    /// through `send`, reporting each body read), suspending only its own
+    /// task; `true` when the service is done.
+    fn get(
+        path: String,
+        streamed: bool,
+        echo: &Rc<RefCell<Echo>>,
+        outputs: &Outputs,
+        slots: Slots,
+    ) -> bool {
+        let Some(reference) = slots.endpoint else {
+            push(
+                outputs,
+                Output::Done(Err(echo_error(EchoError::NoEndpoint))),
+            );
+            return true;
+        };
+        // Suspends only this task: the service keeps reading events.
+        let echo = Rc::clone(echo);
+        let outputs = Rc::clone(outputs);
+        wit_bindgen::spawn(async move {
+            let mut url = vec![TextPart::Reference(reference)];
+            if !path.is_empty() {
+                url.push(TextPart::Literal(path));
+            }
+            let headers = slots
+                .token
+                .map(|token| HttpHeader {
+                    name: "authorization".to_owned(),
+                    value: vec![
+                        TextPart::Literal("Bearer ".to_owned()),
+                        TextPart::Reference(token),
+                    ],
+                })
+                .into_iter()
+                .collect();
+            let request = HttpRequest {
+                method: "GET".to_owned(),
+                url,
+                headers,
+                body: Vec::new(),
+            };
+            let status = if streamed {
+                send(request, &echo, &outputs, slots).await
+            } else {
+                outbound_http::fetch(request)
+                    .await
+                    .map(|response| response.status)
+            };
+            match status {
+                Ok(status) => {
+                    let action = echo.borrow_mut().fetched(status);
+                    carry_out(action, &echo, &outputs, slots);
+                }
+                Err(failure) => push(&outputs, Output::Done(Err(failure))),
+            }
+        });
+        false
+    }
+
+    /// Sends `request` and reads its body to the end, returning
+    /// `echo.received` for each read; its status once the body ended.
+    async fn send(
+        request: HttpRequest,
+        echo: &Rc<RefCell<Echo>>,
+        outputs: &Outputs,
+        slots: Slots,
+    ) -> Result<u16, ComponentError> {
+        let (status, mut body, end) = outbound_http::send(request).await?;
+        loop {
+            let (result, read) = body.read(Vec::with_capacity(65_536)).await;
+            if !read.is_empty() {
+                let action = echo.borrow_mut().received(read.len());
+                carry_out(action, echo, outputs, slots);
+            }
+            if !matches!(result, wit_bindgen::StreamResult::Complete(_)) {
+                break;
             }
         }
+        drop(body);
+        end.await.map(|()| status)
     }
 
     fn event(name: &str, data: DataValue) -> Event {

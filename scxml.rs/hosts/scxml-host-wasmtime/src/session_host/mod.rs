@@ -549,15 +549,16 @@ pub(crate) struct HostCore {
     pub(crate) invoke_limits: InvokeLimits,
 }
 
-/// One HTTP response an invoked service received, as a live session records
-/// it ([`InputRecord::HttpResponse`]).
+/// One answer an invoked service's request received, as a live session
+/// records it ([`InputRecord::HttpResponse`], [`InputRecord::HttpResponsePart`]).
 pub(crate) struct RecordedResponse {
     /// The invoke ids from the root to the invocation.
     pub(crate) path: Vec<String>,
     /// The request's number within its invocation.
     pub(crate) request: u64,
-    /// The response, or the transport's failure.
-    pub(crate) outcome: Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure>,
+    /// A `fetch`'s response or one part of a `send`'s, or the transport's
+    /// failure.
+    pub(crate) answer: crate::ExtensionHttpAnswer,
 }
 
 /// A started invocation and the report of its start, or the component's
