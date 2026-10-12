@@ -328,3 +328,133 @@ fn live_identity() {
         "the addressed bot did not answer (target/floppy-live/live_identity.json)"
     );
 }
+
+/// One labelled line per record of interest, for reading a long run.
+fn transcript(records: &[Json]) -> String {
+    const SHOWN: &[&str] = &[
+        "bot.activated",
+        "bot.activating.failed",
+        "cognition.stage",
+        "cognition.failed",
+        "cognition.reflection.failed",
+        "cognition.routines.failed",
+        "cognition.hop.timed_out",
+        "autonomy",
+        "autonomy.candidate",
+        "autonomy.candidate.failed",
+        "autonomy.behaviors.load.failed",
+        "reasoning",
+        "memory",
+        "reflection",
+        "reflection.selected",
+        "reflection.revision",
+        "reflection.inventory",
+        "reflection.stored",
+        "reflection.failed",
+        "routines",
+        "routines.failed",
+        "bot.ability.routines.reconciled",
+        "bot.ability.routines.reconcile.failed",
+        "floppy.output",
+        "floppy.route",
+        "floppy.say",
+        "floppy.deferred",
+        "floppy.degraded",
+        "bot.processing.completed",
+        "bot.processing.failed",
+        "bot.processing.timed_out",
+        "bot.ability.failed",
+        "bot.ability.listening.failed",
+        "bot.ability.communication.failed",
+        "bot.ability.speaking.output",
+        "bot.reboot",
+        "identity.heard",
+        "communication.product",
+        "conversation",
+    ];
+    let mut out = String::new();
+    for (label, text) in logs(records) {
+        if SHOWN.contains(&label.as_str()) {
+            let text: String = text.chars().take(400).collect();
+            out.push_str(&label);
+            out.push_str(": ");
+            out.push_str(&text);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// The whole bot over several turns of one session, every ability wired:
+/// a fact to remember, a standing request reflection may learn as a
+/// behavior (the builder authors it), the request's trigger (autonomy may
+/// answer it from the learned behavior), and a question the reasoning
+/// answers from memory. Each turn waits for its reflection to settle
+/// (or the turn to fail) before the next. Records go to
+/// `target/floppy-live/live_conversation.json` and a readable transcript
+/// to `live_conversation.txt`; it asserts only that every turn completed.
+#[test]
+#[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
+fn live_conversation() {
+    let inputs = [
+        "Hi floppy! My favorite color is green. Please remember that.",
+        "From now on, whenever I say exactly 'ping', reply with exactly 'pong'.",
+        "ping",
+        "What is my favorite color?",
+    ];
+    let mut run = start();
+    run.event("bot.activate", &json!({"model": model()}));
+    let settled = std::cell::Cell::new(0_usize);
+    for (index, content) in inputs.iter().enumerate() {
+        run.event(
+            "bot.ability.communication.input",
+            &json!({
+                "source_ids": ["gabe"],
+                "target_ids": ["floppy"],
+                "content": content,
+                "content_type": "text/plain"
+            }),
+        );
+        let goal = index + 1;
+        let waited = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run.until(Duration::from_mins(10), |record| {
+                if record["type"] == "log"
+                    && matches!(
+                        record["label"].as_str(),
+                        Some(
+                            "bot.ability.reflection.output"
+                                | "cognition.reflection.failed"
+                                | "bot.processing.failed"
+                                | "floppy.degraded"
+                                | "bot.activating.failed"
+                        )
+                    )
+                {
+                    settled.set(settled.get() + 1);
+                }
+                settled.get() >= goal
+            })
+        }));
+        if waited.is_err() {
+            break;
+        }
+    }
+    let finished = run.close(Duration::from_mins(1));
+    let all = finished.all;
+    keep("live_conversation", &all);
+    std::fs::write(
+        workspace().join("target/floppy-live/live_conversation.txt"),
+        transcript(&all),
+    )
+    .expect("writable");
+    let completed = texts(&all, "bot.processing.completed").len();
+    let failed = texts(&all, "bot.processing.failed");
+    println!(
+        "live conversation: {completed} completed, {} failed",
+        failed.len()
+    );
+    assert!(
+        failed.is_empty() && completed >= inputs.len(),
+        "a turn failed (target/floppy-live/live_conversation.txt)"
+    );
+}

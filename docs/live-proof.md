@@ -7,6 +7,49 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-12, the whole bot over four turns, model `gabe-codex-1/gpt-6-luna`
+
+The runs used floppy commit `b8526d0c` (main) with wasi-sdk 25. Local relays
+forwarded `http://127.0.0.1:8787/v1` to the CPA gateway,
+`http://127.0.0.1:8788` to TypeSafe and `http://127.0.0.1:8789/v1beta` to
+the Gemini API, each through the session's HTTPS proxy, which adds the keys;
+one env file set `FLOPPY_BASE_URL`, `TYPESAFE_BASE_URL` and
+`FLOPPY_SPEECH_BASE_URL` to the relays and each key to a placeholder
+(`FLOPPY_LIVE_MODEL=gabe-codex-1/gpt-6-luna cargo test -p floppy-tests
+--test floppy_live -- --ignored --test-threads=1`).
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `live_cascade` | pass | |
+| `live_chat` | pass | |
+| `live_identity` | pass | |
+| `live_choices` | fail | intuition escalated for low confidence and handed out `bot.focus_device` as an environment action, and reasoning selected it again, so the output held it twice and the body focused the lamp twice (`floppy.focus` logged twice); the test expects one |
+| `live_conversation` (new) | pass | 104 s; the four turns below |
+
+`live_conversation` ran one bot session with every ability wired (memory on
+SQLite, reflection with the builder, routines, speaking on Gemini):
+
+1. "My favorite color is green. Please remember that." Reasoning answered
+   and retained the turn; reflection selected nothing. Speaking failed with
+   "Speech encoding timed out." (the 5 s `encoding_timeout_ms`), so this
+   reply was not spoken.
+2. "Whenever I say exactly 'ping', reply with exactly 'pong'." Reflection
+   selected `bot.behavior.create`, the builder authored `PingPongReply`,
+   and it was stored ACTIVE with the trigger `bot.ability.conversation.output`.
+3. "ping". Autonomy matched `PingPongReply` and ran it, but it returned
+   unhandled: the builder's source tests `stimulus.event ===
+   'bot.ability.communication.input'` while the turn's stimulus is
+   `bot.ability.conversation.output`. Reasoning answered "pong", and
+   reflection then broke the behavior ("the inventory trigger is
+   conversation output, and it has not been used").
+4. "What is my favorite color?" Reasoning recalled memory and answered
+   "Your favorite color is green."
+
+Each turn the listening heard the bot's own speech and failed at voice
+detection (no LocalAI), as on 2026-10-11. Reflection's recalled episode
+count grew by two per turn (1, 3, 5, 7), since reasoning and reflection
+both insert a `cognitive_episode` row.
+
 ## 2026-10-11, speaking and speech decoding on the Gemini API (decision D94)
 
 The runs used floppy's working tree on commit `365f38c6` with the speech
