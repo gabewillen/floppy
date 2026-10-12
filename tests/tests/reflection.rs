@@ -599,6 +599,47 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     );
 }
 
+/// The turn behavior contract the builder gets names what autonomy will
+/// run the behavior with: the grounded triggers it is stored under (the
+/// stimulus events autonomy matches), so the behavior tests no event name,
+/// and this turn's `input` exactly as autonomy builds it (the stimulus
+/// data's fields with `focus` and `focus_candidates`; no stimulus envelope,
+/// no event name). The live run of 2026-10-12 (docs/live-proof.md) built a
+/// behavior that tested a stimulus event it never receives, because the
+/// contract said `input` holds "the stimulus".
+#[test]
+fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "create", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "reflection.inventory"),
+        [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
+    );
+    let drafts = mock.requests("scxml_draft");
+    assert_eq!(drafts.len(), 1);
+    let prompt: Json =
+        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
+    let contract = prompt["constraints"][0]
+        .as_str()
+        .expect("the turn behavior contract")
+        .to_owned();
+    assert!(contract.starts_with("Write a turn behavior"), "{contract}");
+    assert!(
+        contract.contains(r#"its triggers ["environment.sound"]"#),
+        "{contract}"
+    );
+    assert!(
+        contract.contains(
+            r#"for this turn input is {"label":"knock","focus":"door","focus_candidates":["door"]}"#
+        ),
+        "{contract}"
+    );
+    assert!(!contract.contains("and the stimulus"), "{contract}");
+}
+
 /// A build that fails its checks drafts the rejected source as DRAFT with
 /// `status_reason` validation, and the turn fails with the original's abandon
 /// message and rendered report (the reference `_abandon`, `_persist_draft`).

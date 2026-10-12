@@ -219,7 +219,22 @@ function builderRequest() {
 }
 
 function builderConstraints() {
-  return [turn_contract, routineContract(), no_schema_files];
+  return [turnContract(), routineContract(), no_schema_files];
+}
+
+// The input autonomy gives this turn's behavior (abilities/autonomy/autonomy.js
+// behaviorInputPayload, then focus and focus_candidates: the reference
+// behavior_input_payload).
+function turnBehaviorInput() {
+  var data = cognition_input.stimulus.data;
+  var input = data !== null && typeof data === 'object' ? Object.assign({}, data) : {event: data};
+  return Object.assign(input, {focus: cognition_input.focus, focus_candidates: cognition_input.focus_candidates});
+}
+
+// The turn behavior contract with the grounded triggers it is stored under
+// (autonomy matches them against the stimulus event) and this turn's input.
+function turnContract() {
+  return turn_contract.replace(/TRIGGERS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? turnBehaviorInput() : triggers); });
 }
 
 // The original schedule.At.next_after for an at schedule {time: 'HH:MM', days,

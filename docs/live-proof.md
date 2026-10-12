@@ -41,7 +41,10 @@ SQLite, reflection with the builder, routines, speaking on Gemini):
    'bot.ability.communication.input'` while the turn's stimulus is
    `bot.ability.conversation.output`. Reasoning answered "pong", and
    reflection then broke the behavior ("the inventory trigger is
-   conversation output, and it has not been used").
+   conversation output, and it has not been used"). The turn behavior
+   contract had told the builder that `input` holds the stimulus;
+   decision D96 makes it name the behavior's triggers and its actual
+   input, after this run.
 4. "What is my favorite color?" Reasoning recalled memory and answered
    "Your favorite color is green."
 
