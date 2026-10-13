@@ -148,10 +148,11 @@
 //! generation or billing (that is reported by its users, not guaranteed),
 //! and the prompt's tokens are billed whenever the request was accepted.
 //!
-//! The request sets no token limit (neither `max_tokens` nor
-//! `max_completion_tokens`), so the backend's own limit (by default the
-//! model's context left after the prompt) bounds the reasoning and the
-//! answer together. A reasoning model (such as
+//! The request sets no token limit unless the invocation gives
+//! `max_completion_tokens` (it never sends `max_tokens`), so by default the
+//! backend's own limit (the model's context left after the prompt) bounds
+//! the reasoning and the answer together; a reply cut at the limit fails
+//! `truncated`. A reasoning model (such as
 //! `Qwen/Qwen3.8-Flash-Next`) streams its reasoning first, as
 //! `delta.reasoning` or `delta.reasoning_content`, and only then the
 //! answer as `delta.content`: a small limit can go entirely to reasoning
@@ -232,6 +233,8 @@ pub const BASE_URL_SLOT: &str = "baseurl";
 /// `false`), substituted into the request's `stream` member (decision
 /// D101): a run sets it per backend, and without it a call is not streamed.
 pub const STREAM_SLOT: &str = "stream";
+/// Upper bound of `max_completion_tokens`.
+pub const MAX_COMPLETION_TOKENS: u32 = 1_048_576;
 /// The path appended to the base URL.
 pub const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
 /// `json_schema.name` when the invocation names none.
@@ -444,6 +447,8 @@ pub struct Generation {
     pub reasoning_effort: &'static str,
     /// Whether the reply is streamed (`stream`).
     pub stream: bool,
+    /// `max_completion_tokens`, when the invocation gave one.
+    pub max_completion_tokens: Option<u64>,
 }
 
 /// The closed failure codes of [`FAILED_EVENT`].
@@ -939,6 +944,7 @@ pub fn parse_parameters<'a>(
     let mut strict = None;
     let mut reasoning_effort = None;
     let mut stream = None;
+    let mut max_completion_tokens = None;
     for (name, value) in parameters {
         let slot = match name {
             "model" => &mut model,
@@ -950,6 +956,7 @@ pub fn parse_parameters<'a>(
             "strict" => &mut strict,
             "reasoning_effort" => &mut reasoning_effort,
             "stream" => &mut stream,
+            "max_completion_tokens" => &mut max_completion_tokens,
             _ => return Err("generate takes no parameter of that name"),
         };
         if slot.replace(value).is_some() {
@@ -999,6 +1006,7 @@ pub fn parse_parameters<'a>(
     let strict = boolean_parameter(strict, "generate strict must be a boolean")?;
     let reasoning_effort = reasoning_effort_parameter(reasoning_effort)?;
     let stream = boolean_parameter(stream, "generate stream must be a boolean")?.unwrap_or(false);
+    let max_completion_tokens = max_completion_tokens_parameter(max_completion_tokens)?;
     let schema = match schema {
         None => {
             if schema_name.is_some() || strict.is_some() {
@@ -1017,6 +1025,7 @@ pub fn parse_parameters<'a>(
         schema,
         reasoning_effort,
         stream,
+        max_completion_tokens,
     })
 }
 
@@ -1034,6 +1043,26 @@ fn schema_name_parameter(value: Option<&Data>) -> Result<Option<&str>, &'static 
             Ok(Some(name.as_str()))
         }
         Some(_) => Err("generate schemaname must match [A-Za-z0-9_-]{1,64}"),
+    }
+}
+
+/// `max_completion_tokens`: absent, or a whole number from 1 to
+/// [`MAX_COMPLETION_TOKENS`].
+fn max_completion_tokens_parameter(value: Option<&Data>) -> Result<Option<u64>, &'static str> {
+    match value {
+        None => Ok(None),
+        Some(Data::Number(number))
+            if number.get().fract() == 0.0
+                && (1.0..=f64::from(MAX_COMPLETION_TOKENS)).contains(&number.get()) =>
+        {
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "a whole number checked to lie in 1..=MAX_COMPLETION_TOKENS"
+            )]
+            Ok(Some(number.get() as u64))
+        }
+        Some(_) => Err("generate max_completion_tokens must be a whole number from 1 to 1048576"),
     }
 }
 
@@ -1085,6 +1114,9 @@ pub fn build_request(
     );
     if generation.stream {
         body.insert("stream".into(), Json::Bool(true));
+    }
+    if let Some(tokens) = generation.max_completion_tokens {
+        body.insert("max_completion_tokens".into(), tokens.into());
     }
     if let Some(schema) = &generation.schema {
         body.insert(

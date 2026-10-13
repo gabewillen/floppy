@@ -46,7 +46,7 @@ use serde_json::Value as Json;
 /// The service's exact type URI.
 pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/generate";
 /// The parameters the service takes.
-pub const PARAMETERS: [&str; 9] = [
+pub const PARAMETERS: [&str; 10] = [
     "model",
     "prompt",
     "messages",
@@ -56,6 +56,7 @@ pub const PARAMETERS: [&str; 9] = [
     "strict",
     "reasoning_effort",
     "stream",
+    "max_completion_tokens",
 ];
 /// The `reasoning_effort` values the service accepts.
 pub const REASONING_EFFORTS: [&str; 6] = ["none", "minimal", "low", "medium", "high", "xhigh"];

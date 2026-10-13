@@ -6,6 +6,10 @@ fn text(value: &str) -> Data {
     Data::String(value.into())
 }
 
+fn number(value: f64) -> Data {
+    Data::Number(scxml_types::FiniteNumber::new(value).expect("a finite number"))
+}
+
 fn parse(parameters: &[(&str, Data)]) -> Result<Generation, &'static str> {
     parse_with_files(parameters, &[])
 }
@@ -212,6 +216,35 @@ fn the_runs_stream_slot_decides_the_stream_member() {
     ])
     .expect("valid");
     assert_eq!(build_request(2, 1, Some(3), &streamed).stream, None);
+}
+
+/// `max_completion_tokens` bounds a reply's tokens (decision D101): a model
+/// that writes on and on stops there and the call fails as `truncated`.
+#[test]
+fn max_completion_tokens_is_sent_and_bounded() {
+    let generation = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("max_completion_tokens", number(8192.0)),
+    ])
+    .expect("valid");
+    let body: Json =
+        serde_json::from_slice(&build_request(2, 1, None, &generation).body).expect("JSON");
+    assert_eq!(body["max_completion_tokens"], 8192);
+    for bad in [number(0.0), number(1.5), number(2_000_000.0), text("8192")] {
+        assert!(
+            parse(&[
+                ("model", text("m")),
+                ("prompt", text("p")),
+                ("max_completion_tokens", bad)
+            ])
+            .is_err()
+        );
+    }
+    assert_eq!(
+        outcome(&generation, ok(completion("cut", "length"))),
+        Returned::failed(FailureCode::Truncated)
+    );
 }
 
 #[test]

@@ -46,7 +46,8 @@
   topology: design and author arm builder.timeout after generate_ceiling_ms
   in all and, once their reply streams (the run's FLOPPY_STREAM), after
   generate_timeout_ms without progress (the first generate.progress arms
-  it, each later one re-arms it; decision D101), and
+  it, each later one re-arms it; decision D101), bound each reply by
+  max_completion_tokens, and
   triage after decision_timeout_ms (each tagged with its stage run and
   cancelled on exit), and a timeout that fires first leaves the state,
   which cancels the in-flight call (its late answer reaches no one).
@@ -92,6 +93,10 @@
          it over) and its backstop (decision D101). -->
     <data id="generate_timeout_ms" expr="30000"/>
     <data id="generate_ceiling_ms" expr="1200000"/>
+    <!-- A generation's token bound (the generate service's
+         max_completion_tokens): a model that reasons on without answering
+         stops there, as truncated, and the build goes on (decision D101). -->
+    <data id="max_completion_tokens" expr="8192"/>
     <!-- Where the builder reports its progress (a stage entered, a
          generation's reply arriving) as builder.progress: '#_parent' for an
          invoker that bounds the build by inactivity, null for none. -->
@@ -229,6 +234,7 @@
       <param name="schema" expr="plan_schema"/>
       <param name="schemaname" expr="'topology_plan'"/>
       <param name="strict" expr="true"/>
+      <param name="max_completion_tokens" expr="max_completion_tokens"/>
     </invoke>
     <!-- A streamed reply's progress starts the inactivity bound, or starts
          it over, and is passed on (decision D101). -->
@@ -309,6 +315,7 @@
       <param name="schema" expr="draft_schema"/>
       <param name="schemaname" expr="'scxml_draft'"/>
       <param name="strict" expr="true"/>
+      <param name="max_completion_tokens" expr="max_completion_tokens"/>
     </invoke>
     <transition event="generate.progress" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.progress","description":"The reply of a streamed generation is arriving: received counts its bytes so far.","type":"object","properties":{"received":{"type":"integer","minimum":0}},"required":["received"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
       <cancel sendidexpr="generate_timer"/>

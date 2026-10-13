@@ -170,7 +170,8 @@ the topology. `design` and `author` each arm `builder.timeout` after
 `generate_ceiling_ms` in all (default 1200 s) and, once their reply streams
 (the run's `FLOPPY_STREAM` is `true`), after `generate_timeout_ms` without
 progress (default 30 s; the first `generate.progress` arms it, each later
-one re-arms it), the request may set either; and `triage` arms it
+one re-arms it), the request may set either; each reply is bounded by
+`max_completion_tokens` (8192, reasoning included); and `triage` arms it
 after `decision_timeout_ms` (60 s), tagged with the stage run
 (`stage_run`) and cancelled on exit (decision D101). Invoked with the
 `<param>` `progress_target` `'#_parent'` (reflection does), the builder

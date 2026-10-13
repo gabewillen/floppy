@@ -20,7 +20,8 @@ Last updated: 2026-10-12.
   vLLM can); scxml.rs's `outbound-http.send` delivers a streamed body as it
   arrives, the generate service returns `generate.progress` (a reply that
   is not streamed returns none, so only its backstop bounds it), and the
-  builder passes it on to reflection with `builder.progress` for each stage.
+  builder passes it on to reflection with `builder.progress` for each stage;
+  the builder caps its replies at 8192 tokens.
   The stage and revision bounds are configurable through `bot.activate`; the
   turn behavior contract names `parent.data` as a
   conversation turn's message. Two `live_conversation` runs passed: the

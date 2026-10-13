@@ -810,6 +810,12 @@ fn a_build_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
             .iter()
             .all(|request| request.body.get("stream").is_none())
     );
+    assert!(
+        drafts
+            .iter()
+            .all(|request| request.body["max_completion_tokens"] == 8192),
+        "a draft's tokens are bounded"
+    );
 }
 
 /// A build whose generation stops arriving fails the revision at the

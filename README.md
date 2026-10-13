@@ -168,6 +168,7 @@ them). Both directions therefore call the Gemini API, so
 | --- | --- | --- | --- |
 | `bots/builder/builder.scx` | `generate_timeout_ms` | `30000` | one design or author generation without progress, once its reply streams: the first progress arms it, each later one re-arms it (decision D101; a `builder.request`'s `generate_timeout_ms` overrides it) |
 | `bots/builder/builder.scx` | `generate_ceiling_ms` | `1200000` | one design or author generation in all, the backstop, and the only bound of a reply that is not streamed (decision D101; a `builder.request`'s `generate_ceiling_ms` overrides it) |
+| `bots/builder/builder.scx` | `max_completion_tokens` | `8192` | the tokens of one design or author reply, reasoning included: a model that reasons on without answering fails `truncated` (decision D101) |
 | `bots/builder/builder.scx` | `decision_timeout_ms` | `60000` | one triage decision |
 | `bots/builder/builder.scx` | `max_tests` | `8` | the test scripts one draft may carry |
 | `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
