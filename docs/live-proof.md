@@ -7,6 +7,28 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-12, `live_conversation` with the per-backend streaming switch and the builder's token bound (D101)
+
+Streaming is set per backend (`FLOPPY_STREAM`, unset by default), an
+inactivity bound arms only on a streamed reply's first progress, and the
+builder's design and author calls carry `max_completion_tokens` 8192.
+`cargo test -p floppy-tests --locked --test floppy_live -- --ignored
+--test-threads=1 live_conversation`, transcripts read from
+`target/floppy-live/live_conversation.txt`.
+
+| Run | Backend | Streaming | Turns 1-4 | Result |
+| --- | --- | --- | --- | --- |
+| switch CPA | CPA gateway, `gabe-codex-1/gpt-6-luna` (`.env:.env.cpa`) | off (unset) | turn 2 created `ExactPingReply` ACTIVE; turn 3 "pong" from autonomy; turn 4 "Your favorite color is green." | pass (54 s); no call streamed, no bound fired |
+| switch local 1 | vLLM, `Qwen/Qwen3.8-Flash-Next` (`.env` and `FLOPPY_STREAM=true`) | on | turn 1 reflection created a behavior for the favorite color and turn 3 one for ping/pong; every author generation (four) failed `truncated` at 8192 tokens, so both builds ended `no-progress`; turn 3 "pong" (reasoning), turn 4 "Your favorite color is green!" | fails the behavior assertion (1833 s); no stage hit an inactivity bound |
+| switch local 2 | the same, through the logging relay | on | reflection selected nothing on turns 1 and 2; turn 3 "pong" (reasoning) and a create accepted ACTIVE (its author reply 14.7 thousand characters of reasoning and 1.7 thousand of content, under the bound); turn 4 "Your favorite color is green, Gabe!" | fails the behavior assertion (234 s: learned on turn 3, not 2); all 10 calls streamed, longest gap 2.9 s, longest wait for the first chunk 4.8 s |
+
+On the vLLM the behavior assertion depends on the model's choices, as in
+the runs below (local 2 and 3 failed it too). The token bound turned run 1's
+author generations into failures of about 30 thousand characters of reasoning
+each instead of replies that ran to the backstop; whether any of them would
+have answered is not known (no relay ran then). The answered author replies
+logged on this backend so far reasoned at most 14.7 thousand characters.
+
 ## 2026-10-12, `live_conversation` with streamed model calls bounded by inactivity (D101)
 
 The runs used floppy with scxml.rs's `outbound-http.send` (subtree pull

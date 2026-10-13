@@ -21,7 +21,10 @@ Last updated: 2026-10-12.
   arrives, the generate service returns `generate.progress` (a reply that
   is not streamed returns none, so only its backstop bounds it), and the
   builder passes it on to reflection with `builder.progress` for each stage;
-  the builder caps its replies at 8192 tokens.
+  the builder caps its replies at 8192 tokens. Live (docs/live-proof.md):
+  CPA with streaming off passed; the vLLM with streaming on completed every
+  turn but failed the learned-by-turn-2 assertion twice (the model's
+  choices; one run's author replies all hit the token bound).
   The stage and revision bounds are configurable through `bot.activate`; the
   turn behavior contract names `parent.data` as a
   conversation turn's message. Two `live_conversation` runs passed: the
