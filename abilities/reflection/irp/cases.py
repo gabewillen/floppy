@@ -99,11 +99,11 @@ def failed_prefix(text):
 
 S.statement(1, "Without a database (the `<param>` `database` null, its default) it offers nothing on start and answers each `bot.ability.reflection.input` `{turn, cognition_input, cognition_output}` at once with `bot.ability.reflection.output` (no data), asking no model.")
 S.statement(2, "With a database, `recalling` reads the prior episodes and the behavior inventory in one memory transaction and `processing` asks the generate service (schema `dispatch`) to select at most one of `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break` (a change's and a break's `name` pinned to the inventory's names, and neither offered when the inventory is empty; decision D100); an empty selection goes to `storing`, which stores the turn's episode and answers `bot.ability.reflection.output`.")
-S.statement(3, "More than one selected event fails the turn with `bot.ability.failed` `{message: \"Reflection select must return at most one behavior event.\"}`; a failed select call fails it with `Reflection select failed (<code>)`; a select call that makes no progress for `select_timeout_ms` (its streamed reply's `generate.progress` starts it over) or runs `select_ceiling_ms` in all fails it with `Reflection child cancellation timed out.` (decision D101).")
+S.statement(3, "More than one selected event fails the turn with `bot.ability.failed` `{message: \"Reflection select must return at most one behavior event.\"}`; a failed select call fails it with `Reflection select failed (<code>)`; a select call whose streamed reply makes no progress for `select_timeout_ms` (its first `generate.progress` arms it, each later one re-arms it) or that runs `select_ceiling_ms` in all fails it with `Reflection child cancellation timed out.` (decision D101).")
 S.statement(4, "A selected `bot.behavior.break` (`breaking`) marks the named behavior BROKEN with its trimmed reason and keeps the row, then stores the episode and answers `bot.ability.reflection.output`; a break of a name the inventory does not hold is not offered, so a model that selects one fails the select with `Reflection select failed (schema-mismatch)`.")
 S.statement(5, "A selected `bot.behavior.create` (`revising`) stores a DRAFT stub for a new name, invokes the builder bot with a `builder.request`, and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built document, then stores the episode and answers `bot.ability.reflection.output`; a `bot.behavior.change` of a stored name revises it the same way, and a change of a name the inventory does not hold is not offered, so a model that selects one fails the select with `Reflection select failed (schema-mismatch)`.")
 S.statement(6, "A builder that fails with the last draft it rejected (`abandoning`) keeps that draft in the row as DRAFT and fails the turn with `Reflection change abandoned: same diagnostic message after fix:` and the rendered diagnostics (no-progress); a builder that fails with no draft fails the turn with `Reflection revision failed: <reason>: <first diagnostic>`, the create's DRAFT stub kept.")
-S.statement(7, "`revising` is bounded by `revising_timeout_ms` without progress (each `builder.progress` the builder, invoked with `progress_target` `'#_parent'`, sends starts it over) and by `revising_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101): when one passes, the revision is cancelled and the turn fails with `Reflection child cancellation timed out.`.")
+S.statement(7, "`revising` is bounded by `revising_timeout_ms` without progress while a builder generation streams (the builder, invoked with `progress_target` `'#_parent'`, passes on each `generate.progress` of its streamed generations, which arms it, and sends `builder.progress` as it enters a stage, which disarms it) and by `revising_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101): when one passes, the revision is cancelled and the turn fails with `Reflection child cancellation timed out.`.")
 S.statement(8, "A memory transaction that fails (here the recall, on a database the run does not grant) fails the turn with `Reflection memory recall failed: <detail>`; after any failure the turn's episode is stored with no behavior (unless storing it is what failed; decision D97) and the reflection is idle again and takes the next input.")
 S.statement(9, "An input that arrives while a reflection is in hand waits and runs after it, in order: each turn gets its own answer.")
 
@@ -121,9 +121,9 @@ S.case(120, 3, "two selected events fail the turn.",
 S.case(121, 3, "a select call the backend fails fails the turn with its code.",
        [send(INPUT, turn(1)), failed("Reflection select failed (status)")],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[chat(None, status=500)], clock="wall")
-S.case(122, 3, "a select call that does not answer in time fails the turn.",
+S.case(122, 3, "a select call that outlasts its backstop fails the turn.",
        [send(INPUT, turn(1)), failed("Reflection child cancellation timed out.")],
-       params=[DB, ("select_timeout_ms", "1")], backend=[select()], clock="wall")
+       params=[DB, ("select_ceiling_ms", "1")], backend=[select()], clock="wall")
 
 S.case(130, 4, "a break of a behavior the inventory does not hold is not offered: selecting one fails the select.",
        [send(INPUT, turn(1)), failed("Reflection select failed (schema-mismatch)")],
@@ -157,9 +157,9 @@ S.case(151, 6, "a build whose every draft generation fails fails the turn with n
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN, chat(None, status=500), chat(None, status=500), select(brk("GreetOnKnock"))],
        clock="wall")
 
-S.case(160, 7, "a revision that outlasts revising_timeout_ms fails the turn.",
+S.case(160, 7, "a revision that outlasts revising_ceiling_ms fails the turn.",
        [send(INPUT, turn(1)), failed("Reflection child cancellation timed out.")],
-       params=[DB, SLOW_SELECT, ("revising_timeout_ms", "2000")],
+       params=[DB, SLOW_SELECT, ("revising_ceiling_ms", "2000")],
        backend=[select(CREATE), PLAN, draft(WAITING, settle=20000, done=False)], clock="wall")
 
 S.case(170, 8, "a recall on a database the run does not grant fails the turn, and the next input is taken.",

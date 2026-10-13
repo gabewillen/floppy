@@ -317,13 +317,6 @@ fn every_inactivity_bound_has_a_backstop_and_the_stages_nest_in_the_turn() {
             "{document}: {inactivity} is below its backstop {ceiling}"
         );
     }
-    // A revision may simulate one test without progress for the builder's
-    // whole per-test cap.
-    assert!(
-        millis("abilities/reflection/reflection.scx", "revising_timeout_ms")
-            > millis("bots/builder/builder.scx", "sim_test_cap_ms"),
-        "a simulation test fits inside the revision's inactivity bound"
-    );
     // The stages before reasoning answer inside the stage's inactivity bound.
     let stage = millis(
         "abilities/cognition/cognition.scx",
@@ -344,5 +337,44 @@ fn every_inactivity_bound_has_a_backstop_and_the_stages_nest_in_the_turn() {
     assert!(
         cascade < turn,
         "the cascade ({cascade} ms) ends inside the turn ({turn} ms)"
+    );
+}
+
+/// Streaming is per backend (decision D101): every model call that is bounded
+/// by inactivity lets the run's `FLOPPY_STREAM` decide (the generate
+/// package's `stream` slot), and no document asks for a stream itself, so a
+/// run that does not set it streams nothing (the default README.md states).
+#[test]
+fn the_runs_stream_setting_alone_decides_whether_a_call_streams() {
+    let manifest = read(Path::new("services/generate/package/generate.service.json"));
+    assert!(
+        manifest.contains(r#""env-slots": ["apikey", "baseurl", "stream"]"#),
+        "{manifest}"
+    );
+    for document in [
+        "abilities/reasoning/reasoning.scx",
+        "abilities/reflection/reflection.scx",
+        "bots/builder/builder.scx",
+    ] {
+        let text = read(Path::new(document));
+        let invokes = text
+            .matches(r#"type="https://github.com/stateforward/floppy/services/generate""#)
+            .count();
+        assert!(invokes > 0, "{document} calls the model");
+        assert_eq!(
+            text.matches(r#"env:stream="FLOPPY_STREAM""#).count(),
+            invokes,
+            "{document}: every model call lets the run decide"
+        );
+        assert!(
+            !text.contains(r#"<param name="stream""#),
+            "{document} never asks for a stream itself"
+        );
+    }
+    let readme = read(Path::new("README.md"));
+    assert!(
+        readme.contains("| `FLOPPY_STREAM` |")
+            && readme.contains("unset (the default), no call is streamed"),
+        "README.md states the default"
     );
 }

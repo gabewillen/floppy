@@ -8,7 +8,7 @@
   "wit-world": "stateforward:scxml/invoked-service",
   "wit-version": "0.2.0",
   "http-origins": [],
-  "env-slots": ["apikey", "baseurl"],
+  "env-slots": ["apikey", "baseurl", "stream"],
   "validator-artifact": "floppy_service_generate_validator.virtualized.wasm",
   "validator-sha256": "9df9cd48cb94e00638ff84b09785bf7c80bca7e2a3038773328394f8c420b2f9"
 }

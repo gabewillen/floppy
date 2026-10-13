@@ -114,9 +114,11 @@ class Suite:
     def statement(self, number, text):
         self.statements.append((f"{self.name}-{number}", text))
 
-    def case(self, test_id, number, comment, steps, data=(), params=(), ignore=(), backend=None, clock=None):
+    def case(self, test_id, number, comment, steps, data=(), params=(), ignore=(), backend=None, clock=None,
+             stream=False):
         self.cases.append(dict(id=test_id, assertion=f"{self.name}-{number}", comment=comment, steps=steps,
-                               data=data, params=params, ignore=ignore, backend=backend, clock=clock))
+                               data=data, params=params, ignore=ignore, backend=backend, clock=clock,
+                               stream=stream))
 
     # ------------------------------------------------------------ writing
     def document(self, case):
@@ -227,7 +229,10 @@ class Suite:
             script = os.path.join(directory, "backend.json")
             if case["backend"] is not None or case["clock"]:
                 with open(script, "w") as out:
-                    json.dump({"clock": case["clock"] or "wall", "answers": case["backend"] or []}, out, indent=2)
+                    script = {"clock": case["clock"] or "wall", "answers": case["backend"] or []}
+                    if case["stream"]:
+                        script["stream"] = True
+                    json.dump(script, out, indent=2)
                     out.write("\n")
             elif os.path.exists(script):
                 os.remove(script)

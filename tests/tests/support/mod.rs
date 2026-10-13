@@ -41,9 +41,10 @@ use sha2::{Digest as _, Sha256};
 /// The variables the bots' documents name. The child process never inherits
 /// them, so a test supplies values only through its env file (or an
 /// explicit `--env NAME=VALUE`).
-pub const GRANTED: [&str; 8] = [
+pub const GRANTED: [&str; 9] = [
     "FLOPPY_API_KEY",
     "FLOPPY_BASE_URL",
+    "FLOPPY_STREAM",
     "TYPESAFE_API_KEY",
     "TYPESAFE_BASE_URL",
     "FLOPPY_SPEECH_API_KEY",
@@ -916,10 +917,10 @@ pub fn stream_if_asked(request: &Json, text: String) -> String {
 /// head at once and then `content` in `pieces` server-sent-event chunks
 /// `gap` apart, then its finish and `data: [DONE]`; with `stall`, only the
 /// first piece, and then nothing until the client closes the connection
-/// (at most two minutes). A request that is not streamed gets the whole
-/// completion once all of it is ready, `pieces` × `gap` later, as a
-/// backend that answers only when it has finished. The body ends when the
-/// connection closes.
+/// (at most two minutes). A request that is not streamed gets its head at
+/// once and the whole completion once all of it is ready, `pieces` × `gap`
+/// later, as a backend that answers only when it has finished (a gateway
+/// may send the head early). The body ends when the connection closes.
 pub fn answer_slowly(
     stream: &mut std::net::TcpStream,
     request: &Json,
@@ -939,12 +940,19 @@ pub fn answer_slowly(
         }
     );
     if !streamed {
+        if stream
+            .write_all(head.as_bytes())
+            .and_then(|()| stream.flush())
+            .is_err()
+        {
+            return;
+        }
         std::thread::sleep(gap * u32::try_from(pieces).unwrap_or(u32::MAX));
         let completion = serde_json::json!({
             "object": "chat.completion",
             "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": content}}],
         });
-        let _ = write!(stream, "{head}{completion}");
+        let _ = write!(stream, "{completion}");
         return;
     }
     let chunk = |delta: Json, finish: Json| {

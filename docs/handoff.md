@@ -7,17 +7,21 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-10.
+Last updated: 2026-10-12.
 
 ## Current state (2026-10-09) — resume here
 
 - **Behavior learning proven live (2026-10-12, D100, D101, D96):** reflection
   offers change and break only for inventory names (neither on an empty
   inventory); the cascade stage, reflection's select and revising, and the
-  builder's generations are bounded by inactivity with a backstop (the
-  model calls stream; scxml.rs's `outbound-http.send` delivers their bodies
-  as they arrive, the generate service returns `generate.progress`, and
-  the builder `builder.progress`), configurable through `bot.activate`; the
+  builder's generations are bounded by inactivity while their reply streams
+  and by a backstop always (decision D101). Streaming is per backend:
+  `FLOPPY_STREAM=true` (unset by default; the CPA gateway cannot stream, the
+  vLLM can); scxml.rs's `outbound-http.send` delivers a streamed body as it
+  arrives, the generate service returns `generate.progress` (a reply that
+  is not streamed returns none, so only its backstop bounds it), and the
+  builder passes it on to reflection with `builder.progress` for each stage.
+  The stage and revision bounds are configurable through `bot.activate`; the
   turn behavior contract names `parent.data` as a
   conversation turn's message. Two `live_conversation` runs passed: the
   behavior was learned on turn 2, answered "pong" on turn 3 through

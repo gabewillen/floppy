@@ -43,7 +43,7 @@ function firstDiagnosticSummary() {
 
 // Whether the builder.request data satisfies schemas/builder.request.json.
 function satisfiesBuilderRequest(_event) {
-  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'min_every_ms', 'turn_after_bound_ms'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && (_event.data.generate_timeout_ms === undefined || (Number.isInteger(_event.data.generate_timeout_ms) && _event.data.generate_timeout_ms >= 1 && _event.data.generate_timeout_ms <= 3600000));
+  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms);
 }
 
 // An absent lifetime bound, or one of 1 ms to 1 day.
@@ -70,6 +70,15 @@ function requestModel(_event) {
 
 function requestGenerateTimeoutMs(_event) {
   return _event.data.generate_timeout_ms === undefined ? generate_timeout_ms : _event.data.generate_timeout_ms;
+}
+
+function requestGenerateCeilingMs(_event) {
+  return _event.data.generate_ceiling_ms === undefined ? generate_ceiling_ms : _event.data.generate_ceiling_ms;
+}
+
+// A request's optional generation bound: absent, or 1 ms to 1 h.
+function isOptionalGenerateBound(value) {
+  return value === undefined || (Number.isInteger(value) && value >= 1 && value <= 3600000);
 }
 
 function invalidRequestDiagnostics() {

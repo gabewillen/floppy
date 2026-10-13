@@ -23,7 +23,8 @@
 //! * `irp/sources/<id>/backend.json` (optional) scripts the fake HTTP
 //!   backend of the services the run reaches: `{"clock": "wall" |
 //!   "logical", "answers": [{"path": SUFFIX, "status": N, "body": JSON},
-//!   ...]}`. A request takes the first unused answer whose `path` ends its
+//!   ...], "stream": true?}`; with `stream` the run's `FLOPPY_STREAM` is
+//!   `true` (decision D101). A request takes the first unused answer whose `path` ends its
 //!   target (the last one for a path repeats); a request no answer matches
 //!   is answered 404; a 200 completion answers a streamed request
 //!   (`"stream": true`) as its server-sent-event stream
@@ -248,13 +249,18 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
         return Some(format!("{} is missing", start.display()));
     }
     let (wall, answers) = script(case);
+    let streams = std::fs::read_to_string(case.join("backend.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<Json>(&text).ok())
+        .is_some_and(|script| script["stream"] == true);
     let backend = Backend::start(answers);
     let env = unique_scratch("irp-env").join("fake.env");
     std::fs::write(
         &env,
         format!(
-            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/v1\nTYPESAFE_BASE_URL={origin}\nFLOPPY_SPEECH_BASE_URL={origin}/v1\nFLOPPY_VOICE_BASE_URL={origin}/v1\n",
-            origin = backend.origin
+            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/v1\nTYPESAFE_BASE_URL={origin}\nFLOPPY_SPEECH_BASE_URL={origin}/v1\nFLOPPY_VOICE_BASE_URL={origin}/v1\n{stream}",
+            origin = backend.origin,
+            stream = if streams { "FLOPPY_STREAM=true\n" } else { "" },
         ),
     )
     .expect("the env file is writable");

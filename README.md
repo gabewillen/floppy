@@ -121,6 +121,7 @@ values. No package has a default model endpoint (decision D31).
 | --- | --- | --- |
 | `FLOPPY_BASE_URL` | the `generate` service (`env:baseurl`): the builder's design and author stages, the floppy bot's reasoning | yes: without it a generation fails `unconfigured` |
 | `FLOPPY_API_KEY` | the `generate` service (`env:apikey`), as above | yes, as above |
+| `FLOPPY_STREAM` | the `generate` service (`env:stream`): whether the model endpoint streams; `true` or `false` | no: unset (the default), no call is streamed and each model-bound stage is bounded by its backstop alone; `true` makes reasoning's, reflection's and the builder's calls streamed and bounded by inactivity once they stream (decision D101). The CPA gateway does not stream (it answers a streamed request with keep-alive comments only), the maintainer's vLLM does |
 | `TYPESAFE_BASE_URL` | the `decision` service (`env:baseurl`): the builder's triage, the floppy bot's intuition | no: the service's declared origin, `https://api.typesafe.ai` |
 | `TYPESAFE_API_KEY` | the `decision` service (`env:apikey`), as above | for the floppy bot: without it every turn fails (`unconfigured`); the builder triages with its fallback |
 | `FLOPPY_SPEECH_BASE_URL` | the `speech` service (`env:baseurl`): the floppy bot's speech decoding (listening) and speech encoding (speaking) | yes: without it decoding and speaking fail `unconfigured` |
@@ -165,15 +166,15 @@ them). Both directions therefore call the Gemini API, so
 
 | Document | `<data>` | Default | What it bounds |
 | --- | --- | --- | --- |
-| `bots/builder/builder.scx` | `generate_timeout_ms` | `300000` | one design or author generation without progress: each progress of its streamed reply starts it over (decision D101; a `builder.request`'s `generate_timeout_ms` overrides it) |
-| `bots/builder/builder.scx` | `generate_ceiling_ms` | `1200000` | one design or author generation in all, the backstop (a live author generation on the maintainer's vLLM streamed for 548 s; decision D101) |
+| `bots/builder/builder.scx` | `generate_timeout_ms` | `30000` | one design or author generation without progress, once its reply streams: the first progress arms it, each later one re-arms it (decision D101; a `builder.request`'s `generate_timeout_ms` overrides it) |
+| `bots/builder/builder.scx` | `generate_ceiling_ms` | `1200000` | one design or author generation in all, the backstop, and the only bound of a reply that is not streamed (decision D101; a `builder.request`'s `generate_ceiling_ms` overrides it) |
 | `bots/builder/builder.scx` | `decision_timeout_ms` | `60000` | one triage decision |
 | `bots/builder/builder.scx` | `max_tests` | `8` | the test scripts one draft may carry |
 | `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
 | `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (the original's 30 s attachment timeout) |
 | `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (the original's 5 min processing timeout) |
-| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage without progress (the original's 30 s): reasoning's streamed reply starts it over with each progress; live replies had at most 6.2 s between chunks and 4.3 s before the first (decision D101; `bot.activate`'s `child_operation_timeout_ms` overrides it) |
-| `abilities/cognition/cognition.scx` | `child_operation_ceiling_ms` | `240000` | each cascade stage in all, the backstop, inside the body's `processing_timeout_ms` with the stages before reasoning (decision D101; `bot.activate`'s `child_operation_ceiling_ms` overrides it) |
+| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage without progress (the original's 30 s): autonomy's and the intuition's from their start, reasoning's once its reply streams (the first progress arms it, each later one re-arms it); live streamed replies had at most 6.2 s between chunks (decision D101; `bot.activate`'s `child_operation_timeout_ms` overrides it) |
+| `abilities/cognition/cognition.scx` | `child_operation_ceiling_ms` | `240000` | each cascade stage in all, the backstop and the only bound of a reasoning reply that is not streamed, inside the body's `processing_timeout_ms` with the stages before reasoning (decision D101; `bot.activate`'s `child_operation_ceiling_ms` overrides it) |
 | `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
 | `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (the original's `TURN_SILENCE_BOUND`) |
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
@@ -181,9 +182,9 @@ them). Both directions therefore call the Gemini API, so
 | `abilities/conversation/conversation.scx` | `memory_timeout_ms` | `5000` | each of the conversation's memory operations, the recall before the turns and the remember after them (the original's 5 s turn stage timeout) |
 | `abilities/communication/communication.scx` | `response_timeout_ms` | `36000` | saying one response (speaking's 30 s synthesis bound plus the original's 6 s; decision D98) |
 | `abilities/communication/communication.scx` | `encoding_timeout_ms` | `30000` | speaking's speech synthesis (communication passes its own; decision D98) |
-| `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation without progress (the original's 30 s; its streamed reply starts it over, decision D101) |
+| `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation without progress once its reply streams (the original's 30 s; decision D101) |
 | `abilities/reflection/reflection.scx` | `select_ceiling_ms` | `600000` | reflection's select generation in all, the backstop (decision D101) |
-| `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `150000` | reflection's revising through the builder without progress: each builder stage and each progress of its streamed generations starts it over, and one simulation test may run the builder's `sim_test_cap_ms` (120 s) without any (decision D101; `bot.activate`'s `revising_timeout_ms` overrides it) |
+| `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `30000` | reflection's revising through the builder without progress while a builder generation streams: its first progress arms it, each later one re-arms it, and the builder's next stage disarms it (decision D101; `bot.activate`'s `revising_timeout_ms` overrides it) |
 | `abilities/reflection/reflection.scx` | `revising_ceiling_ms` | `1800000` | reflection's revising in all, the backstop (live revisions on the maintainer's vLLM ran past 600 s while making progress; decision D101; `bot.activate`'s `revising_ceiling_ms` overrides it) |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (the original's 30 s) |
 | `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input (the original's 5 s) |

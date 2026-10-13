@@ -696,7 +696,7 @@ fn env_file(
     path
 }
 
-const ALL: [&str; 8] = support::GRANTED;
+const ALL: [&str; 9] = support::GRANTED;
 
 fn run(mock: &Mock, test: &str, route: &str, env: &[&str], request: &Json) -> Vec<Json> {
     run_deciding(mock, test, route, "typesafe", env, request)
@@ -995,7 +995,9 @@ fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
         "builder.request",
         // Long enough that the redesign answers in time on a loaded
         // machine (the held first plan times out whatever the bound).
-        &json!({"spec": SPEC, "generate_timeout_ms": 5000}),
+        // The backstop, since a reply that is not streamed has no
+        // inactivity bound (decision D101).
+        &json!({"spec": SPEC, "generate_ceiling_ms": 5000}),
     );
     run.end_input();
     records.extend(run.finish(Duration::from_mins(3)).records);

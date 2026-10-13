@@ -113,7 +113,9 @@ fn break_selection(name: &str) -> Json {
 fn selection(route: &str) -> Option<Json> {
     match route {
         "none" => Some(json!([])),
-        "create" | "buildfail" | "genfail" | "slowbuild" | "stallbuild" => Some(create_selection()),
+        "create" | "buildfail" | "genfail" | "slowbuild" | "stallbuild" | "slowplain" => {
+            Some(create_selection())
+        }
         "break" => Some(break_selection("GreetOnKnock")),
         "breakunknown" => Some(break_selection("Nobody")),
         "two" => Some(json!([
@@ -205,7 +207,11 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
         .and_then(Json::as_str)
         .unwrap_or_default()
         .to_owned();
-    for (route, stall) in [("slowbuild", false), ("stallbuild", true)] {
+    for (route, stall) in [
+        ("slowbuild", false),
+        ("stallbuild", true),
+        ("slowplain", false),
+    ] {
         let content = match schema.as_str() {
             "topology_plan" => PLAN.to_owned(),
             "scxml_draft" => draft(BEHAVIOR),
@@ -335,10 +341,16 @@ fn layout_bounded(
     std::fs::write(&path, harness).expect("the harness is writable");
     support::use_database(&path, database);
     let env = dir.join("fake.env");
+    // The slow routes' backend streams (decision D101).
+    let stream = if route == "slowbuild" || route == "stallbuild" {
+        "FLOPPY_STREAM=true\n"
+    } else {
+        ""
+    };
     std::fs::write(
         &env,
         format!(
-            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/{route}/v1\nTYPESAFE_BASE_URL={origin}/{route}\n",
+            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/{route}/v1\nTYPESAFE_BASE_URL={origin}/{route}\n{stream}",
             origin = mock.origin,
         ),
     )
@@ -762,6 +774,41 @@ fn a_build_that_keeps_making_progress_outlasts_the_inactivity_bound() {
             .iter()
             .all(|request| request.body["stream"] == true),
         "the builder streams its generations"
+    );
+}
+
+/// A build whose generations are not streamed (the run's `FLOPPY_STREAM`
+/// is unset) reports no generation progress, so the revision's inactivity
+/// bound never arms: each generation of about 10 s outlasts the 8 s bound
+/// and the build is accepted, bounded by the revision's backstop alone
+/// (decision D101).
+#[test]
+fn a_build_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
+    let mock = Mock::start();
+    let (harness, env) = layout_bounded(
+        &mock,
+        "slowplain",
+        "[]",
+        SQLITE,
+        "({revising_timeout_ms: 8000})",
+    );
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    assert_eq!(
+        texts(&records, "reflection.inventory"),
+        [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
+    );
+    let drafts = mock.requests("scxml_draft");
+    assert!(
+        drafts
+            .iter()
+            .all(|request| request.body.get("stream").is_none())
     );
 }
 

@@ -30,7 +30,7 @@ final states and its parent receives that state's done data as
 
 | What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?, min_every_ms?, turn_after_bound_ms?}`: the specification, extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each generation may go without progress before `builder.timeout` cancels it (1 ms to 1 h, default 300000), and the reference `check()`'s lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, the original's `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`) |
+| `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?}`: the specification, extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the reference `check()`'s lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, the original's `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, tests, report}`: the built document, its input event schemas (`{event, schema}`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
 | final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL` or no `FLOPPY_API_KEY`; the first generation ends the build at once), `no-progress` (the same failure twice in a row), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, absent when no draft was rejected (the original's revision drafts the rejected source) |
 
@@ -166,17 +166,18 @@ intake -> design -> author -> validate -> simulate -> done
 
 Model calls are invoked services, never executable content: each runs
 while the session keeps processing events, and every bound on time lives in
-the topology. `design` and `author` stream their generations and each arm
-`builder.timeout` after `generate_timeout_ms` without progress (default
-300 s; the request may lower it; each `generate.progress` of the streamed
-reply re-arms it) and after `generate_ceiling_ms` in all (1200 s), and
-`triage` after `decision_timeout_ms` (60 s), tagged with the stage run
+the topology. `design` and `author` each arm `builder.timeout` after
+`generate_ceiling_ms` in all (default 1200 s) and, once their reply streams
+(the run's `FLOPPY_STREAM` is `true`), after `generate_timeout_ms` without
+progress (default 30 s; the first `generate.progress` arms it, each later
+one re-arms it), the request may set either; and `triage` arms it
+after `decision_timeout_ms` (60 s), tagged with the stage run
 (`stage_run`) and cancelled on exit (decision D101). Invoked with the
 `<param>` `progress_target` `'#_parent'` (reflection does), the builder
 sends its invoker `builder.progress {stage}` as it enters `design`,
-`author`, `validate`, each simulation run and `triage`, and with each
-progress of a streamed generation, so the invoker can bound the build by
-inactivity. A timeout that fires while the call is
+`author`, `validate`, each simulation run and `triage`, and passes on each
+`generate.progress {received}` of a streamed generation, so the invoker can
+bound a streamed generation by inactivity. A timeout that fires while the call is
 in flight leaves the state, which cancels the invocation: the service is
 cancelled, the host closes the request's streaming connection at once (so
 the backend stops sending tokens), and no answer reaches anyone. `scx`

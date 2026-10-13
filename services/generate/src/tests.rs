@@ -108,7 +108,7 @@ fn a_prompt_with_a_system_message_builds_the_canonical_request() {
         ("prompt", text("Say hello.")),
     ])
     .expect("valid parameters");
-    let request = build_request(2, 1, &generation);
+    let request = build_request(2, 1, None, &generation);
     assert_eq!(
         request.url,
         [
@@ -144,7 +144,7 @@ fn a_streamed_generation_asks_for_server_sent_events() {
         ("stream", Data::Bool(true)),
     ])
     .expect("valid parameters");
-    let request = build_request(2, 1, &generation);
+    let request = build_request(2, 1, None, &generation);
     assert_eq!(
         String::from_utf8(request.body).expect("UTF-8"),
         r#"{"messages":[{"content":"p","role":"user"}],"model":"m","reasoning_effort":"low","stream":true}"#
@@ -156,7 +156,8 @@ fn a_streamed_generation_asks_for_server_sent_events() {
             vec![Part::Literal("text/event-stream".into())]
         )
     );
-    // Its reply is the stream's text; a completion is not a stream.
+    // Its reply is the stream's text, and a backend that answers one
+    // completion anyway is read as one (decision D101).
     assert_eq!(
         outcome(&generation, ok(reply("hello there"))),
         Returned {
@@ -166,8 +167,51 @@ fn a_streamed_generation_asks_for_server_sent_events() {
     );
     assert_eq!(
         outcome(&generation, ok(completion("hi", "stop"))),
-        Returned::failed(FailureCode::Malformed)
+        Returned {
+            name: RESULT_EVENT,
+            data: r#"{"text":"hi"}"#.into()
+        }
     );
+}
+
+/// The run's `stream` slot decides whether a call streams (decision D101):
+/// its reference is the body's last member, and the accept header takes
+/// either answer.
+#[test]
+fn the_runs_stream_slot_decides_the_stream_member() {
+    let generation = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
+    let request = build_request(2, 1, Some(3), &generation);
+    assert_eq!(
+        request.body_parts(),
+        [
+            Part::Literal(
+                r#"{"messages":[{"content":"p","role":"user"}],"model":"m","reasoning_effort":"low","stream":"#
+                    .into()
+            ),
+            Part::Reference(3),
+            Part::Literal("}".into()),
+        ]
+    );
+    assert!(request.headers.contains(&(
+        "accept".to_owned(),
+        vec![Part::Literal("application/json, text/event-stream".into())]
+    )));
+    // Without the slot the call is not streamed.
+    let plain = build_request(2, 1, None, &generation);
+    assert_eq!(
+        plain.body_parts(),
+        [Part::Literal(
+            String::from_utf8(plain.body.clone()).expect("UTF-8")
+        )]
+    );
+    // An invocation that asks for a stream streams whatever the slot says.
+    let streamed = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("stream", Data::Bool(true)),
+    ])
+    .expect("valid");
+    assert_eq!(build_request(2, 1, Some(3), &streamed).stream, None);
 }
 
 #[test]
@@ -180,7 +224,8 @@ fn a_schema_asks_for_structured_output_with_its_name_and_strictness() {
         ("strict", Data::Bool(true)),
     ])
     .expect("valid parameters");
-    let body: Json = serde_json::from_slice(&build_request(2, 1, &generation).body).expect("JSON");
+    let body: Json =
+        serde_json::from_slice(&build_request(2, 1, None, &generation).body).expect("JSON");
     assert_eq!(body["response_format"]["type"], "json_schema");
     assert_eq!(body["response_format"]["json_schema"]["name"], "verdict");
     assert_eq!(body["response_format"]["json_schema"]["strict"], true);
@@ -192,7 +237,7 @@ fn a_schema_asks_for_structured_output_with_its_name_and_strictness() {
     ])
     .expect("valid parameters");
     let text_body: Json =
-        serde_json::from_slice(&build_request(2, 1, &from_text).body).expect("JSON");
+        serde_json::from_slice(&build_request(2, 1, None, &from_text).body).expect("JSON");
     assert_eq!(
         text_body["response_format"]["json_schema"]["name"],
         DEFAULT_SCHEMA_NAME
@@ -210,7 +255,8 @@ fn a_strict_schema_is_sent_with_every_property_required() {
         ("strict", Data::Bool(true)),
     ])
     .expect("valid parameters");
-    let body: Json = serde_json::from_slice(&build_request(2, 1, &strict).body).expect("JSON");
+    let body: Json =
+        serde_json::from_slice(&build_request(2, 1, None, &strict).body).expect("JSON");
     assert_eq!(
         body["response_format"]["json_schema"]["schema"],
         serde_json::json!({
@@ -242,7 +288,7 @@ fn a_strict_schema_is_sent_with_every_property_required() {
         ("schema", text(schema)),
     ])
     .expect("valid parameters");
-    let body: Json = serde_json::from_slice(&build_request(2, 1, &loose).body).expect("JSON");
+    let body: Json = serde_json::from_slice(&build_request(2, 1, None, &loose).body).expect("JSON");
     assert_eq!(
         body["response_format"]["json_schema"]["schema"]["title"],
         "t"
@@ -261,7 +307,8 @@ fn reasoning_effort_is_sent_as_given() {
         ("reasoning_effort", text("high")),
     ])
     .expect("valid parameters");
-    let body: Json = serde_json::from_slice(&build_request(2, 1, &generation).body).expect("JSON");
+    let body: Json =
+        serde_json::from_slice(&build_request(2, 1, None, &generation).body).expect("JSON");
     assert_eq!(body["reasoning_effort"], "high");
 }
 
@@ -294,7 +341,7 @@ fn an_image_part_is_sent_as_an_image_url_with_its_data_url() {
         &[("/media/page 1.png", png(b"ab"))],
     )
     .expect("valid parameters");
-    let request = build_request(0, 1, &generation);
+    let request = build_request(0, 1, None, &generation);
     assert_eq!(
         String::from_utf8(request.body).expect("UTF-8"),
         r#"{"messages":[{"content":[{"text":"Read all visible text in this image. Return only the text.","type":"text"},{"image_url":{"url":"data:image/png;base64,iVBORw0KGgphYg=="},"type":"image_url"}],"role":"user"}],"model":"m","reasoning_effort":"low"}"#,
@@ -519,10 +566,13 @@ fn a_text_reply_becomes_the_result_event() {
             data: r#"{"text":"hello there"}"#.into()
         }
     );
-    // A stream is not a completion.
+    // A streamed reply is read as one (the backend decides, decision D101).
     assert_eq!(
         outcome(&generation, ok(reply("hello there"))),
-        Returned::failed(FailureCode::Malformed)
+        Returned {
+            name: RESULT_EVENT,
+            data: r#"{"text":"hello there"}"#.into()
+        }
     );
 }
 
@@ -801,7 +851,10 @@ fn the_package_manifest_binds_the_exact_uri_and_artifacts() {
         manifest.service_artifact,
         "floppy_service_generate.virtualized.wasm"
     );
-    assert_eq!(manifest.env_slots, [API_KEY_SLOT, BASE_URL_SLOT]);
+    assert_eq!(
+        manifest.env_slots,
+        [API_KEY_SLOT, BASE_URL_SLOT, STREAM_SLOT]
+    );
 }
 
 #[test]
@@ -831,4 +884,36 @@ fn only_data_events_count_as_a_streamed_reply_s_progress() {
     more.extend_from_slice(b"ta: [DONE]\n\n");
     assert_eq!(super::data_lines(&more, next), (1, more.len()));
     assert_eq!(super::data_lines(b": ping\n\n", 0), (0, 8));
+}
+
+/// A completion that is not streamed is never progress, however its bytes
+/// arrive (decision D101): a document arms no inactivity bound for it.
+#[test]
+fn a_reply_that_is_not_streamed_reports_no_progress() {
+    let completion = String::from_utf8(completion("hi", "stop")).expect("UTF-8");
+    let mut progress = super::Progress::default();
+    let mut body = Vec::new();
+    for (second, byte) in completion.bytes().enumerate() {
+        body.push(byte);
+        let now = u64::try_from(second).expect("small") * super::PROGRESS_INTERVAL_NS;
+        assert!(!progress.read(&body, now), "{completion}");
+    }
+}
+
+/// A streamed reply reports once it shows it is a stream, a keep-alive
+/// comment included, and then only for new `data:` events, at most once a
+/// second (decision D101).
+#[test]
+fn a_streamed_reply_reports_its_start_and_then_its_data_events() {
+    let second = super::PROGRESS_INTERVAL_NS;
+    let mut pings = super::Progress::default();
+    assert!(pings.read(b": ping\n\n", 0), "the stream has started");
+    assert!(!pings.read(b": ping\n\n: ping\n\n", 2 * second));
+    let mut data = super::Progress::default();
+    let mut body = b"data: {\"a\":1}\n\n".to_vec();
+    assert!(data.read(&body, 0), "the stream has started");
+    body.extend_from_slice(b"data: {\"a\":2}\n\n");
+    assert!(!data.read(&body, second - 1), "within the second");
+    assert!(data.read(&body, second), "the event not yet reported");
+    assert!(!data.read(&body, 3 * second), "no new event");
 }

@@ -97,13 +97,13 @@ def built(extra=""):
                         " && _event.data.report.simulation.every(function (r) { return r.passed; })" + (f" && {extra}" if extra else ""))
 
 
-S.statement(1, "It waits in `intake` for `builder.request` `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?, min_every_ms?, turn_after_bound_ms?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: \"invalid-request\", diagnostics: [{kind: \"request\", code: \"invalid-request\"}]}`, which the invoker receives as `done.invoke.<id>`.")
+S.statement(1, "It waits in `intake` for `builder.request` `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: \"invalid-request\", diagnostics: [{kind: \"request\", code: \"invalid-request\"}]}`, which the invoker receives as `done.invoke.<id>`.")
 S.statement(2, "A request is planned (`design`, schema `topology_plan`), authored (`author`, schema `scxml_draft`), validated (`validate`) and simulated (`simulate`, each test script driving the draft as an invoked child); a draft that validates and passes every test ends in the final state `done` with `{scxml, schemas, tests, report: {attempts, failures, fixes_applied, warnings, plan, decisions, history, simulation}}`, its schemas parsed from their JSON text.")
 S.statement(3, "A draft whose validator errors all have machine-applicable fixes is fixed (`apply_fixes`, at most 2 passes per draft) and validated again, without a new attempt: `report.fixes_applied` counts it.")
 S.statement(4, "Every failure goes through `retry_gate`, then `triage`, which asks the decision service to choose among its enabled transitions: `triage.repair` authors the draft again from the same plan (`report.decisions` `[\"triage.repair\"]`), `triage.redesign` plans again, `triage.abandon` ends in `failed` `{reason: \"abandoned\"}`. When the decision is unavailable it falls back (`fallback`): repair when there is a plan, else redesign.")
 S.statement(5, "A failure whose diagnostics equal the previous failure's ends in `failed` `{reason: \"no-progress\"}` with those diagnostics and, when a check rejected a draft, its `scxml`; at the request's `max_attempts` failures it ends in `failed` `{reason: \"attempts-exhausted\"}`.")
 S.statement(6, "Each check has its own diagnostics: a validator error (`kind` `validate`, its code), a schemas entry that is not JSON Schema text (`draft` `schema-not-json`), test scripts out of bounds (`draft` `tests-out-of-bounds`, one to eight), and a test whose outputs or done differ from its expectations (`simulate` `test-failed`).")
-S.statement(7, "A generation that fails (`generate.failed`) is a `generate` diagnostic `<stage>-failed`; one that makes no progress for `generate_timeout_ms` (its streamed reply's `generate.progress` starts it over) or runs `generate_ceiling_ms` in all is cancelled, a `timeout` diagnostic `<stage>-timeout` (decision D101).")
+S.statement(7, "A generation that fails (`generate.failed`) is a `generate` diagnostic `<stage>-failed`; one that runs `generate_ceiling_ms` in all, or, once its reply streams, makes no progress for `generate_timeout_ms` (the first `generate.progress` arms it, each later one re-arms it), is cancelled, a `timeout` diagnostic `<stage>-timeout` (decision D101).")
 S.statement(8, "With the request's lifetime bounds (`min_every_ms`, `turn_after_bound_ms`), a draft that sends `bot.behavior.tick` (a persistent routine) whose schedule is shorter than `min_every_ms` is a `lifetime` diagnostic `E0009`; a routine within the bounds also gets a forced first tick, whose output must select at least one event (else an `apply` diagnostic `E0008`).")
 
 S.case(100, 1, "a request refused by its schema raises error.execution at the sender; the builder keeps waiting and answers a whitespace spec invalid-request.",
@@ -179,8 +179,8 @@ S.case(161, 7, "an author generation that fails is a generate author-failed diag
        [send(REQUEST, request(max_attempts=1)),
         failed("attempts-exhausted", diagnostic("generate", "author-failed"))],
        backend=[PLAN, chat(status=500)], clock="wall")
-S.case(162, 7, "a design generation that makes no progress within generate_timeout_ms is a timeout design-timeout diagnostic.",
-       [send(REQUEST, request(generate_timeout_ms=1, max_attempts=1)),
+S.case(162, 7, "a design generation that outlasts generate_ceiling_ms is a timeout design-timeout diagnostic.",
+       [send(REQUEST, request(generate_ceiling_ms=1, max_attempts=1)),
         failed("attempts-exhausted", diagnostic("timeout", "design-timeout"))],
        backend=[PLAN, draft(PINGER)], clock="wall")
 

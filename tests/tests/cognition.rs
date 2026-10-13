@@ -449,6 +449,21 @@ fn layout(
     }
 }
 
+/// Sets the run's `FLOPPY_STREAM` to `true`: the backend streams, so each
+/// model call asks for a streamed reply (decision D101).
+fn streaming(bot: &Bot) {
+    set_stream(bot, "true");
+}
+
+/// Sets the run's `FLOPPY_STREAM` to `value`.
+fn set_stream(bot: &Bot, value: &str) {
+    let mut text = std::fs::read_to_string(&bot.env).expect("the env file is readable");
+    text.push_str("FLOPPY_STREAM=");
+    text.push_str(value);
+    text.push('\n');
+    std::fs::write(&bot.env, text).expect("the env file is writable");
+}
+
 fn start(bot: &Bot) -> Run {
     start_activated(bot, &json!({}))
 }
@@ -1623,25 +1638,31 @@ fn reboots_on_a_silent_stage(
     stage: &str,
     hop_ms: &str,
 ) {
+    // A reasoning reply that does not stream (the default) is bounded by the
+    // stage's backstop alone; the stages before it by inactivity from their
+    // start (decision D101).
+    let (bound, timed_out) = if stage == "reasoning" {
+        (
+            "child_operation_ceiling_ms",
+            format!("turn 1: {stage} after {hop_ms} ms in all"),
+        )
+    } else {
+        (
+            "child_operation_timeout_ms",
+            format!("turn 1: {stage} after {hop_ms} ms without progress"),
+        )
+    };
     let mock = Mock::start();
     let bot = layout(
         &mock,
         decision,
         generation,
-        &[(
-            "abilities/cognition/cognition.scx",
-            &[("child_operation_timeout_ms", hop_ms)],
-        )],
+        &[("abilities/cognition/cognition.scx", &[(bound, hop_ms)])],
     );
     let mut run = start(&bot);
     say(&mut run, "hello");
     let records = run.until(WAIT, label_is("bot.activated"));
-    assert_eq!(
-        texts(&records, "cognition.hop.timed_out"),
-        [format!(
-            "turn 1: {stage} after {hop_ms} ms without progress"
-        )]
-    );
+    assert_eq!(texts(&records, "cognition.hop.timed_out"), [timed_out]);
     assert_eq!(
         texts(&records, "bot.reboot"),
         strings(&[r#"{"reason":"cognition_child_teardown_failed"}"#])
@@ -1667,6 +1688,7 @@ fn a_reasoning_reply_that_keeps_streaming_outlasts_the_inactivity_bound() {
             &[("child_operation_timeout_ms", "8000")],
         )],
     );
+    streaming(&bot);
     let mut run = start(&bot);
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
@@ -1686,6 +1708,59 @@ fn a_reasoning_reply_that_keeps_streaming_outlasts_the_inactivity_bound() {
     drop(run.close(WAIT));
 }
 
+/// A reply that is not streamed (the run's `FLOPPY_STREAM` is unset, the
+/// default) reports no progress, so no inactivity bound applies to it: a
+/// sixteen-second reply outlasts the 8 s bound and the turn is reasoned,
+/// bounded by the stage's backstop alone (decision D101).
+#[test]
+fn a_reasoning_reply_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Slow, &[]);
+    let mut run = start_activated(&bot, &json!({"child_operation_timeout_ms": 8000}));
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage")
+            .last()
+            .map(String::as_str),
+        Some("reasoning handled"),
+        "{records:?}"
+    );
+    assert!(texts(&records, "cognition.hop.timed_out").is_empty());
+    let request = &reasoning_requests(&mock)[0].body;
+    assert_eq!(request.get("stream"), None, "the call is not streamed");
+    drop(run.close(WAIT));
+}
+
+/// A run whose `FLOPPY_STREAM` is `false` asks for a reply that is not
+/// streamed, and the backend's head arrives at once while its completion
+/// takes sixteen seconds: neither is progress, so the 8 s inactivity bound
+/// never arms and the turn is reasoned, bounded by the stage's backstop
+/// alone (decision D101).
+#[test]
+fn a_reasoning_reply_the_run_does_not_stream_is_bounded_by_the_backstop_alone() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Slow, &[]);
+    set_stream(&bot, "false");
+    let mut run = start_activated(&bot, &json!({"child_operation_timeout_ms": 8000}));
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage")
+            .last()
+            .map(String::as_str),
+        Some("reasoning handled"),
+        "{records:?}"
+    );
+    assert!(texts(&records, "cognition.hop.timed_out").is_empty());
+    let request = &reasoning_requests(&mock)[0].body;
+    assert_eq!(
+        request["stream"], false,
+        "the run says the call is not streamed"
+    );
+    drop(run.close(WAIT));
+}
+
 /// A reasoning reply that stops arriving ends the stage at the inactivity
 /// bound (decision D101), here `bot.activate`'s: the cognition asks the
 /// body for a reboot.
@@ -1693,6 +1768,7 @@ fn a_reasoning_reply_that_keeps_streaming_outlasts_the_inactivity_bound() {
 fn a_reasoning_reply_that_stalls_reboots_at_the_inactivity_bound() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Stall, &[]);
+    streaming(&bot);
     let mut run = start_activated(&bot, &json!({"child_operation_timeout_ms": 8000}));
     say(&mut run, "hello");
     let records = run.until(WAIT, label_is("bot.activated"));
@@ -1714,6 +1790,7 @@ fn a_reasoning_reply_that_stalls_reboots_at_the_inactivity_bound() {
 fn a_reasoning_reply_of_keep_alive_comments_only_reboots_at_the_inactivity_bound() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Pings, &[]);
+    streaming(&bot);
     let mut run = start_activated(&bot, &json!({"child_operation_timeout_ms": 8000}));
     say(&mut run, "hello");
     let records = run.until(WAIT, label_is("bot.activated"));
@@ -1741,6 +1818,7 @@ fn a_reasoning_reply_that_streams_past_the_ceiling_reboots() {
             ],
         )],
     );
+    streaming(&bot);
     let mut run = start(&bot);
     say(&mut run, "hello");
     let records = run.until(WAIT, label_is("bot.activated"));

@@ -51,7 +51,7 @@
     </test>
   </assert>
   <assert id="cognition-6" specnum="6" specid="#cognition-6">
-    <![CDATA[A stage that makes no progress for `child_operation_timeout_ms` (reasoning's streamed reply's `generate.progress` starts it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101), ends the turn without an answer: the cognition sends `bot.reboot` `{reason: "cognition_child_teardown_failed"}` to its parent and waits in `rebooting`, where it acknowledges any `bot.ability.cognition.cancel` `{turn}` at once with `bot.ability.cognition.cancelled` `{turn}`.]]>
+    <![CDATA[A stage that makes no progress for `child_operation_timeout_ms` (from its start for autonomy and the intuition; for reasoning from its streamed reply's first `generate.progress`, each later one starting it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101), ends the turn without an answer: the cognition sends `bot.reboot` `{reason: "cognition_child_teardown_failed"}` to its parent and waits in `rebooting`, where it acknowledges any `bot.ability.cognition.cancel` `{turn}` at once with `bot.ability.cognition.cancelled` `{turn}`.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>

@@ -48,10 +48,13 @@
   Hop timeouts (decision D101): each stage substate arms two
   bot.ability.cognition.child.hop.timed_out timers and cancels both on
   exit: one of inactivity (child_operation_timeout_ms, the original's
-  child_operation_timeout), which reasoning re-arms with each
-  generate.progress it sends on while its streamed reply arrives, so a
-  slow model that keeps answering is never cut off, and a backstop
-  (child_operation_ceiling_ms) for the stage as a whole. Both are <param>s
+  child_operation_timeout) and a backstop (child_operation_ceiling_ms)
+  for the stage as a whole. Autonomy and the intuition make no streamed
+  call, so their inactivity timer is armed on entry; reasoning's is armed
+  by the first generate.progress it sends on while its streamed reply
+  arrives and re-armed by each one after, so a slow model that keeps
+  answering is never cut off, and a reply that is not streamed (the run's
+  FLOPPY_STREAM is not true) is bounded by the backstop alone. Both are <param>s
   the body passes from bot.activate. The transition takes only the timers
   of the stage in hand (_event.sendid, SCXML 5.10.1). A timeout goes to
   rebooting, which sends bot.reboot {reason:
@@ -309,9 +312,10 @@
     <state id="running_reasoning">
       <onentry>
         <assign location="stage" expr="'reasoning'"/>
-        <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
-          <param name="turn" expr="turn"/>
-        </send>
+        <!-- Reasoning's inactivity bound starts with its streamed reply's
+             first progress (below): until then, and for a reply that is not
+             streamed, only the backstop applies (decision D101). -->
+        <assign location="hop_timer" expr="'unarmed'"/>
         <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
           <param name="turn" expr="turn"/>
         </send>
@@ -332,7 +336,7 @@
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_reasoning"/>
       <!-- Reasoning's streamed reply is arriving: the inactivity bound
-           starts over (decision D101). -->
+           starts, or starts over (decision D101). -->
       <transition event="generate.progress">
         <cancel sendidexpr="hop_timer"/>
         <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">

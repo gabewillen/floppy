@@ -97,14 +97,17 @@
 //!   schema; `V` satisfies it).
 //! * [`FAILED_EVENT`] `{"code": C}` with one closed [`FailureCode`].
 //!
-//! A streamed call (`stream`) first returns [`PROGRESS_EVENT`]
-//! `{"received": N}` (the reply's bytes received so far) while its reply
-//! arrives: when a read brings new `data:` events ([`data_lines`]; a
-//! gateway's keep-alive comments are not progress), for the first such read
-//! and then at most once a second of the session's logical clock
-//! ([`progress_due`], decision D101), so an
+//! A call that may stream (`stream`, or the run's `stream` slot) first
+//! returns [`PROGRESS_EVENT`] `{"received": N}` (the reply's bytes received
+//! so far) while a streamed reply arrives ([`Progress`]): once when its body
+//! shows it is a server-sent-event stream ([`is_event_stream`]; the reply
+//! has started), then when a read brings new `data:` events ([`data_lines`];
+//! a gateway's keep-alive comments are not progress), at most once a second
+//! of the session's logical clock ([`progress_due`], decision D101), so an
 //! invoking document can bound the call by inactivity (a `<send delay>`
-//! re-armed on each progress event) rather than by its whole duration.
+//! armed by the first progress event and re-armed by each later one) rather
+//! than by its whole duration. A reply that is not streamed (one
+//! completion, whenever its head arrives) returns none.
 //!
 //! The invoking document describes both with `event:schema` on the
 //! transitions that take them (`bots/builder/builder.scxml`). The service
@@ -225,6 +228,10 @@ pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/g
 pub const API_KEY_SLOT: &str = "apikey";
 /// The `env` slot of the API base URL (`env:baseurl`).
 pub const BASE_URL_SLOT: &str = "baseurl";
+/// The `env` slot of whether the backend streams (`env:stream`, `true` or
+/// `false`), substituted into the request's `stream` member (decision
+/// D101): a run sets it per backend, and without it a call is not streamed.
+pub const STREAM_SLOT: &str = "stream";
 /// The path appended to the base URL.
 pub const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
 /// `json_schema.name` when the invocation names none.
@@ -287,6 +294,28 @@ pub struct Request {
     pub headers: Vec<(String, Vec<Part>)>,
     /// The canonical JSON body.
     pub body: Vec<u8>,
+    /// The reference whose value (`true` or `false`) is the body's `stream`
+    /// member, when the run's `stream` slot decides it ([`STREAM_SLOT`]).
+    pub stream: Option<u32>,
+}
+
+impl Request {
+    /// The body as it is sent, in parts: the canonical body, with a
+    /// `stream` member whose value is [`Request::stream`]'s reference when
+    /// there is one. `stream` sorts after every other member the body has,
+    /// so it goes last and the body stays canonical.
+    #[must_use]
+    pub fn body_parts(&self) -> Vec<Part> {
+        let text = String::from_utf8_lossy(&self.body).into_owned();
+        match (self.stream, text.strip_suffix('}')) {
+            (Some(reference), Some(open)) => vec![
+                Part::Literal(format!("{open},\"stream\":")),
+                Part::Reference(reference),
+                Part::Literal("}".to_owned()),
+            ],
+            _ => vec![Part::Literal(text)],
+        }
+    }
 }
 
 /// The model service's answer.
@@ -510,6 +539,42 @@ pub fn data_lines(body: &[u8], from: usize) -> (usize, usize) {
         }
     }
     (count, start)
+}
+
+/// What the reads of a reply that may stream report (decision D101): a
+/// [`PROGRESS_EVENT`] once the body shows it is a server-sent-event stream
+/// ([`is_event_stream`]), then one when new `data:` events arrived
+/// ([`data_lines`]) and [`progress_due`] says. A completion that is not
+/// streamed is never progress, however early its head or bytes arrive, so a
+/// document arms no inactivity bound for it.
+#[derive(Debug, Default)]
+pub struct Progress {
+    started: bool,
+    scanned: usize,
+    events: usize,
+    reported: usize,
+    last: Option<u64>,
+}
+
+impl Progress {
+    /// Whether the reply's body, now `body` (all of it so far), read at the
+    /// logical time `now` (nanoseconds), returns a [`PROGRESS_EVENT`].
+    pub fn read(&mut self, body: &[u8], now: u64) -> bool {
+        let (more, next) = data_lines(body, self.scanned);
+        self.events += more;
+        self.scanned = next;
+        let due = if self.started {
+            self.events > self.reported && progress_due(self.last, now)
+        } else {
+            self.started = is_event_stream(body);
+            self.started
+        };
+        if due {
+            self.reported = self.events;
+            self.last = Some(now);
+        }
+        due
+    }
 }
 
 /// Whether a read at the logical time `now` (nanoseconds) returns a
@@ -930,19 +995,7 @@ pub fn parse_parameters<'a>(
     {
         return Err("generate conversation exceeds its bound");
     }
-    let schema_name = match schema_name {
-        None => None,
-        Some(Data::String(name))
-            if !name.is_empty()
-                && name.len() <= MAX_SCHEMA_NAME_BYTES
-                && name
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-') =>
-        {
-            Some(name.as_str())
-        }
-        Some(_) => return Err("generate schemaname must match [A-Za-z0-9_-]{1,64}"),
-    };
+    let schema_name = schema_name_parameter(schema_name)?;
     let strict = boolean_parameter(strict, "generate strict must be a boolean")?;
     let reasoning_effort = reasoning_effort_parameter(reasoning_effort)?;
     let stream = boolean_parameter(stream, "generate stream must be a boolean")?.unwrap_or(false);
@@ -965,6 +1018,23 @@ pub fn parse_parameters<'a>(
         reasoning_effort,
         stream,
     })
+}
+
+/// `schemaname`: absent, or `[A-Za-z0-9_-]{1,64}`.
+fn schema_name_parameter(value: Option<&Data>) -> Result<Option<&str>, &'static str> {
+    match value {
+        None => Ok(None),
+        Some(Data::String(name))
+            if !name.is_empty()
+                && name.len() <= MAX_SCHEMA_NAME_BYTES
+                && name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-') =>
+        {
+            Ok(Some(name.as_str()))
+        }
+        Some(_) => Err("generate schemaname must match [A-Za-z0-9_-]{1,64}"),
+    }
 }
 
 /// The invocation's endpoint, `(baseurl, apikey)`: the references the host
@@ -991,7 +1061,12 @@ pub const fn endpoint(
 /// `reasoning_effort`, `stream` (`true`) when streamed, and, with a
 /// schema, `response_format`.
 #[must_use]
-pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Request {
+pub fn build_request(
+    base_url: u32,
+    api_key: u32,
+    stream: Option<u32>,
+    generation: &Generation,
+) -> Request {
     let mut body = Map::new();
     body.insert(
         "messages".into(),
@@ -1047,6 +1122,8 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
                 vec![Part::Literal(
                     if generation.stream {
                         "text/event-stream"
+                    } else if stream.is_some() {
+                        "application/json, text/event-stream"
                     } else {
                         "application/json"
                     }
@@ -1055,6 +1132,7 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
             ),
         ],
         body: canonical_json(&Json::Object(body)).into_bytes(),
+        stream: stream.filter(|_| !generation.stream),
     }
 }
 
@@ -1240,6 +1318,20 @@ fn json_data(value: &Json) -> Result<Data, FailureCode> {
     })
 }
 
+/// Whether a reply's body is a server-sent-event stream (its first line a
+/// field or a comment) rather than one completion (a JSON object): the
+/// backend decides when the run's `stream` slot does, so the reply is read
+/// as it came.
+#[must_use]
+pub fn is_event_stream(body: &[u8]) -> bool {
+    let start = body.iter().position(|byte| !byte.is_ascii_whitespace());
+    start
+        .and_then(|start| body.get(start..))
+        .is_some_and(|rest| {
+            rest.starts_with(b":") || rest.starts_with(b"data:") || rest.starts_with(b"event:")
+        })
+}
+
 /// What one settled request becomes: [`RESULT_EVENT`] with the reply
 /// (`{"text": T}`, or `{"json": V}` with a schema, validated first), or
 /// [`FAILED_EVENT`] with the failure's code.
@@ -1253,7 +1345,7 @@ pub fn outcome(generation: &Generation, answered: Result<Response, TransportFail
     if !(200..300).contains(&response.status) {
         return Returned::failed(FailureCode::Status);
     }
-    let text = if generation.stream {
+    let text = if is_event_stream(&response.body) {
         reply_text(&response.body)
     } else {
         completion_text(&response.body)
@@ -1392,7 +1484,7 @@ mod guest {
     /// to make first.
     enum Plan {
         Return(Returned),
-        Fetch(Generation, HttpRequest),
+        Fetch(Generation, HttpRequest, bool),
     }
 
     fn plan(request: InvokeRequest) -> Result<Plan, ComponentError> {
@@ -1418,7 +1510,15 @@ mod guest {
             Ok(endpoint) => endpoint,
             Err(code) => return Ok(Plan::Return(Returned::failed(code))),
         };
-        let built = super::build_request(base_url, api_key, &generation);
+        let built = super::build_request(
+            base_url,
+            api_key,
+            slot(&request.references, super::STREAM_SLOT),
+            &generation,
+        );
+        // Read as it arrives when the reply may stream: the invocation asked
+        // for it, or the run's `stream` slot decides.
+        let streamed = generation.stream || built.stream.is_some();
         let http = HttpRequest {
             method: "POST".into(),
             url: text_parts(&built.url),
@@ -1430,9 +1530,16 @@ mod guest {
                     value: text_parts(value),
                 })
                 .collect(),
-            body: vec![BodyPart::Bytes(built.body)],
+            body: built
+                .body_parts()
+                .into_iter()
+                .map(|part| match part {
+                    Part::Literal(text) => BodyPart::Bytes(text.into_bytes()),
+                    Part::Reference(reference) => BodyPart::Reference(reference),
+                })
+                .collect(),
         };
-        Ok(Plan::Fetch(generation, http))
+        Ok(Plan::Fetch(generation, http, streamed))
     }
 
     #[allow(
@@ -1463,8 +1570,8 @@ mod guest {
                 let reply = match plan {
                     Plan::Return(reply) => reply,
                     // Suspends only this task, never the invoking session.
-                    Plan::Fetch(generation, http) => {
-                        let answered = if generation.stream {
+                    Plan::Fetch(generation, http, streamed) => {
+                        let answered = if streamed {
                             match receive(http, &mut returned).await {
                                 Some(answered) => answered,
                                 // The invoking session stopped reading.
@@ -1515,9 +1622,8 @@ mod guest {
     }
 
     /// Sends a streamed request (`outbound-http.send`) and reads its reply
-    /// as it arrives, returning [`super::PROGRESS_EVENT`] on `returned` when
-    /// new data events arrived ([`super::data_lines`]) as
-    /// [`super::progress_due`] says; the whole reply once its body ended, or
+    /// as it arrives, returning [`super::PROGRESS_EVENT`] on `returned` as
+    /// [`super::Progress`] says; the whole reply once its body ended, or
     /// `None` when the invoking session stopped reading `returned`.
     async fn receive(
         http: HttpRequest,
@@ -1528,28 +1634,18 @@ mod guest {
             Err(failure) => return Some(Err(transport_failure(&failure))),
         };
         let mut bytes = Vec::new();
-        let mut last = None;
-        let mut scanned = 0;
-        let mut events = 0;
-        let mut reported = 0;
+        let mut progress = super::Progress::default();
         loop {
             let (result, read) = body.read(Vec::with_capacity(READ_BYTES)).await;
             if !read.is_empty() {
                 bytes.extend_from_slice(&read);
-                let (more, next) = super::data_lines(&bytes, scanned);
-                events += more;
-                scanned = next;
-                let now = monotonic_clock::now();
-                if events > reported && super::progress_due(last, now) {
-                    reported = events;
-                    last = Some(now);
-                    if returned
+                if progress.read(&bytes, monotonic_clock::now())
+                    && returned
                         .write_one(event(&Returned::progress(bytes.len())))
                         .await
                         .is_some()
-                    {
-                        return None;
-                    }
+                {
+                    return None;
                 }
             }
             if !matches!(result, wit_bindgen::StreamResult::Complete(_)) {

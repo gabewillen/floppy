@@ -49,8 +49,9 @@
   where scxml.rs checks its data against the event's schema and the
   transition taking it applies it. The model call is bounded by
   bot.ability.reflection.select.hop.timed_out: select_timeout_ms without
-  progress (the call streams its reply; each generate.progress starts it
-  over) or select_ceiling_ms in all (decision D101).
+  progress once its reply streams (the first generate.progress arms it,
+  each later one re-arms it; a reply that is not streamed has none) or
+  select_ceiling_ms in all (decision D101).
 
   breaking (the original _apply_break): status BROKEN with the trimmed reason
   and status_updated_at; the row stays for a later change. An unknown
@@ -80,11 +81,13 @@
   fix:" and the rendered diagnostics after no progress. Its failed with no
   draft (no backend, generation failures) fails the turn with no draft,
   as the original's failed change call. revising is bounded by
-  inactivity (decision D101): revising_timeout_ms without progress, where
-  the builder (invoked with progress_target '#_parent') sends
-  builder.progress for each stage it enters and each progress of its
-  streamed generations, and revising_ceiling_ms in all; bot.activate may
-  set both (bounds). When either fires, leaving revising cancels the
+  inactivity (decision D101): the builder (invoked with progress_target
+  '#_parent') sends builder.progress {stage} for each stage it enters, which
+  disarms revising_timeout_ms, and passes on generate.progress {received}
+  for each progress of its streamed generations, which arms it again, so it
+  bounds a streamed
+  generation that stops arriving; revising_ceiling_ms bounds the revision
+  in all; bot.activate may set both (bounds). When either fires, leaving revising cancels the
   revision and the turn fails with the original's "Reflection child
   cancellation timed out.".
 
@@ -123,7 +126,7 @@
          ones (the cognition's <param>). -->
     <data id="select_timeout_ms" expr="30000"/>
     <data id="select_ceiling_ms" expr="600000"/>
-    <data id="revising_timeout_ms" expr="150000"/>
+    <data id="revising_timeout_ms" expr="30000"/>
     <data id="revising_ceiling_ms" expr="1800000"/>
     <data id="bounds" expr="({})"/>
     <!-- The turn in hand (the reference InputData). -->
@@ -288,7 +291,9 @@
       <decision:selection location="schema" choices="choices"/>
       <assign location="selected" expr="null"/>
       <assign location="gen_failure" expr="null"/>
-      <send idlocation="hop_timer" event="bot.ability.reflection.select.hop.timed_out" delayexpr="selectTimeoutDelay()"/>
+      <!-- The inactivity bound starts with the streamed reply's first
+           progress (below); until then only the backstop applies. -->
+      <assign location="hop_timer" expr="'unarmed'"/>
       <send idlocation="ceiling_timer" event="bot.ability.reflection.select.hop.timed_out" delayexpr="selectCeilingDelay()"/>
     </onentry>
     <onexit>
@@ -296,17 +301,16 @@
       <cancel sendidexpr="ceiling_timer"/>
     </onexit>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
-            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
+            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
       <param name="system" expr="select_instructions"/>
       <param name="prompt" expr="selectPrompt()"/>
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
       <param name="strict" expr="true"/>
-      <param name="stream" expr="true"/>
     </invoke>
-    <!-- The reply streams: its progress starts the inactivity bound over
-         (decision D101). -->
+    <!-- A streamed reply's progress starts the inactivity bound, or starts
+         it over (decision D101). -->
     <transition event="generate.progress" cond="isGenerate(_event)">
       <cancel sendidexpr="hop_timer"/>
       <send idlocation="hop_timer" event="bot.ability.reflection.select.hop.timed_out" delayexpr="selectTimeoutDelay()"/>
@@ -390,7 +394,7 @@
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
-      <send idlocation="revising_timer" event="revising.after" delayexpr="revisingTimeoutDelay()"/>
+      <assign location="revising_timer" expr="'unarmed'"/>
       <send id="revising-ceiling" event="revising.after" delayexpr="revisingCeilingDelay()"/>
     </onentry>
     <onexit>
@@ -403,11 +407,16 @@
     <transition event="revising.after" target="failing">
       <assign location="failure" expr="'Reflection child cancellation timed out.'"/>
     </transition>
-    <!-- The builder made progress (a stage, or its streamed generation):
-         the inactivity bound starts over. -->
-    <transition event="builder.progress">
+    <!-- The builder's streamed generation made progress (the builder passes
+         on its generate.progress): the inactivity bound starts, or starts
+         over. A stage it enters (builder.progress) has no reply yet: the
+         bound waits for that stage's first progress (decision D101). -->
+    <transition event="generate.progress">
       <cancel sendidexpr="revising_timer"/>
       <send idlocation="revising_timer" event="revising.after" delayexpr="revisingTimeoutDelay()"/>
+    </transition>
+    <transition event="builder.progress">
+      <cancel sendidexpr="revising_timer"/>
     </transition>
     <!-- The original Revision._prepare: a create's DRAFT stub, then the row. -->
     <state id="preparing">
