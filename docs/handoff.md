@@ -561,10 +561,14 @@ The remaining the original port runs as one ultracode run with these grants:
   web components + hsm.ts, marketplace of packages, a Mindstorms-style
   workshop whose pieces are inferred from element XSDs, live highlighting
   of running bots.
-- Live listening: voice detection (every sound) needs LocalAI at
-  `FLOPPY_VOICE_BASE_URL`, which no backend reachable from the cloud
-  session serves, so the listening has not run live end to end; speech
-  decoding and speaking have, on Gemini (live-proof.md, 2026-10-11).
+- Live listening runs end to end with `scripts/vad-server.py` (Silero VAD,
+  LocalAI's `/vad`) as `FLOPPY_VOICE_BASE_URL` (`live_listening`,
+  live-proof.md, 2026-10-12). Diarization and voice identification still
+  need LocalAI; the floppy bot configures neither.
+- Learned behaviors are only as good as the builder's guard: the builder's
+  simulation drives no input, so nothing checks a turn behavior against a
+  stimulus it should handle (the original's verify_apply only dry-runs the
+  creating turn).
 - Going public: CI, publishing the prepared releases with `SHA256SUMS`
   ([release.md](release.md)), per-platform `scx` binaries, IRP identity
   regeneration on Linux CI.

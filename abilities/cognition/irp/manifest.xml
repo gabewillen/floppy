@@ -30,9 +30,12 @@
     </test>
   </assert>
   <assert id="cognition-4" specnum="4" specid="#cognition-4">
-    <![CDATA[An intuition that escalates for low confidence hands out its environment actions (its selections less ignore), which the output carries first, before reasoning's selections.]]>
+    <![CDATA[An intuition that escalates for low confidence hands out its environment actions (its selections less ignore), which the output carries first, before reasoning's selections; a reasoning selection that repeats one of them (the same event and data) is dropped.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
     </test>
   </assert>
   <assert id="cognition-5" specnum="5" specid="#cognition-5">

@@ -372,10 +372,7 @@ fn a_blank_response_that_waited_fails_without_speaking() {
 fn a_response_waits_for_the_one_in_flight_and_each_hop_times_out() {
     let body = layout(
         &Speaking::Deaf,
-        &[(
-            "abilities/communication/communication.scx",
-            &[("response_timeout_ms", "500")],
-        )],
+        &[("bots/floppy/floppy.scx", &[("response_timeout_ms", "500")])],
     );
     let mut run = started(&body);
     run.event("bot.input", &input("twice"));
@@ -852,10 +849,7 @@ fn speech_encoding_is_bounded_by_its_timeout() {
         &Speaking::Real,
         &[
             ("abilities/vocal/speech_double.scx", &[("mode", "'silent'")]),
-            (
-                "abilities/communication/communication.scx",
-                &[("encoding_timeout_ms", "300")],
-            ),
+            ("bots/floppy/floppy.scx", &[("encoding_timeout_ms", "300")]),
         ],
     );
     let mut run = started(&body);

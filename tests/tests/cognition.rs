@@ -985,8 +985,8 @@ fn reasoning_selects_from_the_turns_choices() {
             "reasoning handled"
         ])
     );
-    // The body gives the cognition a database: reasoning recalls from and
-    // retains to memory (no seam logs absent).
+    // The body gives the cognition a database: reasoning recalls from
+    // memory (no seam logs absent).
     assert!(texts(&records, "memory").is_empty(), "{records:?}");
     // The model request: the dispatch schema of the choices, strict, and
     // a prompt that carries the stimulus and what memory recalled (a fresh
@@ -1121,8 +1121,8 @@ fn prompts(mock: &Mock) -> Vec<String> {
         .collect()
 }
 
-/// The original's Reasoning recall: a reasoned turn retains its episode, and the
-/// next turn's prompt carries it.
+/// The original's Reasoning recall: the reflection stores a reasoned turn's
+/// episode, and the next turn's prompt carries it.
 #[test]
 fn a_reasoned_turn_is_recalled_by_the_next() {
     reasoned_turns_recalled(DATABASE, Some("a_reasoned_turn_is_recalled_by_the_next"));
@@ -1147,9 +1147,9 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
     let mut run = start(&bot);
     say(&mut run, "remember this");
     run.until(WAIT, turn_ended);
-    // Reflection stores the turn's episode too (the original's Reasoning
-    // `_retain_activity` and Reflection `_store_activity` both insert
-    // one); `say` waits for it, so the next turn's recall is fixed.
+    // Only the reflection stores the turn's episode (decision D97; the
+    // original's Reasoning `_retain_activity` inserted one too); `say` waits
+    // for it, so the next turn's recall is fixed.
     say(&mut run, "and this");
     run.until(WAIT, turn_ended);
     let prompts = prompts(&mock);
@@ -1159,14 +1159,14 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
         "{}",
         prompts[0]
     );
-    // Reasoning's episode, then reflection's, each a
-    // cognition:cognitive_episode (the original episodes.CognitiveEpisode).
+    // The reflection's episode, a cognition:cognitive_episode (the original
+    // episodes.CognitiveEpisode).
     let episode = format!(
         "    <cognition:cognitive_episode stimulus_name=\"bot.input\">\n      <focus_candidates count=\"0\" />\n      <output count=\"1\">\n        <cognition:event target=\"cognition\" event=\"{IGNORE}\" reason=\"nothing to say\">\n          <data />\n        </cognition:event>\n      </output>\n    </cognition:cognitive_episode>\n"
     );
     assert!(
         prompts[1].contains(&format!(
-            "\n  <prior_episodes count=\"2\">\n{episode}{episode}  </prior_episodes>\n"
+            "\n  <prior_episodes count=\"1\">\n{episode}  </prior_episodes>\n"
         )),
         "{}",
         prompts[1]

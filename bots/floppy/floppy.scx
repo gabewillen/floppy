@@ -173,6 +173,11 @@
     <data id="database" expr="'/memory/floppy.sqlite'"/>
     <data id="activation_timeout_ms" expr="30000"/>
     <data id="processing_timeout_ms" expr="300000"/>
+    <!-- Speaking's bounds, passed through the communication: the speech
+         backend is remote (Gemini by default, D94) and takes longer than
+         the original's local 5 s encoder bound (D96). -->
+    <data id="encoding_timeout_ms" expr="30000"/>
+    <data id="response_timeout_ms" expr="35000"/>
     <!-- The configured devices (none until phase 6) and the live source id
          each one reports from. -->
     <data id="devices" expr="[]"/>
@@ -236,6 +241,8 @@
     </invoke>
     <invoke id="communication" type="scxml" src="../../abilities/communication/communication.scx">
       <param name="database" expr="database"/>
+      <param name="encoding_timeout_ms" expr="encoding_timeout_ms"/>
+      <param name="response_timeout_ms" expr="response_timeout_ms"/>
     </invoke>
     <invoke id="identity" type="scxml" src="../../abilities/identity/identity.scx">
       <param name="database" expr="database"/>

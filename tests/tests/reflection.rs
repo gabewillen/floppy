@@ -597,6 +597,14 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
                 .contains(r#"<data id="next_after" expr="(at, now) => { const hms"#)),
         "{prompt}"
     );
+    // The trigger contract names the triggers the accepted row carries, so
+    // the draft's guard reads the stimulus Autonomy will run it for.
+    assert!(
+        prompt["constraints"][2]
+            .as_str()
+            .is_some_and(|contract| contract.contains(r#"["environment.sound"]"#)),
+        "{prompt}"
+    );
 }
 
 /// A build that fails its checks drafts the rejected source as DRAFT with

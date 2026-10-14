@@ -57,7 +57,11 @@
   with a spec built from the intent, the existing row and the turn
   (CHANGE_INSTRUCTIONS, ChangeWriteInput) and the turn behavior or
   persistent routine contract as constraints (docs/plans/
-  phase5-behaviors.mdscript.md); the builder's own validate, simulate and
+  phase5-behaviors.mdscript.md), with the triggers the row will carry
+  (grounded as accepting grounds them), so a turn behavior's guard reads
+  the input Autonomy runs it with, the stimulus's data with focus and
+  focus_candidates (live drafts tested a stimulus envelope the input does
+  not hold and never fired); the builder's own validate, simulate and
   no-progress loop is the original's check-and-retry. Its done is accepting: the
   document replaces the row ACTIVE (delete triggers, delete row, insert
   row, insert triggers, the original inventory.store_behavior), keeping the
@@ -72,7 +76,8 @@
   fix:" and the rendered diagnostics after no progress. Its failed with no
   draft (no backend, generation failures) fails the turn with no draft,
   as the original's failed change call. revising is bounded by
-  revising_timeout_ms (the original's 30 s child operation timeout): when it
+  revising_timeout_ms (180 s, decision D99; the original's 30 s child
+  operation timeout bounded one change call, the builder makes several): when it
   fires, leaving revising cancels the revision and the turn fails with
   the original's "Reflection child cancellation timed out.".
 
@@ -103,7 +108,7 @@
     <data id="database" expr="null"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <data id="select_timeout_ms" expr="30000"/>
-    <data id="revising_timeout_ms" expr="30000"/>
+    <data id="revising_timeout_ms" expr="180000"/>
     <!-- The turn in hand (the reference InputData). -->
     <data id="turn" expr="0"/>
     <data id="cognition_input" expr="null"/>
@@ -147,7 +152,7 @@
     <!-- The original CHANGE_INSTRUCTIONS, for the builder: the program is an
          SCXML document. -->
     <data id="change_instructions" expr="'Author or revise the SCXML program of the stored behavior. existing_behavior is the current inventory row (source may be empty for a new create stub; status may be DRAFT or BROKEN for unfinished or retired behaviors). If existing_behavior.source is empty, write a full new program from this turn, prior_episodes, and intent: invent event contracts, guards, and effects from the observed pattern only. If source is non-empty, rewrite or patch it so it better fits this turn and prior_episodes. The output is a cognition event selection object (keys: event, target?, data?, reason?) or a list of such objects, matching the shape of prior episode and this-turn outputs. Derive input fields, guards, and selection field names from the observed pattern. At runtime, fill selection data from the live input; never hardcode identifier values copied from episode examples. A turn behavior (default) answers one matching turn. When the intent or the turn calls for something recurring or time-based (or the user asked for it), write a persistent routine instead, scheduled by every or at delayed sends whose transitions send bot.behavior.tick with its selections: a persistent routine is checked by one forced tick, not the live turn, and needs no triggers.'"/>
-    <data id="turn_contract" expr="'Write a turn behavior: its datamodel declares turn and input, which its invoker sets with param elements (input is an object with focus, focus_candidates and the stimulus); it sends nothing to its invoker and ends within one second in a top-level final state whose donedata content is the object {turn, handled, selected}: handled true with selected the list of selections, or handled false with selected an empty list. Its tests drive no input events and expect it to finish.'"/>
+    <data id="turn_contract" expr="'Write a turn behavior: its datamodel declares turn and input, which its invoker sets with param elements (input is the data of the stimulus, laid out as cognition_input.stimulus.data is, or {event: data} when that is not an object, with focus and focus_candidates added; it is not the stimulus envelope); it sends nothing to its invoker and ends within one second in a top-level final state whose donedata content is the object {turn, handled, selected}: handled true with selected the list of selections, or handled false with selected an empty list. Its tests drive no input events and expect it to finish.'"/>
     <!-- The original's persistent routine (lifetime persistent, hsm.every and
          hsm.at, behavior/schedule.py): an at schedule's occurrences are
          computed in the routine's data model by next_after (reflection.js,
@@ -402,6 +407,11 @@
       <transition event="bot.ability.reflection.revision.requested">
         <assign location="write" expr="changeWriteInput()"/>
         <assign location="write" expr="changeWriteInputWithIntent()"/>
+        <assign location="evidence" expr="evidenceStimulusNames()"/>
+        <assign location="evidence" expr="evidenceTriggerNames()"/>
+        <assign location="triggers" expr="intentTriggers()"/>
+        <assign location="triggers" expr="groundedTriggers()"/>
+        <assign location="triggers" expr="acceptedTriggers()"/>
         <assign location="request" expr="builderRequest()"/>
         <assign location="request.constraints" expr="builderConstraints()"/>
         <send event="builder.request" target="#_builder">

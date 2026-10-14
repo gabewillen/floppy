@@ -219,7 +219,28 @@ function builderRequest() {
 }
 
 function builderConstraints() {
-  return [turn_contract, routineContract(), no_schema_files];
+  return [turn_contract, routineContract(), triggerContract(), no_schema_files];
+}
+
+// This turn's stimulus as Autonomy would give it to a turn behavior (the
+// reference behavior_input_payload, autonomy.js behaviorInputPayload).
+function turnBehaviorInput() {
+  var data = cognition_input.stimulus.data;
+  var given = data !== null && typeof data === 'object' ? Object.assign({}, data) : {event: data};
+  given.focus = cognition_input.focus;
+  given.focus_candidates = cognition_input.focus_candidates;
+  return given;
+}
+
+// What a turn behavior's input is when Autonomy runs it (the reference
+// behavior_input_payload): the data of a stimulus whose event is one of the
+// triggers the accepted row will carry (the grounded triggers, computed as
+// accepting does).
+function triggerContract() {
+  if (triggers.length === 0) {
+    return 'No stimulus triggers are grounded for this behavior, so Autonomy will not run it as a turn behavior.';
+  }
+  return 'Autonomy runs a turn behavior only for a stimulus whose event is one of its triggers, ' + JSON.stringify(triggers) + ', so the stimulus event is already matched: input holds that stimulus\'s data fields with focus and focus_candidates, and has no stimulus or event field to test. Guard on input\'s data fields only. For this turn input is ' + JSON.stringify(turnBehaviorInput()) + '.';
 }
 
 // The original schedule.At.next_after for an at schedule {time: 'HH:MM', days,

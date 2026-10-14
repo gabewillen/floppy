@@ -8,12 +8,12 @@ function hasNoDatabase() {
   return database === null;
 }
 
-// The input of bot.ability.reasoning.recalled and .retained.
+// The input of bot.ability.reasoning.recalled.
 function focusInput() {
   return ({focus: focus, focus_candidates: focus_candidates});
 }
 
-// This turn's bot.ability.reasoning.recalled or .retained.
+// This turn's bot.ability.reasoning.recalled.
 function isCurrentTurn(_event) {
   return _event.data.turn === turn;
 }
@@ -206,8 +206,10 @@ function pythonNumber(value) {
 
 // The original _fill_field over a JSON value: null is skipped, a scalar is an
 // attribute, an object is <name> of <entry key> elements (each value
-// filled as value), an array is <name count> of <item> scalars (other
-// items are not presentable and skipped).
+// filled as value), an array is <name count> of <item> elements: a scalar
+// item as text, an object item (where the original renders a model, as
+// the conversation's messages) as its <entry key> elements; an array item
+// is not presentable and skipped.
 function xmlField(element, name, value, budget) {
   if (value === null || value === undefined) {
     return;
@@ -227,18 +229,24 @@ function xmlField(element, name, value, budget) {
         var text = typeof item === 'boolean' ? (item ? 'true' : 'false') : (typeof item === 'number' ? pythonNumber(item) : item);
         budgetScalar(budget, text);
         xmlElement(list, 'item', budget).text = text;
+      } else if (item !== null && typeof item === 'object' && !Array.isArray(item)) {
+        xmlEntries(xmlElement(list, 'item', budget), item, budget);
       }
     });
   } else if (typeof value === 'object') {
-    var mapping = xmlElement(element, name, budget);
-    var keys = Object.keys(value);
-    budgetCollection(budget, keys.length);
-    keys.forEach(function (key) {
-      var entry = xmlElement(mapping, 'entry', budget);
-      xmlAttribute(entry, 'key', key, budget);
-      xmlField(entry, 'value', value[key], budget);
-    });
+    xmlEntries(xmlElement(element, name, budget), value, budget);
   }
+}
+
+// An object's fields as <entry key> elements of mapping, each value filled as value.
+function xmlEntries(mapping, value, budget) {
+  var keys = Object.keys(value);
+  budgetCollection(budget, keys.length);
+  keys.forEach(function (key) {
+    var entry = xmlElement(mapping, 'entry', budget);
+    xmlAttribute(entry, 'key', key, budget);
+    xmlField(entry, 'value', value[key], budget);
+  });
 }
 
 // The stimulus envelope as the original's hsm.Event field: <input> holding its
@@ -353,21 +361,7 @@ function rejectedResult() {
   return ({turn: turn, handled: false, failed: true, reason: rejection});
 }
 
-// retaining
-
-
-// The turn's episode, as JSON.
-function episodeContent() {
-  return JSON.stringify({focus: context_ref, focus_candidates: [], stimulus_name: stimulus.event, output: selected, behavior: null});
-}
-
-function episodeInsertStatements() {
-  return [{sql: episode_insert, parameters: ['memory', context_ref, 'task', 'standard', 'retain', episode, 'application/json', 'cognitive_episode']}];
-}
-
-function retainFailedResult(detail) {
-  return ({turn: turn, handled: false, failed: true, reason: 'Reasoning memory retain failed: ' + detail});
-}
+// done
 
 function selectedResult() {
   return ({turn: turn, handled: true, selected: selected});

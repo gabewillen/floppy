@@ -7,6 +7,26 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-12 (later), the fixes and listening, model `gabe-codex-1/gpt-6-luna`
+
+The same relays as the run below, plus `scripts/vad-server.py` (Silero VAD
+v5 from the `silero-vad` wheel) at `http://127.0.0.1:8790/v1` as
+`FLOPPY_VOICE_BASE_URL`, so voice detection ran for the first time. The
+fixes: the bot passes speaking a 30 s bound (D96), only the reflection
+stores episodes (D97), the cognition drops reasoning's repeats of
+intuition's environment actions (D98), revision is bounded by 180 s
+(D99), reasoning's prompt shows the conversation's messages (D100: it
+showed `<value count="N" />` with none, so the bot never saw history), and
+the builder is told the input a turn behavior really gets (the stimulus's
+data with focus and focus_candidates, not the envelope) with this turn's
+input as an example.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `live_cascade`, `live_chat`, `live_identity`, `live_choices` | pass | `live_choices` now focuses the lamp once |
+| `live_listening` (new) | pass | 61 s; "Hey floppy, what is the capital of France?" (Gemini TTS, `tests/fixtures/live/question-24k.pcm`) then a second of silence: VAD found the voice, Gemini decoded it, the SpeechHeard seed and reasoning answered "The capital of France is Paris." aloud |
+| `live_conversation`, 3 runs | pass | recall answered "green" in all 3; reflection created the ping behavior in 1 of 3 (the model's choice), and that one handled "ping" itself (`autonomy handled`, "pong") and left the color question unhandled |
+
 ## 2026-10-12, the whole bot over four turns, model `gabe-codex-1/gpt-6-luna`
 
 The runs used floppy commit `b8526d0c` (main) with wasi-sdk 25. Local relays

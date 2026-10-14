@@ -105,9 +105,27 @@ function environmentActions(_event) {
 // completing
 
 // The turn's output: an escalated intuition's environment actions first,
-// then the handling stage's selections.
+// then the handling stage's selections that do not repeat one of them
+// (the same event and data: intuition names no target, and an event the
+// body routes without one has exactly one offerer; decision D98).
 function turnOutput() {
-  return environment_actions.concat(selected);
+  var routed = environment_actions.map(selectionKey);
+  return environment_actions.concat(selected.filter(function (s) { return routed.indexOf(selectionKey(s)) < 0; }));
+}
+
+// A selection's event and data as one string, its objects' keys sorted.
+function selectionKey(s) {
+  return canonical([s.event, s.data === undefined ? null : s.data]);
+}
+
+function canonical(v) {
+  if (Array.isArray(v)) {
+    return '[' + v.map(canonical).join(',') + ']';
+  }
+  if (v !== null && typeof v === 'object') {
+    return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canonical(v[k]); }).join(',') + '}';
+  }
+  return JSON.stringify(v);
 }
 
 // The reflection's cognition_input: the turn's stimulus, focus and focus_candidates.
