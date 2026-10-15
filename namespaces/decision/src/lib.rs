@@ -1767,7 +1767,7 @@ mod guest {
                     Section::Transitions => session_snapshot_host::Section::Transitions,
                 })
                 .collect();
-            match session_snapshot_host::snapshot(&exclude) {
+            match session_snapshot_host::snapshot(&exclude, None) {
                 Ok(document) => Ok(Ok(document)),
                 // No image for this call, the call bound, or a document
                 // bound: the element cannot read the choices (`error.execution`).

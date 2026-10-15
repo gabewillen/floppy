@@ -1,21 +1,21 @@
-{"label":"cognition.offers","parent":"session","session":"session.1","text":"bot.ability.cognition.ignore","type":"log"}
-{"label":"communication.offers","parent":"session","session":"session.6","text":"bot.ability.communication.respond","type":"log"}
-{"label":"identity.name","parent":"session","session":"session.9","text":"recalled null","type":"log"}
-{"label":"identity.offers","parent":"session","session":"session.9","text":"bot.ability.identity.adopt","type":"log"}
+{"label":"cognition.offers","parent":"session","session":"session.cognition","text":"bot.ability.cognition.ignore","type":"log"}
+{"label":"communication.offers","parent":"session","session":"session.communication","text":"bot.ability.communication.respond","type":"log"}
+{"label":"identity.name","parent":"session","session":"session.identity","text":"recalled null","type":"log"}
+{"label":"identity.offers","parent":"session","session":"session.identity","text":"bot.ability.identity.adopt","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
 {"label":"floppy.choices","session":"session","text":"bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
-{"label":"cognition","parent":"session","session":"session.1","text":"turn 1: bot.input","type":"log"}
-{"label":"autonomy","parent":"session.1","session":"session.15","text":"turn 1: 0 matched for bot.input","type":"log"}
-{"label":"cognition.stage","parent":"session","session":"session.1","text":"autonomy unhandled (no-behaviors)","type":"log"}
-{"label":"intuition","parent":"session.1","session":"session.18","text":"turn 1: abstained (declined)","type":"log"}
-{"label":"cognition.tuner","parent":"session","session":"session.1","text":"{\"mean\":70,\"n\":0,\"var\":100}","type":"log"}
-{"label":"cognition.stage","parent":"session","session":"session.1","text":"intuition unhandled (empty_product)","type":"log"}
-{"label":"reasoning","parent":"session.1","session":"session.19","text":"turn 1: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
-{"label":"cognition.hop.timed_out","parent":"session","session":"session.1","text":"turn 1: reasoning after 20000 ms in all","type":"log"}
+{"label":"cognition","parent":"session","session":"session.cognition","text":"turn 1: bot.input","type":"log"}
+{"label":"autonomy","parent":"session.cognition","session":"session.cognition.autonomy","text":"turn 1: 0 matched for bot.input","type":"log"}
+{"label":"cognition.stage","parent":"session","session":"session.cognition","text":"autonomy unhandled (no-behaviors)","type":"log"}
+{"label":"intuition","parent":"session.cognition","session":"session.cognition.intuition","text":"turn 1: abstained (declined)","type":"log"}
+{"label":"cognition.tuner","parent":"session","session":"session.cognition","text":"{\"mean\":70,\"n\":0,\"var\":100}","type":"log"}
+{"label":"cognition.stage","parent":"session","session":"session.cognition","text":"intuition unhandled (empty_product)","type":"log"}
+{"label":"reasoning","parent":"session.cognition","session":"session.cognition.reasoning","text":"turn 1: bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity","type":"log"}
+{"label":"cognition.hop.timed_out","parent":"session","session":"session.cognition","text":"turn 1: reasoning after 20000 ms in all","type":"log"}
 {"label":"bot.reboot","session":"session","text":"{\"reason\":\"cognition_child_teardown_failed\"}","type":"log"}
-{"label":"cognition.offers","parent":"session","session":"session.22","text":"bot.ability.cognition.ignore","type":"log"}
-{"label":"communication.offers","parent":"session","session":"session.27","text":"bot.ability.communication.respond","type":"log"}
-{"label":"identity.name","parent":"session","session":"session.30","text":"recalled null","type":"log"}
-{"label":"identity.offers","parent":"session","session":"session.30","text":"bot.ability.identity.adopt","type":"log"}
+{"label":"cognition.offers","parent":"session","session":"session.cognition","text":"bot.ability.cognition.ignore","type":"log"}
+{"label":"communication.offers","parent":"session","session":"session.communication","text":"bot.ability.communication.respond","type":"log"}
+{"label":"identity.name","parent":"session","session":"session.identity","text":"recalled null","type":"log"}
+{"label":"identity.offers","parent":"session","session":"session.identity","text":"bot.ability.identity.adopt","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
 {"body":{"model":"jev-latest","questions":{"selection":{"criteria":{"__unhandled__":"None of these: leave the turn unhandled.","bot.ability.cognition.ignore":"Deliberately ignore this stimulus: no device command, no focus change, no speech. Required when no other offered event should run. Do not use a device command, focus, or clear_focus as a stand-in for ignore. Put why on the selection envelope reason field, not on this empty payload."},"instructions":"You decide what a small companion robot does with one stimulus it observed. Choose the offered event the robot should take for it. Abstain when none of them fits, so slower reasoning handles it.","type":"choice"}},"state":{"turn":{"data":{"observation":{"data":"hello","event":"text"}},"envelope":{"name":"bot.input"}}}},"target":"/abstain/v1/systemone","type":"request"}

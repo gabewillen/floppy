@@ -1,8 +1,8 @@
-{"label":"autonomy.candidate","parent":"session","session":"session.1","text":"SpeechHeard","type":"log"}
+{"label":"autonomy.candidate","parent":"session","session":"session.autonomy","text":"SpeechHeard","type":"log"}
 {"label":"harness.output","session":"session","text":"{\"candidates\":[\"SpeechHeard\"],\"handled\":true,\"reason\":\"behavior\",\"selected\":[{\"data\":{\"channels\":1,\"content\":\"what is the weather like?\",\"content_type\":\"text/plain\",\"sample_rate_hz\":48000,\"source_ids\":[\"caller\"],\"target_ids\":[]},\"event\":\"bot.ability.communication.input\",\"reason\":\"seeded speech admit via communication\"}],\"turn\":1}","type":"log"}
-{"label":"autonomy.candidate","parent":"session","session":"session.3","text":"SpeechHeard","type":"log"}
-{"label":"autonomy.candidate.advance","parent":"session","session":"session.3","text":"SpeechHeard","type":"log"}
-{"label":"autonomy","parent":"session","session":"session.3","text":"turn 2: 1 matched for bot.ability.listening.speech.output","type":"log"}
-{"label":"autonomy.candidate","parent":"session.3","session":"session.7","text":"Double","type":"log"}
-{"label":"behavior.double","parent":"session.7","session":"session.8","text":"turn 2","type":"log"}
+{"label":"autonomy.candidate","parent":"session","session":"session.autonomy","text":"SpeechHeard","type":"log"}
+{"label":"autonomy.candidate.advance","parent":"session","session":"session.autonomy","text":"SpeechHeard","type":"log"}
+{"label":"autonomy","parent":"session","session":"session.autonomy","text":"turn 2: 1 matched for bot.ability.listening.speech.output","type":"log"}
+{"label":"autonomy.candidate","parent":"session.autonomy","session":"session.autonomy.candidates","text":"Double","type":"log"}
+{"label":"behavior.double","parent":"session.autonomy.candidates","session":"session.autonomy.candidates.candidate","text":"turn 2","type":"log"}
 {"label":"harness.output","session":"session","text":"{\"candidates\":[\"SpeechHeard\",\"Double\"],\"handled\":true,\"reason\":\"behavior\",\"selected\":[{\"data\":{},\"event\":\"bot.ability.cognition.ignore\",\"reason\":\"behavior: nothing to do\",\"target\":\"cognition\"}],\"turn\":2}","type":"log"}
