@@ -1830,6 +1830,7 @@ mod guest {
                 WitSendTarget::Local => NativeSendTarget::Local,
                 WitSendTarget::Parent => NativeSendTarget::Parent,
                 WitSendTarget::Invocation(invoke_id) => NativeSendTarget::Invocation(invoke_id),
+                WitSendTarget::Session(session_id) => NativeSendTarget::Session(session_id),
                 WitSendTarget::Unreachable => NativeSendTarget::Unreachable,
                 WitSendTarget::Invalid => NativeSendTarget::Invalid,
             }

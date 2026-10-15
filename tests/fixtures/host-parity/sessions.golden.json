@@ -1,0 +1,41 @@
+{
+  "configuration": [
+    "pass"
+  ],
+  "done": null,
+  "logs": [
+    [
+      "kid",
+      "session.kid kid"
+    ],
+    [
+      "grand",
+      "session.kid.grand #_scxml_session.kid.grand undefined"
+    ],
+    [
+      "generated",
+      "b.0 session.b.0 b.0"
+    ],
+    [
+      "lost",
+      "y"
+    ],
+    [
+      "heard",
+      "hi from #_scxml_session.y"
+    ],
+    [
+      "heard",
+      "early"
+    ],
+    [
+      "started",
+      "session.r"
+    ],
+    [
+      "restarted",
+      "session.r"
+    ]
+  ],
+  "status": "finished"
+}

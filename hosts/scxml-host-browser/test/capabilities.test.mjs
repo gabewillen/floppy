@@ -462,7 +462,7 @@ test('<invoke> runs a child from the page\'s pre-lowered IR, through external ev
   assert.deepEqual(logs, ['Outcome: pass'], "only the root's <log> reaches the page");
   const child = session.trace().entries.filter((entry) => entry.parent === 'machine-session');
   assert.ok(child.length > 0, 'child observations are attributed to the child');
-  assert.ok(child.every((entry) => entry.session === 'machine-session.1'));
+  assert.ok(child.every((entry) => entry.session === 'machine-session.kid'));
   assert.deepEqual(
     child.filter((entry) => entry.observation === 'log').map(({ label, text }) => `${label}: ${text}`),
     ['child: hi'],
@@ -973,7 +973,7 @@ test('without invokeLimits no invoke bound applies: 9 nested levels and 65 invok
 
 // Invocations nested inside their invoking calls overflowed this host's
 // stack between 100 and 300 levels; these chains run past that.
-test('a chain of invocations runs from the host loop, not nested calls: 300 levels, and self-invocation until the command budget, as under Wasmtime', async () => {
+test('a chain of invocations runs from the host loop, not nested calls: 300 levels, and self-invocation until the session id name bound, as under Wasmtime', async () => {
   // 300 nested levels without invokeLimits (the null data model, so the
   // one host call's fuel budget holds them all): each child starts after
   // its invoking session's call suspended, so the depth takes no stack.
@@ -981,12 +981,12 @@ test('a chain of invocations runs from the host loop, not nested calls: 300 leve
   const level = (n) =>
     n === depth
       ? `<scxml xmlns="${SCXML_NS}" version="1.0" datamodel="null"><final id="f"/></scxml>`
-      : `<scxml xmlns="${SCXML_NS}" version="1.0" datamodel="null" initial="w"><state id="w"><invoke src="file:level-${n + 1}.scxml"/><transition event="done.invoke" target="d"/></state><final id="d"/></scxml>`;
+      : `<scxml xmlns="${SCXML_NS}" version="1.0" datamodel="null" initial="w"><state id="w"><invoke id="k" src="file:level-${n + 1}.scxml"/><transition event="done.invoke" target="d"/></state><final id="d"/></scxml>`;
   const deep = await open(
     'null',
     document(
       'null',
-      '<state id="a"><invoke src="file:level-1.scxml"/><transition event="done.invoke" target="pass"/></state><final id="pass"/>',
+      '<state id="a"><invoke id="k" src="file:level-1.scxml"/><transition event="done.invoke" target="pass"/></state><final id="pass"/>',
       ' initial="a"',
     ),
     { trace: true, capabilities: { loadDocument: (kind, uri) => level(Number(uri.match(/^file:level-(\d+)\.scxml$/)[1])) } },
@@ -994,20 +994,28 @@ test('a chain of invocations runs from the host loop, not nested calls: 300 leve
   assert.deepEqual(deep.session.start().activeConfiguration, ['pass']);
   const sessions = new Set(deep.session.trace().entries.map((entry) => entry.session));
   assert.equal(sessions.size, depth + 1, 'the root and every nested session ran');
-  // Invoked session ids are the root's, then the start ordinal: they do
-  // not grow with the depth (the same ids Wasmtime gives).
-  assert.ok(sessions.has(`machine-session.${depth}`), [...sessions].slice(0, 3).join());
+  // A child is `<parent _sessionid>.<invokeid>` (the same ids Wasmtime
+  // gives): the deepest is the root's id and `.k` per level.
+  assert.ok(sessions.has(`machine-session${'.k'.repeat(depth)}`), [...sessions].slice(0, 3).join());
   deep.session.dispose();
   // A document that invokes itself without end, with no invokeLimits:
-  // SCXML 6.4 sets no depth and the host refuses no <invoke>; the chain
-  // grows until the page's command budget ends the run, never a stack
-  // overflow that loses the instance.
+  // SCXML 6.4 sets no depth and the host refuses no <invoke>; each level
+  // adds its generated invoke id (`.c.0`) to the session id, so the chain
+  // grows until the next child's id would exceed the 1024-byte name bound
+  // (that <invoke> raises error.execution), never a stack overflow that
+  // loses the instance: `machine-session.a.0` (19 bytes), then 251 levels.
   const self = `<scxml xmlns="${SCXML_NS}" version="1.0" datamodel="null"><state id="c"><invoke src="file:child.scxml"/></state></scxml>`;
   const unbounded = await open('null', document('null', '<state id="a"><invoke src="file:child.scxml"/></state>'), {
-    maxCommands: 400,
+    trace: true,
+    maxCommands: 4000,
     capabilities: { loadDocument: () => self },
   });
-  assert.throws(() => unbounded.session.start(), sessionError('capacity-exhausted'));
+  assert.equal(unbounded.session.start().status, 'running');
+  const chain = new Set(unbounded.session.trace().entries.map((entry) => entry.session));
+  const deepest = `machine-session.a.0${'.c.0'.repeat(251)}`;
+  assert.equal(deepest.length, 1023);
+  assert.equal(chain.size, 1 + 1 + 251, 'the root and every level the name bound admits');
+  assert.ok(chain.has(deepest));
   unbounded.session.dispose();
 });
 
@@ -1019,12 +1027,12 @@ test('a chain with every level queued at once drains in invocation order and can
   // (the same chain 1,000 deep takes about 71 s); the ordering's own cost
   // at 10,000 levels is the InvokedSessions test above.
   const depth = 300;
-  const child = `<scxml xmlns="${SCXML_NS}" version="1.0" datamodel="null" initial="c0"><state id="c0"><onentry><send event="up" target="#_parent"/></onentry><invoke src="file:child.scxml"/><transition event="up"><log label="up"/></transition></state></scxml>`;
+  const child = `<scxml xmlns="${SCXML_NS}" version="1.0" datamodel="null" initial="c0"><state id="c0"><onentry><send event="up" target="#_parent"/></onentry><invoke id="k" src="file:child.scxml"/><transition event="up"><log label="up"/></transition></state></scxml>`;
   const { session } = await open(
     'null',
     document(
       'null',
-      '<state id="r0"><invoke src="file:child.scxml"/><transition event="up"><log label="up"/></transition><transition event="stop" target="done"/></state><final id="done"/>',
+      '<state id="r0"><invoke id="k" src="file:child.scxml"/><transition event="up"><log label="up"/></transition><transition event="stop" target="done"/></state><final id="done"/>',
       ' initial="r0"',
     ),
     {

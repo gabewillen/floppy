@@ -3,7 +3,7 @@ snapshot diff: 0003.snapshot.json → 0004.snapshot.json
 session root
   --> status: unchanged
    = queues:
-       + external: `hello` (external) invokeid kid origin #_scxml_session.1 origintype http://www.w3.org/TR/scxml/#SCXMLEventProcessor data undefined
+       + external: `hello` (external) invokeid kid origin #_scxml_session.kid origintype http://www.w3.org/TR/scxml/#SCXMLEventProcessor data undefined
 
 session root/kid
   --> status: unchanged

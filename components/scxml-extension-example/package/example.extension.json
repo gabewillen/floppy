@@ -4,7 +4,7 @@
   "package-version": "0.2.0",
   "extension-artifact": "scxml_extension_example.virtualized.wasm",
   "schema-artifact": "example.xsd",
-  "schema-sha256": "45074422d68df4d82aa82e7b0dec09183871c58e59566033fdeaaeb4576b28b3",
+  "schema-sha256": "d9e7ee300d0d715f623db98d7844a90edbc4c7e1253b3bc6b69a84e4a2500342",
   "wit-world": "stateforward:scxml/executable-content-extension",
   "wit-version": "0.2.0"
 }

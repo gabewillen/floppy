@@ -302,7 +302,7 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
         self.invocation_start_result(engine, state, document_order, invoke_id, type_uri, result)
     }
 
-    /// The invoke id (literal, or generated `<state>.<session>.<n>`, SCXML
+    /// The invoke id (literal, or generated `<state>.<n>`, SCXML
     /// 6.4.1; official 224, 225), optionally stored at `idlocation`, and the
     /// `<param>` then `namelist` entries (SCXML 6.4.2), evaluated in the
     /// invoking session with no current event. Only a generated id takes

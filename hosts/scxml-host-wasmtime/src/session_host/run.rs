@@ -109,24 +109,9 @@ pub(crate) struct SessionRecord {
 pub(crate) struct SessionTable {
     records: BTreeMap<SessionKey, SessionRecord>,
     by_session_id: BTreeMap<String, SessionKey>,
-    /// The root's `_sessionid`.
-    root_session_id: String,
-    /// Invoked sessions named so far in this run.
-    invoked_named: u64,
 }
 
 impl SessionTable {
-    /// The `_sessionid` of the next session the run starts: the root's,
-    /// then `.` and the session's ordinal among the invoked sessions the
-    /// run started (SCXML 5.10 "the system-generated id for the current
-    /// SCXML session"). Unique across the run, so `#_scxml_<sessionid>`
-    /// (C.1) names one session, and of a length that does not grow with
-    /// the nesting depth.
-    pub(crate) fn next_invoked_session_id(&mut self) -> String {
-        self.invoked_named = self.invoked_named.saturating_add(1);
-        format!("{}.{}", self.root_session_id, self.invoked_named)
-    }
-
     /// Adds the session `key` with `session_id` (none for an invoked
     /// service), not finished.
     pub(crate) fn insert(&mut self, key: SessionKey, session_id: Option<String>) {
@@ -144,10 +129,12 @@ impl SessionTable {
         );
     }
 
-    /// Removes the session `key`.
+    /// Removes the session `key`. Its `_sessionid` keeps naming a later
+    /// session invoked under the same invoke id that took it over.
     pub(crate) fn remove(&mut self, key: SessionKey) {
         if let Some(record) = self.records.remove(&key)
             && let Some(session_id) = &record.session_id
+            && self.by_session_id.get(session_id) == Some(&key)
         {
             self.by_session_id.remove(session_id);
         }
@@ -380,6 +367,30 @@ impl RunShared {
             return Ok(true);
         };
         machine.accepts_event_data(event)
+    }
+
+    /// The session of this run whose `_sessionid` is `session_id`, while it
+    /// runs: what `#_scxml_<sessionid>` reaches (SCXML C.1). None for an id
+    /// no session of the run has, or for one that finished.
+    pub(crate) fn running_session(&self, session_id: &str) -> Option<SessionKey> {
+        let sessions = self.sessions.borrow();
+        sessions
+            .key_of(session_id)
+            .filter(|key| sessions.get(*key).is_some_and(|record| !record.finished))
+    }
+
+    /// The machine session `key` of this run, unless it is gone or its own
+    /// call is running.
+    pub(crate) fn machine(&self, key: SessionKey) -> Option<Rc<RefCell<MachineHandle>>> {
+        self.machines.borrow().get(&key).and_then(Weak::upgrade)
+    }
+
+    /// Whether the session `key` of this run finished.
+    pub(crate) fn finished(&self, key: SessionKey) -> bool {
+        self.sessions
+            .borrow()
+            .get(key)
+            .is_some_and(|record| record.finished)
     }
 
     /// Records the run's first fault; later ones are consequences.
@@ -1574,6 +1585,14 @@ impl Sessions for RunSessions {
             DueRoute::Invocation(routed) => invoked_sessions
                 .child(session, &routed.invoke_id)
                 .map(|child| (child, &routed.event)),
+            // Another session of the run (SCXML C.1): one that no longer
+            // runs cannot be dispatched to.
+            DueRoute::Session((session_id, event)) => {
+                let Some(receiver) = self.shared.running_session(session_id) else {
+                    return Ok(InvocationDueRoute::Undeliverable(send_id));
+                };
+                Some((receiver, event))
+            }
             DueRoute::Local(_) | DueRoute::Undeliverable(_) => None,
         };
         if let Some((receiver, event)) = receiver
@@ -1589,6 +1608,12 @@ impl Sessions for RunSessions {
             DueRoute::Parent(event) => InvocationDueRoute::Parent(event),
             DueRoute::Invocation(routed) => {
                 InvocationDueRoute::Invocation(routed.invoke_id, routed.event)
+            }
+            DueRoute::Session((session_id, event)) => {
+                if let Some(receiver) = self.shared.running_session(&session_id) {
+                    invoked_sessions.push_external(receiver, event);
+                }
+                InvocationDueRoute::Dispatched
             }
             DueRoute::Undeliverable(send_id) => InvocationDueRoute::Undeliverable(send_id),
         })
@@ -1765,7 +1790,6 @@ impl RunEngine {
             };
         {
             let mut sessions = shared.sessions.borrow_mut();
-            root.session_id.clone_into(&mut sessions.root_session_id);
             sessions.insert(SessionKey::ROOT, Some(root.session_id.to_owned()));
         }
         let handle = Rc::new(RefCell::new(*handle));

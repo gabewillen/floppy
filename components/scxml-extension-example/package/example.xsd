@@ -8,7 +8,7 @@
   example:send      event, target, type, delay, id, eventid
   example:fail      (no attributes)
   example:spin      (no attributes)
-  example:snapshot  location (required), exclude, at
+  example:snapshot  location (required), exclude, at, target
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://stateforward.org/scxml/example"
@@ -40,6 +40,7 @@
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="exclude" type="xs:string"/>
       <xs:attribute name="at" type="xs:string"/>
+      <xs:attribute name="target" type="xs:string"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

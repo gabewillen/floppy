@@ -152,6 +152,31 @@ impl SessionLinks {
             .child(self.key, &invoke_id.to_owned())
     }
 
+    /// The session of this run that the `<send>` target `target` names
+    /// while it runs, for `session-snapshot-host.snapshot` (this session's
+    /// own key for itself); `None` for a malformed target or one no running
+    /// session of the run answers.
+    pub(crate) fn snapshot_target(&mut self, target: &str) -> Option<SessionKey> {
+        let key = match self.classify_target(Some(target)) {
+            SendTarget::Local => return Some(self.key),
+            SendTarget::Parent => self
+                .shared
+                .invoked_sessions
+                .borrow()
+                .parent(self.key)
+                .map(|(parent, _)| parent),
+            SendTarget::Invocation(invoke_id) => self.child(&invoke_id),
+            SendTarget::Session(session_id) => self.shared.running_session(&session_id),
+            SendTarget::Internal | SendTarget::Unreachable | SendTarget::Invalid => None,
+        }?;
+        (!self.shared.finished(key)).then_some(key)
+    }
+
+    /// This session's key in its run.
+    pub(crate) const fn key(&self) -> SessionKey {
+        self.key
+    }
+
     /// Every live, unfinished invocation of this session (an invoked
     /// session or service), by ascending invoke id: its invoke id and the
     /// invoked session's `_sessionid` (none for a service).
@@ -471,6 +496,20 @@ impl SessionLinks {
                         .borrow_mut()
                         .push_external(target, routed.event);
                 }
+                Ok(SendDisposition::Routed)
+            }
+            // Another session of the run (SCXML C.1), while it runs; any
+            // other id is "a session that does not exist or is
+            // inaccessible": error.communication.
+            Ok(DispatchDecision::Session((session_id, event))) => {
+                let Some(target) = self.shared.running_session(&session_id) else {
+                    return Ok(SendDisposition::Undeliverable);
+                };
+                self.require_accepted(target, &event)?;
+                self.shared
+                    .invoked_sessions
+                    .borrow_mut()
+                    .push_external(target, event);
                 Ok(SendDisposition::Routed)
             }
             Err(error) if error.code == ErrorCode::Unavailable => {
@@ -887,6 +926,18 @@ impl SessionLinks {
                 "the invocation exceeds the invoked sessions bounds",
             ));
         }
+        // The child's `_sessionid` (SCXML 5.10): the invoker's and its
+        // invoke id, so the invoker knows the child's address before it
+        // starts, and a child invoked again under the same id keeps it.
+        // Invoke ids are unique among one session's live invocations, so
+        // the id is unique within the run. One over the name bound fails
+        // the invocation, as the invoke limits do.
+        let session_id = format!("{}.{}", self.session_id, request.invoke_id);
+        if scxml_types::SessionId::new(session_id.as_str()).is_err() {
+            return Err(invalid_input(
+                "the invoked session id exceeds the name bound",
+            ));
+        }
         let clock_now = self
             .clock_now()
             .map_err(|failure| fatal(&self.shared, failure))?;
@@ -896,7 +947,6 @@ impl SessionLinks {
             .borrow_mut()
             .register(self.key, request.invoke_id.clone());
         let child = registered.map_err(|violation| fatal(&self.shared, violation.into()))?;
-        let session_id = self.shared.sessions.borrow_mut().next_invoked_session_id();
         let spec = SessionSpec {
             session_id: session_id.clone(),
             key: child,
@@ -1053,6 +1103,15 @@ impl SessionLinks {
     /// This session's `_sessionid`.
     pub(crate) fn session_id(&self) -> &str {
         &self.session_id
+    }
+
+    /// The machine session `key` of this run, unless it is gone or its own
+    /// call is running.
+    pub(crate) fn shared_machine(
+        &self,
+        key: SessionKey,
+    ) -> Option<Rc<std::cell::RefCell<super::run::MachineHandle>>> {
+        self.shared.machine(key)
     }
 
     /// Release digests of the components a snapshot names.

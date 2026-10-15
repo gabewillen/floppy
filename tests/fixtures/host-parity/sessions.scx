@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Session ids and addresses across the run: a child is
+     `<parent _sessionid>.<invokeid>` and a generated invoke id
+     `<state id>.<n>`; `#_scxml_<sessionid>` reaches any running session of
+     the run (a grandchild the root, a child its sibling, at once or when a
+     delayed send falls due), and any other id is error.communication; a
+     child invoked again under its invoke id keeps its address. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <datamodel>
+    <data id="where"/>
+    <data id="n" expr="0"/>
+  </datamodel>
+  <state id="a">
+    <invoke id="kid">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="k0">
+          <state id="k0">
+            <onentry>
+              <send event="up" target="#_parent"><param name="id" expr="_sessionid"/></send>
+            </onentry>
+            <invoke id="grand">
+              <content>
+                <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="g0">
+                  <state id="g0">
+                    <onentry>
+                      <send event="hello" target="#_scxml_session"><param name="id" expr="_sessionid"/></send>
+                    </onentry>
+                  </state>
+                </scxml>
+              </content>
+            </invoke>
+          </state>
+        </scxml>
+      </content>
+    </invoke>
+    <transition event="up">
+      <log label="kid" expr="_event.data.id + ' ' + _event.invokeid"/>
+    </transition>
+    <transition event="hello" target="b">
+      <log label="grand" expr="_event.data.id + ' ' + _event.origin + ' ' + typeof _event.invokeid"/>
+    </transition>
+  </state>
+  <state id="b">
+    <invoke idlocation="where">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="c0">
+          <state id="c0">
+            <onentry>
+              <send event="up" target="#_parent"><param name="id" expr="_sessionid"/></send>
+            </onentry>
+            <transition event="ping">
+              <send event="pong" target="#_parent"/>
+            </transition>
+          </state>
+        </scxml>
+      </content>
+    </invoke>
+    <transition event="up">
+      <log label="generated" expr="where + ' ' + _event.data.id + ' ' + _event.invokeid"/>
+      <send event="ping" targetexpr="'#_' + where"/>
+    </transition>
+    <transition event="pong" target="c"/>
+  </state>
+  <state id="c">
+    <onentry>
+      <send event="settle" delay="50ms"/>
+    </onentry>
+    <invoke id="x">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="x0">
+          <state id="x0">
+            <transition event="hi">
+              <send event="heard" target="#_parent"><param name="what" expr="_event.name + ' from ' + _event.origin"/></send>
+            </transition>
+            <transition event="early">
+              <send event="heard" target="#_parent"><param name="what" expr="_event.name"/></send>
+            </transition>
+            <transition event="late">
+              <send event="heard" target="#_parent"><param name="what" expr="_event.name"/></send>
+            </transition>
+          </state>
+        </scxml>
+      </content>
+    </invoke>
+    <invoke id="y">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="y0">
+          <state id="y0">
+            <onentry>
+              <send event="hi" target="#_scxml_session.x"/>
+              <send event="early" target="#_scxml_session.x" delay="10ms"/>
+              <send id="late" event="late" target="#_scxml_session.x" delay="20ms"/>
+              <cancel sendid="late"/>
+              <send event="nowhere" target="#_scxml_session.nobody"/>
+            </onentry>
+            <transition event="error.communication">
+              <send event="lost" target="#_parent"/>
+            </transition>
+          </state>
+        </scxml>
+      </content>
+    </invoke>
+    <transition event="heard">
+      <log label="heard" expr="_event.data.what"/>
+    </transition>
+    <transition event="lost">
+      <log label="lost" expr="_event.invokeid"/>
+    </transition>
+    <transition event="settle" target="d"/>
+  </state>
+  <state id="d">
+    <invoke id="r">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="r0">
+          <state id="r0">
+            <onentry>
+              <send event="up" target="#_parent"><param name="id" expr="_sessionid"/></send>
+            </onentry>
+            <transition event="ping">
+              <send event="pong" target="#_parent"/>
+            </transition>
+          </state>
+        </scxml>
+      </content>
+    </invoke>
+    <transition event="up" cond="n === 0" target="d">
+      <log label="started" expr="_event.data.id"/>
+      <assign location="n" expr="1"/>
+    </transition>
+    <transition event="up" cond="n === 1">
+      <log label="restarted" expr="_event.data.id"/>
+      <send event="ping" target="#_scxml_session.r"/>
+    </transition>
+    <transition event="pong" target="pass"/>
+  </state>
+  <final id="pass"/>
+</scxml>

@@ -14,6 +14,7 @@
 
 mod prebuilt;
 
+use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
@@ -24,11 +25,11 @@ use opentelemetry_sdk::metrics::SdkMeterProvider;
 use opentelemetry_sdk::trace::{InMemorySpanExporter, SdkTracerProvider};
 use scxml_host_wasmtime::{
     ArtifactError, ArtifactKind, AuthenticatedComponent, DocumentKind, EmbeddedDocument,
-    ExtensionComponents, ExtensionPackage, HostError, MachineScripts, RunFailure, ScriptedEvent,
-    SessionEmbedder, SessionHost, SessionHostComponents, SessionOutcome, SessionRun,
-    SnapshotRequest, TelemetryProviders, Terminal, TrustedComponentDigest, TrustedManifestDigest,
-    WasmtimeHostConfig, WasmtimeStoreConfig, authenticate_component,
-    authenticate_extension_component,
+    ExtensionComponents, ExtensionPackage, HostError, LiveClock, LiveHttp, MachineScripts,
+    RunFailure, ScriptedEvent, SessionEmbedder, SessionHost, SessionHostComponents, SessionOpen,
+    SessionOutcome, SessionRun, SnapshotRequest, TelemetryProviders, Terminal,
+    TrustedComponentDigest, TrustedManifestDigest, WasmtimeHostConfig, WasmtimeStoreConfig,
+    authenticate_component, authenticate_extension_component,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -400,6 +401,247 @@ fn a_extension_reads_the_executing_session_snapshot_only_during_execution() {
             .any(|variable| variable["name"] == "doc" && variable["value"]["type"] == "text"),
         "an assignment the extension component made earlier in the `execute` call block is visible"
     );
+}
+
+/// An ECMAScript child document that may use the example namespace.
+fn child(initial: &str, body: &str) -> String {
+    format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="{EXAMPLE_URI}" version="1.0" datamodel="ecmascript" initial="{initial}">{body}</scxml>"#
+    )
+}
+
+/// `(label, text)` of every root log record, in order.
+fn records(outcome: &SessionOutcome) -> Vec<(String, String)> {
+    outcome
+        .root_logs
+        .iter()
+        .map(|log| (log.label.clone().unwrap_or_default(), log.text.clone()))
+        .collect()
+}
+
+/// A child `kid` holding `secret` that waits in `k0` once it told its
+/// parent it is `ready`.
+fn waiting_kid() -> String {
+    format!(
+        r#"<invoke id="kid"><content>{}</content></invoke>"#,
+        child(
+            "k0",
+            r##"<datamodel><data id="secret" expr="'k'"/></datamodel><state id="k0"><onentry><send event="ready" target="#_parent"/></onentry><transition event="poke" target="k1"/></state><state id="k1"/>"##,
+        )
+    )
+}
+
+/// The checkpoint document of the session `session_id` in `text`.
+fn checkpoint(text: &str, session_id: &str) -> serde_json::Value {
+    assert!(
+        scxml_snapshot::check(text.as_bytes())
+            .expect("a structurally valid document")
+            .is_empty(),
+        "the document is canonical and consistent: {text}"
+    );
+    let doc: serde_json::Value = serde_json::from_str(text).expect("JSON");
+    assert_eq!(doc["version"], "scxml.session-snapshot/v2");
+    // `checkpoint` is the default, never written.
+    assert!(doc["options"].get("point").is_none(), "{doc}");
+    assert_eq!(doc["options"]["trace_context"], "strip");
+    let exclude = doc["options"]["exclude"].as_array().expect("exclude");
+    assert!(exclude.contains(&"invocations".into()) && exclude.contains(&"previews".into()));
+    assert_eq!(doc["snapshot"]["root"]["session_id"], session_id);
+    doc
+}
+
+/// `session-snapshot-host.snapshot` with a target reads another session of
+/// the run, resolved as a `<send>` target is (`#_<invokeid>`, `#_parent`,
+/// `#_scxml_<sessionid>`): that session's canonical document at its last
+/// checkpoint, its configuration and data model, with `exclude` honored.
+#[test]
+fn a_extension_reads_another_session_of_the_run_by_its_send_target() {
+    let a = child(
+        "a0",
+        r##"<datamodel><data id="up"/><data id="sib"/></datamodel><state id="a0"><transition event="read"><example:snapshot location="up" target="#_parent"/><example:snapshot location="sib" target="#_scxml_root.kid" exclude="data_model"/><send event="read" target="#_parent"><param name="up" expr="up"/><param name="sib" expr="sib"/></send></transition></state>"##,
+    );
+    let outcome = run_on(
+        &host(),
+        &scxml(
+            "ecmascript",
+            &format!(
+                r#"<datamodel><data id="flag" expr="'root'"/><data id="byid"/><data id="byaddress"/></datamodel>
+                <state id="s0" initial="wait">{}<invoke id="a"><content>{a}</content></invoke>
+                  <state id="wait"><transition event="ready" target="read"/></state>
+                  <state id="read">
+                    <onentry>
+                      <example:snapshot location="byid" target="{}"/>
+                      <example:snapshot location="byaddress" target="{}"/>
+                      <log label="byid" expr="byid"/>
+                      <log label="byaddress" expr="byaddress"/>
+                      <send event="read" target="{}"/>
+                    </onentry>
+                    <transition event="read" target="done">
+                      <log label="up" expr="_event.data.up"/>
+                      <log label="sib" expr="_event.data.sib"/>
+                    </transition>
+                  </state>
+                </state>
+                <final id="done"/>"#,
+                waiting_kid(),
+                "#_kid",
+                "#_scxml_root.kid",
+                "#_a",
+            ),
+        ),
+        &[],
+    )
+    .expect("the run completes");
+    assert_eq!(outcome.configuration, ["done"], "{outcome:?}");
+    let records = records(&outcome);
+    let text = |label: &str| {
+        records
+            .iter()
+            .find(|(found, _)| found == label)
+            .map_or_else(
+                || panic!("{label} in {records:?}"),
+                |(_, text)| text.clone(),
+            )
+    };
+    let (byid, byaddress) = (text("byid"), text("byaddress"));
+    assert_eq!(byid, byaddress, "both addresses name the same session");
+    let kid = checkpoint(&byid, "root.kid");
+    let root = &kid["snapshot"]["root"];
+    assert_eq!(
+        root["configuration"],
+        serde_json::json!({"atomic": ["k0"], "full": ["k0"]})
+    );
+    assert!(
+        root["data_model"]
+            .as_array()
+            .expect("the data model")
+            .iter()
+            .any(|variable| variable["name"] == "secret" && variable["value"]["value"] == "k"),
+        "{root}"
+    );
+    let parent = checkpoint(&text("up"), "root");
+    assert!(
+        parent["snapshot"]["root"]["data_model"]
+            .as_array()
+            .expect("the data model")
+            .iter()
+            .any(|variable| variable["name"] == "flag")
+    );
+    let sibling = checkpoint(&text("sib"), "root.kid");
+    assert!(sibling["snapshot"]["root"].get("data_model").is_none());
+}
+
+/// A target that is malformed, names no session of the run, or names one
+/// that finished is `unavailable` (the example assigns that code label), and
+/// nothing changes: the read of a live session changes neither that
+/// session's document nor its trace.
+#[test]
+fn a_extension_snapshot_of_an_unavailable_target_fails_and_changes_nothing() {
+    let reads = |targets: &[&str]| {
+        let blocks = targets.iter().fold(String::new(), |mut blocks, target| {
+            write!(
+                blocks,
+                r#"<onentry><example:snapshot location="doc" target="{target}"/><log label="read" expr="doc.length > 20 ? 'document' : doc"/></onentry>"#
+            )
+            .expect("writing to a String cannot fail");
+            blocks
+        });
+        let gone = child("g0", r#"<final id="g0"/>"#);
+        run_on(
+            &host(),
+            &scxml(
+                "ecmascript",
+                &format!(
+                    r#"<datamodel><data id="doc"/><data id="n" expr="0"/></datamodel>
+                    <state id="s0" initial="wait">{}<invoke id="gone"><content>{gone}</content></invoke>
+                      <state id="wait"><transition event="ready" cond="n === 1" target="read"/><transition event="done.invoke.gone"><assign location="n" expr="1"/></transition><transition event="ready"><assign location="n" expr="1"/><raise event="ready"/></transition></state>
+                      <state id="read">{blocks}<onentry><send event="end" delay="1ms"/></onentry><transition event="end" target="done"/></state>
+                    </state>
+                    <final id="done"/>"#,
+                    waiting_kid()
+                ),
+            ),
+            &[],
+        )
+        .expect("the run completes")
+    };
+    let failed = reads(&[
+        "nowhere",
+        "#_scxml_root.nobody",
+        "#_nobody",
+        "#_scxml_root.gone",
+    ]);
+    assert_eq!(failed.configuration, ["done"], "{failed:?}");
+    assert_eq!(
+        texts(&failed),
+        ["unavailable", "unavailable", "unavailable", "unavailable"]
+    );
+    // The kid's trace is the same whether or not the root read it twice.
+    let kid_trace = |outcome: &SessionOutcome| -> Vec<String> {
+        outcome
+            .trace
+            .iter()
+            .filter(|entry| entry.session == "root.kid")
+            .map(|entry| format!("{:?}", entry.observation))
+            .collect()
+    };
+    let read = reads(&["#_kid", "#_kid"]);
+    assert_eq!(texts(&read), ["document", "document"]);
+    let unread = reads(&[]);
+    assert_eq!(kid_trace(&read), kid_trace(&unread));
+}
+
+/// A recorded live session whose extension reads another session of the
+/// run replays to the same documents: the read records nothing, and is a
+/// pure function of the run's state, which replay reproduces.
+#[test]
+fn a_recorded_read_of_another_session_replays_to_the_same_document() {
+    let source = scxml(
+        "ecmascript",
+        &format!(
+            r##"<datamodel><data id="doc"/></datamodel>
+            <state id="s0">{}
+              <transition event="go"><example:snapshot location="doc" target="#_kid"/><log label="doc" expr="doc"/></transition>
+            </state>"##,
+            waiting_kid()
+        ),
+    );
+    let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
+        SOURCE,
+        "namespace.scxml",
+        source.as_str(),
+    ))
+    .expect("fixture parses");
+    let ir = scxml_compiler_core::lower(&document).expect("fixture lowers");
+    let bytes = ir.to_json().expect("fixture IR encodes");
+    let host = host();
+    let open = |record: bool| {
+        host.open(SessionOpen {
+            machine_ir: &bytes,
+            data_model: ir.data_model.as_deref(),
+            session_id: "root",
+            embedder: Rc::new(NoResources),
+            max_commands: 256,
+            clock: LiveClock::Logical,
+            record,
+            replay: None,
+            http: LiveHttp::default(),
+        })
+        .expect("the session opens")
+    };
+    let mut live = open(true);
+    live.send(&ScriptedEvent::named("go")).expect("go");
+    let outputs = live.take_outputs();
+    let read = format!("{outputs:?}");
+    assert!(read.contains("root.kid"), "the root read its child: {read}");
+    let records = live.take_recorded();
+    live.close().expect("close");
+    let mut replay = open(false);
+    for record in &records {
+        replay.apply(record).expect("the record applies");
+    }
+    assert_eq!(replay.take_outputs(), outputs);
+    replay.close().expect("close");
 }
 
 /// The entry content of a compound state reads a snapshot taken before any

@@ -589,6 +589,64 @@ pub(crate) fn extension_document(
     scxml_snapshot::encode(&capture, &options).map_err(|error| SnapshotFailure::Codec(error).into())
 }
 
+/// The canonical `checkpoint` document of the session `key`, another
+/// session of the run of `links` (`session-snapshot-host.snapshot` with a
+/// target): its machine, data model, pending sends, clock, and external
+/// queue as they stand since its last call, one session object,
+/// `invocations` and `previews` excluded besides `exclude`, carriers
+/// stripped. `None` when the session is no machine session, its own call is
+/// running, or it is `failed` or `shut-down`. Read-only: nothing of the
+/// target session changes.
+pub(crate) fn target_document(
+    links: &super::SessionLinks,
+    key: SessionKey,
+    exclude: &[Section],
+) -> Result<Option<Vec<u8>>, RunFailure> {
+    let mut sections: Vec<Section> = exclude
+        .iter()
+        .copied()
+        .chain([Section::Invocations, Section::Previews])
+        .collect();
+    sections.sort_unstable();
+    sections.dedup();
+    let options = Options {
+        exclude: sections,
+        trace_context: TraceContextPolicy::Strip,
+        point: SnapshotPoint::Checkpoint,
+    };
+    let gather = Gather { options: &options };
+    let Some(machine) = links.shared_machine(key) else {
+        return Ok(None);
+    };
+    let Ok(mut handle) = machine.try_borrow_mut() else {
+        return Ok(None);
+    };
+    let mut now_ms = 0;
+    let mut session = match gather.session(&mut handle, None, &mut now_ms) {
+        Err(RunFailure::Snapshot(SnapshotFailure::Codec(error)))
+            if error.code == SnapshotErrorCode::StatusInvalid =>
+        {
+            return Ok(None);
+        }
+        captured => captured?,
+    };
+    drop(handle);
+    session.parent = None;
+    if !gather.excluded(Section::Queues) {
+        session.external =
+            links.with_invoked_sessions(|invoked_sessions, _| gather.queue(invoked_sessions, key));
+    }
+    let sessions = vec![session];
+    let capture = Capture {
+        components: components(links.digests(), &sessions),
+        now_ms,
+        sessions,
+    };
+    scxml_snapshot::encode(&capture, &options)
+        .map(Some)
+        .map_err(|error| SnapshotFailure::Codec(error).into())
+}
+
 /// Converts component records into capture records under one options set.
 struct Gather<'a> {
     options: &'a Options,

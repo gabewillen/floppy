@@ -618,9 +618,106 @@ fn a_recorded_nested_session_replays_byte_for_byte() {
     replay.close().expect("close");
 }
 
-/// Depth of the deep-chain proofs: far beyond what nested calls on a 2 MiB
-/// test thread could reach.
-const DEEP: usize = 10_000;
+/// A recorded run in which sessions reach each other by
+/// `#_scxml_<sessionid>` (a child its sibling, at once and when a delayed
+/// send falls due, and a grandchild the root) replays to the same
+/// snapshots and outputs: a delivery between sessions is a pure function of
+/// the run, which replay reproduces.
+#[test]
+fn a_recorded_run_with_deliveries_between_sessions_replays_byte_for_byte() {
+    let a = scxml(
+        "a0",
+        r##"<state id="a0">
+              <onentry><send event="hi" target="#_scxml_root.b"/><send event="later" target="#_scxml_root.b" delay="20ms"/></onentry>
+              <invoke id="g" type="scxml" src="grandchild.scxml"/>
+            </state>"##,
+    );
+    let b = scxml(
+        "b0",
+        r##"<state id="b0">
+              <transition event="hi"><send target="#_parent" event="heard"/></transition>
+              <transition event="later" target="bdone"/>
+            </state>
+            <final id="bdone"/>"##,
+    );
+    let grandchild = scxml(
+        "g0",
+        r##"<state id="g0"><onentry><send event="deep" target="#_scxml_root"/></onentry></state>"##,
+    );
+    let root = scxml(
+        "r0",
+        r#"<state id="r0">
+              <invoke id="b" type="scxml" src="b.scxml"/>
+              <invoke id="a" type="scxml" src="a.scxml"/>
+              <transition event="heard"><log label="heard"/></transition>
+              <transition event="deep"><log label="deep"/></transition>
+              <transition event="done.invoke.b" target="rdone"/>
+            </state>
+            <final id="rdone"/>"#,
+    );
+    let (ir, data_model) = lower(&root);
+    let documents = || {
+        Rc::new(Documents(vec![
+            ("a.scxml", a.clone()),
+            ("b.scxml", b.clone()),
+            ("grandchild.scxml", grandchild.clone()),
+        ]))
+    };
+    let host = host();
+    let open = |clock, recording: Recording| {
+        host.open(SessionOpen {
+            machine_ir: &ir,
+            data_model: data_model.as_deref(),
+            session_id: "root",
+            embedder: documents(),
+            max_commands: 1_024,
+            clock,
+            record: recording == Recording::On,
+            replay: None,
+            http: LiveHttp::default(),
+        })
+        .expect("the session opens")
+    };
+    let clock = ManualClock::new();
+    let mut live = open(LiveClock::Timed(Box::new(clock.clone())), Recording::On);
+    let options = Options::default();
+    let mut snapshots = vec![live.snapshot(&options).expect("snapshot")];
+    clock.set(25);
+    let step = live
+        .advance()
+        .expect("the delayed send to the sibling falls due");
+    assert_eq!(step.status, LiveStatus::Finished);
+    snapshots.push(live.snapshot(&options).expect("snapshot"));
+    let outputs = live.take_outputs();
+    let mut labels: Vec<&str> = outputs
+        .iter()
+        .filter_map(|output| match output {
+            SessionOutput::Log { entry, .. } => entry.label.as_deref(),
+            SessionOutput::Done { .. } => None,
+        })
+        .collect();
+    labels.sort_unstable();
+    assert_eq!(labels, ["deep", "heard"], "{outputs:?}");
+    let records = live.take_recorded();
+    live.close().expect("close");
+
+    let mut replay = open(LiveClock::Logical, Recording::Off);
+    let mut replayed = Vec::new();
+    for record in &records {
+        if let Applied::Snapshot(bytes) = replay.apply(record).expect("the record applies") {
+            replayed.push(bytes);
+        }
+    }
+    assert_eq!(replayed, snapshots, "the snapshots replay byte for byte");
+    assert_eq!(replay.take_outputs(), outputs);
+    replay.close().expect("close");
+}
+
+/// Depth of the deep-chain proofs: the deepest chain of invoke id `k` the
+/// 1024-byte name bound admits. A child's `_sessionid` is
+/// `<parent _sessionid>.<invokeid>`, so level `n` under the root `root` is
+/// `root` and `n` times `.k`: 4 + 2n bytes.
+const DEEP: usize = (scxml_types::MAX_NAME_BYTES - "root".len()) / 2;
 
 /// Every distinct session that recorded anything in the run's trace.
 fn traced_sessions(outcome: &SessionOutcome) -> usize {
@@ -639,7 +736,7 @@ fn traced_sessions(outcome: &SessionOutcome) -> usize {
 /// each is one host call of the fuel budget.
 const DEEP_CHAIN_FUEL: u64 = 10_000_000 * DEEP as u64;
 
-/// A chain of `DEEP` sessions that each start the next inside their own
+/// A chain of [`DEEP`] sessions that each start the next inside their own
 /// start (the invoke ends the start's macrostep, SCXML 6.4) runs from the
 /// host's loop, not nested calls: the chain starts, a snapshot of it fails
 /// at once with the document format's bounds error, the root's cancel
@@ -648,7 +745,7 @@ const DEEP_CHAIN_FUEL: u64 = 10_000_000 * DEEP as u64;
 /// starts in one host call, so the host is configured with
 /// [`DEEP_CHAIN_FUEL`].
 #[test]
-fn a_nested_start_chain_ten_thousand_deep_starts_cancels_and_drops() {
+fn a_nested_start_chain_to_the_name_bound_starts_cancels_and_drops() {
     let root = scxml(
         "r0",
         r#"<state id="r0"><onentry><send event="stop" delay="1ms"/></onentry><invoke id="k" type="scxml" src="level1.scxml"/><transition event="stop" target="rdone"><log label="stopped"/></transition></state><final id="rdone"/>"#,
@@ -656,7 +753,8 @@ fn a_nested_start_chain_ten_thousand_deep_starts_cancels_and_drops() {
     let outcome = run_with_budget(
         &host_with_fuel(DEEP_CHAIN_FUEL),
         &root,
-        waiting_chain(DEEP),
+        // One level more than the bound admits: its `<invoke>` fails.
+        waiting_chain(DEEP + 1),
         SnapshotRequest {
             points: SnapshotPoints::At(vec![0]),
             options: Options::default(),
@@ -683,13 +781,15 @@ fn a_nested_start_chain_ten_thousand_deep_starts_cancels_and_drops() {
 /// later delayed event, so each start is its own step of the run.
 const DEFERRED_CHILD: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="c0"><state id="c0"><onentry><send event="go" delay="1ms"/></onentry><transition event="go" target="c1"/></state><state id="c1"><invoke type="scxml" src="child.scxml"/></state></scxml>"#;
 
-/// A chain that grows one level per millisecond, one command per level, to
-/// more than `DEEP` levels, then the root leaves its invoking state: the
-/// cancel reaches every level, deepest last, and the whole chain is
+/// A chain that grows one level per millisecond, one command per level,
+/// until the next level's `_sessionid` would exceed the 1024-byte name
+/// bound (its `<invoke>` raises `error.execution`): `root.r0.0` and then
+/// `.c1.0` per level, 204 levels. Then the root leaves its invoking state:
+/// the cancel reaches every level, deepest last, and the whole chain is
 /// dropped, on this debug test thread. The cancel of the whole chain is one
 /// host call, so the host is configured with [`DEEP_CHAIN_FUEL`].
 #[test]
-fn a_deferred_chain_ten_thousand_deep_cancels_and_drops() {
+fn a_deferred_chain_to_the_name_bound_cancels_and_drops() {
     let stop_ms = DEEP + 10;
     let root = scxml(
         "r0",
@@ -706,11 +806,7 @@ fn a_deferred_chain_ten_thousand_deep_cancels_and_drops() {
     );
     assert_eq!(outcome.terminal, Terminal::Finished);
     assert_eq!(logs(&outcome), ["root:stopped"]);
-    assert!(
-        traced_sessions(&outcome) > DEEP,
-        "{} sessions",
-        traced_sessions(&outcome)
-    );
+    assert_eq!(traced_sessions(&outcome), 1 + 204);
 }
 
 /// Fuel of one host call in the fuel-sharing proof.
@@ -910,7 +1006,7 @@ fn reporting_chain(depth: usize) -> Vec<(&'static str, String)> {
 /// queued item is taken more than once. The order the scheduler takes them
 /// in, and its cost per item, are proven in `crates/scxml-scheduler`.
 #[test]
-fn a_ten_thousand_deep_chain_with_every_level_queued_drains_in_bounded_commands() {
+fn a_chain_to_the_name_bound_with_every_level_queued_drains_in_bounded_commands() {
     let root = scxml(
         "r0",
         r#"<state id="r0"><onentry><send event="stop" delay="1ms"/></onentry><invoke id="k" type="scxml" src="level1.scxml"/><transition event="up"><log label="up"/></transition><transition event="stop" target="rdone"/></state><final id="rdone"/>"#,

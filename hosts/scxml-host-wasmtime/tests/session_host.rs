@@ -1207,18 +1207,27 @@ fn a_delayed_send_whose_target_is_gone_at_dispatch_raises_error_communication() 
 }
 
 #[test]
-fn a_delayed_send_to_an_unknown_session_fails_when_the_send_executes() {
-    // A `#_scxml_` address no session answers is classified when the
-    // `<send>` executes, before its delay (C.1: "If the sending SCXML
-    // session specifies a session that does not exist or is
-    // inaccessible, the SCXML Processor MUST place the error
+fn a_delayed_send_to_an_unknown_session_fails_when_its_delay_elapses() {
+    // Every session of the run is accessible (C.1: "The set of SCXML
+    // sessions that are accessible to a given SCXML Processor is
+    // platform-dependent"), and which sessions run is known only when the
+    // delayed send falls due (6.2: "It MUST dispatch the message only when
+    // the delay interval elapses"). Then no session answers `nobody`: "If
+    // the sending SCXML session specifies a session that does not exist or
+    // is inaccessible, the SCXML Processor MUST place the error
     // error.communication on the internal event queue of the sending
-    // session"), so the error is raised at once, with the send's id.
+    // session", with the send's id, after the raised `after`.
     let outcome = run(&ecmascript(
-        r##"<state id="s0"><onentry><send id="lost" event="lost" target="#_scxml_nobody" delay="10ms"/><raise event="after"/></onentry><transition event="error.communication" target="done"><log label="error" expr="_event.sendid"/></transition><transition event="*" target="fail"><log label="unexpected" expr="_event.name"/></transition></state><final id="done"/><final id="fail"/>"##,
+        r##"<state id="s0"><onentry><send id="lost" event="lost" target="#_scxml_nobody" delay="10ms"/><raise event="after"/></onentry><transition event="after"><log label="after"/></transition><transition event="error.communication" target="done"><log label="error" expr="_event.sendid"/></transition><transition event="*" target="fail"><log label="unexpected" expr="_event.name"/></transition></state><final id="done"/><final id="fail"/>"##,
     ));
     assert_eq!(outcome.configuration, ["done"], "{outcome:?}");
-    assert_eq!(records(&outcome), [("error".into(), "lost".into())]);
+    assert_eq!(
+        records(&outcome),
+        [
+            ("after".into(), String::new()),
+            ("error".into(), "lost".into())
+        ]
+    );
 }
 
 #[test]
@@ -1476,6 +1485,311 @@ fn a_parent_reaches_its_child_through_the_childs_scxml_session_address() {
     assert_eq!(outcome.configuration, ["done"], "{outcome:?}");
 }
 
+/// `(session, label, text)` of every log record of the run, in trace order.
+fn session_logs(outcome: &SessionOutcome) -> Vec<(String, String, String)> {
+    outcome
+        .trace
+        .iter()
+        .filter_map(|entry| match &entry.observation {
+            TraceObservation::Log(log) => Some((
+                entry.session.clone(),
+                log.label.clone().unwrap_or_default(),
+                log.text.clone(),
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_child_and_a_grandchild_are_named_by_their_invoke_ids() {
+    // SCXML 5.10: `_sessionid` is "the system-generated id for the current
+    // SCXML session". The host names a child `<parent _sessionid>.<invokeid>`,
+    // so an invoker knows its child's address before the child starts.
+    let grandchild = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="g0"><state id="g0"><onentry><log label="id" expr="_sessionid"/></onentry></state></scxml>"#;
+    let child = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="c0"><state id="c0"><onentry><log label="id" expr="_sessionid"/></onentry><invoke id="grand" src="grandchild.scxml"/></state></scxml>"#;
+    let outcome = run_with(
+        &host(),
+        &ecmascript(
+            r#"<state id="s0"><onentry><send event="check" delay="1ms"/></onentry><invoke id="kid" src="child.scxml"/><transition event="check" target="done"/></state><final id="done"/>"#,
+        ),
+        &[],
+        vec![
+            ("child.scxml", child.to_owned()),
+            ("grandchild.scxml", grandchild.to_owned()),
+        ],
+        RUN_COMMANDS,
+    )
+    .expect("the run completes");
+    assert_eq!(outcome.configuration, ["done"], "{outcome:?}");
+    assert_eq!(
+        session_logs(&outcome),
+        [
+            ("root.kid".into(), "id".into(), "root.kid".into()),
+            (
+                "root.kid.grand".into(),
+                "id".into(),
+                "root.kid.grand".into()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_generated_invoke_id_is_the_state_id_and_an_ordinal_of_the_invoking_session() {
+    // SCXML 6.4.1: a generated id has "the form stateid.platformid", where
+    // "platformid MUST be unique within the current session": `<state id>.<n>`,
+    // the same form in a child session as in the root, and the child it
+    // names is `<parent _sessionid>.<invokeid>`. `idlocation`,
+    // `_event.invokeid` and `#_<invokeid>` carry it.
+    let grandchild = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="g0"><state id="g0"><onentry><log label="id" expr="_sessionid"/></onentry></state></scxml>"#;
+    let child = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s"><datamodel><data id="where"/></datamodel><state id="s"><onentry><log label="id" expr="_sessionid"/><send event="hello" target="#_parent"/></onentry><invoke src="grandchild.scxml" idlocation="where"/><transition event="ping"><log label="where" expr="where"/><send event="pong" target="#_parent"/></transition></state></scxml>"##;
+    let outcome = run_with(
+        &host(),
+        &ecmascript(
+            r#"<datamodel><data id="where"/></datamodel><state id="s0" initial="s"><state id="s"><invoke src="child.scxml" idlocation="where"/><transition event="hello"><log label="hello" expr="_event.invokeid + ' ' + where"/><send event="ping" targetexpr="'#_' + where"/></transition><transition event="pong" target="done"/></state></state><final id="done"/>"#,
+        ),
+        &[],
+        vec![
+            ("child.scxml", child.to_owned()),
+            ("grandchild.scxml", grandchild.to_owned()),
+        ],
+        RUN_COMMANDS,
+    )
+    .expect("the run completes");
+    let logs = session_logs(&outcome);
+    assert_eq!(outcome.configuration, ["done"], "{logs:?}");
+    for expected in [
+        ("root.s.0", "id", "root.s.0"),
+        ("root", "hello", "s.0 s.0"),
+        ("root.s.0.s.0", "id", "root.s.0.s.0"),
+        ("root.s.0", "where", "s.0"),
+    ] {
+        let expected = (
+            expected.0.to_owned(),
+            expected.1.to_owned(),
+            expected.2.to_owned(),
+        );
+        assert!(logs.contains(&expected), "{expected:?} in {logs:?}");
+    }
+}
+
+#[test]
+fn a_child_invoked_again_under_its_invoke_id_keeps_its_address() {
+    // SCXML 6.4: leaving the invoking state cancels the invocation, and
+    // entering it again starts a new one under the same literal id. The
+    // new session has the old one's `_sessionid`, and its address
+    // (`#_scxml_<sessionid>`, C.1) reaches the new session.
+    let child = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="c0"><state id="c0"><onentry><log label="id" expr="_sessionid"/><send event="hello" target="#_parent"/></onentry><transition event="ping"><send event="pong" target="#_parent"/></transition></state></scxml>"##;
+    let outcome = run_with(
+        &host(),
+        &ecmascript(
+            r##"<datamodel><data id="n" expr="0"/></datamodel><state id="s0"><invoke id="kid" src="child.scxml"/><transition event="hello" cond="n === 0" target="s0"><assign location="n" expr="1"/></transition><transition event="hello" cond="n === 1"><send event="ping" target="#_scxml_root.kid"/></transition><transition event="pong" target="done"/><transition event="error.*" target="fail"><log label="error" expr="_event.name"/></transition></state><final id="done"/><final id="fail"/>"##,
+        ),
+        &[],
+        vec![("child.scxml", child.to_owned())],
+        RUN_COMMANDS,
+    )
+    .expect("the run completes");
+    assert_eq!(outcome.configuration, ["done"], "{outcome:?}");
+    assert_eq!(
+        session_logs(&outcome),
+        [
+            ("root.kid".into(), "id".into(), "root.kid".into()),
+            ("root.kid".into(), "id".into(), "root.kid".into()),
+        ]
+    );
+}
+
+#[test]
+fn an_invocation_whose_child_session_id_exceeds_the_name_bound_raises_error_execution() {
+    // A child's `_sessionid` is `<parent _sessionid>.<invokeid>`, so the id
+    // grows with the nesting depth, and a session id is a name of at most
+    // 1024 bytes. The child `root.<1,000 bytes>` (1,005 bytes) invoking a
+    // 19-byte id would name a 1,025-byte grandchild: that `<invoke>` fails
+    // (SCXML 3.12.2: `error.execution`) and starts nothing; an 18-byte id
+    // names a 1,024-byte grandchild, which starts.
+    let kid = "k".repeat(1_000);
+    for (length, expected) in [(19, "bounded"), (18, "started")] {
+        let grand = "g".repeat(length);
+        let child = format!(
+            r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="c0"><state id="c0"><onentry><send event="check" delay="1ms"/></onentry><invoke id="{grand}" type="scxml" src="waiting.scxml"/><transition event="error.execution"><send event="bounded" target="#_parent"/></transition><transition event="check"><send event="started" target="#_parent"/></transition></state></scxml>"##
+        );
+        let outcome = run_with(
+            &host(),
+            &scxml(&format!(
+                r#"<state id="s0"><invoke id="{kid}" type="scxml" src="child.scxml"/><transition event="bounded" target="bounded"/><transition event="started" target="started"/></state><final id="bounded"/><final id="started"/>"#
+            )),
+            &[],
+            vec![
+                ("child.scxml", child),
+                ("waiting.scxml", WAITING_CHILD.to_owned()),
+            ],
+            RUN_COMMANDS,
+        )
+        .expect("the run completes");
+        assert_eq!(outcome.configuration, [expected], "{length}");
+        let grandchild = format!("root.{kid}.{grand}");
+        assert_eq!(
+            outcome
+                .trace
+                .iter()
+                .any(|entry| entry.session == grandchild),
+            expected == "started",
+            "{length}"
+        );
+    }
+}
+
+/// An ECMAScript child document with `body` inside its `<scxml>`.
+fn ecmascript_child(initial: &str, body: &str) -> String {
+    format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="{initial}">{body}</scxml>"#
+    )
+}
+
+#[test]
+fn a_grandchild_reaches_the_root_by_its_scxml_session_address() {
+    // SCXML C.1: "If the target is the special term '#_scxml_sessionid',
+    // where sessionid is the id of an SCXML session that is accessible to
+    // the Processor, the Processor MUST add the event to the external queue
+    // of that session"; "The set of SCXML sessions that are accessible to a
+    // given SCXML Processor is platform-dependent": every session of the
+    // run. 5.10.1: `origin` is the sender's address, and `invokeid` is set
+    // only for an event from an invoked child, so the root's grandchild's
+    // event carries none.
+    let grandchild = ecmascript_child(
+        "g0",
+        r##"<state id="g0"><onentry><send event="hello" target="#_scxml_root"/></onentry></state>"##,
+    );
+    let child = ecmascript_child(
+        "c0",
+        r#"<state id="c0"><invoke id="grand" src="grandchild.scxml"/></state>"#,
+    );
+    let outcome = run_with(
+        &host(),
+        &ecmascript(
+            r#"<state id="s0"><invoke id="kid" src="child.scxml"/><transition event="hello" target="done"><log label="hello" expr="_event.origin + ' ' + typeof _event.invokeid"/></transition></state><final id="done"/>"#,
+        ),
+        &[],
+        vec![("child.scxml", child), ("grandchild.scxml", grandchild)],
+        RUN_COMMANDS,
+    )
+    .expect("the run completes");
+    assert_eq!(outcome.configuration, ["done"], "{outcome:?}");
+    assert_eq!(
+        records(&outcome),
+        [("hello".into(), "#_scxml_root.kid.grand undefined".into())]
+    );
+}
+
+#[test]
+fn a_child_reaches_its_parent_by_its_scxml_session_address_with_its_invoke_id() {
+    // SCXML 5.10.1: an event from an invoked child carries its invoke id,
+    // whichever address the child sent it to.
+    let child = ecmascript_child(
+        "c0",
+        r##"<state id="c0"><onentry><send event="hello" target="#_scxml_root"/></onentry></state>"##,
+    );
+    let outcome = run_with(
+        &host(),
+        &ecmascript(
+            r#"<state id="s0"><invoke id="kid" src="child.scxml"/><transition event="hello" target="done"><log label="hello" expr="_event.origin + ' ' + _event.invokeid"/></transition></state><final id="done"/>"#,
+        ),
+        &[],
+        vec![("child.scxml", child)],
+        RUN_COMMANDS,
+    )
+    .expect("the run completes");
+    assert_eq!(outcome.configuration, ["done"], "{outcome:?}");
+    assert_eq!(
+        records(&outcome),
+        [("hello".into(), "#_scxml_root.kid kid".into())]
+    );
+}
+
+#[test]
+fn a_child_reaches_a_sibling_by_its_address_before_the_sibling_has_sent_anything() {
+    // SCXML C.1, with every session of the run accessible: `a` sends to
+    // its sibling at `root.b` (`<parent _sessionid>.<invokeid>`), which
+    // has sent nothing, and `b` tells the root who it heard from.
+    let a = ecmascript_child(
+        "a0",
+        r##"<state id="a0"><onentry><send event="hi" target="#_scxml_root.b"/></onentry></state>"##,
+    );
+    let b = ecmascript_child(
+        "b0",
+        r##"<state id="b0"><transition event="hi"><send event="heard" target="#_parent"><param name="from" expr="_event.origin"/></send></transition></state>"##,
+    );
+    let outcome = run_with(
+        &host(),
+        &ecmascript(
+            r#"<state id="s0"><invoke id="b" src="b.scxml"/><invoke id="a" src="a.scxml"/><transition event="heard" target="done"><log label="heard" expr="_event.data.from"/></transition></state><final id="done"/>"#,
+        ),
+        &[],
+        vec![("a.scxml", a), ("b.scxml", b)],
+        RUN_COMMANDS,
+    )
+    .expect("the run completes");
+    assert_eq!(outcome.configuration, ["done"], "{outcome:?}");
+    assert_eq!(
+        records(&outcome),
+        [("heard".into(), "#_scxml_root.a".into())]
+    );
+}
+
+#[test]
+fn a_send_to_an_ended_or_unknown_session_of_the_run_raises_error_communication() {
+    // SCXML C.1: "If the sending SCXML session specifies a session that
+    // does not exist or is inaccessible, the SCXML Processor MUST place the
+    // error error.communication on the internal event queue." `b` has
+    // finished, and no session of the run is `root.nobody`.
+    let a = ecmascript_child(
+        "a0",
+        r##"<state id="a0"><transition event="go" target="a1"><send event="hi" target="#_scxml_root.b"/></transition></state><state id="a1"><onentry><send event="hi" target="#_scxml_root.nobody"/></onentry><transition event="error.communication" target="a2"><send event="lost" target="#_parent"/></transition></state><state id="a2"><transition event="error.communication"><send event="lost" target="#_parent"/></transition></state>"##,
+    );
+    let b = ecmascript_child("b0", r#"<final id="b0"/>"#);
+    let outcome = run_with(
+        &host(),
+        &ecmascript(
+            r##"<datamodel><data id="lost" expr="0"/></datamodel><state id="s0"><invoke id="a" src="a.scxml"/><invoke id="b" src="b.scxml"/><transition event="done.invoke.b"><send event="go" target="#_a"/></transition><transition event="lost" cond="lost === 0"><assign location="lost" expr="1"/></transition><transition event="lost" cond="lost === 1" target="done"/></state><final id="done"/>"##,
+        ),
+        &[],
+        vec![("a.scxml", a), ("b.scxml", b)],
+        RUN_COMMANDS,
+    )
+    .expect("the run completes");
+    assert_eq!(outcome.configuration, ["done"], "{outcome:?}");
+}
+
+#[test]
+fn a_delayed_send_to_another_session_is_delivered_at_its_time_or_cancelled() {
+    // SCXML 6.2: "It MUST dispatch the message only when the delay
+    // interval elapses"; 6.3: `<cancel>` stops a delayed send not yet
+    // dispatched. `a` sends `early` and `late` to its sibling `b`, both
+    // delayed, and cancels `late`; `b` hears `early` only.
+    let a = ecmascript_child(
+        "a0",
+        r##"<state id="a0"><onentry><send event="early" target="#_scxml_root.b" delay="10ms"/><send id="late" event="late" target="#_scxml_root.b" delay="20ms"/><cancel sendid="late"/></onentry></state>"##,
+    );
+    let b = ecmascript_child(
+        "b0",
+        r##"<state id="b0"><transition event="early"><send event="heard" target="#_parent"><param name="name" expr="_event.name"/></send><send event="settle" delay="30ms"/></transition><transition event="late"><send event="heard" target="#_parent"><param name="name" expr="_event.name"/></send></transition><transition event="settle"><send event="settled" target="#_parent"/></transition></state>"##,
+    );
+    let outcome = run_with(
+        &host(),
+        &ecmascript(
+            r#"<state id="s0"><invoke id="b" src="b.scxml"/><invoke id="a" src="a.scxml"/><transition event="heard"><log label="heard" expr="_event.data.name"/></transition><transition event="settled" target="done"/></state><final id="done"/>"#,
+        ),
+        &[],
+        vec![("a.scxml", a), ("b.scxml", b)],
+        RUN_COMMANDS,
+    )
+    .expect("the run completes");
+    assert_eq!(outcome.configuration, ["done"], "{outcome:?}");
+    assert_eq!(records(&outcome), [("heard".into(), "early".into())]);
+}
+
 #[test]
 fn event_descriptor_tokens_match_case_sensitively() {
     // SCXML 3.12.1: "An event descriptor matches an event name if its string
@@ -1716,13 +2030,16 @@ const SELF_INVOKING_CHILD: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scx
 /// 6.4 sets no depth, and the host refuses no `<invoke>` of its own. Each
 /// child starts from the host's loop once its invoking session suspended,
 /// not inside that session's call, so the chain takes no native stack per
-/// level: it nests until the caller's command budget ends the step, and the
-/// run fails with that budget, never with a stack overflow. The whole chain
-/// starts inside the root's start, one host call of the fuel budget (the
-/// document itself is compiled once, apart from it), so every level's start
-/// must fit that budget.
+/// level. A child's `_sessionid` is `<parent _sessionid>.<invokeid>`, so
+/// each level adds its generated invoke id (`.c0.0`) to the id: the chain
+/// nests until the next child's id would exceed the 1024-byte name bound,
+/// where that `<invoke>` raises `error.execution`, and every level's
+/// `done.invoke` climbs back to the root, never a stack overflow. The whole
+/// chain starts inside the root's start, one host call of the fuel budget
+/// (the document itself is compiled once, apart from it), so every level's
+/// start must fit that budget.
 #[test]
-fn unbounded_self_invocation_nests_until_the_callers_command_budget() {
+fn unbounded_self_invocation_nests_until_the_session_id_name_bound() {
     const BUDGET: u64 = 4_000;
     let root = scxml(
         r#"<state id="s0"><invoke type="scxml" src="child.scxml"/><transition event="done.invoke" target="done"/><transition event="error.execution" target="done"><log label="refused"/></transition></state><final id="done"/>"#,
@@ -1736,13 +2053,21 @@ fn unbounded_self_invocation_nests_until_the_callers_command_budget() {
         },
         ..WasmtimeHostConfig::default()
     });
-    let failure = run_with(&fueled, &root, &[], documents(), BUDGET)
-        .expect_err("the chain outgrows the command budget");
-    assert!(
-        matches!(failure.failure, RunFailure::CommandBudget),
-        "{failure}"
-    );
-    assert_eq!(failure.commands, BUDGET, "one command per nested start");
+    let outcome = run_with(&fueled, &root, &[], documents(), BUDGET)
+        .expect("the chain ends at the name bound");
+    assert_eq!(outcome.configuration, ["done"]);
+    assert!(labels(&outcome).is_empty(), "the root's own invoke started");
+    // `root.s0.0` (9 bytes), then `.c0.0` (5 bytes) per level: 203 more
+    // levels fit 1,024 bytes.
+    let deepest = format!("root.s0.0{}", ".c0.0".repeat(203));
+    assert_eq!(deepest.len(), 1_024);
+    let sessions: std::collections::BTreeSet<&str> = outcome
+        .trace
+        .iter()
+        .map(|entry| entry.session.as_str())
+        .collect();
+    assert_eq!(sessions.len(), 1 + 1 + 203, "the root and every level");
+    assert!(sessions.contains(deepest.as_str()));
 }
 
 /// Serves one `<script src>` of ECMAScript text.
