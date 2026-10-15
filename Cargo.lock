@@ -277,6 +277,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "floppy-device"
+version = "0.1.0"
+dependencies = [
+ "scxml-types",
+ "scxml-validator-core",
+ "serde_json",
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
 name = "floppy-migration"
 version = "0.1.0"
 dependencies = [

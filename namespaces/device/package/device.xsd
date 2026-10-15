@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML Schema of floppy's `device` extension namespace (namespaces/device). It
+  governs structure only; the extension component governs what the element
+  does. Bind it with the prefix `device` by convention.
+
+  device:snapshot  location (required): receives {id, state, attributes,
+                   events} of the session target names: its _sessionid, its
+                   active atomic states (space-separated), its data model,
+                   and the event names its active transitions accept.
+                   target (required): an expression of the session's address
+                   as a <send> target names it (#_parent, #_<invokeid>,
+                   #_scxml_<sessionid>).
+                   It takes no other attribute and no content.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://github.com/stateforward/floppy/namespaces/device"
+           elementFormDefault="qualified">
+  <xs:element name="snapshot">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="target" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

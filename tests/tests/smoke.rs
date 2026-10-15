@@ -105,6 +105,7 @@ fn the_dev_build_publishes_under_target_and_leaves_the_release_cache_untouched()
         "https://github.com/stateforward/floppy/namespaces/decision",
         "https://github.com/stateforward/floppy/namespaces/bot",
         "https://github.com/stateforward/floppy/namespaces/conversation",
+        "https://github.com/stateforward/floppy/namespaces/device",
         "https://github.com/stateforward/floppy/services/generate",
         "https://github.com/stateforward/floppy/services/decision",
     ] {

@@ -53,7 +53,7 @@ expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 # pinned wasi-sdk release, checked by its VERSION file.
 expected_wasi_sdk='25.0'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
-namespace_components='floppy_decision floppy_bot floppy_conversation floppy_migration'
+namespace_components='floppy_decision floppy_bot floppy_conversation floppy_migration floppy_device'
 service_components='floppy_service_generate floppy_service_decision floppy_service_sql floppy_service_speech floppy_service_pgsql'
 # Package validator components (stateforward:scxml-validator/package-validator),
 # each named by its package's manifest (`validator-artifact`).
@@ -100,6 +100,16 @@ expected_imports() {
         # snapshot, evaluates their guards through the data model, and
         # assigns the choices there; no execution-host or outbound-http.
         floppy_decision)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'stateforward:scxml/data-model-host@0.2.0' \
+                'stateforward:scxml/session-snapshot-host@0.2.0'
+            ;;
+        # <device:snapshot>: reads another session of the run through the
+        # session snapshot (its target) and assigns the read through the
+        # data model; no execution-host or outbound-http.
+        floppy_device)
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0' \

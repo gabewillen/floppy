@@ -1,0 +1,28 @@
+[package]
+name = "floppy-device"
+description = "The `device` namespace: `<device:snapshot>`, another session's id, state, data model and accepted events read from its live session snapshot, as a Wasm extension component"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The data values the data model reads and assigns, and the JSON of the
+# snapshot document and the read it writes (no schema code, so no
+# randomness).
+scxml-types.workspace = true
+serde_json.workspace = true
+wit-bindgen.workspace = true
+
+[dev-dependencies]
+# The package test reads the manifest with the parser every host uses.
+scxml-validator-core.workspace = true
+
+[lints]
+workspace = true

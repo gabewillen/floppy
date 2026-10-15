@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A fixture device (tests/tests/environment.rs): a lamp that is off or on.
+  It takes lamp.on (at an optional brightness) while off and lamp.off while
+  on, from anyone (a device checks nothing about the sender), and logs each
+  as a record labelled with its name. Its data model holds only observable
+  state: brightness (0 while off).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="lamp" initial="off">
+  <datamodel>
+    <data id="brightness" expr="0"/>
+  </datamodel>
+  <state id="off">
+    <transition event="lamp.on" event:schema="schemas/lamp.on.json" target="on">
+      <assign location="brightness" expr="_event.data.brightness || 100"/>
+      <log label="lamp.on" expr="brightness"/>
+    </transition>
+  </state>
+  <state id="on">
+    <transition event="lamp.off" event:schema="schemas/lamp.off.json" target="off">
+      <assign location="brightness" expr="0"/>
+      <log label="lamp.off" expr="brightness"/>
+    </transition>
+  </state>
+</scxml>
