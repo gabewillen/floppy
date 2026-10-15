@@ -983,7 +983,10 @@ impl execution_host::Host for ExtensionStoreData {
                 ErrorCode::Unavailable,
                 "no live session answers the send target",
             )),
-            SendTarget::Local | SendTarget::Parent | SendTarget::Invocation(_) => {
+            SendTarget::Local
+            | SendTarget::Parent
+            | SendTarget::Invocation(_)
+            | SendTarget::Session(_) => {
                 let disposition = with_lent(|lent| {
                     let links = lent.links.as_deref_mut().ok_or_else(|| {
                         component_error(ErrorCode::Unavailable, "no I/O processor is linked")
@@ -1060,6 +1063,7 @@ impl session_snapshot_host::Host for ExtensionStoreData {
     fn snapshot(
         &mut self,
         exclude: Vec<session_snapshot_host::Section>,
+        target: Option<String>,
     ) -> Result<String, ComponentError> {
         let providers = self.providers.clone();
         let call = self.call()?;
@@ -1094,6 +1098,27 @@ impl session_snapshot_host::Host for ExtensionStoreData {
                     "the session snapshot is not available for this `execute` call",
                 ));
             };
+            // Another session of the run, resolved as a `<send>` target is:
+            // its canonical document at its last checkpoint.
+            let unanswered = || {
+                component_error(
+                    ErrorCode::Unavailable,
+                    "no running session of the run answers the snapshot target",
+                )
+            };
+            if let Some(target) = target.as_deref() {
+                match links.snapshot_target(target) {
+                    None => return Err(unanswered()),
+                    Some(key) if key != links.key() => {
+                        return match crate::session_host::target_document(links, key, &exclude) {
+                            Ok(None) => Err(unanswered()),
+                            Ok(Some(bytes)) => Ok(Ok(bytes)),
+                            Err(failure) => Ok(Err(failure)),
+                        };
+                    }
+                    Some(_) => {}
+                }
+            }
             Ok(crate::session_host::extension_document(
                 image,
                 &exclude,

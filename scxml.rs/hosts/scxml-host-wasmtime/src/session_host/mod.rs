@@ -138,7 +138,7 @@ pub use snapshot::{
     CheckpointSnapshot, CheckpointSnapshotFailure, SnapshotExport, SnapshotFailure, SnapshotPoints,
     SnapshotRequest,
 };
-pub(crate) use snapshot::{ExtensionImage, ExtensionState, extension_document};
+pub(crate) use snapshot::{ExtensionImage, ExtensionState, extension_document, target_document};
 
 use crate::basichttp_types::{HttpRequest, HttpResponse};
 use crate::{

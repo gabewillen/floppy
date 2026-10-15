@@ -119,6 +119,9 @@ import { isDataValue, isForeachResult, isOptionalDataValue, toWitEvent } from '.
 export const MAX_MACHINE_IR_BYTES = 16 * 1024 * 1024;
 /** Default `_sessionid`, matching the Wasmtime host driver. */
 export const DEFAULT_SESSION_ID = 'machine-session';
+/** Largest `_sessionid` in UTF-8 bytes (`scxml_types::MAX_NAME_BYTES`). */
+const MAX_SESSION_ID_BYTES = 1_024;
+const utf8 = new TextEncoder();
 /**
  * Most deliveries (delayed sends and cross-session messages) one command,
  * `advanceTime` call, or event-loop timer turn performs; the rest stay
@@ -288,8 +291,6 @@ class Run {
     this.rootInstance = undefined;
     /** Every started invoked session by its key (src/invoked-sessions.js). */
     this.children = new Map();
-    /** Invoked sessions the run named so far (see nextInvokedSessionId). */
-    this.invokedNamed = 0;
     /**
      * The shared logical clock, in ms: the root's clock, which every move
      * of time advances. An invoked session's own clock is moved to it only
@@ -325,18 +326,6 @@ class Run {
     this.fault = undefined;
   }
 
-  /**
-   * The `_sessionid` of the next session the run invokes: the root's, then
-   * `.` and its ordinal among the run's invoked sessions in start order,
-   * exactly as under Wasmtime (SCXML 5.10: "the system-generated id for
-   * the current SCXML session"). Unique across the run and of a length
-   * that does not grow with the nesting depth.
-   */
-  nextInvokedSessionId() {
-    this.invokedNamed += 1;
-    return `${this.rootLinks.sessionId}.${this.invokedNamed}`;
-  }
-
   /** Records the run's first fault; later ones are consequences. */
   latch(error) {
     this.fault ??= error;
@@ -356,6 +345,54 @@ class Run {
   /** The started invoked session `key`, if any. */
   session(key) {
     return this.children.get(key);
+  }
+
+  /**
+   * The key of the session of this run whose `_sessionid` is `sessionId`,
+   * while it runs: what `#_scxml_<sessionid>` reaches (SCXML C.1), the
+   * root or a started, unfinished invoked session; undefined for any other
+   * id, as under Wasmtime.
+   */
+  runningSession(sessionId) {
+    if (sessionId === this.rootLinks?.sessionId) return ROOT;
+    for (const [key, child] of this.children) {
+      if (!child.finished && child.instance.links.sessionId === sessionId) return key;
+    }
+    return undefined;
+  }
+
+  /**
+   * The session of this run that the `<send>` target `target` of the
+   * session `links` names while it runs (`#_parent`, `#_<invokeid>`, or
+   * `#_scxml_<sessionid>`, classified by the SCXML processor), for an
+   * extension component's `session-snapshot-host.snapshot`: `{own: true}`
+   * for the executing session itself, `{instance}` for another one, and
+   * undefined for a malformed target or one no running session answers
+   * (an invoked service has no session), as under Wasmtime.
+   */
+  snapshotTarget(links, target) {
+    const classified = links.classifyTarget(target);
+    let key;
+    switch (classified.tag) {
+      case 'local':
+        return { own: true };
+      case 'parent':
+        key = links.parentLinks?.key;
+        break;
+      case 'invocation':
+        key = this.invokedSessions.child(links.key, classified.val);
+        break;
+      case 'session':
+        key = this.runningSession(classified.val);
+        break;
+      default:
+        return undefined;
+    }
+    if (key === undefined) return undefined;
+    if (key === ROOT) return { instance: this.rootInstance };
+    const child = this.session(key);
+    if (child === undefined || child.finished) return undefined;
+    return { instance: child.instance };
   }
 
   /** Whether the invoked session `key` reached a top-level final state. */
@@ -931,6 +968,16 @@ function capabilityResource(links) {
             run.invokedSessions.pushExternal(child, action.val.event);
             return { tag: 'routed' };
           }
+          case 'session': {
+            // Another session of the run (SCXML C.1), while it runs; any
+            // other id is error.communication.
+            const [sessionId, event] = action.val;
+            const target = run.runningSession(sessionId);
+            if (target === undefined) return { tag: 'undeliverable' };
+            if (!capabilityAccepts(run, target, event)) throw notAccepted();
+            run.invokedSessions.pushExternal(target, event);
+            return { tag: 'routed' };
+          }
           default:
             throw links.invariant();
         }
@@ -1265,8 +1312,15 @@ export function requestStart(links, request) {
     throw componentFailure('invalid-input', 'the invocation exceeds the invoked sessions bounds');
   }
   const rejected = () => componentFailure('invalid-input', 'the invoked session was rejected at load');
+  // The child's `_sessionid` (SCXML 5.10): the invoker's and its invoke
+  // id, exactly as under Wasmtime, so the invoker knows the child's address
+  // before it starts and a child invoked again under the same id keeps it.
+  // One over the name bound fails the invocation, as the invoke limits do.
+  const sessionId = `${links.sessionId}.${request.invokeId}`;
+  if (utf8.encode(sessionId).byteLength > MAX_SESSION_ID_BYTES) {
+    throw componentFailure('invalid-input', 'the invoked session id exceeds the name bound');
+  }
   if (request.machineIr.byteLength > MAX_MACHINE_IR_BYTES) throw rejected();
-  const sessionId = run.nextInvokedSessionId();
   const { telemetry, modules: module, fuel, budget } = run;
   let meter;
   let instance;
@@ -2006,9 +2060,19 @@ export class MachineSession {
       } else if (route.tag === 'invocation') {
         receiver = this.#run.invokedSessions.child(links.key, route.val.invokeId);
         event = route.val.event;
+      } else if (route.tag === 'session') {
+        // Another session of the run (SCXML C.1): one that no longer runs
+        // cannot be dispatched to.
+        [, event] = route.val;
+        receiver = this.#run.runningSession(route.val[0]);
+        if (receiver === undefined) return { tag: 'undeliverable', val: due.val.sendId };
       }
       if (receiver !== undefined && !this.#accepts(receiver, event)) {
         return { tag: 'undeliverable', val: due.val.sendId };
+      }
+      if (route.tag === 'session') {
+        this.#run.invokedSessions.pushExternal(receiver, event);
+        return { tag: 'dispatched' };
       }
       return route;
     }

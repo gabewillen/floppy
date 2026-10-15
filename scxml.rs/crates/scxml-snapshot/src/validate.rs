@@ -362,7 +362,10 @@ impl Passes {
         let root = &document.snapshot.root;
         let root_pointer = snapshot.with_key("root");
         self.session(root, &root_pointer, &context);
-        if root.invoked_by.is_some() && !executable_content {
+        // A document of a whole run starts at its root session, which no
+        // session invoked; one session of the run alone (`invocations`
+        // excluded) may be an invoked one.
+        if root.invoked_by.is_some() && !exclude.contains(&Section::Invocations) {
             self.fail(
                 SnapshotErrorCode::Inconsistent,
                 &root_pointer.with_key("invoked_by"),

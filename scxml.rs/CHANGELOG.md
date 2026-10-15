@@ -478,7 +478,7 @@ hard cutover.
   1,012 bytes, whose `done.invoke.<ID>` event exceeds it; such a document
   compiled and then failed the session when the element ran).
 - An invoke id longer than the 1,024-byte name bound, literal or generated
-  (`<state ID>.<_sessionid>.<n>` over a long state ID), or one whose
+  (`<state ID>.<n>` over a long state ID), or one whose
   `done.invoke.<ID>` event the bound cannot hold, fails that `<invoke>`
   with `error.execution` (SCXML 3.12.2) instead of failing the session, as
   does inline `<invoke><content>` that serializes past the machine's 1 MiB
@@ -727,8 +727,10 @@ hard cutover.
   0.3 s of Wasm in Node 24 on an Apple M3 Max (the heavy nested start;
   a 64-region `<raise>` toggle loop about 0.21 s), and both still stop
   with `fuel-exhausted`.
-- Generated invoke ids (`<state>.<session>.<n>`, SCXML 6.4.1) start at
-  `.0`, as generated send ids start at `sendid_0`, and an `<invoke>` with a
+- Generated invoke ids are `<state>.<n>` (SCXML 6.4.1
+  `stateid.platformid`, `n` unique within the invoking session; formerly
+  `<state>.<session>.<n>`, whose session id the child's address already
+  carries), start at `.0`, as generated send ids start at `sendid_0`, and an `<invoke>` with a
   literal `id` no longer takes an ordinal: only a generated id does. The
   session snapshot's `counters.invoke` is the next generated ordinal, so a
   session that has generated no invoke id reports `invoke: 0` (it reported
@@ -927,10 +929,26 @@ hard cutover.
   (by default 3,000,000,000 instructions under Wasmtime and 75,000,000
   metered charges in the browser), so a finite command that starts a deep
   or heavy chain of invocations can exhaust it.
+- `session-snapshot-host.snapshot` takes an optional `target`: another
+  session of the executing session's run, named as a `<send>` target names
+  it (`#_parent`, `#_<invokeid>`, `#_scxml_<sessionid>`), whose canonical
+  document at its last checkpoint it returns (`unavailable` for a target no
+  running session of the run answers), in both hosts; nothing is recorded.
+  `<example:snapshot>` gains `target`.
+- `#_scxml_<sessionid>` reaches any session of the sender's run while it
+  runs (SCXML C.1 leaves the accessible sessions to the platform): a
+  sibling, a grandchild, or the root, immediately or when a delayed send
+  falls due; an id no running session of the run has raises
+  `error.communication`. The I/O processor WIT's `send-target` gains
+  `session(string)` and `dispatch-decision` and `due-route` gain
+  `session(tuple<string, event>)`, in both hosts.
 - Invoked sessions' `_sessionid`: the host names each one
-  `<root _sessionid>.<n>` in start order across the run (formerly
-  `<parent id>.<n>`, which grew with the nesting depth and stopped a chain
-  at about 510 levels); `invoked-session.session-id` is removed.
+  `<parent _sessionid>.<invokeid>` (formerly `<parent id>.<n>`, `n`
+  counting the run's starts), so an invoker knows a child's address
+  before it starts and a child invoked again under the same invoke id
+  keeps it; the id grows with the nesting depth, and an `<invoke>` whose
+  child's id would exceed the 1024-byte name bound raises
+  `error.execution`; `invoked-session.session-id` is removed.
   Host-side records name the parent beside the session: the live replay
   log's `http` record gains the session's invoke-id `path`.
 - `scxml-scheduler` addresses sessions by `SessionKey` (`InvokedSessions`

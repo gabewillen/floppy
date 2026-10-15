@@ -216,7 +216,8 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
             SendTarget::Internal
             | SendTarget::Local
             | SendTarget::Parent
-            | SendTarget::Invocation(_) => {}
+            | SendTarget::Invocation(_)
+            | SendTarget::Session(_) => {}
         }
         // The event's contracts (namespaces/event): data its own literal
         // `event:schema` rejects, or for an event this session delivers to

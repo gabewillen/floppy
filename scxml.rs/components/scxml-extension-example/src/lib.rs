@@ -16,7 +16,9 @@
 //!   session snapshot document (`session-snapshot-host.snapshot`, the
 //!   space-separated sections `S` excluded) to `L` as a string; with
 //!   `at="initialize"` it assigns instead the error code label the same
-//!   call answered during `initialize` (or `ok`);
+//!   call answered during `initialize` (or `ok`); with `target="T"` it
+//!   reads instead the session of the run the `<send>` target `T` names, and
+//!   assigns the error code label of a read that fails;
 //!
 //! Every other local name is `not-handled`. The decision is the portable
 //! [`ExampleNamespace::execute`], tested natively; the guest executes the
@@ -86,7 +88,11 @@ mod guest {
             observed(Operation::Initialize, None, || {
                 // The snapshot works only during `execute`; the answer
                 // here is kept for `<example:snapshot at="initialize">`.
-                AT_INITIALIZE.set(session_snapshot_host::snapshot(&[]).err().map(|e| e.code));
+                AT_INITIALIZE.set(
+                    session_snapshot_host::snapshot(&[], None)
+                        .err()
+                        .map(|e| e.code),
+                );
                 Ok(())
             })
         }
@@ -174,6 +180,7 @@ mod guest {
                         location,
                         exclude,
                         at_initialize,
+                        target,
                     }) => {
                         let text = if at_initialize {
                             AT_INITIALIZE.get().map_or("ok", code_label).to_owned()
@@ -192,7 +199,16 @@ mod guest {
                                     )),
                                 })
                                 .collect::<Result<_, _>>()?;
-                            session_snapshot_host::snapshot(&sections)?
+                            match (
+                                session_snapshot_host::snapshot(&sections, target.as_deref()),
+                                &target,
+                            ) {
+                                (Ok(text), _) => text,
+                                // A read of another session that fails assigns
+                                // its code label.
+                                (Err(failure), Some(_)) => code_label(failure.code).to_owned(),
+                                (Err(failure), None) => return Err(failure),
+                            }
                         };
                         data_model_host::assign(&location, &DataValue::Text(text))?;
                         Ok(ExtensionOutcome::Handled)
@@ -361,6 +377,9 @@ pub enum ExampleAction {
         /// `at="initialize"`: assign what the snapshot answered in
         /// `initialize` instead.
         at_initialize: bool,
+        /// The `target` attribute: another session of the run, as a
+        /// `<send>` target names it.
+        target: Option<String>,
     },
 }
 
@@ -435,6 +454,7 @@ impl ExampleNamespace {
                             .map(str::to_owned)
                             .collect(),
                         at_initialize: attribute("at").as_deref() == Some("initialize"),
+                        target: attribute("target"),
                     })
                 }),
             _ => Ok(None),

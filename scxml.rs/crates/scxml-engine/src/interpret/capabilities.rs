@@ -131,6 +131,8 @@ pub enum SendTarget {
     Parent,
     /// A live invocation of the sender, by invoke id.
     Invocation(String),
+    /// Any other session of the sender's run, by `_sessionid`.
+    Session(String),
     /// A well-formed session address no live session answers
     /// (`error.communication`).
     Unreachable,

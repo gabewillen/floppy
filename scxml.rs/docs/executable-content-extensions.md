@@ -55,7 +55,7 @@ in-process. Here the same roles are a component's exports and imports:
 | `itp.Log(ctx, label, message)` | `execution-host.log(level, message)` (hosts never put the message in telemetry) |
 | OpenTelemetry spans (`otel.Tracer`) | the `telemetry` import (closed operation labels; the host owns the SDK) |
 | `el xmldom.Element` | `executable-content-extension`: the exact expanded name, attributes, and flattened content |
-| `itp.Snapshot(ctx, SnapshotConfig{ExcludeData})` | `session-snapshot-host.snapshot(exclude)`: the canonical `scxml.session-snapshot/v2` document of the executing session (read-only; see below) |
+| `itp.Snapshot(ctx, SnapshotConfig{ExcludeData})` | `session-snapshot-host.snapshot(exclude, target)`: the canonical `scxml.session-snapshot/v2` document of the executing session, or of another session of its run that `target` names (read-only; see below) |
 | `net/http` clients, `os.LookupEnv` for keys and endpoints | an invoked service ([invoked-services.md](invoked-services.md)): its `outbound-http.fetch` suspends only its own task, and its `<invoke>` binds `env` slots to opaque references; an extension element does no I/O (see "No I/O") |
 | other ambient OS access | nothing ambient: an extension component reaches the outside world only through its world's imports, which carry no I/O (see "No I/O") |
 
@@ -160,11 +160,22 @@ that imports `wasi:filesystem`.
 ## Reading the session snapshot
 
 An extension component reads the executing session's state through
-`stateforward:scxml/session-snapshot-host` (agentml-go's `Snapshot`): `snapshot(exclude)` returns the
+`stateforward:scxml/session-snapshot-host` (agentml-go's `Snapshot`): `snapshot(exclude, target)` returns the
 executing session's canonical `scxml.session-snapshot/v2` document
 ([session-snapshot.md](session-snapshot.md), "Snapshots during executable
 content") as compact JSON text, with any of the `system`, `data_model`, `queues`,
 `pending-sends`, and `transitions` sections excluded.
+
+With a `target`, it reads another session of the same run instead, named as
+a `<send>` target names it (`#_parent`, `#_<invokeid>` of a live invoked
+session, or `#_scxml_<sessionid>` of any running session of the run): that
+session's canonical document at its last checkpoint
+([session-snapshot.md](session-snapshot.md), "Snapshots of another
+session"). A target that is malformed, names no running session of the run
+(an invoked service, a finished, `failed`, or `shut-down` session, another
+run's) is `unavailable`. Nothing of another run, of the host, or of a
+finished session is readable, and the document still never sees a snapshot
+itself, only what an extension component writes from it.
 
 - **Read-only, never restore.** Nothing restores, resumes, or changes a
   session from a snapshot. It shows the extension component nothing it could not

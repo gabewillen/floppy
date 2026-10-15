@@ -994,7 +994,7 @@ test('receiveHttp finds an invoked session by its location without asking http.l
   const elsewhere = { method: 'POST', url: 'https://example.test/s/nobody', headers: { 'Content-Type': FORM }, body: '_scxmleventname=poke' };
   for (let n = 0; n < 10; n += 1) assert.equal(session.receiveHttp(elsewhere).status, 404);
   assert.equal(invokedReads, reads, 'no request reads an invoked session location again');
-  const kid = { ...elsewhere, url: sessionLocation('machine-session.1') };
+  const kid = { ...elsewhere, url: sessionLocation('machine-session.kid') };
   assert.equal(session.receiveHttp(kid).status, 200);
   assert.deepEqual(session.configuration(), ['pass']);
   assert.equal(invokedReads, reads);
@@ -1019,7 +1019,7 @@ test('an invoked session whose location read failed when it started is found onc
       http: {
         allow: () => false,
         location: (id) => {
-          if (id === 'machine-session.1') {
+          if (id === 'machine-session.kid') {
             kidReads += 1;
             // The child's own `_ioprocessors` read is the first; the host's
             // read for routing, when the child has started, the second.
@@ -1039,7 +1039,7 @@ test('an invoked session whose location read failed when it started is found onc
   assert.equal(failed.length, 1, 'the failed read is recorded');
   const poke = {
     method: 'POST',
-    url: sessionLocation('machine-session.1'),
+    url: sessionLocation('machine-session.kid'),
     headers: { 'Content-Type': FORM },
     body: '_scxmleventname=poke',
   };

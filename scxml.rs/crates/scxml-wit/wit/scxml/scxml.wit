@@ -176,6 +176,12 @@ interface types {
     /// A live invocation of the sender (`#_invokeid`, or the invoked
     /// session's `#_scxml_sessionid`), by invoke id.
     invocation(string),
+    /// Any other session of the sender's run (`#_scxml_sessionid` naming
+    /// neither the sender, its parent, nor its invocations), by
+    /// `_sessionid`: SCXML C.1 leaves the accessible sessions to the
+    /// platform, and every session of the run is. The host delivers to it
+    /// while it runs; one that does not run is `error.communication`.
+    session(string),
     /// A well-formed session address no live session answers
     /// (`error.communication`).
     unreachable,
@@ -1502,6 +1508,9 @@ interface io-processor-api {
     parent(event),
     /// Deliver the stamped event to one live invocation of the sender.
     invocation(routed-event),
+    /// Deliver the stamped event to another session of the sender's run,
+    /// by `_sessionid` (`send-target.session`).
+    session(tuple<string, event>),
   }
 
   /// Where one due delayed send is delivered, decided at delivery time.
@@ -1512,6 +1521,10 @@ interface io-processor-api {
     parent(event),
     /// One live invocation of the sender.
     invocation(routed-event),
+    /// Another session of the sender's run, by `_sessionid`
+    /// (`send-target.session`); the host refuses one that no longer runs as
+    /// undeliverable.
+    session(tuple<string, event>),
     /// Nobody answers the target any more (for example an invoked session
     /// that finished), so the message cannot be dispatched: the host calls
     /// the sender's `session.communication-error` with the failed send's id
@@ -1879,7 +1892,20 @@ interface session-snapshot-host {
   /// document over a bound of the format (32 MiB, or a list bound); `execution`
   /// when a component's read-only `snapshot` export failed; `platform` when the
   /// host failed.
-  snapshot: func(exclude: list<section>) -> result<string, component-error>;
+  ///
+  /// `target`, when given, names another session of the executing session's
+  /// run as a `<send>` target does (`#_parent`, `#_<invokeid>` of a live
+  /// invoked session, or `#_scxml_<sessionid>` of any running session of the
+  /// run), and the result is that session's canonical document at its last
+  /// checkpoint (`options.point` `checkpoint`; every other session of the run
+  /// is between machine calls while this one executes), with its external
+  /// queue, `previews` and `invocations` excluded besides `exclude`, trace
+  /// carriers stripped; a target naming the executing session is the
+  /// executable-content image above. The read changes nothing in the target
+  /// session. Errors besides the above: `unavailable` for a malformed target,
+  /// one no running session of the run answers (including an invoked service,
+  /// or a finished, `failed`, or `shut-down` session).
+  snapshot: func(exclude: list<section>, target: option<string>) -> result<string, component-error>;
 }
 
 /// Supplier of one machine's immutable lowered Machine IR.

@@ -296,7 +296,7 @@ function extensionImports(state, telemetry) {
     },
   };
   const sessionSnapshotHost = {
-    snapshot(exclude) {
+    snapshot(exclude, target) {
       const current = call();
       if (current.snapshots >= MAX_EXTENSION_SNAPSHOTS) {
         throw new ImportFailure(componentError('capacity-exhausted', 'an `execute` call takes at most 64 session snapshots'));
@@ -305,7 +305,13 @@ function extensionImports(state, telemetry) {
       if (current.image === undefined || state.codec === undefined) {
         throw unavailable('the session snapshot is not available for this `execute` call');
       }
-      const bytes = executableContentDocument(state, current, exclude, telemetry);
+      // Another session of the run, resolved as a `<send>` target is: its
+      // canonical document at its last checkpoint.
+      const resolved = target === undefined ? { own: true } : state.links.run.snapshotTarget(state.links, target);
+      if (resolved === undefined) throw unavailable('no running session of the run answers the snapshot target');
+      const bytes = resolved.own
+        ? executableContentDocument(state, current, exclude, telemetry)
+        : checkpointDocument(state, resolved, exclude, telemetry);
       return new TextDecoder().decode(bytes);
     },
   };
@@ -378,6 +384,80 @@ function executableContentDocument(state, current, exclude, telemetry) {
     finished: false,
   });
   const options = { exclude: sections, traceContext: 'strip', point: 'executable-content' };
+  return encodeDocument(state, telemetry, { nowMs, session, dataModelName }, options);
+}
+
+/**
+ * The canonical `checkpoint` document of another session of the run (the
+ * Wasmtime host's `target_document`): one session object read through its
+ * read-only exports, as it stands since its last call (every other session
+ * is between calls while this one executes), with its external queue;
+ * never invoked sessions or previews; carriers stripped.
+ */
+function checkpointDocument(state, { instance }, exclude, telemetry) {
+  const { links, meter } = instance;
+  const sections = new Set([...exclude, 'invocations', 'previews']);
+  const transitions = !sections.has('transitions');
+  const read = (body) => {
+    const suspendedLeft = meter.suspendedLeft;
+    meter.suspendedLeft = undefined;
+    try {
+      return links.run.budget.run(meter, () => body(instance.session));
+    } catch (thrown) {
+      if (exportPayload(thrown) === undefined) throw thrown;
+      throw new ImportFailure(componentError('execution', 'the session snapshot could not be read'));
+    } finally {
+      meter.suspendedLeft = suspendedLeft;
+    }
+  };
+  const status = read((session) => session.status());
+  if (status === 'failed' || status === 'shut-down') {
+    throw unavailable('no running session of the run answers the snapshot target');
+  }
+  const machine = read((session) => session.snapshot({ transitions, previews: false }));
+  let dataModel;
+  let dataModelName;
+  if (links.dataModel !== undefined && links.dataModelInitialized) {
+    dataModelName = links.dataModelName();
+    if (!(sections.has('system') && sections.has('data-model')) && machine.status !== 'ready') {
+      let value;
+      try {
+        value = links.dataModel.snapshot();
+      } catch {
+        throw new ImportFailure(componentError('execution', 'the session snapshot could not be read'));
+      }
+      if (!isDataModelSnapshot(value, isDataValue)) {
+        throw new ImportFailure(componentError('execution', 'the session snapshot could not be read'));
+      }
+      dataModel = value;
+    }
+  }
+  let pendingSends = [];
+  let nowMs;
+  try {
+    nowMs = links.snapshotNow();
+    if (!sections.has('pending-sends')) pendingSends = links.pendingSends();
+  } catch {
+    throw new ImportFailure(componentError('platform', 'the host failed to read the session'));
+  }
+  const external = sections.has('queues') ? [] : links.externalQueue();
+  const session = stripTraceContext({
+    parent: undefined,
+    sessionId: links.sessionId,
+    irSha256: links.irSha256(),
+    dataModelName,
+    machine,
+    dataModel,
+    pendingSends,
+    external,
+    finished: false,
+  });
+  const options = { exclude: sections, traceContext: 'strip', point: 'checkpoint' };
+  return encodeDocument(state, telemetry, { nowMs, session, dataModelName }, options);
+}
+
+/** Encodes one session's capture, with the codec's errors as the contract's. */
+function encodeDocument(state, telemetry, { nowMs, session, dataModelName }, options) {
   try {
     return encodeCapture(
       state.codec,
