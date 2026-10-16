@@ -91,9 +91,8 @@ function promptProjection() {
     }
     xmlModels(root, 'prior_episodes', prior_episodes, xmlEpisode, budget);
     xmlModels(root, 'standing_directives', standing_directives, xmlDirective, budget);
-    // The environment block (decision D106): the bot's environment, as the
-    // renderer renders any value (D99).
-    xmlField(root, 'environment', environment, budget);
+    // The environment block (decision D106), in the original's layout.
+    xmlEnvironment(root, environment, budget);
     var rendered = xmlText(root, 0);
     if (utf8Length(rendered) > 262144) {
       throw new Error('prompt projection encoded byte budget exceeded');
@@ -245,6 +244,67 @@ function xmlField(element, name, value, budget) {
       xmlField(entry, 'value', value[key], budget);
     });
   }
+}
+
+// The original's environment block (Environment.model_snapshot from the
+// bot's perspective): <environment id> holding <self state> with the bot's
+// own attributes, its owned_devices as <owned_devices> holding one
+// <device ref id state> per held device with its attributes. Nothing when
+// the turn has no environment.
+function xmlEnvironment(parent, value, budget) {
+  if (value === null || typeof value !== 'object') {
+    return;
+  }
+  var element = xmlElement(parent, 'environment', budget);
+  xmlAttribute(element, 'id', String(value.id), budget);
+  var own = Object(value.self);
+  var self = xmlElement(element, 'self', budget);
+  xmlAttribute(self, 'state', String(own.state), budget);
+  var others = {};
+  Object.keys(own).forEach(function (key) {
+    if (key !== 'state' && key !== 'owned_devices') {
+      others[key] = own[key];
+    }
+  });
+  xmlAttributes(self, others, ['state'], budget);
+  var owned = Object(own.owned_devices);
+  var devices = xmlElement(self, 'owned_devices', budget);
+  var references = Object.keys(owned);
+  budgetCollection(budget, references.length);
+  references.forEach(function (reference) {
+    var device = Object(owned[reference]);
+    var element = xmlElement(devices, 'device', budget);
+    ['ref', 'id', 'state'].forEach(function (key) { xmlAttribute(element, key, String(device[key]), budget); });
+    xmlAttributes(element, Object(device.attributes), ['ref', 'id', 'state'], budget);
+  });
+}
+
+// A snapshot's attributes on element, as the original renders them: a
+// scalar as an attribute, a mapping as a nested element of the same kind,
+// an array as the renderer's list (D99), and null (or no value) as nothing.
+// A key that is no XML name, or one of reserved (the element's own
+// attributes), is an <entry key> element.
+function xmlAttributes(element, values, reserved, budget) {
+  var keys = Object.keys(values);
+  budgetCollection(budget, keys.length);
+  keys.forEach(function (key) {
+    var value = values[key];
+    var name = /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(key) && !/^xml/i.test(key) && reserved.indexOf(key) < 0;
+    if (value === null || value === undefined) {
+      return;
+    }
+    if (!name) {
+      var entry = xmlElement(element, 'entry', budget);
+      xmlAttribute(entry, 'key', key, budget);
+      xmlField(entry, 'value', value, budget);
+    } else if (Array.isArray(value)) {
+      xmlField(element, key, value, budget);
+    } else if (typeof value === 'object') {
+      xmlAttributes(xmlElement(element, key, budget), value, [], budget);
+    } else {
+      xmlField(element, key, value, budget);
+    }
+  });
 }
 
 // The stimulus envelope as the original's hsm.Event field: <input> holding its

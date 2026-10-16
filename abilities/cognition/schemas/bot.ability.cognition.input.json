@@ -123,13 +123,12 @@
       "type": "array"
     },
     "environment": {
-      "description": "The bot's environment this turn, from its own perspective, which the cognition passes to reasoning (its prompt renders it as the environment block) and intuition (in its decision instructions): the environment's id, the bot itself (its state and owned_devices, reference to the device's session id), and each held device it could read this turn (its reference, session id, state and data model) [floppy field].",
+      "description": "The bot's environment this turn, from its own perspective and in the original's layout, which the cognition passes to reasoning (its prompt renders it as the environment block) and intuition (in its decision instructions): the environment's id, and the bot itself, its state and its own attributes, owned_devices holding each held device it could read this turn under its reference (its reference, session id, state and data model) [floppy field].",
       "type": "object",
       "additionalProperties": false,
       "required": [
         "id",
-        "self",
-        "devices"
+        "self"
       ],
       "properties": {
         "id": {
@@ -139,7 +138,6 @@
         },
         "self": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "state",
             "owned_devices"
@@ -152,36 +150,30 @@
             "owned_devices": {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "devices": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "ref",
-              "id",
-              "state",
-              "attributes"
-            ],
-            "properties": {
-              "ref": {
-                "type": "string",
-                "minLength": 1
-              },
-              "id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "state": {
-                "type": "string"
-              },
-              "attributes": {
-                "type": "object"
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ref",
+                  "id",
+                  "state",
+                  "attributes"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "attributes": {
+                    "type": "object"
+                  }
+                }
               }
             }
           }

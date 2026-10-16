@@ -213,9 +213,9 @@
          each entry into live. -->
     <data id="owned_devices" expr="({})"/>
     <data id="devices" expr="[]"/>
-    <!-- This turn's reads of the held devices (<device:snapshot>):
+    <!-- This turn's snapshots of the held devices (<device:snapshot>):
          reference to {id, state, attributes, events}. -->
-    <data id="device_reads" expr="({})"/>
+    <data id="device_snapshots" expr="({})"/>
     <!-- The device being read (the <foreach> item). -->
     <data id="device" expr="null"/>
     <!-- Lifecycle: each entry into live is one run; the abilities expected
@@ -450,7 +450,7 @@
           <assign location="turn" expr="nextTurn()"/>
           <bot:attention location="focus_candidates" focuslocation="focus" stimulus="stimulus"
                          devices="devices" focus="focused_device"/>
-          <assign location="device_reads" expr="({})"/>
+          <assign location="device_snapshots" expr="({})"/>
         </onentry>
         <!-- The live state of every held device (decision D109): the
              focused one's events are choices of this turn, and every read
@@ -459,7 +459,7 @@
              nothing), so it is left out. -->
         <onentry>
           <foreach array="devices" item="device">
-            <device:snapshot location="device_reads[device]" target="deviceTarget(device)"/>
+            <device:snapshot location="device_snapshots[device]" target="deviceTarget(device)"/>
           </foreach>
         </onentry>
         <onentry>

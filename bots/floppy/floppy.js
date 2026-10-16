@@ -105,7 +105,7 @@ function nextTurn() {
 // The abilities' latest offers and, while a device is focused and was
 // read this turn, its events as choices under its reference.
 function turnOffers() {
-  var read = device_reads[focused_device];
+  var read = device_snapshots[focused_device];
   if (!hasFocusedDevice() || read === undefined) {
     return offers;
   }
@@ -122,19 +122,20 @@ function cognitionInput() {
   return {turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, choices: choices, environment: environmentField()};
 }
 
-// The turn's environment from the bot's perspective (decision D106): the
-// environment's id, the bot itself (its state and owned_devices), and each
-// held device read this turn, in the order the bot holds them.
+// The turn's environment from the bot's perspective (decision D106), in
+// the original's layout: the environment's id, then the bot itself, its
+// state and its own attributes (owned_devices), each held device that was
+// read this turn under its reference with its id, state and attributes (a
+// device that is not running is left out).
 function environmentField() {
-  var read = devices.filter(function (reference) { return device_reads[reference] !== undefined; });
-  return {
-    id: environment,
-    self: {state: 'processing', owned_devices: owned_devices},
-    devices: read.map(function (reference) {
-      var snapshot = device_reads[reference];
-      return {ref: reference, id: snapshot.id, state: snapshot.state, attributes: snapshot.attributes};
-    })
-  };
+  var owned = {};
+  devices.forEach(function (reference) {
+    var snapshot = device_snapshots[reference];
+    if (snapshot !== undefined) {
+      owned[reference] = {ref: reference, id: snapshot.id, state: snapshot.state, attributes: snapshot.attributes};
+    }
+  });
+  return {id: environment, self: {state: 'processing', owned_devices: owned}};
 }
 
 function choicesOverFailure() {

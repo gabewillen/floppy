@@ -2230,15 +2230,24 @@ fn reasonings_prompt_carries_the_environment_block() {
     let prompts = prompts(&mock);
     assert_eq!(prompts.len(), 1, "{prompts:?}");
     let prompt = &prompts[0];
-    for expected in [
-        "<environment>",
-        r#"<entry key="id" value="session" />"#,
-        r#"<entry key="state" value="processing" />"#,
-        r#"<entry key="ref" value="lamp" />"#,
-        r#"<entry key="id" value="session.lamp" />"#,
-        r#"<entry key="state" value="off" />"#,
-        r#"<entry key="label" value="desk &lt;lamp&gt; &amp; co" />"#,
-    ] {
-        assert!(prompt.contains(expected), "{expected} in {prompt}");
-    }
+    // The original's nesting: <environment id><self state><owned_devices>
+    // <device ref id state> with the device's attributes.
+    let start = prompt.find("<environment ").expect("the environment block");
+    let block = &prompt[start..];
+    let block = &block[..block.find("</environment>").expect("its end") + "</environment>".len()];
+    assert!(
+        block.starts_with(r#"<environment id="session">"#),
+        "{block}"
+    );
+    let lines: Vec<&str> = block.lines().map(str::trim).collect();
+    assert_eq!(lines[1], r#"<self state="processing">"#, "{block}");
+    assert_eq!(lines[2], "<owned_devices>", "{block}");
+    assert!(
+        lines[3].starts_with(r#"<device ref="lamp" id="session.lamp" state="off" "#),
+        "{block}"
+    );
+    assert!(
+        lines[3].contains(r#"label="desk &lt;lamp&gt; &amp; co""#),
+        "{block}"
+    );
 }
