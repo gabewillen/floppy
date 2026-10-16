@@ -82,6 +82,56 @@ fn reply(content: &str) -> Vec<u8> {
     ])
 }
 
+/// The reply text of a stream without a forced call.
+fn reply_text_of(body: &[u8]) -> Result<String, FailureCode> {
+    reply_text(body, None)
+}
+
+/// A non-streamed completion whose first tool call is `function`'s with
+/// `arguments`, as a backend answers a forced call (content `null`).
+fn tool_completion(function: &str, arguments: &str) -> Vec<u8> {
+    serde_json::json!({
+        "object": "chat.completion",
+        "choices": [{
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [{
+                    "id": "call-1",
+                    "type": "function",
+                    "function": { "name": function, "arguments": arguments },
+                }],
+            },
+        }],
+    })
+    .to_string()
+    .into_bytes()
+}
+
+/// A streamed reply of `function`'s call with `arguments`, its arguments
+/// split in two `delta.tool_calls` fragments after the one naming it.
+fn tool_reply(function: &str, arguments: &str) -> Vec<u8> {
+    let middle = arguments.chars().count() / 2;
+    let head: String = arguments.chars().take(middle).collect();
+    let tail: String = arguments.chars().skip(middle).collect();
+    let fragment = |value: Json| chunk(&serde_json::json!({ "tool_calls": [value] }), None);
+    stream(&[
+        chunk(
+            &serde_json::json!({ "role": "assistant", "content": "" }),
+            None,
+        ),
+        fragment(serde_json::json!({
+            "index": 0, "id": "call-1", "type": "function",
+            "function": { "name": function, "arguments": "" },
+        })),
+        fragment(serde_json::json!({ "index": 0, "function": { "arguments": head } })),
+        fragment(serde_json::json!({ "index": 0, "function": { "arguments": tail } })),
+        chunk(&serde_json::json!({}), Some("tool_calls")),
+    ])
+}
+
 /// A non-streamed completion of `content`, finished by `finish_reason`.
 fn completion(content: &str, finish_reason: &str) -> Vec<u8> {
     serde_json::json!({
@@ -248,7 +298,7 @@ fn max_completion_tokens_is_sent_and_bounded() {
 }
 
 #[test]
-fn a_schema_asks_for_structured_output_with_its_name_and_strictness() {
+fn a_schema_forces_one_tool_call_with_its_name_and_strictness() {
     let generation = parse(&[
         ("model", text("m")),
         ("prompt", text("Decide.")),
@@ -259,9 +309,15 @@ fn a_schema_asks_for_structured_output_with_its_name_and_strictness() {
     .expect("valid parameters");
     let body: Json =
         serde_json::from_slice(&build_request(2, 1, None, &generation).body).expect("JSON");
-    assert_eq!(body["response_format"]["type"], "json_schema");
-    assert_eq!(body["response_format"]["json_schema"]["name"], "verdict");
-    assert_eq!(body["response_format"]["json_schema"]["strict"], true);
+    assert!(body.get("response_format").is_none(), "{body}");
+    assert_eq!(body["tools"].as_array().map(Vec::len), Some(1), "{body}");
+    assert_eq!(body["tools"][0]["type"], "function");
+    assert_eq!(body["tools"][0]["function"]["name"], "verdict");
+    assert_eq!(body["tools"][0]["function"]["strict"], true);
+    assert_eq!(
+        body["tool_choice"],
+        serde_json::json!({ "type": "function", "function": { "name": "verdict" } })
+    );
     // A schema given as a string is the same request.
     let from_text = parse(&[
         ("model", text("m")),
@@ -272,10 +328,19 @@ fn a_schema_asks_for_structured_output_with_its_name_and_strictness() {
     let text_body: Json =
         serde_json::from_slice(&build_request(2, 1, None, &from_text).body).expect("JSON");
     assert_eq!(
-        text_body["response_format"]["json_schema"]["name"],
+        text_body["tools"][0]["function"]["name"],
         DEFAULT_SCHEMA_NAME
     );
-    assert_eq!(text_body["response_format"]["json_schema"]["strict"], false);
+    assert_eq!(text_body["tools"][0]["function"]["strict"], false);
+    assert_eq!(
+        text_body["tool_choice"]["function"]["name"],
+        DEFAULT_SCHEMA_NAME
+    );
+    // Without a schema, no tool is offered.
+    let plain = parse(&[("model", text("m")), ("prompt", text("Say."))]).expect("valid");
+    let plain_body: Json =
+        serde_json::from_slice(&build_request(2, 1, None, &plain).body).expect("JSON");
+    assert!(plain_body.get("tools").is_none() && plain_body.get("tool_choice").is_none());
 }
 
 #[test]
@@ -291,7 +356,7 @@ fn a_strict_schema_is_sent_with_every_property_required() {
     let body: Json =
         serde_json::from_slice(&build_request(2, 1, None, &strict).body).expect("JSON");
     assert_eq!(
-        body["response_format"]["json_schema"]["schema"],
+        body["tools"][0]["function"]["parameters"],
         serde_json::json!({
             "type": "object",
             "properties": {
@@ -322,12 +387,9 @@ fn a_strict_schema_is_sent_with_every_property_required() {
     ])
     .expect("valid parameters");
     let body: Json = serde_json::from_slice(&build_request(2, 1, None, &loose).body).expect("JSON");
+    assert_eq!(body["tools"][0]["function"]["parameters"]["title"], "t");
     assert_eq!(
-        body["response_format"]["json_schema"]["schema"]["title"],
-        "t"
-    );
-    assert_eq!(
-        body["response_format"]["json_schema"]["schema"]["properties"]["data"]["required"],
+        body["tools"][0]["function"]["parameters"]["properties"]["data"]["required"],
         serde_json::json!(["name"])
     );
 }
@@ -617,23 +679,94 @@ fn a_structured_reply_is_validated_before_it_is_returned() {
         ("schema", text(SCHEMA)),
     ])
     .expect("valid");
+    let answered = Returned {
+        name: RESULT_EVENT,
+        data: r#"{"json":{"answer":"yes","score":41}}"#.into(),
+    };
+    let arguments = r#"{"score":41,"answer":"yes"}"#;
     assert_eq!(
         outcome(
             &generation,
-            ok(completion(r#"{"score":41,"answer":"yes"}"#, "stop"))
+            ok(tool_completion(DEFAULT_SCHEMA_NAME, arguments))
         ),
-        Returned {
-            name: RESULT_EVENT,
-            data: r#"{"json":{"answer":"yes","score":41}}"#.into()
-        }
+        answered
+    );
+    // A streamed call's argument fragments are joined in order.
+    assert_eq!(
+        outcome(&generation, ok(tool_reply(DEFAULT_SCHEMA_NAME, arguments))),
+        answered
     );
     assert_eq!(
-        outcome(&generation, ok(completion(r#"{"answer":"yes"}"#, "stop"))),
+        outcome(
+            &generation,
+            ok(tool_completion(DEFAULT_SCHEMA_NAME, r#"{"answer":"yes"}"#))
+        ),
         Returned::failed(FailureCode::SchemaMismatch)
     );
     assert_eq!(
-        outcome(&generation, ok(completion("not json", "stop"))),
+        outcome(
+            &generation,
+            ok(tool_completion(DEFAULT_SCHEMA_NAME, "not json"))
+        ),
         Returned::failed(FailureCode::NotJson)
+    );
+    assert_eq!(
+        outcome(&generation, ok(tool_reply(DEFAULT_SCHEMA_NAME, "not json"))),
+        Returned::failed(FailureCode::NotJson)
+    );
+}
+
+#[test]
+fn a_structured_reply_is_only_the_forced_calls_arguments() {
+    let generation = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(SCHEMA)),
+    ])
+    .expect("valid");
+    let arguments = r#"{"score":41,"answer":"yes"}"#;
+    // JSON content without a tool call is no reply, streamed or not.
+    assert_eq!(
+        outcome(&generation, ok(completion(arguments, "stop"))),
+        Returned::failed(FailureCode::Malformed)
+    );
+    assert_eq!(
+        outcome(&generation, ok(reply(arguments))),
+        Returned::failed(FailureCode::Malformed)
+    );
+    // A call of another function, or with no arguments, is none either.
+    assert_eq!(
+        outcome(&generation, ok(tool_completion("other", arguments))),
+        Returned::failed(FailureCode::Malformed)
+    );
+    assert_eq!(
+        outcome(&generation, ok(tool_reply("other", arguments))),
+        Returned::failed(FailureCode::Malformed)
+    );
+    assert_eq!(
+        outcome(&generation, ok(tool_completion(DEFAULT_SCHEMA_NAME, ""))),
+        Returned::failed(FailureCode::Malformed)
+    );
+    // A later call's fragments are not the first call's.
+    let later = stream(&[chunk(
+        &serde_json::json!({ "tool_calls": [
+                { "index": 0, "function": { "name": DEFAULT_SCHEMA_NAME, "arguments": arguments } },
+                { "index": 1, "function": { "name": DEFAULT_SCHEMA_NAME, "arguments": "{}" } },
+            ] }),
+        Some("tool_calls"),
+    )]);
+    assert_eq!(
+        outcome(&generation, ok(later)),
+        Returned {
+            name: RESULT_EVENT,
+            data: r#"{"json":{"answer":"yes","score":41}}"#.into(),
+        }
+    );
+    // Without a schema, a tool call is not the reply's text.
+    let plain = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
+    assert_eq!(
+        outcome(&plain, ok(tool_completion(DEFAULT_SCHEMA_NAME, arguments))),
+        Returned::failed(FailureCode::Malformed)
     );
 }
 
@@ -733,10 +866,10 @@ fn a_stream_is_joined_in_order_up_to_done() {
         "data: [DONE]\r\n\r\n",
         "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ignored\"}}]}\r\n\r\n",
     );
-    assert_eq!(reply_text(body.as_bytes()), Ok("Hello".to_owned()));
+    assert_eq!(reply_text_of(body.as_bytes()), Ok("Hello".to_owned()));
     // A multi-byte character split across chunks survives.
     assert_eq!(
-        reply_text(&reply("héllo wörld")),
+        reply_text_of(&reply("héllo wörld")),
         Ok("héllo wörld".to_owned())
     );
 }
@@ -753,7 +886,7 @@ fn a_reasoning_models_reasoning_is_never_the_reply() {
     let reasoning_content = chunk(&serde_json::json!({ "reasoning_content": "more" }), None);
     let answer = chunk(&serde_json::json!({ "content": "hi" }), Some("stop"));
     assert_eq!(
-        reply_text(&stream(&[
+        reply_text_of(&stream(&[
             opening.clone(),
             reasoning.clone(),
             reasoning_content,
@@ -765,12 +898,12 @@ fn a_reasoning_models_reasoning_is_never_the_reply() {
     // stream that ends with only the empty content has none.
     let spent = chunk(&serde_json::json!({ "reasoning": "still" }), Some("length"));
     assert_eq!(
-        reply_text(&stream(&[opening.clone(), reasoning.clone(), spent])),
+        reply_text_of(&stream(&[opening.clone(), reasoning.clone(), spent])),
         Err(FailureCode::Truncated)
     );
     let stopped = chunk(&serde_json::json!({}), Some("stop"));
     assert_eq!(
-        reply_text(&stream(&[opening, reasoning, stopped])),
+        reply_text_of(&stream(&[opening, reasoning, stopped])),
         Err(FailureCode::Malformed)
     );
 }
@@ -779,29 +912,29 @@ fn a_reasoning_models_reasoning_is_never_the_reply() {
 fn a_stream_that_is_cut_short_or_malformed_is_never_a_reply() {
     let content = chunk(&serde_json::json!({ "content": "partial" }), None);
     let without_done = format!("data: {content}\n\n").into_bytes();
-    assert_eq!(reply_text(&without_done), Err(FailureCode::Malformed));
+    assert_eq!(reply_text_of(&without_done), Err(FailureCode::Malformed));
     assert_eq!(
-        reply_text(b"data: not json\n\ndata: [DONE]\n\n"),
+        reply_text_of(b"data: not json\n\ndata: [DONE]\n\n"),
         Err(FailureCode::Malformed)
     );
     assert_eq!(
-        reply_text(&stream(&[
+        reply_text_of(&stream(&[
             serde_json::json!({ "error": { "message": "boom" } })
         ])),
         Err(FailureCode::Malformed)
     );
     assert_eq!(
-        reply_text(&stream(&[chunk(&serde_json::json!({}), Some("stop"))])),
+        reply_text_of(&stream(&[chunk(&serde_json::json!({}), Some("stop"))])),
         Err(FailureCode::Malformed),
         "a stream without content"
     );
-    assert_eq!(reply_text(&[0xff, 0xfe]), Err(FailureCode::Malformed));
+    assert_eq!(reply_text_of(&[0xff, 0xfe]), Err(FailureCode::Malformed));
     // A non-streamed completion is not a stream.
     let completion = serde_json::json!({
         "choices": [{ "index": 0, "finish_reason": "stop", "message": { "content": "hi" } }],
     });
     assert_eq!(
-        reply_text(completion.to_string().as_bytes()),
+        reply_text_of(completion.to_string().as_bytes()),
         Err(FailureCode::Malformed)
     );
 }

@@ -297,7 +297,7 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
         }
     }
     let reply = answer(&target, &body)
-        .map(|(status, text)| (status, support::stream_if_asked(&body, text)));
+        .map(|(status, text)| (status, support::answer_as_asked(&body, text)));
     log.lock()
         .expect("the log lock")
         .push(Received { target, body });
@@ -1063,10 +1063,11 @@ fn reasoning_selects_from_the_turns_choices() {
     let requests = reasoning_requests(&mock);
     assert_eq!(requests.len(), 1);
     let body = &requests[0].body;
-    let format = &body["response_format"]["json_schema"];
+    let format = &body["tools"][0]["function"];
     assert_eq!(format["name"], "dispatch");
     assert_eq!(format["strict"], true);
-    let branches = format["schema"]["properties"]["events"]["items"]["anyOf"]
+    assert_eq!(body["tool_choice"]["function"]["name"], "dispatch");
+    let branches = format["parameters"]["properties"]["events"]["items"]["anyOf"]
         .as_array()
         .expect("one branch per choice");
     let pinned: Vec<String> = branches

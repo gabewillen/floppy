@@ -1032,23 +1032,68 @@ impl Drop for Pglite {
     }
 }
 
-/// `text`, a fake backend's answer to the Chat Completions `request`, as
-/// the backend sends it: when the request asks for a streamed reply
-/// (`"stream": true`, as every model call of reasoning, reflection and the
-/// builder does, decision D101) and `text` is a completion, the
-/// server-sent-event stream of the same reply (a role chunk, its content,
-/// its finish, then `data: [DONE]`); any other answer unchanged.
-pub fn stream_if_asked(request: &Json, text: String) -> String {
-    if request["stream"] != true {
-        return text;
+/// The function a Chat Completions `request` forces a call of
+/// (`tool_choice`, as the generate service sends a schema, decision D112).
+pub fn forced_function(request: &Json) -> Option<&str> {
+    request.pointer("/tool_choice/function/name")?.as_str()
+}
+
+/// The `delta` of a streamed reply's piece of `content`: the content
+/// itself, or, when `function` is forced, a fragment of its call's
+/// `arguments` (the first fragment, `first`, naming the function).
+fn piece_delta(function: Option<&str>, content: &str, first: bool) -> Json {
+    match function {
+        None => serde_json::json!({"content": content}),
+        Some(name) if first => serde_json::json!({"tool_calls": [{
+            "index": 0, "id": "call-1", "type": "function",
+            "function": {"name": name, "arguments": content},
+        }]}),
+        Some(_) => {
+            serde_json::json!({"tool_calls": [{"index": 0, "function": {"arguments": content}}]})
+        }
     }
-    let Ok(completion) = serde_json::from_str::<Json>(&text) else {
+}
+
+/// The `message` of a completion of `content`: the content itself, or,
+/// when `function` is forced, its call with `content` as the arguments.
+fn completion_message(function: Option<&str>, content: &str) -> Json {
+    match function {
+        None => serde_json::json!({"role": "assistant", "content": content}),
+        Some(name) => serde_json::json!({"role": "assistant", "content": null, "tool_calls": [{
+            "id": "call-1", "type": "function",
+            "function": {"name": name, "arguments": content},
+        }]}),
+    }
+}
+
+/// `text`, a fake backend's answer to the Chat Completions `request`, as
+/// the backend sends it. A completion whose content is the scripted reply
+/// becomes, when the request forces a function call ([`forced_function`]),
+/// the call of that function with the content as its `arguments` (content
+/// `null`), as a backend answers a forced call. And when the request asks
+/// for a streamed reply (`"stream": true`, as every model call of
+/// reasoning, reflection and the builder does, decision D101), the
+/// server-sent-event stream of the same reply (a role chunk, its content or
+/// call, its finish, then `data: [DONE]`). Any other answer is unchanged.
+pub fn answer_as_asked(request: &Json, text: String) -> String {
+    let Ok(mut completion) = serde_json::from_str::<Json>(&text) else {
         return text;
     };
+    let Some(content) = completion["choices"][0]["message"]["content"]
+        .as_str()
+        .map(str::to_owned)
+    else {
+        return text;
+    };
+    let function = forced_function(request);
+    if request["stream"] != true {
+        if function.is_none() {
+            return text;
+        }
+        completion["choices"][0]["message"] = completion_message(function, &content);
+        return completion.to_string();
+    }
     let choice = &completion["choices"][0];
-    let Some(content) = choice["message"]["content"].as_str() else {
-        return text;
-    };
     let chunk = |delta: Json, finish: Json| {
         format!(
             "data: {}\n\n",
@@ -1063,15 +1108,16 @@ pub fn stream_if_asked(request: &Json, text: String) -> String {
             serde_json::json!({"role": "assistant", "content": ""}),
             Json::Null,
         ),
-        chunk(serde_json::json!({"content": content}), Json::Null),
+        chunk(piece_delta(function, &content, true), Json::Null),
         chunk(serde_json::json!({}), choice["finish_reason"].clone()),
         "data: [DONE]\n\n".to_owned(),
     ]
     .concat()
 }
 
-/// Answers the Chat Completions `request` on `stream` with `content` the
-/// way a slow backend does: a streamed request (`"stream": true`) gets its
+/// Answers the Chat Completions `request` on `stream` with `content` (as
+/// [`answer_as_asked`] does: a forced function's call when the request
+/// forces one) the way a slow backend does: a streamed request (`"stream": true`) gets its
 /// head at once and then `content` in `pieces` server-sent-event chunks
 /// `gap` apart, then its finish and `data: [DONE]`; with `stall`, only the
 /// first piece, and then nothing until the client closes the connection
@@ -1089,6 +1135,7 @@ pub fn answer_slowly(
 ) {
     use std::io::Write as _;
     let streamed = request["stream"] == true;
+    let function = forced_function(request);
     let head = format!(
         "HTTP/1.1 200 OK\r\ncontent-type: {}\r\nconnection: close\r\n\r\n",
         if streamed {
@@ -1108,7 +1155,7 @@ pub fn answer_slowly(
         std::thread::sleep(gap * u32::try_from(pieces).unwrap_or(u32::MAX));
         let completion = serde_json::json!({
             "object": "chat.completion",
-            "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": content}}],
+            "choices": [{"index": 0, "finish_reason": "stop", "message": completion_message(function, content)}],
         });
         let _ = write!(stream, "{completion}");
         return;
@@ -1141,7 +1188,7 @@ pub fn answer_slowly(
         }
         let piece: String = piece.iter().collect();
         let written = stream
-            .write_all(chunk(serde_json::json!({"content": piece}), Json::Null).as_bytes())
+            .write_all(chunk(piece_delta(function, &piece, index == 0), Json::Null).as_bytes())
             .and_then(|()| stream.flush());
         if written.is_err() {
             return;

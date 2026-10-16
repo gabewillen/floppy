@@ -92,6 +92,28 @@ fn completion(content: &str) -> String {
     .to_string()
 }
 
+/// A non-streamed Chat Completions answer to a forced call of `function`:
+/// its first tool call carries `arguments`, its content is `null`.
+fn tool_call(function: &str, arguments: &str) -> String {
+    serde_json::json!({
+        "object": "chat.completion",
+        "choices": [{
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [{
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": function, "arguments": arguments},
+                }],
+            },
+        }],
+    })
+    .to_string()
+}
+
 /// A deterministic fake Chat Completions backend on 127.0.0.1: the first
 /// path segment picks the scripted answer (`/text`, `/json`, `/mismatch`,
 /// `/fail` answers 500); every request is recorded.
@@ -150,11 +172,12 @@ impl Mock {
                     "/text/v1/chat/completions" => {
                         ("200 OK", completion("Hello from the fake backend!"))
                     }
-                    "/json/v1/chat/completions" => {
-                        ("200 OK", completion(r#"{"score":41,"answer":"yes"}"#))
-                    }
+                    "/json/v1/chat/completions" => (
+                        "200 OK",
+                        tool_call("verdict", r#"{"score":41,"answer":"yes"}"#),
+                    ),
                     "/mismatch/v1/chat/completions" => {
-                        ("200 OK", completion(r#"{"answer":"yes"}"#))
+                        ("200 OK", tool_call("verdict", r#"{"answer":"yes"}"#))
                     }
                     "/fail/v1/chat/completions" => (
                         "500 Internal Server Error",
@@ -281,9 +304,14 @@ fn a_structured_generation_returns_the_schema_valid_object() {
     assert_eq!(received.len(), 1);
     let body: serde_json::Value =
         serde_json::from_slice(&received[0].body).expect("the body is JSON");
-    assert_eq!(body["response_format"]["type"], "json_schema");
-    assert_eq!(body["response_format"]["json_schema"]["name"], "verdict");
-    assert_eq!(body["response_format"]["json_schema"]["strict"], true);
+    assert!(body.get("response_format").is_none(), "{body}");
+    assert_eq!(body["tools"][0]["type"], "function");
+    assert_eq!(body["tools"][0]["function"]["name"], "verdict");
+    assert_eq!(body["tools"][0]["function"]["strict"], true);
+    assert_eq!(
+        body["tool_choice"],
+        serde_json::json!({"type": "function", "function": {"name": "verdict"}})
+    );
 }
 
 #[test]

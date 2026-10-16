@@ -10,7 +10,7 @@
 //! answer logs it and then the inventory and the stored episodes.
 //!
 //! One deterministic fake Chat Completions backend on 127.0.0.1 answers
-//! by the request's structured-output schema: `dispatch` (the select step)
+//! by the schema's name, the function the request forces: `dispatch` (the select step)
 //! by the route (the first path segment of `FLOPPY_BASE_URL`),
 //! `topology_plan` and `scxml_draft` (the builder) with a plan and a turn
 //! behavior draft, or with drafts that never validate on the `buildfail`
@@ -132,9 +132,7 @@ fn answer(target: &str, body: &Json) -> Option<String> {
     if !target.ends_with("/v1/chat/completions") {
         return None;
     }
-    let schema = body
-        .pointer("/response_format/json_schema/name")?
-        .as_str()?;
+    let schema = body.pointer("/tool_choice/function/name")?.as_str()?;
     match schema {
         "dispatch" => Some(completion(
             &json!({"events": selection(route)?}).to_string(),
@@ -161,7 +159,7 @@ struct Received {
 impl Received {
     fn schema_name(&self) -> Option<&str> {
         self.body
-            .pointer("/response_format/json_schema/name")
+            .pointer("/tool_choice/function/name")
             .and_then(Json::as_str)
     }
 
@@ -203,7 +201,7 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     // steadily (seven pieces 1.5 s apart), or stall after their first
     // piece.
     let schema = body
-        .pointer("/response_format/json_schema/name")
+        .pointer("/tool_choice/function/name")
         .and_then(Json::as_str)
         .unwrap_or_default()
         .to_owned();
@@ -232,7 +230,7 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
             return;
         }
     }
-    let reply = answer(&target, &body).map(|text| support::stream_if_asked(&body, text));
+    let reply = answer(&target, &body).map(|text| support::answer_as_asked(&body, text));
     log.lock().expect("the log lock").push(Received { body });
     let (status, text) = reply.map_or_else(
         || {
@@ -274,7 +272,7 @@ impl Mock {
         Self { origin, received }
     }
 
-    /// The requests with the structured-output schema `name`, in order.
+    /// The requests forcing the schema `name`'s function, in order.
     fn requests(&self, name: &str) -> Vec<Received> {
         self.received
             .lock()
@@ -485,7 +483,7 @@ fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(databas
 /// The inventory events the select call offers, each with the `enum` its
 /// `name` is pinned to (`null`: any name).
 fn offered_names(body: &Json) -> Json {
-    let schema = &body["response_format"]["json_schema"]["schema"];
+    let schema = &body["tools"][0]["function"]["parameters"];
     schema["properties"]["events"]["items"]["anyOf"]
         .as_array()
         .expect("one branch per offered event")

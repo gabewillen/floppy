@@ -32,15 +32,18 @@
 //! * `schema` (optional): a JSON Schema (a JSON object, or a string holding
 //!   one) that satisfies its dialect's metaschema (2020-12 unless `$schema`
 //!   names another supported dialect) and references nothing outside itself.
-//!   With it the request asks for structured output (`response_format` of
-//!   type `json_schema`), and the reply must parse as JSON and satisfy the
-//!   schema **before** anything is returned. `schemaname` (a string matching
-//!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it) and `strict`
-//!   (a boolean, `false` without it) are sent with it and require it. A
-//!   strict schema is sent as [`strict_schema`] normalizes it (the original's
-//!   OpenAI-compatible provider does the same): strict structured outputs
-//!   require every object property; the reply is still checked against the
-//!   schema as given.
+//!   With it the request forces one tool call (`tools` holding one
+//!   function whose `parameters` are the schema, and `tool_choice` naming
+//!   it; decision D112: the maintainer's local server does not support
+//!   structured output, `response_format`), and the call's `arguments` must
+//!   parse as JSON and satisfy the schema **before** anything is returned.
+//!   `schemaname` (a string matching `[A-Za-z0-9_-]{1,64}`,
+//!   [`DEFAULT_SCHEMA_NAME`] without it) is the function's `name` and
+//!   `strict` (a boolean, `false` without it) its `strict`; both require a
+//!   schema. A strict schema is sent as [`strict_schema`] normalizes it (the
+//!   original's OpenAI-compatible provider does the same): strict function
+//!   calling requires every object property; the arguments are still
+//!   checked against the schema as given.
 //! * `reasoning_effort` (optional, one of `none`, `minimal`, `low`,
 //!   `medium`, `high`, `xhigh`): sent as `reasoning_effort`, and
 //!   [`DEFAULT_REASONING_EFFORT`] without it.
@@ -126,7 +129,8 @@
 //! {"messages":[{"content":"…","role":"system"},{"content":"…","role":"user"}],
 //!  "model":"…",
 //!  "reasoning_effort":"low",
-//!  "response_format":{"json_schema":{"name":"result","schema":{…},"strict":false},"type":"json_schema"}}
+//!  "tool_choice":{"function":{"name":"result"},"type":"function"},
+//!  "tools":[{"function":{"name":"result","parameters":{…},"strict":false},"type":"function"}]}
 //! ```
 //!
 //! The request never blocks the session: `outbound-http.fetch` (and, for a
@@ -181,9 +185,16 @@
 //! (`choices[0].delta.refusal`), a `finish_reason` of `length` or
 //! `content_filter`, an `error` chunk, a stream without `[DONE]` or without
 //! content (empty content counts as none: a reasoning model's stream opens
-//! with an empty `content`), or a body that is not such a stream is a failure. With a schema
-//! the whole text is parsed as JSON and checked against the compiled schema
-//! only once the whole reply arrived ([`structured_value`]).
+//! with an empty `content`), or a body that is not such a stream is a failure.
+//!
+//! With a schema the reply is the forced call's arguments instead, never
+//! the content: a non-streamed reply's `choices[0].message.tool_calls[0]`,
+//! a streamed reply's `choices[0].delta.tool_calls` entries of `index` 0,
+//! whose `function.arguments` fragments are joined in order. A reply whose
+//! first tool call is missing, does not name the forced function, or has
+//! empty arguments is malformed. The arguments are parsed as JSON and
+//! checked against the compiled schema only once the whole reply arrived
+//! ([`structured_value`]).
 //!
 //! # Bounds
 //!
@@ -237,7 +248,7 @@ pub const STREAM_SLOT: &str = "stream";
 pub const MAX_COMPLETION_TOKENS: u32 = 1_048_576;
 /// The path appended to the base URL.
 pub const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
-/// `json_schema.name` when the invocation names none.
+/// The forced function's `name` when the invocation names none.
 pub const DEFAULT_SCHEMA_NAME: &str = "result";
 /// `reasoning_effort` when the invocation names none.
 pub const DEFAULT_REASONING_EFFORT: &str = "low";
@@ -421,12 +432,13 @@ pub enum ImageReadFailure {
     TooLarge,
 }
 
-/// The structured-output request of one invocation.
+/// The forced tool call of one invocation: one function whose `parameters`
+/// are the schema.
 #[derive(Debug)]
 pub struct ResponseSchema {
-    /// `json_schema.name`.
+    /// The function's `name`.
     pub name: String,
-    /// `json_schema.strict`.
+    /// The function's `strict`.
     pub strict: bool,
     /// The canonical resolved schema.
     pub schema: Json,
@@ -441,7 +453,7 @@ pub struct Generation {
     pub model: String,
     /// The conversation, the system message first.
     pub messages: Vec<Message>,
-    /// The structured-output request, when the invocation gave a schema.
+    /// The forced tool call, when the invocation gave a schema.
     pub schema: Option<ResponseSchema>,
     /// `reasoning_effort`, one of [`REASONING_EFFORTS`].
     pub reasoning_effort: &'static str,
@@ -460,7 +472,8 @@ pub enum FailureCode {
     Transport,
     /// The model service answered with a non-2xx status.
     Status,
-    /// The answer is not a chat completion with text content, or exceeds
+    /// The answer is not a chat completion with text content (with a
+    /// schema, a call of the forced function with arguments), or exceeds
     /// the host's response bound.
     Malformed,
     /// The reply was cut short by its token limit.
@@ -469,9 +482,9 @@ pub enum FailureCode {
     Filtered,
     /// The model refused the request.
     Refusal,
-    /// The structured reply is not JSON.
+    /// The forced call's arguments are not JSON.
     NotJson,
-    /// The structured reply does not satisfy the requested schema.
+    /// The forced call's arguments do not satisfy the requested schema.
     SchemaMismatch,
 }
 
@@ -824,7 +837,7 @@ pub fn response_schema(
     })
 }
 
-/// `schema` as strict structured outputs take it (the original's
+/// `schema` as strict function calling takes it (the original's
 /// `_normalize_openai_schema`): `default`, `examples` and `title` dropped,
 /// `oneOf` sent as `anyOf`, and every object schema closed
 /// (`additionalProperties: false`) with all its properties required, at
@@ -1088,7 +1101,8 @@ pub const fn endpoint(
 /// the `baseurl` slot's reference) with the `apikey` slot's reference as a
 /// bearer key and a canonical JSON body: `messages`, `model`,
 /// `reasoning_effort`, `stream` (`true`) when streamed, and, with a
-/// schema, `response_format`.
+/// schema, `tools` (one function, the schema its `parameters`) and
+/// `tool_choice` forcing it.
 #[must_use]
 pub fn build_request(
     base_url: u32,
@@ -1120,19 +1134,23 @@ pub fn build_request(
     }
     if let Some(schema) = &generation.schema {
         body.insert(
-            "response_format".into(),
-            serde_json::json!({
-                "type": "json_schema",
-                "json_schema": {
+            "tools".into(),
+            serde_json::json!([{
+                "type": "function",
+                "function": {
                     "name": schema.name,
                     "strict": schema.strict,
-                    "schema": if schema.strict {
+                    "parameters": if schema.strict {
                         strict_schema(&schema.schema)
                     } else {
                         schema.schema.clone()
                     },
                 },
-            }),
+            }]),
+        );
+        body.insert(
+            "tool_choice".into(),
+            serde_json::json!({ "type": "function", "function": { "name": schema.name } }),
         );
     }
     Request {
@@ -1188,7 +1206,8 @@ fn content_json(content: &Content) -> Json {
 
 /// The reply text of a streamed Chat Completions result: the
 /// `choices[0].delta.content` of every `data:` chunk before `data: [DONE]`,
-/// joined in order.
+/// joined in order, or, when the request forced a call of `function`, the
+/// `function.arguments` of its `delta.tool_calls` entries of `index` 0.
 ///
 /// The body is server-sent events: lines ending in `\n` (or `\r\n`), an
 /// event's `data:` lines joined with `\n`, a blank line ending the event;
@@ -1198,13 +1217,15 @@ fn content_json(content: &Content) -> Json {
 ///
 /// [`FailureCode::Malformed`] when the body is not such a stream (not
 /// UTF-8, a chunk that is not a JSON object, an `error` chunk, no
-/// `[DONE]`, or no content), [`FailureCode::Truncated`] or
+/// `[DONE]`, no content, or, with `function`, no call of it with
+/// arguments), [`FailureCode::Truncated`] or
 /// [`FailureCode::Filtered`] for a `finish_reason` of `length` or
 /// `content_filter`, and [`FailureCode::Refusal`] when the stream carries a
 /// refusal.
-pub fn reply_text(body: &[u8]) -> Result<String, FailureCode> {
+pub fn reply_text(body: &[u8], function: Option<&str>) -> Result<String, FailureCode> {
     let text = std::str::from_utf8(body).map_err(|_| FailureCode::Malformed)?;
     let mut content: Option<String> = None;
+    let mut call = ToolCall::default();
     let mut refusal = String::new();
     let mut finish: Option<String> = None;
     let mut done = false;
@@ -1241,6 +1262,14 @@ pub fn reply_text(body: &[u8]) -> Result<String, FailureCode> {
             {
                 content.get_or_insert_with(String::new).push_str(part);
             }
+            for fragment in delta
+                .and_then(|delta| delta.get("tool_calls"))
+                .and_then(Json::as_array)
+                .into_iter()
+                .flatten()
+            {
+                call.add(fragment)?;
+            }
             if let Some(part) = delta
                 .and_then(|delta| delta.get("refusal"))
                 .and_then(Json::as_str)
@@ -1271,22 +1300,70 @@ pub fn reply_text(body: &[u8]) -> Result<String, FailureCode> {
     if !refusal.is_empty() {
         return Err(FailureCode::Refusal);
     }
-    content
-        .filter(|text| !text.is_empty())
-        .ok_or(FailureCode::Malformed)
+    match function {
+        Some(function) => call.arguments_of(function),
+        None => content
+            .filter(|text| !text.is_empty())
+            .ok_or(FailureCode::Malformed),
+    }
+}
+
+/// The first tool call of a reply, as its fragments arrive: a streamed
+/// reply's `delta.tool_calls` entries of `index` 0, or a non-streamed
+/// reply's `message.tool_calls[0]` as its one fragment.
+#[derive(Default)]
+struct ToolCall {
+    /// `function.name`.
+    name: Option<String>,
+    /// `function.arguments`, joined in order.
+    arguments: String,
+}
+
+impl ToolCall {
+    /// Adds one fragment of `index` 0 (a fragment of a later call is
+    /// ignored: the reply is the first call's).
+    fn add(&mut self, fragment: &Json) -> Result<(), FailureCode> {
+        match fragment.get("index") {
+            None => {}
+            Some(index) if index.as_u64() == Some(0) => {}
+            Some(index) if index.is_u64() => return Ok(()),
+            Some(_) => return Err(FailureCode::Malformed),
+        }
+        let function = fragment.get("function");
+        if let Some(name) = function.and_then(|function| function.get("name")) {
+            let name = name.as_str().ok_or(FailureCode::Malformed)?;
+            self.name.get_or_insert_with(String::new).push_str(name);
+        }
+        if let Some(arguments) = function.and_then(|function| function.get("arguments")) {
+            self.arguments
+                .push_str(arguments.as_str().ok_or(FailureCode::Malformed)?);
+        }
+        Ok(())
+    }
+
+    /// The call's arguments, when it calls `function` with some.
+    fn arguments_of(self, function: &str) -> Result<String, FailureCode> {
+        if self.name.as_deref() != Some(function) || self.arguments.is_empty() {
+            return Err(FailureCode::Malformed);
+        }
+        Ok(self.arguments)
+    }
 }
 
 /// The reply text of a non-streamed Chat Completions result: its
-/// `choices[0].message.content`.
+/// `choices[0].message.content`, or, when the request forced a call of
+/// `function`, the `function.arguments` of `message.tool_calls[0]`.
 ///
 /// # Errors
 ///
 /// [`FailureCode::Malformed`] when the body is not such a completion (not a
-/// JSON object, an `error` object, or no or empty content),
+/// JSON object, an `error` object, no or empty content, or, with
+/// `function`, a first tool call that is missing, calls another function,
+/// or has no arguments),
 /// [`FailureCode::Truncated`] or [`FailureCode::Filtered`] for a
 /// `finish_reason` of `length` or `content_filter`, and
 /// [`FailureCode::Refusal`] when the message carries a refusal.
-pub fn completion_text(body: &[u8]) -> Result<String, FailureCode> {
+pub fn completion_text(body: &[u8], function: Option<&str>) -> Result<String, FailureCode> {
     let completion: Json = serde_json::from_slice(body).map_err(|_| FailureCode::Malformed)?;
     if !completion.is_object() || completion.get("error").is_some() {
         return Err(FailureCode::Malformed);
@@ -1309,6 +1386,16 @@ pub fn completion_text(body: &[u8]) -> Result<String, FailureCode> {
     {
         return Err(FailureCode::Refusal);
     }
+    if let Some(function) = function {
+        let mut call = ToolCall::default();
+        let first = message
+            .and_then(|message| message.get("tool_calls"))
+            .and_then(Json::as_array)
+            .and_then(|calls| calls.first())
+            .ok_or(FailureCode::Malformed)?;
+        call.add(first)?;
+        return call.arguments_of(function);
+    }
     message
         .and_then(|message| message.get("content"))
         .and_then(Json::as_str)
@@ -1317,7 +1404,8 @@ pub fn completion_text(body: &[u8]) -> Result<String, FailureCode> {
         .ok_or(FailureCode::Malformed)
 }
 
-/// The structured reply: `text` parsed as JSON, admitted by `schema`.
+/// The structured reply: `text` (the forced call's arguments) parsed as
+/// JSON, admitted by `schema`.
 ///
 /// # Errors
 ///
@@ -1377,10 +1465,14 @@ pub fn outcome(generation: &Generation, answered: Result<Response, TransportFail
     if !(200..300).contains(&response.status) {
         return Returned::failed(FailureCode::Status);
     }
+    let function = generation
+        .schema
+        .as_ref()
+        .map(|schema| schema.name.as_str());
     let text = if is_event_stream(&response.body) {
-        reply_text(&response.body)
+        reply_text(&response.body, function)
     } else {
-        completion_text(&response.body)
+        completion_text(&response.body, function)
     };
     let text = match text {
         Ok(text) => text,

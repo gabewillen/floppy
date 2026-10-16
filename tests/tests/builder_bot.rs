@@ -423,7 +423,7 @@ fn system_one(chosen: &str, body: &[u8]) -> Option<String> {
     Some(json!({"model": "jev-latest", "answers": answers}).to_string())
 }
 
-/// The mock's answer to one request on `path` with the structured-output
+/// The mock's answer to one request on `path` forcing the function of
 /// `schema`, after `authors` draft and `plans` plan requests on that path.
 fn mock_reply(
     path: &str,
@@ -516,10 +516,10 @@ struct Received {
 }
 
 impl Received {
-    /// The structured-output schema name of a Chat Completions request.
+    /// The schema name of a Chat Completions request: the function it forces.
     fn schema_name(&self) -> Option<&str> {
         self.body
-            .pointer("/response_format/json_schema/name")
+            .pointer("/tool_choice/function/name")
             .and_then(Json::as_str)
     }
 
@@ -655,7 +655,7 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>, arrived: &
         counts
     };
     let reply = mock_reply(&path, request.schema_name(), authors, plans, &body)
-        .map(|reply| support::stream_if_asked(&request.body, reply));
+        .map(|reply| support::answer_as_asked(&request.body, reply));
     let (status, reply) = reply.map_or(("404 Not Found", "{}".to_owned()), |reply| {
         ("200 OK", reply)
     });
