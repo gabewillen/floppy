@@ -56,7 +56,7 @@ echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestria
 printf '%s\n' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" \
-    --dir "https://github.com/stateforward/floppy/services/speech=$PWD/media::/media" environments/room/room.scx
+    --dir "https://github.com/stateforward/floppy/services/speech=$PWD/media::/media" --fuel 9223372036854775807 environments/room/room.scx
 # A bot, with the packages of floppy's latest GitHub release (once one is
 # published: docs/release.md).
 scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx

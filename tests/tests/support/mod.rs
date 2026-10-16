@@ -53,6 +53,12 @@ pub const GRANTED: [&str; 9] = [
     "FLOPPY_VOICE_BASE_URL",
 ];
 
+/// The fuel of every run of an environment document (`environments/...`,
+/// where the bots run): `i64::MAX`, until average usage is measured
+/// (decision D111). One host call's budget pays for every session it
+/// starts, and entering a room starts its bots and all their abilities.
+pub const FUEL: &str = "9223372036854775807";
+
 /// The model floppy ships (README.md, "Defaults"): every document's `model`
 /// `<data>`, checked by `tests/tests/defaults.rs`.
 pub const DEFAULT_MODEL: &str = "Qwen/Qwen3.8-Flash-Next";
@@ -260,6 +266,9 @@ impl Run {
     /// Starts `scx run` with `args` (the document among them) and the
     /// extra environment `env`.
     ///
+    /// A run of an environment document (`environments/<name>/<name>.scx`)
+    /// gets `--fuel` [`FUEL`] unless it names its own.
+    ///
     /// A run whose document tree binds the sql, the generate or the speech
     /// service (decided by [`binds`]) and that grants it no directory gets
     /// a fresh one ([`memory_grant`], [`media_grant`],
@@ -269,6 +278,18 @@ impl Run {
     pub fn start(args: &[String], env: &[(&str, &str)]) -> Self {
         let mut full = vec!["run".to_owned()];
         full.extend_from_slice(args);
+        // A bot runs in its environment, with the run's fuel (decision D111).
+        if !args.iter().any(|arg| arg == "--fuel")
+            && args.iter().any(|arg| {
+                Path::new(arg)
+                    .parent()
+                    .and_then(Path::parent)
+                    .and_then(Path::file_name)
+                    .is_some_and(|name| name == "environments")
+            })
+        {
+            full.splice(1..1, ["--fuel".to_owned(), FUEL.to_owned()]);
+        }
         for (name, grant) in [
             ("sql", memory_grant as fn() -> Vec<String>),
             ("generate", media_grant),

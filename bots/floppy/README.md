@@ -67,18 +67,25 @@ names (every bot when it names none):
 printf '%s\n' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
-    --dir https://github.com/stateforward/floppy/services/speech=media::/media environments/room/room.scx
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media --fuel 9223372036854775807 environments/room/room.scx
 # A conversation: text addressed to the bot, answered through floppy.say.
 printf '%s\n' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
-    --dir https://github.com/stateforward/floppy/services/speech=media::/media environments/room/room.scx
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media --fuel 9223372036854775807 environments/room/room.scx
 # floppy's latest release, once one is published (phase 7).
 printf '%s\n' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
   scx run --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
-    --dir https://github.com/stateforward/floppy/services/speech=media::/media environments/room/room.scx
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media --fuel 9223372036854775807 environments/room/room.scx
 ```
+
+`--fuel 9223372036854775807` (2^63 - 1, the most fuel Wasmtime puts into a store at
+once) gives every host call the fuel a bot's start needs. Entering the room
+starts the bot and all of its abilities, about 20 sessions, on one host
+call's budget (scxml.rs docs/limits.md, "Fuel"), which two bots already
+exceed at `scx`'s default of 3 billion. It stays this high until average
+usage is measured (decision D111).
 
 The env file must set `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
 reasoning's `generate` service has no default backend, decision D31) and

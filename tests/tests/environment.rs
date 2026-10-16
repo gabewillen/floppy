@@ -74,22 +74,10 @@ fn double_the_identity(dir: &Path) {
     .expect("the input double is copyable");
 }
 
-/// The fuel of a run with more than one bot: the command that enters the
-/// room starts every bot and all of their abilities, about 20 sessions
-/// each, on one host-call budget (scxml.rs docs/limits.md, "Fuel": a chain
-/// of invoked sessions started by one command needs fuel for every level),
-/// and two bots' starts exceed the default 3 billion.
-const MULTI_BOT_FUEL: &str = "12000000000";
-
 /// Starts the room laid into `dir` with one floppy bot per id in `bots`.
 fn start(dir: &Path, bots: &[&str]) -> Run {
     let room = support::environment(dir, bots, &[]);
-    let mut args = Vec::new();
-    if bots.len() > 1 {
-        args.extend(["--fuel".to_owned(), MULTI_BOT_FUEL.to_owned()]);
-    }
-    args.push(room.display().to_string());
-    Run::start(&args, &[])
+    Run::start(&[room.display().to_string()], &[])
 }
 
 fn label_is(label: &'static str) -> impl Fn(&Json) -> bool {
@@ -355,9 +343,6 @@ fn start_hearing(
         ],
     )
     .args;
-    if bots.len() > 1 {
-        args.extend(["--fuel".to_owned(), MULTI_BOT_FUEL.to_owned()]);
-    }
     args.push(support::environment(dir, bots, &[]).display().to_string());
     (Run::start(&args, &[]), backend)
 }
@@ -454,12 +439,7 @@ fn a_bot_hears_its_own_speech_through_the_environment_and_withholds_it() {
 /// names.
 fn start_with_lamp(dir: &Path, bots: &[&str], holdings: &[(&str, &[&str])]) -> Run {
     let room = support::environment_with_devices(dir, bots, &["lamp"], holdings, &[]);
-    let mut args = Vec::new();
-    if bots.len() > 1 {
-        args.extend(["--fuel".to_owned(), MULTI_BOT_FUEL.to_owned()]);
-    }
-    args.push(room.display().to_string());
-    Run::start(&args, &[])
+    Run::start(&[room.display().to_string()], &[])
 }
 
 /// A `bot.input` from the host stamped with the lamp as its device.
@@ -874,14 +854,7 @@ fn a_visual_reaches_every_participant() {
         &room,
         "a: {position: {x: 0, y: 0, z: 0}, threshold_db: 200}, b: {position: {x: 50, y: 0, z: 0}, threshold_db: 200}",
     );
-    let mut run = Run::start(
-        &[
-            "--fuel".to_owned(),
-            MULTI_BOT_FUEL.to_owned(),
-            room.display().to_string(),
-        ],
-        &[],
-    );
+    let mut run = Run::start(&[room.display().to_string()], &[]);
     all_activated(&run, &["a", "b"]);
     run.event(
         "environment.visual",
