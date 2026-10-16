@@ -894,3 +894,78 @@ fn a_visual_reaches_every_participant() {
     seen.sort();
     assert_eq!(seen, ["session.a.identity", "session.b.identity"]);
 }
+
+/// The `environment` the bot sent the cognition double on each turn.
+fn environments(records: &[Json]) -> Vec<Json> {
+    texts_of(records, "session.floppy.cognition", "double.environment")
+        .into_iter()
+        .map(|text| serde_json::from_str(&text).expect("JSON"))
+        .collect()
+}
+
+/// One turn of a bot holding `held` in a room running `devices`; returns
+/// every record. `edit` rewrites the laid-out room before it runs.
+fn one_turn(held: &[&str], devices: &[&str], edit: impl FnOnce(&Path)) -> Vec<Json> {
+    let dir = layout(&[]);
+    let room =
+        support::environment_with_devices(&dir, &["floppy"], devices, &[("floppy", held)], &[]);
+    edit(&dir.join("environments/room"));
+    let mut run = Run::start(&[room.display().to_string()], &[]);
+    all_activated(&run, &["floppy"]);
+    run.event("bot.input", &input("ignore", "x"));
+    let mut records = completed(&run);
+    records.extend(run.close(WAIT).records);
+    records
+}
+
+#[test]
+fn the_bot_sends_its_environment_to_the_cognition() {
+    // No devices: the environment's id, the bot's state and its (empty)
+    // holdings.
+    let records = one_turn(&[], &[], |_| {});
+    assert_eq!(
+        environments(&records),
+        [
+            json!({"id": "session", "self": {"state": "processing", "owned_devices": {}}, "devices": []})
+        ]
+    );
+    // The lamp, with a nested object and a null in its data model.
+    let records = one_turn(&["lamp"], &["lamp"], |room| {
+        let lamp = room.join("lamp/lamp.scx");
+        let text = std::fs::read_to_string(&lamp).expect("readable");
+        std::fs::write(
+            &lamp,
+            text.replace(
+                r#"<data id="click_db" expr="60"/>"#,
+                r#"<data id="click_db" expr="60"/><data id="settings" expr="({color: {hue: 30}, owner: null})"/>"#,
+            ),
+        )
+        .expect("writable");
+    });
+    assert_eq!(
+        environments(&records),
+        [json!({
+            "id": "session",
+            "self": {"state": "processing", "owned_devices": {"lamp": "session.lamp"}},
+            "devices": [{
+                "ref": "lamp",
+                "id": "session.lamp",
+                "state": "off",
+                "attributes": {"brightness": 0, "click_db": 60, "settings": {"color": {"hue": 30}, "owner": null}},
+            }],
+        })]
+    );
+}
+
+#[test]
+fn a_device_that_left_is_not_in_the_environment_block() {
+    // The bot holds the lamp, whose session is not running: its read
+    // fails, and the lamp is left out.
+    let records = one_turn(&["lamp"], &[], |_| {});
+    assert_eq!(
+        environments(&records),
+        [
+            json!({"id": "session", "self": {"state": "processing", "owned_devices": {"lamp": "session.lamp"}}, "devices": []})
+        ]
+    );
+}

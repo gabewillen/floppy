@@ -148,6 +148,9 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="choices" expr="[]"/>
+    <!-- The bot's environment this turn (decision D106), for reasoning's
+         prompt and the intuition's instructions. -->
+    <data id="environment" expr="null"/>
     <!-- The intuition's confidence tuner (the reference ConfidenceTuner). -->
     <data id="tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <!-- The stage in hand: its name, hop timers, and answer. -->
@@ -195,6 +198,7 @@
       <assign location="focus" expr="inputFocus(_event)"/>
       <assign location="focus_candidates" expr="inputFocusCandidates(_event)"/>
       <assign location="choices" expr="inputChoices(_event)"/>
+      <assign location="environment" expr="inputEnvironment(_event)"/>
     </transition>
     <!-- Nothing in flight: acknowledge at once. -->
     <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json">
@@ -283,6 +287,7 @@
         <param name="focus" expr="focus"/>
         <param name="focus_candidates" expr="focus_candidates"/>
         <param name="choices" expr="choices"/>
+        <param name="environment" expr="environment"/>
         <param name="tuner" expr="tuner"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
@@ -330,6 +335,7 @@
         <param name="focus" expr="focus"/>
         <param name="focus_candidates" expr="focus_candidates"/>
         <param name="choices" expr="choices"/>
+        <param name="environment" expr="environment"/>
         <param name="model" expr="model"/>
         <param name="database" expr="database"/>
       </invoke>

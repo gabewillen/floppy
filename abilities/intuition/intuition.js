@@ -136,3 +136,9 @@ function timedOutResult() {
 function couldNotRunResult(_event) {
   return ({handled: false, failed: true, reason: 'the decision could not run (' + _event.name + ')', turn: turn, tuner: tuner});
 }
+
+// The decision's instructions: the robot's own, then its environment this
+// turn as JSON when it has one (decision D106).
+function decisionInstructions() {
+  return environment === null ? instructions : instructions + '\n\nThe robot\'s environment: ' + JSON.stringify(environment);
+}

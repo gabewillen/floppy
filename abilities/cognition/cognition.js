@@ -12,6 +12,11 @@ function inputFocusCandidates(_event) {
   return _event.data.focus_candidates === undefined ? [] : _event.data.focus_candidates;
 }
 
+// The turn's environment (decision D106), null when the input has none.
+function inputEnvironment(_event) {
+  return _event.data.environment === undefined ? null : _event.data.environment;
+}
+
 function inputChoices(_event) {
   return _event.data.choices === undefined ? [] : _event.data.choices;
 }

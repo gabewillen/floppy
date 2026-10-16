@@ -2181,3 +2181,64 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
     );
     assert_eq!(usage(&grant, DATABASE), json!([["Double", "1", "0"]]));
 }
+
+/// Reasoning's prompt carries the environment block (decision D106): the
+/// structured environment the body sends, rendered by its prompt renderer
+/// (D99) as XML elements, values escaped. The bot holds the lamp the
+/// room runs.
+#[test]
+fn reasonings_prompt_carries_the_environment_block() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
+    let layout_dir = bot
+        .body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the layout's root")
+        .to_path_buf();
+    let room = support::environment_with_devices(
+        &layout_dir,
+        &["floppy"],
+        &["lamp"],
+        &[("floppy", &["lamp"])],
+        &[],
+    );
+    let lamp = layout_dir.join("environments/room/lamp/lamp.scx");
+    let text = std::fs::read_to_string(&lamp).expect("the lamp copy is readable");
+    std::fs::write(
+        &lamp,
+        text.replace(
+            r#"<data id="click_db" expr="60"/>"#,
+            r#"<data id="click_db" expr="60"/><data id="label" expr="'desk &lt;lamp&gt; &amp; co'"/>"#,
+        ),
+    )
+    .expect("the lamp copy is writable");
+    let mut run = Run::start(
+        &[
+            "--env-file".to_owned(),
+            bot.env.display().to_string(),
+            room.display().to_string(),
+        ],
+        &[],
+    );
+    run.until(WAIT, label_is("bot.activated"));
+    say(&mut run, "what is the capital of France?");
+    run.until(WAIT, label_is("bot.processing.completed"));
+    settle_reflection(&run);
+    drop(run.close(WAIT));
+    let prompts = prompts(&mock);
+    assert_eq!(prompts.len(), 1, "{prompts:?}");
+    let prompt = &prompts[0];
+    for expected in [
+        "<environment>",
+        r#"<entry key="id" value="session" />"#,
+        r#"<entry key="state" value="processing" />"#,
+        r#"<entry key="ref" value="lamp" />"#,
+        r#"<entry key="id" value="session.lamp" />"#,
+        r#"<entry key="state" value="off" />"#,
+        r#"<entry key="label" value="desk &lt;lamp&gt; &amp; co" />"#,
+    ] {
+        assert!(prompt.contains(expected), "{expected} in {prompt}");
+    }
+}

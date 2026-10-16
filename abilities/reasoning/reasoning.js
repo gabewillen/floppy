@@ -91,6 +91,9 @@ function promptProjection() {
     }
     xmlModels(root, 'prior_episodes', prior_episodes, xmlEpisode, budget);
     xmlModels(root, 'standing_directives', standing_directives, xmlDirective, budget);
+    // The environment block (decision D106): the bot's environment, as the
+    // renderer renders any value (D99).
+    xmlField(root, 'environment', environment, budget);
     var rendered = xmlText(root, 0);
     if (utf8Length(rendered) > 262144) {
       throw new Error('prompt projection encoded byte budget exceeded');

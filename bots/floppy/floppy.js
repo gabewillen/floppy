@@ -119,7 +119,22 @@ function choicesFit() {
 }
 
 function cognitionInput() {
-  return {turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, choices: choices};
+  return {turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, choices: choices, environment: environmentField()};
+}
+
+// The turn's environment from the bot's perspective (decision D106): the
+// environment's id, the bot itself (its state and owned_devices), and each
+// held device read this turn, in the order the bot holds them.
+function environmentField() {
+  var read = devices.filter(function (reference) { return device_reads[reference] !== undefined; });
+  return {
+    id: environment,
+    self: {state: 'processing', owned_devices: owned_devices},
+    devices: read.map(function (reference) {
+      var snapshot = device_reads[reference];
+      return {ref: reference, id: snapshot.id, state: snapshot.state, attributes: snapshot.attributes};
+    })
+  };
 }
 
 function choicesOverFailure() {

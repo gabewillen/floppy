@@ -216,6 +216,7 @@
     <!-- This turn's reads of the held devices (<device:snapshot>):
          reference to {id, state, attributes, events}. -->
     <data id="device_reads" expr="({})"/>
+    <data id="device" expr="null"/>
     <!-- Lifecycle: each entry into live is one run; the abilities expected
          and the offers each has sent this run. -->
     <data id="live_run" expr="0"/>
@@ -458,6 +459,14 @@
           <if cond="hasFocusedDevice()">
             <device:snapshot location="device_reads[focused_device]" target="deviceTarget(focused_device)"/>
           </if>
+        </onentry>
+        <!-- Every held device, for the turn's environment (decision D106),
+             in its own block: a read that fails ends it, so it and the
+             devices after it are left out of this turn's environment. -->
+        <onentry>
+          <foreach array="devices" item="device">
+            <device:snapshot location="device_reads[device]" target="deviceTarget(device)"/>
+          </foreach>
         </onentry>
         <onentry>
           <assign location="offering" expr="true"/>

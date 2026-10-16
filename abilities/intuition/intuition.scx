@@ -94,6 +94,9 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="choices" expr="[]"/>
+    <!-- The bot's environment (decision D106), in the decision's
+         instructions. -->
+    <data id="environment" expr="null"/>
     <data id="tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <data id="decision_timeout_ms" expr="20000"/>
     <data id="instructions" expr="'You decide what a small companion robot does with one stimulus it observed. Choose the offered event the robot should take for it. Abstain when none of them fits, so slower reasoning handles it.'"/>
@@ -125,7 +128,7 @@
       <param name="choices" expr="processorChoices()"/>
       <param name="state" expr="decisionState()"/>
       <param name="data" expr="stimulus_data"/>
-      <param name="instructions" expr="instructions"/>
+      <param name="instructions" expr="decisionInstructions()"/>
     </invoke>
 
     <!-- The decision service's own events. Every groundable event, each

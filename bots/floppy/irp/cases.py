@@ -64,8 +64,13 @@ ACTIVE = [ACTIVATED]
 LEFT = expect(DONE)
 
 
-def case(test_id, number, comment, steps, **options):
-    S.case(test_id, number, comment, steps, ignore=NOISE, **options)
+# The harness is the body's environment: its _sessionid is the body's
+# environment param (decision D106).
+ENVIRONMENT = ("environment", "_sessionid")
+
+
+def case(test_id, number, comment, steps, params=(), **options):
+    S.case(test_id, number, comment, steps, ignore=NOISE, params=[ENVIRONMENT] + list(params), **options)
 
 
 S.statement(1, "Invoked, the body starts in `live`, which invokes the abilities (`cognition`, `communication`, `identity`, `listening`), and activates on its own (no `bot.activate`): it sends `bot.activated` to its parent, and takes a turn's input, only once every expected ability (the data `expected`) has sent its first `bot.ability.offers`.")
