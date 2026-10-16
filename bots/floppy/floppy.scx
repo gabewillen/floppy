@@ -216,6 +216,8 @@
     <!-- This turn's reads of the held devices (<device:snapshot>):
          reference to {id, state, attributes, events}. -->
     <data id="device_reads" expr="({})"/>
+    <!-- The device being read (the <foreach> item). -->
+    <data id="device" expr="null"/>
     <!-- Lifecycle: each entry into live is one run; the abilities expected
          and the offers each has sent this run. -->
     <data id="live_run" expr="0"/>
@@ -450,58 +452,15 @@
                          devices="devices" focus="focused_device"/>
           <assign location="device_reads" expr="({})"/>
         </onentry>
-        <!-- The focused device's live state (decision D109): its events
-             are choices of this turn. A read that fails (the device is not
-             running) raises error.execution, which ends only this block
-             (SCXML 4.9): the device is left out of the turn. -->
+        <!-- The live state of every held device (decision D109): the
+             focused one's events are choices of this turn, and every read
+             is the turn's environment (decision D106). A device whose
+             session is not running is not read (<device:snapshot> assigns
+             nothing), so it is left out. -->
         <onentry>
-          <if cond="hasFocusedDevice()">
-            <device:snapshot location="device_reads[focused_device]" target="deviceTarget(focused_device)"/>
-          </if>
-        </onentry>
-        <!-- Every held device, for the turn's environment (decision D106),
-             each in a block of its own: a read that fails (the device is
-             not running) ends only its block (SCXML 4.9), so only that
-             device is left out. A bot reads at most its first 8 devices. -->
-        <onentry>
-          <if cond="holdsDeviceAt(0)">
-            <device:snapshot location="device_reads[devices[0]]" target="deviceTarget(devices[0])"/>
-          </if>
-        </onentry>
-        <onentry>
-          <if cond="holdsDeviceAt(1)">
-            <device:snapshot location="device_reads[devices[1]]" target="deviceTarget(devices[1])"/>
-          </if>
-        </onentry>
-        <onentry>
-          <if cond="holdsDeviceAt(2)">
-            <device:snapshot location="device_reads[devices[2]]" target="deviceTarget(devices[2])"/>
-          </if>
-        </onentry>
-        <onentry>
-          <if cond="holdsDeviceAt(3)">
-            <device:snapshot location="device_reads[devices[3]]" target="deviceTarget(devices[3])"/>
-          </if>
-        </onentry>
-        <onentry>
-          <if cond="holdsDeviceAt(4)">
-            <device:snapshot location="device_reads[devices[4]]" target="deviceTarget(devices[4])"/>
-          </if>
-        </onentry>
-        <onentry>
-          <if cond="holdsDeviceAt(5)">
-            <device:snapshot location="device_reads[devices[5]]" target="deviceTarget(devices[5])"/>
-          </if>
-        </onentry>
-        <onentry>
-          <if cond="holdsDeviceAt(6)">
-            <device:snapshot location="device_reads[devices[6]]" target="deviceTarget(devices[6])"/>
-          </if>
-        </onentry>
-        <onentry>
-          <if cond="holdsDeviceAt(7)">
-            <device:snapshot location="device_reads[devices[7]]" target="deviceTarget(devices[7])"/>
-          </if>
+          <foreach array="devices" item="device">
+            <device:snapshot location="device_reads[device]" target="deviceTarget(device)"/>
+          </foreach>
         </onentry>
         <onentry>
           <assign location="offering" expr="true"/>

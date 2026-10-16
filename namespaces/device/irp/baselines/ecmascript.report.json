@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/device/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "ba6a8f5dc600a16dac4205b479858abe01ce61706dc64be5f30274e1d9bc6d31",
-    "source_digest": "6deaef99318df33c3552c09207b962cad7c31b040f592d26d660c2c58fd83749",
-    "manifest_digest": "cf446ae7f02bea37c0a020db65ed891dd180f5061cd21ca5fd2ce7d3aabeb92f",
+    "corpus_digest": "0c2d1dc9686e3bf53b0eb99aa6cbf536f9b59f4628d6ce30314cc297a14b95b4",
+    "source_digest": "38a8b9467478649b30cdac6595f5af2d4b8d677b6ee0066bc79c096123850937",
+    "manifest_digest": "c5d24f3183cad8408ca67336714bae3dbb5057bb667c9e5a5b224ab68a23213c",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -64,7 +64,7 @@
       "package_version": "0.1.0",
       "manifest_sha256": "be5b43f1bad3ed7085315bb3c96dea8b1e5737147d2830cf16102f9291b12a57",
       "schema_sha256": "af8ed7066fe2378612b2eefd290c62391bdecf51aa784e7050c5f9bcfc34da67",
-      "component_sha256": "fbd9ac7fb8c300ddcdc41566eb93006f1970957506ce5284a4900cd691dfc0c9"
+      "component_sha256": "87fa5765f6ad619a23f87b455a2b2da70eab4e9bf377dc7603dd6fa8d55f6f6d"
     }
   ],
   "ir_version": 5,
@@ -77,7 +77,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "ae7a71fab21f82fbbafdb622bd19a28a8fe9ecd94ddbc822d0162c539e26e71d",
+  "identity_digest": "734f78695c0a2fe02fb069e3b7d17a785be892eb988e91c275fe4cb38e360b9a",
   "summary": {
     "total_selected": 5,
     "applicable_selected": 5,

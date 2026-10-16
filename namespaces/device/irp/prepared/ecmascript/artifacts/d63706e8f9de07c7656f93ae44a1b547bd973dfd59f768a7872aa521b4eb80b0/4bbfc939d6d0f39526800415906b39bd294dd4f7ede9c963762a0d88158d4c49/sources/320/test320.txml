@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- device-3: a target no running session of the run answers raises error.execution and assigns nothing. -->
+<!-- device-3: a target no running session of the run answers assigns nothing and raises nothing. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:device="https://github.com/stateforward/floppy/namespaces/device">
 <datamodel>
   <data id="read" expr="'untouched'"/>
@@ -9,7 +9,7 @@
     <device:snapshot location="read" target="'#_scxml_' + _sessionid + '.nobody'"/>
     <raise event="executed"/>
   </onentry>
-  <transition event="error.execution" cond="read === 'untouched'" conf:targetpass=""/>
+  <transition event="executed" cond="read === 'untouched'" conf:targetpass=""/>
   <transition event="*" conf:targetfail=""/>
 </state>
 <conf:pass/>

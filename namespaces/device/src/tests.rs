@@ -6,12 +6,13 @@ use super::*;
 
 /// A deterministic fake host: expressions read from a table (anything else
 /// fails to evaluate), each target's snapshot is scripted (an unscripted
-/// target is unavailable), and assignments and snapshot requests are
-/// recorded.
+/// target names no running session, one in `failing` fails to read), and
+/// assignments and snapshot requests are recorded.
 #[derive(Default)]
 struct FakeHost {
     values: BTreeMap<String, Data>,
     snapshots: BTreeMap<String, String>,
+    failing: Vec<String>,
     snapshot_requests: Vec<(Vec<Section>, String)>,
     assigned: Vec<(String, Data)>,
     fail_assign: bool,
@@ -39,10 +40,17 @@ impl DeviceHost for FakeHost {
         &mut self,
         exclude: &[Section],
         target: &str,
-    ) -> Result<Result<String, ()>, &'static str> {
+    ) -> Result<SnapshotRead, &'static str> {
         self.snapshot_requests
             .push((exclude.to_vec(), target.to_owned()));
-        Ok(self.snapshots.get(target).cloned().ok_or(()))
+        if self.failing.iter().any(|failing| failing == target) {
+            return Ok(SnapshotRead::Failed);
+        }
+        Ok(self
+            .snapshots
+            .get(target)
+            .cloned()
+            .map_or(SnapshotRead::NotRunning, SnapshotRead::Document))
     }
 }
 
@@ -248,10 +256,18 @@ fn the_attributes_are_the_data_model_values_and_a_value_with_no_portable_form_is
 }
 
 #[test]
-fn a_failed_read_is_an_execution_error_and_assigns_nothing() {
+fn a_target_that_is_not_running_assigns_nothing_and_raises_nothing() {
     let mut host = host_with(lamp_off());
     host.values
         .insert("target".into(), Data::String("#_scxml_session.gone".into()));
+    assert_eq!(read_element(&mut host), Ok(Executed::Handled));
+    assert!(host.assigned.is_empty());
+}
+
+#[test]
+fn a_read_the_host_fails_is_an_execution_error_and_assigns_nothing() {
+    let mut host = host_with(lamp_off());
+    host.failing.push(LAMP.to_owned());
     assert_eq!(
         execution(read_element(&mut host)),
         "device:snapshot cannot read the target session"

@@ -21,7 +21,7 @@
     </test>
   </assert>
   <assert id="device-3" specnum="3" specid="#device-3">
-    <![CDATA[A target that no running session of the run answers raises error.execution and assigns nothing.]]>
+    <![CDATA[A target that no running session of the run answers assigns nothing and raises nothing: location keeps its value.]]>
     <test id="320" conformance="mandatory" manual="false">
       <start uri="320/test320.txml"/>
     </test>

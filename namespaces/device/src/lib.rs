@@ -32,11 +32,14 @@
 //!   snapshot's walk order, each once: a descriptor `*` names no event and
 //!   is not listed, and a descriptor `e.*` is listed as `e`.
 //!
-//! The element takes no other attribute and no content. A malformed
-//! element, a target that is not a string, a session the host cannot read
-//! (malformed, unknown, finished, or failed), a malformed snapshot, or a
-//! failed assignment is an `execution` error with a static detail (SCXML
-//! `error.execution`); nothing is assigned then.
+//! The element takes no other attribute and no content. A target that no
+//! running session of the run answers (a session that is not running,
+//! finished or failed, or a target that names none) is nothing to read: the
+//! element assigns nothing and raises nothing, so `location` keeps its value
+//! (decision D109, as the maintainer amended it on 2026-10-16). A malformed
+//! element, a target that is not a string, a read the host fails (a bound),
+//! a malformed snapshot, or a failed assignment is an `execution` error
+//! with a static detail (SCXML `error.execution`); nothing is assigned then.
 //!
 //! # Bounds
 //!
@@ -134,6 +137,18 @@ pub enum Failure<E> {
     Host(E),
 }
 
+/// What a host read of another session gave.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SnapshotRead {
+    /// The session's `scxml.session-snapshot/v2` document.
+    Document(String),
+    /// No running session of the run answers the target (it is not
+    /// running, or the target names none).
+    NotRunning,
+    /// The read failed (a bound, or the host).
+    Failed,
+}
+
 /// The host capabilities one `execute` call uses.
 pub trait DeviceHost {
     /// A non-recoverable host failure.
@@ -156,17 +171,12 @@ pub trait DeviceHost {
     fn assign(&mut self, location: &str, value: &Data) -> Result<Result<(), ()>, Self::Error>;
 
     /// The `scxml.session-snapshot/v2` document of the session `target`
-    /// names, with `exclude` omitted; `Ok(Err(()))` when the host cannot
-    /// read it.
+    /// names, with `exclude` omitted, or why there is none.
     ///
     /// # Errors
     ///
     /// A non-recoverable host failure.
-    fn snapshot(
-        &mut self,
-        exclude: &[Section],
-        target: &str,
-    ) -> Result<Result<String, ()>, Self::Error>;
+    fn snapshot(&mut self, exclude: &[Section], target: &str) -> Result<SnapshotRead, Self::Error>;
 }
 
 /// Executes one element with the given local name, attributes, and
@@ -234,10 +244,20 @@ fn snapshot<H: DeviceHost>(
             "device:snapshot's target is not a string",
         ));
     };
-    let document = host
+    let document = match host
         .snapshot(&SNAPSHOT_EXCLUDE, &target)
         .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution("device:snapshot cannot read the target session"))?;
+    {
+        SnapshotRead::Document(document) => document,
+        // Nothing to read (decision D109, as amended): the location is left
+        // as it was.
+        SnapshotRead::NotRunning => return Ok(Executed::Handled),
+        SnapshotRead::Failed => {
+            return Err(Failure::Execution(
+                "device:snapshot cannot read the target session",
+            ));
+        }
+    };
     let read =
         session_read(&document).ok_or(Failure::Execution("the session snapshot is malformed"))?;
     host.assign(location, &Data::JsonObject(read.to_string()))
@@ -363,7 +383,7 @@ mod guest {
     };
     use stateforward::scxml::{data_model_host, session_snapshot_host};
 
-    use super::{Attribute, Content, Data, DeviceHost, Executed, Failure, Section};
+    use super::{Attribute, Content, Data, DeviceHost, Executed, Failure, Section, SnapshotRead};
 
     /// The lifecycle of this instance.
     #[derive(Clone, Copy, Eq, PartialEq)]
@@ -425,7 +445,7 @@ mod guest {
             &mut self,
             exclude: &[Section],
             target: &str,
-        ) -> Result<Result<String, ()>, ComponentError> {
+        ) -> Result<SnapshotRead, ComponentError> {
             let exclude: Vec<session_snapshot_host::Section> = exclude
                 .iter()
                 .map(|section| match section {
@@ -437,14 +457,16 @@ mod guest {
                 })
                 .collect();
             match session_snapshot_host::snapshot(&exclude, Some(target)) {
-                Ok(document) => Ok(Ok(document)),
-                // A session the run cannot read, the call bound, or a
-                // document bound: the element cannot read it
-                // (`error.execution`).
+                Ok(document) => Ok(SnapshotRead::Document(document)),
+                // No running session of the run answers the target: nothing
+                // to read.
+                Err(error) if error.code == ErrorCode::Unavailable => Ok(SnapshotRead::NotRunning),
+                // The call bound or a document bound: the element cannot
+                // read it (`error.execution`).
                 Err(error)
                     if recoverable(error.code) || error.code == ErrorCode::CapacityExhausted =>
                 {
-                    Ok(Err(()))
+                    Ok(SnapshotRead::Failed)
                 }
                 Err(error) => Err(error),
             }
