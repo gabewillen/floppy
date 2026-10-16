@@ -17,9 +17,10 @@
 //! * the mapping rules hold: correlated events require an integer `turn`,
 //!   the original's runtime-only fields are gone, and media is a reference.
 //!
-//! And over every `.scx` under `abilities/` and `bots/floppy/` (the body
-//! `bots/floppy/floppy.scx` and its abilities; the checks themselves are
-//! proven on `tests/fixtures/phase4/contracts/`):
+//! And over every `.scx` under `abilities/`, `bots/floppy/` and
+//! `environments/` (the body `bots/floppy/floppy.scx`, its abilities, and
+//! the environments that invoke it; the checks themselves are proven on
+//! `tests/fixtures/phase4/contracts/`):
 //!
 //! * `scx validate` reports nothing (which includes `EVENT011`: a literal
 //!   payload sent to a literal child is judged against the child's schema);
@@ -52,7 +53,10 @@
 //!
 //! The body's twins (`bots/floppy/schemas/` copies of the ability events
 //! the body takes, which it cannot reference across directories) are
-//! byte-identical to their `abilities/schemas/` sources.
+//! byte-identical to their `abilities/schemas/` sources, and an
+//! environment's twins (`environments/<name>/schemas/`) to theirs: the
+//! ability events' `abilities/schemas/` files and the body events'
+//! `bots/floppy/schemas/` files.
 
 #![allow(
     missing_docs,
@@ -74,8 +78,7 @@ const FLOPPY_NAME: &str = "[floppy name]";
 const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// The body's events (`bots/floppy/schemas/`).
-const BODY_EVENTS: [&str; 13] = [
-    "bot.activate",
+const BODY_EVENTS: [&str; 12] = [
     "bot.deactivate",
     "bot.input",
     "bot.focus_device",
@@ -449,6 +452,51 @@ fn each_abilitys_twins_are_byte_identical_and_exactly_what_it_references() {
 }
 
 #[test]
+fn each_environments_twins_are_byte_identical_and_exactly_what_it_references() {
+    for document in documents_under(&workspace().join("environments")) {
+        let dir = document.parent().expect("a document has a directory");
+        let referenced: BTreeSet<String> = Parsed::read(&document).with(|root| {
+            let mut referenced = BTreeSet::new();
+            root.visit(&mut |element| {
+                for attribute in element.attributes.iter().filter(|a| is_schema_attribute(a)) {
+                    if let Some(file) = attribute.value.strip_prefix("schemas/") {
+                        referenced.insert(file.split('#').next().unwrap_or(file).to_owned());
+                    }
+                }
+            });
+            referenced
+        });
+        let twins: BTreeSet<String> = std::fs::read_dir(dir.join("schemas"))
+            .expect("an environment has schema twins")
+            .map(|entry| {
+                entry
+                    .expect("a directory entry")
+                    .file_name()
+                    .into_string()
+                    .expect("a UTF-8 file name")
+            })
+            .collect();
+        assert_eq!(twins, referenced, "{}", dir.display());
+        for file in twins {
+            let twin =
+                std::fs::read(dir.join("schemas").join(&file)).expect("the twin is readable");
+            let ability = ability_schemas().join(&file);
+            let source = if ability.is_file() {
+                ability
+            } else {
+                body_schemas().join(&file)
+            };
+            assert!(
+                twin == std::fs::read(&source).expect("the source is readable"),
+                "{}/schemas/{file} differs from {}",
+                dir.display(),
+                source.display()
+            );
+        }
+    }
+}
+
+#[test]
 fn every_event_name_is_the_original_or_a_marked_floppy_name() {
     let reference = reference_names();
     let schemas = all_schemas();
@@ -572,6 +620,7 @@ fn documents_under(dir: &Path) -> Vec<PathBuf> {
 fn phase4_documents() -> Vec<PathBuf> {
     let mut documents = documents_under(&workspace().join("abilities"));
     documents.extend(documents_under(&workspace().join("bots/floppy")));
+    documents.extend(documents_under(&workspace().join("environments")));
     documents
 }
 

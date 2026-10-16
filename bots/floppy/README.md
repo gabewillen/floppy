@@ -54,24 +54,30 @@ with the phase's saved live examples.
 
 ## Running
 
-Activate it, then give it inputs, on standard input:
+The bot runs in an environment that invokes it (decision D102): the room,
+[`environments/room/room.scx`](../../environments/room/room.scx), the root
+session, invokes it as its participant `floppy` and activates it on
+joining (decision D107). Give the room inputs on standard input; it routes
+`bot.input` and `bot.deactivate` to every bot, and
+`bot.ability.communication.input` to the participants its `target_ids`
+names (every bot when it names none):
 
 ```console
 # The locally built packages (the dev cache under target/).
-printf '%s\n' '{"name":"bot.activate","data":{}}' \
+printf '%s\n' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
-    --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media environments/room/room.scx
 # A conversation: text addressed to the bot, answered through floppy.say.
-printf '%s\n' '{"name":"bot.activate","data":{}}' \
+printf '%s\n' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
-    --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media environments/room/room.scx
 # floppy's latest release, once one is published (phase 7).
-printf '%s\n' '{"name":"bot.activate","data":{}}' \
+printf '%s\n' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
   scx run --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
-    --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media environments/room/room.scx
 ```
 
 The env file must set `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
@@ -80,9 +86,11 @@ reasoning's `generate` service has no default backend, decision D31) and
 is optional, `https://api.typesafe.ai` without it). Without the TypeSafe key
 every turn fails with `the decision failed (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
-`bot.activate` may name the model (`{"model": "..."}`); the default is
-`Qwen/Qwen3.8-Flash-Next`. It may also set the time bounds of the
-model-bound stages (decision D101), each in milliseconds:
+The environment's `<invoke>` gives the bot its activation settings as
+`<param>`s: `model` (the default is `Qwen/Qwen3.8-Flash-Next`),
+`database`, `environment` (the environment's id) and `bounds`, an object
+that may set the time bounds of the model-bound stages (decision D101),
+each in milliseconds:
 `child_operation_timeout_ms` (a cognition stage without progress; a
 streamed reasoning reply's progress starts it over),
 `child_operation_ceiling_ms` (a stage in all), `revising_timeout_ms`
@@ -142,15 +150,19 @@ speech decoding calls `FLOPPY_SPEECH_BASE_URL` with `FLOPPY_SPEECH_API_KEY`;
 neither has a default backend. A sound that cannot be heard is logged as
 `bot.ability.listening.failed`.
 
-The root has no parent, so each event the body emits is a `log` record
-labelled with its name, its text the event's data as JSON: `bot.activated`,
-`bot.activating.failed`, `bot.deactivated`, `bot.reboot`,
+Each event the body emits goes to its environment, which writes it as a
+`log` record labelled with its name, its text the event's data as JSON:
+`bot.activated`, `bot.activating.failed`, `bot.deactivated`, `bot.reboot`,
 `bot.processing.completed`, `bot.processing.failed`,
 `bot.processing.timed_out`, `bot.processing.cancel.timed_out`, and, from
 the communication,
 `bot.ability.speaking.output` (what was said),
 `bot.ability.communication.failed`, `bot.ability.conversation.failed`
-and `environment.sound` (speaking's playout, by reference). floppy's own
+and `bot.ability.conversation.output`; the body logs `environment.sound`
+(speaking's playout, by reference) itself. The bot's session ends in
+`inactive` when its activation fails or it is deactivated, and in
+`degraded` when it degrades; the environment logs each as `done.invoke`
+with the bot's invoke id and its result. floppy's own
 records, which are not the original events, are labelled `floppy.*`:
 `floppy.output` is the turn's selected events, speaking logs the words as
 `floppy.say`, `floppy.choices` lists each turn's choices (`event` or `event@target`),

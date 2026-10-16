@@ -87,7 +87,7 @@
   for each progress of its streamed generations, which arms it again, so it
   bounds a streamed
   generation that stops arriving; revising_ceiling_ms bounds the revision
-  in all; bot.activate may set both (bounds). When either fires, leaving revising cancels the
+  in all; the bot's bounds param may set both (bounds). When either fires, leaving revising cancels the
   revision and the turn fails with the original's "Reflection child
   cancellation timed out.".
 
@@ -122,7 +122,7 @@
     <data id="database" expr="null"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <!-- The select call's and the revision's inactivity bounds and their
-         backstops (decision D101); bounds holds bot.activate's revising
+         backstops (decision D101); bounds holds the bot's revising
          ones (the cognition's <param>). -->
     <data id="select_timeout_ms" expr="30000"/>
     <data id="select_ceiling_ms" expr="600000"/>

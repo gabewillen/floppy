@@ -239,10 +239,10 @@ fn millis(path: &str, id: &str) -> u64 {
         .unwrap_or_else(|_| panic!("{path}: {id} is a whole number of milliseconds"))
 }
 
-/// The time bounds `bot.activate` may set (decision D101): its `*_ms`
-/// fields are exactly the cognition's stage bounds and reflection's
-/// revising bounds, each a `<data>` of its document, and the body passes
-/// exactly those on.
+/// The time bounds the bot's `bounds` param may set (decision D101): its
+/// `*_ms` members are exactly the cognition's stage bounds and reflection's
+/// revising bounds, each a `<data>` of its document that the document's
+/// script reads from `bounds` first.
 const ACTIVATION_BOUNDS: [(&str, &str); 4] = [
     (
         "abilities/cognition/cognition.scx",
@@ -257,32 +257,23 @@ const ACTIVATION_BOUNDS: [(&str, &str); 4] = [
 ];
 
 #[test]
-fn bot_activate_sets_exactly_the_bounds_the_documents_declare() {
-    let schema: serde_json::Value =
-        serde_json::from_str(&read(Path::new("bots/floppy/schemas/bot.activate.json")))
-            .expect("bot.activate.json is JSON");
-    let fields: BTreeSet<String> = schema["properties"]
-        .as_object()
-        .expect("bot.activate has properties")
-        .keys()
-        .filter(|name| name.ends_with("_ms"))
-        .cloned()
-        .collect();
-    let bounds: BTreeSet<String> = ACTIVATION_BOUNDS
-        .iter()
-        .map(|(_, id)| (*id).to_owned())
-        .collect();
-    assert_eq!(fields, bounds);
+fn the_bounds_param_sets_exactly_the_bounds_the_documents_declare() {
     for (document, id) in ACTIVATION_BOUNDS {
         assert!(
             data(&read(Path::new(document))).contains_key(id),
             "{document} declares <data id=\"{id}\">"
         );
+        let script = document.replace(".scx", ".js");
         assert!(
-            read(Path::new("bots/floppy/floppy.js")).contains(&format!("'{id}'")),
-            "the body passes {id} on"
+            read(Path::new(&script)).contains(&format!("bounds.{id}")),
+            "{script} reads {id} from bounds"
         );
     }
+    assert!(
+        read(Path::new("bots/floppy/floppy.scx"))
+            .contains(r#"<param name="bounds" expr="bounds"/>"#),
+        "the body passes its bounds on to the cognition"
+    );
 }
 
 /// Each inactivity bound has a backstop above it, and a turn's stages fit

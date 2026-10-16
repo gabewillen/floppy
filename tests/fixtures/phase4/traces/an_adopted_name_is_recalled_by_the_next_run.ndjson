@@ -1,5 +1,5 @@
-{"label":"communication.offers","parent":"session","session":"session.communication","text":"bot.ability.communication.respond","type":"log"}
-{"label":"identity.name","parent":"session","session":"session.identity","text":"recalled \"Pip\"","type":"log"}
-{"label":"identity.offers","parent":"session","session":"session.identity","text":"bot.ability.identity.adopt","type":"log"}
+{"label":"communication.offers","parent":"session.floppy","session":"session.floppy.communication","text":"bot.ability.communication.respond","type":"log"}
+{"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"recalled \"Pip\"","type":"log"}
+{"label":"identity.offers","parent":"session.floppy","session":"session.floppy.identity","text":"bot.ability.identity.adopt","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
-{"label":"double.exit","parent":"session","session":"session.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}

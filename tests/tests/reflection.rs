@@ -308,7 +308,7 @@ fn layout(mock: &Mock, route: &str, seed: &str, database: &str) -> (PathBuf, Pat
 }
 
 /// [`layout`], the harness passing the reflection `bounds` (the
-/// cognition's `<param>` of bot.activate's time bounds, decision D101).
+/// cognition's `<param>` of the bot's time bounds, decision D101).
 fn layout_bounded(
     mock: &Mock,
     route: &str,

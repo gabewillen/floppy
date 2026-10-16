@@ -39,7 +39,7 @@ function hopTimeoutLog(_event) {
 
 // running_autonomy, running_intuition, running_reasoning
 
-// A stage's inactivity bound and its backstop: bot.activate's, else this
+// A stage's inactivity bound and its backstop: the bot's bounds, else this
 // document's defaults (decision D101).
 function inactivityMs() {
   return bounds.child_operation_timeout_ms === undefined ? child_operation_timeout_ms : bounds.child_operation_timeout_ms;

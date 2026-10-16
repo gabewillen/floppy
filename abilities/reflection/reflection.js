@@ -437,7 +437,7 @@ function episodeStoreFailedMessage(detail) {
 
 // revising
 
-// The revision's inactivity bound and its backstop: bot.activate's (bounds),
+// The revision's inactivity bound and its backstop: the bot's (bounds),
 // else this document's defaults (decision D101).
 function revisingTimeoutDelay() {
   return (bounds.revising_timeout_ms === undefined ? revising_timeout_ms : bounds.revising_timeout_ms) + 'ms';

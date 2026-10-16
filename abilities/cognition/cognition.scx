@@ -55,7 +55,7 @@
   arrives and re-armed by each one after, so a slow model that keeps
   answering is never cut off, and a reply that is not streamed (the run's
   FLOPPY_STREAM is not true) is bounded by the backstop alone. Both are <param>s
-  the body passes from bot.activate. The transition takes only the timers
+  the body passes from its bounds param. The transition takes only the timers
   of the stage in hand (_event.sendid, SCXML 5.10.1). A timeout goes to
   rebooting, which sends bot.reboot {reason:
   "cognition_child_teardown_failed"} to the body.
@@ -139,7 +139,7 @@
     <!-- A stage's inactivity bound and its backstop (decision D101). -->
     <data id="child_operation_timeout_ms" expr="30000"/>
     <data id="child_operation_ceiling_ms" expr="240000"/>
-    <!-- The bounds bot.activate overrides (the body's <param>): these two
+    <!-- The bounds the body's bounds param overrides (its <param>): these two
          and reflection's revising_timeout_ms and revising_ceiling_ms. -->
     <data id="bounds" expr="({})"/>
     <!-- The turn in hand. -->

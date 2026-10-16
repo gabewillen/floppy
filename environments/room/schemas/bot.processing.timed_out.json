@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.processing.timed_out",
+  "description": "The primary ability did not finish the processing turn in time; the body cancels the turn.",
+  "properties": {
+    "turn": {
+      "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "type": "object",
+  "required": [
+    "turn"
+  ]
+}

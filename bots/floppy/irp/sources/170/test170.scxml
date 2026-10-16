@@ -8,19 +8,18 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <onentry>
-      <send event="bot.activate" target="#_floppy"><content expr="{}"/></send>
-      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "cognition", "choices": []}'/></send>
-      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "communication", "choices": []}'/></send>
-      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "identity", "choices": []}'/></send>
-      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "listening", "choices": []}'/></send>
-      <send event="done.invoke.listening" target="#_floppy"><content expr="{}"/></send>
-    </onentry>
-    <transition event="done.invoke.floppy" cond="/^the ability .* ended while active$/.test(_event.data.reason)" target="step1"/>
+    <transition event="bot.activated" target="step1"/>
   </state>
   <state id="step1">
+    <onentry>
+      <send event="done.invoke.listening" target="#_floppy"><content expr="{}"/></send>
+    </onentry>
+    <transition event="done.invoke.floppy" cond="/^the ability .* ended while active$/.test(_event.data.reason)" target="step2"/>
+  </state>
+  <state id="step2">
     <transition target="pass"/>
   </state>
+  <transition event="bot.ability"/>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
 </state>
 <final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>

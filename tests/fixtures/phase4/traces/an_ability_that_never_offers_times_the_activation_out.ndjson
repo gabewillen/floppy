@@ -1,6 +1,7 @@
-{"label":"communication.offers","parent":"session","session":"session.communication","text":"bot.ability.communication.respond","type":"log"}
-{"label":"identity.name","parent":"session","session":"session.identity","text":"recalled null","type":"log"}
-{"label":"identity.offers","parent":"session","session":"session.identity","text":"bot.ability.identity.adopt","type":"log"}
-{"label":"double.exit","parent":"session","session":"session.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
-{"label":"floppy.diagnostic","session":"session","text":"the abilities [\"cognition\"] were not ready within 3000 ms","type":"log"}
+{"label":"communication.offers","parent":"session.floppy","session":"session.floppy.communication","text":"bot.ability.communication.respond","type":"log"}
+{"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"recalled null","type":"log"}
+{"label":"identity.offers","parent":"session.floppy","session":"session.floppy.identity","text":"bot.ability.identity.adopt","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"the abilities [\"cognition\"] were not ready within 3000 ms","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
+{"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}

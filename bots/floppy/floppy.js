@@ -8,8 +8,8 @@ function eventDataJson(_event) {
   return JSON.stringify(_event.data);
 }
 
-function emptyDataJson() {
-  return JSON.stringify({});
+function emptyData() {
+  return {};
 }
 
 function delay(ms) {
@@ -18,20 +18,6 @@ function delay(ms) {
 
 function abilityTarget(id) {
   return '#_' + id;
-}
-
-// inactive
-
-function activationModel(_event) {
-  return _event.data.model === undefined ? model : _event.data.model;
-}
-
-// The time bounds bot.activate sets, by name (decision D101).
-function activationBounds(_event) {
-  var names = ['child_operation_timeout_ms', 'child_operation_ceiling_ms', 'revising_timeout_ms', 'revising_ceiling_ms'];
-  var given = {};
-  names.forEach(function (name) { if (_event.data[name] !== undefined) { given[name] = _event.data[name]; } });
-  return given;
 }
 
 // live
@@ -119,7 +105,7 @@ function cognitionInput() {
 }
 
 function choicesOverFailure() {
-  return JSON.stringify({message: 'the turn\'s choices are ' + choices_size + ' bytes, over 32768', turn: turn});
+  return {message: 'the turn\'s choices are ' + choices_size + ' bytes, over 32768', turn: turn};
 }
 
 // A reply or timer for the current turn.
@@ -132,15 +118,15 @@ function botOutput(_event) {
 }
 
 function processingCompleted() {
-  return JSON.stringify({output: selections, focus_candidates: focus_candidates, turn: turn});
+  return {output: selections, focus_candidates: focus_candidates, turn: turn};
 }
 
 function cognitionFailure(_event) {
-  return JSON.stringify({message: typeof _event.data.message === 'string' && _event.data.message.length > 0 ? _event.data.message : 'Bot processing ability failed.', turn: turn});
+  return {message: typeof _event.data.message === 'string' && _event.data.message.length > 0 ? _event.data.message : 'Bot processing ability failed.', turn: turn};
 }
 
-function turnJson() {
-  return JSON.stringify({turn: turn});
+function turnData() {
+  return {turn: turn};
 }
 
 // cancelling_processing
@@ -153,7 +139,7 @@ function cancelDelay() {
 // The original _dispatch_processing_timeout_failure, after an acknowledged cancel
 // and after an unacknowledged one alike.
 function cancelledFailure() {
-  return JSON.stringify({message: 'Bot processing timed out after ' + processing_timeout_ms / 1000 + ' seconds.', turn: turn});
+  return {message: 'Bot processing timed out after ' + processing_timeout_ms / 1000 + ' seconds.', turn: turn};
 }
 
 function cancelUnacknowledgedReason() {
@@ -176,7 +162,7 @@ function routeChoices() {
 
 // The original: a rejected selection fails the turn (bot.processing.failed).
 function rejectionFailure() {
-  return JSON.stringify({message: rejection, turn: turn});
+  return {message: rejection, turn: turn};
 }
 
 function isBodyRoute(route) {

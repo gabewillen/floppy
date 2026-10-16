@@ -600,6 +600,77 @@ pub fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
+/// The bot invoke of `environments/room/room.scx`, which [`environment`]
+/// replaces.
+const ROOM_BOT: &str = r#"    <invoke id="floppy" type="scxml" src="../../bots/floppy/floppy.scx">
+      <param name="environment" expr="_sessionid"/>
+    </invoke>"#;
+
+/// Where `environments/room/room.scx` sets its participants on entry.
+const ROOM_PARTICIPANTS: &str = r#"<assign location="participants" expr="['floppy']"/>"#;
+
+/// Lays `environments/room/` (its document, script and schema twins) into
+/// the scratch layout `dir`, whose `bots/floppy/` it invokes, and returns
+/// the path of its document. The room invokes one floppy bot per id in
+/// `bots` (each a participant), each with `params` (`(name, ECMAScript
+/// expression)`) after its `environment`: the test's activation settings
+/// (decision D107).
+pub fn environment(dir: &Path, bots: &[&str], params: &[(&str, &str)]) -> PathBuf {
+    let room = dir.join("environments/room");
+    copy_tree(&workspace().join("environments/room"), &room);
+    let path = room.join("room.scx");
+    let text = std::fs::read_to_string(&path).expect("the room is readable");
+    assert!(
+        text.contains(ROOM_BOT) && text.contains(ROOM_PARTICIPANTS),
+        "environments/room/room.scx invokes the floppy bot"
+    );
+    let mut extra = String::new();
+    for (name, expr) in params {
+        extra.push_str("\n      <param name=\"");
+        extra.push_str(name);
+        extra.push_str("\" expr=\"");
+        extra.push_str(expr);
+        extra.push_str("\"/>");
+    }
+    let invokes: Vec<String> = bots
+        .iter()
+        .map(|id| {
+            ROOM_BOT
+                .replace(r#"id="floppy""#, &format!(r#"id="{id}""#))
+                .replace(
+                    r#"expr="_sessionid"/>"#,
+                    &format!(r#"expr="_sessionid"/>{extra}"#),
+                )
+        })
+        .collect();
+    let ids: Vec<String> = bots.iter().map(|id| format!("'{id}'")).collect();
+    let text = text.replacen(ROOM_BOT, &invokes.join("\n"), 1).replacen(
+        ROOM_PARTICIPANTS,
+        &format!(
+            r#"<assign location="participants" expr="[{}]"/>"#,
+            ids.join(", ")
+        ),
+        1,
+    );
+    std::fs::write(&path, text).expect("the room copy is writable");
+    path
+}
+
+/// [`environment`] for the laid-out body at `body`
+/// (`<layout>/bots/floppy/floppy.scx`): the room, with one floppy bot
+/// (`floppy`) given `params`, laid into the same layout, as the path `scx
+/// run` takes.
+pub fn environment_for(body: &Path, params: &[(&str, &str)]) -> String {
+    let layout = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the body is <layout>/bots/floppy/floppy.scx");
+    environment(layout, &["floppy"], params)
+        .display()
+        .to_string()
+}
+
 /// Copies the ability `name` (`abilities/<name>/`: its document, its
 /// script, its schema twins, and any data beside them) into `abilities`,
 /// and returns the path of its copied document. The memory ability comes

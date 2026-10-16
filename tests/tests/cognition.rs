@@ -465,20 +465,20 @@ fn set_stream(bot: &Bot, value: &str) {
 }
 
 fn start(bot: &Bot) -> Run {
-    start_activated(bot, &json!({}))
+    start_activated(bot, &[])
 }
 
-/// [`start`] with `activation` as `bot.activate`'s data.
-fn start_activated(bot: &Bot, activation: &Json) -> Run {
-    let mut run = Run::start(
+/// [`start`] with `params` as the bot's activation settings in the room
+/// that invokes it (decision D107); the bot activates on joining.
+fn start_activated(bot: &Bot, params: &[(&str, &str)]) -> Run {
+    let run = Run::start(
         &[
             "--env-file".to_owned(),
             bot.env.display().to_string(),
-            bot.body.display().to_string(),
+            support::environment_for(&bot.body, params),
         ],
         &[],
     );
-    run.event("bot.activate", activation);
     run.until(WAIT, label_is("bot.activated"));
     run
 }
@@ -782,10 +782,9 @@ fn start_with(bot: &Bot, args: &[String]) -> Run {
     full.extend([
         "--env-file".to_owned(),
         bot.env.display().to_string(),
-        bot.body.display().to_string(),
+        support::environment_for(&bot.body, &[]),
     ]);
-    let mut run = Run::start(&full, &[]);
-    run.event("bot.activate", &json!({}));
+    let run = Run::start(&full, &[]);
     run.until(WAIT, label_is("bot.activated"));
     run
 }
@@ -1716,7 +1715,7 @@ fn a_reasoning_reply_that_keeps_streaming_outlasts_the_inactivity_bound() {
 fn a_reasoning_reply_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Slow, &[]);
-    let mut run = start_activated(&bot, &json!({"child_operation_timeout_ms": 8000}));
+    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
@@ -1742,7 +1741,7 @@ fn a_reasoning_reply_the_run_does_not_stream_is_bounded_by_the_backstop_alone() 
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Slow, &[]);
     set_stream(&bot, "false");
-    let mut run = start_activated(&bot, &json!({"child_operation_timeout_ms": 8000}));
+    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
@@ -1762,14 +1761,14 @@ fn a_reasoning_reply_the_run_does_not_stream_is_bounded_by_the_backstop_alone() 
 }
 
 /// A reasoning reply that stops arriving ends the stage at the inactivity
-/// bound (decision D101), here `bot.activate`'s: the cognition asks the
+/// bound (decision D101), here the bot's `bounds` param: the cognition asks the
 /// body for a reboot.
 #[test]
 fn a_reasoning_reply_that_stalls_reboots_at_the_inactivity_bound() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Stall, &[]);
     streaming(&bot);
-    let mut run = start_activated(&bot, &json!({"child_operation_timeout_ms": 8000}));
+    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
     say(&mut run, "hello");
     let records = run.until(WAIT, label_is("bot.activated"));
     assert_eq!(
@@ -1791,7 +1790,7 @@ fn a_reasoning_reply_of_keep_alive_comments_only_reboots_at_the_inactivity_bound
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Pings, &[]);
     streaming(&bot);
-    let mut run = start_activated(&bot, &json!({"child_operation_timeout_ms": 8000}));
+    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
     say(&mut run, "hello");
     let records = run.until(WAIT, label_is("bot.activated"));
     assert_eq!(

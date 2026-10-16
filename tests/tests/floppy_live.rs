@@ -8,7 +8,9 @@
 //! generate service has no default backend) and `TYPESAFE_API_KEY` (the
 //! intuition's decision service); the model is
 //! `FLOPPY_LIVE_MODEL`, else `Qwen/Qwen3.8-Flash-Next`, given to the bot
-//! by `bot.activate`. Each test writes the run's records under
+//! as its `model` param by the room that invokes it
+//! (`environments/room/room.scx`, laid out beside a scratch copy of the
+//! bot). Each test writes the run's records under
 //! `target/floppy-live/` and prints pass or fail only; no value is ever
 //! printed.
 
@@ -38,16 +40,19 @@ fn keep(name: &str, records: &[Json]) {
 }
 
 fn start() -> Run {
-    start_body(&workspace().join("bots/floppy/floppy.scx"))
+    start_body(&with_devices("[]"))
 }
 
+/// Starts the room with the laid-out body at `body` as its bot, given the
+/// live model.
 fn start_body(body: &Path) -> Run {
     let mut args = Vec::new();
     for file in support::live_env_files() {
         args.push("--env-file".to_owned());
         args.push(file.display().to_string());
     }
-    args.push(body.display().to_string());
+    let model = format!("'{}'", model());
+    args.push(support::environment_for(body, &[("model", &model)]));
     Run::start(&args, &[])
 }
 
@@ -121,7 +126,6 @@ fn model() -> String {
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_cascade() {
     let mut run = start();
-    run.event("bot.activate", &json!({"model": model()}));
     run.event(
         "bot.input",
         &json!({"observation": {"event": "text", "data": "What is the capital of France? Please tell me."}}),
@@ -169,7 +173,6 @@ fn live_cascade() {
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_choices() {
     let mut run = start_body(&with_devices("['lamp']"));
-    run.event("bot.activate", &json!({"model": model()}));
     run.event(
         "bot.input",
         &json!({"observation": {"event": "text", "data": "Please turn and look at the lamp."}, "target_device": "lamp"}),
@@ -219,7 +222,6 @@ fn live_choices() {
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_chat() {
     let mut run = start();
-    run.event("bot.activate", &json!({"model": model()}));
     run.event(
         "bot.ability.communication.input",
         &json!({
@@ -291,7 +293,6 @@ fn with_name(name: &str) -> PathBuf {
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_identity() {
     let mut run = start_body(&with_name("Floppy"));
-    run.event("bot.activate", &json!({"model": model()}));
     run.event(
         "bot.ability.communication.input",
         &json!({
@@ -408,7 +409,6 @@ fn live_conversation() {
         "What is my favorite color?",
     ];
     let mut run = start();
-    run.event("bot.activate", &json!({"model": model()}));
     let settled = std::cell::Cell::new(0_usize);
     for (index, content) in inputs.iter().enumerate() {
         run.event(

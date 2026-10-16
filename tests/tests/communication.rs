@@ -167,9 +167,10 @@ fn until_all(run: &Run, labels: &[&str]) -> Vec<Json> {
     })
 }
 
+/// Starts the room with the laid-out body as its bot, which activates on
+/// joining.
 fn started(body: &Path) -> Run {
-    let mut run = Run::start(&[body.display().to_string()], &[]);
-    run.event("bot.activate", &json!({}));
+    let run = Run::start(&[support::environment_for(body, &[])], &[]);
     run.until(WAIT, label_is("bot.activated"));
     run
 }
@@ -429,8 +430,7 @@ fn malformed_communication_input_is_refused_before_the_body() {
 #[test]
 fn a_communication_whose_speaking_cannot_start_fails_the_activation() {
     let body = layout(&Speaking::Missing, &[]);
-    let mut run = Run::start(&[body.display().to_string()], &[]);
-    run.event("bot.activate", &json!({}));
+    let run = Run::start(&[support::environment_for(&body, &[])], &[]);
     let records = run.until(WAIT, label_is("bot.activating.failed"));
     let degraded = texts(&records, "communication.degraded");
     assert_eq!(degraded.len(), 1, "{records:?}");
@@ -960,7 +960,7 @@ fn spoken_through_the_speech_service(
         ),
     )
     .expect("the env file is writable");
-    let mut run = Run::start(
+    let run = Run::start(
         &[
             "--env-file".to_owned(),
             env.display().to_string(),
@@ -970,11 +970,10 @@ fn spoken_through_the_speech_service(
                 support::service_uri("speech"),
                 media.display()
             ),
-            body.display().to_string(),
+            support::environment_for(&body, &[]),
         ],
         &[],
     );
-    run.event("bot.activate", &json!({}));
     run.until(WAIT, label_is("bot.activated"));
     (run, requests, media)
 }

@@ -1,16 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  The floppy bot: the original's Bot body as the root SCXML session. It owns the
-  bot lifecycle and processing turns; its abilities are invoked children
+  The floppy bot: the original's Bot body as a participant its environment
+  invokes (environments/room/room.scx, decision D102). It owns the bot
+  lifecycle and processing turns; its abilities are invoked children
   (decision D6: invoke lifecycle replaces the original's attachment protocol).
 
-    inactive -bot.activate-> live { activating -> active { unfocused,
-      focused, processing, cancelling_processing } }
-    live -bot.deactivate-> deactivating -> inactive
+    live { activating -> active { unfocused, focused, processing,
+      cancelling_processing } }
+    live -bot.deactivate-> deactivating -> inactive (final)
     live -bot.reboot (the cognition asks for one)-> live (re-entered:
       every ability is cancelled and invoked again)
     activating -bot.deactivate-> inactive (the original's activation_cleanup)
     cancelling_processing -cancel timeout-> degraded (a final sink)
+
+  Joining (decision D107): the environment's <invoke> is the original's
+  attach. Its <param>s are the activation settings (model, bounds,
+  database, environment: the environment's id), and the body starts in
+  live and activates at once; nothing sends bot.activate. inactive is a
+  top-level final state: a failed activation and bot.deactivate end the
+  session there, which is its leave; rejoining is the environment invoking
+  it again.
 
   Abilities: live holds <invoke id="cognition">, <invoke
   id="communication"> (abilities/communication/communication.scx, which holds the
@@ -24,8 +33,8 @@
   sends its first bot.ability.offers; the body is active when every
   expected ability is ready. A run-tagged activation timer
   (activation_timeout_ms), an error event, or an ability ending while
-  activating fails the activation (bot.activating.failed) back to inactive;
-  an ability ending while active degrades the bot.
+  activating fails the activation (bot.activating.failed) and ends the
+  session in inactive; an ability ending while active degrades the bot.
 
   Communication: bot.ability.communication.input from outside, while
   active, goes to the communication, which admits it into its
@@ -43,12 +52,12 @@
   Speaking: the communication relays speaking's playout, the efference
   copy bot.ability.speaking.efference (sent on to each Listening ability
   in listening, the original's Speaking listening peers) and then
-  environment.sound, which the body puts into the environment: a log
-  record labelled environment.sound (the root has no parent), and, as any
-  sound there, a stimulus for each input ability (the bot hears itself).
+  environment.sound, which the body logs as a record labelled
+  environment.sound and, as any sound, gives each input ability as a
+  stimulus (the bot hears itself).
 
-  Environment: environment.sound (logged, as any sound in the
-  environment) and environment.visual from outside, while active, go to
+  Environment: environment.sound (logged) and environment.visual from the
+  environment, while active, go to
   each input ability (input, the original's Bot input: the invoke ids
   of the abilities that perceive raw stimuli; the identity and the
   listening), in
@@ -120,14 +129,16 @@
   selections, ends routing once every routed body event has been taken
   (the internal queue is FIFO).
 
-  Outputs: the root has no parent, so each event the body emits is written
-  as <log label="EVENT" expr="JSON data">: bot.activated,
+  Outputs: each event the body emits is sent to its parent, the
+  environment, which logs it (decision D102): bot.activated,
   bot.activating.failed, bot.deactivated, bot.processing.completed,
-  bot.processing.failed, plus the communication's
-  bot.ability.speaking.output and bot.ability.communication.failed, the
-  listening's bot.ability.listening.failed, any ability's
-  bot.ability.failed that is not a turn's reply, and every
-  environment.sound;
+  bot.processing.failed, bot.processing.timed_out,
+  bot.processing.cancel.timed_out, bot.reboot, plus the communication's
+  bot.ability.speaking.output, bot.ability.communication.failed,
+  bot.ability.conversation.failed and bot.ability.conversation.output, the
+  listening's bot.ability.listening.failed, and any ability's
+  bot.ability.failed that is not a turn's reply. Every environment.sound
+  is a log record labelled environment.sound;
   floppy's own records are labelled floppy.* (not the original events):
   floppy.output the turn's selected events (one record per completed turn),
   floppy.choices each turn's assembled
@@ -139,19 +150,19 @@
   events it receives (abilities/schemas/; a schema reference cannot leave
   this directory). scxml.rs checks them where each event is created: an
   ability's send whose data a schema rejects is not routed and raises
-  error.execution in the ability, and standard input the schemas reject is
-  refused by scx run before it reaches the body. No cond asks who sent an
+  error.execution in the ability, and an environment's send the schemas
+  reject raises error.execution in the environment. No cond asks who sent an
   event: every event name the body takes has one meaning here, whoever
   sends it, so its name and the active state route it. Conds only
   correlate (the turn, the run) and read routing state.
 
-  Running: scx run with an env file and this document, as for the builder
-  (bots/builder/README.md), then bot.activate and bot.input on standard
-  input. The cognition's stages need TYPESAFE_API_KEY (intuition's decision
+  Running: scx run with an env file and an environment that invokes this
+  document (environments/room/room.scx), then bot.input on standard input,
+  which the environment gives every bot. The cognition's stages need TYPESAFE_API_KEY (intuition's decision
   service) and FLOPPY_BASE_URL and FLOPPY_API_KEY (reasoning's generate
   service, no default backend); without them a turn fails.
 
-  Time bounds (decision D101): bot.activate may set the cognition's
+  Time bounds (decision D101): the bounds param may set the cognition's
   child_operation_timeout_ms and child_operation_ceiling_ms (a stage's
   inactivity bound and its backstop) and reflection's revising_timeout_ms
   and revising_ceiling_ms (likewise for a revision through the builder),
@@ -172,17 +183,21 @@
        xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       version="1.0" datamodel="ecmascript" name="floppy" initial="inactive">
+       version="1.0" datamodel="ecmascript" name="floppy" initial="live">
   <datamodel>
-    <!-- Configuration. -->
+    <!-- Configuration: the activation settings, which the environment's
+         <invoke> may set as <param>s (decision D107). -->
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
-    <!-- The time bounds bot.activate overrides, for the cognition (its
-         stages' inactivity and backstop, and reflection's revising; decision
-         D101): each absent one is the ability's own default. -->
+    <!-- The time bounds for the cognition (its stages' inactivity and
+         backstop, and reflection's revising; decision D101): each absent one
+         is the ability's own default. -->
     <data id="bounds" expr="({})"/>
     <!-- The memory database file (the original's sqlite_memory
          database), in the directory the run grants the service at /memory. -->
     <data id="database" expr="'/memory/floppy.sqlite'"/>
+    <!-- The environment's id (its root's _sessionid, decision D106), which
+         the environment gives as a <param>. -->
+    <data id="environment" expr="null"/>
     <data id="activation_timeout_ms" expr="30000"/>
     <data id="processing_timeout_ms" expr="300000"/>
     <!-- The configured devices (none until phase 6) and the live source id
@@ -226,13 +241,6 @@
   </datamodel>
   <script src="floppy.js"/>
 
-  <state id="inactive">
-    <transition event="bot.activate" event:schema="schemas/bot.activate.json" target="live">
-      <assign location="model" expr="activationModel(_event)"/>
-      <assign location="bounds" expr="activationBounds(_event)"/>
-    </transition>
-  </state>
-
   <state id="live" initial="activating">
     <onentry>
       <assign location="live_run" expr="nextLiveRun()"/>
@@ -266,7 +274,9 @@
     <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating"/>
     <!-- A reboot (the cognition asks for one): re-enter live. -->
     <transition event="bot.reboot" event:schema="schemas/bot.reboot.json" target="live">
-      <log label="bot.reboot" expr="eventDataJson(_event)"/>
+      <send event="bot.reboot" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
     </transition>
 
     <state id="activating">
@@ -279,22 +289,30 @@
         <cancel sendid="activation-timer"/>
       </onexit>
       <transition cond="everyAbilityReady()" target="active">
-        <log label="bot.activated" expr="emptyDataJson()"/>
+        <send event="bot.activated" target="#_parent">
+          <content expr="emptyData()"/>
+        </send>
       </transition>
       <transition event="activating.after" cond="isCurrentRun(_event)" target="inactive">
         <log label="floppy.diagnostic" expr="activationTimeoutDiagnostic()"/>
-        <log label="bot.activating.failed" expr="emptyDataJson()"/>
+        <send event="bot.activating.failed" target="#_parent">
+          <content expr="emptyData()"/>
+        </send>
       </transition>
       <transition event="error.*" target="inactive">
         <log label="floppy.diagnostic" expr="activatingErrorDiagnostic(_event)"/>
-        <log label="bot.activating.failed" expr="emptyDataJson()"/>
+        <send event="bot.activating.failed" target="#_parent">
+          <content expr="emptyData()"/>
+        </send>
       </transition>
       <transition event="done.invoke" target="inactive">
         <log label="floppy.diagnostic" expr="activatingDoneDiagnostic(_event)"/>
-        <log label="bot.activating.failed" expr="emptyDataJson()"/>
+        <send event="bot.activating.failed" target="#_parent">
+          <content expr="emptyData()"/>
+        </send>
       </transition>
-      <!-- The original's activation_cleanup: back to inactive, with no
-           bot.deactivated (the bot never became active). -->
+      <!-- The original's activation_cleanup: the session ends in inactive,
+           with no bot.deactivated (the bot never became active). -->
       <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="inactive"/>
     </state>
 
@@ -314,9 +332,8 @@
           <content expr="_event.data"/>
         </send>
       </transition>
-      <!-- A sound in the environment, from outside or the bot's own
-           speech: the root has no parent, so it goes into the environment
-           as a log record, and to every input ability. -->
+      <!-- A sound in the environment, or the bot's own speech: a log
+           record, and a stimulus for every input ability. -->
       <transition event="environment.sound" event:schema="schemas/environment.sound.json">
         <log label="environment.sound" expr="eventDataJson(_event)"/>
         <foreach array="input" item="ability">
@@ -344,22 +361,32 @@
       </transition>
       <!-- What the communication said, and its failures. -->
       <transition event="bot.ability.speaking.output" event:schema="schemas/bot.ability.speaking.output.json">
-        <log label="bot.ability.speaking.output" expr="eventDataJson(_event)"/>
+        <send event="bot.ability.speaking.output" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
       </transition>
       <transition event="bot.ability.communication.failed" event:schema="schemas/bot.ability.communication.failed.json">
-        <log label="bot.ability.communication.failed" expr="eventDataJson(_event)"/>
+        <send event="bot.ability.communication.failed" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
       </transition>
       <transition event="bot.ability.conversation.failed" event:schema="schemas/bot.ability.conversation.failed.json">
-        <log label="bot.ability.conversation.failed" expr="eventDataJson(_event)"/>
+        <send event="bot.ability.conversation.failed" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
       </transition>
       <!-- A conversation product that is not text (the original's bot grants no
            turn for it). -->
       <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json">
-        <log label="bot.ability.conversation.output" expr="eventDataJson(_event)"/>
+        <send event="bot.ability.conversation.output" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
       </transition>
       <!-- What the listening could not hear. -->
       <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json">
-        <log label="bot.ability.listening.failed" expr="eventDataJson(_event)"/>
+        <send event="bot.ability.listening.failed" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
       </transition>
       <!-- The body's own choices (the original: focus on active, clear only while
            a device is focused), offered on processing entry and taken only
@@ -431,7 +458,9 @@
         </onexit>
         <!-- The choices do not fit: the turn fails before the cognition. -->
         <transition cond="choices_over" target="returning">
-          <log label="bot.processing.failed" expr="choicesOverFailure()"/>
+          <send event="bot.processing.failed" target="#_parent">
+            <content expr="choicesOverFailure()"/>
+          </send>
         </transition>
         <transition event="bot.ability.cognition.output" event:schema="schemas/bot.ability.cognition.output.json"
                     cond="isCurrentTurn(_event)" target="routing">
@@ -440,11 +469,15 @@
         </transition>
         <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
                     cond="isCurrentTurn(_event)" target="returning">
-          <log label="bot.processing.failed" expr="cognitionFailure(_event)"/>
+          <send event="bot.processing.failed" target="#_parent">
+            <content expr="cognitionFailure(_event)"/>
+          </send>
         </transition>
         <transition event="bot.processing.timed_out" event:schema="schemas/bot.processing.timed_out.json"
                     cond="isCurrentTurn(_event)" target="cancelling_processing">
-          <log label="bot.processing.timed_out" expr="turnJson()"/>
+          <send event="bot.processing.timed_out" target="#_parent">
+            <content expr="turnData()"/>
+          </send>
           <send event="bot.ability.cognition.cancel" target="#_cognition">
             <param name="turn" expr="turn"/>
           </send>
@@ -473,16 +506,24 @@
         </onexit>
         <transition event="bot.ability.cognition.cancelled" event:schema="schemas/bot.ability.cognition.cancelled.json"
                     cond="isCurrentTurn(_event)" target="returning">
-          <log label="bot.processing.failed" expr="cancelledFailure()"/>
+          <send event="bot.processing.failed" target="#_parent">
+            <content expr="cancelledFailure()"/>
+          </send>
         </transition>
         <transition event="bot.ability.processing.cancelled" event:schema="schemas/bot.ability.processing.cancelled.json"
                     cond="isCurrentTurn(_event)" target="returning">
-          <log label="bot.processing.failed" expr="cancelledFailure()"/>
+          <send event="bot.processing.failed" target="#_parent">
+            <content expr="cancelledFailure()"/>
+          </send>
         </transition>
         <transition event="bot.processing.cancel.timed_out" event:schema="schemas/bot.processing.cancel.timed_out.json"
                     cond="isCurrentTurn(_event)" target="degraded">
-          <log label="bot.processing.cancel.timed_out" expr="turnJson()"/>
-          <log label="bot.processing.failed" expr="cancelledFailure()"/>
+          <send event="bot.processing.cancel.timed_out" target="#_parent">
+            <content expr="turnData()"/>
+          </send>
+          <send event="bot.processing.failed" target="#_parent">
+            <content expr="cancelledFailure()"/>
+          </send>
           <assign location="degraded_reason" expr="cancelUnacknowledgedReason()"/>
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json">
@@ -509,7 +550,9 @@
                             choices="routeChoices()"/>
           </if>
           <if cond="isAccepted()">
-            <log label="bot.processing.completed" expr="processingCompleted()"/>
+            <send event="bot.processing.completed" target="#_parent">
+              <content expr="processingCompleted()"/>
+            </send>
             <foreach array="routed_selections" item="route">
               <if cond="isBodyRoute(route)">
                 <log label="floppy.route" expr="bodyRouteLog(route)"/>
@@ -524,7 +567,9 @@
               </if>
             </foreach>
           <else/>
-            <log label="bot.processing.failed" expr="rejectionFailure()"/>
+            <send event="bot.processing.failed" target="#_parent">
+              <content expr="rejectionFailure()"/>
+            </send>
           </if>
           <raise event="floppy.routed"/>
         </onentry>
@@ -551,7 +596,9 @@
       <!-- A failure that is no current turn's reply: the identity's, or
            the cognition's for another turn. -->
       <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
-        <log label="bot.ability.failed" expr="eventDataJson(_event)"/>
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
       </transition>
     </state>
   </state>
@@ -559,9 +606,16 @@
   <!-- Leaving live cancelled every ability. -->
   <state id="deactivating">
     <transition target="inactive">
-      <log label="bot.deactivated" expr="emptyDataJson()"/>
+      <send event="bot.deactivated" target="#_parent">
+        <content expr="emptyData()"/>
+      </send>
     </transition>
   </state>
+
+  <!-- The bot left its environment (decision D107): a failed activation or
+       bot.deactivate ends its session here. Nothing activates it again;
+       rejoining is the environment invoking it again. -->
+  <final id="inactive"/>
 
   <!-- A sink: the cognition did not acknowledge a cancel, or ended while
        active. The bot takes no more turns. The original's degraded is a state

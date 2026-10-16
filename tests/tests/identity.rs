@@ -114,9 +114,8 @@ fn started(body: &Path) -> (Run, Vec<Json>) {
 /// body; an empty `grant` gets a fresh directory.
 fn started_with(body: &Path, grant: &[String]) -> (Run, Vec<Json>) {
     let mut args = grant.to_vec();
-    args.push(body.display().to_string());
-    let mut run = Run::start(&args, &[]);
-    run.event("bot.activate", &json!({}));
+    args.push(support::environment_for(body, &[]));
+    let run = Run::start(&args, &[]);
     let records = run.until(WAIT, label_is("bot.activated"));
     (run, records)
 }

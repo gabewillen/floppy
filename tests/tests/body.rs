@@ -1,5 +1,7 @@
 //! The floppy bot's body (`bots/floppy/floppy.scx`): the original's Bot lifecycle
-//! and processing turns, run through `scx run` on the wall clock.
+//! and processing turns, run through `scx run` on the wall clock as the one
+//! participant (`floppy`) of the room (`environments/room/room.scx`, laid
+//! out beside it by `support::environment`), which activates it on joining.
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
 //! and its schemas under `bots/floppy/`, the ability schemas under
@@ -12,8 +14,8 @@
 //! (`reply`, `fail`, `stale`, `reboot`, `hang`, `deaf`). Timer bounds are
 //! shortened by rewriting the copy's `<data>` expressions.
 //!
-//! The body writes each event it emits as a `log` record labelled with the
-//! event's name; the double logs `double.input` and `double.exit`.
+//! The body sends each event it emits to the room, which writes it as a
+//! `log` record labelled with the event's name; the double logs `double.input` and `double.exit`.
 //!
 //! The double offers `bot.ability.cognition.ignore` and the communication
 //! `bot.ability.communication.respond`; the routing tests
@@ -141,8 +143,15 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
     body_path
 }
 
+/// Starts the room with the laid-out body as its one bot, `floppy`.
 fn start(body: &Path) -> Run {
-    Run::start(&[body.display().to_string()], &[])
+    start_with(body, &[])
+}
+
+/// [`start`] with `params` as the bot's activation settings (decision
+/// D107).
+fn start_with(body: &Path, params: &[(&str, &str)]) -> Run {
+    Run::start(&[support::environment_for(body, params)], &[])
 }
 
 fn input(action: &str, data: &str) -> Json {
@@ -165,8 +174,9 @@ fn pairs(expected: &[(&str, &str)]) -> Vec<(String, String)> {
     support::labelled(expected)
 }
 
+/// Waits for the bot to activate: it does on joining the room (decision
+/// D107), which logs its bot.activated.
 fn activated(run: &mut Run) -> Vec<Json> {
-    run.event("bot.activate", &json!({}));
     run.until(WAIT, label_is("bot.activated"))
 }
 
@@ -181,12 +191,12 @@ fn close(run: Run, test: &str) -> Finished {
 fn activation_waits_for_the_cognitions_offers() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
-    // Nothing happens before bot.activate: the body starts inactive.
-    run.event("bot.input", &input("reply", "early"));
+    // The bot activates on joining (nothing sends bot.activate), once
+    // every ability has offered.
     let records = activated(&mut run);
     assert!(
         only(&records, &["double.input", "floppy.output"]).is_empty(),
-        "an inactive bot takes no turn: {records:?}"
+        "an activating bot takes no turn: {records:?}"
     );
     let finished = close(run, "activation_waits_for_the_cognitions_offers");
     assert!(
@@ -199,8 +209,7 @@ fn activation_waits_for_the_cognitions_offers() {
 #[test]
 fn a_missing_cognition_fails_the_activation() {
     let body = layout(&Cognition::Missing, &[]);
-    let mut run = start(&body);
-    run.event("bot.activate", &json!({}));
+    let run = start(&body);
     let records = run.until(WAIT, label_is("bot.activating.failed"));
     let diagnostic = only(&records, &["floppy.diagnostic"]);
     assert_eq!(diagnostic.len(), 1, "{records:?}");
@@ -209,9 +218,8 @@ fn a_missing_cognition_fails_the_activation() {
         "the invoke's start error fails the activation: {diagnostic:?}"
     );
     assert!(only(&records, &["bot.activated"]).is_empty(), "{records:?}");
-    // Back in inactive: a second bot.activate is taken again.
-    run.event("bot.activate", &json!({}));
-    run.until(WAIT, label_is("bot.activating.failed"));
+    // The session ended in inactive: the bot left its environment.
+    run.until(WAIT, label_is("done.invoke"));
     close(run, "a_missing_cognition_fails_the_activation");
 }
 
@@ -221,8 +229,7 @@ fn an_ability_that_never_offers_times_the_activation_out() {
         &Cognition::Double("'silent'"),
         &[("activation_timeout_ms", "3000")],
     );
-    let mut run = start(&body);
-    run.event("bot.activate", &json!({}));
+    let run = start(&body);
     let records = run.until(WAIT, label_is("bot.activating.failed"));
     assert_eq!(
         only(&records, &["floppy.diagnostic"]),
@@ -248,32 +255,30 @@ fn deactivate_cancels_the_abilities() {
     let mut run = start(&body);
     activated(&mut run);
     run.event("bot.deactivate", &json!({}));
-    let records = run.until(WAIT, label_is("bot.deactivated"));
+    let records = run.until(WAIT, label_is("done.invoke"));
     assert_eq!(
-        only(&records, &["double.exit", "bot.deactivated"]),
+        only(&records, &["double.exit", "bot.deactivated", "done.invoke"]),
         pairs(&[
             ("double.exit", "Qwen/Qwen3.8-Flash-Next"),
-            ("bot.deactivated", "{}")
+            ("bot.deactivated", "{}"),
+            ("done.invoke", r#"{"invokeid":"floppy"}"#),
         ]),
-        "the child's exit handler runs before the body reports"
+        "the child's exit handler runs before the body reports, and the session ends in inactive"
     );
-    // Inactive again: a turn is not taken until the next activation.
+    // The bot left: nothing takes a turn any more.
     run.event("bot.input", &input("reply", "ignored"));
-    activated(&mut run);
-    run.event("bot.input", &input("reply", "taken"));
-    let records = run.until(WAIT, label_is("floppy.output"));
-    assert_eq!(
-        only(&records, &["double.input"]),
-        pairs(&[("double.input", r#"1 reply "taken""#)])
+    let finished = close(run, "deactivate_cancels_the_abilities");
+    assert!(
+        only(&finished.records, &["double.input"]).is_empty(),
+        "{:?}",
+        finished.records
     );
-    close(run, "deactivate_cancels_the_abilities");
 }
 
 #[test]
 fn the_activation_passes_its_model_to_the_cognition() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
-    let mut run = start(&body);
-    run.event("bot.activate", &json!({"model": "some/model"}));
+    let mut run = start_with(&body, &[("model", "'some/model'")]);
     run.until(WAIT, label_is("bot.activated"));
     run.event("bot.deactivate", &json!({}));
     let records = run.until(WAIT, label_is("bot.deactivated"));
@@ -285,28 +290,10 @@ fn the_activation_passes_its_model_to_the_cognition() {
 }
 
 #[test]
-fn a_reboot_re_enters_live_whoever_asks() {
+fn a_reboot_re_enters_live() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    // From outside: the name routes it, so live is re-entered as for the
-    // cognition's (decision D81).
-    run.event(
-        "bot.reboot",
-        &json!({"reason": "cognition_child_teardown_failed"}),
-    );
-    let records = run.until(WAIT, label_is("bot.activated"));
-    assert_eq!(
-        only(&records, &["double.exit", "bot.reboot", "bot.activated"]),
-        pairs(&[
-            ("double.exit", "Qwen/Qwen3.8-Flash-Next"),
-            (
-                "bot.reboot",
-                r#"{"reason":"cognition_child_teardown_failed"}"#
-            ),
-            ("bot.activated", "{}"),
-        ])
-    );
     // From the cognition: live is re-entered, the cognition restarts and
     // the bot activates again.
     run.event("bot.input", &input("reboot", "please"));
@@ -333,7 +320,7 @@ fn a_reboot_re_enters_live_whoever_asks() {
         only(&records, &["double.input"]),
         pairs(&[("double.input", r#"2 reply "again""#)])
     );
-    close(run, "a_reboot_re_enters_live_whoever_asks");
+    close(run, "a_reboot_re_enters_live");
 }
 
 #[test]
@@ -357,7 +344,7 @@ fn a_turn_completes_with_the_cognitions_output() {
             ),
             (
                 "bot.processing.completed",
-                &format!(r#"{{"output":{output},"focus_candidates":[],"turn":1}}"#)
+                &format!(r#"{{"focus_candidates":[],"output":{output},"turn":1}}"#)
             ),
         ])
     );
@@ -428,18 +415,19 @@ fn inputs_during_a_turn_wait_and_run_in_order() {
         ),
         // Each state that holds an input logs it: processing holds both,
         // cancelling_processing holds them again, and processing holds the
-        // third again while the second runs.
+        // third again while the second runs. The environment logs the
+        // events the body sends it after the body's step.
         pairs(&[
             ("floppy.deferred", "bot.input"),
             ("floppy.deferred", "bot.input"),
-            ("bot.processing.timed_out", r#"{"turn":1}"#),
             ("floppy.deferred", "bot.input"),
+            ("floppy.deferred", "bot.input"),
+            ("bot.processing.timed_out", r#"{"turn":1}"#),
             ("floppy.deferred", "bot.input"),
             (
                 "bot.processing.failed",
                 r#"{"message":"Bot processing timed out after 1.5 seconds.","turn":1}"#
             ),
-            ("floppy.deferred", "bot.input"),
             ("double.input", r#"2 reply "second""#),
             ("double.input", r#"3 reply "third""#),
         ])
@@ -485,13 +473,9 @@ fn an_unacknowledged_cancel_degrades_the_bot() {
     let mut run = start(&body);
     activated(&mut run);
     run.event("bot.input", &input("deaf", "x"));
-    let finished = run.finish(WAIT);
-    trace::assert_trace(
-        "an_unacknowledged_cancel_degrades_the_bot",
-        &finished.all,
-        &[],
-    );
-    let records = &finished.records;
+    run.until(WAIT, label_is("done.invoke"));
+    let finished = close(run, "an_unacknowledged_cancel_degrades_the_bot");
+    let records = &finished.all;
     assert_eq!(
         only(
             records,
@@ -502,28 +486,26 @@ fn an_unacknowledged_cancel_degrades_the_bot() {
                 "floppy.degraded"
             ]
         ),
+        // The environment logs the events the body sends it after the
+        // body's step, which enters degraded.
         pairs(&[
             ("bot.processing.timed_out", r#"{"turn":1}"#),
+            (
+                "floppy.degraded",
+                "turn 1: the cognition did not acknowledge its cancel"
+            ),
             ("bot.processing.cancel.timed_out", r#"{"turn":1}"#),
             (
                 "bot.processing.failed",
                 r#"{"message":"Bot processing timed out after 0.3 seconds.","turn":1}"#
             ),
-            (
-                "floppy.degraded",
-                "turn 1: the cognition did not acknowledge its cancel"
-            ),
         ])
     );
-    // degraded is a final sink: the session ends with its reason.
-    assert!(support::finished(records), "{records:?}");
-    let done: Vec<&Json> = support::of_type(records, "done")
-        .into_iter()
-        .filter(|record| record.get("parent").is_none())
-        .collect();
+    // degraded is a final sink: the bot's session ends with its reason,
+    // and the bot leaves its environment.
     assert_eq!(
-        done.last().map(|record| &record["data"]),
-        Some(&json!({"reason": "turn 1: the cognition did not acknowledge its cancel"})),
+        last_json(records, "done.invoke"),
+        json!({"invokeid": "floppy", "data": {"reason": "turn 1: the cognition did not acknowledge its cancel"}}),
         "{records:?}"
     );
 }
@@ -677,7 +659,9 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     // offers bot.focus_device pinned to it (no clear_focus: nothing is
     // focused), then the double's offer, compacted and tagged.
     run.event("bot.input", &device_input("focus", "lamp", "lamp"));
-    let records = run.until(WAIT, label_is("floppy.focus"));
+    let mut records = run.until(WAIT, label_is("floppy.focus"));
+    // The environment logs the turn's outcome after the body's step.
+    records.extend(run.until(WAIT, label_is("bot.processing.completed")));
     let [respond, adopt] = ability_choices();
     assert_eq!(
         last_json(&records, "double.choices"),
@@ -817,7 +801,7 @@ fn an_ignore_selection_is_not_dispatched_and_ends_the_turn() {
         ),
         pairs(&[(
             "bot.processing.completed",
-            r#"{"output":[{"data":{},"event":"bot.ability.cognition.ignore","reason":"nothing to do","target":"cognition"}],"focus_candidates":[],"turn":1}"#
+            r#"{"focus_candidates":[],"output":[{"data":{},"event":"bot.ability.cognition.ignore","reason":"nothing to do","target":"cognition"}],"turn":1}"#
         )])
     );
     // The bot is back in attention and takes the next turn.
@@ -922,7 +906,7 @@ fn the_listenings_products_are_turn_stimuli() {
         ],
     )
     .args;
-    args.push(body.display().to_string());
+    args.push(support::environment_for(&body, &[]));
     let mut run = Run::start(&args, &[]);
     activated(&mut run);
     // Decoded speech: a turn whose stimulus is
@@ -971,7 +955,7 @@ fn a_selected_communication_input_reaches_the_communication() {
         ],
     )
     .args;
-    args.push(body.display().to_string());
+    args.push(support::environment_for(&body, &[]));
     let mut run = Run::start(&args, &[]);
     activated(&mut run);
     // Heard speech whose turn selects bot.ability.communication.input (as
