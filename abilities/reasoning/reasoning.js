@@ -248,9 +248,9 @@ function xmlField(element, name, value, budget) {
 
 // The original's environment block (Environment.model_snapshot from the
 // bot's perspective): <environment id> holding <self state> with the bot's
-// own attributes, its owned_devices as <owned_devices> holding one
-// <device ref id state> per held device with its attributes. Nothing when
-// the turn has no environment.
+// own attributes as children, its owned_devices as <owned_devices> holding
+// one <device ref id state> per held device with its attributes as
+// children. Nothing when the turn has no environment.
 function xmlEnvironment(parent, value, budget) {
   if (value === null || typeof value !== 'object') {
     return;
@@ -266,7 +266,7 @@ function xmlEnvironment(parent, value, budget) {
       others[key] = own[key];
     }
   });
-  xmlAttributes(self, others, ['state'], budget);
+  xmlAttributes(self, others, budget);
   var owned = Object(own.owned_devices);
   var devices = xmlElement(self, 'owned_devices', budget);
   var references = Object.keys(owned);
@@ -275,36 +275,42 @@ function xmlEnvironment(parent, value, budget) {
     var device = Object(owned[reference]);
     var element = xmlElement(devices, 'device', budget);
     ['ref', 'id', 'state'].forEach(function (key) { xmlAttribute(element, key, String(device[key]), budget); });
-    xmlAttributes(element, Object(device.attributes), ['ref', 'id', 'state'], budget);
+    xmlAttributes(element, Object(device.attributes), budget);
   });
 }
 
-// A snapshot's attributes on element, as the original renders them: a
-// scalar as an attribute, a mapping as a nested element of the same kind,
-// an array as the renderer's list (D99), and null (or no value) as nothing.
-// A key that is no XML name, or one of reserved (the element's own
-// attributes), is an <entry key> element.
-function xmlAttributes(element, values, reserved, budget) {
+// A snapshot's attributes as child elements of element, as the original
+// renders them: a string as its text, a boolean or number as its JSON
+// text, a mapping as nested child elements by the same rule, an array as
+// the renderer's list (D99), and null or an opaque value as nothing. Each
+// tag is the key with every character other than a letter, a digit, `_`,
+// `.` or `-` replaced by `_`, and `_` put first when it is empty or starts
+// with a digit, `.` or `-`.
+function xmlAttributes(element, values, budget) {
   var keys = Object.keys(values);
   budgetCollection(budget, keys.length);
   keys.forEach(function (key) {
     var value = values[key];
-    var name = /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(key) && !/^xml/i.test(key) && reserved.indexOf(key) < 0;
-    if (value === null || value === undefined) {
-      return;
-    }
-    if (!name) {
-      var entry = xmlElement(element, 'entry', budget);
-      xmlAttribute(entry, 'key', key, budget);
-      xmlField(entry, 'value', value, budget);
+    var tag = xmlTag(key);
+    if (typeof value === 'string') {
+      budgetScalar(budget, value);
+      xmlElement(element, tag, budget).text = value;
+    } else if (typeof value === 'boolean' || typeof value === 'number') {
+      var text = JSON.stringify(value);
+      budgetScalar(budget, text);
+      xmlElement(element, tag, budget).text = text;
     } else if (Array.isArray(value)) {
-      xmlField(element, key, value, budget);
-    } else if (typeof value === 'object') {
-      xmlAttributes(xmlElement(element, key, budget), value, [], budget);
-    } else {
-      xmlField(element, key, value, budget);
+      xmlField(element, tag, value, budget);
+    } else if (value !== null && typeof value === 'object') {
+      xmlAttributes(xmlElement(element, tag, budget), value, budget);
     }
   });
+}
+
+// The original's sanitized tag of a key.
+function xmlTag(key) {
+  var tag = String(key).replace(/[^A-Za-z0-9_.-]/g, '_');
+  return tag.length === 0 || /^[0-9.-]/.test(tag) ? '_' + tag : tag;
 }
 
 // The stimulus envelope as the original's hsm.Event field: <input> holding its

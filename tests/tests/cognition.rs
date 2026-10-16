@@ -2242,12 +2242,19 @@ fn reasonings_prompt_carries_the_environment_block() {
     let lines: Vec<&str> = block.lines().map(str::trim).collect();
     assert_eq!(lines[1], r#"<self state="processing">"#, "{block}");
     assert_eq!(lines[2], "<owned_devices>", "{block}");
-    assert!(
-        lines[3].starts_with(r#"<device ref="lamp" id="session.lamp" state="off" "#),
+    // ref, id and state are the device's only XML attributes; each of its
+    // snapshot attributes is a child element, a string as its escaped
+    // text, a number as its JSON text.
+    assert_eq!(
+        lines[3], r#"<device ref="lamp" id="session.lamp" state="off">"#,
         "{block}"
     );
-    assert!(
-        lines[3].contains(r#"label="desk &lt;lamp&gt; &amp; co""#),
-        "{block}"
-    );
+    for element in [
+        "<brightness>0</brightness>",
+        "<click_db>60</click_db>",
+        "<label>desk &lt;lamp&gt; &amp; co</label>",
+    ] {
+        assert!(lines.contains(&element), "{element} in {block}");
+    }
+    assert!(!block.contains("<entry"), "{block}");
 }
