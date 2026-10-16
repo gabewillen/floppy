@@ -7,9 +7,28 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-12.
+Last updated: 2026-10-16.
 
 ## Current state (2026-10-09) — resume here
+
+- **The environment (2026-10-16, D102 to D111,
+  [plan](plans/environment.mdscript.md)):** the bot runs as a participant of
+  `environments/room/room.scx`, the root session, and activates on joining
+  (no `bot.activate`; `inactive` is its final). The room routes host input,
+  broadcasts sound and visuals with the original's placement and loudness,
+  and logs the bot's events; the communication puts speaking's sound into
+  the room after the efference copy (D103, amended). Devices are documents
+  the room invokes, held through `holdings` and `owned_devices`, read with
+  the new `namespaces/device` (`<device:snapshot>`) and acted on at their
+  address; the cognition input's `environment` field is rendered by
+  reasoning as the original's environment block. Every environment run
+  passes `--fuel 9223372036854775807` until average usage is measured
+  (D111). scxml.rs is at `b59f8111` (D104, D109, D110). Not proven live:
+  on 2026-10-16 the CPA gateway answered 502 and no speech or voice backend
+  is configured (docs/live-proof.md); `environment_live`'s
+  `live_two_participants` waits for both. Open: the bot and device
+  namespace IRP baselines were measured on macOS arm64 (regenerate on
+  Linux x86_64).
 
 - **Behavior learning proven live (2026-10-12, D100, D101, D96):** reflection
   offers change and break only for inventory names (neither on an empty

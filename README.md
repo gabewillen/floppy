@@ -21,11 +21,13 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | `namespaces/bot/` | the bot body's extension namespace (a Wasm component; synchronous executable content: `bot:attention`, `bot:stimulus`, `bot:recognize`) |
 | `namespaces/conversation/` | the conversation's extension namespace (a Wasm component; synchronous executable content: `conversation:commit`) |
 | `namespaces/migration/` | Alembic's revision walk as an extension namespace (a Wasm component; synchronous executable content: `migration:plan`) |
+| `namespaces/device/` | a bot's read of a device it holds (a Wasm component; synchronous executable content: `device:snapshot`, decision D109; [device](namespaces/device/README.md)) |
 | `services/{generate,decision}/` | canonical invoked services (Wasm components: model generation, decisions) |
 | `services/{sql,pgsql}/` | the memory engines (Wasm components: one SQLite or Postgres transaction per `<invoke>`, [sql](services/sql/README.md), [pgsql](services/pgsql/README.md)) |
 | `services/speech/` | the speech service (a Wasm component: speech decoding and encoding on OpenAI-compatible audio APIs, voice detection, diarization and identification on LocalAI's voice APIs; decisions D57, D66; [speech](services/speech/README.md)) |
 | `bots/builder/` | the builder bot: its SCXML document (`builder.scx`), schemas, and saved live examples |
 | `bots/floppy/` | the floppy bot: the body (`floppy.scx`, the original's Bot) and its event contracts |
+| `environments/room/` | the room, the environment the floppy bot runs in: the root session that invokes its bots (and any devices) as participants, routes host input, and delivers sound and visuals (decisions D102 to D111; [room](environments/room/README.md)) |
 | `abilities/` | the abilities and stages the bots invoke, each `<name>/<name>.scx` with `<name>/<name>.js` (memory, migration, cognition, communication, listening, ...) |
 | `tests/` | `floppy-tests`: integration tests that run the bots, namespaces, and services through `scx run` |
 | `scripts/` | build and proof scripts |

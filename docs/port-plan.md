@@ -18,11 +18,12 @@ invoked service). The decisions behind this plan are in
 
 | The original | floppy |
 | --- | --- |
-| `the original.Bot` (body + cognition) | One root SCXML document per bot under `bots/<name>/`, run as a live session by scxml.rs's `scx run` (floppy has no runtime of its own, decision D14) |
+| `the original.Bot` (body + cognition) | One SCXML document per bot under `bots/<name>/`, invoked by its environment, which `scx run` runs as the live root session (floppy has no runtime of its own, decision D14; the bot is a participant, decision D102) |
+| `Environment` (a context: membership, holdings, placement, broadcast) | An environment document, `environments/<name>/<name>.scx` (today `environments/room/room.scx`), run as the root session; its invoked children are its participants, joining when the invoke starts and leaving when it ends; it routes host input by its payload (D108), broadcasts every `environment.sound` and `environment.visual` to the participants that perceive it (placement, the free-field law and thresholds, D103), and logs the events its bots send it (decisions D102 to D111) |
 | hsm state machines | SCXML documents (table below) |
 | Abilities (listening, speaking, cognition, memory, ...) | Invoked children, one `.scx` per the original machine in the flat `abilities/` directory: `<invoke id="<name>" type="scxml" src="../../abilities/<name>.scx">` from the body (a stage or sub-ability from its ability: `src="<name>.scx"`), literal `id` and `src`, talking to the parent through `#_parent` and to the child through `#_<invokeid>` (decisions D33, D34) |
 | Ability attachment protocol (`attachment.*`, `attachment.group.*`, `bot.ability.attachment.terminal`, yamux) | Not ported, and none of these names has a schema: `<invoke>` lifecycle is attach (start on state entry) and detach (cancel on state exit, `done.invoke.<id>` on completion); a group's attach is the body's parallel `<invoke>`s joined on each member's first `bot.ability.offers` (decision D6) |
-| Devices (phone, audio, smart phone) | Invoked services: `<invoke type="https://github.com/stateforward/floppy/services/<device>@<tag>">` (out of scope for now; phase 6 ported none) |
+| Devices (phone, audio, smart phone) | SCXML documents an environment invokes (`devices/<name>/<name>.scx`), any real I/O inside them an invoked service; a bot holds them through the environment's `holdings` and `owned_devices`, reads them with `<device:snapshot>` and acts on them at their address (decisions D105, D109, D110); none is ported yet (the tests use the lamp fixture) |
 | Providers (SDK owners) | Invoked services (`services/`) for every effect: anything asynchronous, I/O-bound, or long-running (decision D13); extension namespaces (`namespaces/`) only for synchronous, quick executable content (table below) |
 | Starlark behaviors (compiled, stored, cached) | Validator-gated SCXML: the builder bot authors the behavior as an SCXML document, `scx:validate` gates it, and a simulation as an invoked child proves it before it is stored; a matched behavior runs as an invoked child |
 | Persistent routines (`hsm.every` / `hsm.at` across turns) | Long-lived invoked children whose schedules are self-rescheduling `<send delay>` loops; each tick is an event to the parent, which decides on it in a new turn |
@@ -154,8 +155,9 @@ Mapping rules (the byte-for-byte rule covers event names, not data shapes):
   `choices`, the turn's choices the body assembled (its own and each
   ability's `bot.ability.offers`, tagged with the offering ability's
   `target`; the original built its dispatch inventory from live actor
-  snapshots); `bot.activate` takes an optional `model` the body hands to
-  its model-backed abilities.
+  snapshots), and `environment`, the bot's environment block (D106); the
+  bot's `model` (an activation `<param>` its environment gives, D107) goes
+  to its model-backed abilities.
 - Media is a reference: `environment.sound`'s `audio` and
   `environment.visual`'s `image` are `uri-reference` strings, not base64
   bytes. `timedelta` would map to integer milliseconds and other `bytes` to
@@ -454,6 +456,38 @@ decisions are D76 to D79.
   `tests/tests/communication.rs` runs the conversation's turns
   (`the_conversation_commits_each_message_into_its_history`,
   `a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing`).
+
+## Environment conventions
+
+- **Running.** A bot runs as a participant of its environment:
+  `scx run --env-file <file> --fuel 9223372036854775807
+  environments/room/room.scx` (D102, D111). The room passes each bot its
+  `environment` (the root's `_sessionid`, D106) and `owned_devices`
+  (D105) as `<param>`s, and the bot activates on joining (D107).
+- **Broadcast.** Every `environment.sound` and `environment.visual` the
+  room receives, from a participant or the host, is logged and delivered
+  to every participant that perceives it, the emitter included. A bot's
+  speech reaches the room through its communication, which sends the
+  sound to `#_scxml_` + the environment's id right after the efference
+  copy to the body (D103, amended), so the bot's listening has the copy
+  first and withholds its own words (D98). A device sends to `#_parent`.
+- **Placement.** `placements[<id>]` is `{position: {x, y, z}, threshold_db}`;
+  a sound's `received_level_db` at a participant is `amplitude_db -
+  20 log10(max(d, 0.01) / 1)` from the sender's placement (only a placed
+  child is an origin), filled per recipient; a participant below its
+  threshold, or a sound too quiet for everyone, receives nothing; without
+  an amplitude, an origin or a placement the sound is unmeasured and
+  heard (D103). A visual reaches everyone.
+- **Devices.** A bot reads every held device on processing entry with
+  `<device:snapshot>` into `device_snapshots` (a device that is not
+  running is not read, D109); the focused device's events are the turn's
+  choices, and a selection for it is sent straight to its address (D105).
+- **The environment block.** The body sends `environment` `{id, self:
+  {state, owned_devices: {<ref>: {ref, id, state, attributes}}}}` on
+  `bot.ability.cognition.input`; reasoning renders it as the original's
+  `<environment id><self state><owned_devices><device ref id state>`
+  block, each snapshot attribute a child element under a sanitized tag,
+  and intuition gets it as JSON (D106).
 
 ## Known gaps carried from phase 0
 
