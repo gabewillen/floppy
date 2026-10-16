@@ -604,24 +604,51 @@ pub fn copy_tree(from: &Path, to: &Path) {
 /// replaces.
 const ROOM_BOT: &str = r#"    <invoke id="floppy" type="scxml" src="../../bots/floppy/floppy.scx">
       <param name="environment" expr="_sessionid"/>
+      <param name="owned_devices" expr="ownedDevices('floppy')"/>
     </invoke>"#;
 
 /// Where `environments/room/room.scx` sets its participants on entry.
 const ROOM_PARTICIPANTS: &str = r#"<assign location="participants" expr="['floppy']"/>"#;
 
+/// The holdings `environments/room/room.scx` declares.
+const ROOM_HOLDINGS: &str = r#"<data id="holdings" expr="({floppy: []})"/>"#;
+
 /// Lays `environments/room/` (its document, script and schema twins) into
 /// the scratch layout `dir`, whose `bots/floppy/` it invokes, and returns
 /// the path of its document. The room invokes one floppy bot per id in
 /// `bots` (each a participant), each with `params` (`(name, ECMAScript
-/// expression)`) after its `environment`: the test's activation settings
-/// (decision D107).
+/// expression)`) after its `environment` and `owned_devices`: the test's
+/// activation settings (decision D107).
 pub fn environment(dir: &Path, bots: &[&str], params: &[(&str, &str)]) -> PathBuf {
+    environment_with_devices(dir, bots, &[], &[], params)
+}
+
+/// [`environment`] with devices: each of `devices` is a fixture device
+/// (`tests/fixtures/environment/<name>/`, copied beside the room, or one
+/// the test laid out there as `<name>/<name>.scx`) the room
+/// invokes as `<name>` before its bots (a participant too), and
+/// `holdings` names the devices each bot holds (a bot not named holds
+/// none).
+pub fn environment_with_devices(
+    dir: &Path,
+    bots: &[&str],
+    devices: &[&str],
+    holdings: &[(&str, &[&str])],
+    params: &[(&str, &str)],
+) -> PathBuf {
     let room = dir.join("environments/room");
     copy_tree(&workspace().join("environments/room"), &room);
+    for device in devices {
+        // A device the test laid out beside the room itself has no fixture.
+        let fixture = workspace().join("tests/fixtures/environment").join(device);
+        if fixture.is_dir() {
+            copy_tree(&fixture, &room.join(device));
+        }
+    }
     let path = room.join("room.scx");
     let text = std::fs::read_to_string(&path).expect("the room is readable");
     assert!(
-        text.contains(ROOM_BOT) && text.contains(ROOM_PARTICIPANTS),
+        text.contains(ROOM_BOT) && text.contains(ROOM_PARTICIPANTS) && text.contains(ROOM_HOLDINGS),
         "environments/room/room.scx invokes the floppy bot"
     );
     let mut extra = String::new();
@@ -632,26 +659,47 @@ pub fn environment(dir: &Path, bots: &[&str], params: &[(&str, &str)]) -> PathBu
         extra.push_str(expr);
         extra.push_str("\"/>");
     }
-    let invokes: Vec<String> = bots
+    let mut invokes: Vec<String> = devices
         .iter()
-        .map(|id| {
-            ROOM_BOT
-                .replace(r#"id="floppy""#, &format!(r#"id="{id}""#))
-                .replace(
-                    r#"expr="_sessionid"/>"#,
-                    &format!(r#"expr="_sessionid"/>{extra}"#),
-                )
+        .map(|id| format!(r#"    <invoke id="{id}" type="scxml" src="{id}/{id}.scx"/>"#))
+        .collect();
+    invokes.extend(bots.iter().map(|id| {
+        ROOM_BOT
+            .replace(r#"id="floppy""#, &format!(r#"id="{id}""#))
+            .replace("ownedDevices('floppy')", &format!("ownedDevices('{id}')"))
+            .replace("\n    </invoke>", &format!("{extra}\n    </invoke>"))
+    }));
+    let ids: Vec<String> = devices
+        .iter()
+        .chain(bots)
+        .map(|id| format!("'{id}'"))
+        .collect();
+    let held: Vec<String> = bots
+        .iter()
+        .map(|bot| {
+            let devices: Vec<String> = holdings
+                .iter()
+                .filter(|(holder, _)| holder == bot)
+                .flat_map(|(_, devices)| devices.iter().map(|device| format!("'{device}'")))
+                .collect();
+            format!("'{bot}': [{}]", devices.join(", "))
         })
         .collect();
-    let ids: Vec<String> = bots.iter().map(|id| format!("'{id}'")).collect();
-    let text = text.replacen(ROOM_BOT, &invokes.join("\n"), 1).replacen(
-        ROOM_PARTICIPANTS,
-        &format!(
-            r#"<assign location="participants" expr="[{}]"/>"#,
-            ids.join(", ")
-        ),
-        1,
-    );
+    let text = text
+        .replacen(ROOM_BOT, &invokes.join("\n"), 1)
+        .replacen(
+            ROOM_PARTICIPANTS,
+            &format!(
+                r#"<assign location="participants" expr="[{}]"/>"#,
+                ids.join(", ")
+            ),
+            1,
+        )
+        .replacen(
+            ROOM_HOLDINGS,
+            &format!(r#"<data id="holdings" expr="({{{}}})"/>"#, held.join(", ")),
+            1,
+        );
     std::fs::write(&path, text).expect("the room copy is writable");
     path
 }

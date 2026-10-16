@@ -15,8 +15,7 @@
 //! <bot:stimulus location="stimulus" event="_event.name" data="_event.data"
 //!               source="_event.invokeid"/>
 //! <bot:attention location="focus_candidates" focuslocation="focus"
-//!                stimulus="stimulus" devices="devices" focus="focused_device"
-//!                sources="device_source_refs"/>
+//!                stimulus="stimulus" devices="devices" focus="focused_device"/>
 //! <bot:verdict location="dispatching" rejectionlocation="rejection"
 //!              selections="output" focus="focus" candidates="focus_candidates"/>
 //! <bot:recognize location="addressed" name="name" text="heard"/>
@@ -27,24 +26,22 @@
 //! the document's data model. Each element writes to its locations and
 //! never sends: the document's own `<send>` delivers what it computes.
 //!
-//! # `<bot:attention location="L" focuslocation="F" stimulus="X" devices="D" focus="G" sources="S"/>`
+//! # `<bot:attention location="L" focuslocation="F" stimulus="X" devices="D" focus="G"/>`
 //!
 //! The turn's attention bias from device identity only (the original
 //! `attention_bias_for_turn`). `focus` is the currently focused device (any
 //! value; `null` when none), `devices` the configured devices (an array),
-//! `stimulus` the turn's stimulus envelope (an object, see
-//! `<bot:stimulus>`), and `sources` (optional; none when absent) an object
-//! mapping a live source id to the device it reports from.
+//! and `stimulus` the turn's stimulus envelope (an object, see
+//! `<bot:stimulus>`).
 //!
 //! * The focus: `focus` when it is not `null` and is one of `devices`, else
 //!   `null`. It is the first focus candidate when it is not `null`.
 //! * The stimulus's device: for a `bot.input` stimulus, its data's
 //!   `target_device` when the data is an object that has one (the original
-//!   `_target_device_reference`); otherwise, and when that is `null`, the
-//!   device `sources` maps the stimulus's `source` to when the source is a
-//!   non-empty string (the reference `_interrupt_reference`), else `null`. It is
-//!   appended to the candidates when it is not `null`, is one of `devices`,
-//!   and is not a candidate already.
+//!   `_target_device_reference`, which its `_interrupt_reference` prefers:
+//!   the environment stamps a device's input with it, decision D105), else
+//!   `null`. It is appended to the candidates when it is not `null`, is one
+//!   of `devices`, and is not a candidate already.
 //!
 //! `focuslocation` (optional) receives the focus, then `location`
 //! (required) receives the candidates, a JSON array. Values compare as JSON
@@ -337,17 +334,10 @@ fn attention<H: BotHost>(
     content: &[Content],
     host: &mut H,
 ) -> Result<Executed, Failure<H::Error>> {
-    let [location, focus_location, stimulus, devices, focus, sources] = attribute_values(
+    let [location, focus_location, stimulus, devices, focus] = attribute_values(
         attributes,
-        [
-            "location",
-            "focuslocation",
-            "stimulus",
-            "devices",
-            "focus",
-            "sources",
-        ],
-        "bot:attention takes only the location, focuslocation, stimulus, devices, focus and sources attributes",
+        ["location", "focuslocation", "stimulus", "devices", "focus"],
+        "bot:attention takes only the location, focuslocation, stimulus, devices and focus attributes",
         "bot:attention repeats an attribute",
         "bot:attention has an empty attribute",
     )?;
@@ -380,18 +370,7 @@ fn attention<H: BotHost>(
     .ok_or(Failure::Execution(
         "bot:attention focus is not a JSON value",
     ))?;
-    let sources = match sources {
-        None => Map::new(),
-        Some(sources) => match json_of(&evaluate(
-            host,
-            sources,
-            "bot:attention sources did not evaluate",
-        )?) {
-            Some(Json::Object(sources)) => sources,
-            _ => return Err(Failure::Execution("bot:attention sources is not an object")),
-        },
-    };
-    let (focus, candidates) = attention_bias(&stimulus, &devices, &focus, &sources);
+    let (focus, candidates) = attention_bias(&stimulus, &devices, &focus);
     if let Some(focus_location) = focus_location {
         let focus =
             data_of(&focus).ok_or(Failure::Execution("bot:attention focus is not finite"))?;
@@ -418,7 +397,6 @@ pub fn attention_bias(
     stimulus: &Map<String, Json>,
     devices: &[Json],
     focus: &Json,
-    sources: &Map<String, Json>,
 ) -> (Json, Vec<Json>) {
     let mut candidates = Vec::new();
     let focus = if !focus.is_null() && devices.contains(focus) {
@@ -427,20 +405,11 @@ pub fn attention_bias(
     } else {
         Json::Null
     };
-    let source_reference = || match stimulus.get("source") {
-        Some(Json::String(source)) if !source.is_empty() => {
-            sources.get(source).cloned().unwrap_or(Json::Null)
-        }
-        _ => Json::Null,
-    };
     let mut reference = Json::Null;
     if stimulus.get("event").and_then(Json::as_str) == Some("bot.input")
         && let Some(Json::Object(data)) = stimulus.get("data")
     {
         reference = data.get("target_device").cloned().unwrap_or(Json::Null);
-    }
-    if reference.is_null() {
-        reference = source_reference();
     }
     if !reference.is_null() && devices.contains(&reference) && !candidates.contains(&reference) {
         candidates.push(reference);

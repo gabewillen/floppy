@@ -35,10 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines bot
 ```
 
-The current baseline (manifest SHA-256 `6f7e0d04eac6ea6f2d8afa150b1ce4fa0bdc87c62873de159724da8c8da7705a`,
+The current baseline (manifest SHA-256 `46a58ed1a3f0fce92b87c5803104f18b422139d37aefb069dc1f422f60e2fe51`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
-measured on Linux x86_64) measures:
+measured on macOS arm64 after `<bot:attention>` lost `sources`; regenerate
+it on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares fuel
+on) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 23 / 23 | 0 | `965f05e5bec16d1aacc8d89aba5b674981c543c30b40b9c5486e9063d4590509` | `a5b7a45de11b213c20c6c1dce494ba469d85a226eba98c04f949b38ac1a1f3cb` |
+| ECMAScript | 23 / 23 | 0 | `611d0ba36669d51933051e70c49e05ce63faf27daa54ba7a8002808798e6cfb8` | `93863389ab0be2f2f7c077ba7ef7f1974b4655bcb11270bb0a7d60256928c5ec` |

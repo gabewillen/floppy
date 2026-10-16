@@ -649,11 +649,23 @@ fn last_json(records: &[Json], label: &str) -> Json {
 
 #[test]
 fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
-    let body = layout(
-        &Cognition::Double("'ready'"),
-        &[("devices", "['lamp', 'fan']")],
+    let body = layout(&Cognition::Double("'ready'"), &[]);
+    // The bot holds the lamp and the fan, which the room does not run:
+    // each focused turn's read of the lamp fails, so it offers no device
+    // choice.
+    let layout_root = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the layout's root");
+    let room = support::environment_with_devices(
+        layout_root,
+        &["floppy"],
+        &[],
+        &[("floppy", &["lamp", "fan"])],
+        &[],
     );
-    let mut run = start(&body);
+    let mut run = Run::start(&[room.display().to_string()], &[]);
     activated(&mut run);
     // Unfocused, the input names the lamp: the only candidate. The body
     // offers bot.focus_device pinned to it (no clear_focus: nothing is

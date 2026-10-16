@@ -96,7 +96,10 @@
   bot.focus_device's device to an enum of the turn's focus_candidates, and
   <decision:assemble> appends each ability's latest bot.ability.offers
   choices tagged with the ability's invoke id as target (the body's own
-  carry no target). Every schema is compacted ($schema, title and examples
+  carry no target), and, while a device is focused, the events its live
+  session accepts, read this turn with <device:snapshot> (decision D109),
+  each {event, schema: {type: object}} tagged with the device's reference
+  as target (the device's own event:schema decides its data on delivery). Every schema is compacted ($schema, title and examples
   dropped); when the choices are still over 32 KiB (phase 4 spike (b): a
   relayed list of 48264 B, with its raw message, is over the 96 KiB event
   bound, so its send raises error.execution in the sender) every description is
@@ -113,7 +116,10 @@
   one on the target offering it in the turn's choices (the original
   _resolve_target): an event the body offered to itself (#_internal),
   else the ability whose invoke id is the selection's target, or the only
-  ability offering it when the selection names none (#_<id>). The body
+  ability offering it when the selection names none (#_<id>), or the held
+  device whose reference is its target, straight at its address
+  (#_scxml_ + owned_devices[target]; decision D105: a device checks
+  nothing about who sends it an action). The body
   also places a selected bot.ability.communication.input on itself (the original
   dispatches the trusted SpeechHeard seed's selection to a declared event
   of the bot), which takes it as outside communication input. A selection
@@ -182,6 +188,7 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
+       xmlns:device="https://github.com/stateforward/floppy/namespaces/device"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="floppy" initial="live">
   <datamodel>
@@ -200,10 +207,15 @@
     <data id="environment" expr="null"/>
     <data id="activation_timeout_ms" expr="30000"/>
     <data id="processing_timeout_ms" expr="300000"/>
-    <!-- The configured devices (none until phase 6) and the live source id
-         each one reports from. -->
+    <!-- The devices the bot holds, which the environment gives as a
+         <param> (decision D105): reference to the device session's
+         _sessionid, its address; devices are their references, set on
+         each entry into live. -->
+    <data id="owned_devices" expr="({})"/>
     <data id="devices" expr="[]"/>
-    <data id="device_source_refs" expr="({})"/>
+    <!-- This turn's reads of the held devices (<device:snapshot>):
+         reference to {id, state, attributes, events}. -->
+    <data id="device_reads" expr="({})"/>
     <!-- Lifecycle: each entry into live is one run; the abilities expected
          and the offers each has sent this run. -->
     <data id="live_run" expr="0"/>
@@ -246,6 +258,7 @@
       <assign location="live_run" expr="nextLiveRun()"/>
       <assign location="offers" expr="({})"/>
       <assign location="waiting" expr="expectedAbilities()"/>
+      <assign location="devices" expr="heldDevices()"/>
     </onentry>
     <onexit>
       <!-- The original _clear_focus on every reboot and deactivate. -->
@@ -434,13 +447,25 @@
         <onentry>
           <assign location="turn" expr="nextTurn()"/>
           <bot:attention location="focus_candidates" focuslocation="focus" stimulus="stimulus"
-                         devices="devices" focus="focused_device" sources="device_source_refs"/>
+                         devices="devices" focus="focused_device"/>
+          <assign location="device_reads" expr="({})"/>
+        </onentry>
+        <!-- The focused device's live state (decision D109): its events
+             are choices of this turn. A read that fails (the device is not
+             running) raises error.execution, which ends only this block
+             (SCXML 4.9): the device is left out of the turn. -->
+        <onentry>
+          <if cond="hasFocusedDevice()">
+            <device:snapshot location="device_reads[focused_device]" target="deviceTarget(focused_device)"/>
+          </if>
+        </onentry>
+        <onentry>
           <assign location="offering" expr="true"/>
           <decision:choice location="body_choices" events="bot.focus_device bot.clear_focus"/>
           <assign location="offering" expr="false"/>
           <decision:pin location="body_choices" event="bot.focus_device" property="device" values="focus_candidates"/>
           <!-- bound: 32 KiB, the failure message below names it. -->
-          <decision:assemble location="choices" choices="body_choices" offers="offers"
+          <decision:assemble location="choices" choices="body_choices" offers="turnOffers()"
                              bound="32768" overlocation="choices_over" sizelocation="choices_size"/>
           <decision:names location="choice_names" choices="choices"/>
           <log label="floppy.choices" expr="choice_names"/>
@@ -559,6 +584,13 @@
                 <send eventexpr="route.event" target="#_internal">
                   <content expr="route.data"/>
                 </send>
+              <elseif cond="isDeviceRoute(route)"/>
+                <!-- A held device's action, straight to the device
+                     (decision D105); its event:schema decides (D41). -->
+                <log label="floppy.route" expr="abilityRouteLog(route)"/>
+                <send eventexpr="route.event" targetexpr="deviceTarget(route.target)">
+                  <content expr="route.data"/>
+                </send>
               <else/>
                 <log label="floppy.route" expr="abilityRouteLog(route)"/>
                 <send eventexpr="route.event" targetexpr="abilityTarget(route.target)">
@@ -571,6 +603,11 @@
               <content expr="rejectionFailure()"/>
             </send>
           </if>
+        </onentry>
+        <!-- Its own block, so a send that fails above (a device's schema
+             refusing an action's data raises error.execution in the body,
+             SCXML 4.9 and D41) still ends routing. -->
+        <onentry>
           <raise event="floppy.routed"/>
         </onentry>
         <onexit>

@@ -10,8 +10,16 @@
 
   Participants: present invokes the floppy bot (bots/floppy/floppy.scx) as
   its child "floppy", with the environment's id (the root's _sessionid,
-  decision D106) as <param name="environment">; the bot activates on joining
-  (decision D107). participants holds the invoke ids of the children
+  decision D106) as <param name="environment"> and the devices it holds as
+  <param name="owned_devices">; the bot activates on joining (decision
+  D107). An environment with devices (devices/<name>/<name>.scx, decision
+  D105) invokes them in the same state, before its bots, and names in
+  holdings which bot holds which; this room has none. A child's
+  _sessionid is <the environment's _sessionid>.<invoke id> (scxml.rs,
+  decision D110), so each bot's owned_devices maps each device's reference,
+  its invoke id, to its address before anything starts. A device is a
+  participant too: it receives the broadcasts, and its bot.input goes to
+  the bots holding it. participants holds the invoke ids of the children
   present invokes, set on its entry; a child's done.invoke.<id> (the bot's
   session ended in inactive or degraded) or error.communication.<id> (it
   failed) removes it, and the environment logs the event's invokeid and
@@ -30,8 +38,7 @@
   goes to each participant its target_ids names, and to every participant
   when target_ids is empty (the original: the input is ambient);
   environment.sound and environment.visual go to every participant (the
-  original's broadcast); bot.deactivate and bot.input go to every
-  participant.
+  original's broadcast); bot.deactivate and bot.input go to every bot.
 
   Records: each event a bot sends its parent (bot.activated,
   bot.processing.completed, ...) is logged as <log label="EVENT"> with its
@@ -53,6 +60,10 @@
          to. -->
     <data id="participants" expr="[]"/>
     <data id="participant" expr="null"/>
+    <!-- Which devices each bot holds: bot invoke id to device invoke ids
+         (decision D105). Its keys are the bots; every other participant
+         is a device. -->
+    <data id="holdings" expr="({floppy: []})"/>
   </datamodel>
   <script src="room.js"/>
 
@@ -62,6 +73,7 @@
     </onentry>
     <invoke id="floppy" type="scxml" src="../../bots/floppy/floppy.scx">
       <param name="environment" expr="_sessionid"/>
+      <param name="owned_devices" expr="ownedDevices('floppy')"/>
     </invoke>
 
     <!-- Leave: a participant that finished or failed. -->
@@ -99,16 +111,20 @@
       </foreach>
     </transition>
     <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json">
-      <foreach array="participants" item="participant">
+      <foreach array="bots()" item="participant">
         <send event="bot.deactivate" targetexpr="participantTarget(participant)">
           <content expr="_event.data"/>
         </send>
       </foreach>
     </transition>
+    <!-- bot.input: from a device, to the bots that hold it, with
+         target_device stamped as the device's reference; from the host,
+         to every bot. The recipients and the stamp are chosen from
+         _event.invokeid in exprs (decision D108). -->
     <transition event="bot.input" event:schema="schemas/bot.input.json">
-      <foreach array="participants" item="participant">
+      <foreach array="inputRecipients(_event)" item="participant">
         <send event="bot.input" targetexpr="participantTarget(participant)">
-          <content expr="_event.data"/>
+          <content expr="inputData(_event)"/>
         </send>
       </foreach>
     </transition>

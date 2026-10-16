@@ -40,19 +40,37 @@ fn keep(name: &str, records: &[Json]) {
 }
 
 fn start() -> Run {
-    start_body(&with_devices("[]"))
+    start_body(&scratch_bot())
 }
 
 /// Starts the room with the laid-out body at `body` as its bot, given the
 /// live model.
 fn start_body(body: &Path) -> Run {
+    start_holding(body, &[])
+}
+
+/// [`start_body`] with the bot holding `devices`, which the room does not
+/// run (every read of one fails and it offers nothing).
+fn start_holding(body: &Path, devices: &[&str]) -> Run {
     let mut args = Vec::new();
     for file in support::live_env_files() {
         args.push("--env-file".to_owned());
         args.push(file.display().to_string());
     }
     let model = format!("'{}'", model());
-    args.push(support::environment_for(body, &[("model", &model)]));
+    let layout = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the body is <layout>/bots/floppy/floppy.scx");
+    let room = support::environment_with_devices(
+        layout,
+        &["floppy"],
+        &[],
+        &[("floppy", devices)],
+        &[("model", &model)],
+    );
+    args.push(room.display().to_string());
     Run::start(&args, &[])
 }
 
@@ -67,27 +85,14 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-/// A scratch copy of the bot whose body's `devices` expression is
-/// `devices`; returns the body's path.
-fn with_devices(devices: &str) -> PathBuf {
+/// A scratch copy of the bot; returns the body's path.
+fn scratch_bot() -> PathBuf {
     let dir = unique_scratch("floppy-live");
     for sub in ["bots/floppy", "bots/floppy/schemas"] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
     }
     support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
-    let body = dir.join("bots/floppy/floppy.scx");
-    let text = std::fs::read_to_string(&body).expect("the body is readable");
-    let declared = r#"<data id="devices" expr="[]"/>"#;
-    assert!(text.contains(declared), "the body declares its devices");
-    std::fs::write(
-        &body,
-        text.replace(
-            declared,
-            &format!(r#"<data id="devices" expr="{devices}"/>"#),
-        ),
-    )
-    .expect("the body copy is writable");
-    body
+    dir.join("bots/floppy/floppy.scx")
 }
 
 fn texts(records: &[Json], label: &str) -> Vec<String> {
@@ -172,7 +177,7 @@ fn live_cascade() {
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_choices() {
-    let mut run = start_body(&with_devices("['lamp']"));
+    let mut run = start_holding(&scratch_bot(), &["lamp"]);
     run.event(
         "bot.input",
         &json!({"observation": {"event": "text", "data": "Please turn and look at the lamp."}, "target_device": "lamp"}),

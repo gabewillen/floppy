@@ -90,14 +90,13 @@ fn other_local_names_are_not_handled() {
 // <bot:attention>
 
 /// A host for one attention bias: the stimulus, the configured lamp and
-/// fan, the focus, and the sources (the mic reports from the fan).
+/// fan, and the focus.
 fn attention_host(stimulus: &Json, focus: &Json) -> FakeHost {
     FakeHost {
         values: BTreeMap::from([
             ("stimulus".to_owned(), data(stimulus)),
             ("devices".to_owned(), data(&json!(["lamp", "fan"]))),
             ("focused_device".to_owned(), data(focus)),
-            ("sources".to_owned(), data(&json!({"mic": "fan"}))),
         ]),
         ..FakeHost::default()
     }
@@ -110,7 +109,6 @@ fn attention_attributes() -> Vec<Attribute> {
         attr("stimulus", "stimulus"),
         attr("devices", "devices"),
         attr("focus", "focused_device"),
-        attr("sources", "sources"),
     ]
 }
 
@@ -174,37 +172,45 @@ fn attention_puts_the_configured_focus_first_once() {
 }
 
 #[test]
-fn attention_falls_back_to_the_device_the_source_reports_from() {
-    // An input with no (or a null) target device, from the mic.
+fn attention_takes_no_device_from_the_stimulus_source() {
+    // A device's input reaches the bot with its target_device stamped by
+    // the environment (decision D105): a source names no device.
     let mut stimulus = input(&json!({"target_device": null}));
-    stimulus["source"] = json!("mic");
+    stimulus["source"] = json!("fan");
     assert_eq!(
         bias(&stimulus, &Json::Null),
-        assigned(&Json::Null, &json!(["fan"]))
+        assigned(&Json::Null, &json!([]))
     );
-    // Any other event: the source's device only (the original
-    // `_interrupt_reference`), never a target_device in its data.
+    // Any other event: never a target_device in its data.
     let other = json!({"event": "bot.ability.conversation.output",
-                       "data": {"target_device": "lamp"}, "source": "mic"});
-    assert_eq!(
-        bias(&other, &Json::Null),
-        assigned(&Json::Null, &json!(["fan"]))
-    );
-    // An unknown or empty source has no device.
-    let other = json!({"event": "e", "data": {}, "source": "speaker"});
-    assert_eq!(bias(&other, &Json::Null), assigned(&Json::Null, &json!([])));
-    let other = json!({"event": "e", "data": {}, "source": ""});
+                       "data": {"target_device": "lamp"}, "source": "fan"});
     assert_eq!(bias(&other, &Json::Null), assigned(&Json::Null, &json!([])));
 }
 
 #[test]
-fn attention_without_sources_or_focuslocation_writes_the_candidates_only() {
+fn attention_refuses_a_sources_attribute() {
+    // The original's source map is gone: the environment stamps a device's
+    // input with its target_device (decision D105).
     let mut stimulus = input(&json!({}));
     stimulus["source"] = json!("mic");
-    let mut host = attention_host(&stimulus, &json!("lamp"));
+    let mut host = attention_host(&stimulus, &Json::Null);
+    host.values
+        .insert("sources".to_owned(), data(&json!({"mic": "fan"})));
+    let mut attributes = attention_attributes();
+    attributes.push(attr("sources", "sources"));
+    assert_eq!(
+        execution(execute("attention", &attributes, &[], &mut host)),
+        "bot:attention takes only the location, focuslocation, stimulus, devices and focus attributes"
+    );
+    assert!(host.assigned.is_empty());
+}
+
+#[test]
+fn attention_without_focuslocation_writes_the_candidates_only() {
+    let mut host = attention_host(&input(&json!({})), &json!("lamp"));
     let attributes: Vec<Attribute> = attention_attributes()
         .into_iter()
-        .filter(|attribute| !matches!(attribute.local_name.as_str(), "sources" | "focuslocation"))
+        .filter(|attribute| attribute.local_name != "focuslocation")
         .collect();
     execute("attention", &attributes, &[], &mut host).expect("handled");
     assert_eq!(
@@ -262,7 +268,6 @@ fn malformed_attention_elements_or_values_raise_error_execution() {
     for (name, value) in [
         ("stimulus", data(&json!([]))),
         ("devices", data(&json!({}))),
-        ("sources", data(&json!([]))),
         ("focused_device", Data::Undefined),
     ] {
         let mut host = attention_host(&stimulus, &Json::Null);

@@ -37,6 +37,8 @@
     SpeechHeard seed admits heard speech);
   * ignore: selects bot.ability.cognition.ignore for target cognition;
   * focus: selects bot.focus_device for the observation's data;
+  * act: selects the observation's data {event, data} for the turn's focus
+    as its target (a focused device's action);
   * elsewhere: selects bot.ability.communication.respond for target
     identity (which does not offer it);
   * fail: answers bot.ability.failed;
@@ -61,6 +63,7 @@
     <data id="action" expr="null"/>
     <data id="observed" expr="null"/>
     <data id="stimulus" expr="null"/>
+    <data id="focus" expr="null"/>
     <data id="ignore" expr="({event: 'bot.ability.cognition.ignore', description: 'Deliberately ignore this stimulus.', schema: {'$schema': 'https://json-schema.org/draft/2020-12/schema', title: 'bot.ability.cognition.ignore', description: 'Deliberately ignore this stimulus.', type: 'object', properties: {}, additionalProperties: false, examples: [{}]}})"/>
   </datamodel>
   <state id="alive" initial="idle">
@@ -85,6 +88,7 @@
       <transition event="bot.ability.cognition.input" target="working">
         <assign location="turn" expr="_event.data.turn"/>
         <assign location="stimulus" expr="_event.data.stimulus"/>
+        <assign location="focus" expr="_event.data.focus"/>
         <assign location="action" expr="stimulus.event === 'bot.ability.listening.speech.output' ? stimulus.data.content.split(' ')[0] : stimulus.event === 'environment.sound' ? 'ignore' : stimulus.event === 'bot.ability.identity.addressed' ? 'addressed' : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages[stimulus.data.messages.length - 1].content.split(' ')[0] : stimulus.data.observation.event"/>
         <assign location="observed" expr="stimulus.event === 'bot.ability.listening.speech.output' ? stimulus.data.content : stimulus.event === 'environment.sound' ? stimulus.data.kind : stimulus.event === 'bot.ability.identity.addressed' ? stimulus.data.name : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages.length : stimulus.data.observation.data"/>
         <log label="double.input" expr="turn + ' ' + action + ' ' + JSON.stringify(observed)"/>
@@ -165,6 +169,12 @@
             <param name="output" expr="[{event: 'bot.focus_device', data: {device: observed}, reason: 'look'}]"/>
           </send>
         </if>
+        <if cond="action === 'act'">
+          <send event="bot.ability.cognition.output" target="#_parent">
+            <param name="turn" expr="turn"/>
+            <param name="output" expr="[{event: observed.event, data: observed.data, reason: 'act', target: focus}]"/>
+          </send>
+        </if>
         <if cond="action === 'fail'">
           <send event="bot.ability.failed" target="#_parent">
             <param name="message" expr="'double failed'"/>
@@ -186,7 +196,7 @@
           <send event="bot.reboot" target="#_parent"><content>{"reason": "cognition_child_teardown_failed"}</content></send>
         </if>
       </onentry>
-      <transition cond="['reply', 'blank', 'twice', 'then_blank', 'unoffered', 'adopt', 'admit', 'addressed', 'ignore', 'elsewhere', 'focus', 'fail', 'stale'].indexOf(action) &gt;= 0" target="idle"/>
+      <transition cond="['reply', 'blank', 'twice', 'then_blank', 'unoffered', 'adopt', 'admit', 'addressed', 'ignore', 'elsewhere', 'focus', 'act', 'fail', 'stale'].indexOf(action) &gt;= 0" target="idle"/>
       <transition event="bot.ability.cognition.cancel" cond="action !== 'deaf'" target="idle">
         <send event="bot.ability.cognition.cancelled" target="#_parent"><param name="turn" expr="turn"/></send>
       </transition>

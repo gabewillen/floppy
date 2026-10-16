@@ -448,3 +448,273 @@ fn a_bot_hears_its_own_speech_through_the_environment_and_withholds_it() {
         "the environment delivered the bot's own sound: {all:?}"
     );
 }
+
+/// Starts the room laid into `dir` with the lamp fixture (`lamp`) and one
+/// floppy bot per id in `bots`, each bot holding the devices `holdings`
+/// names.
+fn start_with_lamp(dir: &Path, bots: &[&str], holdings: &[(&str, &[&str])]) -> Run {
+    let room = support::environment_with_devices(dir, bots, &["lamp"], holdings, &[]);
+    let mut args = Vec::new();
+    if bots.len() > 1 {
+        args.extend(["--fuel".to_owned(), MULTI_BOT_FUEL.to_owned()]);
+    }
+    args.push(room.display().to_string());
+    Run::start(&args, &[])
+}
+
+/// A `bot.input` from the host stamped with the lamp as its device.
+fn lamp_input(action: &str, data: &Json) -> Json {
+    json!({"observation": {"event": action, "data": data}, "target_device": "lamp"})
+}
+
+/// The session object `id` of a `scxml.session-snapshot/v2` document.
+fn session_in<'a>(session: &'a Json, id: &str) -> Option<&'a Json> {
+    if session["session_id"] == id {
+        return Some(session);
+    }
+    session["invocations"]
+        .as_array()?
+        .iter()
+        .find_map(|invocation| session_in(&invocation["session"], id))
+}
+
+/// The value of the `<data id="name">` of the session `id`, from a
+/// snapshot the run writes now.
+fn data_of(run: &mut Run, id: &str, name: &str) -> Json {
+    run.send(&json!({"type": "snapshot"}));
+    let records = run.until(WAIT, |record| record["type"] == "snapshot");
+    let record = records.last().expect("the snapshot record");
+    let document: Json = match &record["document"] {
+        Json::String(text) => serde_json::from_str(text).expect("the snapshot is JSON"),
+        other => other.clone(),
+    };
+    let session = session_in(&document["snapshot"]["root"], id)
+        .unwrap_or_else(|| panic!("the snapshot holds {id}: {document}"));
+    let value = session["data_model"]
+        .as_array()
+        .expect("a data model")
+        .iter()
+        .find(|entry| entry["name"] == name)
+        .unwrap_or_else(|| panic!("{id} declares {name}"))["value"]
+        .clone();
+    match value["type"].as_str() {
+        Some("json-object" | "json-array") => {
+            serde_json::from_str(value["value"].as_str().expect("JSON text")).expect("JSON")
+        }
+        _ => value["value"].clone(),
+    }
+}
+
+/// The text of every `log` record labelled `label` of the session
+/// `session`.
+fn texts_of(records: &[Json], session: &str, label: &str) -> Vec<String> {
+    records
+        .iter()
+        .filter(|record| {
+            record["type"] == "log" && record["label"] == label && record["session"] == session
+        })
+        .map(|record| record["text"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
+/// Waits for the room's next `bot.processing.completed` and returns every
+/// record until it.
+fn completed(run: &Run) -> Vec<Json> {
+    run.until(WAIT, label_is("bot.processing.completed"))
+}
+
+#[test]
+fn a_bot_is_given_the_ids_of_the_devices_it_holds() {
+    let dir = layout(&[]);
+    let mut run = start_with_lamp(&dir, &["floppy"], &[("floppy", &["lamp"])]);
+    all_activated(&run, &["floppy"]);
+    assert_eq!(
+        data_of(&mut run, "session.floppy", "owned_devices"),
+        json!({"lamp": "session.lamp"})
+    );
+    assert_eq!(
+        data_of(&mut run, "session.floppy", "devices"),
+        json!(["lamp"])
+    );
+    drop(run.close(WAIT));
+}
+
+#[test]
+fn a_held_devices_input_grounds_the_turns_focus() {
+    let dir = layout(&[]);
+    let mut run = start_with_lamp(&dir, &["floppy"], &[("floppy", &["lamp"])]);
+    all_activated(&run, &["floppy"]);
+    // Focused on the lamp (the host's input names it), the bot turns it
+    // on; the lamp reports the change, which reaches the bot with the
+    // lamp as its target_device.
+    run.event("bot.input", &lamp_input("focus", &json!("lamp")));
+    let mut records = completed(&run);
+    run.event(
+        "bot.input",
+        &json!({"observation": {"event": "act", "data": {"event": "lamp.on", "data": {}}}}),
+    );
+    records.extend(completed(&run));
+    records.extend(completed(&run));
+    let finished = run.close(WAIT);
+    records.extend(finished.records);
+    assert_eq!(
+        texts_of(&records, "session.floppy", "floppy.focus"),
+        ["lamp"]
+    );
+    assert_eq!(texts_of(&records, "session.lamp", "lamp.on"), ["100"]);
+    let turns = texts_of(&records, "session", "bot.processing.completed");
+    let last: Json = serde_json::from_str(turns.last().expect("the lamp's turn")).expect("JSON");
+    assert_eq!(last["turn"], json!(3), "{turns:?}");
+    assert_eq!(last["focus_candidates"], json!(["lamp"]), "{turns:?}");
+    assert_eq!(
+        texts_of(&records, "session.floppy.cognition", "double.input").last(),
+        Some(&r#"3 ignore "on""#.to_owned())
+    );
+}
+
+#[test]
+fn a_focused_devices_choices_are_read_from_its_snapshot_and_a_selection_reaches_it() {
+    let dir = layout(&[]);
+    let mut run = start_with_lamp(&dir, &["floppy"], &[("floppy", &["lamp"])]);
+    all_activated(&run, &["floppy"]);
+    run.event("bot.input", &lamp_input("focus", &json!("lamp")));
+    let mut records = completed(&run);
+    run.event("bot.input", &json!({"observation": {"event": "act", "data": {"event": "lamp.on", "data": {"brightness": 40}}}}));
+    records.extend(completed(&run));
+    // The lamp's report is the next turn, focused on the lamp, now on.
+    records.extend(completed(&run));
+    let finished = run.close(WAIT);
+    records.extend(finished.records);
+    let choices = texts_of(&records, "session.floppy", "floppy.choices");
+    assert_eq!(choices.len(), 3, "{choices:?}");
+    // Unfocused: no device choice. Focused on the lamp while it is off:
+    // lamp.on and not lamp.off; then on: lamp.off and not lamp.on.
+    assert!(!choices[0].contains("lamp."), "{choices:?}");
+    assert!(
+        choices[1].contains("lamp.on@lamp") && !choices[1].contains("lamp.off"),
+        "{choices:?}"
+    );
+    assert!(
+        choices[2].contains("lamp.off@lamp") && !choices[2].contains("lamp.on"),
+        "{choices:?}"
+    );
+    assert_eq!(
+        texts_of(&records, "session.floppy", "floppy.route"),
+        ["bot.focus_device -> bot", "lamp.on -> lamp"]
+    );
+    assert_eq!(texts_of(&records, "session.lamp", "lamp.on"), ["40"]);
+}
+
+#[test]
+fn only_its_holders_are_offered_a_devices_choices() {
+    let dir = layout(&[]);
+    let mut run = start_with_lamp(&dir, &["a", "b"], &[("a", &["lamp"])]);
+    all_activated(&run, &["a", "b"]);
+    assert_eq!(data_of(&mut run, "session.b", "owned_devices"), json!({}));
+    // Both bots get the host's input naming the lamp: only a holds it, so
+    // only a can focus it (b's focus is refused, its turn fails) and is
+    // offered its events; the lamp's report goes to a alone.
+    run.event("bot.input", &lamp_input("focus", &json!("lamp")));
+    let mut records = Vec::new();
+    let outcomes = |records: &[Json]| {
+        logs(records)
+            .iter()
+            .filter(|(label, _)| {
+                label == "bot.processing.completed" || label == "bot.processing.failed"
+            })
+            .count()
+    };
+    while outcomes(&records) < 2 {
+        records.extend(run.until(WAIT, |record| {
+            label_is("bot.processing.completed")(record)
+                || label_is("bot.processing.failed")(record)
+        }));
+    }
+    run.event(
+        "bot.input",
+        &json!({"observation": {"event": "act", "data": {"event": "lamp.on", "data": {}}}}),
+    );
+    while outcomes(&records) < 5 {
+        records.extend(run.until(WAIT, |record| {
+            label_is("bot.processing.completed")(record)
+                || label_is("bot.processing.failed")(record)
+        }));
+    }
+    let finished = run.close(WAIT);
+    records.extend(finished.records);
+    assert!(
+        texts_of(&records, "session.b", "floppy.choices")
+            .iter()
+            .all(|choices| !choices.contains("lamp.")),
+        "{records:?}"
+    );
+    assert!(texts_of(&records, "session.b", "floppy.focus").is_empty());
+    assert_eq!(texts_of(&records, "session.lamp", "lamp.on"), ["100"]);
+    assert_eq!(
+        texts_of(&records, "session.a.cognition", "double.input").last(),
+        Some(&r#"3 ignore "on""#.to_owned())
+    );
+    assert_eq!(
+        texts_of(&records, "session.b.cognition", "double.input").len(),
+        2
+    );
+}
+
+#[test]
+fn any_participant_can_act_on_a_device() {
+    let dir = layout(&[]);
+    // A participant that holds nothing turns the lamp on by its address
+    // (D110), on the first visual it sees.
+    let actor = dir.join("environments/room/actor");
+    std::fs::create_dir_all(&actor).expect("creatable");
+    write(
+        &actor,
+        "actor.scx",
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="waiting">
+  <state id="waiting">
+    <transition event="environment.visual" target="done">
+      <send event="lamp.on" target="#_scxml_session.lamp"><content expr="({brightness: 7})"/></send>
+    </transition>
+  </state>
+  <final id="done"/>
+</scxml>"##,
+    );
+    let room = support::environment_with_devices(&dir, &[], &["lamp", "actor"], &[], &[]);
+    let mut run = Run::start(&[room.display().to_string()], &[]);
+    run.event("environment.visual", &json!({"image": "media/image-1"}));
+    let records = run.until(WAIT, label_is("lamp.on"));
+    drop(run.close(WAIT));
+    assert_eq!(texts_of(&records, "session.lamp", "lamp.on"), ["7"]);
+}
+
+#[test]
+fn a_device_action_the_device_refuses_is_an_error_in_the_sender() {
+    let dir = layout(&[]);
+    let mut run = start_with_lamp(&dir, &["floppy"], &[("floppy", &["lamp"])]);
+    all_activated(&run, &["floppy"]);
+    run.event("bot.input", &lamp_input("focus", &json!("lamp")));
+    let mut records = completed(&run);
+    // A brightness the lamp's schema refuses: not delivered.
+    run.event("bot.input", &json!({"observation": {"event": "act", "data": {"event": "lamp.on", "data": {"brightness": 500}}}}));
+    records.extend(completed(&run));
+    // The bot still takes its next turn.
+    run.event(
+        "bot.input",
+        &json!({"observation": {"event": "ignore", "data": "x"}}),
+    );
+    records.extend(completed(&run));
+    let finished = run.close(WAIT);
+    records.extend(finished.records);
+    assert_eq!(
+        texts_of(&records, "session.floppy", "floppy.route"),
+        ["bot.focus_device -> bot", "lamp.on -> lamp"]
+    );
+    assert!(
+        texts_of(&records, "session.lamp", "lamp.on").is_empty(),
+        "{records:?}"
+    );
+    assert_eq!(
+        texts_of(&records, "session", "bot.processing.completed").len(),
+        3
+    );
+}

@@ -6,21 +6,28 @@
     "kind": "namespace-irp",
     "source": "namespaces/bot/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "965f05e5bec16d1aacc8d89aba5b674981c543c30b40b9c5486e9063d4590509",
-    "source_digest": "40ccbb54ee4d7fef9ba9001b141968158a5dcd26a56492ebbc9819b37678e223",
-    "manifest_digest": "6f7e0d04eac6ea6f2d8afa150b1ce4fa0bdc87c62873de159724da8c8da7705a",
+    "corpus_digest": "611d0ba36669d51933051e70c49e05ce63faf27daa54ba7a8002808798e6cfb8",
+    "source_digest": "4037c8dcca5917d9ff61b9dfcff2cb51fc0c61b37cba1e3ef5ac0931df5870d8",
+    "manifest_digest": "46a58ed1a3f0fce92b87c5803104f18b422139d37aefb069dc1f422f60e2fe51",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
     "transformer": {
-      "name": "saxon-process",
+      "name": "saxon-process-sandboxed",
       "version": "SaxonJ-HE 12.8 from Saxonica",
       "command_argv": [
         "java",
         "-jar",
-        "saxon-he-12.8.jar"
+        "saxon-he-12.8.jar",
+        "-a:off",
+        "-p:off",
+        "-dtd:off",
+        "-expand:off",
+        "-ext:off",
+        "-xi:off",
+        "-xsiloc:off"
       ],
-      "executable_digest": "1202571b0b642654eb70550cf2216fdb0642c8accae3d9e120112ed921deee4d"
+      "executable_digest": "c13657d80564f40f10b8ab91b29fdc74080e7d8bb36d6cd06589292755d3476f"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/bot/irp/sources"
@@ -34,12 +41,12 @@
   "engine": {
     "name": "scxml-machine",
     "version": "0.2.0",
-    "source_digest": "fa539502555be6876cee2620b88b222833593c686d6de68cdd840da71ad0c21f"
+    "source_digest": "b3fde869dbf1c6e0b9494fb7013aef41e3436225ac598902afafdf761c9e2dd5"
   },
   "data_model": {
     "name": "scxml-data-model-ecmascript",
     "version": "0.2.0",
-    "source_digest": "eee3209122213ddb2832d90e121ec744af0fcee7cd78eab22c6ed0efa3d48b51"
+    "source_digest": "e84a0f3d2c9335c246e1e63d11927c9778ca51ce1891cbf024b93660b8d2d969"
   },
   "runner": {
     "name": "scxml-conformance/wasm",
@@ -55,9 +62,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/bot",
       "package_version": "0.1.0",
-      "manifest_sha256": "3ff942044300d7426e84c4150ed2f8c86ff9e995e88babd1ba3c977a38b2e165",
-      "schema_sha256": "3574d3f68a0b67e112b584dedcc77bd7e491057c5afc5c67e547cc2e97507338",
-      "component_sha256": "9c41e750e06f83a358e2a3b92c0c6de97517c6b924529880e637ad1b3a6a28de"
+      "manifest_sha256": "a40f6e8bdd9d5e12f51c36f88a9cd1469761df5dad24f6e911c2570f66273275",
+      "schema_sha256": "72cb67cdc48dffdf6494133a7b325793ea6633a78a651aabdd7923518e8c6cc2",
+      "component_sha256": "aa9fbdee7f67338af95631c3035a566f5fbf96caac21ba91e2e7fe6c81ebdb4f"
     }
   ],
   "ir_version": 5,
@@ -70,7 +77,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "6b4f3f0658eeeabfc5e037dcf6b02e59f6ae6f49428c454637149573fa7da353",
+  "identity_digest": "3d4447d6c727e622fb494a90584a20fb0e0e1737e8dafd100f3567c7df76114f",
   "summary": {
     "total_selected": 23,
     "applicable_selected": 23,

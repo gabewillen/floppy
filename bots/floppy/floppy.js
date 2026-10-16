@@ -18,6 +18,16 @@ function abilityTarget(id) {
 
 // live
 
+// The references of the devices the bot holds (decision D105).
+function heldDevices() {
+  return Object.keys(owned_devices);
+}
+
+// A held device's address (decision D110).
+function deviceTarget(reference) {
+  return '#_scxml_' + owned_devices[reference];
+}
+
 function nextLiveRun() {
   return live_run + 1;
 }
@@ -92,6 +102,18 @@ function nextTurn() {
   return turn + 1;
 }
 
+// The abilities' latest offers and, while a device is focused and was
+// read this turn, its events as choices under its reference.
+function turnOffers() {
+  var read = device_reads[focused_device];
+  if (!hasFocusedDevice() || read === undefined) {
+    return offers;
+  }
+  var turn = Object.assign({}, offers);
+  turn[focused_device] = read.events.map(function (event) { return {event: event, schema: {type: 'object'}}; });
+  return turn;
+}
+
 function choicesFit() {
   return !choices_over;
 }
@@ -163,6 +185,10 @@ function rejectionFailure() {
 
 function isBodyRoute(route) {
   return route.target === null;
+}
+
+function isDeviceRoute(route) {
+  return devices.indexOf(route.target) >= 0;
 }
 
 function bodyRouteLog(route) {
