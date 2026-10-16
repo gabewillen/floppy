@@ -27,11 +27,21 @@
   invokeid) removes nobody.
 
   Sound (decision D103): an environment.sound or environment.visual from a
-  participant (a bot's speaking sends its playout to #_scxml_ + the
-  environment's id) or from the host is logged, which keeps the
-  environment's broadcasts in the run's records, and goes to every
-  participant, the emitter included (its efference copy withholds its own
-  speech).
+  participant (a bot's communication sends its speaking's playout to
+  #_scxml_ + the environment's id; a device sends to its parent) or from
+  the host is logged, which keeps the environment's broadcasts in the
+  run's records, and goes to every participant that perceives it, the
+  emitter included (its efference copy withholds its own speech). A visual
+  stimulus reaches every participant. A sound's level where a participant
+  is follows the original's free-field law, from the emitter's amplitude_db
+  (dB SPL at 1 m) and the distance d between the sender's placement (the
+  origin: placements[_event.invokeid], so only a placed child has one) and
+  the participant's: received_level_db = amplitude_db - 20 log10(max(d,
+  0.01) / 1) (a 1 cm clamp); the participant receives it, with that
+  received_level_db, only when it is at least its threshold_db. With no
+  amplitude, no origin, or no placement there is nothing to measure: the
+  participant hears it, and received_level_db is left as it was. A sound
+  too quiet for everyone is sent to nobody.
 
   Host input (decision D108) enters the environment and is routed by what
   its payload says, never by who sent it: bot.ability.communication.input
@@ -64,6 +74,10 @@
          (decision D105). Its keys are the bots; every other participant
          is a device. -->
     <data id="holdings" expr="({floppy: []})"/>
+    <!-- Where each participant is and the quietest sound it hears:
+         invoke id to {position: {x, y, z} in metres, threshold_db in dB
+         SPL}. A participant with none hears every sound. -->
+    <data id="placements" expr="({})"/>
   </datamodel>
   <script src="room.js"/>
 
@@ -97,9 +111,11 @@
     <transition event="environment.sound" event:schema="schemas/environment.sound.json">
       <log label="environment.sound" expr="eventDataJson(_event)"/>
       <foreach array="participants" item="participant">
-        <send event="environment.sound" targetexpr="participantTarget(participant)">
-          <content expr="_event.data"/>
-        </send>
+        <if cond="hears(participant, _event)">
+          <send event="environment.sound" targetexpr="participantTarget(participant)">
+            <content expr="delivered(participant, _event)"/>
+          </send>
+        </if>
       </foreach>
     </transition>
     <transition event="environment.visual" event:schema="schemas/environment.visual.json">

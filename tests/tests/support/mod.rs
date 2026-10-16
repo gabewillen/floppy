@@ -704,6 +704,24 @@ pub fn environment_with_devices(
     path
 }
 
+/// Sets the placements of the room at `room` (as [`environment`] laid it
+/// out) to `placements`, an ECMAScript object expression: invoke id to
+/// `{position: {x, y, z}, threshold_db}`.
+pub fn place(room: &Path, placements: &str) {
+    let declared = r#"<data id="placements" expr="({})"/>"#;
+    let text = std::fs::read_to_string(room).expect("the room is readable");
+    assert!(text.contains(declared), "the room declares its placements");
+    std::fs::write(
+        room,
+        text.replacen(
+            declared,
+            &format!(r#"<data id="placements" expr="({{{placements}}})"/>"#),
+            1,
+        ),
+    )
+    .expect("the room copy is writable");
+}
+
 /// [`environment`] for the laid-out body at `body`
 /// (`<layout>/bots/floppy/floppy.scx`): the room, with one floppy bot
 /// (`floppy`) given `params`, laid into the same layout, as the path `scx

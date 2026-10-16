@@ -7,19 +7,26 @@
   the environment, as bot.input {observation: {event: "ignore", data:
   "on" | "off"}} (a device reports its own state change; the environment
   gives it to the bots holding the lamp, with target_device stamped; the
-  cognition double ignores it). Its data model holds only observable state:
-  brightness (0 while off).
+  cognition double ignores it). Its switch clicks as it turns on: before
+  the report, environment.sound {audio: "media/click.wav", kind:
+  "lamp.on", amplitude_db} to its parent, amplitude_db being click_db (dB
+  SPL at 1 m). Its data model holds only observable state: brightness (0
+  while off) and click_db.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="lamp" initial="off">
   <datamodel>
     <data id="brightness" expr="0"/>
+    <data id="click_db" expr="60"/>
   </datamodel>
   <state id="off">
     <transition event="lamp.on" event:schema="schemas/lamp.on.json" target="on">
       <assign location="brightness" expr="_event.data.brightness || 100"/>
       <log label="lamp.on" expr="brightness"/>
+      <send event="environment.sound" target="#_parent">
+        <content expr="({audio: 'media/click.wav', kind: 'lamp.on', amplitude_db: click_db})"/>
+      </send>
       <send event="bot.input" target="#_parent">
         <content expr="({observation: {event: 'ignore', data: 'on'}})"/>
       </send>

@@ -67,3 +67,46 @@ function inputData(_event) {
   }
   return Object.assign({}, _event.data, {target_device: _event.invokeid});
 }
+
+// Sound: the original's reception (decision D103). The level of _event's
+// sound where the participant id is, by the free-field law from the
+// sender's placement (1 m reference, 1 cm clamp); the sound's own
+// received_level_db when there is nothing to measure (no amplitude, no
+// origin, or no placement).
+
+function receivedLevelDb(id, _event) {
+  var origin = placements[_event.invokeid];
+  var placement = placements[id];
+  var amplitude = _event.data.amplitude_db;
+  if (typeof amplitude !== 'number' || origin === undefined || placement === undefined) {
+    return _event.data.received_level_db;
+  }
+  var dx = placement.position.x - origin.position.x;
+  var dy = placement.position.y - origin.position.y;
+  var dz = placement.position.z - origin.position.z;
+  var distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  return amplitude - 20 * Math.log10(Math.max(distance, 0.01) / 1.0);
+}
+
+// Whether the participant id hears _event's sound: always when there is
+// nothing to measure, else when its level there is at least its threshold.
+
+function hears(id, _event) {
+  var origin = placements[_event.invokeid];
+  var placement = placements[id];
+  if (typeof _event.data.amplitude_db !== 'number' || origin === undefined || placement === undefined) {
+    return true;
+  }
+  return receivedLevelDb(id, _event) >= placement.threshold_db;
+}
+
+// The sound as the participant id receives it: received_level_db filled
+// when there is something to measure, the emitter's data otherwise.
+
+function delivered(id, _event) {
+  var level = receivedLevelDb(id, _event);
+  if (level === undefined) {
+    return _event.data;
+  }
+  return Object.assign({}, _event.data, {received_level_db: level});
+}

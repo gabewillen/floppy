@@ -195,8 +195,8 @@ fn a_device_snapshot_reads_another_session() {
     assert_eq!(
         logged(&finished.records, "read"),
         [
-            json!({"id": "session.lamp", "state": "off", "attributes": {"brightness": 0}, "events": ["lamp.on"]}),
-            json!({"id": "session.lamp", "state": "on", "attributes": {"brightness": 40}, "events": ["lamp.off"]}),
+            json!({"id": "session.lamp", "state": "off", "attributes": {"brightness": 0, "click_db": 60}, "events": ["lamp.on"]}),
+            json!({"id": "session.lamp", "state": "on", "attributes": {"brightness": 40, "click_db": 60}, "events": ["lamp.off"]}),
         ],
         "{:?}",
         finished.records
@@ -717,4 +717,180 @@ fn a_device_action_the_device_refuses_is_an_error_in_the_sender() {
         texts_of(&records, "session", "bot.processing.completed").len(),
         3
     );
+}
+
+/// One placed room: the floppy bot (its identity the input double, so it
+/// logs `input.sound` and `input.visual` for each stimulus) holding the
+/// lamp, which clicks at `click_db`, placed per `placements` (an
+/// ECMAScript object expression). The bot focuses the lamp and turns it
+/// on: the lamp clicks, then reports (turn 3). Returns every record.
+fn click(click_db: &str, placements: &str) -> Vec<Json> {
+    let dir = layout(&[("input", "['identity']")]);
+    double_the_identity(&dir);
+    let room = support::environment_with_devices(
+        &dir,
+        &["floppy"],
+        &["lamp"],
+        &[("floppy", &["lamp"])],
+        &[],
+    );
+    support::place(&room, placements);
+    let lamp = dir.join("environments/room/lamp/lamp.scx");
+    let text = std::fs::read_to_string(&lamp).expect("the lamp copy is readable");
+    std::fs::write(
+        &lamp,
+        text.replace(
+            r#"<data id="click_db" expr="60"/>"#,
+            &format!(r#"<data id="click_db" expr="{click_db}"/>"#),
+        ),
+    )
+    .expect("the lamp copy is writable");
+    let mut run = Run::start(&[room.display().to_string()], &[]);
+    all_activated(&run, &["floppy"]);
+    run.event("bot.input", &lamp_input("focus", &json!("lamp")));
+    let mut records = completed(&run);
+    run.event(
+        "bot.input",
+        &json!({"observation": {"event": "act", "data": {"event": "lamp.on", "data": {}}}}),
+    );
+    records.extend(completed(&run));
+    records.extend(completed(&run));
+    records.extend(run.close(WAIT).records);
+    records
+}
+
+/// The lamp's clicks the bot heard: the data of each `input.sound` its
+/// input ability logged for a sound of kind `lamp.on`.
+fn heard_clicks(records: &[Json]) -> Vec<Json> {
+    texts_of(records, "session.floppy.identity", "input.sound")
+        .into_iter()
+        .map(|text| serde_json::from_str::<Json>(&text).expect("JSON"))
+        .filter(|sound| sound["kind"] == "lamp.on")
+        .collect()
+}
+
+const LAMP_AT_ORIGIN: &str = "lamp: {position: {x: 0, y: 0, z: 0}, threshold_db: 0}";
+
+#[test]
+fn a_sound_carries_by_distance() {
+    // 2 m away: 60 - 20 log10(2) dB.
+    let records = click(
+        "60",
+        &format!("{LAMP_AT_ORIGIN}, floppy: {{position: {{x: 2, y: 0, z: 0}}, threshold_db: 0}}"),
+    );
+    let clicks = heard_clicks(&records);
+    assert_eq!(clicks.len(), 1, "{records:?}");
+    let level = clicks[0]["received_level_db"]
+        .as_f64()
+        .expect("a received level");
+    assert!(
+        (level - (60.0 - 20.0 * 2f64.log10())).abs() < 1e-9,
+        "{level}"
+    );
+    assert!((level - 53.979_400_086_720_37).abs() < 1e-9, "{level}");
+    // The emitter's amplitude is untouched.
+    assert_eq!(clicks[0]["amplitude_db"], json!(60));
+    // At the lamp: the 1 cm clamp, 100 + 40 dB.
+    let records = click(
+        "100",
+        &format!("{LAMP_AT_ORIGIN}, floppy: {{position: {{x: 0, y: 0, z: 0}}, threshold_db: 0}}"),
+    );
+    let clicks = heard_clicks(&records);
+    assert_eq!(clicks.len(), 1, "{records:?}");
+    assert_eq!(clicks[0]["received_level_db"].as_f64(), Some(140.0));
+}
+
+#[test]
+fn a_participant_below_its_threshold_does_not_hear() {
+    let records = click(
+        "60",
+        &format!("{LAMP_AT_ORIGIN}, floppy: {{position: {{x: 2, y: 0, z: 0}}, threshold_db: 55}}"),
+    );
+    assert!(heard_clicks(&records).is_empty(), "{records:?}");
+    // The click was made: the environment logged it.
+    assert!(
+        texts_of(&records, "session", "environment.sound")
+            .iter()
+            .any(|text| text.contains("lamp.on")),
+        "{records:?}"
+    );
+}
+
+#[test]
+fn a_sound_too_quiet_for_everyone_reaches_nobody() {
+    // Nobody's threshold is met, not even the lamp's own: the click is
+    // sent to nobody (not to every participant).
+    let records = click(
+        "60",
+        "lamp: {position: {x: 0, y: 0, z: 0}, threshold_db: 200}, floppy: {position: {x: 2, y: 0, z: 0}, threshold_db: 70}",
+    );
+    assert!(heard_clicks(&records).is_empty(), "{records:?}");
+    assert_eq!(texts_of(&records, "session.lamp", "lamp.on"), ["100"]);
+}
+
+#[test]
+fn speech_and_host_sounds_have_no_origin_and_reach_everyone() {
+    let dir = layout(&[("input", "['identity']")]);
+    double_the_identity(&dir);
+    let room = support::environment(&dir, &["floppy"], &[]);
+    support::place(
+        &room,
+        "floppy: {position: {x: 9, y: 0, z: 0}, threshold_db: 90}",
+    );
+    let mut run = Run::start(&[room.display().to_string()], &[]);
+    all_activated(&run, &["floppy"]);
+    // A loud host sound and a quiet one: neither has an origin, so both
+    // reach the bot, its level unmeasured.
+    run.event(
+        "environment.sound",
+        &json!({"audio": "media/a.wav", "amplitude_db": 20}),
+    );
+    run.event(
+        "environment.sound",
+        &json!({"audio": "media/b.wav", "amplitude_db": 100}),
+    );
+    let mut records = run.until(WAIT, label_is("input.sound"));
+    records.extend(run.until(WAIT, label_is("input.sound")));
+    drop(run.close(WAIT));
+    let heard: Vec<Json> = texts_of(&records, "session.floppy.identity", "input.sound")
+        .into_iter()
+        .map(|text| serde_json::from_str(&text).expect("JSON"))
+        .collect();
+    assert_eq!(
+        heard,
+        [
+            json!({"audio": "media/a.wav", "amplitude_db": 20}),
+            json!({"audio": "media/b.wav", "amplitude_db": 100})
+        ]
+    );
+}
+
+#[test]
+fn a_visual_reaches_every_participant() {
+    let dir = layout(&[("input", "['identity']")]);
+    double_the_identity(&dir);
+    let room = support::environment(&dir, &["a", "b"], &[]);
+    support::place(
+        &room,
+        "a: {position: {x: 0, y: 0, z: 0}, threshold_db: 200}, b: {position: {x: 50, y: 0, z: 0}, threshold_db: 200}",
+    );
+    let mut run = Run::start(
+        &[
+            "--fuel".to_owned(),
+            MULTI_BOT_FUEL.to_owned(),
+            room.display().to_string(),
+        ],
+        &[],
+    );
+    all_activated(&run, &["a", "b"]);
+    run.event(
+        "environment.visual",
+        &json!({"image": "media/image-1", "media_type": "image/png"}),
+    );
+    let mut records = run.until(WAIT, label_is("input.visual"));
+    records.extend(run.until(WAIT, label_is("input.visual")));
+    drop(run.close(WAIT));
+    let mut seen = sessions_of(&records, "input.visual");
+    seen.sort();
+    assert_eq!(seen, ["session.a.identity", "session.b.identity"]);
 }
