@@ -7,6 +7,28 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-16, the bot under its environment (D102 to D111), model `gabe-codex-1/gpt-6-luna`
+
+The bot now runs as a participant of `environments/room/room.scx` (the
+room logs its events; `--fuel 9223372036854775807`, D111). Env files
+`FLOPPY_LIVE_ENV_FILE=$PWD/.env:$PWD/.env.cpa` (the CPA gateway's
+`FLOPPY_BASE_URL` and `FLOPPY_API_KEY` from `.env.cpa`, `TYPESAFE_API_KEY`
+from `.env`; no vLLM call: `.env.cpa` overrides both of `.env`'s model
+variables), `FLOPPY_LIVE_MODEL=gabe-codex-1/gpt-6-luna`, `cargo test
+--locked -p floppy-tests --test floppy_live -- --ignored --test-threads 1`
+(79 s in all) and `--test environment_live -- --ignored`.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | fail | the bot activated in the room, autonomy and intuition left the turn unhandled (intuition `abstained (declined)` through TypeSafe), and reasoning failed `the reasoning failed (status)`: the CPA gateway answered 502 (a direct request to its `/models` and `/chat/completions` answered `502`, `error code: 502`, at the time of the run) |
+| `floppy_live` `live_chat`, `live_choices`, `live_identity` | fail | the same 502 at reasoning |
+| `floppy_live` `live_conversation` | fail | `0 completed, 4 failed`: the same 502 |
+| `environment_live` `live_two_participants` | not run (precondition) | `the env files set no value for ["FLOPPY_SPEECH_BASE_URL", "FLOPPY_SPEECH_API_KEY", "FLOPPY_VOICE_BASE_URL", "FLOPPY_VOICE_API_KEY"]`: no speech or voice backend is configured in this checkout (`.env.gemini` and `.env.local` are gone), and without voice detection the listening hands over no product (D98) |
+
+Nothing reached a model, so these runs prove only that the bot activates
+and takes its turns under the room against live TypeSafe; the live
+proofs wait for the gateway and for a speech and a voice backend.
+
 ## 2026-10-12, `live_conversation` with the per-backend streaming switch and the builder's token bound (D101)
 
 Streaming is set per backend (`FLOPPY_STREAM`, unset by default), an
