@@ -29,6 +29,14 @@ Nothing reached a model, so these runs prove only that the bot activates
 and takes its turns under the room against live TypeSafe; the live
 proofs wait for the gateway and for a speech and a voice backend.
 
+A rerun later the same day, after the gateway was reported back up,
+failed the same way: five tests in 78 s, each turn ending `the reasoning
+failed (status)`, and direct requests to the gateway's `/models` and
+`/chat/completions` just before it still answered `502`. The failures
+are the backend's, not floppy's (the requests never got a model's
+answer), so a run at the pre-environment commit `1a60144e3a` would meet
+the same 502 and was not made.
+
 ## 2026-10-12, `live_conversation` with the per-backend streaming switch and the builder's token bound (D101)
 
 Streaming is set per backend (`FLOPPY_STREAM`, unset by default), an
