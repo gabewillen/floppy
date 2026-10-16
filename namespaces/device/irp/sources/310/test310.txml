@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!-- device-2: a running child is read by its invoke id: its _sessionid (<parent>.<invokeid>), its active state, its data model and the events its active transitions accept. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:device="https://github.com/stateforward/floppy/namespaces/device">
+<datamodel>
+  <data id="read" expr="null"/>
+</datamodel>
+<state id="s0">
+  <invoke id="lamp" type="scxml">
+    <content>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="off">
+        <datamodel><data id="brightness" expr="0"/></datamodel>
+        <state id="off"><transition event="lamp.on" target="on"/></state>
+        <state id="on"><transition event="lamp.off" target="off"/></state>
+      </scxml>
+    </content>
+  </invoke>
+  <onentry><send event="read" delay="10ms"/></onentry>
+  <!-- Leaving s0 cancels the child before a transition's content runs
+       (SCXML 3.13), so the read is taken inside s0. -->
+  <transition event="read">
+    <device:snapshot location="read" target="'#_lamp'"/>
+    <raise event="check"/>
+  </transition>
+  <transition event="check" target="s1"/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<state id="s1">
+  <transition cond="read.id === _sessionid + '.lamp' &amp;&amp; read.state === 'off' &amp;&amp; read.attributes.brightness === 0 &amp;&amp; read.events.length === 1 &amp;&amp; read.events[0] === 'lamp.on'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

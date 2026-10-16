@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!-- device-2: a parallel configuration's atomic states are space-separated; a wildcard names no event and an event two transitions accept is listed once. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:device="https://github.com/stateforward/floppy/namespaces/device">
+<datamodel>
+  <data id="read" expr="null"/>
+</datamodel>
+<state id="s0">
+  <invoke id="pair" type="scxml">
+    <content>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="both">
+        <parallel id="both">
+          <state id="a"><transition event="go" target="a"/><transition event="*" target="a"/></state>
+          <state id="b"><transition event="go" target="b"/></state>
+        </parallel>
+      </scxml>
+    </content>
+  </invoke>
+  <onentry><send event="read" delay="10ms"/></onentry>
+  <!-- Leaving s0 cancels the child before a transition's content runs
+       (SCXML 3.13), so the read is taken inside s0. -->
+  <transition event="read">
+    <device:snapshot location="read" target="'#_pair'"/>
+    <raise event="check"/>
+  </transition>
+  <transition event="check" target="s1"/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<state id="s1">
+  <transition cond="read.state === 'a b' &amp;&amp; read.events.length === 1 &amp;&amp; read.events[0] === 'go'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

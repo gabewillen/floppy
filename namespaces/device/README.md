@@ -22,3 +22,13 @@ manifest [`package/device.extension.json`](package/device.extension.json)
 pins. `scripts/build-components.sh` builds, virtualizes and checks the
 component (imports: `types`, `telemetry`, `data-model-host`,
 `session-snapshot-host`) and publishes it into the dev package cache.
+
+## Statements
+
+The contract above as numbered statements, each tested by the namespace's
+own implementation report plan ([`irp/`](irp/README.md)), in the format and
+through the pipeline of scxml.rs's namespace suites.
+
+- <a id="device-1"></a>**device-1**. `<device:snapshot>` takes exactly `location` and `target`, both present and not empty, and no content, and the namespace has no other element: a malformed element raises `error.execution` and assigns nothing (its schema, [`package/device.xsd`](package/device.xsd), rejects it before any run under `scx validate`).
+- <a id="device-2"></a>**device-2**. `<device:snapshot>` writes `{id, state, attributes, events}` of the session its `target` names: its `_sessionid` (for an invoked child, `<parent _sessionid>.<invokeid>`), its active atomic states in document order separated by one space, its data model by `<data>` id, and the event names its active transitions accept, each once, a descriptor `*` naming none.
+- <a id="device-3"></a>**device-3**. A `target` that no running session of the run answers raises `error.execution` and assigns nothing.
