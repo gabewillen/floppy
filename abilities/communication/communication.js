@@ -74,3 +74,9 @@ function isResponseHopTimeout(_event) {
 function hopTimedOutMessage() {
   return 'response ' + operation + ' after ' + response_timeout_ms + ' ms';
 }
+
+// Speaking's playout: the environment's session, where its sound goes
+// (decision D103, amended 2026-10-15).
+function environmentTarget() {
+  return '#_scxml_' + environment;
+}

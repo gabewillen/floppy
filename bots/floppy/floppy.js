@@ -4,10 +4,6 @@
 
 // Shared: event records and send delays.
 
-function eventDataJson(_event) {
-  return JSON.stringify(_event.data);
-}
-
 function emptyData() {
   return {};
 }

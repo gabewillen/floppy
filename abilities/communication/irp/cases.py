@@ -1,6 +1,18 @@
 # The communication's statements and cases (tests/irp/harness.py writes them).
 
 S = suite
+# The harness is the environment the playout goes into: every case passes
+# its own _sessionid as environment (decision D103), so the communication
+# puts speaking's environment.sound into it at #_scxml_ + that id.
+ENVIRONMENT = ("environment", "_sessionid")
+_case = S.case
+
+
+def _in_the_harness(*args, params=(), **options):
+    return _case(*args, params=[ENVIRONMENT] + list(params), **options)
+
+
+S.case = _in_the_harness
 OFFERS = "bot.ability.offers"
 RESPOND = "bot.ability.communication.respond"
 INPUT = "bot.ability.communication.input"
@@ -61,7 +73,7 @@ S.statement(1, "It is ready once both its children, the conversation and speakin
 S.statement(2, "`bot.ability.communication.input` in active goes to the conversation; a text product comes back to the body as `bot.ability.cognition.input` `{stimulus}` unchanged, its stimulus carrying the conversation's history with the input as its latest, inbound, message.")
 S.statement(3, "A product that is not text reaches the body as the conversation's `bot.ability.conversation.output` itself (its latest message inbound); history whose latest message is outbound is not forwarded.")
 S.statement(4, "A conversation that cannot take an input fails it: its `bot.ability.conversation.failed` `{stage, message}` goes on to the body unchanged.")
-S.statement(5, "`bot.ability.communication.respond` `{text}` (non-blank) in active is said through speaking: the body gets speaking's playout in order, `bot.ability.speaking.efference` `{mouth: \"speaking\", duration, media_type, sample_rate_hz, channels}` then `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: \"speaking\"}`, then `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}`; the communication is active again and offers again, and the outbound record goes to the conversation as history only.")
+S.statement(5, "`bot.ability.communication.respond` `{text}` (non-blank) in active is said through speaking: in order, the body gets speaking's efference copy `bot.ability.speaking.efference` `{mouth: \"speaking\", duration, media_type, sample_rate_hz, channels}`, the communication puts speaking's `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: \"speaking\"}` into the environment whose id its `environment` names (`#_scxml_` + that id), and the body gets `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}`; the communication is active again and offers again, and the outbound record goes to the conversation as history only.")
 S.statement(6, "A blank response answers `bot.ability.communication.failed` `{message: \"Communication response text must be non-blank.\"}` without speaking; the communication stays active and says the next response.")
 S.statement(7, "A speaking failure answers `bot.ability.communication.failed` `{message}` (speaking's failure message) and the communication is active again.")
 S.statement(8, "A response is bounded by `response_timeout_ms` (36000 by default, a `<param>`: speaking's 30 s encoding bound plus the original's 6 s): when it passes before speaking answers, the body gets `bot.ability.communication.failed` `{message: \"Speaking response timed out.\"}` and the communication is active again; speaking's late answer is not forwarded. `encoding_timeout_ms` (30000 by default, a `<param>`; decision D98) is passed to speaking as its encoding bound.")

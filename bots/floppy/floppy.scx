@@ -49,14 +49,15 @@
   when the text names the bot, as the cognition hands over a routine's
   bot.behavior.tick (its routines).
 
-  Speaking: the communication relays speaking's playout, the efference
-  copy bot.ability.speaking.efference (sent on to each Listening ability
-  in listening, the original's Speaking listening peers) and then
-  environment.sound, which the body logs as a record labelled
-  environment.sound and, as any sound, gives each input ability as a
-  stimulus (the bot hears itself).
+  Speaking: the communication relays speaking's efference copy,
+  bot.ability.speaking.efference (sent on to each Listening ability in
+  listening, the original's Speaking listening peers); right after it, the
+  communication puts speaking's sound, environment.sound, into the
+  environment whose id the body passes it (decision D103, amended
+  2026-10-15: the copy reaches the listening first), and the sound comes
+  back to the body as any sound there does (the bot hears itself).
 
-  Environment: environment.sound (logged) and environment.visual from the
+  Environment: environment.sound and environment.visual from the
   environment, while active, go to
   each input ability (input, the original's Bot input: the invoke ids
   of the abilities that perceive raw stimuli; the identity and the
@@ -137,8 +138,7 @@
   bot.ability.speaking.output, bot.ability.communication.failed,
   bot.ability.conversation.failed and bot.ability.conversation.output, the
   listening's bot.ability.listening.failed, and any ability's
-  bot.ability.failed that is not a turn's reply. Every environment.sound
-  is a log record labelled environment.sound;
+  bot.ability.failed that is not a turn's reply;
   floppy's own records are labelled floppy.* (not the original events):
   floppy.output the turn's selected events (one record per completed turn),
   floppy.choices each turn's assembled
@@ -258,6 +258,7 @@
     </invoke>
     <invoke id="communication" type="scxml" src="../../abilities/communication/communication.scx">
       <param name="database" expr="database"/>
+      <param name="environment" expr="environment"/>
     </invoke>
     <invoke id="identity" type="scxml" src="../../abilities/identity/identity.scx">
       <param name="database" expr="database"/>
@@ -332,10 +333,9 @@
           <content expr="_event.data"/>
         </send>
       </transition>
-      <!-- A sound in the environment, or the bot's own speech: a log
-           record, and a stimulus for every input ability. -->
+      <!-- A sound the environment delivers (the bot's own speech
+           included): a stimulus for every input ability. -->
       <transition event="environment.sound" event:schema="schemas/environment.sound.json">
-        <log label="environment.sound" expr="eventDataJson(_event)"/>
         <foreach array="input" item="ability">
           <send event="environment.sound" targetexpr="abilityTarget(ability)">
             <content expr="_event.data"/>

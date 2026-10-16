@@ -2,7 +2,9 @@
 <!-- communication-10: activate in active does nothing. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="communication" type="scxml" src="../../../communication.scx"/>
+  <invoke id="communication" type="scxml" src="../../../communication.scx">
+    <param name="environment" expr="_sessionid"/>
+  </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>

@@ -3,6 +3,7 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="communication" type="scxml" src="../../../communication.scx">
+    <param name="environment" expr="_sessionid"/>
     <param name="response_timeout_ms" expr="100"/>
   </invoke>
   <state id="boot">

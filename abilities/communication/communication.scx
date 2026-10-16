@@ -51,8 +51,12 @@
   Speaking's routes: speaking records the words it said as an outbound
   bot.ability.conversation.append, which the communication passes to the
   conversation (a sibling is out of speaking's reach), and its playout,
-  bot.ability.speaking.efference and then environment.sound, goes on to
-  the body in order, whatever the state.
+  bot.ability.speaking.efference and then environment.sound, is passed on
+  in order whatever the state: the copy to the body, the sound into the
+  environment, at #_scxml_ + the <data> environment (the environment's id,
+  the body's <param>; decision D103, amended 2026-10-15: the communication
+  puts the sound into the environment, after the copy has left for the
+  body, so the copy reaches the listening first).
 
   Activate: bot.ability.communication.activate {} keeps the one
   conversation active (a catalog of conversations to switch between is
@@ -89,6 +93,8 @@
     <!-- The memory database file, for the conversation (null:
          no memory). -->
     <data id="database" expr="null"/>
+    <!-- The environment's id (decision D106), where speaking's sound goes. -->
+    <data id="environment" expr="null"/>
     <data id="ready" expr="({})"/>
     <!-- The response in hand: its number, words and hop timer. -->
     <data id="operation" expr="0"/>
@@ -153,7 +159,11 @@
     <transition event="done.invoke.conversation done.invoke.speaking" target="degraded">
       <assign location="failure" expr="childEndFailure(_event)"/>
     </transition>
-    <!-- Speaking's record of what it said, and its playout. -->
+    <!-- Speaking's record of what it said, and its playout: the copy to
+         the body, then the sound into the environment, in the order speaking
+         sent them, so the copy is in the body's queue before the
+         environment can deliver the sound back (decision D103, amended
+         2026-10-15). -->
     <transition event="bot.ability.conversation.append" event:schema="schemas/bot.ability.conversation.append.json">
       <send event="bot.ability.conversation.append" target="#_conversation">
         <content expr="_event.data"/>
@@ -165,7 +175,7 @@
       </send>
     </transition>
     <transition event="environment.sound" event:schema="schemas/environment.sound.json">
-      <send event="environment.sound" target="#_parent">
+      <send event="environment.sound" targetexpr="environmentTarget()">
         <content expr="_event.data"/>
       </send>
     </transition>

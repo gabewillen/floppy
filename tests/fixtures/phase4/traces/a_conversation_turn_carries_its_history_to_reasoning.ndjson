@@ -22,7 +22,7 @@
 {"label":"reflection","parent":"session.floppy.cognition","session":"session.floppy.cognition.reflection","text":"turn 1: 0 episodes, 0 behaviors","type":"log"}
 {"label":"speech.encode","parent":"session.floppy.communication.speaking.vocal","session":"session.floppy.communication.speaking.vocal.speech","text":"encode Hi! I am floppy. -> media/speaking-1.pcm","type":"log"}
 {"label":"floppy.say","parent":"session.floppy.communication","session":"session.floppy.communication.speaking","text":"Hi! I am floppy.","type":"log"}
-{"label":"environment.sound","parent":"session","session":"session.floppy","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"source\":\"speaking\"}","type":"log"}
+{"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"source\":\"speaking\"}","type":"log"}
 {"label":"communication.offers","parent":"session.floppy","session":"session.floppy.communication","text":"bot.ability.communication.respond","type":"log"}
 {"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"text\":\"Hi! I am floppy.\"}","type":"log"}
 {"label":"conversation","parent":"session.floppy.communication","session":"session.floppy.communication.conversation","text":"outbound 1","type":"log"}
@@ -50,7 +50,7 @@
 {"label":"reflection","parent":"session.floppy.cognition","session":"session.floppy.cognition.reflection","text":"turn 2: 1 episodes, 0 behaviors","type":"log"}
 {"label":"speech.encode","parent":"session.floppy.communication.speaking.vocal","session":"session.floppy.communication.speaking.vocal.speech","text":"encode Hi! I am floppy. -> media/speaking-2.pcm","type":"log"}
 {"label":"floppy.say","parent":"session.floppy.communication","session":"session.floppy.communication.speaking","text":"Hi! I am floppy.","type":"log"}
-{"label":"environment.sound","parent":"session","session":"session.floppy","text":"{\"audio\":\"media/speaking-2.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"source\":\"speaking\"}","type":"log"}
+{"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-2.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"source\":\"speaking\"}","type":"log"}
 {"label":"communication.offers","parent":"session.floppy","session":"session.floppy.communication","text":"bot.ability.communication.respond","type":"log"}
 {"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"text\":\"Hi! I am floppy.\"}","type":"log"}
 {"label":"conversation","parent":"session.floppy.communication","session":"session.floppy.communication.conversation","text":"outbound 3","type":"log"}

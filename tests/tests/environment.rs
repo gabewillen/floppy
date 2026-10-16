@@ -332,3 +332,119 @@ fn the_environment_refuses_host_input_its_schemas_refuse() {
         finished.records
     );
 }
+
+/// Starts the room laid into `dir` with one floppy bot per id in `bots`,
+/// hearing through the fake hearing backend (`support::hearing`): the
+/// speech double's first utterance, `media/speaking-1.pcm`, spells
+/// `words` (24 kHz mono PCM, as the double reports it), and
+/// `media/silence.wav` is silence.
+fn start_hearing(
+    dir: &Path,
+    bots: &[&str],
+    test: &str,
+    words: &str,
+) -> (Run, support::hearing::Backend) {
+    use support::hearing;
+    let backend = hearing::Backend::start();
+    let mut args = hearing::granted(
+        test,
+        &backend,
+        &[
+            ("speaking-1.pcm", hearing::pcm(&hearing::voiced(words))),
+            ("silence.wav", hearing::silent_wav()),
+        ],
+    )
+    .args;
+    if bots.len() > 1 {
+        args.extend(["--fuel".to_owned(), MULTI_BOT_FUEL.to_owned()]);
+    }
+    args.push(support::environment(dir, bots, &[]).display().to_string());
+    (Run::start(&args, &[]), backend)
+}
+
+/// The silence that ends an utterance, from no source.
+fn silence() -> Json {
+    json!({"audio": "media/silence.wav", "media_type": "audio/wav"})
+}
+
+#[test]
+fn a_bots_speech_reaches_the_other_participant() {
+    let dir = layout(&[]);
+    let (mut run, backend) = start_hearing(
+        &dir,
+        &["a", "b"],
+        "a_bots_speech_reaches_the_other_participant",
+        "ignore this",
+    );
+    all_activated(&run, &["a", "b"]);
+    // a answers, through the speech double; its sound goes into the
+    // environment, which gives it to both bots.
+    run.event(
+        "bot.ability.communication.input",
+        &said("reply now", &["a"]),
+    );
+    let mut all = run.until(WAIT, label_is("bot.ability.speaking.output"));
+    run.event("environment.sound", &silence());
+    all.extend(run.until(WAIT, |record| {
+        label_is("double.input")(record) && record["session"] == "session.b.cognition"
+    }));
+    all.extend(run.close(WAIT).records);
+    let turns: Vec<(String, String)> = all
+        .iter()
+        .filter(|record| record["type"] == "log" && record["label"] == "double.input")
+        .map(|record| {
+            (
+                record["session"].as_str().unwrap_or_default().to_owned(),
+                record["text"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        turns,
+        [
+            ("session.a.cognition".to_owned(), "1 reply 1".to_owned()),
+            (
+                "session.b.cognition".to_owned(),
+                r#"1 ignore "ignore this""#.to_owned()
+            ),
+        ],
+        "{all:?}"
+    );
+    assert!(backend.decoded().contains(&"ignore this".to_owned()));
+}
+
+#[test]
+fn a_bot_hears_its_own_speech_through_the_environment_and_withholds_it() {
+    let dir = layout(&[]);
+    let (mut run, backend) = start_hearing(
+        &dir,
+        &["floppy"],
+        "a_bot_hears_its_own_speech_through_the_environment_and_withholds_it",
+        "ignore this",
+    );
+    all_activated(&run, &["floppy"]);
+    run.event("bot.ability.communication.input", &said("reply now", &[]));
+    let spoken = run.until(WAIT, label_is("bot.ability.speaking.output"));
+    run.event("environment.sound", &silence());
+    // The listening decodes the bot's own words, after its efference
+    // copy, and hands over no product (decision D98).
+    let mut seen = Vec::new();
+    while !backend.decoded().contains(&"ignore this".to_owned()) {
+        seen.extend(run.until(WAIT, |record| record["type"] == "call"));
+    }
+    let finished = run.close(WAIT);
+    seen.extend(finished.records);
+    assert_eq!(
+        sessions_of(&seen, "double.input"),
+        Vec::<String>::new(),
+        "{seen:?}"
+    );
+    let mut all = spoken;
+    all.extend(seen);
+    assert!(
+        logs(&all)
+            .iter()
+            .any(|(label, text)| label == "environment.sound" && text.contains("speaking-1.pcm")),
+        "the environment delivered the bot's own sound: {all:?}"
+    );
+}
