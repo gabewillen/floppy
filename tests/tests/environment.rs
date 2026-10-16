@@ -969,3 +969,20 @@ fn a_device_that_left_is_not_in_the_environment_block() {
         ]
     );
 }
+
+#[test]
+fn a_held_device_whose_read_fails_drops_only_that_device() {
+    // The bot holds `gone`, which the room does not run, before the lamp:
+    // `gone`'s read fails and only `gone` is left out.
+    let records = one_turn(&["gone", "lamp"], &["lamp"], |_| {});
+    let sent = environments(&records);
+    assert_eq!(sent.len(), 1, "{records:?}");
+    let devices: Vec<&Json> = sent[0]["devices"]
+        .as_array()
+        .expect("devices")
+        .iter()
+        .collect();
+    assert_eq!(devices.len(), 1, "{sent:?}");
+    assert_eq!(devices[0]["ref"], json!("lamp"));
+    assert_eq!(devices[0]["id"], json!("session.lamp"));
+}

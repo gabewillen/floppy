@@ -23,6 +23,11 @@ function heldDevices() {
   return Object.keys(owned_devices);
 }
 
+// Whether the bot holds an index-th device (the turn reads at most 8).
+function holdsDeviceAt(index) {
+  return index < devices.length;
+}
+
 // A held device's address (decision D110).
 function deviceTarget(reference) {
   return '#_scxml_' + owned_devices[reference];
