@@ -7,6 +7,50 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-16, generate's forced tool call (D112) on the local vLLM, model `Qwen/Qwen3.8-Flash-Next`
+
+`generate` now asks for schema-shaped output through one forced tool call
+(`tools`, `tool_choice`) instead of `response_format`, which this server
+answers `400` ("structured output (response_format and the guided_*
+fields) is not supported by this engine yet"); before the change every
+`floppy_live` test failed `the reasoning failed (status)` there. The runs
+used floppy commit `2c733f2ebc`, env file `FLOPPY_LIVE_ENV_FILE=$PWD/.env`
+only (the vLLM's `FLOPPY_BASE_URL` and `FLOPPY_API_KEY`, and
+`TYPESAFE_API_KEY`; no `FLOPPY_STREAM`, so no call streamed; no speech or
+voice backend), `FLOPPY_LIVE_MODEL=Qwen/Qwen3.8-Flash-Next`, `cargo test
+-p floppy-tests --locked --test floppy_live -- --ignored --nocapture
+--test-threads=1` (468 s). The diagnosis runs after it went through a
+local relay that saved each request and reply body (no headers).
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `generate_service` `live_generate_through_an_env_file` | pass | strict schema through the forced call, `generate.result` (27 s) |
+| `floppy_live` `live_cascade` | pass | |
+| `floppy_live` `live_choices` | pass | |
+| `floppy_live` `live_chat` | fail | reasoning answered through the forced call ("Hi Gabe! Hello! It's nice to meet you.") and the turn completed, but speaking failed `Speech encoding failed: the backend is not configured.`, so no `bot.ability.speaking.output` came within 6 minutes |
+| `floppy_live` `live_identity` | fail | turn 1's reasoning failed `schema-mismatch`: the call's arguments did not satisfy the dispatch schema (the server does not constrain decoding, so `strict` is advisory there; the arguments were not saved). Three reruns completed both turns and then waited the full 6 minutes for speaking's output, as in `live_chat` |
+| `floppy_live` `live_conversation` | fail | `4 completed, 0 failed`: turn 3 answered "pong" and turn 4 recalled "green" (both through reasoning), but no behavior was learned by turn 2 |
+
+Why `live_conversation` learned nothing: reflection selected
+`bot.behavior.create` on turn 2, and its revision failed
+`error.execution` before the builder made a model call. Since
+`52d00a84af`, `floppy_live` lays out a scratch copy of `bots/floppy` and
+`abilities` only, so reflection's `<invoke src="../../bots/builder/builder.scx">`
+names a document that isn't there. That is outside D112 and was not
+changed. With a local, uncommitted edit that copies `bots/builder` too, the
+same test (684 s) learned `PingPongResponder` ACTIVE on turn 2 through the
+builder's `topology_plan` and `scxml_draft` forced calls (three of its
+eight author calls stopped at the 8192-token bound, `length`), and
+autonomy handled turns 3 and 4. But the drafted behavior answered "pong"
+to turn 4's question too, so the test failed its "green" assertion: the
+model's draft, not the transport.
+
+Across these runs the server sometimes ignored the forced `tool_choice` on
+reflection's select call and answered in prose with no tool call (for
+example "Empty selection. No clear repeated pattern..."). That reply is
+`malformed` (`Reflection select failed (malformed)`), as D112 says; the
+turn still completes.
+
 ## 2026-10-16, the bot under its environment (D102 to D111), model `gabe-codex-1/gpt-6-luna`
 
 The bot now runs as a participant of `environments/room/room.scx` (the
