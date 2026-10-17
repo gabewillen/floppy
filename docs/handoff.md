@@ -11,6 +11,17 @@ Last updated: 2026-10-16.
 
 ## Current state (2026-10-09) — resume here
 
+- **Tools, not structured output (2026-10-16, D112):** the generate
+  service asks for schema-shaped output through one forced tool call
+  (`tools` with one function, the `schemaname` and the schema as its
+  `parameters`, and `tool_choice` forcing it) and reads the first tool
+  call's `function.arguments`, validated against the schema as before; it
+  never sends `response_format`, which the maintainer's local vLLM refuses
+  (`400`). The `<param>`s and events are unchanged. That server does not
+  constrain decoding, so `strict` is advisory there: a reply without the
+  forced call is `malformed` and arguments outside the schema are
+  `schema-mismatch` (docs/live-proof.md).
+
 - **The environment (2026-10-16, D102 to D111,
   [plan](plans/environment.mdscript.md)):** the bot runs as a participant of
   `environments/room/room.scx`, the root session, and activates on joining
