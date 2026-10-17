@@ -423,7 +423,7 @@ fn system_one(chosen: &str, body: &[u8]) -> Option<String> {
     Some(json!({"model": "jev-latest", "answers": answers}).to_string())
 }
 
-/// The mock's answer to one request on `path` forcing the function of
+/// The mock's answer to one request on `path` requiring the function of
 /// `schema`, after `authors` draft and `plans` plan requests on that path.
 fn mock_reply(
     path: &str,
@@ -516,10 +516,10 @@ struct Received {
 }
 
 impl Received {
-    /// The schema name of a Chat Completions request: the function it forces.
+    /// The schema name of a Chat Completions request: the one tool it requires a call of.
     fn schema_name(&self) -> Option<&str> {
         self.body
-            .pointer("/tool_choice/function/name")
+            .pointer("/tools/0/function/name")
             .and_then(Json::as_str)
     }
 

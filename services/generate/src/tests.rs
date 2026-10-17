@@ -82,19 +82,19 @@ fn reply(content: &str) -> Vec<u8> {
     ])
 }
 
-/// The reply text of a stream without a forced call.
+/// The answer of a stream without a schema.
 fn reply_text_of(body: &[u8]) -> Result<String, FailureCode> {
-    reply_text(body, None)
+    stream_reply(body).and_then(|reply| reply.answer(None))
 }
 
-/// A non-streamed completion whose first tool call is `function`'s with
-/// `arguments`, as a backend answers a forced call (content `null`).
+/// A non-streamed completion whose one tool call is `function`'s with
+/// `arguments`, as a backend answers a required call (content `null`).
 fn tool_completion(function: &str, arguments: &str) -> Vec<u8> {
     serde_json::json!({
         "object": "chat.completion",
         "choices": [{
             "index": 0,
-            "finish_reason": "stop",
+            "finish_reason": "tool_calls",
             "message": {
                 "role": "assistant",
                 "content": null,
@@ -298,7 +298,7 @@ fn max_completion_tokens_is_sent_and_bounded() {
 }
 
 #[test]
-fn a_schema_forces_one_tool_call_with_its_name_and_strictness() {
+fn a_schema_is_the_one_tool_and_a_call_is_required() {
     let generation = parse(&[
         ("model", text("m")),
         ("prompt", text("Decide.")),
@@ -313,11 +313,13 @@ fn a_schema_forces_one_tool_call_with_its_name_and_strictness() {
     assert_eq!(body["tools"].as_array().map(Vec::len), Some(1), "{body}");
     assert_eq!(body["tools"][0]["type"], "function");
     assert_eq!(body["tools"][0]["function"]["name"], "verdict");
-    assert_eq!(body["tools"][0]["function"]["strict"], true);
-    assert_eq!(
-        body["tool_choice"],
-        serde_json::json!({ "type": "function", "function": { "name": "verdict" } })
+    assert!(
+        body["tools"][0]["function"].get("strict").is_none(),
+        "{body}"
     );
+    assert_eq!(body["tool_choice"], "required");
+    // With tools and no effort asked, the effort is none.
+    assert_eq!(body["reasoning_effort"], "none");
     // A schema given as a string is the same request.
     let from_text = parse(&[
         ("model", text("m")),
@@ -331,11 +333,7 @@ fn a_schema_forces_one_tool_call_with_its_name_and_strictness() {
         text_body["tools"][0]["function"]["name"],
         DEFAULT_SCHEMA_NAME
     );
-    assert_eq!(text_body["tools"][0]["function"]["strict"], false);
-    assert_eq!(
-        text_body["tool_choice"]["function"]["name"],
-        DEFAULT_SCHEMA_NAME
-    );
+    assert_eq!(text_body["tool_choice"], "required");
     // Without a schema, no tool is offered.
     let plain = parse(&[("model", text("m")), ("prompt", text("Say."))]).expect("valid");
     let plain_body: Json =
@@ -717,7 +715,7 @@ fn a_structured_reply_is_validated_before_it_is_returned() {
 }
 
 #[test]
-fn a_structured_reply_is_only_the_forced_calls_arguments() {
+fn a_structured_reply_is_only_the_calls_arguments() {
     let generation = parse(&[
         ("model", text("m")),
         ("prompt", text("p")),
@@ -734,7 +732,8 @@ fn a_structured_reply_is_only_the_forced_calls_arguments() {
         outcome(&generation, ok(reply(arguments))),
         Returned::failed(FailureCode::Malformed)
     );
-    // A call of another function, or with no arguments, is none either.
+    // A call of another function is none either, and arguments that are no
+    // JSON object are not JSON.
     assert_eq!(
         outcome(&generation, ok(tool_completion("other", arguments))),
         Returned::failed(FailureCode::Malformed)
@@ -745,13 +744,18 @@ fn a_structured_reply_is_only_the_forced_calls_arguments() {
     );
     assert_eq!(
         outcome(&generation, ok(tool_completion(DEFAULT_SCHEMA_NAME, ""))),
-        Returned::failed(FailureCode::Malformed)
+        Returned::failed(FailureCode::NotJson)
     );
-    // A later call's fragments are not the first call's.
+    assert_eq!(
+        outcome(&generation, ok(tool_completion(DEFAULT_SCHEMA_NAME, "[]"))),
+        Returned::failed(FailureCode::NotJson)
+    );
+    // Each fragment goes to the call its index names; the first call of the
+    // function is the answer.
     let later = stream(&[chunk(
         &serde_json::json!({ "tool_calls": [
-                { "index": 0, "function": { "name": DEFAULT_SCHEMA_NAME, "arguments": arguments } },
-                { "index": 1, "function": { "name": DEFAULT_SCHEMA_NAME, "arguments": "{}" } },
+                { "index": 1, "id": "call-2", "function": { "name": DEFAULT_SCHEMA_NAME, "arguments": "{}" } },
+                { "index": 0, "id": "call-1", "function": { "name": DEFAULT_SCHEMA_NAME, "arguments": arguments } },
             ] }),
         Some("tool_calls"),
     )]);
@@ -1082,4 +1086,57 @@ fn a_streamed_reply_reports_its_start_and_then_its_data_events() {
     assert!(!data.read(&body, second - 1), "within the second");
     assert!(data.read(&body, second), "the event not yet reported");
     assert!(!data.read(&body, 3 * second), "no new event");
+}
+
+#[test]
+fn with_a_schema_only_no_reasoning_effort_is_admitted() {
+    let with = |effort: Option<&str>| {
+        let mut parameters = vec![
+            ("model", text("m")),
+            ("prompt", text("p")),
+            ("schema", text(SCHEMA)),
+        ];
+        if let Some(effort) = effort {
+            parameters.push(("reasoning_effort", text(effort)));
+        }
+        parse(&parameters).map(|generation| generation.reasoning_effort)
+    };
+    assert_eq!(with(None), Ok(TOOLS_REASONING_EFFORT));
+    assert_eq!(with(Some("none")), Ok("none"));
+    assert!(with(Some("low")).is_err(), "tools refuse another effort");
+    // Without a schema the default stays.
+    let plain = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
+    assert_eq!(plain.reasoning_effort, DEFAULT_REASONING_EFFORT);
+}
+
+#[test]
+fn a_finish_reason_must_agree_with_the_tool_calls() {
+    let generation = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(SCHEMA)),
+    ])
+    .expect("valid");
+    let arguments = r#"{"score":41,"answer":"yes"}"#;
+    let mut stopped: Json =
+        serde_json::from_slice(&tool_completion(DEFAULT_SCHEMA_NAME, arguments)).expect("JSON");
+    stopped["choices"][0]["finish_reason"] = "stop".into();
+    assert_eq!(
+        outcome(&generation, ok(stopped.to_string().into_bytes())),
+        Returned::failed(FailureCode::Malformed),
+        "calls without a tool_calls finish reason"
+    );
+    assert_eq!(
+        outcome(&generation, ok(completion("", "tool_calls"))),
+        Returned::failed(FailureCode::Malformed),
+        "a tool_calls finish reason without calls"
+    );
+    let mut without_id: Json =
+        serde_json::from_slice(&tool_completion(DEFAULT_SCHEMA_NAME, arguments)).expect("JSON");
+    without_id["choices"][0]["message"]["tool_calls"][0]["id"] = "".into();
+    assert_eq!(
+        outcome(&generation, ok(without_id.to_string().into_bytes())),
+        Returned::failed(FailureCode::Malformed),
+        "a call without an id"
+    );
 }

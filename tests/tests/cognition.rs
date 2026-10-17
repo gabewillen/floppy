@@ -1065,8 +1065,7 @@ fn reasoning_selects_from_the_turns_choices() {
     let body = &requests[0].body;
     let format = &body["tools"][0]["function"];
     assert_eq!(format["name"], "dispatch");
-    assert_eq!(format["strict"], true);
-    assert_eq!(body["tool_choice"]["function"]["name"], "dispatch");
+    assert_eq!(body["tool_choice"], "required");
     let branches = format["parameters"]["properties"]["events"]["items"]["anyOf"]
         .as_array()
         .expect("one branch per choice");

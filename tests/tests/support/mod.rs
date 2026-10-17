@@ -1032,14 +1032,18 @@ impl Drop for Pglite {
     }
 }
 
-/// The function a Chat Completions `request` forces a call of
-/// (`tool_choice`, as the generate service sends a schema, decision D112).
-pub fn forced_function(request: &Json) -> Option<&str> {
-    request.pointer("/tool_choice/function/name")?.as_str()
+/// The function a Chat Completions `request` requires a call of: its one
+/// tool when `tool_choice` is `required`, as the generate service sends a
+/// schema (decision D112).
+pub fn required_function(request: &Json) -> Option<&str> {
+    if request["tool_choice"] != "required" {
+        return None;
+    }
+    request.pointer("/tools/0/function/name")?.as_str()
 }
 
 /// The `delta` of a streamed reply's piece of `content`: the content
-/// itself, or, when `function` is forced, a fragment of its call's
+/// itself, or, when `function` is required, a fragment of its call's
 /// `arguments` (the first fragment, `first`, naming the function).
 fn piece_delta(function: Option<&str>, content: &str, first: bool) -> Json {
     match function {
@@ -1055,7 +1059,7 @@ fn piece_delta(function: Option<&str>, content: &str, first: bool) -> Json {
 }
 
 /// The `message` of a completion of `content`: the content itself, or,
-/// when `function` is forced, its call with `content` as the arguments.
+/// when `function` is required, its call with `content` as the arguments.
 fn completion_message(function: Option<&str>, content: &str) -> Json {
     match function {
         None => serde_json::json!({"role": "assistant", "content": content}),
@@ -1068,9 +1072,10 @@ fn completion_message(function: Option<&str>, content: &str) -> Json {
 
 /// `text`, a fake backend's answer to the Chat Completions `request`, as
 /// the backend sends it. A completion whose content is the scripted reply
-/// becomes, when the request forces a function call ([`forced_function`]),
+/// becomes, when the request requires a function call ([`required_function`]),
 /// the call of that function with the content as its `arguments` (content
-/// `null`), as a backend answers a forced call. And when the request asks
+/// `null`, a `stop` finish reason as `tool_calls`), as a backend answers a
+/// required call. And when the request asks
 /// for a streamed reply (`"stream": true`, as every model call of
 /// reasoning, reflection and the builder does, decision D101), the
 /// server-sent-event stream of the same reply (a role chunk, its content or
@@ -1085,12 +1090,15 @@ pub fn answer_as_asked(request: &Json, text: String) -> String {
     else {
         return text;
     };
-    let function = forced_function(request);
+    let function = required_function(request);
     if request["stream"] != true {
         if function.is_none() {
             return text;
         }
         completion["choices"][0]["message"] = completion_message(function, &content);
+        if completion["choices"][0]["finish_reason"] == "stop" {
+            completion["choices"][0]["finish_reason"] = "tool_calls".into();
+        }
         return completion.to_string();
     }
     let choice = &completion["choices"][0];
@@ -1109,15 +1117,22 @@ pub fn answer_as_asked(request: &Json, text: String) -> String {
             Json::Null,
         ),
         chunk(piece_delta(function, &content, true), Json::Null),
-        chunk(serde_json::json!({}), choice["finish_reason"].clone()),
+        chunk(
+            serde_json::json!({}),
+            if function.is_some() && choice["finish_reason"] == "stop" {
+                Json::from("tool_calls")
+            } else {
+                choice["finish_reason"].clone()
+            },
+        ),
         "data: [DONE]\n\n".to_owned(),
     ]
     .concat()
 }
 
 /// Answers the Chat Completions `request` on `stream` with `content` (as
-/// [`answer_as_asked`] does: a forced function's call when the request
-/// forces one) the way a slow backend does: a streamed request (`"stream": true`) gets its
+/// [`answer_as_asked`] does: the required function's call when the request
+/// requires one) the way a slow backend does: a streamed request (`"stream": true`) gets its
 /// head at once and then `content` in `pieces` server-sent-event chunks
 /// `gap` apart, then its finish and `data: [DONE]`; with `stall`, only the
 /// first piece, and then nothing until the client closes the connection
@@ -1135,7 +1150,7 @@ pub fn answer_slowly(
 ) {
     use std::io::Write as _;
     let streamed = request["stream"] == true;
-    let function = forced_function(request);
+    let function = required_function(request);
     let head = format!(
         "HTTP/1.1 200 OK\r\ncontent-type: {}\r\nconnection: close\r\n\r\n",
         if streamed {
@@ -1155,7 +1170,7 @@ pub fn answer_slowly(
         std::thread::sleep(gap * u32::try_from(pieces).unwrap_or(u32::MAX));
         let completion = serde_json::json!({
             "object": "chat.completion",
-            "choices": [{"index": 0, "finish_reason": "stop", "message": completion_message(function, content)}],
+            "choices": [{"index": 0, "finish_reason": if function.is_some() { "tool_calls" } else { "stop" }, "message": completion_message(function, content)}],
         });
         let _ = write!(stream, "{completion}");
         return;
@@ -1197,7 +1212,17 @@ pub fn answer_slowly(
     let _ = write!(
         stream,
         "{}data: [DONE]\n\n",
-        chunk(serde_json::json!({}), Json::String("stop".to_owned()))
+        chunk(
+            serde_json::json!({}),
+            Json::String(
+                if function.is_some() {
+                    "tool_calls"
+                } else {
+                    "stop"
+                }
+                .to_owned()
+            )
+        )
     );
 }
 

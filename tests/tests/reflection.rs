@@ -10,7 +10,7 @@
 //! answer logs it and then the inventory and the stored episodes.
 //!
 //! One deterministic fake Chat Completions backend on 127.0.0.1 answers
-//! by the schema's name, the function the request forces: `dispatch` (the select step)
+//! by the schema's name, the one tool the request requires a call of: `dispatch` (the select step)
 //! by the route (the first path segment of `FLOPPY_BASE_URL`),
 //! `topology_plan` and `scxml_draft` (the builder) with a plan and a turn
 //! behavior draft, or with drafts that never validate on the `buildfail`
@@ -132,7 +132,7 @@ fn answer(target: &str, body: &Json) -> Option<String> {
     if !target.ends_with("/v1/chat/completions") {
         return None;
     }
-    let schema = body.pointer("/tool_choice/function/name")?.as_str()?;
+    let schema = body.pointer("/tools/0/function/name")?.as_str()?;
     match schema {
         "dispatch" => Some(completion(
             &json!({"events": selection(route)?}).to_string(),
@@ -159,7 +159,7 @@ struct Received {
 impl Received {
     fn schema_name(&self) -> Option<&str> {
         self.body
-            .pointer("/tool_choice/function/name")
+            .pointer("/tools/0/function/name")
             .and_then(Json::as_str)
     }
 
@@ -201,7 +201,7 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     // steadily (seven pieces 1.5 s apart), or stall after their first
     // piece.
     let schema = body
-        .pointer("/tool_choice/function/name")
+        .pointer("/tools/0/function/name")
         .and_then(Json::as_str)
         .unwrap_or_default()
         .to_owned();
@@ -272,7 +272,7 @@ impl Mock {
         Self { origin, received }
     }
 
-    /// The requests forcing the schema `name`'s function, in order.
+    /// The requests requiring a call of the schema `name`'s function, in order.
     fn requests(&self, name: &str) -> Vec<Received> {
         self.received
             .lock()

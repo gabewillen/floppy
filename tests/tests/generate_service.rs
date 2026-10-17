@@ -92,14 +92,14 @@ fn completion(content: &str) -> String {
     .to_string()
 }
 
-/// A non-streamed Chat Completions answer to a forced call of `function`:
-/// its first tool call carries `arguments`, its content is `null`.
+/// A non-streamed Chat Completions answer to a required call of
+/// `function`: its one tool call carries `arguments`, its content is `null`.
 fn tool_call(function: &str, arguments: &str) -> String {
     serde_json::json!({
         "object": "chat.completion",
         "choices": [{
             "index": 0,
-            "finish_reason": "stop",
+            "finish_reason": "tool_calls",
             "message": {
                 "role": "assistant",
                 "content": null,
@@ -307,11 +307,12 @@ fn a_structured_generation_returns_the_schema_valid_object() {
     assert!(body.get("response_format").is_none(), "{body}");
     assert_eq!(body["tools"][0]["type"], "function");
     assert_eq!(body["tools"][0]["function"]["name"], "verdict");
-    assert_eq!(body["tools"][0]["function"]["strict"], true);
-    assert_eq!(
-        body["tool_choice"],
-        serde_json::json!({"type": "function", "function": {"name": "verdict"}})
+    assert!(
+        body["tools"][0]["function"].get("strict").is_none(),
+        "{body}"
     );
+    assert_eq!(body["tool_choice"], "required");
+    assert_eq!(body["reasoning_effort"], "none");
 }
 
 #[test]

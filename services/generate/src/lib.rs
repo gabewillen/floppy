@@ -32,21 +32,23 @@
 //! * `schema` (optional): a JSON Schema (a JSON object, or a string holding
 //!   one) that satisfies its dialect's metaschema (2020-12 unless `$schema`
 //!   names another supported dialect) and references nothing outside itself.
-//!   With it the request forces one tool call (`tools` holding one
-//!   function whose `parameters` are the schema, and `tool_choice` naming
-//!   it; decision D112: the maintainer's local server does not support
-//!   structured output, `response_format`), and the call's `arguments` must
-//!   parse as JSON and satisfy the schema **before** anything is returned.
-//!   `schemaname` (a string matching `[A-Za-z0-9_-]{1,64}`,
-//!   [`DEFAULT_SCHEMA_NAME`] without it) is the function's `name` and
-//!   `strict` (a boolean, `false` without it) its `strict`; both require a
-//!   schema. A strict schema is sent as [`strict_schema`] normalizes it (the
-//!   original's OpenAI-compatible provider does the same): strict function
-//!   calling requires every object property; the arguments are still
-//!   checked against the schema as given.
+//!   With it the request offers one function tool whose `parameters` are
+//!   the schema and requires a call of it (`tool_choice` `required`), as
+//!   the original's Chat Completions provider asks for its `dispatch` call
+//!   (decision D112; it never sends `response_format`), and the call's
+//!   `arguments` must parse as a JSON object and satisfy the schema
+//!   **before** anything is returned. `schemaname` (a string matching
+//!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it) is the
+//!   function's `name`, and `strict` (a boolean, `false` without it) sends
+//!   the schema as [`strict_schema`] normalizes it (every object property
+//!   required); both require a schema. The arguments are still checked
+//!   against the schema as given.
 //! * `reasoning_effort` (optional, one of `none`, `minimal`, `low`,
 //!   `medium`, `high`, `xhigh`): sent as `reasoning_effort`, and
-//!   [`DEFAULT_REASONING_EFFORT`] without it.
+//!   [`DEFAULT_REASONING_EFFORT`] without it. With a schema only `none` is
+//!   admitted and it is [`TOOLS_REASONING_EFFORT`] (`none`) without it, as
+//!   the original sends function tools on Chat Completions: reasoning models
+//!   reject them with any other effort.
 //! * `stream` (optional, a boolean, `false` without it): `true` asks for a
 //!   streamed reply (`"stream": true`, server-sent events); without it the
 //!   call is one non-streamed completion, as the original's `OpenAI`-compatible
@@ -128,9 +130,9 @@
 //! ```json
 //! {"messages":[{"content":"…","role":"system"},{"content":"…","role":"user"}],
 //!  "model":"…",
-//!  "reasoning_effort":"low",
-//!  "tool_choice":{"function":{"name":"result"},"type":"function"},
-//!  "tools":[{"function":{"name":"result","parameters":{…},"strict":false},"type":"function"}]}
+//!  "reasoning_effort":"none",
+//!  "tool_choice":"required",
+//!  "tools":[{"function":{"name":"result","parameters":{…}},"type":"function"}]}
 //! ```
 //!
 //! The request never blocks the session: `outbound-http.fetch` (and, for a
@@ -163,7 +165,8 @@
 //! and leave no answer (a 20-token limit did). The time bound is the
 //! invoking state's `<send delay>`, not a token count.
 //!
-//! The request always sends `reasoning_effort`, `low` by default. The
+//! The request always sends `reasoning_effort`, `low` by default without
+//! a schema (`none` with one, as above). The
 //! maintainer's gateway (decision D25) held a reasoning model's reasoning back until its answer
 //! starts, so nothing reaches the connection while it reasons; without
 //! `reasoning_effort` the builder's design prompt reasoned past Cloudflare's
@@ -173,28 +176,32 @@
 //!
 //! # The reply
 //!
-//! A non-streamed reply is the completion's `choices[0].message.content`
-//! ([`completion_text`]); a refusal (`message.refusal`), a `finish_reason`
-//! of `length` or `content_filter`, an `error` object, no or empty content,
-//! or a body that is not such a completion is a failure. A streamed reply
-//! is the text the stream carries ([`reply_text`]): every
-//! `data:` event up to `data: [DONE]` is a chunk, and the
-//! `choices[0].delta.content` of the chunks are joined in order (a chunk
-//! without choices, such as a usage chunk, adds nothing, and a reasoning
-//! model's reasoning is never part of the reply). A refusal
-//! (`choices[0].delta.refusal`), a `finish_reason` of `length` or
-//! `content_filter`, an `error` chunk, a stream without `[DONE]` or without
-//! content (empty content counts as none: a reasoning model's stream opens
-//! with an empty `content`), or a body that is not such a stream is a failure.
+//! The reply is read as the original's Chat Completions provider reads it
+//! ([`Reply`]). A non-streamed reply is the completion's first choice
+//! ([`completion_reply`]): its `message.content`, its `message.tool_calls`
+//! (each a `function` call with a non-blank `id` and name and string
+//! `arguments`), and its `finish_reason`. A streamed reply is put back
+//! together into the same shape ([`stream_reply`]): every `data:` event up
+//! to `data: [DONE]` is a chunk; the choice of `index` 0 of each chunk adds
+//! its `delta.content` to the content and each `delta.tool_calls` fragment
+//! to the call its `index` names (its `id` and `function.name` when given,
+//! its `function.arguments` appended); a chunk without choices, such as a
+//! usage chunk, adds nothing, and a reasoning model's reasoning is never
+//! part of the reply. A refusal, an `error` object or chunk, a stream
+//! without `[DONE]` or a finish reason, or a body that is not such a
+//! completion or stream is a failure.
 //!
-//! With a schema the reply is the forced call's arguments instead, never
-//! the content: a non-streamed reply's `choices[0].message.tool_calls[0]`,
-//! a streamed reply's `choices[0].delta.tool_calls` entries of `index` 0,
-//! whose `function.arguments` fragments are joined in order. A reply whose
-//! first tool call is missing, does not name the forced function, or has
-//! empty arguments is malformed. The arguments are parsed as JSON and
-//! checked against the compiled schema only once the whole reply arrived
-//! ([`structured_value`]).
+//! Then ([`Reply::answer`]): a `finish_reason` of `length` or
+//! `content_filter` fails `truncated` or `filtered`; `tool_calls` with no
+//! call, or calls with another finish reason, is malformed. Without a
+//! schema the answer is the content, and tool calls or no content (empty
+//! counts as none: a reasoning model's stream opens with an empty
+//! `content`) are malformed. With a schema the answer is the arguments of
+//! the first call of the function, never the content: a reply with no tool
+//! call ("did not include a required tool call") or none of that function
+//! is malformed, and arguments that are not a JSON object are not JSON. The
+//! arguments are checked against the compiled schema only once the whole
+//! reply arrived ([`structured_value`]).
 //!
 //! # Bounds
 //!
@@ -248,10 +255,16 @@ pub const STREAM_SLOT: &str = "stream";
 pub const MAX_COMPLETION_TOKENS: u32 = 1_048_576;
 /// The path appended to the base URL.
 pub const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
-/// The forced function's `name` when the invocation names none.
+/// `tool_choice` with a schema: a call of the one tool is required, as the
+/// original's Chat Completions provider asks.
+pub const TOOL_CHOICE: &str = "required";
+/// The function's `name` when the invocation names none.
 pub const DEFAULT_SCHEMA_NAME: &str = "result";
-/// `reasoning_effort` when the invocation names none.
+/// `reasoning_effort` when the invocation names none and gives no schema.
 pub const DEFAULT_REASONING_EFFORT: &str = "low";
+/// `reasoning_effort` with a schema (`tools`), the only one admitted there,
+/// as the original's Chat Completions provider sends it.
+pub const TOOLS_REASONING_EFFORT: &str = "none";
 /// The `reasoning_effort` values the Chat Completions API defines.
 pub const REASONING_EFFORTS: [&str; 6] = ["none", "minimal", "low", "medium", "high", "xhigh"];
 /// Upper bound on the bytes of a schema name (the `OpenAI` limit).
@@ -432,13 +445,13 @@ pub enum ImageReadFailure {
     TooLarge,
 }
 
-/// The forced tool call of one invocation: one function whose `parameters`
+/// The one function tool of one invocation, whose `parameters`
 /// are the schema.
 #[derive(Debug)]
 pub struct ResponseSchema {
     /// The function's `name`.
     pub name: String,
-    /// The function's `strict`.
+    /// Whether the parameters are sent as [`strict_schema`] normalizes them.
     pub strict: bool,
     /// The canonical resolved schema.
     pub schema: Json,
@@ -453,7 +466,7 @@ pub struct Generation {
     pub model: String,
     /// The conversation, the system message first.
     pub messages: Vec<Message>,
-    /// The forced tool call, when the invocation gave a schema.
+    /// The one function tool, when the invocation gave a schema.
     pub schema: Option<ResponseSchema>,
     /// `reasoning_effort`, one of [`REASONING_EFFORTS`].
     pub reasoning_effort: &'static str,
@@ -473,7 +486,7 @@ pub enum FailureCode {
     /// The model service answered with a non-2xx status.
     Status,
     /// The answer is not a chat completion with text content (with a
-    /// schema, a call of the forced function with arguments), or exceeds
+    /// schema, a call of its function), or exceeds
     /// the host's response bound.
     Malformed,
     /// The reply was cut short by its token limit.
@@ -482,9 +495,9 @@ pub enum FailureCode {
     Filtered,
     /// The model refused the request.
     Refusal,
-    /// The forced call's arguments are not JSON.
+    /// The call's arguments are not a JSON object.
     NotJson,
-    /// The forced call's arguments do not satisfy the requested schema.
+    /// The call's arguments do not satisfy the requested schema.
     SchemaMismatch,
 }
 
@@ -837,7 +850,7 @@ pub fn response_schema(
     })
 }
 
-/// `schema` as strict function calling takes it (the original's
+/// `schema` as strict structured outputs take it (the original's
 /// `_normalize_openai_schema`): `default`, `examples` and `title` dropped,
 /// `oneOf` sent as `anyOf`, and every object schema closed
 /// (`additionalProperties: false`) with all its properties required, at
@@ -905,10 +918,20 @@ fn boolean_parameter(
 }
 
 /// The `reasoning_effort` an invocation asks: one of [`REASONING_EFFORTS`],
-/// or [`DEFAULT_REASONING_EFFORT`] without the parameter.
-fn reasoning_effort_parameter(value: Option<&Data>) -> Result<&'static str, &'static str> {
+/// or [`DEFAULT_REASONING_EFFORT`] without the parameter. With a schema
+/// (`tools`), as the original does: `none` without the parameter, and any
+/// other value is refused, since reasoning models reject function tools on
+/// Chat Completions unless the effort is `none`.
+fn reasoning_effort_parameter(
+    value: Option<&Data>,
+    tools: bool,
+) -> Result<&'static str, &'static str> {
     match value {
+        None if tools => Ok(TOOLS_REASONING_EFFORT),
         None => Ok(DEFAULT_REASONING_EFFORT),
+        Some(Data::String(effort)) if tools && effort != TOOLS_REASONING_EFFORT => {
+            Err("generate reasoning_effort must be none with a schema")
+        }
         Some(Data::String(effort)) => REASONING_EFFORTS
             .into_iter()
             .find(|known| known == effort)
@@ -1017,7 +1040,7 @@ pub fn parse_parameters<'a>(
     }
     let schema_name = schema_name_parameter(schema_name)?;
     let strict = boolean_parameter(strict, "generate strict must be a boolean")?;
-    let reasoning_effort = reasoning_effort_parameter(reasoning_effort)?;
+    let reasoning_effort = reasoning_effort_parameter(reasoning_effort, schema.is_some())?;
     let stream = boolean_parameter(stream, "generate stream must be a boolean")?.unwrap_or(false);
     let max_completion_tokens = max_completion_tokens_parameter(max_completion_tokens)?;
     let schema = match schema {
@@ -1139,7 +1162,6 @@ pub fn build_request(
                 "type": "function",
                 "function": {
                     "name": schema.name,
-                    "strict": schema.strict,
                     "parameters": if schema.strict {
                         strict_schema(&schema.schema)
                     } else {
@@ -1148,10 +1170,7 @@ pub fn build_request(
                 },
             }]),
         );
-        body.insert(
-            "tool_choice".into(),
-            serde_json::json!({ "type": "function", "function": { "name": schema.name } }),
-        );
+        body.insert("tool_choice".into(), TOOL_CHOICE.into());
     }
     Request {
         url: vec![
@@ -1204,10 +1223,35 @@ fn content_json(content: &Content) -> Json {
     }
 }
 
-/// The reply text of a streamed Chat Completions result: the
-/// `choices[0].delta.content` of every `data:` chunk before `data: [DONE]`,
-/// joined in order, or, when the request forced a call of `function`, the
-/// `function.arguments` of its `delta.tool_calls` entries of `index` 0.
+/// One completion's reply, as the original reads it: the first choice's
+/// content, its tool calls, and its finish reason.
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct Reply {
+    /// `message.content`, empty when absent or `null`.
+    pub content: String,
+    /// `message.tool_calls`, in order.
+    pub tool_calls: Vec<ToolCall>,
+    /// `finish_reason`.
+    pub finish_reason: Option<String>,
+}
+
+/// One tool call of a reply.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ToolCall {
+    /// Its `id`.
+    pub id: String,
+    /// `function.name`.
+    pub name: String,
+    /// `function.arguments`, a JSON object's text.
+    pub arguments: String,
+}
+
+/// The reply of a streamed Chat Completions result, put back together as
+/// the original's stream assembly does: the `choices` of `index` 0 of every
+/// `data:` chunk before `data: [DONE]`, their `delta.content` joined in
+/// order, each `delta.tool_calls` fragment folded into the call its `index`
+/// names (its `id` and `function.name` when given, its `function.arguments`
+/// appended), and the last `finish_reason`.
 ///
 /// The body is server-sent events: lines ending in `\n` (or `\r\n`), an
 /// event's `data:` lines joined with `\n`, a blank line ending the event;
@@ -1216,16 +1260,14 @@ fn content_json(content: &Content) -> Json {
 /// # Errors
 ///
 /// [`FailureCode::Malformed`] when the body is not such a stream (not
-/// UTF-8, a chunk that is not a JSON object, an `error` chunk, no
-/// `[DONE]`, no content, or, with `function`, no call of it with
-/// arguments), [`FailureCode::Truncated`] or
-/// [`FailureCode::Filtered`] for a `finish_reason` of `length` or
-/// `content_filter`, and [`FailureCode::Refusal`] when the stream carries a
+/// UTF-8, a chunk that is not a JSON object, an `error` chunk, a tool call
+/// fragment without a non-negative `index`, no finish reason, or no
+/// `[DONE]`), and [`FailureCode::Refusal`] when the stream carries a
 /// refusal.
-pub fn reply_text(body: &[u8], function: Option<&str>) -> Result<String, FailureCode> {
+pub fn stream_reply(body: &[u8]) -> Result<Reply, FailureCode> {
     let text = std::str::from_utf8(body).map_err(|_| FailureCode::Malformed)?;
-    let mut content: Option<String> = None;
-    let mut call = ToolCall::default();
+    let mut content = String::new();
+    let mut calls: std::collections::BTreeMap<u64, ToolCall> = std::collections::BTreeMap::new();
     let mut refusal = String::new();
     let mut finish: Option<String> = None;
     let mut done = false;
@@ -1245,36 +1287,60 @@ pub fn reply_text(body: &[u8], function: Option<&str>) -> Result<String, Failure
             if !chunk.is_object() || chunk.get("error").is_some() {
                 return Err(FailureCode::Malformed);
             }
-            let Some(choice) = chunk
+            let choices = chunk
                 .get("choices")
                 .and_then(Json::as_array)
-                .and_then(|choices| choices.first())
-            else {
-                continue;
-            };
-            if let Some(reason) = choice.get("finish_reason").and_then(Json::as_str) {
-                finish = Some(reason.to_owned());
-            }
-            let delta = choice.get("delta");
-            if let Some(part) = delta
-                .and_then(|delta| delta.get("content"))
-                .and_then(Json::as_str)
-            {
-                content.get_or_insert_with(String::new).push_str(part);
-            }
-            for fragment in delta
-                .and_then(|delta| delta.get("tool_calls"))
-                .and_then(Json::as_array)
                 .into_iter()
-                .flatten()
-            {
-                call.add(fragment)?;
-            }
-            if let Some(part) = delta
-                .and_then(|delta| delta.get("refusal"))
-                .and_then(Json::as_str)
-            {
-                refusal.push_str(part);
+                .flatten();
+            for choice in choices {
+                if choice.get("index").and_then(Json::as_u64).unwrap_or(0) != 0 {
+                    continue;
+                }
+                if let Some(reason) = choice.get("finish_reason").and_then(Json::as_str) {
+                    finish = Some(reason.to_owned());
+                }
+                let Some(delta) = choice.get("delta") else {
+                    continue;
+                };
+                if let Some(part) = delta.get("content").and_then(Json::as_str) {
+                    content.push_str(part);
+                }
+                if let Some(part) = delta.get("refusal").and_then(Json::as_str) {
+                    refusal.push_str(part);
+                }
+                for piece in delta
+                    .get("tool_calls")
+                    .and_then(Json::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    let index = piece
+                        .get("index")
+                        .and_then(Json::as_u64)
+                        .ok_or(FailureCode::Malformed)?;
+                    let call = calls.entry(index).or_default();
+                    if let Some(id) = piece
+                        .get("id")
+                        .and_then(Json::as_str)
+                        .filter(|id| !id.is_empty())
+                    {
+                        id.clone_into(&mut call.id);
+                    }
+                    let function = piece.get("function");
+                    if let Some(name) = function
+                        .and_then(|function| function.get("name"))
+                        .and_then(Json::as_str)
+                        .filter(|name| !name.is_empty())
+                    {
+                        name.clone_into(&mut call.name);
+                    }
+                    if let Some(arguments) = function
+                        .and_then(|function| function.get("arguments"))
+                        .and_then(Json::as_str)
+                    {
+                        call.arguments.push_str(arguments);
+                    }
+                }
             }
             continue;
         }
@@ -1289,81 +1355,30 @@ pub fn reply_text(body: &[u8], function: Option<&str>) -> Result<String, Failure
             }
         }
     }
-    if !done {
+    if !done || finish.is_none() {
         return Err(FailureCode::Malformed);
-    }
-    match finish.as_deref() {
-        Some("length") => return Err(FailureCode::Truncated),
-        Some("content_filter") => return Err(FailureCode::Filtered),
-        _ => {}
     }
     if !refusal.is_empty() {
         return Err(FailureCode::Refusal);
     }
-    match function {
-        Some(function) => call.arguments_of(function),
-        None => content
-            .filter(|text| !text.is_empty())
-            .ok_or(FailureCode::Malformed),
-    }
+    Ok(Reply {
+        content,
+        tool_calls: calls.into_values().collect(),
+        finish_reason: finish,
+    })
 }
 
-/// The first tool call of a reply, as its fragments arrive: a streamed
-/// reply's `delta.tool_calls` entries of `index` 0, or a non-streamed
-/// reply's `message.tool_calls[0]` as its one fragment.
-#[derive(Default)]
-struct ToolCall {
-    /// `function.name`.
-    name: Option<String>,
-    /// `function.arguments`, joined in order.
-    arguments: String,
-}
-
-impl ToolCall {
-    /// Adds one fragment of `index` 0 (a fragment of a later call is
-    /// ignored: the reply is the first call's).
-    fn add(&mut self, fragment: &Json) -> Result<(), FailureCode> {
-        match fragment.get("index") {
-            None => {}
-            Some(index) if index.as_u64() == Some(0) => {}
-            Some(index) if index.is_u64() => return Ok(()),
-            Some(_) => return Err(FailureCode::Malformed),
-        }
-        let function = fragment.get("function");
-        if let Some(name) = function.and_then(|function| function.get("name")) {
-            let name = name.as_str().ok_or(FailureCode::Malformed)?;
-            self.name.get_or_insert_with(String::new).push_str(name);
-        }
-        if let Some(arguments) = function.and_then(|function| function.get("arguments")) {
-            self.arguments
-                .push_str(arguments.as_str().ok_or(FailureCode::Malformed)?);
-        }
-        Ok(())
-    }
-
-    /// The call's arguments, when it calls `function` with some.
-    fn arguments_of(self, function: &str) -> Result<String, FailureCode> {
-        if self.name.as_deref() != Some(function) || self.arguments.is_empty() {
-            return Err(FailureCode::Malformed);
-        }
-        Ok(self.arguments)
-    }
-}
-
-/// The reply text of a non-streamed Chat Completions result: its
-/// `choices[0].message.content`, or, when the request forced a call of
-/// `function`, the `function.arguments` of `message.tool_calls[0]`.
+/// The reply of a non-streamed Chat Completions result: its first choice's
+/// `message.content`, `message.tool_calls`, and `finish_reason`.
 ///
 /// # Errors
 ///
 /// [`FailureCode::Malformed`] when the body is not such a completion (not a
-/// JSON object, an `error` object, no or empty content, or, with
-/// `function`, a first tool call that is missing, calls another function,
-/// or has no arguments),
-/// [`FailureCode::Truncated`] or [`FailureCode::Filtered`] for a
-/// `finish_reason` of `length` or `content_filter`, and
+/// JSON object, an `error` object, no choice, a legacy `function_call`, or
+/// `tool_calls` that is not a list of function calls each with a non-blank
+/// `id` and `function.name` and string `function.arguments`), and
 /// [`FailureCode::Refusal`] when the message carries a refusal.
-pub fn completion_text(body: &[u8], function: Option<&str>) -> Result<String, FailureCode> {
+pub fn completion_reply(body: &[u8]) -> Result<Reply, FailureCode> {
     let completion: Json = serde_json::from_slice(body).map_err(|_| FailureCode::Malformed)?;
     if !completion.is_object() || completion.get("error").is_some() {
         return Err(FailureCode::Malformed);
@@ -1373,38 +1388,114 @@ pub fn completion_text(body: &[u8], function: Option<&str>) -> Result<String, Fa
         .and_then(Json::as_array)
         .and_then(|choices| choices.first())
         .ok_or(FailureCode::Malformed)?;
-    match choice.get("finish_reason").and_then(Json::as_str) {
-        Some("length") => return Err(FailureCode::Truncated),
-        Some("content_filter") => return Err(FailureCode::Filtered),
-        _ => {}
-    }
-    let message = choice.get("message");
+    let message = choice.get("message").ok_or(FailureCode::Malformed)?;
     if message
-        .and_then(|message| message.get("refusal"))
+        .get("refusal")
         .and_then(Json::as_str)
         .is_some_and(|refusal| !refusal.is_empty())
     {
         return Err(FailureCode::Refusal);
     }
-    if let Some(function) = function {
-        let mut call = ToolCall::default();
-        let first = message
-            .and_then(|message| message.get("tool_calls"))
-            .and_then(Json::as_array)
-            .and_then(|calls| calls.first())
-            .ok_or(FailureCode::Malformed)?;
-        call.add(first)?;
-        return call.arguments_of(function);
+    if message
+        .get("function_call")
+        .is_some_and(|call| !call.is_null())
+    {
+        return Err(FailureCode::Malformed);
     }
-    message
-        .and_then(|message| message.get("content"))
-        .and_then(Json::as_str)
-        .filter(|text| !text.is_empty())
-        .map(str::to_owned)
-        .ok_or(FailureCode::Malformed)
+    let tool_calls = match message.get("tool_calls") {
+        None | Some(Json::Null) => Vec::new(),
+        Some(Json::Array(calls)) => calls
+            .iter()
+            .map(|call| {
+                let function = call.get("function");
+                let text = |value: Option<&Json>| value.and_then(Json::as_str).map(str::to_owned);
+                let (Some("function"), Some(id), Some(name), Some(arguments)) = (
+                    call.get("type").and_then(Json::as_str),
+                    text(call.get("id")).filter(|id| !id.trim().is_empty()),
+                    text(function.and_then(|function| function.get("name")))
+                        .filter(|name| !name.trim().is_empty()),
+                    text(function.and_then(|function| function.get("arguments"))),
+                ) else {
+                    return Err(FailureCode::Malformed);
+                };
+                Ok(ToolCall {
+                    id,
+                    name,
+                    arguments,
+                })
+            })
+            .collect::<Result<_, _>>()?,
+        Some(_) => return Err(FailureCode::Malformed),
+    };
+    Ok(Reply {
+        content: message
+            .get("content")
+            .and_then(Json::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        tool_calls,
+        finish_reason: choice
+            .get("finish_reason")
+            .and_then(Json::as_str)
+            .map(str::to_owned),
+    })
 }
 
-/// The structured reply: `text` (the forced call's arguments) parsed as
+impl Reply {
+    /// What the reply answers, as the original's Chat Completions provider
+    /// takes it: with `function` (a schema, sent as the one tool, its
+    /// selection `required`), the arguments of its first call of
+    /// `function`; without, the content.
+    ///
+    /// # Errors
+    ///
+    /// [`FailureCode::Truncated`] or [`FailureCode::Filtered`] for a
+    /// `finish_reason` of `length` or `content_filter`;
+    /// [`FailureCode::Malformed`] when the finish reason is `tool_calls`
+    /// with no call or another with calls, when a required call is missing
+    /// or calls arrive without a tool, when no call names `function`, when
+    /// a stream's call has no `id` or name, or when there is no content;
+    /// [`FailureCode::NotJson`] when the arguments are not a JSON object.
+    pub fn answer(self, function: Option<&str>) -> Result<String, FailureCode> {
+        match self.finish_reason.as_deref() {
+            Some("length") => return Err(FailureCode::Truncated),
+            Some("content_filter") => return Err(FailureCode::Filtered),
+            Some("tool_calls") if self.tool_calls.is_empty() => {
+                return Err(FailureCode::Malformed);
+            }
+            Some(reason) if reason != "tool_calls" && !self.tool_calls.is_empty() => {
+                return Err(FailureCode::Malformed);
+            }
+            _ => {}
+        }
+        if self
+            .tool_calls
+            .iter()
+            .any(|call| call.id.trim().is_empty() || call.name.trim().is_empty())
+        {
+            return Err(FailureCode::Malformed);
+        }
+        let Some(function) = function else {
+            if !self.tool_calls.is_empty() || self.content.is_empty() {
+                return Err(FailureCode::Malformed);
+            }
+            return Ok(self.content);
+        };
+        let call = self
+            .tool_calls
+            .into_iter()
+            .find(|call| call.name == function)
+            .ok_or(FailureCode::Malformed)?;
+        let arguments: Json =
+            serde_json::from_str(&call.arguments).map_err(|_| FailureCode::NotJson)?;
+        if !arguments.is_object() {
+            return Err(FailureCode::NotJson);
+        }
+        Ok(call.arguments)
+    }
+}
+
+/// The structured reply: `text` (the call's arguments) parsed as
 /// JSON, admitted by `schema`.
 ///
 /// # Errors
@@ -1469,11 +1560,12 @@ pub fn outcome(generation: &Generation, answered: Result<Response, TransportFail
         .schema
         .as_ref()
         .map(|schema| schema.name.as_str());
-    let text = if is_event_stream(&response.body) {
-        reply_text(&response.body, function)
+    let reply = if is_event_stream(&response.body) {
+        stream_reply(&response.body)
     } else {
-        completion_text(&response.body, function)
+        completion_reply(&response.body)
     };
+    let text = reply.and_then(|reply| reply.answer(function));
     let text = match text {
         Ok(text) => text,
         Err(code) => return Returned::failed(code),
