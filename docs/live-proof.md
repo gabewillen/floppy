@@ -40,7 +40,7 @@ names a document that isn't there. That is outside D112 and was not
 changed. With a local, uncommitted edit that copies `bots/builder` too, the
 same test (684 s) learned `PingPongResponder` ACTIVE on turn 2 through the
 builder's `topology_plan` and `scxml_draft` forced calls (three of its
-eight author calls stopped at the 8192-token bound, `length`), and
+nine author calls stopped at the 8192-token bound, `length`), and
 autonomy handled turns 3 and 4. But the drafted behavior answered "pong"
 to turn 4's question too, so the test failed its "green" assertion: the
 model's draft, not the transport.
