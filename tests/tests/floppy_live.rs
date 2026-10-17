@@ -85,10 +85,16 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-/// A scratch copy of the bot; returns the body's path.
+/// A scratch copy of the bot and of the builder its reflection invokes
+/// (`../../bots/builder/builder.scx`); returns the body's path.
 fn scratch_bot() -> PathBuf {
     let dir = unique_scratch("floppy-live");
-    for sub in ["bots/floppy", "bots/floppy/schemas"] {
+    for sub in [
+        "bots/floppy",
+        "bots/floppy/schemas",
+        "bots/builder",
+        "bots/builder/schemas",
+    ] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
     }
     support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
@@ -275,7 +281,12 @@ fn live_chat() {
 /// (standing in for the invoker's `<param>`); returns the body's path.
 fn with_name(name: &str) -> PathBuf {
     let dir = unique_scratch("floppy-live");
-    for sub in ["bots/floppy", "bots/floppy/schemas"] {
+    for sub in [
+        "bots/floppy",
+        "bots/floppy/schemas",
+        "bots/builder",
+        "bots/builder/schemas",
+    ] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
     }
     support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));

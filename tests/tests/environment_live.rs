@@ -81,11 +81,13 @@ fn texts_of(records: &[Json], session: &str, label: &str) -> Vec<String> {
         .collect()
 }
 
-/// A scratch copy of the repository's bot and abilities, with the room
-/// invoking bots `a` and `b` given the live model.
+/// A scratch copy of the repository's bot, abilities, and the builder
+/// reflection invokes, with the room invoking bots `a` and `b` given the
+/// live model.
 fn room() -> std::path::PathBuf {
     let dir = unique_scratch("environment-live");
     support::copy_tree(&workspace().join("bots/floppy"), &dir.join("bots/floppy"));
+    support::copy_tree(&workspace().join("bots/builder"), &dir.join("bots/builder"));
     support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
     let model = format!("'{}'", support::live_model());
     support::environment(&dir, &["a", "b"], &[("model", &model)])
