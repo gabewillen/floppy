@@ -12,14 +12,16 @@ Last updated: 2026-10-17.
 ## Current state (2026-10-09) — resume here
 
 - **Tools, not structured output (2026-10-16, D112, amended
-  2026-10-17):** the generate service asks for schema-shaped output as the
+  2026-10-17 and 2026-10-18):** the generate service asks for schema-shaped output as the
   original does on Chat Completions: one function tool (the `schemaname`,
   the schema's root `description` as the function's, the rest of the
   schema as its `parameters`, no `strict`), `"tool_choice": "required"`,
   and `reasoning_effort` `none`. `generate.result` is always
   `{content, tool_calls: [{id, name, args}]}`, each call of the function
-  checked against the schema before any is returned (`schema-mismatch`);
-  `strict` is gone. Reasoning and reflection merge the `dispatch` calls in
+  checked against the schema before any is returned (`schema-mismatch`),
+  after its top-level fields the schema's root `properties` do not
+  declare are dropped (the original reads only `args.events`; nested
+  objects stay strict); `strict` is gone. Reasoning and reflection merge the `dispatch` calls in
   their `.js` (temporary), the builder takes its call by name, and
   `<decision:selection>` builds the original's dispatch tool exactly.
   Open: the maintainer's mapping of floppy's domains onto the original's
