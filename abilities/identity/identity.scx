@@ -108,9 +108,11 @@
          engines (SQLite and Postgres). A memory id is the next row count
          as 32 zero-padded digits (neither engine's randomness is unique
          across invocations in Wasm); JSON rows are told by their
-         content_format, oldest first by created_at, then memory_id. -->
+         content_format, the 50 most recent by created_at,
+         then memory_id (the insertion order), read oldest first (the original's
+         recent_select). -->
     <data id="database" expr="null"/>
-    <data id="name_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND content_format = \'application/json\' ORDER BY created_at, memory_id LIMIT 50'"/>
+    <data id="name_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
     <data id="name_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
     <data id="recalled_name" expr="null"/>
     <data id="name_parameters" expr="[]"/>

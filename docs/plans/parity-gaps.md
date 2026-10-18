@@ -8,7 +8,7 @@ These are the original's commits floppy has not ported, measured on 2026-10-18 a
 
 | # | Gap | The original | floppy today | Size | Status |
 |---|---|---|---|---|---|
-| 1 | Recall the most recent window of memories, oldest first within it | `abilities/memory/store.py` `recent_select` (`30f638e`, `2443929`) | Every recall returns the oldest 50 rows (`ORDER BY created_at, memory_id LIMIT 50` in reasoning, conversation, identity, reflection) | S | to do |
+| 1 | Recall the most recent window of memories, oldest first within it | `abilities/memory/store.py` `recent_select` (`30f638e`, `2443929`) | Every recall returns the oldest 50 rows (`ORDER BY created_at, memory_id LIMIT 50` in reasoning, conversation, identity, reflection) | S | done: the four recalls take the newest 50 by `created_at`, then `memory_id` (floppy's ids are its insertion order on both engines, where the original uses SQLite's `rowid`), read oldest first; `memory.rs` `every_recall_reads_the_most_recent_window_oldest_first` |
 | 2 | A revision keeps the behavior's own triggers as evidence | `cognition/reflection/revision.py` (`325ff36`) | `evidenceStimulusNames()` in `abilities/reflection/reflection.js` leaves out `existing_behavior.triggers` | S | to do |
 | 3 | Trim recalled memory to the prompt budget instead of failing the turn | `cognition/event.py`, `processing.py` (`b1654d6`) | `reasoning.js` throws "budget exceeded"; lands in the map's J1 | M | after J1 |
 | 4 | Stimuli and cognition inputs carry producer-stamped `participants` | `f6c4e08` | Absent from `bot.ability.cognition.input` and the room's sound and visual schemas | M | to do |

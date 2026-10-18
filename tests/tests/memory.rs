@@ -306,3 +306,109 @@ fn postgres_a_failing_statement_fails_the_memory_and_commits_nothing() {
         counted.stderr
     );
 }
+
+/// The recall statement `id` of the document at `path` (relative to the
+/// workspace), as the document holds it: a `<data>` element's text, or
+/// its `expr`, an ECMAScript string literal.
+fn recall_select(path: &str, id: &str) -> String {
+    let text =
+        std::fs::read_to_string(support::workspace().join(path)).expect("the document is readable");
+    let unescaped = |value: &str| {
+        value
+            .replace("&apos;", "'")
+            .replace("&quot;", "\"")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")
+    };
+    let element = format!(r#"<data id="{id}""#);
+    let start = text
+        .find(&element)
+        .expect("the document has the data element")
+        + element.len();
+    let rest = &text[start..];
+    if let Some(literal) = rest.strip_prefix(r#" expr="'"#) {
+        let end = literal
+            .find(r#"'"/>"#)
+            .expect("the expr is one string literal");
+        unescaped(&literal[..end]).replace("\\'", "'")
+    } else {
+        let body = rest.strip_prefix('>').expect("the data element holds text");
+        let end = body.find("</data>").expect("the data element is closed");
+        unescaped(&body[..end])
+    }
+}
+
+/// Every recall takes the most recent window of its rows and reads it
+/// oldest first (the original's `recent_select`): newest by `created_at`,
+/// ties by `memory_id` (the insertion order floppy's ids keep), so once
+/// more rows match than the window holds, the oldest are the ones left
+/// out.
+#[test]
+fn every_recall_reads_the_most_recent_window_oldest_first() {
+    // (document, data id, the select's parameters, the rows' tag)
+    let recalls = [
+        (
+            "abilities/reasoning/reasoning.scx",
+            "episode_select",
+            serde_json::json!(["cognitive_episode", "c"]),
+            "cognitive_episode",
+        ),
+        (
+            "abilities/reflection/reflection.scx",
+            "select_episodes",
+            serde_json::json!(["c", "c"]),
+            "cognitive_episode",
+        ),
+        (
+            "abilities/conversation/conversation.scx",
+            "memory_select",
+            serde_json::json!(["conversation_memory", "c"]),
+            "conversation_memory",
+        ),
+        (
+            "abilities/identity/identity.scx",
+            "name_select",
+            serde_json::json!(["self_name", "self"]),
+            "self_name",
+        ),
+    ];
+    for (path, id, parameters, tag) in recalls {
+        // 52 rows in one statement (one created_at for all but the first,
+        // so memory_id breaks their ties), the first stamped later than
+        // all of them.
+        let statements = vec![
+            serde_json::json!({
+                "sql": "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 52) INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags, created_at) SELECT printf('%032d', i), 'memory', 'c', 'self', 'fact', 'standard', 'retain', CAST(i AS TEXT), 'application/json', ?1, CASE WHEN i = 1 THEN '2999-01-01 00:00:00' ELSE '2000-01-01 00:00:00' END FROM n",
+                "parameters": [tag],
+            }),
+            serde_json::json!({"sql": recall_select(path, id), "parameters": parameters}),
+        ];
+        let expression = serde_json::Value::Array(statements)
+            .to_string()
+            .replace('&', "&amp;")
+            .replace('"', "&quot;")
+            .replace('<', "&lt;");
+        let directory = unique_scratch("memory");
+        let finished = run(&directory, &harness(None, &expression));
+        let records = logs(&finished.records);
+        let [(label, text)] = records.as_slice() else {
+            panic!("{path}: one record: {records:?} {}", finished.stderr);
+        };
+        assert_eq!(label, "output", "{path}: {text} {}", finished.stderr);
+        let output: serde_json::Value = serde_json::from_str(text).expect("the output is JSON");
+        let recalled: Vec<String> = output["results"][1]["rows"]
+            .as_array()
+            .expect("the select's rows")
+            .iter()
+            .map(|row| row["values"][0].as_str().unwrap_or_default().to_owned())
+            .collect();
+        // The newest 50: the later-stamped row 1, then 52 down to 4; read
+        // oldest first.
+        let expected: Vec<String> = (4..=52)
+            .chain(std::iter::once(1))
+            .map(|n| n.to_string())
+            .collect();
+        assert_eq!(recalled, expected, "{path}");
+    }
+}

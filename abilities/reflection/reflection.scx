@@ -189,11 +189,13 @@
     <data id="turn_after_bound_ms" expr="1000"/>
     <data id="no_schema_files" expr="'It is loaded from text, so it gets no schema files: any event:schema it carries is inline.'"/>
 
-    <!-- The original episodes.episode_select_input and
+    <!-- The original episodes.episode_select_input (the 50 most recent
+         episodes by created_at, then memory_id, read oldest first: its
+         recent_select) and
          storage.select_all_behaviors_clauses (the behavior rows, named as
          the inventory's fields, then their triggers), each optionally for
          one name. -->
-    <data id="select_episodes">SELECT content FROM bot_memory WHERE query_tags = 'cognitive_episode' AND content_format = 'application/json' AND (CAST(? AS TEXT) IS NULL OR context_ref IS NULL OR context_ref = ?) ORDER BY created_at, memory_id LIMIT 50</data>
+    <data id="select_episodes">SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = 'cognitive_episode' AND content_format = 'application/json' AND (CAST(? AS TEXT) IS NULL OR context_ref IS NULL OR context_ref = ?) ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id</data>
     <data id="select_behaviors">SELECT name, source, description, examples_json AS examples, lifetime, status, status_reason, status_updated_at, used_count, last_used_at, failed_count, last_failed_at FROM bot_behavior WHERE CAST(? AS TEXT) IS NULL OR name = ? ORDER BY name</data>
     <data id="select_triggers">SELECT behavior_name, "trigger" FROM bot_behavior_trigger WHERE CAST(? AS TEXT) IS NULL OR behavior_name = ? ORDER BY behavior_name, "trigger"</data>
     <!-- The original storage.mark_broken + inventory.store_behavior. -->
