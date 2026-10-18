@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- identity-2: a missing name or a name with no tokens is never heard. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:identity="https://github.com/stateforward/floppy/namespaces/identity">
+<datamodel>
+  <data id="a" expr="null"/>
+  <data id="b" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <identity:hears_name location="a" name="null" text="'hi'"/>
+    <identity:hears_name location="b" name="'!!'" text="'!!'"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="a === false &amp;&amp; b === false" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

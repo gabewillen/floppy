@@ -1,0 +1,638 @@
+//! The `identity` extension namespace: `<identity:hears_name>` and
+//! `<identity:sorted_identities>` as a
+//! `stateforward:scxml/executable-content-extension` Wasm component.
+//!
+//! The original's identity module (`abilities/identity/recognition.py`,
+//! `value.py`): whether a text names the bot (`hears_name`, the text
+//! recognizer), and the canonical order of a collection of participant
+//! identities (`sorted_identities`). Both are synchronous and quick, so
+//! they are executable content, named after the original's functions.
+//! Documents bind [`NAMESPACE_URI`] (conventionally with the prefix
+//! `identity`):
+//!
+//! ```xml
+//! <identity:hears_name location="addressed" name="name" text="heard"/>
+//! <identity:sorted_identities location="turn_sources" ids="input.source_ids"/>
+//! ```
+//!
+//! Every attribute but `location` is an expression of the document's data
+//! model. Each element writes to its location and never sends.
+//!
+//! # Identities
+//!
+//! An identity is a name (a string) or an embedding (an array of numbers);
+//! floppy's conversation still carries voice embeddings as identities,
+//! which the original's earlier `IdentityValue` did.
+//!
+//! # `<identity:hears_name location="L" name="N" text="T"/>`
+//!
+//! Whether `text` names the bot (the original's `recognition.hears_name`,
+//! the text recognizer). `name` and `text` (required) each evaluate to a
+//! string, or to `null` (also `undefined`) when there is none. Each is
+//! split on white space into tokens kept to their letters and digits and
+//! lowercased, the empty ones dropped; the name is heard when its tokens
+//! appear as a whole run among the text's (so "Al" is not heard in
+//! "always"). A name with no tokens, or a missing name or text, is never
+//! heard. `location` (required) receives `true` or `false`.
+//!
+//! # `<identity:sorted_identities location="L" ids="I"/>`
+//!
+//! The original's `value.sorted_identities`. `ids` (required) evaluates to
+//! an array of identities; `location` (required) receives them in the
+//! original's identity order ([`sort_key`]): names first, by their text in
+//! code point order, then embeddings by their compact Python JSON text
+//! (each component as Python's `repr` writes a float). The sort is stable
+//! and keeps repeated identities.
+//!
+//! # Failures
+//!
+//! A malformed element (a missing, empty, unknown or repeated attribute,
+//! or any content but white space), an expression that fails or evaluates
+//! to a value of the wrong kind, or a failed assignment is an `execution`
+//! error with a static detail (SCXML `error.execution`); nothing is
+//! assigned then. A host failure that is not recoverable is passed through
+//! unchanged.
+//!
+//! # Bounds
+//!
+//! The data model bounds the values it hands this component.
+//!
+//! # Telemetry
+//!
+//! Each entry point (`initialize`, `execute`, `shutdown`) records one
+//! observation through scxml.rs's `telemetry` WIT facade: its closed
+//! operation, its closed outcome (`ok`, `rejected`, `failed`), and one
+//! closed signal event. No attribute carries a name, a text, an identity,
+//! or a location, so the cardinality is the product of the three closed
+//! enums.
+
+#![cfg_attr(not(target_arch = "wasm32"), forbid(unsafe_code))]
+#![cfg_attr(
+    target_arch = "wasm32",
+    allow(
+        unsafe_code,
+        reason = "wit-bindgen generated ABI glue only; no authored unsafe code"
+    )
+)]
+
+use scxml_types::DataValue as Data;
+use serde_json::Value as Json;
+
+/// The namespace's name: the last path segment of its repository namespace
+/// URI before the tag.
+pub const NAMESPACE_NAME: &str = "identity";
+
+/// The exact namespace URI documents bind: tagless, so it names the
+/// repository's latest release (decision D19); the manifest and schema name
+/// it too.
+pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespaces/identity";
+
+/// One attribute of an element.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Attribute {
+    /// Its namespace URI, when it has one.
+    pub namespace_uri: Option<String>,
+    /// Local name.
+    pub local_name: String,
+    /// Value exactly as authored.
+    pub value: String,
+}
+
+/// One item of an element's flattened content, in document order.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Content {
+    /// Character data.
+    Text(String),
+    /// The start tag of a nested element.
+    Start,
+    /// The end tag of the innermost open nested element.
+    End,
+}
+
+/// What `execute` did with the element.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Executed {
+    /// The element was executed.
+    Handled,
+    /// The local name is not one of this namespace's elements.
+    NotHandled,
+}
+
+/// Why `execute` failed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Failure<E> {
+    /// SCXML `error.execution`, with a static detail.
+    Execution(&'static str),
+    /// A non-recoverable host failure, passed through unchanged.
+    Host(E),
+}
+
+/// The host capabilities one `execute` call uses.
+pub trait IdentityHost {
+    /// A non-recoverable host failure.
+    type Error;
+
+    /// Evaluates one value expression in the current data model;
+    /// `Ok(Err(()))` is a recoverable evaluation failure.
+    ///
+    /// # Errors
+    ///
+    /// A non-recoverable host failure.
+    fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, Self::Error>;
+
+    /// Assigns one value to one data-model location; `Ok(Err(()))` is a
+    /// recoverable assignment failure.
+    ///
+    /// # Errors
+    ///
+    /// A non-recoverable host failure.
+    fn assign(&mut self, location: &str, value: &Data) -> Result<Result<(), ()>, Self::Error>;
+}
+
+/// Executes one element with the given local name, attributes, and
+/// flattened content.
+///
+/// # Errors
+///
+/// [`Failure::Execution`] for every malformed element, value, or
+/// assignment; [`Failure::Host`] for a non-recoverable host failure.
+pub fn execute<H: IdentityHost>(
+    local_name: &str,
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    match local_name {
+        "hears_name" => hears_name_element(attributes, content, host),
+        "sorted_identities" => sorted_identities_element(attributes, content, host),
+        _ => Ok(Executed::NotHandled),
+    }
+}
+
+/// The values of an element's unqualified attributes named in `names`, in
+/// that order, each trimmed and non-empty; any other attribute is `refused`,
+/// a repeated one `repeated`, an empty one `empty`.
+fn attribute_values<'a, E, const N: usize>(
+    attributes: &'a [Attribute],
+    names: [&str; N],
+    [refused, repeated, empty]: [&'static str; 3],
+) -> Result<[Option<&'a str>; N], Failure<E>> {
+    let mut values = [None; N];
+    for attribute in attributes {
+        let index = match attribute.namespace_uri {
+            None => names.iter().position(|name| *name == attribute.local_name),
+            Some(_) => None,
+        }
+        .ok_or(Failure::Execution(refused))?;
+        let value = attribute.value.trim();
+        if value.is_empty() {
+            return Err(Failure::Execution(empty));
+        }
+        if values[index].replace(value).is_some() {
+            return Err(Failure::Execution(repeated));
+        }
+    }
+    Ok(values)
+}
+
+/// Refuses any content but white space with `detail`.
+fn no_content<E>(content: &[Content], detail: &'static str) -> Result<(), Failure<E>> {
+    if content
+        .iter()
+        .any(|item| !matches!(item, Content::Text(text) if text.trim().is_empty()))
+    {
+        return Err(Failure::Execution(detail));
+    }
+    Ok(())
+}
+
+/// Evaluates `expression`, else `failed`.
+fn evaluate<H: IdentityHost>(
+    host: &mut H,
+    expression: &str,
+    failed: &'static str,
+) -> Result<Data, Failure<H::Error>> {
+    host.read(expression)
+        .map_err(Failure::Host)?
+        .map_err(|()| Failure::Execution(failed))
+}
+
+/// Assigns `value` to `location`, else `failed`.
+fn assign_to<H: IdentityHost>(
+    host: &mut H,
+    location: &str,
+    value: &Data,
+    failed: &'static str,
+) -> Result<(), Failure<H::Error>> {
+    host.assign(location, value)
+        .map_err(Failure::Host)?
+        .map_err(|()| Failure::Execution(failed))
+}
+
+/// Executes `<identity:hears_name>`.
+fn hears_name_element<H: IdentityHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, name, text] = attribute_values(
+        attributes,
+        ["location", "name", "text"],
+        [
+            "identity:hears_name takes only the location, name and text attributes",
+            "identity:hears_name repeats an attribute",
+            "identity:hears_name has an empty attribute",
+        ],
+    )?;
+    let location = location.ok_or(Failure::Execution(
+        "identity:hears_name requires a location",
+    ))?;
+    let name = name.ok_or(Failure::Execution("identity:hears_name requires a name"))?;
+    let text = text.ok_or(Failure::Execution("identity:hears_name requires a text"))?;
+    no_content(content, "identity:hears_name holds no content")?;
+    let mut string_or_null = |expression: &str,
+                              failed: &'static str,
+                              malformed: &'static str|
+     -> Result<Option<String>, Failure<H::Error>> {
+        match evaluate(host, expression, failed)? {
+            Data::String(value) => Ok(Some(value)),
+            Data::Null | Data::Undefined | Data::Absent => Ok(None),
+            _ => Err(Failure::Execution(malformed)),
+        }
+    };
+    let name = string_or_null(
+        name,
+        "identity:hears_name name did not evaluate",
+        "identity:hears_name name is not a string or null",
+    )?;
+    let text = string_or_null(
+        text,
+        "identity:hears_name text did not evaluate",
+        "identity:hears_name text is not a string or null",
+    )?;
+    let addressed = match (name, text) {
+        (Some(name), Some(text)) => hears_name(&text, &name),
+        _ => false,
+    };
+    assign_to(
+        host,
+        location,
+        &Data::Bool(addressed),
+        "identity:hears_name could not assign whether the name was heard",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// The original's `recognition._tokens`: the white-space separated words of
+/// `text`, each kept to its letters and digits and lowercased, the empty
+/// ones dropped.
+fn tokens(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .map(|word| {
+            word.chars()
+                .filter(|c| c.is_alphanumeric())
+                .flat_map(char::to_lowercase)
+                .collect::<String>()
+        })
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+/// The original's `recognition.hears_name`: whether `name`'s tokens appear
+/// as a whole run among `text`'s; a name with no tokens is never heard.
+#[must_use]
+pub fn hears_name(text: &str, name: &str) -> bool {
+    let wanted = tokens(name);
+    !wanted.is_empty()
+        && tokens(text)
+            .windows(wanted.len())
+            .any(|run| run == wanted.as_slice())
+}
+
+/// Executes `<identity:sorted_identities>`.
+fn sorted_identities_element<H: IdentityHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, ids] = attribute_values(
+        attributes,
+        ["location", "ids"],
+        [
+            "identity:sorted_identities takes only the location and ids attributes",
+            "identity:sorted_identities repeats an attribute",
+            "identity:sorted_identities has an empty attribute",
+        ],
+    )?;
+    let location = location.ok_or(Failure::Execution(
+        "identity:sorted_identities requires a location",
+    ))?;
+    let ids = ids.ok_or(Failure::Execution(
+        "identity:sorted_identities requires ids",
+    ))?;
+    no_content(content, "identity:sorted_identities holds no content")?;
+    let ids = match evaluate(host, ids, "identity:sorted_identities ids did not evaluate")? {
+        Data::JsonArray(text) => match serde_json::from_str::<Json>(&text) {
+            Ok(Json::Array(ids)) if ids.iter().all(is_identity) => ids,
+            _ => {
+                return Err(Failure::Execution(
+                    "identity:sorted_identities ids is not an array of identities",
+                ));
+            }
+        },
+        _ => {
+            return Err(Failure::Execution(
+                "identity:sorted_identities ids is not an array of identities",
+            ));
+        }
+    };
+    assign_to(
+        host,
+        location,
+        &Data::JsonArray(Json::Array(sorted_identities(&ids)).to_string()),
+        "identity:sorted_identities could not assign the identities",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// An identity: a string, or an array of numbers (an embedding).
+#[must_use]
+pub fn is_identity(value: &Json) -> bool {
+    match value {
+        Json::String(_) => true,
+        Json::Array(values) => values.iter().all(Json::is_number),
+        _ => false,
+    }
+}
+
+/// The original's `value.sorted_identities`: `ids` in identity order
+/// ([`sort_key`]), stable, repeats kept.
+#[must_use]
+pub fn sorted_identities(ids: &[Json]) -> Vec<Json> {
+    let mut keyed: Vec<(String, &Json)> = ids.iter().map(|id| (sort_key(id), id)).collect();
+    keyed.sort_by(|left, right| left.0.cmp(&right.0));
+    keyed.into_iter().map(|(_, id)| id.clone()).collect()
+}
+
+/// The original's `identity_sort_key` as one text, compared in code point
+/// order: `0` and a name's text, or `1` and an embedding's compact Python
+/// JSON (so every name sorts before every embedding).
+#[must_use]
+pub fn sort_key(id: &Json) -> String {
+    match id {
+        Json::String(name) => format!("0{name}"),
+        Json::Array(components) => {
+            let texts: Vec<String> = components
+                .iter()
+                .map(|component| python_float(component.as_f64().unwrap_or(f64::NAN)))
+                .collect();
+            format!("1[{}]", texts.join(","))
+        }
+        other => format!("2{other}"),
+    }
+}
+
+/// Python's `repr` of a finite float (`float_repr_style` `short`): the
+/// shortest round-trip digits, positional with at least one fraction digit
+/// when the decimal exponent is from -4 to 15, else `d[.ddd]e±XX`.
+#[must_use]
+pub fn python_float(value: f64) -> String {
+    if !value.is_finite() {
+        return "NaN".into();
+    }
+    let sign = if value.is_sign_negative() { "-" } else { "" };
+    if value == 0.0 {
+        return format!("{sign}0.0");
+    }
+    // Rust's `{:e}` writes the shortest round-trip digits: `d[.ddd]e<exp>`.
+    let scientific = format!("{:e}", value.abs());
+    let Some((mantissa, exponent)) = scientific.split_once('e') else {
+        return scientific;
+    };
+    let Ok(exponent) = exponent.parse::<i64>() else {
+        return scientific;
+    };
+    if !(-4..16).contains(&exponent) {
+        let exponent_sign = if exponent < 0 { "-" } else { "+" };
+        return format!("{sign}{mantissa}e{exponent_sign}{:02}", exponent.abs());
+    }
+    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
+    let whole_digits = usize::try_from(exponent + 1).unwrap_or(0);
+    let body = if exponent < 0 {
+        let zeros = usize::try_from(-exponent - 1).unwrap_or(0);
+        format!("0.{}{digits}", "0".repeat(zeros))
+    } else if digits.len() <= whole_digits {
+        format!("{digits}{}.0", "0".repeat(whole_digits - digits.len()))
+    } else {
+        let (whole, fraction) = digits.split_at(whole_digits);
+        format!("{whole}.{fraction}")
+    };
+    format!("{sign}{body}")
+}
+
+#[cfg(target_arch = "wasm32")]
+#[allow(
+    clippy::same_length_and_capacity,
+    reason = "generated canonical-ABI ownership transfer"
+)]
+mod guest {
+    wit_bindgen::generate!({
+        world: "executable-content-extension",
+        path: "../../scxml.rs/crates/scxml-wit/wit/scxml",
+    });
+
+    use std::cell::Cell;
+
+    use exports::stateforward::scxml::executable_content_extension_api::Guest;
+    use stateforward::scxml::data_model_host;
+    use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
+    use stateforward::scxml::types::{
+        ComponentError, DataValue, ErrorCode, ErrorVersion, ExecutableContentExtension,
+        ExtensionContent, ExtensionOutcome, TraceContext,
+    };
+
+    use super::{Attribute, Content, Data, Executed, Failure, IdentityHost};
+
+    /// The lifecycle of this instance.
+    #[derive(Clone, Copy, Eq, PartialEq)]
+    enum Lifecycle {
+        Created,
+        Live,
+        ShutDown,
+    }
+
+    thread_local! {
+        static STATE: Cell<Lifecycle> = const { Cell::new(Lifecycle::Created) };
+    }
+
+    struct Component;
+
+    /// The host capabilities of one `execute` call.
+    struct Host;
+
+    /// Evaluation and assignment failures (and a session with no data
+    /// model) are document errors.
+    fn recoverable(code: ErrorCode) -> bool {
+        matches!(
+            code,
+            ErrorCode::InvalidInput
+                | ErrorCode::Execution
+                | ErrorCode::Unavailable
+                | ErrorCode::PayloadTooLarge
+        )
+    }
+
+    impl IdentityHost for Host {
+        type Error = ComponentError;
+
+        fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, ComponentError> {
+            match data_model_host::evaluate(expression) {
+                Ok(value) => Ok(match value {
+                    DataValue::Absent => Ok(Data::Absent),
+                    DataValue::Undefined => Ok(Data::Undefined),
+                    DataValue::Null => Ok(Data::Null),
+                    DataValue::Boolean(value) => Ok(Data::Bool(value)),
+                    DataValue::Number(value) => scxml_types::FiniteNumber::new(value)
+                        .map(Data::Number)
+                        .map_err(|_| ()),
+                    DataValue::Text(text) => Ok(Data::String(text)),
+                    DataValue::JsonArray(text) => Ok(Data::JsonArray(text)),
+                    DataValue::JsonObject(text) => Ok(Data::JsonObject(text)),
+                    DataValue::Xml(text) => Ok(Data::Xml(text)),
+                }),
+                Err(error) if recoverable(error.code) => Ok(Err(())),
+                Err(error) => Err(error),
+            }
+        }
+
+        fn assign(
+            &mut self,
+            location: &str,
+            value: &Data,
+        ) -> Result<Result<(), ()>, ComponentError> {
+            let value = match value {
+                Data::Null => DataValue::Null,
+                Data::Bool(value) => DataValue::Boolean(*value),
+                Data::Number(value) => DataValue::Number(value.get()),
+                Data::String(text) => DataValue::Text(text.clone()),
+                Data::JsonArray(text) => DataValue::JsonArray(text.clone()),
+                Data::JsonObject(text) => DataValue::JsonObject(text.clone()),
+                Data::Absent | Data::Undefined | Data::Xml(_) => return Ok(Err(())),
+            };
+            match data_model_host::assign(location, &value) {
+                Ok(()) => Ok(Ok(())),
+                Err(error) if recoverable(error.code) => Ok(Err(())),
+                Err(error) => Err(error),
+            }
+        }
+    }
+
+    fn content(items: Vec<ExtensionContent>) -> Vec<Content> {
+        items
+            .into_iter()
+            .map(|item| match item {
+                ExtensionContent::Text(text) => Content::Text(text),
+                ExtensionContent::StartElement(_) => Content::Start,
+                ExtensionContent::EndElement(_) => Content::End,
+            })
+            .collect()
+    }
+
+    impl Guest for Component {
+        fn namespace_uri() -> String {
+            super::NAMESPACE_URI.into()
+        }
+
+        fn initialize() -> Result<(), ComponentError> {
+            observed(Operation::Initialize, None, || {
+                if STATE.get() != Lifecycle::Created {
+                    return Err(error(ErrorCode::Protocol, "initialize was already called"));
+                }
+                STATE.set(Lifecycle::Live);
+                Ok(())
+            })
+        }
+
+        fn execute(
+            element: ExecutableContentExtension,
+            context: Option<TraceContext>,
+        ) -> Result<ExtensionOutcome, ComponentError> {
+            observed(Operation::Execute, context.as_ref(), || {
+                if element.name.namespace_uri.as_deref() != Some(super::NAMESPACE_URI) {
+                    return Err(error(
+                        ErrorCode::Protocol,
+                        "element namespace does not match extension component identity",
+                    ));
+                }
+                if STATE.get() != Lifecycle::Live {
+                    return Err(error(
+                        ErrorCode::Protocol,
+                        "execute outside the initialized lifecycle",
+                    ));
+                }
+                let attributes: Vec<Attribute> = element
+                    .attributes
+                    .into_iter()
+                    .map(|attribute| Attribute {
+                        namespace_uri: attribute.name.namespace_uri,
+                        local_name: attribute.name.local_name,
+                        value: attribute.value,
+                    })
+                    .collect();
+                let flattened = content(element.content);
+                match super::execute(&element.name.local_name, &attributes, &flattened, &mut Host) {
+                    Ok(Executed::Handled) => Ok(ExtensionOutcome::Handled),
+                    Ok(Executed::NotHandled) => Ok(ExtensionOutcome::NotHandled),
+                    Err(Failure::Execution(detail)) => Err(error(ErrorCode::Execution, detail)),
+                    Err(Failure::Host(host)) => Err(host),
+                }
+            })
+        }
+
+        fn shutdown() -> Result<(), ComponentError> {
+            observed(Operation::Shutdown, None, || {
+                STATE.set(Lifecycle::ShutDown);
+                Ok(())
+            })
+        }
+    }
+
+    /// Records one closed-label observation per entry point: the operation,
+    /// its outcome, and one signal event (no attribute carries input).
+    fn observed<T>(
+        operation: Operation,
+        context: Option<&TraceContext>,
+        body: impl FnOnce() -> Result<T, ComponentError>,
+    ) -> Result<T, ComponentError> {
+        let result = body();
+        let outcome = match &result {
+            Ok(_) => Outcome::Ok,
+            Err(error) if error.code == ErrorCode::Execution => Outcome::Failed,
+            Err(_) => Outcome::Rejected,
+        };
+        telemetry::observe(operation, outcome, None, context);
+        telemetry::event(
+            operation,
+            if result.is_ok() {
+                SignalEvent::TransformationCompleted
+            } else {
+                SignalEvent::InputRejected
+            },
+            context,
+        );
+        result
+    }
+
+    fn error(code: ErrorCode, detail: &'static str) -> ComponentError {
+        ComponentError {
+            version: ErrorVersion::V1,
+            code,
+            detail: (detail.len() <= 160).then(|| detail.into()),
+        }
+    }
+
+    export!(Component);
+}
+
+#[cfg(test)]
+mod tests;

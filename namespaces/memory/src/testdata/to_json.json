@@ -1,0 +1,146 @@
+[
+ {
+  "message": {
+   "source_ids": [
+    "zed",
+    "alice",
+    [
+     0.5,
+     1
+    ]
+   ],
+   "target_ids": [
+    "bot",
+    "é"
+   ],
+   "content": {
+    "b": 1,
+    "a": [
+     true,
+     null,
+     1.5
+    ],
+    "é": "x"
+   },
+   "content_type": "application/json"
+  },
+  "json": "{\"content\":{\"__stateforward_memory_content__\":\"mapping\",\"value\":[[\"é\",\"x\"],[\"a\",{\"__stateforward_memory_content__\":\"list\",\"value\":[true,null,1.5]}],[\"b\",1]]},\"content_type\":\"application/json\",\"source_ids\":[\"alice\",\"zed\",[0.5,1.0]],\"target_ids\":[\"bot\",\"é\"]}"
+ },
+ {
+  "message": {
+   "source_ids": [
+    [
+     1e-05,
+     2
+    ],
+    [
+     3,
+     4
+    ],
+    "q\"\n"
+   ],
+   "target_ids": [],
+   "content": [
+    "😀",
+    1e-07,
+    12345678901234567000,
+    {
+     "": [],
+     "z": {}
+    }
+   ],
+   "content_type": "text/x"
+  },
+  "json": "{\"content\":{\"__stateforward_memory_content__\":\"list\",\"value\":[\"😀\",1e-07,1.2345678901234567e+19,{\"__stateforward_memory_content__\":\"mapping\",\"value\":[[\"\",{\"__stateforward_memory_content__\":\"list\",\"value\":[]}],[\"z\",{\"__stateforward_memory_content__\":\"mapping\",\"value\":[]}]]}]},\"content_type\":\"text/x\",\"source_ids\":[\"q\\\"\\n\",[1e-05,2.0],[3.0,4.0]],\"target_ids\":[]}"
+ },
+ {
+  "message": {
+   "source_ids": [
+    "alice",
+    "alice",
+    [
+     1,
+     2
+    ],
+    [
+     1,
+     2
+    ]
+   ],
+   "target_ids": [
+    "bot"
+   ],
+   "content": "hi",
+   "content_type": "text/plain"
+  },
+  "json": "{\"content\":\"hi\",\"content_type\":\"text/plain\",\"source_ids\":[\"alice\",[1.0,2.0]],\"target_ids\":[\"bot\"]}"
+ },
+ {
+  "message": {
+   "source_ids": [
+    "a"
+   ],
+   "target_ids": [],
+   "content": null,
+   "content_type": "audio/pcm"
+  },
+  "json": "{\"content\":null,\"content_type\":\"audio/pcm\",\"source_ids\":[\"a\"],\"target_ids\":[]}"
+ },
+ {
+  "message": {
+   "source_ids": [
+    "a"
+   ],
+   "target_ids": [],
+   "content": {
+    "😀": 1,
+    "ab": 2,
+    "aé": 3,
+    "a\"": 4,
+    "a\\": 5,
+    "A": [
+     {
+      "y": 1,
+      "x": 2
+     }
+    ]
+   },
+   "content_type": "application/json"
+  },
+  "json": "{\"content\":{\"__stateforward_memory_content__\":\"mapping\",\"value\":[[\"A\",{\"__stateforward_memory_content__\":\"list\",\"value\":[{\"__stateforward_memory_content__\":\"mapping\",\"value\":[[\"x\",2],[\"y\",1]]}]}],[\"😀\",1],[\"a\\\"\",4],[\"a\\\\\",5],[\"aé\",3],[\"ab\",2]]},\"content_type\":\"application/json\",\"source_ids\":[\"a\"],\"target_ids\":[]}"
+ },
+ {
+  "message": {
+   "source_ids": [
+    "a"
+   ],
+   "target_ids": [],
+   "content": [
+    1,
+    -0.5,
+    3,
+    1e+21,
+    2e-07,
+    100,
+    9007199254740992,
+    0.1,
+    -1e-05
+   ],
+   "content_type": "application/json"
+  },
+  "json": "{\"content\":{\"__stateforward_memory_content__\":\"list\",\"value\":[1,-0.5,3,1e+21,2e-07,100,9007199254740992.0,0.1,-1e-05]},\"content_type\":\"application/json\",\"source_ids\":[\"a\"],\"target_ids\":[]}"
+ },
+ {
+  "message": {
+   "source_ids": [
+    " x\u0001"
+   ],
+   "target_ids": [
+    "\t"
+   ],
+   "content": " \u0001😀",
+   "content_type": "text/plain"
+  },
+  "json": "{\"content\":\" \\u0001😀\",\"content_type\":\"text/plain\",\"source_ids\":[\" x\\u0001\"],\"target_ids\":[\"\\t\"]}"
+ }
+]

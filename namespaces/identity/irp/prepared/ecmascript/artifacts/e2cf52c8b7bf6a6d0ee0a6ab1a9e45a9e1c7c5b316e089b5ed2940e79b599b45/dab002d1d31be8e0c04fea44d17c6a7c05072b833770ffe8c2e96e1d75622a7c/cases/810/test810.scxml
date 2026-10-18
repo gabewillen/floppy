@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- identity-2: a name is heard as a whole run of the text's case-folded letter-and-digit tokens. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:identity="https://github.com/stateforward/floppy/namespaces/identity" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="heard" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <identity:hears_name location="heard" name="'Floppy Bot'" text="'hey, FLOPPY  bot!'"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="heard === true" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

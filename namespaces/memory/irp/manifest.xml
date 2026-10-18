@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!-- The memory namespace's implementation report plan: each assertion is a
+     numbered statement of namespaces/memory/README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/memory/irp/sources">
+  <assert id="memory-1" specnum="1" specid="#memory-1">
+    <![CDATA[Each element (to_json, contents) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/memory.xsd, rejects it before any run under scx validate).]]>
+    <test id="900" conformance="mandatory" manual="false">
+      <start uri="900/test900.txml"/>
+    </test>
+    <test id="901" conformance="mandatory" manual="false">
+      <start uri="901/test901.txml"/>
+    </test>
+    <test id="902" conformance="mandatory" manual="false">
+      <start uri="902/test902.txml"/>
+    </test>
+  </assert>
+  <assert id="memory-2" specnum="2" specid="#memory-2">
+    <![CDATA[<memory:to_json> writes the original's Memory.to_json of a message as one JSON text: {content, content_type, source_ids, target_ids} with sorted keys and compact separators, the content's arrays and objects tagged __stateforward_memory_content__ list and mapping (a mapping's entries ordered by their keys' ASCII JSON), a number that is not a safe integer as a Python float, and the identities sorted without repeats, embeddings as Python floats; a message without identity arrays raises error.execution and assigns nothing.]]>
+    <test id="910" conformance="mandatory" manual="false">
+      <start uri="910/test910.txml"/>
+    </test>
+    <test id="911" conformance="mandatory" manual="false">
+      <start uri="911/test911.txml"/>
+    </test>
+    <test id="912" conformance="mandatory" manual="false">
+      <start uri="912/test912.txml"/>
+    </test>
+  </assert>
+  <assert id="memory-3" specnum="3" specid="#memory-3">
+    <![CDATA[<memory:contents> writes, in row order, the first value of each row of one statement's result that is a string holding a JSON object, parsed, and skips every other row; a result without a rows array raises error.execution and assigns nothing.]]>
+    <test id="920" conformance="mandatory" manual="false">
+      <start uri="920/test920.txml"/>
+    </test>
+    <test id="921" conformance="mandatory" manual="false">
+      <start uri="921/test921.txml"/>
+    </test>
+    <test id="922" conformance="mandatory" manual="false">
+      <start uri="922/test922.txml"/>
+    </test>
+  </assert>
+</assertions>

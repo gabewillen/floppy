@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- identity-1: a sorted_identities with content raises error.execution and assigns nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:identity="https://github.com/stateforward/floppy/namespaces/identity">
+<datamodel>
+  <data id="s" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <identity:sorted_identities location="s" ids="['a']">a</identity:sorted_identities>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="s === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

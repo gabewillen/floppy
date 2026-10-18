@@ -9,6 +9,8 @@ members = [
     "namespaces/processing",
     "namespaces/intuition",
     "namespaces/cognition",
+    "namespaces/identity",
+    "namespaces/memory",
     "services/generate",
     "services/generate/validator",
     "services/decision",

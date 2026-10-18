@@ -1,0 +1,26 @@
+[package]
+name = "floppy-identity"
+description = "The `identity` namespace: `<identity:hears_name>` and `<identity:sorted_identities>`, the original's identity module (its text name recognition and canonical identity order), as a Wasm extension component"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The identities as JSON (no schema code, so no randomness).
+scxml-types.workspace = true
+serde_json.workspace = true
+wit-bindgen.workspace = true
+
+[dev-dependencies]
+# The package test reads the manifest with the parser every host uses.
+scxml-validator-core.workspace = true
+
+[lints]
+workspace = true

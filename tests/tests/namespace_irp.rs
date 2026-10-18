@@ -1,6 +1,5 @@
 //! floppy's namespace implementation report plans
-//! (`namespaces/<name>/irp`, decision, bot, conversation, migration and
-//! device), in
+//! (`namespaces/<name>/irp`, one per floppy namespace), in
 //! the format and through the pipeline of scxml.rs's own namespace suites
 //! (`scxml.rs/docs/conformance.md`, "Namespace suites").
 //!
@@ -38,7 +37,7 @@ use serde_json::Value as Json;
 use support::{components, output, scratch, sha256_file, workspace};
 
 /// The namespaces that have a suite: every floppy namespace.
-const SUITES: [&str; 8] = [
+const SUITES: [&str; 10] = [
     "decision",
     "bot",
     "conversation",
@@ -47,6 +46,8 @@ const SUITES: [&str; 8] = [
     "processing",
     "intuition",
     "cognition",
+    "identity",
+    "memory",
 ];
 
 /// Whether this host is the one the baselines are measured on.

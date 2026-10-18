@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML Schema of floppy's `memory` extension namespace (namespaces/memory),
+  the original's memory module. It governs structure only; the extension
+  component governs what the element does. Bind it with the prefix
+  `memory` by convention.
+
+  memory:to_json   location (required): receives the JSON text of a
+                   conversation memory row (the original's Memory.to_json).
+                   message (required): an expression.
+  memory:contents  location (required): receives the JSON objects of one
+                   statement's result (the original's OutputData.contents).
+                   result (required): an expression.
+                   Neither takes another attribute or content.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://github.com/stateforward/floppy/namespaces/memory"
+           elementFormDefault="qualified">
+  <xs:element name="to_json">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="message" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="contents">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="result" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- memory-3: each row's JSON object is read in order, and every other row is skipped. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="c" expr="null"/>
+  <data id="r" expr="({rowcount: 4, rows: [{columns: ['content'], values: ['{&#34;a&#34;: 1}']}, {columns: ['content'], values: ['[1]']}, {columns: ['content'], values: ['not json']}, {columns: ['content'], values: ['{&#34;b&#34;: 2}']}]})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:contents location="c" result="r"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="c.length === 2 &amp;&amp; c[0].a === 1 &amp;&amp; c[1].b === 2" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

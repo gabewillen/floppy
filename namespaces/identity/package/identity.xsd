@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML Schema of floppy's `identity` extension namespace
+  (namespaces/identity), the original's identity module. It governs
+  structure only; the extension component governs what the element does.
+  Bind it with the prefix `identity` by convention.
+
+  identity:hears_name
+                   location (required): receives whether the text names the
+                   bot (the original's recognition.hears_name).
+                   name, text (required): expressions.
+  identity:sorted_identities
+                   location (required): receives the identities in the
+                   original's order (value.sorted_identities).
+                   ids (required): an expression.
+                   Neither takes another attribute or content.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://github.com/stateforward/floppy/namespaces/identity"
+           elementFormDefault="qualified">
+  <xs:element name="hears_name">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="name" type="xs:string" use="required"/>
+      <xs:attribute name="text" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="sorted_identities">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="ids" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

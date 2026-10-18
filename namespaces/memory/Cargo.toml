@@ -1,0 +1,26 @@
+[package]
+name = "floppy-memory"
+description = "The `memory` namespace: `<memory:to_json>` and `<memory:contents>`, the original's memory module (a memory row's JSON as the original writes it, and the contents of a memory select), as a Wasm extension component"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The rows and the memory JSON as JSON (no schema code, so no randomness).
+scxml-types.workspace = true
+serde_json.workspace = true
+wit-bindgen.workspace = true
+
+[dev-dependencies]
+# The package test reads the manifest with the parser every host uses.
+scxml-validator-core.workspace = true
+
+[lints]
+workspace = true

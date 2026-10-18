@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<!-- The identity namespace's implementation report plan: each assertion is a
+     numbered statement of namespaces/identity/README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/identity/irp/sources">
+  <assert id="identity-1" specnum="1" specid="#identity-1">
+    <![CDATA[Each element (hears_name, sorted_identities) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/identity.xsd, rejects it before any run under scx validate).]]>
+    <test id="800" conformance="mandatory" manual="false">
+      <start uri="800/test800.txml"/>
+    </test>
+    <test id="801" conformance="mandatory" manual="false">
+      <start uri="801/test801.txml"/>
+    </test>
+    <test id="802" conformance="mandatory" manual="false">
+      <start uri="802/test802.txml"/>
+    </test>
+  </assert>
+  <assert id="identity-2" specnum="2" specid="#identity-2">
+    <![CDATA[<identity:hears_name> writes true exactly when the name's case-folded letter-and-digit tokens appear as a whole run among the text's; a missing name or one with no tokens is never heard, and a text that is neither a string nor null raises error.execution and assigns nothing.]]>
+    <test id="810" conformance="mandatory" manual="false">
+      <start uri="810/test810.txml"/>
+    </test>
+    <test id="811" conformance="mandatory" manual="false">
+      <start uri="811/test811.txml"/>
+    </test>
+    <test id="812" conformance="mandatory" manual="false">
+      <start uri="812/test812.txml"/>
+    </test>
+    <test id="813" conformance="mandatory" manual="false">
+      <start uri="813/test813.txml"/>
+    </test>
+  </assert>
+  <assert id="identity-3" specnum="3" specid="#identity-3">
+    <![CDATA[<identity:sorted_identities> writes the identities in the original's order: names first by their text in code point order, then embeddings by their compact Python JSON, stable and with repeats kept; ids that are not an array of identities raise error.execution and assign nothing.]]>
+    <test id="820" conformance="mandatory" manual="false">
+      <start uri="820/test820.txml"/>
+    </test>
+    <test id="821" conformance="mandatory" manual="false">
+      <start uri="821/test821.txml"/>
+    </test>
+    <test id="822" conformance="mandatory" manual="false">
+      <start uri="822/test822.txml"/>
+    </test>
+  </assert>
+</assertions>

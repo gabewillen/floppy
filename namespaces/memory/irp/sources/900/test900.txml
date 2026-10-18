@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- memory-1: a to_json without a message raises error.execution and assigns nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory">
+<datamodel>
+  <data id="p" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:to_json location="p"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="p === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

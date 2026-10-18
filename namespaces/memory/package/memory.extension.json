@@ -1,0 +1,10 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://github.com/stateforward/floppy/namespaces/memory",
+  "package-version": "0.1.0",
+  "extension-artifact": "floppy_memory.virtualized.wasm",
+  "schema-artifact": "memory.xsd",
+  "schema-sha256": "0322f8a342e8222203d5e568c766949c9388f57bba0c2a2607e5d4b77173d508",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0"
+}
