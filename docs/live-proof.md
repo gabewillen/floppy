@@ -26,7 +26,7 @@ floppy-tests --locked --test floppy_live -- --ignored --nocapture
 | Run | Result | Note |
 | --- | --- | --- |
 | `floppy_live` `live_cascade` | pass (30 s) | |
-| `floppy_live` `live_conversation` | pass (130 s) | `4 completed, 0 failed`; reflection created `IgnoreConversationTurn` (`ACTIVE turn []`) and `ReplyPongToPing` (`ACTIVE turn ["bot.ability.conversation.output"]`), each accepted, so a behavior was learned by turn 2 (the runs on D114 and D115 learned none: the model's choices). Autonomy matched nothing on turn 3 (`0 matched for bot.ability.conversation.output`), so reasoning answered "pong" there, and turn 4 recalled green ("Your favorite color is green, Gabe!") |
+| `floppy_live` `live_conversation` | pass (130 s) | `4 completed, 0 failed`; the behavior learned by turn 2 is `IgnoreConversationTurn` (`ACTIVE turn []`, accepted on turn 1's reflection, so it matches no stimulus); `ReplyPongToPing` (`ACTIVE turn ["bot.ability.conversation.output"]`) was accepted only after turn 4 had completed, so autonomy matched nothing on turn 3 (`0 matched for bot.ability.conversation.output`) and reasoning answered "pong"; turn 4 recalled green ("Your favorite color is green, Gabe!"). The runs on D114 and D115 learned no behavior (the model's choices) |
 
 ## 2026-10-18, the identity, conversation and memory namespaces (D115), model `Qwen/Qwen3.8-Flash-Next`
 
