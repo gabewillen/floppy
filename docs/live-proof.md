@@ -7,6 +7,23 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-18, the intuition and cognition namespaces (D114), model `Qwen/Qwen3.8-Flash-Next`
+
+Intuition now tunes its confidence with `<intuition:observe>` and
+`<intuition:escalate>`, the body takes its attention bias with
+`<cognition:attention_bias_for_turn>`, and reasoning builds its prompt
+with `<cognition:model_facing_content>`. The runs used floppy commit
+`0b2edc91ee` (code at `1f331106b9`), the same env files, backends and
+model as the entries below (`FLOPPY_LIVE_ENV_FILE` naming `.env`,
+`env.speech` and `env.voice`), no relay, and `cargo test -p floppy-tests
+--locked --test floppy_live -- --ignored --nocapture --test-threads=1
+--exact <test>`, once each.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (31 s) | autonomy left the question unhandled, intuition abstained (`empty_product`, so the tuner observed nothing), and reasoning, prompted by `<cognition:model_facing_content>`, answered it |
+| `floppy_live` `live_conversation` | fail (100 s) | `4 completed, 0 failed`, but no behavior was learned by turn 2: on turn 1 reflection created `IgnoreConversationTurn`, whose draft failed its simulation twice with the same diagnostic (`test-failed`: `done=false`), so the revision was abandoned and stayed DRAFT; on turn 2 reflection's select failed `schema-mismatch` and on turn 3 `malformed`. Reasoning answered every turn: turn 3 "pong" and turn 4 "Your favorite color is green, Gabe!", recalling turn 1. The reflection failures are the model's, the same kind as the 2026-10-18 run below; the reflection path does not use the changed elements |
+
 ## 2026-10-18, `live_choices` through the relay, and a selection without data sent with `{}`, model `Qwen/Qwen3.8-Flash-Next`
 
 A selection with no data is now sent with `{}`, as the original's
