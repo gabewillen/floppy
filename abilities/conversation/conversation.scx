@@ -108,8 +108,11 @@
   commit (an envelope {event, data}), and messages is the committed
   history in causal order. An inbound commit of text (string content,
   content_type text/*) hands it to the parent as a stimulus,
-  bot.ability.cognition.input {stimulus} (the product's envelope with
-  source "conversation", the original's text contribution handoff); every other
+  bot.ability.cognition.input {stimulus, participants} (the product's
+  envelope with source "conversation", the original's text contribution
+  handoff; participants as <conversation:turn_participants> stamps them
+  for the turn, the original's f6c4e08: its string source_ids and
+  target_ids, then whatever its parent's data carries); every other
   commit sends the product itself, history only.
 
   Readiness: the session's start sends bot.ability.offers
@@ -162,6 +165,8 @@
     <data id="product" expr="null"/>
     <data id="parent" expr="null"/>
     <data id="input" expr="null"/>
+    <!-- The participants the turn's cognition handoff stamps. -->
+    <data id="turn_participants" expr="[]"/>
     <!-- The message in hand. -->
     <data id="message" expr="null"/>
     <!-- Memory: the database file (null: no memory) and the original's
@@ -403,8 +408,10 @@
               <assign location="product.data.parent" expr="parent"/>
               <assign location="product.data.messages" expr="history"/>
               <assign location="product.source" expr="'conversation'"/>
+              <conversation:turn_participants location="turn_participants" input="input" parent="parent"/>
               <send event="bot.ability.cognition.input" target="#_parent">
                 <param name="stimulus" expr="product"/>
+                <param name="participants" expr="turn_participants"/>
               </send>
             <else/>
               <send event="bot.ability.conversation.output" target="#_parent">

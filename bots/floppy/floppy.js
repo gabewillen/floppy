@@ -100,7 +100,12 @@ function choicesFit() {
 }
 
 function cognitionInput() {
-  return {turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, choices: choices, environment: environmentField()};
+  return {turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, participants: participants, choices: choices, environment: environmentField()};
+}
+
+// The participants a handoff's producer stamped (none when it names none).
+function handoffParticipants(_event) {
+  return _event.data.participants || [];
 }
 
 // The turn's environment from the bot's perspective (decision D106), in

@@ -44,3 +44,8 @@ function soundSource(sound) {
 function sensitivityTimedOut() {
   return ({stage: 'sensitivity', message: 'Listening sensitivity timed out.'});
 }
+
+// The participants a speech product carries (the original's f6c4e08).
+function productParticipants(_event) {
+  return _event.data.participants || [];
+}

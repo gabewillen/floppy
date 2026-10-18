@@ -54,7 +54,8 @@
 
   It logs double.input per turn (turn, behavior, observation data),
   double.choices (the turn's choices as JSON), double.environment (the
-  turn's environment as JSON), double.ignore when a
+  turn's environment as JSON), double.participants (the turn's
+  participants as JSON), double.ignore when a
   bot.ability.cognition.ignore reaches it, and double.exit when it is
   cancelled.
 -->
@@ -103,6 +104,7 @@
         <log label="double.input" expr="turn + ' ' + action + ' ' + JSON.stringify(observed)"/>
         <log label="double.choices" expr="JSON.stringify(_event.data.choices)"/>
         <log label="double.environment" expr="JSON.stringify(_event.data.environment)"/>
+        <log label="double.participants" expr="JSON.stringify(_event.data.participants)"/>
       </transition>
       <transition event="bot.ability.cognition.ignore">
         <log label="double.ignore" expr="JSON.stringify(_event.data)"/>

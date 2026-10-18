@@ -285,6 +285,14 @@ fn history_carrying_turns(body: &Path) -> Run {
         texts(&all, "double.input"),
         strings(&["1 reply 1", "2 reply 3"])
     );
+    // The conversation's handoff stamps the turn's names as participants
+    // (the original's turn_participants, f6c4e08), and the body copies them
+    // into the turn.
+    let stamped = r#"[{"ref":"gabe","role":"source"},{"ref":"floppy","role":"target"}]"#;
+    assert_eq!(
+        texts(&all, "double.participants"),
+        strings(&[stamped, stamped])
+    );
     assert_eq!(
         texts(&all, "conversation"),
         strings(&[

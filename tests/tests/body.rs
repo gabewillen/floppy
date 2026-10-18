@@ -372,10 +372,17 @@ fn a_turn_completes_with_the_cognitions_output() {
     assert_eq!(
         only(
             &records,
-            &["double.input", "floppy.output", "bot.processing.completed"]
+            &[
+                "double.input",
+                "double.participants",
+                "floppy.output",
+                "bot.processing.completed"
+            ]
         ),
         pairs(&[
             ("double.input", r#"1 reply "hello""#),
+            // A device's bot.input names no one (the original's f6c4e08).
+            ("double.participants", "[]"),
             (
                 "floppy.output",
                 &format!(r#"{{"turn":1,"output":{output}}}"#)

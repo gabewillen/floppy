@@ -179,6 +179,72 @@
           }
         }
       }
+    },
+    "participants": {
+      "default": [],
+      "description": "Who took part in the stimulus, stamped by the producer of this input. Empty when the producer knows no one (environment sound, routine tick).",
+      "examples": [
+        [
+          {
+            "ref": "caller",
+            "role": "source"
+          },
+          {
+            "ref": "bot",
+            "role": "target"
+          }
+        ]
+      ],
+      "items": {
+        "additionalProperties": false,
+        "description": "Someone who took part in a stimulus: an opaque, producer-stable identity reference and the role it played (source: who produced it; target: who it was addressed to).",
+        "examples": [
+          {
+            "ref": "+15555550100",
+            "role": "source"
+          },
+          {
+            "ref": "person-42",
+            "role": "target"
+          }
+        ],
+        "properties": {
+          "ref": {
+            "description": "Opaque, producer-stable identity such as a phone number, an app person id, or a chat handle. Never a display name chosen by the bot.",
+            "examples": [
+              "+15555550100",
+              "person-42",
+              "caller"
+            ],
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Ref",
+            "type": "string"
+          },
+          "role": {
+            "description": "source: who produced the stimulus (speaker, sender). target: who it was addressed to.",
+            "enum": [
+              "source",
+              "target"
+            ],
+            "examples": [
+              "source",
+              "target"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "role"
+        ],
+        "title": "Participant",
+        "type": "object"
+      },
+      "maxItems": 32,
+      "title": "Participants",
+      "type": "array"
     }
   },
   "type": "object",

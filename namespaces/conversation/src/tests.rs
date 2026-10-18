@@ -1041,3 +1041,127 @@ fn malformed_other_elements_raise_error_execution_and_assign_nothing() {
         assert!(host.assigned.is_empty(), "{detail}");
     }
 }
+
+// <conversation:turn_participants>
+
+/// What `<conversation:turn_participants>` writes for `input` and `parent`.
+fn stamped(input: &Json, parent: Option<&Json>) -> Json {
+    let mut host = FakeHost::default();
+    host.values.insert("input".to_owned(), data(input));
+    let mut attributes = vec![attr("location", "participants"), attr("input", "input")];
+    if let Some(parent) = parent {
+        host.values.insert("parent".to_owned(), data(parent));
+        attributes.push(attr("parent", "parent"));
+    }
+    assert_eq!(
+        execute("turn_participants", &attributes, &[], &mut host),
+        Ok(Executed::Handled)
+    );
+    match host.assigned.as_slice() {
+        [(location, Data::JsonArray(text))] if location == "participants" => {
+            serde_json::from_str(text).expect("the participants are JSON")
+        }
+        other => panic!("expected the participants, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_turn_stamps_its_names_as_sources_then_targets_and_never_an_embedding() {
+    assert_eq!(
+        stamped(
+            &json!({"source_ids": ["zoe", [0.1, 0.2], "ann"], "target_ids": ["floppy"]}),
+            None,
+        ),
+        json!([
+            {"ref": "ann", "role": "source"},
+            {"ref": "zoe", "role": "source"},
+            {"ref": "floppy", "role": "target"},
+        ])
+    );
+}
+
+#[test]
+fn a_turn_carries_its_parents_participants_after_its_own_once_each() {
+    let parent = json!({"event": "bot.ability.listening.speech.output", "data": {"participants": [
+        {"ref": "ann", "role": "source"},
+        {"ref": "person-42", "role": "source"},
+    ]}});
+    assert_eq!(
+        stamped(
+            &json!({"source_ids": ["ann"], "target_ids": []}),
+            Some(&parent)
+        ),
+        json!([
+            {"ref": "ann", "role": "source"},
+            {"ref": "person-42", "role": "source"},
+        ])
+    );
+    // A parent with no participants, or none at all, carries nothing.
+    let input = json!({"source_ids": ["ann"], "target_ids": []});
+    for parent in [
+        json!(null),
+        json!({"event": "bot.ability.communication.input", "data": {"source_ids": ["ann"]}}),
+    ] {
+        assert_eq!(
+            stamped(&input, Some(&parent)),
+            json!([{"ref": "ann", "role": "source"}])
+        );
+    }
+}
+
+#[test]
+fn a_ref_over_200_characters_is_not_stamped_and_the_list_is_bounded_at_32() {
+    let long = "é".repeat(201);
+    let names: Vec<String> = (0..40).map(|index| format!("p{index:02}")).collect();
+    let participants = stamped(
+        &json!({"source_ids": [long, "é".repeat(200)], "target_ids": names}),
+        None,
+    );
+    let participants = participants.as_array().expect("an array");
+    assert_eq!(participants.len(), MAX_PARTICIPANTS);
+    assert_eq!(
+        participants[0],
+        json!({"ref": "é".repeat(200), "role": "source"})
+    );
+    assert_eq!(participants[1], json!({"ref": "p00", "role": "target"}));
+    assert_eq!(participants[31], json!({"ref": "p30", "role": "target"}));
+}
+
+#[test]
+fn turn_participants_of_the_wrong_kind_raise_error_execution() {
+    let mut host = FakeHost::default();
+    host.values
+        .insert("input".to_owned(), data(&json!({"source_ids": ["ann"]})));
+    host.values.insert(
+        "parent".to_owned(),
+        data(&json!({"data": {"participants": [{"ref": "ann", "role": "speaker"}]}})),
+    );
+    host.values.insert(
+        "good".to_owned(),
+        data(&json!({"source_ids": [], "target_ids": []})),
+    );
+    let attributes = [attr("location", "participants"), attr("input", "input")];
+    assert_eq!(
+        execution(execute("turn_participants", &attributes, &[], &mut host)),
+        "conversation:turn_participants input is not an object with source_ids and target_ids"
+    );
+    let attributes = [
+        attr("location", "participants"),
+        attr("input", "good"),
+        attr("parent", "parent"),
+    ];
+    assert_eq!(
+        execution(execute("turn_participants", &attributes, &[], &mut host)),
+        "conversation:turn_participants parent carries participants that are not {ref, role}"
+    );
+    assert_eq!(
+        execution(execute(
+            "turn_participants",
+            &[attr("input", "good")],
+            &[],
+            &mut host
+        )),
+        "conversation:turn_participants requires a location"
+    );
+    assert!(host.assigned.is_empty());
+}

@@ -15,6 +15,7 @@
 //! | `<conversation:complete_turn>` | `Conversation._complete_turn` |
 //! | `<conversation:ingest_content>` | `TurnDetector._ingest_content` |
 //! | `<conversation:on_end>` | `TurnDetector._on_end` |
+//! | `<conversation:turn_participants>` | `turn_participants` |
 //!
 //! Documents bind [`NAMESPACE_URI`] (conventionally with the prefix
 //! `conversation`). Every attribute but `location` and `indexlocation` is
@@ -137,6 +138,21 @@
 //! there is audio), or `{failure}` (the original's `FailedEventData`, stage
 //! `turn`) when the turn has neither text, audio nor content, or both text
 //! and audio.
+//!
+//! # `<conversation:turn_participants location="L" input="X" parent="P"/>`
+//!
+//! The participants a cognition handoff stamps for the inbound turn that
+//! caused it (the original's `turn_participants`, `f6c4e08`): the input
+//! `X`'s (an object with `source_ids` and `target_ids`) string identities,
+//! in the original's identity order, `source_ids` as `{ref, role:
+//! "source"}` and then `target_ids` as `{ref, role: "target"}`, followed by
+//! the participants the turn's parent `P` (optional; an envelope, `null`
+//! for none) already carries in its data's `participants` (each `{ref,
+//! role}`). An embedding, or a name longer than
+//! [`MAX_PARTICIPANT_REF_CHARACTERS`] characters (or empty), is not a
+//! producer-stable ref and is never stamped. Deduplicated, the first
+//! occurrence winning, and bounded at [`MAX_PARTICIPANTS`]. `location`
+//! receives the participants, an array.
 //!
 //! # Failures
 //!
@@ -295,6 +311,7 @@ pub fn execute<H: ConversationHost>(
         "complete_turn" => complete_turn(attributes, content, host),
         "ingest_content" => ingest_content_element(attributes, content, host),
         "on_end" => on_end_element(attributes, content, host),
+        "turn_participants" => turn_participants_element(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
 }
@@ -2148,6 +2165,137 @@ fn on_end_element<H: ConversationHost>(
         "conversation:on_end could not assign the closed turn",
     )?;
     Ok(Executed::Handled)
+}
+
+/// The most participants a payload carries (the original's
+/// `_MAX_PARTICIPANTS`).
+pub const MAX_PARTICIPANTS: usize = 32;
+
+/// The longest participant ref, in characters (the original's
+/// `_MAX_PARTICIPANT_REF_LENGTH`).
+pub const MAX_PARTICIPANT_REF_CHARACTERS: usize = 200;
+
+/// `<conversation:turn_participants>`'s detail for an input of the wrong
+/// kind.
+const MALFORMED_INPUT: &str =
+    "conversation:turn_participants input is not an object with source_ids and target_ids";
+
+/// Executes `<conversation:turn_participants>`.
+fn turn_participants_element<H: ConversationHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, input, parent] = attribute_values(
+        attributes,
+        ["location", "input", "parent"],
+        "conversation:turn_participants takes only the location, input and parent attributes",
+        "conversation:turn_participants repeats an attribute",
+        "conversation:turn_participants has an empty attribute",
+    )?;
+    let location = location.ok_or(Failure::Execution(
+        "conversation:turn_participants requires a location",
+    ))?;
+    let input = input.ok_or(Failure::Execution(
+        "conversation:turn_participants requires an input",
+    ))?;
+    no_content(content, "conversation:turn_participants holds no content")?;
+    let Json::Object(input) = read_json(
+        host,
+        input,
+        [
+            "conversation:turn_participants input did not evaluate",
+            MALFORMED_INPUT,
+        ],
+    )?
+    else {
+        return Err(Failure::Execution(MALFORMED_INPUT));
+    };
+    let sources =
+        identities_of(&input, "source_ids", MALFORMED_INPUT).map_err(Failure::Execution)?;
+    let targets =
+        identities_of(&input, "target_ids", MALFORMED_INPUT).map_err(Failure::Execution)?;
+    let carried = match parent {
+        None => Vec::new(),
+        Some(parent) => {
+            match evaluate(
+                host,
+                parent,
+                "conversation:turn_participants parent did not evaluate",
+            )? {
+                Data::Null | Data::Undefined | Data::Absent => Vec::new(),
+                value => carried_participants(json_of(&value)).ok_or(Failure::Execution(
+                    "conversation:turn_participants parent carries participants that are not {ref, role}",
+                ))?,
+            }
+        }
+    };
+    let participants = turn_participants(sources, targets, &carried);
+    assign_to(
+        host,
+        location,
+        &Data::JsonArray(Json::Array(participants).to_string()),
+        "conversation:turn_participants could not assign the participants",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// The participants an envelope's data carries: none when it has no data
+/// or no `participants`; `None` when they are not each `{ref, role}`.
+fn carried_participants(parent: Option<Json>) -> Option<Vec<Json>> {
+    let parent = parent?;
+    let Some(participants) = parent.get("data").and_then(|data| data.get("participants")) else {
+        return parent.is_object().then(Vec::new);
+    };
+    participants
+        .as_array()?
+        .iter()
+        .map(|participant| {
+            let participant = participant.as_object()?;
+            let reference = participant.get("ref")?.as_str()?;
+            let role = participant.get("role")?.as_str()?;
+            (participant.len() == 2 && matches!(role, "source" | "target"))
+                .then(|| participant_of(reference, role))
+        })
+        .collect()
+}
+
+/// One participant, `{ref, role}`.
+fn participant_of(reference: &str, role: &str) -> Json {
+    let mut participant = Map::new();
+    participant.insert("ref".to_owned(), Json::String(reference.to_owned()));
+    participant.insert("role".to_owned(), Json::String(role.to_owned()));
+    Json::Object(participant)
+}
+
+/// The original's `turn_participants` (see the crate documentation).
+#[must_use]
+pub fn turn_participants(sources: &[Json], targets: &[Json], carried: &[Json]) -> Vec<Json> {
+    let stamped = sorted_identities(sources)
+        .into_iter()
+        .map(|identity| (identity, "source"))
+        .chain(
+            sorted_identities(targets)
+                .into_iter()
+                .map(|identity| (identity, "target")),
+        )
+        .filter_map(|(identity, role)| match identity {
+            Json::String(reference)
+                if !reference.is_empty()
+                    && reference.chars().count() <= MAX_PARTICIPANT_REF_CHARACTERS =>
+            {
+                Some(participant_of(&reference, role))
+            }
+            _ => None,
+        });
+    let mut participants: Vec<Json> = Vec::new();
+    for participant in stamped.chain(carried.iter().cloned()) {
+        if !participants.contains(&participant) {
+            participants.push(participant);
+        }
+    }
+    participants.truncate(MAX_PARTICIPANTS);
+    participants
 }
 
 #[cfg(target_arch = "wasm32")]

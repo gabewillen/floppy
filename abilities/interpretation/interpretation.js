@@ -396,3 +396,15 @@ function isPcmSilence() {
 function silenceProduct() {
   return speechProduct(completion.sensed.sound.audio, 'audio/pcm', completion.sensed, completion.voice_detection, []);
 }
+
+// Participants (the original's f6c4e08: producers stamp, transformers copy)
+
+// The participants stamped on a scored sound.
+function soundParticipants(scored) {
+  return Object(scored.sound).participants || [];
+}
+
+// Not yet in the ordered union, which holds at most 32.
+function isNewParticipant(p) {
+  return active_participants.length < 32 && !active_participants.some(function (q) { return q.ref === p.ref && q.role === p.role; });
+}

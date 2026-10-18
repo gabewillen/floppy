@@ -129,8 +129,10 @@
         <assign location="product.event" expr="_event.name"/>
         <assign location="product.data" expr="_event.data"/>
         <assign location="product.source" expr="'listening'"/>
+        <!-- The speech product's participants ride forward (f6c4e08). -->
         <send event="bot.ability.cognition.input" target="#_parent">
           <param name="stimulus" expr="product"/>
+          <param name="participants" expr="productParticipants(_event)"/>
         </send>
       </transition>
       <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json">

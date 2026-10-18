@@ -87,10 +87,12 @@
   unfocused or focused starts a processing turn; the stimulus is the
   envelope {event, data, source} assigned for bot.input (its source null:
   it reaches the body from outside its session, the environment or the
-  host), or the handoff's stimulus as given. The body counts the turn, computes the
+  host), or the handoff's stimulus as given, with the participants its
+  producer stamped (none for bot.input: a device report names no one; the
+  original's f6c4e08 copies them forward unchanged). The body counts the turn, computes the
   turn's attention bias with <cognition:attention_bias_for_turn> (focus, focus_candidates:
   the original's attention_bias_for_turn from device identity only), assembles the turn's choices (below), sends bot.ability.cognition.input
-  {turn, stimulus, focus, focus_candidates, choices} to the cognition, and
+  {turn, stimulus, focus, focus_candidates, participants, choices} to the cognition, and
   arms bot.processing.timed_out
   (processing_timeout_ms) for the turn. Replies count only when they carry
   the current turn. A timeout sends
@@ -237,6 +239,9 @@
     <data id="turn" expr="0"/>
     <data id="focused_device" expr="null"/>
     <data id="stimulus" expr="null"/>
+    <!-- Who took part in the turn's stimulus, as its producer stamped them
+         (the original's f6c4e08); a device's bot.input names no one. -->
+    <data id="participants" expr="[]"/>
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <!-- The turn's choices, its output, and the output selection being
@@ -426,9 +431,11 @@
           <assign location="stimulus.event" expr="_event.name"/>
           <assign location="stimulus.data" expr="_event.data"/>
           <assign location="stimulus.source" expr="null"/>
+          <assign location="participants" expr="[]"/>
         </transition>
         <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json" target="processing">
           <assign location="stimulus" expr="_event.data.stimulus"/>
+          <assign location="participants" expr="handoffParticipants(_event)"/>
         </transition>
       </state>
 
@@ -438,9 +445,11 @@
           <assign location="stimulus.event" expr="_event.name"/>
           <assign location="stimulus.data" expr="_event.data"/>
           <assign location="stimulus.source" expr="null"/>
+          <assign location="participants" expr="[]"/>
         </transition>
         <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json" target="processing">
           <assign location="stimulus" expr="_event.data.stimulus"/>
+          <assign location="participants" expr="handoffParticipants(_event)"/>
         </transition>
       </state>
 

@@ -50,6 +50,11 @@
                    turn detector's _on_end). turn, participant_ref,
                    conversation_ref, turn_ref, source_participant_ref
                    (required): expressions.
+  conversation:turn_participants
+                   location (required): receives the participants a
+                   cognition handoff stamps for the turn (the original's
+                   turn_participants). input (required), parent
+                   (optional): expressions.
                    None takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -134,6 +139,13 @@
       <xs:attribute name="conversation_ref" type="xs:string" use="required"/>
       <xs:attribute name="turn_ref" type="xs:string" use="required"/>
       <xs:attribute name="source_participant_ref" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="turn_participants">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="input" type="xs:string" use="required"/>
+      <xs:attribute name="parent" type="xs:string"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>
