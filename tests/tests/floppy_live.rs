@@ -174,8 +174,9 @@ fn live_cascade() {
 /// body's choices are its own `bot.focus_device` (pinned to the lamp) and
 /// the cognition's and the communication's offers, each tagged with its
 /// offering session's id; whatever the cascade selects is sent to its
-/// target (a focus on the lamp moves the body's attention there), and the
-/// turn completes.
+/// target (a focus on the lamp moves the body's attention there, at least
+/// once: intuition's environment action and reasoning may both focus it),
+/// and the turn completes.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_choices() {
@@ -206,11 +207,18 @@ fn live_choices() {
         .pop()
         .and_then(|text| serde_json::from_str::<Json>(&text).ok());
     let reasoned = names(texts(&all, "reasoning"));
-    let focused_on_lamp = output.as_ref().is_some_and(|output| {
+    // Every focus is on the lamp, and an output that focuses it has focused
+    // it at least once: as in the original, intuition's environment action
+    // and reasoning may both send `bot.focus_device` in one turn, with no
+    // dedupe (D113, J12), so the lamp may be focused twice.
+    let focuses = texts(&all, "floppy.focus");
+    let focuses_output = output.as_ref().is_some_and(|output| {
         output["output"]
             .as_array()
             .is_some_and(|items| items.iter().any(|item| item["event"] == "bot.focus_device"))
-    }) == (texts(&all, "floppy.focus") == ["lamp"]);
+    });
+    let focused_on_lamp =
+        focuses.iter().all(|device| device == "lamp") && (!focuses_output || !focuses.is_empty());
     let pass = names(texts(&all, "floppy.choices")) == [choices]
         && output.as_ref().is_some_and(|output| output["turn"] == 1)
         && reasoned.iter().all(|line| line == choices)
