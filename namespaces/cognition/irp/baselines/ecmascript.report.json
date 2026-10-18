@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/cognition/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "6ba9592a74d44e7d2ab0690629b22db49482c971fbd206756ef4b19711596c61",
-    "source_digest": "2a75034c0b128cbacfe135a1049b268b21d93af5e1fde91bc6d65d14b8a8a9e1",
-    "manifest_digest": "53ae47587bf0ecf3056e9d46bb499870cef8b91369e804e0d40c76d82ca2f7f6",
+    "corpus_digest": "c731c96bb433bae08fccd0818d643b9a40882df6c296eba84c5bb58fab6b8b84",
+    "source_digest": "bf1fbed93cb4207f2dc8306cd1b6f4680f724e6330378060eb313a41e9c9cef9",
+    "manifest_digest": "e6b5596a2afee58a89225824c7658db29bfaed9c49d229ec2a0c39913a4e3929",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -64,7 +64,7 @@
       "package_version": "0.1.0",
       "manifest_sha256": "79ba8fa8db243d6341fee4eeadf0e182d52647b1b102b9b1c02e5fa9a1359a71",
       "schema_sha256": "ee5c85f23ce71a26476e9e13e641b36c4779f39c3542f75801418b97a534cef7",
-      "component_sha256": "eba3a203dbeaf3b337fc4dc61aafc8304259526e3c5e0d2738bd86d4a0043241"
+      "component_sha256": "1dca19b221813da7c12cb000d8b4e65ef34fc100407f12dd63c4feafcd81f19f"
     }
   ],
   "ir_version": 5,
@@ -77,7 +77,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "0330d74992e8bf6a4b8830e8b0d393e577ca7cab78ef0f815414d58ae9b1e4f0",
+  "identity_digest": "362a3558f4baccde1453fc29efb77265f50e812545a51ee548cb6cb4a8c88223",
   "summary": {
     "total_selected": 17,
     "applicable_selected": 17,

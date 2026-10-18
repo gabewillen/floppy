@@ -403,13 +403,158 @@ fn a_projection_over_a_budget_fails_with_the_originals_message() {
         failed(&instructions),
         "prompt projection scalar length budget exceeded"
     );
-    let mut cumulative = stimulus_with(&json!({}));
-    cumulative["instructions"] = json!("z".repeat(65_000));
-    cumulative["schema"] = json!({"pad": "q".repeat(200_000)});
+    let mut reserved = stimulus_with(&json!({}));
+    reserved["instructions"] = json!("z".repeat(65_000));
+    reserved["schema"] = json!({"pad": "q".repeat(200_000)});
     assert_eq!(
-        failed(&cumulative),
-        "prompt projection cumulative encoded byte budget exceeded"
+        failed(&reserved),
+        "prompt projection encoded byte budget exceeded"
     );
+}
+
+/// A projection input whose stimulus is `text`, recalling `episodes` and
+/// `directives`.
+fn recalling(text: &str, episodes: &[Json], directives: &[Json]) -> Json {
+    json!({
+        "stimulus": {"event": "bot.input", "source": "gabe", "data": {"text": text}},
+        "prior_episodes": episodes, "standing_directives": directives,
+        "environment": null, "instructions": null, "schema": null,
+    })
+}
+
+fn prompt(input: &Json) -> String {
+    match projected(input) {
+        (Data::Null, Data::String(prompt)) => prompt,
+        other => panic!("expected a prompt, got {other:?}"),
+    }
+}
+
+#[test]
+fn recalled_episodes_over_the_budget_are_trimmed_to_the_newest_not_failed() {
+    let episodes: Vec<Json> = (0..6)
+        .map(|index| json!({"stimulus_name": format!("episode-{index}-{}", "x".repeat(60_000)), "output": []}))
+        .collect();
+    let directives: Vec<Json> = (0..3)
+        .map(|index| json!({"text": format!("directive-{index}")}))
+        .collect();
+    let rendered = prompt(&recalling("incoming speech", &episodes, &directives));
+    assert!(rendered.len() <= MAX_PROJECTION_BYTES);
+    assert!(rendered.contains("incoming speech"));
+    let kept: Vec<usize> = (0..6)
+        .filter(|index| rendered.contains(&format!("episode-{index}-")))
+        .collect();
+    assert!(!kept.is_empty() && kept.len() < 6, "{kept:?}");
+    assert_eq!(kept, ((6 - kept.len())..6).collect::<Vec<_>>());
+    assert!(rendered.contains(&format!(
+        "<prior_episodes count=\"{}\" omitted=\"{}\">",
+        kept.len(),
+        6 - kept.len()
+    )));
+    for index in 0..3 {
+        assert!(rendered.contains(&format!("directive-{index}")));
+    }
+}
+
+#[test]
+fn recalled_items_trim_to_what_the_instructions_and_the_tool_leave() {
+    let directives: Vec<Json> = (0..40)
+        .map(|index| json!({"text": format!("memory-{index}-{}", "m".repeat(5_000))}))
+        .collect();
+    let mut input = recalling("incoming speech", &[], &directives);
+    input["instructions"] = json!("i".repeat(60_000));
+    input["schema"] = json!({"pad": "q".repeat(20_000)});
+    let tool = input["schema"].to_string().len();
+    let rendered = prompt(&input);
+    assert!(60_000 + rendered.len() + tool <= MAX_PROJECTION_BYTES);
+    assert!(rendered.contains("incoming speech"));
+    let kept: Vec<usize> = (0..40)
+        .filter(|index| rendered.contains(&format!("memory-{index}-")))
+        .collect();
+    assert!(!kept.is_empty() && kept.len() < 40, "{kept:?}");
+    assert_eq!(kept, ((40 - kept.len())..40).collect::<Vec<_>>());
+    assert!(rendered.contains(&format!("omitted=\"{}\"", 40 - kept.len())));
+}
+
+#[test]
+fn recalled_items_that_fit_render_without_an_omitted_marker() {
+    let rendered = prompt(&recalling(
+        "now",
+        &[json!({"stimulus_name": "a"})],
+        &[json!({"text": "b"}), json!({"text": "c"})],
+    ));
+    assert!(rendered.contains("<prior_episodes count=\"1\">"));
+    assert!(rendered.contains("<standing_directives count=\"2\">"));
+    assert!(!rendered.contains("omitted="));
+}
+
+#[test]
+fn a_recalled_item_over_a_scalar_budget_is_omitted_not_failed() {
+    let directives = [
+        json!({"text": "older"}),
+        json!({"text": "z".repeat(70_000)}),
+        json!({"text": "newest"}),
+    ];
+    let rendered = prompt(&recalling("now", &[], &directives));
+    assert!(rendered.contains("older") && rendered.contains("newest"));
+    assert!(!rendered.contains(&"z".repeat(100)));
+    assert!(rendered.contains("<standing_directives count=\"2\" omitted=\"1\">"));
+}
+
+#[test]
+fn every_recalled_item_left_out_leaves_the_field_empty_with_its_count() {
+    let mut input = recalling("now", &[], &[json!({"text": "y".repeat(30_000)})]);
+    input["instructions"] = json!("i".repeat(60_000));
+    input["schema"] = json!({"pad": "q".repeat(180_000)});
+    let rendered = prompt(&input);
+    assert!(rendered.contains("<standing_directives count=\"0\" omitted=\"1\" />"));
+}
+
+#[test]
+fn recalled_items_never_hide_a_stimulus_that_alone_overflows() {
+    let mut input = recalling(&"s".repeat(20_000), &[], &[json!({"text": "small"})]);
+    input["instructions"] = json!("i".repeat(60_000));
+    input["schema"] = json!({"pad": "q".repeat(190_000)});
+    assert_eq!(
+        failed(&input),
+        "prompt projection encoded byte budget exceeded"
+    );
+}
+
+#[test]
+fn trimmed_projections_fit_every_budget_they_admit() {
+    let episodes = [
+        json!({"stimulus_name": "it's <older> & \"quoted\"\nline", "focus_candidates": ["lamp"], "output": [{"target": "t", "event": "e", "data": {"k": [1, 2]}, "reason": "r"}]}),
+        json!({"stimulus_name": "plain ".repeat(20), "behavior": {"event": "bot.behavior.create", "name": "n", "triggers": ["a"]}}),
+    ];
+    let directives = [
+        json!({"text": "first"}),
+        json!({"text": "é".repeat(300), "kind": "rule"}),
+    ];
+    let (mut fitted, mut overflowed) = (0, false);
+    for pad in (MAX_PROJECTION_BYTES - 3_000..MAX_PROJECTION_BYTES - 150).step_by(7) {
+        let mut input = recalling("now", &episodes, &directives);
+        input["instructions"] = json!("i".repeat(60_000));
+        input["schema"] = json!({"pad": "q".repeat(pad - 60_000 - 10)});
+        let tool = input["schema"].to_string().len();
+        match projected(&input) {
+            (Data::Null, Data::String(rendered)) => {
+                assert!(!overflowed, "{pad}");
+                fitted += 1;
+                assert!(
+                    60_000 + rendered.len() + tool <= MAX_PROJECTION_BYTES,
+                    "{pad}"
+                );
+            }
+            // Too few bytes left for the stimulus alone (the budgets
+            // shrink as the pad grows).
+            (Data::String(message), Data::Null) => {
+                overflowed = true;
+                assert_eq!(message, "prompt projection encoded byte budget exceeded");
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+    assert!(fitted > 300, "{fitted}");
 }
 
 #[test]

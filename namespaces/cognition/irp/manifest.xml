@@ -48,7 +48,7 @@
     </test>
   </assert>
   <assert id="cognition-4" specnum="4" specid="#cognition-4">
-    <![CDATA[Over one of the original's projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar, and 262144 bytes for the instructions, the projection and the schema together), failurelocation receives the original's message and location null; without failurelocation the element raises error.execution and assigns nothing.]]>
+    <![CDATA[Over one of the original's projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar, and 65536 characters for the instructions; the instructions and the schema reserved first from the prompt's 262144 bytes, the projection rendering into what they leave), failurelocation receives the original's message and location null; without failurelocation the element raises error.execution and assigns nothing.]]>
     <test id="730" conformance="mandatory" manual="false">
       <start uri="730/test730.txml"/>
     </test>

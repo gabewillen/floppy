@@ -86,15 +86,35 @@
 //!
 //! The original's budgets hold: 262144 encoded bytes, 4096 nodes, 4096
 //! collection items and 65536 characters per scalar for the projection,
-//! and 262144 bytes for the instructions (`instructions`, optional, a
-//! string; `null` is none), the projection and the tool's schema (`schema`,
-//! optional, its compact JSON) together; the instructions are a scalar
-//! too. Over any, `failurelocation` (optional) receives the original's
-//! `ValueError` message (for example `prompt projection collection item
-//! budget exceeded`) and `location` receives `null`; without
-//! `failurelocation` it is `error.execution`. Within them,
+//! and 65536 characters for the instructions (`instructions`, optional, a
+//! string; `null` is none). The instructions and the tool's schema
+//! (`schema`, optional, its compact JSON) are reserved first, and the
+//! projection renders into the bytes they leave of the prompt's 262144
+//! (the original's `InputData.model_facing_content`).
+//!
+//! `prior_episodes` and `standing_directives` are recalled context, the
+//! original's budgeted fields (`__model_facing_budgeted_fields__`, both
+//! `"tail"`), so they never make the projection fail (the original's
+//! `b1654d6`): their elements are placed where they belong, but their items
+//! render after the rest of the projection, each field in turn, newest
+//! (last) first, into the bytes the rest leaves. An item that would exceed
+//! any budget is left out; the kept items keep their order, the field's
+//! `count` is how many were kept, and `omitted="<n>"` follows it when any
+//! was left out. Sizes are measured as rendered and indented, so the text
+//! always fits.
+//!
+//! Over a budget otherwise (the stimulus alone overflows, or the
+//! instructions are over the scalar budget), `failurelocation` (optional)
+//! receives the original's `ValueError` message (for example `prompt
+//! projection collection item budget exceeded`) and `location` receives
+//! `null`; without `failurelocation` it is `error.execution`. Within them,
 //! `failurelocation` receives `null`. `failurelocation` is assigned before
 //! `location`.
+//!
+//! The original also counts the left-out items in its
+//! `bot.processing.prompt.recalled.omitted` metric; this component's
+//! telemetry is the closed per-entry-point observation below, so the count
+//! is only the `omitted` attribute.
 //!
 //! # Failures
 //!
@@ -161,7 +181,6 @@ const NODE_BUDGET: &str = "prompt projection node budget exceeded";
 const BYTE_BUDGET: &str = "prompt projection encoded byte budget exceeded";
 const ITEM_BUDGET: &str = "prompt projection collection item budget exceeded";
 const SCALAR_BUDGET: &str = "prompt projection scalar length budget exceeded";
-const CUMULATIVE_BUDGET: &str = "prompt projection cumulative encoded byte budget exceeded";
 
 /// One attribute of an element.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -654,16 +673,26 @@ pub struct ProcessorInput<'a> {
 
 /// The model-facing text of `input` under the original's budgets, with
 /// `instructions` and a tool schema of `tool_bytes` bytes reserved from the
-/// prompt's (see the crate documentation).
+/// prompt's first (see the crate documentation).
 ///
 /// # Errors
 ///
-/// The original's message for the first budget exceeded.
+/// The original's message for the first budget exceeded: the instructions
+/// over the scalar budget, or the projection without its recalled items
+/// over the bytes the instructions and the tool leave (or any other
+/// budget). Recalled items never fail the projection: those that do not fit
+/// are left out and counted.
 pub fn project(
     input: &ProcessorInput<'_>,
     instructions: &str,
     tool_bytes: usize,
 ) -> Result<String, &'static str> {
+    if instructions.chars().count() > MAX_SCALAR_CHARACTERS {
+        return Err(SCALAR_BUDGET);
+    }
+    let limit = MAX_PROJECTION_BYTES
+        .saturating_sub(instructions.len())
+        .saturating_sub(tool_bytes);
     let mut budget = Budget::default();
     let mut root = budget.element("cognition:processor_input")?;
     let mut host_input = budget.element("host_input")?;
@@ -675,37 +704,140 @@ pub fn project(
     }
     host_input.children.push(processing_input);
     root.children.push(host_input);
-    root.children.push(models(
-        "prior_episodes",
-        input.prior_episodes,
-        episode,
-        &mut budget,
-    )?);
-    root.children.push(models(
-        "standing_directives",
-        input.standing_directives,
-        directive,
-        &mut budget,
-    )?);
+    let mut deferred = Vec::new();
+    for (name, items, render) in [
+        ("prior_episodes", input.prior_episodes, episode as Render),
+        ("standing_directives", input.standing_directives, directive),
+    ] {
+        let (list, recalled) = budgeted(name, items, render, &mut budget)?;
+        if let Some(recalled) = recalled {
+            deferred.push((root.children.len(), recalled));
+        }
+        root.children.push(list);
+    }
     if let Some(environment) = environment_element(input.environment, &mut budget)? {
         root.children.push(environment);
     }
+    render_budgeted(&mut root, &deferred, limit, &mut budget)?;
     let rendered = root.text(0);
-    if rendered.len() > MAX_PROJECTION_BYTES {
+    if rendered.len() > limit {
         return Err(BYTE_BUDGET);
-    }
-    if instructions.chars().count() > MAX_SCALAR_CHARACTERS {
-        return Err(SCALAR_BUDGET);
-    }
-    if instructions.len() + rendered.len() + tool_bytes > MAX_PROJECTION_BYTES {
-        return Err(CUMULATIVE_BUDGET);
     }
     Ok(rendered)
 }
 
+/// The original's `_BudgetedField`: a recalled tuple whose items render
+/// after the rest of the projection, kept from its tail (both of
+/// `ProcessorInput`'s budgeted fields, `prior_episodes` and
+/// `standing_directives`, are `"tail"`: recalled oldest first, so the
+/// newest survive).
+#[derive(Clone, Copy)]
+struct Recalled<'a> {
+    items: &'a [Json],
+    render: Render,
+}
+
+/// A budgeted tuple field (the original's `_fill_field` with `keep`): with
+/// items, its element is placed now with the upper bounds `count` and
+/// `omitted` (both its length) and its items deferred to
+/// [`render_budgeted`]; without, it renders as any tuple.
+fn budgeted<'a>(
+    name: &str,
+    items: &'a [Json],
+    render: Render,
+    budget: &mut Budget,
+) -> Result<(Element, Option<Recalled<'a>>), &'static str> {
+    if items.is_empty() {
+        return Ok((models(name, items, render, budget)?, None));
+    }
+    let mut list = budget.element(name)?;
+    budget.attribute(&mut list, "count", items.len().to_string())?;
+    budget.attribute(&mut list, "omitted", items.len().to_string())?;
+    Ok((list, Some(Recalled { items, render })))
+}
+
+/// The original's `_render_budgeted`: each deferred field's items, newest
+/// first, into the bytes the rest of `root` leaves of `limit`. An item that
+/// would exceed any budget is left out, and its field's `omitted` counts
+/// them (the attribute is dropped when none is); kept items keep their
+/// order. Sizes are measured as rendered and indented, as the original's.
+///
+/// # Errors
+///
+/// [`BYTE_BUDGET`] when `root` without any recalled item is already over
+/// `limit`: the stimulus alone overflows.
+fn render_budgeted(
+    root: &mut Element,
+    deferred: &[(usize, Recalled<'_>)],
+    limit: usize,
+    budget: &mut Budget,
+) -> Result<(), &'static str> {
+    if deferred.is_empty() {
+        return Ok(());
+    }
+    let mut used = root.text(0).len();
+    if used > limit {
+        return Err(BYTE_BUDGET);
+    }
+    // Every budgeted field is a child of the root, so its items are at
+    // level 2.
+    let level = 2;
+    for (index, recalled) in deferred {
+        let Some(field) = root.children.get_mut(*index) else {
+            continue;
+        };
+        // Each item rides on its own indented line; the first one also turns
+        // the empty `<field … />` into `<field …>` + indentation +
+        // `</field>` (the original's arithmetic, byte for byte).
+        let line = 1 + INDENT.len() * level;
+        let opening = format!("</{}>", field.name).len() + line - 2;
+        let mut kept: Vec<(usize, Element)> = Vec::new();
+        for (position, item) in recalled.items.iter().enumerate().rev() {
+            let mark = budget.mark();
+            let Ok(element) = budget
+                .collection(1)
+                .and_then(|()| (recalled.render)(item.as_object(), budget))
+            else {
+                budget.rewind(mark);
+                continue;
+            };
+            let cost = element.text(level).len() + line + if kept.is_empty() { opening } else { 0 };
+            if used + cost > limit || budget.bytes > MAX_PROJECTION_BYTES {
+                budget.rewind(mark);
+                continue;
+            }
+            used += cost;
+            kept.push((position, element));
+        }
+        kept.reverse();
+        let omitted = recalled.items.len() - kept.len();
+        field
+            .children
+            .extend(kept.into_iter().map(|(_, element)| element));
+        let count = field.children.len().to_string();
+        field
+            .attributes
+            .retain_mut(|(name, value)| match name.as_str() {
+                "count" => {
+                    value.clone_from(&count);
+                    true
+                }
+                "omitted" => {
+                    *value = omitted.to_string();
+                    omitted > 0
+                }
+                _ => true,
+            });
+    }
+    Ok(())
+}
+
+/// The indentation of one level (`ElementTree.indent(space="  ")`).
+const INDENT: &str = "  ";
+
 /// The original's `_ProjectionBudget`: encoded bytes, nodes and collection
 /// items so far.
-#[derive(Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 struct Budget {
     bytes: usize,
     nodes: usize,
@@ -713,6 +845,16 @@ struct Budget {
 }
 
 impl Budget {
+    /// The original's `_ProjectionBudget.mark`.
+    fn mark(&self) -> Self {
+        *self
+    }
+
+    /// The original's `_ProjectionBudget.rewind`.
+    fn rewind(&mut self, mark: Self) {
+        *self = mark;
+    }
+
     fn markup(&mut self, text: &str) -> Result<(), &'static str> {
         self.bytes = self.bytes.saturating_add(text.len());
         if self.bytes > MAX_PROJECTION_BYTES {

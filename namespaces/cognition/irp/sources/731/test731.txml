@@ -1,21 +1,21 @@
 <?xml version="1.0"?>
-<!-- cognition-4: instructions, projection and schema over the prompt's bytes together fail with the original's cumulative message. -->
+<!-- cognition-4: a stimulus over the bytes the instructions and the schema leave of the prompt's fails with the original's message, recalled items or not. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
 <datamodel>
   <data id="p" expr="'unset'"/>
   <data id="f" expr="null"/>
-  <data id="s" expr="({event: 'bot.input', source: 'gabe', data: {text: 'é'.repeat(30000)}})"/>
-  <data id="e" expr="[{stimulus_name: 'é'.repeat(30000)}]"/>
-  <data id="d" expr="[{text: 'é'.repeat(30000)}]"/>
+  <data id="s" expr="({event: 'bot.input', source: 'gabe', data: {text: '&amp;'.repeat(30000)}})"/>
+  <data id="e" expr="[{stimulus_name: 'small'}]"/>
+  <data id="d" expr="[{text: 'small'}]"/>
   <data id="i" expr="'é'.repeat(32000)"/>
-  <data id="t" expr="({pad: 'q'.repeat(60000)})"/>
+  <data id="t" expr="({pad: 'é'.repeat(30000)})"/>
 </datamodel>
 <state id="s0">
   <onentry>
     <cognition:model_facing_content location="p" failurelocation="f" stimulus="s" prior_episodes="e" standing_directives="d" instructions="i" schema="t"/>
   </onentry>
   <transition event="error.execution" conf:targetfail=""/>
-  <transition cond="p === null &amp;&amp; f === 'prompt projection cumulative encoded byte budget exceeded'" conf:targetpass=""/>
+  <transition cond="p === null &amp;&amp; f === 'prompt projection encoded byte budget exceeded'" conf:targetpass=""/>
   <transition conf:targetfail=""/>
 </state>
 <conf:pass/>

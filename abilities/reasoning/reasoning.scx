@@ -41,9 +41,13 @@
   conversation's messages reach the model; decision D99). ElementTree's
   indent and serialization (two spaces, an empty element as <name />) are
   reproduced. The original's budgets hold: 262144 encoded bytes, 4096 nodes, 4096
-  collection items and 65536 characters per scalar for the projection, and
-  262144 bytes for the system prompt, the projection and the dispatch
-  schema together; over any, the element writes the original's message to
+  collection items and 65536 characters per scalar for the projection; the
+  system prompt and the dispatch schema are reserved first, and the
+  projection renders into the bytes they leave of the prompt's 262144.
+  Recalled context never fails the turn: prior_episodes and
+  standing_directives keep their newest items that fit and count the rest
+  as omitted="<n>" (the original's b1654d6). Over a budget otherwise (the
+  stimulus alone overflows), the element writes the original's message to
   prompt_failure and the stage fails without a model call with it (for
   example "prompt projection encoded byte budget exceeded"). applying ends on the generate service's done.invoke, which
   stands in for the original's private bot.ability.reasoning.reasoned
