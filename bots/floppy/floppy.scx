@@ -71,8 +71,9 @@
   Turns: bot.input, or an ability's bot.ability.cognition.input handoff
   (the original grants any ability product the turn, blind to its content), in
   unfocused or focused starts a processing turn; the stimulus is the
-  envelope {event, data, source} <bot:stimulus> writes for bot.input, or
-  the handoff's stimulus as given. The body counts the turn, computes the
+  envelope {event, data, source} assigned for bot.input (its source null:
+  it reaches the body from outside its session, the environment or the
+  host), or the handoff's stimulus as given. The body counts the turn, computes the
   turn's attention bias with <cognition:attention_bias_for_turn> (focus, focus_candidates:
   the original's attention_bias_for_turn from device identity only), assembles the turn's choices (below), sends bot.ability.cognition.input
   {turn, stimulus, focus, focus_candidates, choices} to the cognition, and
@@ -172,7 +173,6 @@
   before it starts.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:device="https://github.com/stateforward/floppy/namespaces/device"
@@ -407,7 +407,10 @@
           <assign location="focused_device" expr="null"/>
         </onentry>
         <transition event="bot.input" event:schema="schemas/bot.input.json" target="processing">
-          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="stimulus" expr="({})"/>
+          <assign location="stimulus.event" expr="_event.name"/>
+          <assign location="stimulus.data" expr="_event.data"/>
+          <assign location="stimulus.source" expr="null"/>
         </transition>
         <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json" target="processing">
           <assign location="stimulus" expr="_event.data.stimulus"/>
@@ -416,7 +419,10 @@
 
       <state id="focused">
         <transition event="bot.input" event:schema="schemas/bot.input.json" target="processing">
-          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="stimulus" expr="({})"/>
+          <assign location="stimulus.event" expr="_event.name"/>
+          <assign location="stimulus.data" expr="_event.data"/>
+          <assign location="stimulus.source" expr="null"/>
         </transition>
         <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json" target="processing">
           <assign location="stimulus" expr="_event.data.stimulus"/>

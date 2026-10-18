@@ -9,30 +9,6 @@ function hasDeferredInput() {
   return deferred.length > 0;
 }
 
-// The behaviors of select_behaviors' rows (named as the inventory's
-// fields) with their triggers from select_triggers' rows: the SQL both
-// engines run returns plain rows, assembled here.
-function assembledBehaviors(behaviorRows, triggerRows) {
-  return behaviorRows.map(function (r) {
-    var b = Object.fromEntries(r.columns.map(function (c, i) { return [c, r.values[i]]; }));
-    return Object.assign(b, {
-      examples: JSON.parse(b.examples),
-      used_count: Number(b.used_count),
-      failed_count: Number(b.failed_count),
-      triggers: triggerRows.filter(function (t) { return t.values[0] === b.name; }).map(function (t) { return t.values[1]; })
-    });
-  });
-}
-
-// The intent's triggers, each once.
-function distinctIntentTriggers(list) {
-  return list.filter(function (t, i, a) { return a.indexOf(t) === i; });
-}
-
-function triggerInserts(list) {
-  return distinctIntentTriggers(list).map(function (t) { return {sql: insert_trigger, parameters: [intent.name, t]}; });
-}
-
 // recalling
 
 function hasNoDatabase() {
@@ -56,10 +32,6 @@ function recalledEpisodes(_event) {
 // The recalled inventory's names, which a change or a break may name.
 function behaviorNames() {
   return behaviors.map(function (b) { return b.name; });
-}
-
-function recalledBehaviors(_event) {
-  return assembledBehaviors(_event.data.results[1].rows, _event.data.results[2].rows);
 }
 
 function recalledLog() {
@@ -150,13 +122,9 @@ function isCreate() {
   return create_intent !== null && !behaviors.some(function (b) { return b.name === intent.name; });
 }
 
-// The original revision._draft: the create stub.
-function insertDraftStatements() {
-  return [{sql: insert_draft, parameters: [intent.name, intent.description || '']}];
-}
-
-function insertDraftTriggersStatements() {
-  return statements.concat(triggerInserts(intent.triggers || []));
+// The original revision._draft: the create stub, DRAFT.
+function draftInstance() {
+  return ({name: intent.name, source: '', description: intent.description || '', status: 'DRAFT', triggers: intent.triggers || []});
 }
 
 // The intent's behavior row appended.
@@ -165,8 +133,8 @@ function intentBehaviorSelectStatements() {
 }
 
 // The intent's row, from the last two statements (undefined: unknown).
-function preparedBehavior(_event) {
-  return assembledBehaviors(_event.data.results.at(-2).rows, _event.data.results.at(-1).rows)[0];
+function preparedBehavior() {
+  return prepared[0];
 }
 
 // Shared by preparing, authoring and accepting.
@@ -209,19 +177,11 @@ function builderConstraints() {
   return [turnContract(), routineContract(), no_schema_files];
 }
 
-// The input autonomy gives this turn's behavior (abilities/autonomy/autonomy.js
-// behaviorInputPayload, then focus and focus_candidates: the reference
-// behavior_input_payload).
-function turnBehaviorInput() {
-  var data = cognition_input.stimulus.data;
-  var input = data !== null && typeof data === 'object' ? Object.assign({}, data) : {event: data};
-  return Object.assign(input, {focus: cognition_input.focus, focus_candidates: cognition_input.focus_candidates});
-}
-
 // The turn behavior contract with the grounded triggers it is stored under
-// (autonomy matches them against the stimulus event) and this turn's input.
+// (autonomy matches them against the stimulus event) and this turn's input
+// (behavior_input, as autonomy builds it).
 function turnContract() {
-  return turn_contract.replace(/TRIGGERS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? turnBehaviorInput() : triggers); });
+  return turn_contract.replace(/TRIGGERS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? behavior_input : triggers); });
 }
 
 // The original schedule.At.next_after for an at schedule {time: 'HH:MM', days,
@@ -332,11 +292,6 @@ function acceptedTriggers() {
   return triggers.length > 0 ? triggers : existing_behavior.triggers;
 }
 
-// persistent when the program sends bot.behavior.tick.
-function writtenLifetime() {
-  return written.indexOf('bot.behavior.tick') >= 0 ? 'persistent' : 'turn';
-}
-
 // The original _AppliedEventData.behavior.
 function appliedBehavior() {
   return ({event: intent.event, name: intent.name, triggers: triggers, description: intent.description || existing_behavior.description || null});
@@ -346,30 +301,12 @@ function appliedBehaviorWithSource() {
   return Object.assign(behavior, {reason: intent.reason || null, source: written});
 }
 
-// insert_behavior's parameters, the usage counters kept.
-function behaviorRow() {
-  return [intent.name, written, behavior.description || '', JSON.stringify(existing_behavior.examples), lifetime];
-}
-
-function behaviorRowWithUsage() {
-  return row.concat([String(existing_behavior.used_count), existing_behavior.last_used_at]);
-}
-
-function behaviorRowWithFailures() {
-  return row.concat([String(existing_behavior.failed_count), existing_behavior.last_failed_at]);
-}
-
-// The original storage.replace_behavior_clauses: delete triggers, delete row.
-function replaceBehaviorStatements() {
-  return [{sql: delete_triggers, parameters: [intent.name]}, {sql: delete_behavior, parameters: [intent.name]}];
-}
-
-function replaceBehaviorWithRow() {
-  return statements.concat([{sql: insert_behavior, parameters: row}]);
-}
-
-function replaceBehaviorWithTriggers() {
-  return statements.concat(triggerInserts(triggers));
+// The accepted Instance, ACTIVE with the written source and lifetime, the
+// grounded triggers and the existing row's examples and usage counters.
+function acceptedInstance() {
+  var e = existing_behavior;
+  return ({name: intent.name, source: written, description: behavior.description || '', examples: e.examples, lifetime: lifetime, status: 'ACTIVE', triggers: triggers,
+    used_count: e.used_count, last_used_at: e.last_used_at, failed_count: e.failed_count, last_failed_at: e.last_failed_at});
 }
 
 function acceptedLog() {

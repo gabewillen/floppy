@@ -2,7 +2,6 @@
 members = [
     "tests",
     "namespaces/decision",
-    "namespaces/bot",
     "namespaces/conversation",
     "namespaces/migration",
     "namespaces/device",

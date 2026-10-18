@@ -719,7 +719,7 @@ fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
     );
     assert!(
         contract.contains(
-            r#"for this turn input is {"label":"knock","focus":"door","focus_candidates":["door"]}"#
+            r#"for this turn input is {"focus":"door","focus_candidates":["door"],"label":"knock"}"#
         ),
         "{contract}"
     );

@@ -88,7 +88,6 @@
   sql service package (a run grants it its directory: scx run's dir option).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        xmlns:identity="https://github.com/stateforward/floppy/namespaces/identity"
@@ -243,7 +242,11 @@
       <state id="recognized">
         <transition cond="addressed" target="listening">
           <log label="identity.heard" expr="addressedLog()"/>
-          <bot:stimulus location="handoff" event="'bot.ability.identity.addressed'" data="({name: name})" source="'identity'"/>
+          <assign location="handoff" expr="({})"/>
+          <assign location="handoff.event" expr="'bot.ability.identity.addressed'"/>
+          <assign location="handoff.data" expr="({})"/>
+          <assign location="handoff.data.name" expr="name"/>
+          <assign location="handoff.source" expr="'identity'"/>
           <send event="bot.ability.cognition.input" target="#_parent">
             <param name="stimulus" expr="handoff"/>
           </send>

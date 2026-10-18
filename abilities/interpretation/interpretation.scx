@@ -112,12 +112,10 @@
   <donedata>, which scxml.rs does not check, so their shape is checked by
   cond.
 
-  Bindings: the bot namespace package (<bot:stimulus>) and the speech
-  service for the append step (no backend); the stages bind their own
-  services.
+  Bindings: the speech service for the append step (no backend); the
+  stages bind their own services.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="interpretation" initial="initializing">
   <datamodel>
@@ -608,7 +606,10 @@
               <content expr="product"/>
             </send>
           <else/>
-            <bot:stimulus location="product" event="'environment.sound'" data="completion.sensed.sound" source="'listening'"/>
+            <assign location="product" expr="({})"/>
+            <assign location="product.event" expr="'environment.sound'"/>
+            <assign location="product.data" expr="completion.sensed.sound"/>
+            <assign location="product.source" expr="'listening'"/>
             <send event="bot.ability.cognition.input" target="#_parent">
               <param name="stimulus" expr="product"/>
             </send>
@@ -618,7 +619,10 @@
              completion's sound, normalized to PCM where detection did so
              (the original hands off the completion chain's sensed sound). -->
         <transition target="Idle">
-          <bot:stimulus location="product" event="'environment.sound'" data="completion.sensed.sound" source="'listening'"/>
+          <assign location="product" expr="({})"/>
+          <assign location="product.event" expr="'environment.sound'"/>
+          <assign location="product.data" expr="completion.sensed.sound"/>
+          <assign location="product.source" expr="'listening'"/>
           <send event="bot.ability.cognition.input" target="#_parent">
             <param name="stimulus" expr="product"/>
           </send>

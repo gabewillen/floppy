@@ -126,7 +126,6 @@
   scx run's dir option).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        xmlns:identity="https://github.com/stateforward/floppy/namespaces/identity"
@@ -398,8 +397,12 @@
                     expr="message.sequence"/>
             <log label="conversation" expr="inboundCommitLog()"/>
             <if cond="isTextMessage()">
-              <bot:stimulus location="product" event="'bot.ability.conversation.output'"
-                            data="({parent: parent, messages: history})" source="'conversation'"/>
+              <assign location="product" expr="({})"/>
+              <assign location="product.event" expr="'bot.ability.conversation.output'"/>
+              <assign location="product.data" expr="({})"/>
+              <assign location="product.data.parent" expr="parent"/>
+              <assign location="product.data.messages" expr="history"/>
+              <assign location="product.source" expr="'conversation'"/>
               <send event="bot.ability.cognition.input" target="#_parent">
                 <param name="stimulus" expr="product"/>
               </send>

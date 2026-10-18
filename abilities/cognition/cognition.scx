@@ -123,7 +123,6 @@
   invoke), else the default below, and goes to reasoning.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
@@ -444,7 +443,10 @@
         <param name="database" expr="database"/>
       </invoke>
       <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json">
-        <bot:stimulus location="tick" event="_event.name" data="_event.data" source="'routines'"/>
+        <assign location="tick" expr="({})"/>
+        <assign location="tick.event" expr="_event.name"/>
+        <assign location="tick.data" expr="_event.data"/>
+        <assign location="tick.source" expr="'routines'"/>
         <send event="bot.ability.cognition.input" target="#_parent">
           <param name="stimulus" expr="tick"/>
         </send>

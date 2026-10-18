@@ -27,11 +27,11 @@
   -> validate (scx:validate; machine-applicable
   fixes through apply_fixes, at most 2 passes per draft; with the request's
   min_every_ms and turn_after_bound_ms, the original check()'s lifetime bounds,
-  E0009) -> simulate (each test script drives the draft as an invoked
+  E0009, <behavior:lifetime_errors>) -> simulate (each test script drives the draft as an invoked
   child with its own invoke id; with those bounds, a persistent routine,
   a draft that sends bot.behavior.tick, also gets its first schedule's
   event at once and must tick with a selection, the reference verify_apply,
-  E0008) -> done. Every failure goes through retry_gate, which takes its
+  E0008, <behavior:verify_tick>) -> done. Every failure goes through retry_gate, which takes its
   fingerprint and gives up (no-progress) when it equals the previous
   failure's, or at the request's optional max_attempts; triage then reads its enabled
   event:schema transitions with decision:choice and invokes the decision
@@ -66,8 +66,8 @@
   run's consent and grants allow (its env scopes, origins, and its dir
   and wasi grants), nothing more (docs/decisions.md, D28).
 
-  Bindings: the scx namespace (built into scx), and the decision namespace
-  package and the generate and decision service packages, resolved from their
+  Bindings: the scx namespace (built into scx), and the decision and
+  behavior namespace packages and the generate and decision service packages, resolved from their
   repository URIs; the env
   attributes below scope FLOPPY_API_KEY and FLOPPY_BASE_URL to the generate
   service's invokes and TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
@@ -78,6 +78,7 @@
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:scx="https://github.com/stateforward/scxml.rs/namespaces/scx"
+       xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -118,7 +119,9 @@
     <data id="mode" expr="'author'"/>
     <data id="schema_errors" expr="[]"/>
     <data id="lifetime_errors" expr="[]"/>
-    <!-- A persistent routine's schedule events, in document order. -->
+    <!-- The draft's lifetime (persistent when it sends bot.behavior.tick)
+         and a persistent routine's schedule events, in document order. -->
+    <data id="lifetime" expr="'turn'"/>
     <data id="schedules" expr="[]"/>
     <!-- The last draft a check rejected (the failed donedata's scxml). -->
     <data id="rejected" expr="null"/>
@@ -170,6 +173,8 @@
     <data id="sim_tests" expr="[]"/>
     <!-- The data of each bot.behavior.tick the candidate sent. -->
     <data id="ticks" expr="[]"/>
+    <!-- The forced tick's E0008 messages (the original _verify_tick). -->
+    <data id="apply" expr="[]"/>
     <data id="observed" expr="[]"/>
     <data id="child_done" expr="false"/>
     <data id="sim_error" expr="null"/>
@@ -371,8 +376,9 @@
       <assign location="fixed" expr="null"/>
       <assign location="schema_errors" expr="schemaErrors(draft.schemas)"/>
       <assign location="parsed_schemas" expr="parsedSchemas(draft.schemas)"/>
-      <assign location="lifetime_errors" expr="lifetimeErrors(scxml_text)"/>
-      <assign location="schedules" expr="scheduleEvents(scxml_text)"/>
+      <behavior:lifetime_errors location="lifetime_errors" scxml="scxml_text"
+          min_every="min_every_ms" turn_after_bound="turn_after_bound_ms"
+          lifetimelocation="lifetime" scheduleslocation="schedules"/>
       <scx:validate location="report" expr="scxml_text" name="draft.scx"
                    applyfixes="machine-applicable" fixedlocation="fixed"/>
     </onentry>
@@ -507,6 +513,10 @@
          order (other outputs may come between), and expect_done. -->
     <state id="sim_check">
       <onentry>
+        <assign location="apply" expr="[]"/>
+        <if cond="isTickTest()">
+          <behavior:verify_tick location="apply" ticks="ticks"/>
+        </if>
         <assign location="sim_results" expr="nextSimResults()"/>
         <assign location="sim_index" expr="increment(sim_index)"/>
       </onentry>

@@ -18,7 +18,6 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | --- | --- |
 | `scxml.rs/` | scxml.rs as a squashed git subtree (see [docs/decisions.md](docs/decisions.md) for the source commit) |
 | `namespaces/decision/` | the canonical extension namespace (a Wasm component; synchronous executable content: `decision:choice` and the choice elements); the builder's `scx:validate` is scxml.rs's embedded `scx` namespace |
-| `namespaces/bot/` | the bot body's extension namespace (a Wasm component; synchronous executable content: `bot:stimulus`) |
 | `namespaces/processing/` | the original's processing module (a Wasm component; synchronous executable content: `processing:model_facing_schema`, `processing:collect_offered_events`, `processing:send`, `processing:selection_confidence`; [processing](namespaces/processing/README.md)) |
 | `namespaces/intuition/` | the original's intuition `ConfidenceTuner` (a Wasm component; synchronous executable content: `intuition:observe`, `intuition:escalate`; [intuition](namespaces/intuition/README.md)) |
 | `namespaces/cognition/` | the original's cognition module (a Wasm component; synchronous executable content: `cognition:attention_bias_for_turn`, `cognition:model_facing_content`; [cognition](namespaces/cognition/README.md)) |

@@ -53,7 +53,7 @@ expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 # pinned wasi-sdk release, checked by its VERSION file.
 expected_wasi_sdk='25.0'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
-namespace_components='floppy_decision floppy_bot floppy_conversation floppy_migration floppy_device floppy_processing floppy_intuition floppy_cognition floppy_identity floppy_memory floppy_behavior floppy_autonomy'
+namespace_components='floppy_decision floppy_conversation floppy_migration floppy_device floppy_processing floppy_intuition floppy_cognition floppy_identity floppy_memory floppy_behavior floppy_autonomy'
 service_components='floppy_service_generate floppy_service_decision floppy_service_sql floppy_service_speech floppy_service_pgsql'
 # Package validator components (stateforward:scxml-validator/package-validator),
 # each named by its package's manifest (`validator-artifact`).
@@ -115,15 +115,6 @@ expected_imports() {
                 'stateforward:scxml/telemetry@0.2.0' \
                 'stateforward:scxml/data-model-host@0.2.0' \
                 'stateforward:scxml/session-snapshot-host@0.2.0'
-            ;;
-        # <bot:stimulus>: evaluates its expressions and assigns the envelope
-        # through the data model; no session snapshot, execution-host, or
-        # outbound-http.
-        floppy_bot)
-            printf '%s\n' \
-                'stateforward:scxml/types@0.2.0' \
-                'stateforward:scxml/telemetry@0.2.0' \
-                'stateforward:scxml/data-model-host@0.2.0'
             ;;
         # The conversation elements (<conversation:message_for_turn>,
         # <conversation:relationship_for_input> and the rest of the

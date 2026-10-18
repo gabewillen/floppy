@@ -116,11 +116,13 @@
   event:schema (never inline). The builder's answer is its <donedata>,
   which scxml.rs does not check, so its conds check the shape.
 
-  Bindings: the decision and processing namespace packages and the
-  generate service package; env scopes FLOPPY_API_KEY and FLOPPY_BASE_URL to the select
+  Bindings: the decision, processing, behavior and autonomy namespace
+  packages and the generate service package; env scopes FLOPPY_API_KEY and FLOPPY_BASE_URL to the select
   call (the builder scopes its own).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:autonomy="https://github.com/stateforward/floppy/namespaces/autonomy"
+       xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -165,14 +167,21 @@
          create, the stored row, and the builder's answer. -->
     <data id="intent" expr="null"/>
     <data id="create_intent" expr="null"/>
+    <data id="prepared" expr="[]"/>
     <data id="existing_behavior" expr="null"/>
     <data id="write" expr="null"/>
     <data id="request" expr="null"/>
     <data id="written" expr="null"/>
     <data id="triggers" expr="[]"/>
     <data id="evidence" expr="[]"/>
+    <!-- This turn's behavior input as autonomy builds it (the original
+         behavior_input_payload), for the turn behavior contract. -->
+    <data id="behavior_input" expr="null"/>
+    <!-- The written document's lifetime (the original lifetime, by
+         <behavior:lifetime_errors>, which also writes its unbounded
+         diagnostics: the builder already checked the bounds). -->
     <data id="lifetime" expr="'turn'"/>
-    <data id="row" expr="[]"/>
+    <data id="lifetime_errors" expr="[]"/>
     <!-- The turn's CognitiveEpisode. -->
     <data id="episode" expr="null"/>
     <!-- The memory transaction in hand and its answer. -->
@@ -212,16 +221,10 @@
     <data id="select_triggers">SELECT behavior_name, "trigger" FROM bot_behavior_trigger WHERE CAST(? AS TEXT) IS NULL OR behavior_name = ? ORDER BY behavior_name, "trigger"</data>
     <!-- The original storage.mark_broken + inventory.store_behavior. -->
     <data id="break_behavior">UPDATE bot_behavior SET status = 'BROKEN', status_reason = ?, status_updated_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
-    <!-- The original revision._draft: the create stub and its triggers, only for
-         a name the recalled inventory does not hold. -->
-    <data id="insert_draft">INSERT INTO bot_behavior (name, source, description, status, status_reason, status_updated_at) VALUES (?, '', ?, 'DRAFT', '', replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z')</data>
-    <!-- The original inventory.store_behavior (storage.replace_behavior_clauses):
-         delete triggers, delete row, insert row, insert each distinct
-         trigger. -->
-    <data id="delete_triggers">DELETE FROM bot_behavior_trigger WHERE behavior_name = ?</data>
-    <data id="delete_behavior">DELETE FROM bot_behavior WHERE name = ?</data>
-    <data id="insert_behavior">INSERT INTO bot_behavior (name, source, description, examples_json, lifetime, status, status_reason, status_updated_at, used_count, last_used_at, failed_count, last_failed_at) VALUES (?, ?, ?, ?, ?, 'ACTIVE', '', replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', ?, ?, ?, ?)</data>
-    <data id="insert_trigger">INSERT INTO bot_behavior_trigger (behavior_name, "trigger") VALUES (?, ?)</data>
+    <!-- The original inventory.store_behavior (a create's revision._draft
+         stub and an accepted change) is
+         <behavior:replace_behavior_clauses>: delete triggers, delete row,
+         insert row, insert each distinct trigger. -->
     <!-- The original Revision._persist_draft: the rejected source,
          storage.mark_draft(reason=validation), usage kept. -->
     <data id="draft_behavior">UPDATE bot_behavior SET source = ?, status = 'DRAFT', status_reason = 'validation', status_updated_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
@@ -279,7 +282,8 @@
     </invoke>
     <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="processing">
       <assign location="prior_episodes" expr="recalledEpisodes(_event)"/>
-      <assign location="behaviors" expr="recalledBehaviors(_event)"/>
+      <behavior:instances_from_behavior_results location="behaviors"
+          behaviors="_event.data.results[1]" triggers="_event.data.results[2]"/>
       <log label="reflection" expr="recalledLog()"/>
     </transition>
     <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
@@ -440,8 +444,7 @@
       <onentry>
         <assign location="statements" expr="[]"/>
         <if cond="isCreate()">
-          <assign location="statements" expr="insertDraftStatements()"/>
-          <assign location="statements" expr="insertDraftTriggersStatements()"/>
+          <behavior:replace_behavior_clauses location="statements" instance="draftInstance()"/>
         </if>
         <assign location="statements" expr="intentBehaviorSelectStatements()"/>
       </onentry>
@@ -450,7 +453,9 @@
         <param name="statements" expr="statements"/>
       </invoke>
       <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="authoring">
-        <assign location="existing_behavior" expr="preparedBehavior(_event)"/>
+        <behavior:instances_from_behavior_results location="prepared"
+            behaviors="_event.data.results.at(-2)" triggers="_event.data.results.at(-1)"/>
+        <assign location="existing_behavior" expr="preparedBehavior()"/>
       </transition>
       <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
         <assign location="failure" expr="revisionFailedMessage(_event.data.message)"/>
@@ -486,6 +491,8 @@
         <assign location="triggers" expr="acceptedTriggers()"/>
         <assign location="write" expr="changeWriteInput()"/>
         <assign location="write" expr="changeWriteInputWithIntent()"/>
+        <autonomy:behavior_input_payload location="behavior_input" stimulus="cognition_input.stimulus"
+            focus="cognition_input.focus" focus_candidates="cognition_input.focus_candidates"/>
         <assign location="request" expr="builderRequest()"/>
         <assign location="request.constraints" expr="builderConstraints()"/>
         <send event="builder.request" target="#_builder">
@@ -513,15 +520,10 @@
          the triggers authoring grounded (the original _grounded_triggers). -->
     <state id="accepting">
       <onentry>
-        <assign location="lifetime" expr="writtenLifetime()"/>
+        <behavior:lifetime_errors location="lifetime_errors" scxml="written" lifetimelocation="lifetime"/>
         <assign location="behavior" expr="appliedBehavior()"/>
         <assign location="behavior" expr="appliedBehaviorWithSource()"/>
-        <assign location="row" expr="behaviorRow()"/>
-        <assign location="row" expr="behaviorRowWithUsage()"/>
-        <assign location="row" expr="behaviorRowWithFailures()"/>
-        <assign location="statements" expr="replaceBehaviorStatements()"/>
-        <assign location="statements" expr="replaceBehaviorWithRow()"/>
-        <assign location="statements" expr="replaceBehaviorWithTriggers()"/>
+        <behavior:replace_behavior_clauses location="statements" instance="acceptedInstance()"/>
       </onentry>
       <invoke id="accepting_memory" type="scxml" src="../memory/memory.scx">
         <param name="database" expr="database"/>

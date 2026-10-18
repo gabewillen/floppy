@@ -90,12 +90,6 @@ function hasNoMatchAndNoCandidates() {
 
 // running
 
-// the reference behavior_input_payload without focus and focus_candidates, which
-// running assigns after it.
-function behaviorInputPayload() {
-  return (stimulus.data !== null && typeof stimulus.data === 'object' ? Object.assign({}, stimulus.data) : {event: stimulus.data});
-}
-
 // The matched rows as the runner's candidates, [{name, source}].
 function candidateRows() {
   return rows.map(function (row) { return {name: row.values[0], source: row.values[1]}; });

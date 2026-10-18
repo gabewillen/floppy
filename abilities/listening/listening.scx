@@ -68,7 +68,6 @@
   bind the speech service).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="listening" initial="live">
   <datamodel>
@@ -126,7 +125,10 @@
       <!-- The interpretation's products and failures, out through this
            ability's own. -->
       <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json">
-        <bot:stimulus location="product" event="_event.name" data="_event.data" source="'listening'"/>
+        <assign location="product" expr="({})"/>
+        <assign location="product.event" expr="_event.name"/>
+        <assign location="product.data" expr="_event.data"/>
+        <assign location="product.source" expr="'listening'"/>
         <send event="bot.ability.cognition.input" target="#_parent">
           <param name="stimulus" expr="product"/>
         </send>

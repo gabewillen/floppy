@@ -37,9 +37,8 @@ use serde_json::Value as Json;
 use support::{components, output, scratch, sha256_file, workspace};
 
 /// The namespaces that have a suite: every floppy namespace.
-const SUITES: [&str; 12] = [
+const SUITES: [&str; 11] = [
     "decision",
-    "bot",
     "conversation",
     "migration",
     "device",
@@ -250,11 +249,6 @@ fn run_suite(name: &str) {
 #[test]
 fn decision_suite_passes() {
     run_suite("decision");
-}
-
-#[test]
-fn bot_suite_passes() {
-    run_suite("bot");
 }
 
 #[test]
