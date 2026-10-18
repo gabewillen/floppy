@@ -359,6 +359,40 @@ fn select_returns_every_offered_event_with_its_own_probability() {
     assert_eq!(mismatched, Returned::failed(FailureCode::SchemaMismatch));
 }
 
+#[test]
+fn a_selection_carries_its_only_offerer_as_target() {
+    // order.ship has one offerer, order.cancel two, order.hold none: the
+    // original's _single_enabler.
+    let tagged = Data::JsonArray(canonical_json(&json!([
+        {"event": "order.ship", "schema": ship_schema(), "target": "session.floppy.orders"},
+        {"event": "order.cancel", "schema": cancel_schema(), "target": "session.floppy.orders"},
+        {"event": "order.cancel", "schema": cancel_schema(), "target": "session.floppy.returns"},
+        {"event": "order.hold", "schema": {"type": "object"}},
+    ])));
+    let returned = prepared(&[
+        ("kind", Data::String("select".into())),
+        ("choices", tagged),
+        ("state", order_state()),
+    ])
+    .decide(
+        &TypeSafe,
+        ok(&json!({
+            "selection": {"order.ship": 0.5, "order.cancel": 0.25, "order.hold": 0.125, "__unhandled__": 0.125},
+            "order.ship::sku": {"A-1": 1.0},
+            "order.ship::carrier": {"ups": 0.2, "fedex": 0.8},
+            "order.cancel::reason": {"customer": 0.4, "stock": 0.6},
+        })),
+    );
+    assert_eq!(
+        returned.data,
+        canonical_json(&json!({"selections": [
+            {"event": "order.ship", "data": {"carrier": "fedex", "sku": "A-1"}, "confidence": 0.5, "target": "session.floppy.orders"},
+            {"event": "order.cancel", "data": {"reason": "stock"}, "confidence": 0.25},
+            {"event": "order.hold", "data": {}, "confidence": 0.125},
+        ]}))
+    );
+}
+
 fn prepared_select_with_evidence(evidence: &str) -> Prepared {
     prepared(&[
         ("kind", Data::String("select".into())),
@@ -537,8 +571,8 @@ fn classify_takes_labels_in_every_form() {
 
 #[test]
 fn a_turns_assembled_choices_are_one_candidate_per_event() {
-    // The body's choices (untagged) and the abilities' offers (tagged with
-    // their target), as `<decision:assemble>` writes them.
+    // A document's choices, untagged and tagged with their target, as
+    // `<processing:collect_offered_events>` writes them.
     let choices = choices_from_json(&json!([
         {"event": "bot.focus_device", "schema": {"type": "object"}},
         {"event": "order.cancel", "schema": cancel_schema(), "target": "orders"},

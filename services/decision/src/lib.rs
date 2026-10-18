@@ -43,7 +43,8 @@
 //! * `choose` and `select`: `choices` (required: a JSON array of objects
 //!   with `event`, an event name, `schema`, a self-contained JSON Schema, and
 //!   an optional `description` string, as `<decision:choice>` writes it, and
-//!   an optional `target` string, as `<decision:assemble>` tags it; an event
+//!   an optional `target` string, as `<processing:collect_offered_events>`
+//!   tags it; an event
 //!   is listed once, or once per target with the same schema, and is one
 //!   candidate; no event is named [`ABSTAIN_LABEL`]) and `data` (optional: a
 //!   JSON object of evidence).
@@ -88,10 +89,13 @@
 //!   criterion wins, [`ABSTAIN_EVENT`] `{"reason": "declined", "confidence": P}`.
 //! * **`choose`** returns the winning event itself, with its filled data.
 //! * **`select`** returns [`SELECTED_EVENT`]
-//!   `{"selections": [{"event": E, "data": D, "confidence": P}]}`: every
-//!   offered event, in choices order, with its filled data and its own
-//!   probability in the selection question (the original: "every groundable event
-//!   rides the response"); the invoking document owns what to dispatch.
+//!   `{"selections": [{"event": E, "data": D, "confidence": P, "target": T}]}`:
+//!   every offered event, in choices order, with its filled data, its own
+//!   probability in the selection question (the original: "every groundable
+//!   event rides the response"), and `target` its only offerer, the one
+//!   `target` its listings name (the original's `_single_enabler`; absent
+//!   when no listing or several name one); the invoking document sends
+//!   each to its target.
 //! * **Validation before returning.** The filled data of every returned
 //!   event must satisfy its schema from the choices; otherwise the service
 //!   returns [`FAILED_EVENT`] `{"code": "schema-mismatch"}` and never the
@@ -338,6 +342,9 @@ pub struct Candidate {
     pub compiled: CompiledSchema,
     /// The first line of what the event means, when known.
     pub description: Option<String>,
+    /// The targets that offer it, in listing order (the session ids
+    /// `<processing:collect_offered_events>` tags them with).
+    pub targets: Vec<String>,
 }
 
 /// The first non-blank line of `text`, trimmed (the reference `_event_wording`
@@ -361,13 +368,13 @@ fn valid_event_name(name: &str) -> bool {
 
 /// The candidates of a `choices` value: an array of objects with `event`,
 /// `schema`, an optional `description`, and an optional `target` (the
-/// offering ability, as `<decision:assemble>` tags it).
+/// offering session's id, as `<processing:collect_offered_events>` tags it).
 ///
 /// An event is one candidate however many targets offer it (the original
 /// `collect_offered_events` keeps one event per name): it may be listed
 /// again only when every listing has a `target` and the same schema, and
-/// the first listing's description is kept. The target is the document's to
-/// route, never part of the decision.
+/// the first listing's description is kept. The targets are never part of
+/// the decision; a selection carries its only one.
 ///
 /// # Errors
 ///
@@ -424,6 +431,9 @@ pub fn choices_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
                 return Err(TWICE);
             }
             targets.push(target);
+            if let Some(candidate) = choices.get_mut(index) {
+                candidate.targets.push(target.to_owned());
+            }
             continue;
         }
         listings.push((source, target.into_iter().collect()));
@@ -445,6 +455,7 @@ pub fn choices_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
             schema,
             compiled,
             description,
+            targets: target.into_iter().map(str::to_owned).collect(),
         });
     }
     Ok(choices)
@@ -1136,8 +1147,8 @@ fn decided_choice(
         return Ok(Returned::abstain("declined", Some(probability(chosen))));
     }
     // The event at `index` with its filled data, validated
-    // against its schema.
-    let event = |index: usize| -> Result<(&str, Json), FailureCode> {
+    // against its schema, and the candidate it is.
+    let event = |index: usize| -> Result<(&Candidate, Json), FailureCode> {
         let grounded = offered.get(index).ok_or(NO_ANSWER)?;
         let candidate = choices.get(grounded.candidate).ok_or(NO_ANSWER)?;
         let data = filled_data(offered, index, distributions)?;
@@ -1147,22 +1158,30 @@ fn decided_choice(
         {
             return Err(FailureCode::SchemaMismatch);
         }
-        Ok((candidate.event.as_str(), data))
+        Ok((candidate, data))
     };
     if !every {
-        let (name, data) = event(chosen)?;
-        return Ok(Returned::new(name, &data));
+        let (candidate, data) = event(chosen)?;
+        return Ok(Returned::new(&candidate.event, &data));
     }
     // The original: every groundable event rides the response with
-    // its own probability; the pass criterion never does.
+    // its own probability; the pass criterion never does. Each carries its
+    // only offerer as `target` (the original's `_single_enabler`), none
+    // when several offer it.
     let selections = (0..offered.len())
         .map(|index| {
-            let (name, data) = event(index)?;
-            Ok(serde_json::json!({
-                "event": name,
+            let (candidate, data) = event(index)?;
+            let mut selection = serde_json::json!({
+                "event": candidate.event,
                 "data": data,
                 "confidence": probability(index),
-            }))
+            });
+            if let ([target], Some(selection)) =
+                (candidate.targets.as_slice(), selection.as_object_mut())
+            {
+                selection.insert("target".into(), Json::String(target.clone()));
+            }
+            Ok(selection)
         })
         .collect::<Result<Vec<Json>, FailureCode>>()?;
     Ok(Returned::new(
