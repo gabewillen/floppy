@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- behavior-1: an element the namespace does not have raises error.execution. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
+<datamodel>
+  <data id="d" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:next_after location="d" at="({})" now="0"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="d === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

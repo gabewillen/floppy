@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- behavior-4: a turn behavior's delayed send past turn_after_bound is an E0009. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="e" expr="null"/>
+  <data id="l" expr="null"/>
+  <data id="doc" expr="'&lt;scxml xmlns=&#34;http://www.w3.org/2005/07/scxml&#34;&gt;&lt;state id=&#34;w&#34;&gt;&lt;onentry&gt;&lt;send event=&#34;late&#34; delay=&#34;5s&#34;/&gt;&lt;send event=&#34;soon&#34; delay=&#34;500ms&#34;/&gt;&lt;/onentry&gt;&lt;/state&gt;&lt;/scxml&gt;'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:lifetime_errors location="e" scxml="doc" turn_after_bound="1000" lifetimelocation="l"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="l === 'turn' &amp;&amp; e.length === 1 &amp;&amp; e[0].message.indexOf('after (the late delay of 5s) never fires in a turn behavior, which is silenced 1s after it starts;') === 0" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

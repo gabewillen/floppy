@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- behavior-4: a persistent routine with no schedule is an E0009; with no bounds nothing is checked. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="e" expr="null"/>
+  <data id="n" expr="null"/>
+  <data id="doc" expr="'&lt;scxml xmlns=&#34;http://www.w3.org/2005/07/scxml&#34;&gt;&lt;state id=&#34;w&#34;&gt;&lt;transition event=&#34;go&#34;&gt;&lt;send event=&#34;bot.behavior.tick&#34; target=&#34;#_parent&#34;/&gt;&lt;/transition&gt;&lt;/state&gt;&lt;/scxml&gt;'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:lifetime_errors location="e" scxml="doc" min_every="60000"/>
+    <behavior:lifetime_errors location="n" scxml="doc"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="e.length === 1 &amp;&amp; e[0].message.indexOf('a persistent routine must schedule at least one transition with every or at') === 0 &amp;&amp; n.length === 0" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

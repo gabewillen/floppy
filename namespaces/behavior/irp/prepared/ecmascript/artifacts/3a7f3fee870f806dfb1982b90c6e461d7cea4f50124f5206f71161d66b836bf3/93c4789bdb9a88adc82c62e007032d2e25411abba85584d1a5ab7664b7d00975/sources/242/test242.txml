@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- behavior-5: an empty output, or data that hardcodes a tick field, is a message. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
+<datamodel>
+  <data id="a" expr="null"/>
+  <data id="b" expr="null"/>
+  <data id="t1" expr="[{name: 'M', trigger: 'every', scheduled_at: 'a', fired_at: 'b', output: []}]"/>
+  <data id="t2" expr="[{name: 'M', trigger: 'every', scheduled_at: 'a', fired_at: 'b', output: [{event: 'e', data: {name: 'N'}}]}]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:verify_tick location="a" ticks="t1"/>
+    <behavior:verify_tick location="b" ticks="t2"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="a[0] === 'behavior output must select at least one event for the observed pattern.' &amp;&amp; b[0] === 'selection data[&quot;name&quot;]=&quot;N&quot; does not match live event value &quot;M&quot;; read identifiers from the tick at runtime.'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!-- The autonomy namespace's implementation report plan: each assertion is a
+     numbered statement of namespaces/autonomy/README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/autonomy/irp/sources">
+  <assert id="autonomy-1" specnum="1" specid="#autonomy-1">
+    <![CDATA[<autonomy:behavior_input_payload> takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/autonomy.xsd, rejects it before any run under scx validate).]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.txml"/>
+    </test>
+    <test id="161" conformance="mandatory" manual="false">
+      <start uri="161/test161.txml"/>
+    </test>
+    <test id="162" conformance="mandatory" manual="false">
+      <start uri="162/test162.txml"/>
+    </test>
+  </assert>
+  <assert id="autonomy-2" specnum="2" specid="#autonomy-2">
+    <![CDATA[<autonomy:behavior_input_payload> writes the stimulus data's members when the data is an object (not an array), else {event: data}, with focus and focus_candidates set to the values given (one that is undefined left out); a stimulus that is not an object raises error.execution and assigns nothing.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.txml"/>
+    </test>
+    <test id="171" conformance="mandatory" manual="false">
+      <start uri="171/test171.txml"/>
+    </test>
+    <test id="172" conformance="mandatory" manual="false">
+      <start uri="172/test172.txml"/>
+    </test>
+    <test id="173" conformance="mandatory" manual="false">
+      <start uri="173/test173.txml"/>
+    </test>
+  </assert>
+</assertions>

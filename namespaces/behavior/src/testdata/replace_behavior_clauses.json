@@ -1,0 +1,179 @@
+[
+ {
+  "name": "a_change_keeps_usage",
+  "instance": {
+   "description": "Say hi.",
+   "examples": [
+    "knock",
+    {
+     "a": 2,
+     "b": 1
+    }
+   ],
+   "failed_count": 1,
+   "last_failed_at": "2026-10-18T02:00:00Z",
+   "last_used_at": "2026-10-18T01:00:00Z",
+   "lifetime": "turn",
+   "name": "GreetOnKnock",
+   "source": "<scxml v=\"2\"/>",
+   "status": "ACTIVE",
+   "triggers": [
+    "environment.sound",
+    "bot.input",
+    "environment.sound"
+   ],
+   "used_count": 3
+  },
+  "statements": [
+   {
+    "parameters": [
+     "GreetOnKnock"
+    ],
+    "sql": "DELETE FROM bot_behavior_trigger WHERE behavior_name = ?"
+   },
+   {
+    "parameters": [
+     "GreetOnKnock"
+    ],
+    "sql": "DELETE FROM bot_behavior WHERE name = ?"
+   },
+   {
+    "parameters": [
+     "GreetOnKnock",
+     "<scxml v=\"2\"/>",
+     "Say hi.",
+     "[\"knock\",{\"a\":2,\"b\":1}]",
+     "turn",
+     "3",
+     "2026-10-18T01:00:00Z",
+     "1",
+     "2026-10-18T02:00:00Z"
+    ],
+    "sql": "OLD INSERT"
+   },
+   {
+    "parameters": [
+     "GreetOnKnock",
+     "environment.sound"
+    ],
+    "sql": "INSERT INTO bot_behavior_trigger (behavior_name, \"trigger\") VALUES (?, ?)"
+   },
+   {
+    "parameters": [
+     "GreetOnKnock",
+     "bot.input"
+    ],
+    "sql": "INSERT INTO bot_behavior_trigger (behavior_name, \"trigger\") VALUES (?, ?)"
+   }
+  ]
+ },
+ {
+  "name": "a_create_after_its_draft",
+  "instance": {
+   "description": "",
+   "examples": [],
+   "failed_count": 0,
+   "last_failed_at": "",
+   "last_used_at": "",
+   "lifetime": "persistent",
+   "name": "Morning",
+   "source": "<scxml/>",
+   "status": "ACTIVE",
+   "triggers": [],
+   "used_count": 0
+  },
+  "statements": [
+   {
+    "parameters": [
+     "Morning"
+    ],
+    "sql": "DELETE FROM bot_behavior_trigger WHERE behavior_name = ?"
+   },
+   {
+    "parameters": [
+     "Morning"
+    ],
+    "sql": "DELETE FROM bot_behavior WHERE name = ?"
+   },
+   {
+    "parameters": [
+     "Morning",
+     "<scxml/>",
+     "",
+     "[]",
+     "persistent",
+     "0",
+     "",
+     "0",
+     ""
+    ],
+    "sql": "OLD INSERT"
+   }
+  ]
+ },
+ {
+  "name": "examples_with_numbers",
+  "instance": {
+   "description": "kept",
+   "examples": [
+    1,
+    1.5,
+    1e+21,
+    1e-7,
+    0,
+    {
+     "z": [
+      true,
+      null
+     ]
+    }
+   ],
+   "failed_count": 0,
+   "last_failed_at": "",
+   "last_used_at": null,
+   "lifetime": "turn",
+   "name": "N",
+   "source": "x",
+   "status": "ACTIVE",
+   "triggers": [
+    "a"
+   ],
+   "used_count": 12.5
+  },
+  "statements": [
+   {
+    "parameters": [
+     "N"
+    ],
+    "sql": "DELETE FROM bot_behavior_trigger WHERE behavior_name = ?"
+   },
+   {
+    "parameters": [
+     "N"
+    ],
+    "sql": "DELETE FROM bot_behavior WHERE name = ?"
+   },
+   {
+    "parameters": [
+     "N",
+     "x",
+     "kept",
+     "[1,1.5,1e+21,1e-7,0,{\"z\":[true,null]}]",
+     "turn",
+     "12.5",
+     null,
+     "0",
+     ""
+    ],
+    "sql": "OLD INSERT"
+   },
+   {
+    "parameters": [
+     "N",
+     "a"
+    ],
+    "sql": "INSERT INTO bot_behavior_trigger (behavior_name, \"trigger\") VALUES (?, ?)"
+   }
+  ]
+ }
+]

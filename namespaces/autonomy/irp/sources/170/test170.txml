@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!-- autonomy-2: object data keeps its members, with the focus set over them. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:autonomy="https://github.com/stateforward/floppy/namespaces/autonomy">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="s" expr="({event: 'bot.input', data: {text: 'hi', focus: 'stale'}, source: null})"/>
+  <data id="f" expr="'lamp'"/>
+  <data id="c" expr="['lamp', 'tv']"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <autonomy:behavior_input_payload location="p" stimulus="s" focus="f" focus_candidates="c"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="JSON.stringify(p) === '{&quot;focus&quot;:&quot;lamp&quot;,&quot;focus_candidates&quot;:[&quot;lamp&quot;,&quot;tv&quot;],&quot;text&quot;:&quot;hi&quot;}'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

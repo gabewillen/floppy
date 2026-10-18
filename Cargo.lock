@@ -246,6 +246,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef25905e51abafe4dcea6c15fec58c57b601cdbd0ee53d22ea1d3016c587d39b"
 
 [[package]]
+name = "floppy-autonomy"
+version = "0.1.0"
+dependencies = [
+ "scxml-types",
+ "scxml-validator-core",
+ "serde_json",
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
+name = "floppy-behavior"
+version = "0.1.0"
+dependencies = [
+ "quick-xml",
+ "scxml-types",
+ "scxml-validator-core",
+ "serde_json",
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
 name = "floppy-bot"
 version = "0.1.0"
 dependencies = [

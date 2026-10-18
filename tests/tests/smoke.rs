@@ -111,6 +111,8 @@ fn the_dev_build_publishes_under_target_and_leaves_the_release_cache_untouched()
         "https://github.com/stateforward/floppy/namespaces/cognition",
         "https://github.com/stateforward/floppy/namespaces/identity",
         "https://github.com/stateforward/floppy/namespaces/memory",
+        "https://github.com/stateforward/floppy/namespaces/behavior",
+        "https://github.com/stateforward/floppy/namespaces/autonomy",
         "https://github.com/stateforward/floppy/services/generate",
         "https://github.com/stateforward/floppy/services/decision",
     ] {

@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- behavior-4: a turn behavior's delayed send past turn_after_bound is an E0009. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
+<datamodel>
+  <data id="e" expr="null"/>
+  <data id="l" expr="null"/>
+  <data id="doc" expr="'&lt;scxml xmlns=&quot;http://www.w3.org/2005/07/scxml&quot;&gt;&lt;state id=&quot;w&quot;&gt;&lt;onentry&gt;&lt;send event=&quot;late&quot; delay=&quot;5s&quot;/&gt;&lt;send event=&quot;soon&quot; delay=&quot;500ms&quot;/&gt;&lt;/onentry&gt;&lt;/state&gt;&lt;/scxml&gt;'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:lifetime_errors location="e" scxml="doc" turn_after_bound="1000" lifetimelocation="l"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="l === 'turn' &amp;&amp; e.length === 1 &amp;&amp; e[0].message.indexOf('after (the late delay of 5s) never fires in a turn behavior, which is silenced 1s after it starts;') === 0" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- autonomy-1: a behavior_input_payload with content raises error.execution and assigns nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:autonomy="https://github.com/stateforward/floppy/namespaces/autonomy">
+<datamodel>
+  <data id="p" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <autonomy:behavior_input_payload location="p" stimulus="({data: {}})" focus="null" focus_candidates="[]">x</autonomy:behavior_input_payload>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="p === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

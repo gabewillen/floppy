@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- autonomy-2: data that is not an object, an array included, is the event member. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:autonomy="https://github.com/stateforward/floppy/namespaces/autonomy" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="q" expr="null"/>
+  <data id="s" expr="({event: 'environment.sound', data: 'knock', source: 'listening'})"/>
+  <data id="a" expr="({event: 'x', data: [1, 2]})"/>
+  <data id="f" expr="null"/>
+  <data id="c" expr="[]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <autonomy:behavior_input_payload location="p" stimulus="s" focus="f" focus_candidates="c"/>
+    <autonomy:behavior_input_payload location="q" stimulus="a" focus="f" focus_candidates="c"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="JSON.stringify(p) === '{&#34;event&#34;:&#34;knock&#34;,&#34;focus&#34;:null,&#34;focus_candidates&#34;:[]}' &amp;&amp; JSON.stringify(q) === '{&#34;event&#34;:[1,2],&#34;focus&#34;:null,&#34;focus_candidates&#34;:[]}'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

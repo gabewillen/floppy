@@ -1,0 +1,274 @@
+[
+ {
+  "name": "empty",
+  "behaviors": {
+   "rowcount": 0,
+   "rows": []
+  },
+  "triggers": {
+   "rowcount": 0,
+   "rows": []
+  },
+  "instances": []
+ },
+ {
+  "name": "two_behaviors_with_their_triggers",
+  "behaviors": {
+   "rowcount": 2,
+   "rows": [
+    {
+     "columns": [
+      "name",
+      "source",
+      "description",
+      "examples",
+      "lifetime",
+      "status",
+      "status_reason",
+      "status_updated_at",
+      "used_count",
+      "last_used_at",
+      "failed_count",
+      "last_failed_at"
+     ],
+     "values": [
+      "GreetOnKnock",
+      "<scxml/>",
+      "Say hello.",
+      "[\"knock\", {\"b\": 1, \"a\": 2}]",
+      "turn",
+      "ACTIVE",
+      "",
+      "2026-10-18T00:00:00Z",
+      "3",
+      "2026-10-18T01:00:00Z",
+      "0",
+      ""
+     ]
+    },
+    {
+     "columns": [
+      "name",
+      "source",
+      "description",
+      "examples",
+      "lifetime",
+      "status",
+      "status_reason",
+      "status_updated_at",
+      "used_count",
+      "last_used_at",
+      "failed_count",
+      "last_failed_at"
+     ],
+     "values": [
+      "Morning",
+      "<scxml/>",
+      "",
+      "[]",
+      "persistent",
+      "BROKEN",
+      "stale",
+      "",
+      " 12 ",
+      "",
+      "",
+      ""
+     ]
+    }
+   ]
+  },
+  "triggers": {
+   "rowcount": 3,
+   "rows": [
+    {
+     "columns": [
+      "behavior_name",
+      "trigger"
+     ],
+     "values": [
+      "GreetOnKnock",
+      "environment.sound"
+     ]
+    },
+    {
+     "columns": [
+      "behavior_name",
+      "trigger"
+     ],
+     "values": [
+      "Other",
+      "x"
+     ]
+    },
+    {
+     "columns": [
+      "behavior_name",
+      "trigger"
+     ],
+     "values": [
+      "GreetOnKnock",
+      "bot.input"
+     ]
+    }
+   ]
+  },
+  "instances": [
+   {
+    "description": "Say hello.",
+    "examples": [
+     "knock",
+     {
+      "a": 2,
+      "b": 1
+     }
+    ],
+    "failed_count": 0,
+    "last_failed_at": "",
+    "last_used_at": "2026-10-18T01:00:00Z",
+    "lifetime": "turn",
+    "name": "GreetOnKnock",
+    "source": "<scxml/>",
+    "status": "ACTIVE",
+    "status_reason": "",
+    "status_updated_at": "2026-10-18T00:00:00Z",
+    "triggers": [
+     "environment.sound",
+     "bot.input"
+    ],
+    "used_count": 3
+   },
+   {
+    "description": "",
+    "examples": [],
+    "failed_count": 0,
+    "last_failed_at": "",
+    "last_used_at": "",
+    "lifetime": "persistent",
+    "name": "Morning",
+    "source": "<scxml/>",
+    "status": "BROKEN",
+    "status_reason": "stale",
+    "status_updated_at": "",
+    "triggers": [],
+    "used_count": 12
+   }
+  ]
+ },
+ {
+  "name": "counters_that_are_not_numbers",
+  "behaviors": {
+   "rowcount": 1,
+   "rows": [
+    {
+     "columns": [
+      "name",
+      "source",
+      "description",
+      "examples",
+      "lifetime",
+      "status",
+      "status_reason",
+      "status_updated_at",
+      "used_count",
+      "last_used_at",
+      "failed_count",
+      "last_failed_at"
+     ],
+     "values": [
+      "A",
+      "",
+      "",
+      "null",
+      "turn",
+      "DRAFT",
+      "",
+      "",
+      "many",
+      null,
+      4,
+      null
+     ]
+    }
+   ]
+  },
+  "triggers": {
+   "rowcount": 0,
+   "rows": []
+  },
+  "instances": [
+   {
+    "description": "",
+    "examples": null,
+    "failed_count": 4,
+    "last_failed_at": null,
+    "last_used_at": null,
+    "lifetime": "turn",
+    "name": "A",
+    "source": "",
+    "status": "DRAFT",
+    "status_reason": "",
+    "status_updated_at": "",
+    "triggers": [],
+    "used_count": null
+   }
+  ]
+ },
+ {
+  "name": "a_row_with_other_columns",
+  "behaviors": {
+   "rowcount": 1,
+   "rows": [
+    {
+     "columns": [
+      "name",
+      "examples",
+      "used_count",
+      "failed_count",
+      "extra"
+     ],
+     "values": [
+      "B",
+      "{\"k\": [1, 2.5, \"x\"]}",
+      "1e3",
+      ".5",
+      true
+     ]
+    }
+   ]
+  },
+  "triggers": {
+   "rowcount": 1,
+   "rows": [
+    {
+     "columns": [
+      "behavior_name",
+      "trigger"
+     ],
+     "values": [
+      "B",
+      "bot.input"
+     ]
+    }
+   ]
+  },
+  "instances": [
+   {
+    "examples": {
+     "k": [
+      1,
+      2.5,
+      "x"
+     ]
+    },
+    "extra": true,
+    "failed_count": 0.5,
+    "name": "B",
+    "triggers": [
+     "bot.input"
+    ],
+    "used_count": 1000
+   }
+  ]
+ }
+]

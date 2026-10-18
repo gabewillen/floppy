@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- behavior-5: a tick with its fields whose output reads them has no messages. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="a" expr="null"/>
+  <data id="ticks" expr="[{name: 'M', trigger: 'every', scheduled_at: 'a', fired_at: 'b', output: [{event: 'bot.speaking.say', data: {text: 'hi', name: 'M'}}]}]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:verify_tick location="a" ticks="ticks"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="Array.isArray(a) &amp;&amp; a.length === 0" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

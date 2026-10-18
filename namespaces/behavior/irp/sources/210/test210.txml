@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- behavior-2: each behavior row is an instance with its examples parsed, its counters numbers and its triggers. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
+<datamodel>
+  <data id="i" expr="null"/>
+  <data id="b" expr="({rows: [{columns: ['name', 'source', 'examples', 'used_count', 'failed_count'], values: ['A', '&lt;scxml/&gt;', '[&quot;x&quot;]', '2', '']}, {columns: ['name', 'source', 'examples', 'used_count', 'failed_count'], values: ['B', '', '[]', '0', '0']}]})"/>
+  <data id="t" expr="({rows: [{columns: ['behavior_name', 'trigger'], values: ['A', 'bot.input']}, {columns: ['behavior_name', 'trigger'], values: ['C', 'x']}, {columns: ['behavior_name', 'trigger'], values: ['A', 'environment.sound']}]})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:instances_from_behavior_results location="i" behaviors="b" triggers="t"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="i.length === 2 &amp;&amp; i[0].examples[0] === 'x' &amp;&amp; i[0].used_count === 2 &amp;&amp; i[0].failed_count === 0 &amp;&amp; JSON.stringify(i[0].triggers) === '[&quot;bot.input&quot;,&quot;environment.sound&quot;]' &amp;&amp; i[1].triggers.length === 0" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

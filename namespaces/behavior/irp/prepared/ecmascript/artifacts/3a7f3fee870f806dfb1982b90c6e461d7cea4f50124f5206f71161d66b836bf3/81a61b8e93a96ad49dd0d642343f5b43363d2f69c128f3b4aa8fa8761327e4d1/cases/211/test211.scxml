@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- behavior-2: no rows are no instances. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="i" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:instances_from_behavior_results location="i" behaviors="({rows: []})" triggers="({rows: []})"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="Array.isArray(i) &amp;&amp; i.length === 0" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

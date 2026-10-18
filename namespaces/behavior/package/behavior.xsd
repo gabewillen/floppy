@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML Schema of floppy's `behavior` extension namespace (namespaces/behavior),
+  the original's behavior package. It governs structure only; the extension
+  component governs what the element does. Bind it with the prefix
+  `behavior` by convention.
+
+  behavior:instances_from_behavior_results
+                   location (required): receives the behavior instances of
+                   a memory select (the original's
+                   storage.instances_from_behavior_results).
+                   behaviors, triggers (required): expressions.
+  behavior:replace_behavior_clauses
+                   location (required): receives the statements that
+                   replace one behavior (the original's
+                   storage.replace_behavior_clauses).
+                   instance (required): an expression.
+  behavior:lifetime_errors
+                   location (required): receives the E0009 diagnostics of
+                   an SCXML document (the original's
+                   instance._lifetime_errors).
+                   scxml (required), min_every, turn_after_bound (optional):
+                   expressions.
+                   lifetimelocation, scheduleslocation (optional): receive
+                   the document's lifetime and its schedules' events.
+  behavior:verify_tick
+                   location (required): receives the E0008 messages of a
+                   persistent routine's forced tick (the original's
+                   verify._verify_tick).
+                   ticks (required): an expression.
+                   None takes another attribute or content.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://github.com/stateforward/floppy/namespaces/behavior"
+           elementFormDefault="qualified">
+  <xs:element name="instances_from_behavior_results">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="behaviors" type="xs:string" use="required"/>
+      <xs:attribute name="triggers" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="replace_behavior_clauses">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="instance" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="lifetime_errors">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="scxml" type="xs:string" use="required"/>
+      <xs:attribute name="min_every" type="xs:string"/>
+      <xs:attribute name="turn_after_bound" type="xs:string"/>
+      <xs:attribute name="lifetimelocation" type="xs:string"/>
+      <xs:attribute name="scheduleslocation" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="verify_tick">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="ticks" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

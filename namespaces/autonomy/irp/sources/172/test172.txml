@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- autonomy-2: a focus that is undefined is left out. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:autonomy="https://github.com/stateforward/floppy/namespaces/autonomy">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="s" expr="({event: 'x', data: {focus: 'stale'}})"/>
+  <data id="i" expr="({focus_candidates: []})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <autonomy:behavior_input_payload location="p" stimulus="s" focus="i.focus" focus_candidates="i.focus_candidates"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="JSON.stringify(p) === '{&quot;focus_candidates&quot;:[]}'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

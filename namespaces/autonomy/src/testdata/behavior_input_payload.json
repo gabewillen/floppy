@@ -1,0 +1,300 @@
+[
+ {
+  "stimulus": {
+   "data": {
+    "source": "alice",
+    "text": "hi"
+   },
+   "event": "bot.input",
+   "source": null
+  },
+  "focus": null,
+  "focus_candidates": [],
+  "autonomy": {
+   "focus": null,
+   "focus_candidates": [],
+   "source": "alice",
+   "text": "hi"
+  },
+  "reflection": {
+   "focus": null,
+   "focus_candidates": [],
+   "source": "alice",
+   "text": "hi"
+  }
+ },
+ {
+  "stimulus": {
+   "data": {
+    "source": "alice",
+    "text": "hi"
+   },
+   "event": "bot.input",
+   "source": null
+  },
+  "focus": "lamp",
+  "focus_candidates": [
+   "lamp",
+   "tv"
+  ],
+  "autonomy": {
+   "focus": "lamp",
+   "focus_candidates": [
+    "lamp",
+    "tv"
+   ],
+   "source": "alice",
+   "text": "hi"
+  },
+  "reflection": {
+   "focus": "lamp",
+   "focus_candidates": [
+    "lamp",
+    "tv"
+   ],
+   "source": "alice",
+   "text": "hi"
+  }
+ },
+ {
+  "stimulus": {
+   "data": "knock",
+   "event": "environment.sound",
+   "source": "listening"
+  },
+  "focus": null,
+  "focus_candidates": [],
+  "autonomy": {
+   "event": "knock",
+   "focus": null,
+   "focus_candidates": []
+  },
+  "reflection": {
+   "event": "knock",
+   "focus": null,
+   "focus_candidates": []
+  }
+ },
+ {
+  "stimulus": {
+   "data": "knock",
+   "event": "environment.sound",
+   "source": "listening"
+  },
+  "focus": "lamp",
+  "focus_candidates": [
+   "lamp",
+   "tv"
+  ],
+  "autonomy": {
+   "event": "knock",
+   "focus": "lamp",
+   "focus_candidates": [
+    "lamp",
+    "tv"
+   ]
+  },
+  "reflection": {
+   "event": "knock",
+   "focus": "lamp",
+   "focus_candidates": [
+    "lamp",
+    "tv"
+   ]
+  }
+ },
+ {
+  "stimulus": {
+   "data": null,
+   "event": "x",
+   "source": null
+  },
+  "focus": null,
+  "focus_candidates": [],
+  "autonomy": {
+   "event": null,
+   "focus": null,
+   "focus_candidates": []
+  },
+  "reflection": {
+   "event": null,
+   "focus": null,
+   "focus_candidates": []
+  }
+ },
+ {
+  "stimulus": {
+   "data": null,
+   "event": "x",
+   "source": null
+  },
+  "focus": "lamp",
+  "focus_candidates": [
+   "lamp",
+   "tv"
+  ],
+  "autonomy": {
+   "event": null,
+   "focus": "lamp",
+   "focus_candidates": [
+    "lamp",
+    "tv"
+   ]
+  },
+  "reflection": {
+   "event": null,
+   "focus": "lamp",
+   "focus_candidates": [
+    "lamp",
+    "tv"
+   ]
+  }
+ },
+ {
+  "stimulus": {
+   "data": 7,
+   "event": "x",
+   "source": null
+  },
+  "focus": null,
+  "focus_candidates": [],
+  "autonomy": {
+   "event": 7,
+   "focus": null,
+   "focus_candidates": []
+  },
+  "reflection": {
+   "event": 7,
+   "focus": null,
+   "focus_candidates": []
+  }
+ },
+ {
+  "stimulus": {
+   "data": 7,
+   "event": "x",
+   "source": null
+  },
+  "focus": "lamp",
+  "focus_candidates": [
+   "lamp",
+   "tv"
+  ],
+  "autonomy": {
+   "event": 7,
+   "focus": "lamp",
+   "focus_candidates": [
+    "lamp",
+    "tv"
+   ]
+  },
+  "reflection": {
+   "event": 7,
+   "focus": "lamp",
+   "focus_candidates": [
+    "lamp",
+    "tv"
+   ]
+  }
+ },
+ {
+  "stimulus": {
+   "data": {
+    "focus": "stale",
+    "focus_candidates": [
+     "stale"
+    ],
+    "z": 1
+   },
+   "event": "x",
+   "source": null
+  },
+  "focus": null,
+  "focus_candidates": [],
+  "autonomy": {
+   "focus": null,
+   "focus_candidates": [],
+   "z": 1
+  },
+  "reflection": {
+   "focus": null,
+   "focus_candidates": [],
+   "z": 1
+  }
+ },
+ {
+  "stimulus": {
+   "data": {
+    "focus": "stale",
+    "focus_candidates": [
+     "stale"
+    ],
+    "z": 1
+   },
+   "event": "x",
+   "source": null
+  },
+  "focus": "lamp",
+  "focus_candidates": [
+   "lamp",
+   "tv"
+  ],
+  "autonomy": {
+   "focus": "lamp",
+   "focus_candidates": [
+    "lamp",
+    "tv"
+   ],
+   "z": 1
+  },
+  "reflection": {
+   "focus": "lamp",
+   "focus_candidates": [
+    "lamp",
+    "tv"
+   ],
+   "z": 1
+  }
+ },
+ {
+  "stimulus": {
+   "event": "x",
+   "source": null
+  },
+  "focus": null,
+  "focus_candidates": [],
+  "autonomy": {
+   "focus": null,
+   "focus_candidates": []
+  },
+  "reflection": {
+   "focus": null,
+   "focus_candidates": []
+  }
+ },
+ {
+  "stimulus": {
+   "event": "x",
+   "source": null
+  },
+  "focus": "lamp",
+  "focus_candidates": [
+   "lamp",
+   "tv"
+  ],
+  "autonomy": {
+   "focus": "lamp",
+   "focus_candidates": [
+    "lamp",
+    "tv"
+   ]
+  },
+  "reflection": {
+   "focus": "lamp",
+   "focus_candidates": [
+    "lamp",
+    "tv"
+   ]
+  }
+ }
+]
