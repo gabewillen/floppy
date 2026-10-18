@@ -118,38 +118,7 @@ function intuitionFailure(_event) {
   return stageFailure(_event);
 }
 
-// An escalated intuition's environment actions (the original _environment_actions), else none.
-function environmentActions(_event) {
-  return Array.isArray(_event.data.selected) ? _event.data.selected : [];
-}
-
 // completing
-
-// A value as JSON with its object keys sorted at every depth, so equal data
-// compares equal whatever order its keys were written in.
-function canonicalJson(value) {
-  if (Array.isArray(value)) {
-    return '[' + value.map(canonicalJson).join(',') + ']';
-  }
-  if (value !== null && typeof value === 'object') {
-    return '{' + Object.keys(value).sort().map(function (key) { return JSON.stringify(key) + ':' + canonicalJson(value[key]); }).join(',') + '}';
-  }
-  return JSON.stringify(value === undefined ? null : value);
-}
-
-// What makes two selections the same action: the event and its data.
-function actionKey(item) {
-  return item.event + ' ' + canonicalJson(item.data === undefined ? {} : item.data);
-}
-
-// The turn's output: an escalated intuition's environment actions first,
-// then the handling stage's selections less any that repeats one of them
-// (the original dispatched the environment actions before reasoning ran,
-// so a repeat is no new action): a turn acts once.
-function turnOutput() {
-  var handed = environment_actions.map(actionKey);
-  return environment_actions.concat(selected.filter(function (item) { return handed.indexOf(actionKey(item)) < 0; }));
-}
 
 // The reflection's cognition_input: the turn's stimulus, focus and focus_candidates.
 function cognitionInput() {

@@ -69,10 +69,6 @@ function noChoicesResult() {
 
 // applying
 
-function choiceNamesLog() {
-  return 'turn ' + turn + ': ' + choice_names;
-}
-
 // The model prompt: the original's model_facing_xml(ProcessorInput)
 // (abilities/cognition/event.py, processing.py InputData.model_facing_payload)
 // over floppy's JSON, as {prompt} or {failure} (the original's ValueError text).
@@ -390,19 +386,6 @@ function xmlText(element, level) {
   return open + '>' + inner + children.join(inner) + '\n' + '  '.repeat(level) + '</' + element.name + '>';
 }
 
-// Temporary, until the mapping onto the original's domains moves it to Rust.
-// The original's _events_from_dispatch_tool_calls: the events of every
-// dispatch call of a generate.result, merged in call order (the service
-// returns only calls of its one function, each its schema admits), else
-// selected unchanged (D41: the service's events are unchecked).
-function generatedSelection(_event) {
-  var calls = Object(_event.data).tool_calls;
-  if (!Array.isArray(calls)) {
-    return selected;
-  }
-  return calls.filter(function (call) { return Object(call).name === 'dispatch'; }).reduce(function (merged, call) { return merged.concat(call.args.events); }, []);
-}
-
 // The code of a generate.failed, else gen_failure unchanged.
 function generateFailure(_event) {
   return typeof Object(_event.data).code === 'string' ? _event.data.code : gen_failure;
@@ -418,18 +401,6 @@ function failedResult() {
 
 function couldNotRunResult(_event) {
   return ({turn: turn, handled: false, failed: true, reason: 'the reasoning could not run (' + _event.name + ')'});
-}
-
-// dispatching
-
-// No selection was rejected.
-function isAccepted() {
-  return rejection === null;
-}
-
-// The original: the rejection fails the stage with its message.
-function rejectedResult() {
-  return ({turn: turn, handled: false, failed: true, reason: rejection});
 }
 
 // done

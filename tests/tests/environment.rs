@@ -598,22 +598,27 @@ fn a_focused_devices_choices_are_read_from_its_snapshot_and_a_selection_reaches_
     records.extend(completed(&run));
     let finished = run.close(WAIT);
     records.extend(finished.records);
-    let choices = texts_of(&records, "session.floppy", "floppy.choices");
+    let choices: Vec<String> = texts_of(&records, "session.floppy", "floppy.choices")
+        .iter()
+        .map(|text| support::choice_names(text))
+        .collect();
     assert_eq!(choices.len(), 3, "{choices:?}");
     // Unfocused: no device choice. Focused on the lamp while it is off:
     // lamp.on and not lamp.off; then on: lamp.off and not lamp.on.
     assert!(!choices[0].contains("lamp."), "{choices:?}");
     assert!(
-        choices[1].contains("lamp.on@lamp") && !choices[1].contains("lamp.off"),
+        choices[1].contains("lamp.on@session.lamp") && !choices[1].contains("lamp.off"),
         "{choices:?}"
     );
     assert!(
-        choices[2].contains("lamp.off@lamp") && !choices[2].contains("lamp.on"),
+        choices[2].contains("lamp.off@session.lamp") && !choices[2].contains("lamp.on"),
         "{choices:?}"
     );
+    // The cognition sent the focus to the body and the action to the
+    // lamp, at their session ids.
     assert_eq!(
-        texts_of(&records, "session.floppy", "floppy.route"),
-        ["bot.focus_device -> bot", "lamp.on -> lamp"]
+        texts_of(&records, "session.floppy", "floppy.focus"),
+        ["lamp"]
     );
     assert_eq!(texts_of(&records, "session.lamp", "lamp.on"), ["40"]);
 }
@@ -625,7 +630,7 @@ fn only_its_holders_are_offered_a_devices_choices() {
     all_activated(&run, &["a", "b"]);
     assert_eq!(data_of(&mut run, "session.b", "owned_devices"), json!({}));
     // Both bots get the host's input naming the lamp: only a holds it, so
-    // only a can focus it (b's focus is refused, its turn fails) and is
+    // only a can focus it (b is offered no focus, and takes none) and is
     // offered its events; the lamp's report goes to a alone.
     run.event("bot.input", &lamp_input("focus", &json!("lamp")));
     let mut records = Vec::new();
@@ -719,8 +724,8 @@ fn a_device_action_the_device_refuses_is_an_error_in_the_sender() {
     let finished = run.close(WAIT);
     records.extend(finished.records);
     assert_eq!(
-        texts_of(&records, "session.floppy", "floppy.route"),
-        ["bot.focus_device -> bot", "lamp.on -> lamp"]
+        texts_of(&records, "session.floppy", "floppy.focus"),
+        ["lamp"]
     );
     assert!(
         texts_of(&records, "session.lamp", "lamp.on").is_empty(),

@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- candidates_runner-7: a focus_device outside input.focus_candidates is rejected by the verdict. -->
+<!-- candidates_runner-7: a selection whose target no session of the run answers cannot be sent. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="candidates_runner" type="scxml" src="../../../candidates_runner.scx">
     <param name="turn" expr="3"/>
-    <param name="input" expr='{"focus": null, "focus_candidates": ["kitchen"]}'/>
-    <param name="candidates" expr="[{&quot;name&quot;: &quot;Focus&quot;, &quot;source&quot;: &quot;&lt;scxml xmlns=\&quot;http://www.w3.org/2005/07/scxml\&quot; version=\&quot;1.0\&quot; datamodel=\&quot;ecmascript\&quot; initial=\&quot;done\&quot;&gt;&lt;datamodel&gt;&lt;data id=\&quot;turn\&quot; expr=\&quot;0\&quot;/&gt;&lt;data id=\&quot;input\&quot; expr=\&quot;null\&quot;/&gt;&lt;/datamodel&gt;&lt;final id=\&quot;done\&quot;&gt;&lt;donedata&gt;&lt;content expr=\&quot;({turn: turn, handled: true, selected: [{event: 'bot.focus_device', data: {device: 'garage'}}]})\&quot;/&gt;&lt;/donedata&gt;&lt;/final&gt;&lt;/scxml&gt;&quot;}]"/>
-    <param name="choices" expr='[{"event": "bot.focus_device", "schema": {}}]'/>
+    <param name="input" expr='{"text": "hello", "focus": null, "focus_candidates": []}'/>
+    <param name="candidates" expr="[{&quot;name&quot;: &quot;Nowhere&quot;, &quot;source&quot;: &quot;&lt;scxml xmlns=\&quot;http://www.w3.org/2005/07/scxml\&quot; version=\&quot;1.0\&quot; datamodel=\&quot;ecmascript\&quot; initial=\&quot;done\&quot;&gt;&lt;datamodel&gt;&lt;data id=\&quot;turn\&quot; expr=\&quot;0\&quot;/&gt;&lt;data id=\&quot;input\&quot; expr=\&quot;null\&quot;/&gt;&lt;/datamodel&gt;&lt;final id=\&quot;done\&quot;&gt;&lt;donedata&gt;&lt;content expr=\&quot;({turn: turn, handled: true, selected: [{event: 'bot.say', data: {}, target: 'session.nowhere'}]})\&quot;/&gt;&lt;/donedata&gt;&lt;/final&gt;&lt;/scxml&gt;&quot;}]"/>
     <param name="database" expr="'/memory/floppy.sqlite'"/>
   </invoke>
   <state id="boot">
@@ -14,7 +13,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.candidates_runner" cond="_event.data.tried.join(' ') === &quot;Focus&quot; &amp;&amp; _event.data.tried.length === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.rejection === &quot;Processing selected focus_device outside available device candidates.&quot; &amp;&amp; _event.data.selected === null" target="step1"/>
+    <transition event="done.invoke.candidates_runner" cond="_event.data.tried.join(' ') === &quot;Nowhere&quot; &amp;&amp; _event.data.tried.length === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.rejection === &quot;Autonomy behavior dispatch failed: error.communication&quot; &amp;&amp; _event.data.selected === null" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/candidates_runner/irp/sources">
   <assert id="candidates_runner-1" specnum="1" specid="#candidates_runner-1">
-    <![CDATA[It runs the first of its `candidates` <param> (`[{name, source}]`) as the child `candidate` from its source, with the <param>s `turn` and `input`. A candidate that answers by its donedata `{turn, handled: true, selected}` for this turn with at least one selection, all accepted, has its use persisted, and the runner ends with donedata `{tried: [name], handled: true, selected, rejection: null}`, `selected` the candidate's own selections; it sends its parent nothing else.]]>
+    <![CDATA[It runs the first of its `candidates` <param> (`[{name, source}]`) as the child `candidate` from its source, with the <param>s `turn` and `input`. A candidate that answers by its donedata `{turn, handled: true, selected}` for this turn with at least one selection, all sent, has its use persisted, and the runner ends with donedata `{tried: [name], handled: true, selected, rejection: null}`, `selected` the candidate's own selections; it sends its parent nothing else.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -12,7 +12,7 @@
     </test>
   </assert>
   <assert id="candidates_runner-2" specnum="2" specid="#candidates_runner-2">
-    <![CDATA[The handled candidate's selections are checked before its use is persisted: `<bot:verdict>` drops `bot.ability.cognition.ignore` selections and applies the attention policy with `input.focus` and `input.focus_candidates`, then `<decision:route>` places each remaining one on the target offering it in the `choices` <param>.]]>
+    <![CDATA[The handled candidate's selections are sent, in order, each to the session its `target` names (`#_scxml_` + target, the session ids its turn's selections carry), before its use is persisted.]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -33,7 +33,7 @@
     </test>
   </assert>
   <assert id="candidates_runner-4" specnum="4" specid="#candidates_runner-4">
-    <![CDATA[When its candidate does not handle the turn and candidates are left, the runner invokes itself for the rest (with the same turn, input, choices, database and bounds) and ends with the rest's donedata, its own candidate first in `tried`.]]>
+    <![CDATA[When its candidate does not handle the turn and candidates are left, the runner invokes itself for the rest (with the same turn, input, database and bounds) and ends with the rest's donedata, its own candidate first in `tried`.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -63,7 +63,7 @@
     </test>
   </assert>
   <assert id="candidates_runner-7" specnum="7" specid="#candidates_runner-7">
-    <![CDATA[A handled candidate whose selection the verdict or the route rejects has its failure persisted, and the runner ends with `{tried: [name], handled: false, selected: null, rejection}`, the rejection's message; the rest do not run.]]>
+    <![CDATA[A handled candidate a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and the runner ends with `{tried: [name], handled: false, selected: null, rejection}`, rejection `Autonomy behavior dispatch failed: <error>`; the rest do not run.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>

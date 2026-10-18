@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- bot-5: a missing name or a name with no tokens is never heard. -->
+<!-- bot-4: a missing name or a name with no tokens is never heard. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot">
 <datamodel>
   <data id="a" expr="null"/>

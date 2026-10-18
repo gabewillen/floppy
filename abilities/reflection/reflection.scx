@@ -39,16 +39,23 @@
 
   processing (the original _dispatch_select, SELECT_INSTRUCTIONS): its
   transitions for the three inventory events are the enabled transitions
-  <decision:choice> reads; <decision:pin> pins a change's and a break's
-  name to the recalled inventory's names and drops both when it is empty
-  (decision D100: the original offers both with any name, and a model
-  broke behaviors that did not exist), and <decision:selection> builds the
-  original's dispatch tool, which the generate service offers as its one
-  tool, from {cognition_input, cognition_output, prior_episodes,
-  behaviors}; the events of every dispatch call it returns are merged. An empty selection goes to
-  storing; more than one fails; one is sent to this session (#_internal),
-  where scxml.rs checks its data against the event's schema and the
-  transition taking it applies it. The model call is bounded by
+  <decision:choice> reads, which <processing:collect_offered_events> tags
+  with this session's id (the session that offers them, so a selection is
+  sent here); <decision:pin> pins a change's and a break's name to the
+  recalled inventory's names and drops both when it is empty (decision
+  D100: the original offers both with any name, and a model broke
+  behaviors that did not exist), and <processing:send max="1"> builds the
+  original's dispatch tool with at most one event (the original's "at most
+  one"), which the generate service offers as its one tool, from
+  {cognition_input, cognition_output, prior_episodes, behaviors}, and
+  refuses as schema-mismatch a reply that selects more. The events of
+  every dispatch call it returns are each sent to this session at its
+  target (#_scxml_ + target), where scxml.rs checks its data against the
+  event's schema and the transition taking it applies it (the original's
+  bot.ability.reflection.selected route); after them it sends itself
+  bot.ability.reflection.selected, which arrives after any selection (the
+  external queue is first in, first out) and goes to storing only while
+  processing still waits: the empty selection. The model call is bounded by
   bot.ability.reflection.select.hop.timed_out: select_timeout_ms without
   progress once its reply streams (the first generate.progress arms it,
   each later one re-arms it; a reply that is not streamed has none) or
@@ -109,14 +116,15 @@
   event:schema (never inline). The builder's answer is its <donedata>,
   which scxml.rs does not check, so its conds check the shape.
 
-  Bindings: the decision namespace package and the generate service
-  package; env scopes FLOPPY_API_KEY and FLOPPY_BASE_URL to the select
+  Bindings: the decision and processing namespace packages and the
+  generate service package; env scopes FLOPPY_API_KEY and FLOPPY_BASE_URL to the select
   call (the builder scopes its own).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="reflection" initial="idle">
   <datamodel>
     <!-- The cognition's <param>s. -->
@@ -143,6 +151,10 @@
     <data id="gen_id" expr="null"/>
     <data id="selected" expr="null"/>
     <data id="gen_failure" expr="null"/>
+    <!-- The dispatch call and the selection being sent (the <foreach>
+         items). -->
+    <data id="call" expr="null"/>
+    <data id="s" expr="null"/>
     <data id="hop_timer" expr="null"/>
     <data id="ceiling_timer" expr="null"/>
     <!-- The revision's inactivity timer. -->
@@ -176,7 +188,7 @@
     <!-- The original CHANGE_INSTRUCTIONS, for the builder: the program is an
          SCXML document. -->
     <data id="change_instructions" expr="'Author or revise the SCXML program of the stored behavior. existing_behavior is the current inventory row (source may be empty for a new create stub; status may be DRAFT or BROKEN for unfinished or retired behaviors). If existing_behavior.source is empty, write a full new program from this turn, prior_episodes, and intent: invent event contracts, guards, and effects from the observed pattern only. If source is non-empty, rewrite or patch it so it better fits this turn and prior_episodes. The output is a cognition event selection object (keys: event, target?, data?, reason?) or a list of such objects, matching the shape of prior episode and this-turn outputs. Derive input fields, guards, and selection field names from the observed pattern. At runtime, fill selection data from the live input; never hardcode identifier values copied from episode examples. A turn behavior (default) answers one matching turn. When the intent or the turn calls for something recurring or time-based (or the user asked for it), write a persistent routine instead, scheduled by every or at delayed sends whose transitions send bot.behavior.tick with its selections: a persistent routine is checked by one forced tick, not the live turn, and needs no triggers.'"/>
-    <data id="turn_contract" expr="'Write a turn behavior: its datamodel declares turn and input, which its invoker sets with param elements ; its invoker runs it only for a turn whose stimulus event is one of its triggers TRIGGERS, and no stimulus, event name or trigger reaches it, so it never tests one: input is the stimulus data (its fields, or {event: the data} when the data is not an object) with focus and focus_candidates added, and for this turn input is INPUT; when input holds messages and parent (a conversation\'s output), parent.data is the message this turn answers and messages is the whole conversation so far, earlier turns included, so it decides from parent.data; it sends nothing to its invoker and ends within one second in a top-level final state whose donedata content is the object {turn, handled, selected}: handled true with selected the list of selections, or handled false with selected an empty list when the behavior does not apply to this turn (never handled true with an empty list). Its tests drive no input events and expect it to finish.'"/>
+    <data id="turn_contract" expr="'Write a turn behavior: its datamodel declares turn and input, which its invoker sets with param elements ; its invoker runs it only for a turn whose stimulus event is one of its triggers TRIGGERS, and no stimulus, event name or trigger reaches it, so it never tests one: input is the stimulus data (its fields, or {event: the data} when the data is not an object) with focus and focus_candidates added, and for this turn input is INPUT; when input holds messages and parent (a conversation\'s output), parent.data is the message this turn answers and messages is the whole conversation so far, earlier turns included, so it decides from parent.data; it sends nothing to its invoker and ends within one second in a top-level final state whose donedata content is the object {turn, handled, selected}: handled true with selected the list of selections, each naming its target, the session that receives its event, exactly as this turn\'s cognition_output names it, or handled false with selected an empty list when the behavior does not apply to this turn (never handled true with an empty list). Its tests drive no input events and expect it to finish.'"/>
     <!-- The original's persistent routine (lifetime persistent, hsm.every and
          hsm.at, behavior/schedule.py): an at schedule's occurrences are
          computed in the routine's data model by next_after (reflection.js,
@@ -286,12 +298,12 @@
     </transition>
     <onentry>
       <decision:choice location="choices" events="bot.behavior.create bot.behavior.change bot.behavior.break"/>
-      <decision:compact location="choices"/>
+      <processing:collect_offered_events location="choices" choices="choices"/>
       <!-- A change or a break names a behavior the inventory holds; with
            none, neither is offered (decision D100). -->
       <decision:pin location="choices" event="bot.behavior.change" property="name" values="behaviorNames()"/>
       <decision:pin location="choices" event="bot.behavior.break" property="name" values="behaviorNames()"/>
-      <decision:selection location="schema" choices="choices"/>
+      <processing:send location="schema" choices="choices" max="1"/>
       <assign location="selected" expr="null"/>
       <assign location="gen_failure" expr="null"/>
       <!-- The inactivity bound starts with the streamed reply's first
@@ -320,7 +332,17 @@
     <!-- The answer of this hop's call (gen_id: a late answer from an
          earlier hop's cancelled call is not this one). -->
     <transition event="generate.result" cond="isGenerate(_event)">
-      <assign location="selected" expr="generatedSelection(_event)"/>
+      <assign location="selected" expr="[]"/>
+      <foreach array="_event.data.tool_calls" item="call">
+        <foreach array="call.args.events" item="s">
+          <log label="reflection.selected" expr="s.event"/>
+          <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
+            <content expr="s.data"/>
+          </send>
+          <assign location="selected[selected.length]" expr="s"/>
+        </foreach>
+      </foreach>
+      <send event="bot.ability.reflection.selected" targetexpr="'#_scxml_' + _sessionid"/>
     </transition>
     <transition event="generate.failed" cond="isGenerate(_event)">
       <assign location="gen_failure" expr="generateFailure(_event)"/>
@@ -339,18 +361,11 @@
       <assign location="behavior" expr="_event.data"/>
     </transition>
 
-    <transition event="done.invoke" cond="hasEmptySelection(_event)" target="storing">
+    <!-- After the selection, if any: none was selected. -->
+    <transition event="bot.ability.reflection.selected" target="storing">
       <log label="reflection.selected" expr="'none'"/>
     </transition>
-    <transition event="done.invoke" cond="hasSingleSelection(_event)">
-      <log label="reflection.selected" expr="selectedEvent()"/>
-      <send eventexpr="selectedEvent()" target="#_internal">
-        <content expr="selectedData()"/>
-      </send>
-    </transition>
-    <transition event="done.invoke" cond="hasSelection(_event)" target="failing">
-      <assign location="failure" expr="'Reflection select must return at most one behavior event.'"/>
-    </transition>
+    <transition event="done.invoke" cond="hasSelection(_event)"/>
     <transition event="done.invoke" cond="isGenerate(_event)" target="failing">
       <assign location="failure" expr="generateFailedMessage()"/>
     </transition>

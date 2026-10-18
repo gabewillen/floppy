@@ -39,24 +39,6 @@ function hasSelections(_event) {
   return Array.isArray(Object(_event.data).selections) && _event.data.selections.length > 0;
 }
 
-// The reference normalize_confidence: a probability in (0, 1] as a whole number
-// on the 0-100 scale, rounded half to even as Python's round does.
-function normalizedConfidence(probability) {
-  var scaled = probability * 100;
-  var rounded = Math.round(scaled);
-  if (rounded - scaled === 0.5 && rounded % 2 !== 0) {
-    rounded -= 1;
-  }
-  return Math.max(0, Math.min(100, rounded));
-}
-
-// The reference selection_confidence: the minimum of the selections' confidences.
-function selectionConfidence(_event) {
-  return _event.data.selections.reduce(function (least, selection) {
-    return Math.min(least, normalizedConfidence(Number(selection.confidence)));
-  }, 100);
-}
-
 function selectionNames(_event) {
   return _event.data.selections.map(function (selection) { return selection.event; }).join(' ');
 }
@@ -75,9 +57,13 @@ function hasDeliberativeInput(_event) {
   return _event.data.selections.some(function (selection) { return isDeliberativeHandoff(selection.event); });
 }
 
-// The selections as the turn's product {event, data}.
+// The selections as the turn's product {event, data, target?} (no target
+// when no single session offers the event).
 function product(_event) {
-  return _event.data.selections.map(function (selection) { return ({event: selection.event, data: Object(selection.data)}); });
+  return _event.data.selections.map(function (selection) {
+    var item = {event: selection.event, data: Object(selection.data)};
+    return typeof selection.target === 'string' ? Object.assign(item, {target: selection.target}) : item;
+  });
 }
 
 // The turn's selections (the original's escalation reason none).
@@ -85,12 +71,10 @@ function selectionResult(_event) {
   return ({handled: true, selected: product(_event), reason: 'none', turn: turn, tuner: tuner});
 }
 
-// The original _environment_actions: the selections safe to hand out before the
-// turn escalates, less the deliberate handoff and the cognition ignore
-// (types.is_ignore_event).
-function escalatedResult(reason, _event) {
-  var actions = product(_event).filter(function (item) { return !isDeliberativeHandoff(item.event) && item.event !== 'bot.ability.cognition.ignore'; });
-  return ({handled: false, selected: actions, reason: reason, turn: turn, tuner: tuner});
+// An escalating product: unhandled, its selections sent (the original
+// dispatches its _environment_actions before reasoning runs).
+function escalatedResult(reason) {
+  return ({handled: false, reason: reason, turn: turn, tuner: tuner});
 }
 
 // An abstain with one of its reasons (the service's events are unchecked).
@@ -113,20 +97,6 @@ function failedCode(_event) {
 
 function decisionFailedResult() {
   return ({handled: false, failed: true, reason: 'the decision failed (' + failed_code + ')', turn: turn, tuner: tuner});
-}
-
-// No selection was rejected.
-function isAccepted() {
-  return rejection === null;
-}
-
-function isRejected() {
-  return rejection !== null;
-}
-
-// The original _selection_rejection_message: the rejection fails the stage.
-function rejectedResult() {
-  return ({handled: false, failed: true, reason: 'Selection rejected: ' + rejection, turn: turn, tuner: tuner});
 }
 
 function timedOutResult() {

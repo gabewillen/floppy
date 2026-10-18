@@ -471,6 +471,53 @@ pub fn logs(records: &[Json]) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The events of logged choices (`<log expr="choices"/>`, JSON text),
+/// space separated, each `event@target` for a tagged choice.
+pub fn choice_names(text: &str) -> String {
+    let choices: Json = serde_json::from_str(text).expect("the logged choices are JSON");
+    choices
+        .as_array()
+        .expect("an array of choices")
+        .iter()
+        .map(|choice| {
+            let event = choice["event"].as_str().unwrap_or_default();
+            choice["target"]
+                .as_str()
+                .map_or_else(|| event.to_owned(), |target| format!("{event}@{target}"))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// `events` with each one's `target` the first one the request's dispatch
+/// tool offers for its event, as a model fills it (an event the tool does
+/// not offer keeps none).
+pub fn with_targets(body: &Json, events: &Json) -> Json {
+    let branches =
+        body["tools"][0]["function"]["parameters"]["properties"]["events"]["items"]["anyOf"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+    Json::Array(
+        events
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|mut event| {
+                let target = branches
+                    .iter()
+                    .find(|branch| branch["properties"]["event"]["enum"][0] == event["event"])
+                    .map(|branch| branch["properties"]["target"]["enum"][0].clone());
+                if let (Some(target), Some(fields)) = (target, event.as_object_mut()) {
+                    fields.insert("target".into(), target);
+                }
+                event
+            })
+            .collect(),
+    )
+}
+
 /// `(label, text)` pairs from string pairs.
 pub fn labelled(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
     pairs

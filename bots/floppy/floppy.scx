@@ -87,54 +87,42 @@
   (scxml.rs namespaces/event) and start the next turns, in order, one per
   return to unfocused or focused, before any later event.
 
-  Choices (the original's per-turn dispatch inventory, assembled by decision
-  namespace elements): on processing entry the body reads its own choices
-  with <decision:choice location="body_choices" events="bot.focus_device
-  bot.clear_focus"> (the transitions on active, offered only while offering
-  is true: bot.focus_device when the turn has focus candidates,
-  bot.clear_focus when a device is focused), <decision:pin> pins
-  bot.focus_device's device to an enum of the turn's focus_candidates, and
-  <decision:assemble> appends each ability's latest bot.ability.offers
-  choices tagged with the ability's invoke id as target (the body's own
-  carry no target), and, while a device is focused, the events its live
-  session accepts, read this turn with <device:snapshot> (decision D109),
-  each {event, schema: {type: object}} tagged with the device's reference
-  as target (the device's own event:schema decides its data on delivery). Every schema is compacted ($schema, title and examples
-  dropped); when the choices are still over 32 KiB (phase 4 spike (b): a
-  relayed list of 48264 B, with its raw message, is over the 96 KiB event
-  bound, so its send raises error.execution in the sender) every description is
-  dropped too, and if they are still over the turn fails without reaching
-  the cognition.
+  Choices (the original's per-turn dispatch inventory,
+  collect_offered_events): on processing entry the body reads its own
+  choices with <decision:choice location="body_choices"
+  events="bot.focus_device bot.clear_focus"> (the transitions on active:
+  bot.focus_device when the turn has focus candidates, bot.clear_focus when
+  a device is focused), <decision:pin> pins bot.focus_device's device to an
+  enum of the turn's focus_candidates, and
+  <processing:collect_offered_events> tags every choice with the session id
+  of the session that offers it (the target a stage sends it to): the
+  body's own with its _sessionid, each ability's latest bot.ability.offers
+  choices with the ability's session id (<_sessionid>.<invoke id>, decision
+  D110), and, while a device is focused, the events its live session
+  accepts, read this turn with <device:snapshot> (decision D109), each
+  {event, schema: {type: object}} with the device's id (the device's own
+  event:schema decides its data on delivery). Every schema is made
+  model-facing ($schema, title and examples dropped); when the choices are
+  still over 32 KiB (phase 4 spike (b): a relayed list of 48264 B, with its
+  raw message, is over the 96 KiB event bound, so its send raises
+  error.execution in the sender) every description is dropped too, and if
+  they are still over the turn fails without reaching the cognition.
 
-  Routing: the cognition's output goes through routing, which checks every
-  selection before the turn's outcome is logged, as the original's cognition
-  does before it dispatches any (cognition.types.dispatch_selected_events):
-  <bot:verdict> removes the bot.ability.cognition.ignore selections (the
-  cognition's own terminal product, never dispatched) and applies the original's
-  attention_selection_error to the focus and clear selections (the turn's
-  focus and focus_candidates), then <decision:route> places each remaining
-  one on the target offering it in the turn's choices (the original
-  _resolve_target): an event the body offered to itself (#_internal),
-  else the ability whose invoke id is the selection's target, or the only
-  ability offering it when the selection names none (#_<id>), or the held
-  device whose reference is its target, straight at its address
-  (#_scxml_ + owned_devices[target]; decision D105: a device checks
-  nothing about who sends it an action). The body
-  also places a selected bot.ability.communication.input on itself (the original
-  dispatches the trusted SpeechHeard seed's selection to a declared event
-  of the bot), which takes it as outside communication input. A selection
-  that cannot be placed (refused by the attention policy, not offered this
-  turn, offered by another target, or offered by several when it names
-  none) fails the whole turn before anything is sent: bot.processing.failed
-  with the original's SelectionRejectionError message, never
-  bot.processing.completed (the reference bot.py: illegal selections fail the
-  turn instead of silently dropping). The cognition's stages make the same
-  checks before they answer (autonomy, intuition, reasoning), so this one
-  catches what reaches the body unchecked (the trusted seed's selection).
-  Otherwise bot.processing.completed is logged and each placed selection is
-  sent, in order. floppy.routed [floppy name], raised after the
-  selections, ends routing once every routed body event has been taken
-  (the internal queue is FIFO).
+  Dispatch: the cognition's stages send their own selections, each to the
+  session its target names (#_scxml_ + target, decision D104), as the
+  original's stages dispatch theirs (cognition.types.dispatch_selected_events):
+  a selection of the body's own bot.focus_device or bot.clear_focus reaches
+  the body during the turn and is taken by active's transitions, whose
+  conds are the original's guards (_ability_selected_configured_focus_device,
+  and a clear only while a device is focused). The schemas the generate
+  service and the decision service check a selection against (the focus
+  device's enum pinned to the turn's candidates, each target an enum of
+  the offering sessions) refuse what the original's attention policy
+  refused before anything is sent. On the turn's output the body logs
+  bot.processing.completed and sends itself the selections that name no
+  target: the trusted SpeechHeard seed's bot.ability.communication.input
+  (the original dispatches it to a declared event of the bot), which it
+  takes as outside communication input.
 
   Outputs: each event the body emits is sent to its parent, the
   environment, which logs it (decision D102): bot.activated,
@@ -147,9 +135,7 @@
   bot.ability.failed that is not a turn's reply;
   floppy's own records are labelled floppy.* (not the original events):
   floppy.output the turn's selected events (one record per completed turn),
-  floppy.choices each turn's assembled
-  choices as event@target, floppy.route each routed selection, and floppy.focus
-  each focus change.
+  floppy.choices each turn's choices, and floppy.focus each focus change.
 
   Contracts: every event the body takes references schemas/ by
   event:schema: its own events, and byte-identical twins of the abilities'
@@ -160,7 +146,7 @@
   reject raises error.execution in the environment. No cond asks who sent an
   event: every event name the body takes has one meaning here, whoever
   sends it, so its name and the active state route it. Conds only
-  correlate (the turn, the run) and read routing state.
+  correlate (the turn, the run) and read the focus.
 
   Running: scx run with an env file and an environment that invokes this
   document (environments/room/room.scx), then bot.input on standard input,
@@ -189,6 +175,7 @@
        xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:device="https://github.com/stateforward/floppy/namespaces/device"
+       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="floppy" initial="live">
   <datamodel>
@@ -237,20 +224,14 @@
     <data id="stimulus" expr="null"/>
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
-    <!-- The turn's choices, its output, the selections dispatched, and
-         why they were rejected (null when placed). -->
-    <data id="offering" expr="false"/>
+    <!-- The turn's choices, its output, and the output selection being
+         sent (the <foreach> item). -->
     <data id="body_choices" expr="[]"/>
     <data id="choices" expr="[]"/>
-    <data id="choice_names" expr="''"/>
     <data id="choices_over" expr="false"/>
     <data id="choices_size" expr="0"/>
     <data id="selections" expr="[]"/>
-    <data id="dispatch_selections" expr="[]"/>
-    <data id="rejection" expr="null"/>
-    <data id="routing_selections" expr="false"/>
-    <data id="routed_selections" expr="[]"/>
-    <data id="route" expr="null"/>
+    <data id="s" expr="null"/>
     <data id="degraded_reason" expr="null"/>
   </datamodel>
   <script src="floppy.js"/>
@@ -404,10 +385,9 @@
         </send>
       </transition>
       <!-- The body's own choices (the original: focus on active, clear only while
-           a device is focused), offered on processing entry and taken only
-           as routed selections of the turn (<bot:verdict> has checked
-           them; one that no longer applies, a second clear in one turn, is
-           ignored, as the original's guard ignores it). -->
+           a device is focused), offered on processing entry and taken as a
+           stage sends them (one that no longer applies, a second clear in
+           one turn, is ignored, as the original's guard ignores it). -->
       <transition event="bot.focus_device" event:schema="schemas/bot.focus_device.json"
                   cond="focusDeviceEnabled()">
         <if cond="isFocusCandidate(_event)">
@@ -416,11 +396,9 @@
         </if>
       </transition>
       <transition event="bot.clear_focus" event:schema="schemas/bot.clear_focus.json"
-                  cond="clearFocusEnabled()">
-        <if cond="hasFocusedDevice()">
-          <assign location="focused_device" expr="null"/>
-          <log label="floppy.focus" expr="'none'"/>
-        </if>
+                  cond="hasFocusedDevice()">
+        <assign location="focused_device" expr="null"/>
+        <log label="floppy.focus" expr="'none'"/>
       </transition>
 
       <state id="unfocused">
@@ -463,15 +441,13 @@
           </foreach>
         </onentry>
         <onentry>
-          <assign location="offering" expr="true"/>
           <decision:choice location="body_choices" events="bot.focus_device bot.clear_focus"/>
-          <assign location="offering" expr="false"/>
           <decision:pin location="body_choices" event="bot.focus_device" property="device" values="focus_candidates"/>
           <!-- bound: 32 KiB, the failure message below names it. -->
-          <decision:assemble location="choices" choices="body_choices" offers="turnOffers()"
-                             bound="32768" overlocation="choices_over" sizelocation="choices_size"/>
-          <decision:names location="choice_names" choices="choices"/>
-          <log label="floppy.choices" expr="choice_names"/>
+          <processing:collect_offered_events location="choices" choices="body_choices" offers="offers"
+                                             devices="device_snapshots" focus="focused_device"
+                                             bound="32768" overlocation="choices_over" sizelocation="choices_size"/>
+          <log label="floppy.choices" expr="choices"/>
           <if cond="choicesFit()">
             <send event="bot.ability.cognition.input" target="#_cognition">
               <content expr="cognitionInput()"/>
@@ -490,10 +466,23 @@
             <content expr="choicesOverFailure()"/>
           </send>
         </transition>
+        <!-- The turn's output: its stages have sent their selections; the
+             body sends itself those that name no target (the trusted
+             seed's). -->
         <transition event="bot.ability.cognition.output" event:schema="schemas/bot.ability.cognition.output.json"
-                    cond="isCurrentTurn(_event)" target="routing">
+                    cond="isCurrentTurn(_event)" target="returning">
           <log label="floppy.output" expr="botOutput(_event)"/>
           <assign location="selections" expr="_event.data.output"/>
+          <send event="bot.processing.completed" target="#_parent">
+            <content expr="processingCompleted()"/>
+          </send>
+          <foreach array="selections" item="s">
+            <if cond="hasNoTarget(s)">
+              <send eventexpr="s.event" target="#_internal">
+                <content expr="s.data"/>
+              </send>
+            </if>
+          </foreach>
         </transition>
         <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
                     cond="isCurrentTurn(_event)" target="returning">
@@ -562,65 +551,6 @@
           <event:defer/>
           <log label="floppy.deferred" expr="_event.name"/>
         </transition>
-      </state>
-
-      <!-- The turn's selections, checked, then each sent to its receiver;
-           the routed body events are taken (by active's transitions) before
-           floppy.routed. A selection that cannot be placed fails the turn
-           before anything is sent. -->
-      <state id="routing">
-        <onentry>
-          <assign location="routing_selections" expr="true"/>
-          <bot:verdict location="dispatch_selections" rejectionlocation="rejection" selections="selections"
-                       focus="focus" candidates="focus_candidates"/>
-          <if cond="isAccepted()">
-            <decision:route location="routed_selections" rejectionlocation="rejection" selections="dispatch_selections"
-                            choices="routeChoices()"/>
-          </if>
-          <if cond="isAccepted()">
-            <send event="bot.processing.completed" target="#_parent">
-              <content expr="processingCompleted()"/>
-            </send>
-            <foreach array="routed_selections" item="route">
-              <if cond="isBodyRoute(route)">
-                <log label="floppy.route" expr="bodyRouteLog(route)"/>
-                <send eventexpr="route.event" target="#_internal">
-                  <content expr="route.data"/>
-                </send>
-              <elseif cond="isDeviceRoute(route)"/>
-                <!-- A held device's action, straight to the device
-                     (decision D105); its event:schema decides (D41). -->
-                <log label="floppy.route" expr="abilityRouteLog(route)"/>
-                <send eventexpr="route.event" targetexpr="deviceTarget(route.target)">
-                  <content expr="route.data"/>
-                </send>
-              <else/>
-                <log label="floppy.route" expr="abilityRouteLog(route)"/>
-                <send eventexpr="route.event" targetexpr="abilityTarget(route.target)">
-                  <content expr="route.data"/>
-                </send>
-              </if>
-            </foreach>
-          <else/>
-            <send event="bot.processing.failed" target="#_parent">
-              <content expr="rejectionFailure()"/>
-            </send>
-          </if>
-        </onentry>
-        <!-- Its own block, so a send that fails above (a device's schema
-             refusing an action's data raises error.execution in the body,
-             SCXML 4.9 and D41) still ends routing. -->
-        <onentry>
-          <raise event="floppy.routed"/>
-        </onentry>
-        <onexit>
-          <assign location="routing_selections" expr="false"/>
-          <assign location="selections" expr="[]"/>
-          <assign location="dispatch_selections" expr="[]"/>
-          <assign location="rejection" expr="null"/>
-          <assign location="routed_selections" expr="[]"/>
-        </onexit>
-        <transition event="floppy.routed" target="returning"/>
       </state>
 
       <!-- Back to attention: focused when a device is focused. -->

@@ -6,7 +6,6 @@
     <param name="turn" expr="7"/>
     <param name="input" expr='{"focus": null, "focus_candidates": []}'/>
     <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "listening"}'/>
-    <param name="choices" expr="[]"/>
     <param name="database" expr="'/elsewhere/floppy.sqlite'"/>
   </invoke>
   <state id="boot">

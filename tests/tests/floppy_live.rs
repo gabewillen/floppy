@@ -109,18 +109,12 @@ fn texts(records: &[Json], label: &str) -> Vec<String> {
         .collect()
 }
 
-/// The turn completed, and every selection of its output but an ignore
-/// (never dispatched) was routed.
-fn all_routed(records: &[Json], output: Option<&Json>) -> bool {
-    let selected = output
+/// The turn completed, and every selection of its output named the
+/// session it was sent to (the stages send their own selections).
+fn all_sent(records: &[Json], output: Option<&Json>) -> bool {
+    output
         .and_then(|output| output["output"].as_array())
-        .map_or(usize::MAX, |items| {
-            items
-                .iter()
-                .filter(|item| item["event"] != "bot.ability.cognition.ignore")
-                .count()
-        });
-    texts(records, "floppy.route").len() == selected
+        .is_some_and(|items| items.iter().all(|item| item["target"].is_string()))
         && texts(records, "bot.processing.failed").is_empty()
 }
 
@@ -131,8 +125,8 @@ fn model() -> String {
 /// One question turn through the full cascade: autonomy's seam leaves it
 /// unhandled, intuition (the decision service on `TypeSafe`) hands it to
 /// reasoning or abstains, and reasoning (the model) selects from the
-/// body's assembled choices, which the body routes (`live_chat` checks
-/// what is said). The env files must also hold `TYPESAFE_API_KEY`.
+/// body's collected choices and sends each selection to its target
+/// (`live_chat` checks what is said). The env files must also hold `TYPESAFE_API_KEY`.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_cascade() {
@@ -162,7 +156,7 @@ fn live_cascade() {
         .find(|(label, _)| label == "floppy.output")
         .and_then(|(_, text)| serde_json::from_str::<Json>(&text).ok());
     let responded = output.as_ref().is_some_and(|output| output["turn"] == 1)
-        && all_routed(&all, output.as_ref());
+        && all_sent(&all, output.as_ref());
     let pass = stages.first().map(String::as_str) == Some("autonomy unhandled (no-behaviors)")
         && stages
             .get(1)
@@ -178,8 +172,10 @@ fn live_cascade() {
 
 /// One turn on a bot with a lamp, for an input that names the lamp: the
 /// body's choices are its own `bot.focus_device` (pinned to the lamp) and
-/// the cognition's and the communication's offers; whatever the cascade selects is routed (a focus
-/// on the lamp moves the body's attention there), and the turn completes.
+/// the cognition's and the communication's offers, each tagged with its
+/// offering session's id; whatever the cascade selects is sent to its
+/// target (a focus on the lamp moves the body's attention there), and the
+/// turn completes.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_choices() {
@@ -199,34 +195,38 @@ fn live_choices() {
     let mut all = records;
     all.extend(finished.records);
     keep("live_choices", &all);
-    let choices = "bot.focus_device bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity";
+    let choices = "bot.focus_device@session.floppy bot.ability.cognition.ignore@session.floppy.cognition bot.ability.communication.respond@session.floppy.communication bot.ability.identity.adopt@session.floppy.identity";
+    let names = |lines: Vec<String>| -> Vec<String> {
+        lines
+            .iter()
+            .map(|line| support::choice_names(line))
+            .collect()
+    };
     let output = texts(&all, "floppy.output")
         .pop()
         .and_then(|text| serde_json::from_str::<Json>(&text).ok());
-    let reasoned = texts(&all, "reasoning");
+    let reasoned = names(texts(&all, "reasoning"));
     let focused_on_lamp = output.as_ref().is_some_and(|output| {
         output["output"]
             .as_array()
             .is_some_and(|items| items.iter().any(|item| item["event"] == "bot.focus_device"))
     }) == (texts(&all, "floppy.focus") == ["lamp"]);
-    let pass = texts(&all, "floppy.choices") == [choices]
+    let pass = names(texts(&all, "floppy.choices")) == [choices]
         && output.as_ref().is_some_and(|output| output["turn"] == 1)
-        && reasoned
-            .iter()
-            .all(|line| *line == format!("turn 1: {choices}"))
-        && all_routed(&all, output.as_ref())
+        && reasoned.iter().all(|line| line == choices)
+        && all_sent(&all, output.as_ref())
         && focused_on_lamp;
     println!("live choices: {}", if pass { "pass" } else { "fail" });
     assert!(
         pass,
-        "the turn's choices or routing were wrong (target/floppy-live/live_choices.json)"
+        "the turn's choices or sends were wrong (target/floppy-live/live_choices.json)"
     );
 }
 
 /// One text turn through the original's communication path: a
 /// `bot.ability.communication.input` addressed to the bot is admitted into
 /// the conversation, whose product is the turn's stimulus; the cascade
-/// selects `bot.ability.communication.respond`, which the body routes to
+/// selects `bot.ability.communication.respond`, which reasoning sends to
 /// the communication and speaking says (`floppy.say`), and the spoken text is
 /// recorded in the conversation.
 #[test]
@@ -263,7 +263,7 @@ fn live_chat() {
     let said = texts(&all, "floppy.say");
     let pass = texts(&all, "communication.product") == ["0"]
         && output.as_ref().is_some_and(|output| output["turn"] == 1)
-        && all_routed(&all, output.as_ref())
+        && all_sent(&all, output.as_ref())
         && said.len() == 1
         && said.iter().all(|text| !text.trim().is_empty())
         && texts(&all, "bot.ability.speaking.output").len() == 1
@@ -373,7 +373,6 @@ fn transcript(records: &[Json]) -> String {
         "bot.ability.routines.reconciled",
         "bot.ability.routines.reconcile.failed",
         "floppy.output",
-        "floppy.route",
         "floppy.say",
         "floppy.deferred",
         "floppy.degraded",

@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- candidates_runner-2: a selection the turn offers is placed, and the candidate answers. -->
+<!-- candidates_runner-2: a selection is sent to its target, and the candidate answers. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="candidates_runner" type="scxml" src="../../../candidates_runner.scx">
     <param name="turn" expr="3"/>
     <param name="input" expr='{"text": "hello", "focus": null, "focus_candidates": []}'/>
-    <param name="candidates" expr="[{&quot;name&quot;: &quot;Say&quot;, &quot;source&quot;: &quot;&lt;scxml xmlns=\&quot;http://www.w3.org/2005/07/scxml\&quot; version=\&quot;1.0\&quot; datamodel=\&quot;ecmascript\&quot; initial=\&quot;done\&quot;&gt;&lt;datamodel&gt;&lt;data id=\&quot;turn\&quot; expr=\&quot;0\&quot;/&gt;&lt;data id=\&quot;input\&quot; expr=\&quot;null\&quot;/&gt;&lt;/datamodel&gt;&lt;final id=\&quot;done\&quot;&gt;&lt;donedata&gt;&lt;content expr=\&quot;({turn: turn, handled: true, selected: [{event: 'bot.say', data: {text: 'hi'}}]})\&quot;/&gt;&lt;/donedata&gt;&lt;/final&gt;&lt;/scxml&gt;&quot;}]"/>
-    <param name="choices" expr='[{"event": "bot.say", "schema": {}, "target": "speaking"}]'/>
+    <param name="candidates" expr="[{&quot;name&quot;: &quot;Say&quot;, &quot;source&quot;: &quot;&lt;scxml xmlns=\&quot;http://www.w3.org/2005/07/scxml\&quot; version=\&quot;1.0\&quot; datamodel=\&quot;ecmascript\&quot; initial=\&quot;done\&quot;&gt;&lt;datamodel&gt;&lt;data id=\&quot;turn\&quot; expr=\&quot;0\&quot;/&gt;&lt;data id=\&quot;input\&quot; expr=\&quot;null\&quot;/&gt;&lt;/datamodel&gt;&lt;final id=\&quot;done\&quot;&gt;&lt;donedata&gt;&lt;content expr=\&quot;({turn: turn, handled: true, selected: [{event: 'bot.say', data: {text: 'hi'}, target: 'session'}]})\&quot;/&gt;&lt;/donedata&gt;&lt;/final&gt;&lt;/scxml&gt;&quot;}]"/>
     <param name="database" expr="'/memory/floppy.sqlite'"/>
   </invoke>
   <state id="boot">
@@ -14,9 +13,12 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.candidates_runner" cond="_event.data.tried.join(' ') === &quot;Say&quot; &amp;&amp; _event.data.tried.length === 1 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.rejection === null &amp;&amp; _event.data.selected.length === 1 &amp;&amp; _event.data.selected[0].event === 'bot.say' &amp;&amp; _event.data.selected[0].data.text === 'hi'" target="step1"/>
+    <transition event="bot.say" cond="_event.data.text === 'hi'" target="step1"/>
   </state>
   <state id="step1">
+    <transition event="done.invoke.candidates_runner" cond="_event.data.tried.join(' ') === &quot;Say&quot; &amp;&amp; _event.data.tried.length === 1 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.rejection === null &amp;&amp; _event.data.selected.length === 1 &amp;&amp; _event.data.selected[0].event === 'bot.say' &amp;&amp; _event.data.selected[0].data.text === 'hi'" target="step2"/>
+  </state>
+  <state id="step2">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

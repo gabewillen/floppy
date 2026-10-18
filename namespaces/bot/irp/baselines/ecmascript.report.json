@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/bot/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "611d0ba36669d51933051e70c49e05ce63faf27daa54ba7a8002808798e6cfb8",
-    "source_digest": "4037c8dcca5917d9ff61b9dfcff2cb51fc0c61b37cba1e3ef5ac0931df5870d8",
-    "manifest_digest": "46a58ed1a3f0fce92b87c5803104f18b422139d37aefb069dc1f422f60e2fe51",
+    "corpus_digest": "5f11cc60a1d31608f4e32857e2e3abd28ccf72df55a8674d8fac7cc9159a58c4",
+    "source_digest": "2a7b747acff7526a48f819882a464f30945e47a58e7c33dfc683519fc65ec63e",
+    "manifest_digest": "33e4bf5644e20d8a5e91002e9465cc78ec6fc1c8051fa5e7bedf8f0f7e27c800",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -62,9 +62,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/bot",
       "package_version": "0.1.0",
-      "manifest_sha256": "a40f6e8bdd9d5e12f51c36f88a9cd1469761df5dad24f6e911c2570f66273275",
-      "schema_sha256": "72cb67cdc48dffdf6494133a7b325793ea6633a78a651aabdd7923518e8c6cc2",
-      "component_sha256": "aa9fbdee7f67338af95631c3035a566f5fbf96caac21ba91e2e7fe6c81ebdb4f"
+      "manifest_sha256": "2ec0921d71c0c5714a9df630007aa53868d88ec20fe9f455b12fea12a5c098e1",
+      "schema_sha256": "c043b10c0ebe8346c48952adb3ea1a76d409e612644f0b8c85012d1c3dbb9958",
+      "component_sha256": "e82c80f81e42e68dbb274dd2f9b0155603f6e28e12d34c6975dd352bf7cdfe38"
     }
   ],
   "ir_version": 5,
@@ -77,11 +77,11 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "3d4447d6c727e622fb494a90584a20fb0e0e1737e8dafd100f3567c7df76114f",
+  "identity_digest": "fbef4473279ccd9ba863a0345dad66441b605a1cf5046a2de4c4a5101f2cf496",
   "summary": {
-    "total_selected": 23,
-    "applicable_selected": 23,
-    "passed": 23,
+    "total_selected": 17,
+    "applicable_selected": 17,
+    "passed": 17,
     "failed": 0,
     "unsupported": 0,
     "invalid": 0,
@@ -91,8 +91,8 @@
     "not_passing": 0,
     "passed_under_erratum": 0,
     "mandatory": {
-      "applicable_selected": 23,
-      "passed": 23,
+      "applicable_selected": 17,
+      "passed": 17,
       "failed": 0,
       "unsupported": 0,
       "invalid": 0,
@@ -152,18 +152,6 @@
         "passed_under_erratum": 0
       },
       "#bot-4": {
-        "applicable_selected": 6,
-        "passed": 6,
-        "failed": 0,
-        "unsupported": 0,
-        "invalid": 0,
-        "harness_error": 0,
-        "skipped": 0,
-        "not_applicable": 0,
-        "not_passing": 0,
-        "passed_under_erratum": 0
-      },
-      "#bot-5": {
         "applicable_selected": 4,
         "passed": 4,
         "failed": 0,
@@ -178,8 +166,8 @@
     },
     "by_datamodel": {
       "ecmascript": {
-        "applicable_selected": 23,
-        "passed": 23,
+        "applicable_selected": 17,
+        "passed": 17,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -518,160 +506,10 @@
       "oracle": "outcome-log"
     },
     {
-      "id": "230",
-      "assertion_id": "bot-4",
-      "spec_num": "4",
-      "spec_id": "#bot-4",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "231",
-      "assertion_id": "bot-4",
-      "spec_num": "4",
-      "spec_id": "#bot-4",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "232",
-      "assertion_id": "bot-4",
-      "spec_num": "4",
-      "spec_id": "#bot-4",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "233",
-      "assertion_id": "bot-4",
-      "spec_num": "4",
-      "spec_id": "#bot-4",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "234",
-      "assertion_id": "bot-4",
-      "spec_num": "4",
-      "spec_id": "#bot-4",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "235",
-      "assertion_id": "bot-4",
-      "spec_num": "4",
-      "spec_id": "#bot-4",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
       "id": "240",
-      "assertion_id": "bot-5",
-      "spec_num": "5",
-      "spec_id": "#bot-5",
+      "assertion_id": "bot-4",
+      "spec_num": "4",
+      "spec_id": "#bot-4",
       "datamodel": "ecmascript",
       "conformance": "mandatory",
       "manual": false,
@@ -694,9 +532,9 @@
     },
     {
       "id": "241",
-      "assertion_id": "bot-5",
-      "spec_num": "5",
-      "spec_id": "#bot-5",
+      "assertion_id": "bot-4",
+      "spec_num": "4",
+      "spec_id": "#bot-4",
       "datamodel": "ecmascript",
       "conformance": "mandatory",
       "manual": false,
@@ -719,9 +557,9 @@
     },
     {
       "id": "242",
-      "assertion_id": "bot-5",
-      "spec_num": "5",
-      "spec_id": "#bot-5",
+      "assertion_id": "bot-4",
+      "spec_num": "4",
+      "spec_id": "#bot-4",
       "datamodel": "ecmascript",
       "conformance": "mandatory",
       "manual": false,
@@ -744,9 +582,9 @@
     },
     {
       "id": "243",
-      "assertion_id": "bot-5",
-      "spec_num": "5",
-      "spec_id": "#bot-5",
+      "assertion_id": "bot-4",
+      "spec_num": "4",
+      "spec_id": "#bot-4",
       "datamodel": "ecmascript",
       "conformance": "mandatory",
       "manual": false,

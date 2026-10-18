@@ -199,10 +199,6 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
         &run,
         &["communication.history", "bot.ability.speaking.output"],
     );
-    assert_eq!(
-        texts(&records, "floppy.route"),
-        strings(&["bot.ability.communication.respond -> communication"])
-    );
     assert_eq!(texts(&records, "floppy.say"), strings(&["reply 1"]));
     // Encoded by the speech service (its double), played out into the
     // environment by reference, then said.
@@ -235,7 +231,10 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
     let mut all = records;
     all.extend(finished.records);
     assert_eq!(
-        texts(&all, "communication.offers"),
+        texts(&all, "communication.offers")
+            .iter()
+            .map(|text| support::choice_names(text))
+            .collect::<Vec<_>>(),
         strings(&["bot.ability.communication.respond"]),
         "{all:?}"
     );

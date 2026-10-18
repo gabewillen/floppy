@@ -85,19 +85,6 @@ function selectPrompt() {
   return JSON.stringify({cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, behaviors: behaviors});
 }
 
-// Temporary, until the mapping onto the original's domains moves it to Rust.
-// The original's _events_from_dispatch_tool_calls: the events of every
-// dispatch call of a generate.result, merged in call order (the service
-// returns only calls of its one function, each its schema admits), else
-// selected unchanged (D41: the service's events are unchecked).
-function generatedSelection(_event) {
-  var calls = Object(_event.data).tool_calls;
-  if (!Array.isArray(calls)) {
-    return selected;
-  }
-  return calls.filter(function (call) { return Object(call).name === 'dispatch'; }).reduce(function (merged, call) { return merged.concat(call.args.events); }, []);
-}
-
 // The code of a generate.failed, else gen_failure unchanged.
 function generateFailure(_event) {
   return typeof Object(_event.data).code === 'string' ? _event.data.code : gen_failure;
@@ -113,22 +100,6 @@ function isGenerate(_event) {
 
 function hasSelection(_event) {
   return isGenerate(_event) && Array.isArray(selected);
-}
-
-function hasEmptySelection(_event) {
-  return hasSelection(_event) && selected.length === 0;
-}
-
-function hasSingleSelection(_event) {
-  return hasSelection(_event) && selected.length === 1;
-}
-
-function selectedEvent() {
-  return selected[0].event;
-}
-
-function selectedData() {
-  return selected[0].data;
 }
 
 function selectFailedMessage(detail) {

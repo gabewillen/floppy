@@ -18,11 +18,12 @@
 //! `log` record labelled with the event's name; the double logs `double.input` and `double.exit`.
 //!
 //! The double offers `bot.ability.cognition.ignore` and the communication
-//! `bot.ability.communication.respond`; the routing tests
-//! check the turn's assembled choices (`double.choices`) and where the
-//! body routes each selection (`floppy.route`, `floppy.focus`) or fails the
-//! turn when one cannot be placed (`bot.processing.failed`). `tests/tests/communication.rs` covers
-//! what the communication does with what it is routed.
+//! `bot.ability.communication.respond`; the choice tests check the turn's
+//! choices, each tagged with its offering session's id (`floppy.choices`,
+//! `double.choices`), and what the body takes of the selections the double
+//! sends it like a stage (`floppy.focus`) or sends itself (the ones that
+//! name no target). `tests/tests/communication.rs` covers what the
+//! communication does with what it is sent.
 //!
 //! One test sets `input` (the original's Bot input) to `['identity']` and puts
 //! `tests/fixtures/phase4/input_double.scx` in the identity's place; the
@@ -330,7 +331,7 @@ fn a_turn_completes_with_the_cognitions_output() {
     activated(&mut run);
     run.event("bot.input", &input("reply", "hello"));
     let records = run.until(WAIT, label_is("bot.processing.completed"));
-    let output = r#"[{"data":{"text":"reply 1"},"event":"bot.ability.communication.respond"}]"#;
+    let output = r#"[{"data":{"text":"reply 1"},"event":"bot.ability.communication.respond","target":"session.floppy.communication"}]"#;
     assert_eq!(
         only(
             &records,
@@ -377,7 +378,7 @@ fn a_reply_for_another_turn_is_ignored() {
             ),
             (
                 "floppy.output",
-                r#"{"turn":1,"output":[{"data":{"text":"fresh 1"},"event":"bot.ability.communication.respond"}]}"#
+                r#"{"turn":1,"output":[{"data":{"text":"fresh 1"},"event":"bot.ability.communication.respond","target":"session.floppy.communication"}]}"#
             ),
         ])
     );
@@ -573,7 +574,7 @@ fn focus_choice(candidates: &[&str]) -> Json {
         .to_owned();
     let mut schema = compacted(&schema);
     schema["properties"]["device"]["enum"] = json!(candidates);
-    json!({"event": "bot.focus_device", "schema": schema, "description": description})
+    json!({"event": "bot.focus_device", "schema": schema, "description": description, "target": BODY})
 }
 
 fn clear_choice() -> Json {
@@ -587,11 +588,14 @@ fn clear_choice() -> Json {
         .and_then(|text| text.lines().next())
         .expect("a description")
         .to_owned();
-    json!({"event": "bot.clear_focus", "schema": compacted(&schema), "description": description})
+    json!({"event": "bot.clear_focus", "schema": compacted(&schema), "description": description, "target": BODY})
 }
 
-/// The offer of `event` (its schema file) by the ability `target`,
-/// compacted and tagged with its target.
+/// The body's session id, which tags its own choices.
+const BODY: &str = "session.floppy";
+
+/// The offer of `event` (its schema file) by the ability whose session is
+/// `target`, compacted and tagged with it.
 fn offered_choice(target: &str, event: &str) -> Json {
     let schema: Json = serde_json::from_str(
         &std::fs::read_to_string(
@@ -613,12 +617,15 @@ fn offered_choice(target: &str, event: &str) -> Json {
 /// The communication's offers, then the identity's.
 fn ability_choices() -> [Json; 2] {
     [
-        offered_choice("communication", "bot.ability.communication.respond"),
-        offered_choice("identity", "bot.ability.identity.adopt"),
+        offered_choice(
+            "session.floppy.communication",
+            "bot.ability.communication.respond",
+        ),
+        offered_choice("session.floppy.identity", "bot.ability.identity.adopt"),
     ]
 }
 
-/// The double's offer, compacted and tagged with its target.
+/// The double's offer, compacted and tagged with its session's id.
 fn ignore_choice() -> Json {
     json!({
         "event": "bot.ability.cognition.ignore",
@@ -629,7 +636,7 @@ fn ignore_choice() -> Json {
             "properties": {},
             "additionalProperties": false
         },
-        "target": "cognition"
+        "target": "session.floppy.cognition"
     })
 }
 
@@ -675,29 +682,19 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     // The environment logs the turn's outcome after the body's step.
     records.extend(run.until(WAIT, label_is("bot.processing.completed")));
     let [respond, adopt] = ability_choices();
+    let choices = json!([focus_choice(&["lamp"]), ignore_choice(), respond, adopt]);
+    assert_eq!(last_json(&records, "double.choices"), choices);
+    assert_eq!(last_json(&records, "floppy.choices"), choices);
     assert_eq!(
-        last_json(&records, "double.choices"),
-        json!([focus_choice(&["lamp"]), ignore_choice(), respond, adopt])
-    );
-    assert_eq!(
-        only(
-            &records,
-            &["floppy.choices", "floppy.route", "floppy.focus"]
-        ),
-        pairs(&[
-            (
-                "floppy.choices",
-                "bot.focus_device bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity"
-            ),
-            ("floppy.route", "bot.focus_device -> bot"),
-            ("floppy.focus", "lamp"),
-        ])
+        only(&records, &["floppy.focus"]),
+        pairs(&[("floppy.focus", "lamp")])
     );
     // Focused on the lamp, an input for the lamp again: clear_focus is
-    // offered now. A focus on the fan, outside the turn's candidates, fails
-    // the turn (the reference attention_selection_error) and is not routed.
+    // offered now. A focus on the fan, outside the turn's candidates (which
+    // the generate service's pinned enum would refuse), is not taken: the
+    // body's guard is the original's _ability_selected_configured_focus_device.
     run.event("bot.input", &device_input("focus", "fan", "lamp"));
-    let records = run.until(WAIT, label_is("bot.processing.failed"));
+    let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         last_json(&records, "double.choices"),
         json!([
@@ -709,19 +706,8 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
         ])
     );
     assert_eq!(
-        only(
-            &records,
-            &[
-                "bot.processing.completed",
-                "bot.processing.failed",
-                "floppy.route",
-                "floppy.focus"
-            ]
-        ),
-        pairs(&[(
-            "bot.processing.failed",
-            r#"{"message":"Processing selected focus_device outside available device candidates.","turn":2}"#
-        )])
+        only(&records, &["bot.processing.failed", "floppy.focus"]),
+        pairs(&[])
     );
     // Still focused on the lamp: the next turn's candidates include it.
     run.event("bot.input", &device_input("focus", "fan", "fan"));
@@ -741,80 +727,33 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
 }
 
 #[test]
-fn a_selection_the_turn_cannot_place_fails_the_turn() {
+fn an_ignore_selection_goes_to_the_cognition_and_ends_the_turn() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    // A respond (offered by the communication), then
-    // bot.ability.reasoning.input, which no ability offers: the turn fails
-    // before anything is sent (the reference SelectionRejectionError), so the
-    // respond is not said.
-    let labels = [
-        "bot.processing.completed",
-        "bot.processing.failed",
-        "floppy.route",
-        "floppy.say",
-    ];
-    run.event("bot.input", &input("unoffered", "hello"));
-    let records = run.until(WAIT, label_is("bot.processing.failed"));
-    let [respond, adopt] = ability_choices();
-    assert_eq!(
-        last_json(&records, "double.choices"),
-        json!([ignore_choice(), respond, adopt])
-    );
-    assert_eq!(
-        only(&records, &labels),
-        pairs(&[(
-            "bot.processing.failed",
-            r#"{"message":"Processing selected unavailable event: bot.ability.reasoning.input.","turn":1}"#
-        )])
-    );
-    // An offered event for an ability that does not offer it.
-    run.event("bot.input", &input("elsewhere", "x"));
-    let records = run.until(WAIT, label_is("bot.processing.failed"));
-    assert_eq!(
-        only(&records, &labels),
-        pairs(&[(
-            "bot.processing.failed",
-            r#"{"message":"Processing selected unavailable event for target identity: bot.ability.communication.respond.","turn":2}"#
-        )])
-    );
-    // The bot is back in attention and takes the next turn.
-    run.event("bot.input", &input("reply", "next"));
-    let records = run.until(WAIT, label_is("floppy.route"));
-    assert_eq!(
-        only(&records, &["floppy.route"]),
-        pairs(&[(
-            "floppy.route",
-            "bot.ability.communication.respond -> communication"
-        )])
-    );
-    close(run, "a_selection_the_turn_cannot_place_fails_the_turn");
-}
-
-#[test]
-fn an_ignore_selection_is_not_dispatched_and_ends_the_turn() {
-    let body = layout(&Cognition::Double("'ready'"), &[]);
-    let mut run = start(&body);
-    activated(&mut run);
-    // The reference without_ignore_selections: the turn completes with the ignore
-    // as its output, and nothing is routed.
+    // The reference without_ignore_selections ("cognition only"): the
+    // ignore goes to the cognition that offers it, and the turn completes
+    // with it as its output.
     run.event("bot.input", &input("ignore", "noise"));
-    let records = run.until(WAIT, label_is("bot.processing.completed"));
+    // The double logs the ignore it sent itself and the environment the
+    // outcome, in either order.
+    let mut records = run.until(WAIT, label_is("bot.processing.completed"));
+    if only(&records, &["double.ignore"]).is_empty() {
+        records.extend(run.until(WAIT, label_is("double.ignore")));
+    }
     assert_eq!(
         only(
             &records,
-            &[
-                "bot.processing.completed",
-                "bot.processing.failed",
-                "floppy.route",
-                "double.ignore"
-            ]
+            &["bot.processing.completed", "bot.processing.failed"]
         ),
         pairs(&[(
             "bot.processing.completed",
-            r#"{"focus_candidates":[],"output":[{"data":{},"event":"bot.ability.cognition.ignore","reason":"nothing to do","target":"cognition"}],"turn":1}"#
+            r#"{"focus_candidates":[],"output":[{"data":{},"event":"bot.ability.cognition.ignore","reason":"nothing to do","target":"session.floppy.cognition"}],"turn":1}"#
         )])
+    );
+    assert_eq!(
+        only(&records, &["double.ignore"]),
+        pairs(&[("double.ignore", "{}")])
     );
     // The bot is back in attention and takes the next turn.
     run.event("bot.input", &input("reply", "next"));
@@ -825,7 +764,7 @@ fn an_ignore_selection_is_not_dispatched_and_ends_the_turn() {
     );
     close(
         run,
-        "an_ignore_selection_is_not_dispatched_and_ends_the_turn",
+        "an_ignore_selection_goes_to_the_cognition_and_ends_the_turn",
     );
 }
 
@@ -971,9 +910,9 @@ fn a_selected_communication_input_reaches_the_communication() {
     let mut run = Run::start(&args, &[]);
     activated(&mut run);
     // Heard speech whose turn selects bot.ability.communication.input (as
-    // The original's SpeechHeard seed does): the body routes it to itself and
-    // relays it to the communication, whose conversation product is the
-    // next turn's stimulus.
+    // the original's SpeechHeard seed does), naming no target: the body
+    // sends it to itself and relays it to the communication, whose
+    // conversation product is the next turn's stimulus.
     let speech = json!({"audio": "media/admit.wav", "media_type": "audio/wav"});
     run.event("environment.sound", &speech);
     let silence = json!({"audio": "media/silence.wav", "media_type": "audio/wav"});
@@ -986,20 +925,11 @@ fn a_selected_communication_input_reaches_the_communication() {
     assert_eq!(
         only(
             &finished.all,
-            &[
-                "double.input",
-                "floppy.route",
-                "bot.ability.speaking.output"
-            ]
+            &["double.input", "bot.ability.speaking.output"]
         ),
         pairs(&[
             ("double.input", r#"1 admit "admit reply now""#),
-            ("floppy.route", "bot.ability.communication.input -> bot"),
             ("double.input", "2 reply 1"),
-            (
-                "floppy.route",
-                "bot.ability.communication.respond -> communication"
-            ),
             (
                 "bot.ability.speaking.output",
                 r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 2"}"#

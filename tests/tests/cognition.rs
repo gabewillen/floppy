@@ -48,9 +48,12 @@ const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-
 const IGNORE: &str = "bot.ability.cognition.ignore";
 const RESPOND: &str = "bot.ability.communication.respond";
 const ADOPT: &str = "bot.ability.identity.adopt";
-/// The turn's choices as the body logs them: the cognition's offer, the
-/// communication's and the identity's.
-const CHOICES: &str = "bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity";
+/// The turn's choices as the body collects them, each `event@target`: the
+/// cognition's offer, the communication's and the identity's, each tagged
+/// with its offering session's id.
+const CHOICES: &str = "bot.ability.cognition.ignore@session.floppy.cognition bot.ability.communication.respond@session.floppy.communication bot.ability.identity.adopt@session.floppy.identity";
+/// The cognition's session id in the body, the target of its ignore.
+const COGNITION: &str = "session.floppy.cognition";
 
 /// The decision backend's scripted answer.
 #[derive(Clone, Copy)]
@@ -212,7 +215,11 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
             r#"{"error":{"message":"boom"}}"#.to_owned(),
         ))
     };
-    let selection = |events: Json| ok(completion(&json!({ "events": events }).to_string()));
+    let selection = |events: Json| {
+        ok(completion(
+            &json!({ "events": support::with_targets(body, &events) }).to_string(),
+        ))
+    };
     // Reflection's select after each output: an empty selection (no
     // behavior to revise), so reflection stores the turn's episode.
     if is_reflection(body) {
@@ -223,13 +230,13 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
         "/abstain/v1/systemone" => ok(decided(body, "__unhandled__", 0.8)?),
         "/low/v1/systemone" => ok(decided_with(body, IGNORE, 0.34, Some(0.33))?),
         "/gignore/v1/chat/completions" => selection(json!([
-            {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}
+            {"event": IGNORE, "data": {}, "reason": "nothing to say"}
         ])),
         "/grespond/v1/chat/completions" => selection(json!([
-            {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet", "target": "communication"}
+            {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet"}
         ])),
         "/grepeat/v1/chat/completions" => selection(json!([
-            {"event": RESPOND, "data": {"text": "hi"}, "reason": "answer", "target": "communication"}
+            {"event": RESPOND, "data": {"text": "hi"}, "reason": "answer"}
         ])),
         "/offchoice/v1/chat/completions" => selection(json!([
             {"event": "bot.focus_device", "data": {"device": "lamp"}, "reason": "look"}
@@ -282,9 +289,9 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
                 target,
                 body: body.clone(),
             });
-            let ignore = json!({"events": [
-                {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}
-            ]});
+            let ignore = json!({"events": support::with_targets(&body, &json!([
+                {"event": IGNORE, "data": {}, "reason": "nothing to say"}
+            ]))});
             support::answer_slowly(
                 &mut stream,
                 &body,
@@ -625,7 +632,7 @@ fn intuition_handles_an_ignore_without_reasoning() {
     let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         json_text(&records, "floppy.output"),
-        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}}]})
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "target": COGNITION}]})
     );
     assert_eq!(
         texts(&records, "cognition.stage"),
@@ -640,13 +647,11 @@ fn intuition_handles_an_ignore_without_reasoning() {
         texts(&records, "autonomy"),
         strings(&["turn 1: 0 matched for bot.input"])
     );
-    // An ignore is the turn's terminal product: never dispatched (the original
-    // without_ignore_selections).
-    assert!(texts(&records, "floppy.route").is_empty(), "{records:?}");
-    assert!(
-        texts(&records, "cognition.ignore").is_empty(),
-        "{records:?}"
-    );
+    // An ignore is the turn's terminal product, the cognition's only (the
+    // original's without_ignore_selections): intuition sends it to the
+    // cognition, its only offerer (the decision service names it), which
+    // logs it.
+    assert_eq!(texts(&records, "cognition.ignore"), strings(&["turn 1"]));
     // The decision offered the turn's choices it could fill (respond's
     // text and adopt's name have no grounded value); reasoning asked no
     // model.
@@ -665,7 +670,9 @@ fn intuition_handles_an_ignore_without_reasoning() {
     let mut all = records;
     all.extend(finished.records);
     assert!(
-        texts(&all, "cognition.offers").iter().all(|t| t == IGNORE),
+        texts(&all, "cognition.offers")
+            .iter()
+            .all(|t| support::choice_names(t) == IGNORE),
         "{all:?}"
     );
 }
@@ -911,7 +918,7 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
     );
     assert_eq!(
         json_text(&records, "floppy.output"),
-        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "behavior: nothing to do", "target": "cognition"}]})
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "behavior: ignore", "target": COGNITION}]})
     );
     // Neither intuition nor reasoning ran: no backend but reflection's
     // was asked.
@@ -932,11 +939,11 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
 }
 
 /// The original's Autonomy dispatches a handled behavior's selections before it
-/// counts the use: one the turn cannot place (here an event nobody offers)
-/// marks the behavior failed, not used, and fails the turn with the original's
-/// `SelectionRejectionError` message; intuition never runs.
+/// counts the use: one that cannot be sent (here one that names no target)
+/// marks the behavior failed, not used, and fails the turn; intuition never
+/// runs.
 #[test]
-fn a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn() {
+fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
     let mock = Mock::start();
     let unoffered = turn_behavior(
         "({turn: turn, handled: true, selected: [{event: 'bot.ability.reasoning.input', data: {}}]})",
@@ -964,7 +971,7 @@ fn a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn() {
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
     let records = run.until(WAIT, turn_ended);
-    let message = "Processing selected unavailable event: bot.ability.reasoning.input.";
+    let message = "Autonomy behavior dispatch failed: error.communication";
     assert_eq!(
         texts(&records, "autonomy.candidate.failed"),
         strings(&[&format!("Unoffered ({message})")])
@@ -978,7 +985,7 @@ fn a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn() {
     close(
         run,
         &mock,
-        "a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn",
+        "a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn",
     );
     assert_eq!(usage(&grant, DATABASE), json!([["Unoffered", "0", "1"]]));
 }
@@ -1017,7 +1024,7 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
     );
     assert_eq!(
         json_text(&records, "floppy.output"),
-        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}}]})
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "target": COGNITION}]})
     );
     close(
         run,
@@ -1025,6 +1032,14 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
         "when_no_learned_behavior_handles_the_turn_intuition_runs",
     );
     assert_eq!(usage(&grant, DATABASE), json!([["Declines", "0", "0"]]));
+}
+
+/// The choices logged under `label`, each as `event@target` names.
+fn logged_choices(records: &[Json], label: &str) -> Vec<String> {
+    texts(records, label)
+        .iter()
+        .map(|text| support::choice_names(text))
+        .collect()
 }
 
 #[test]
@@ -1036,16 +1051,17 @@ fn reasoning_selects_from_the_turns_choices() {
     let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         json_text(&records, "floppy.output"),
-        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}]})
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": COGNITION}]})
     );
-    // Reasoning selected from the body's assembled choices (the
-    // cognition's offer, tagged); an ignore is never dispatched.
-    assert_eq!(texts(&records, "floppy.choices"), strings(&[CHOICES]));
+    // Reasoning selected from the body's collected choices (the
+    // cognition's offer, tagged with its session id); the ignore goes to
+    // the cognition, which only logs it.
     assert_eq!(
-        texts(&records, "reasoning"),
-        strings(&[&format!("turn 1: {CHOICES}")])
+        logged_choices(&records, "floppy.choices"),
+        strings(&[CHOICES])
     );
-    assert!(texts(&records, "floppy.route").is_empty(), "{records:?}");
+    assert_eq!(logged_choices(&records, "reasoning"), strings(&[CHOICES]));
+    assert_eq!(texts(&records, "cognition.ignore"), strings(&["turn 1"]));
     assert_eq!(
         texts(&records, "cognition.stage"),
         strings(&[
@@ -1100,11 +1116,11 @@ fn reasoning_selects_from_the_turns_choices() {
                 .expect("a pinned event")
                 .to_owned();
             let target = if event == IGNORE {
-                "cognition"
+                COGNITION
             } else if event == ADOPT {
-                "identity"
+                "session.floppy.identity"
             } else {
-                "communication"
+                "session.floppy.communication"
             };
             assert_eq!(branch["properties"]["target"]["enum"], json!([target]));
             event
@@ -1144,7 +1160,7 @@ fn reasoning_selects_from_the_turns_choices() {
 }
 
 /// The whole text path on fake backends: "say hi" escalates to reasoning,
-/// which selects the communication's respond; the body routes it to the
+/// which selects the communication's respond and sends it to the
 /// communication, which says the response through speaking
 /// and records it in its conversation.
 #[test]
@@ -1164,10 +1180,6 @@ fn a_reasoned_response_is_said_through_the_communication() {
             "intuition unhandled (empty_product)",
             "reasoning handled"
         ])
-    );
-    assert_eq!(
-        texts(&records, "floppy.route"),
-        strings(&["bot.ability.communication.respond -> communication"])
     );
     assert_eq!(
         texts(&records, "floppy.say"),
@@ -1302,7 +1314,7 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
     // The first turn's one episode, a cognition:cognitive_episode (the
     // original episodes.CognitiveEpisode).
     let episode = format!(
-        "    <cognition:cognitive_episode stimulus_name=\"bot.input\">\n      <focus_candidates count=\"0\" />\n      <output count=\"1\">\n        <cognition:event target=\"cognition\" event=\"{IGNORE}\" reason=\"nothing to say\">\n          <data />\n        </cognition:event>\n      </output>\n    </cognition:cognitive_episode>\n"
+        "    <cognition:cognitive_episode stimulus_name=\"bot.input\">\n      <focus_candidates count=\"0\" />\n      <output count=\"1\">\n        <cognition:event target=\"session.floppy.cognition\" event=\"{IGNORE}\" reason=\"nothing to say\">\n          <data />\n        </cognition:event>\n      </output>\n    </cognition:cognitive_episode>\n"
     );
     assert!(
         prompts[1].contains(&format!(
@@ -1439,7 +1451,8 @@ fn offered_schema(event: &str) -> Json {
 /// cognition routes respond first, then reasoning's selection. Reasoning's
 /// prompt is the original's model-facing XML of its `ProcessorInput`.
 /// Runs one `hi` turn, offering ignore and respond, through the cognition
-/// harness of `bot` and returns its records up to the harness's output.
+/// harness of `bot` (which offers respond itself) and returns its records
+/// up to the harness's output.
 fn low_confidence_turn(bot: &Bot) -> (Run, Vec<Json>) {
     let abilities = bot
         .body
@@ -1471,8 +1484,8 @@ fn low_confidence_turn(bot: &Bot) -> (Run, Vec<Json>) {
             "focus": null,
             "focus_candidates": [],
             "choices": [
-                {"event": IGNORE, "schema": offered_schema(IGNORE), "target": "cognition"},
-                {"event": RESPOND, "schema": offered_schema(RESPOND), "target": "communication"},
+                {"event": IGNORE, "schema": offered_schema(IGNORE), "target": "session.cognition"},
+                {"event": RESPOND, "schema": offered_schema(RESPOND), "target": "session"},
             ],
         }),
     );
@@ -1499,11 +1512,16 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
             "reasoning handled"
         ])
     );
+    // The escalating intuition sent its environment action (respond's
+    // grounded "hi") before reasoning ran; the output is reasoning's.
+    assert_eq!(
+        texts(&records, "harness.sent"),
+        strings(&[r#"{"text":"hi"}"#])
+    );
     assert_eq!(
         json_text(&records, "harness.output"),
         json!({"turn": 1, "output": [
-            {"event": RESPOND, "data": {"text": "hi"}},
-            {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"},
+            {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "session.cognition"},
         ]})
     );
     // The TypeSafe state is the original's turn document, and respond's text is
@@ -1536,14 +1554,13 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     );
 }
 
-/// A turn acts once (docs/live-proof.md, 2026-10-12, `live_choices`): when
-/// reasoning selects the very action the escalated intuition already
-/// handed out (respond with `hi`, as intuition's environment action), the
-/// output holds it once, the environment action, since the original had
-/// already dispatched it before reasoning ran. The reflection still gets
-/// reasoning's selections.
+/// Each stage sends its own selections, as the original's do: when
+/// reasoning selects the very action the escalated intuition already sent
+/// (respond with `hi`, intuition's environment action), it is sent again,
+/// after it, as the original's reasoning dispatches it again; the output
+/// is reasoning's.
 #[test]
-fn reasoning_does_not_repeat_an_environment_action() {
+fn reasoning_sends_its_selections_after_the_environment_actions() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Low, Generation::Repeat, &[]);
     let (run, records) = low_confidence_turn(&bot);
@@ -1556,15 +1573,19 @@ fn reasoning_does_not_repeat_an_environment_action() {
         ])
     );
     assert_eq!(
+        texts(&records, "harness.sent"),
+        strings(&[r#"{"text":"hi"}"#, r#"{"text":"hi"}"#])
+    );
+    assert_eq!(
         json_text(&records, "harness.output"),
         json!({"turn": 1, "output": [
-            {"event": RESPOND, "data": {"text": "hi"}},
+            {"event": RESPOND, "data": {"text": "hi"}, "reason": "answer", "target": "session"},
         ]})
     );
     close(
         run,
         &mock,
-        "reasoning_does_not_repeat_an_environment_action",
+        "reasoning_sends_its_selections_after_the_environment_actions",
     );
 }
 
@@ -2149,7 +2170,10 @@ fn the_speech_heard_seed_admits_identified_speech_as_communication_input() {
 fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
     let double =
         std::fs::read_to_string(workspace().join("tests/fixtures/phase4/behavior_double.scx"))
-            .expect("the double is readable");
+            .expect("the double is readable")
+            // The harness stands in for the cognition: the double's
+            // selection goes to it.
+            .replace("'session.floppy.cognition'", "'session'");
     let grant = inventory(
         DATABASE,
         &[Learned {
@@ -2172,7 +2196,7 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
         json!({
             "turn": 2,
             "handled": true,
-            "selected": [{"event": IGNORE, "data": {}, "reason": "behavior: nothing to do", "target": "cognition"}],
+            "selected": [{"event": IGNORE, "data": {}, "reason": "behavior: ignore", "target": "session"}],
             "candidates": ["SpeechHeard", "Double"],
             "reason": "behavior",
         })

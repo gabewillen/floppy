@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- decision-5: after the warmup the threshold is the mean less k_sigma deviations, never under half the floor. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision">
+<datamodel>
+  <data id="tuner" expr='{"mean": 80, "var": 100, "n": 8}'/>
+  <data id="threshold" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <decision:tuner location="tuner" thresholdlocation="threshold"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="Math.abs(threshold - 0.70) &lt; 1e-9 &amp;&amp; tuner.n === 8" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

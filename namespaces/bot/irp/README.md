@@ -4,8 +4,8 @@ The implementation report plan of the `bot` namespace, in the format of the
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-5 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 23 mandatory documents. It runs through exactly
+4 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 17 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,12 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines bot
 ```
 
-The current baseline (manifest SHA-256 `46a58ed1a3f0fce92b87c5803104f18b422139d37aefb069dc1f422f60e2fe51`,
+The current baseline (manifest SHA-256 `33e4bf5644e20d8a5e91002e9465cc78ec6fc1c8051fa5e7bedf8f0f7e27c800`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
-measured on macOS arm64 after `<bot:attention>` lost `sources`; regenerate
-it on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares fuel
-on) measures:
+measured on macOS arm64 after `<bot:verdict>` was dissolved into each
+stage's `<send>`; regenerate it on Linux x86_64, the host
+`tests/tests/namespace_irp.rs` compares fuel on) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 23 / 23 | 0 | `611d0ba36669d51933051e70c49e05ce63faf27daa54ba7a8002808798e6cfb8` | `93863389ab0be2f2f7c077ba7ef7f1974b4655bcb11270bb0a7d60256928c5ec` |
+| ECMAScript | 17 / 17 | 0 | `5f11cc60a1d31608f4e32857e2e3abd28ccf72df55a8674d8fac7cc9159a58c4` | `15a5a9106e99f3f309db32213da6b1ab53fd9be747ed6b59c0af7aa942f7c963` |

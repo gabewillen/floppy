@@ -17,9 +17,7 @@
 
   Input: the <param>s turn, input (focus and focus_candidates, the original's
   bot.ability.autonomy.input, schemas/bot.ability.autonomy.input.json),
-  stimulus (the turn's stimulus envelope), choices (the turn's assembled
-  choices, which the learned behaviors' selections are checked against)
-  and database (the memory database; null means no learned inventory,
+  stimulus (the turn's stimulus envelope) and database (the memory database; null means no learned inventory,
   and only the seeds run).
 
   Seeds (the reference _prepare_match: the seeded behaviors ride before the
@@ -34,8 +32,9 @@
   fails autonomy ("Autonomy native seed 'SpeechHeard' failed: ...", the original
   _emit_native_start_failure). candidates names it first. A seed's
   selections are trusted (the reference DispatchTrust.TRUSTED_BEHAVIOR may name
-  any event a recipient declares, not only the offered ones), so the body
-  checks them where it places them (its own bot.ability.communication.input).
+  any event a recipient declares, not only the offered ones) and name no
+  target: the turn's output carries them to the body, which sends itself
+  the ones that name no target (its own bot.ability.communication.input).
 
   Matching (the reference _prepare_match, _match_activity): one memory
   transaction selects the ACTIVE behaviors of lifetime 'turn' that have a
@@ -53,17 +52,16 @@
   (the stimulus's data, or {event: data} when it is not an object, plus
   focus and focus_candidates: the reference behavior_input_payload). It answers by
   its final state's <donedata> {turn, handled, selected}:
-    * handled with selections: dispatching checks them as the original's
-      _dispatch_candidate_activity does before it dispatches them
-      (cognition.types.dispatch_selected_events): <bot:verdict> removes the
-      ignore selections and applies attention_selection_error with the
-      input's focus and focus_candidates, then <decision:route> places
-      each on the target offering it in choices (_resolve_target). Placed,
-      its used_count and last_used_at are persisted, then autonomy answers
-      {turn, handled: true, selected, candidates, reason: "behavior"}.
-      Rejected (the reference persisting_dispatch_failed), its failed_count and
-      last_failed_at are persisted and autonomy fails with the rejection's
-      message (_fail_after_dispatch_persistence), so the turn fails;
+    * handled with selections: dispatching sends each to the session its
+      target names, as the original's _dispatch_candidate_activity
+      dispatches them (cognition.types.dispatch_selected_events; a learned
+      behavior names its targets, the session ids of its turn's
+      selections). Sent, its used_count and last_used_at are persisted,
+      then autonomy answers {turn, handled: true, selected, candidates,
+      reason: "behavior"}. A send that fails (the reference
+      persisting_dispatch_failed), its failed_count and last_failed_at are
+      persisted and autonomy fails with the failure's message
+      (_fail_after_dispatch_persistence), so the turn fails;
     * not handled (the reference candidate.advance), or no answer within
       silence_ms (TURN_SILENCE_BOUND, candidate.silent): the next one runs;
     * an error.* for it (candidate.failed): its failed_count and
@@ -85,8 +83,7 @@
   Contracts: the Memory ability's events reference abilities/schemas/ by
   event:schema. A candidate is builder output and gets no schema files.
 
-  Bindings: none of its own (the candidates runner binds the bot and
-  decision namespace packages, and the Memory ability the sql service).
+  Bindings: none of its own (the Memory ability binds the sql service).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -96,7 +93,6 @@
     <data id="input" expr="null"/>
     <data id="stimulus" expr="null"/>
     <data id="database" expr="null"/>
-    <data id="choices" expr="[]"/>
     <data id="silence_ms" expr="1000"/>
     <data id="memory_timeout_ms" expr="10000"/>
     <data id="rows" expr="[]"/>
@@ -199,7 +195,6 @@
       <param name="turn" expr="turn"/>
       <param name="input" expr="behavior_input"/>
       <param name="candidates" expr="candidateRows()"/>
-      <param name="choices" expr="choices"/>
       <param name="database" expr="database"/>
       <param name="silence_ms" expr="silence_ms"/>
       <param name="memory_timeout_ms" expr="memory_timeout_ms"/>

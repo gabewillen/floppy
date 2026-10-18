@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- decision-5: an entry whose schema has no such property raises error.execution and assigns nothing. -->
+<!-- decision-4: an entry whose schema has no such property raises error.execution and assigns nothing. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision">
 <datamodel>
   <data id="source" expr='[{"event": "bot.focus_device", "schema": {"type": "object", "properties": {"device": {"type": "string"}}}}, {"event": "bot.say", "schema": {"type": "object"}}]'/>

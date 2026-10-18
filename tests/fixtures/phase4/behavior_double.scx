@@ -10,7 +10,8 @@
   event:schema reference and no <script>. It takes autonomy's <param>s turn
   and input, logs behavior.double with the turn, and handles the turn
   through its <donedata>: one bot.ability.cognition.ignore selection for
-  the cognition.
+  the cognition, named by its session id as a learned behavior names its
+  targets.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        version="1.0" datamodel="ecmascript" name="behavior_double" initial="handling">
@@ -28,7 +29,7 @@
 
   <final id="handled">
     <donedata>
-      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.cognition.ignore', data: {}, reason: 'behavior: nothing to do', target: 'cognition'}]})"/>
+      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.cognition.ignore', data: {}, reason: 'behavior: ignore', target: 'session.floppy.cognition'}]})"/>
     </donedata>
   </final>
 </scxml>

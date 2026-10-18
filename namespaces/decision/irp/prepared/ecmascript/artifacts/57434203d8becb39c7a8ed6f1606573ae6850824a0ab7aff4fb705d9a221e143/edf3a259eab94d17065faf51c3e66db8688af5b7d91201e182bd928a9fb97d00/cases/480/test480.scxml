@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- decision-5: a tuner state that is not one is replaced by the initial state, and the warmup threshold is the floor. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="tuner" expr="'garbage'"/>
+  <data id="threshold" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <decision:tuner location="tuner" thresholdlocation="threshold"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="tuner.mean === 70 &amp;&amp; tuner['var'] === 100 &amp;&amp; tuner.n === 0 &amp;&amp; threshold === 0.35" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

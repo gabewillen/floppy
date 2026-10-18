@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- reasoning-6: a clear_focus with no focused device fails the turn with the original's message. -->
+<!-- reasoning-6: a selection whose target no session of the run answers fails the turn. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reasoning" type="scxml" src="../../../reasoning.scx">
@@ -7,7 +7,7 @@
     <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"}'/>
     <param name="focus" expr="null"/>
     <param name="focus_candidates" expr="[]"/>
-    <param name="choices" expr='[{"event": "bot.ability.cognition.ignore", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Ignore the stimulus.", "target": "cognition"}, {"event": "bot.ability.communication.respond", "schema": {"type": "object", "properties": {"text": {"type": "string", "minLength": 1}}, "required": ["text"], "additionalProperties": false}, "description": "Say something.", "target": "communication"}, {"event": "bot.focus_device", "schema": {"type": "object", "properties": {"device": {"type": "string", "minLength": 1}}, "required": ["device"], "additionalProperties": false}, "description": "Look at a device."}, {"event": "bot.clear_focus", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Stop looking at the device."}]'/>
+    <param name="choices" expr='[{"event": "bot.ability.communication.respond", "schema": {"type": "object", "properties": {"text": {"type": "string", "minLength": 1}}, "required": ["text"], "additionalProperties": false}, "description": "Say something.", "target": "session.nowhere"}]'/>
     <param name="model" expr="'mock-model'"/>
   </invoke>
   <state id="boot">
@@ -15,7 +15,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.reasoning" cond='_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.failed === true &amp;&amp; _event.data.reason === "Processing selected clear_focus with no focused device."' target="step1"/>
+    <transition event="done.invoke.reasoning" cond='_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.failed === true &amp;&amp; _event.data.reason === "the reasoning could not run (error.communication)"' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

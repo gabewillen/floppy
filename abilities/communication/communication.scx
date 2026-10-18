@@ -67,7 +67,7 @@
   "communication", choices} to the body: <decision:choice events=
   "bot.ability.communication.respond"> (the original's enabled transitions in
   active; activate is enabled only in inactive, and input is not a tool
-  event), compacted by <decision:compact>
+  event), made model-facing by <processing:model_facing_schema>
   ($schema, title and examples dropped; over 32 KiB descriptions dropped
   too; still over, the offer is empty and logged). The children offer
   nothing, so nothing is relayed.
@@ -79,12 +79,13 @@
   its name and the active state route it; conds only correlate (which
   timer) and keep the original's non-blank response check.
 
-  Bindings: the decision namespace package; speaking's (the conversation
+  Bindings: the decision and processing namespace packages; speaking's (the conversation
   namespace and vocal's speech service).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="communication" initial="communication">
   <datamodel>
     <data id="response_timeout_ms" expr="36000"/>
@@ -105,7 +106,6 @@
     <data id="offering" expr="false"/>
     <data id="offered" expr="[]"/>
     <data id="offers_over" expr="false"/>
-    <data id="offer_names" expr="''"/>
     <!-- The children. -->
     <data id="children" expr="['conversation', 'speaking']"/>
   </datamodel>
@@ -205,12 +205,11 @@
         <assign location="offering" expr="true"/>
         <decision:choice location="offered" events="bot.ability.communication.respond"/>
         <assign location="offering" expr="false"/>
-        <decision:compact location="offered" bound="32768" overlocation="offers_over"/>
+        <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
         <if cond="offers_over">
           <log label="communication.offers.dropped" expr="'the offers are over 32768 bytes'"/>
         </if>
-        <decision:names location="offer_names" choices="offered"/>
-        <log label="communication.offers" expr="offer_names"/>
+        <log label="communication.offers" expr="offered"/>
         <send event="bot.ability.offers" target="#_parent">
           <param name="ability" expr="'communication'"/>
           <param name="choices" expr="offered"/>

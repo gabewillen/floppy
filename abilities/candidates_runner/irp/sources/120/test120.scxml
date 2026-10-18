@@ -6,7 +6,6 @@
     <param name="turn" expr="3"/>
     <param name="input" expr='{"text": "hello", "focus": null, "focus_candidates": []}'/>
     <param name="candidates" expr='[{"name": "Declines", "source": "&lt;scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"done\"&gt;&lt;datamodel&gt;&lt;data id=\"turn\" expr=\"0\"/&gt;&lt;data id=\"input\" expr=\"null\"/&gt;&lt;/datamodel&gt;&lt;final id=\"done\"&gt;&lt;donedata&gt;&lt;content expr=\"({turn: turn, handled: false})\"/&gt;&lt;/donedata&gt;&lt;/final&gt;&lt;/scxml&gt;"}]'/>
-    <param name="choices" expr="[]"/>
     <param name="database" expr="'/memory/floppy.sqlite'"/>
   </invoke>
   <state id="boot">

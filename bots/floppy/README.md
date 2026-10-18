@@ -31,25 +31,23 @@ by [vocal](../../abilities/vocal/vocal.scx) through the speech service, logged a
 Listening, and recorded in the conversation), and the
 [listening](../../abilities/listening/listening.scx), its input ability
 (the original's Listening, phase 6: see Sound below). Each turn the body
-assembles the choices (its own
-`bot.focus_device`, pinned to the turn's focus candidates, and
-`bot.clear_focus` while a device is focused, plus each ability's latest
-`bot.ability.offers`, tagged with the ability as `target`, compacted and
-held to 32 KiB) and routes each selected event of the turn's output to the
-body itself or to the ability that offered it. As in the original, an ignore
-selection is never dispatched, and a selection the body cannot place (a
-focus outside the turn's candidates, a clear with nothing focused, an
-event not offered this turn, a target that does not offer it, or several
-offerers and no target) fails the whole turn with
-`bot.processing.failed` (the original's `SelectionRejectionError` message)
-before anything is sent; the cognition's stages make the same checks
-before they answer. A selected
+collects the choices (its own `bot.focus_device`, pinned to the turn's
+focus candidates, and `bot.clear_focus` while a device is focused, plus
+each ability's latest `bot.ability.offers` and the focused device's
+events, each tagged with the session id of its offerer as `target`, made
+model-facing and held to 32 KiB, `<processing:collect_offered_events>`).
+As in the original, each stage of the cognition sends its own selections,
+each to the session its target names (`#_scxml_` + target); the schemas
+the services check a selection against (the pinned focus device, each
+target an enum of its offerers) refuse what the original's attention
+policy refused, before anything is sent, and an ignore goes to the
+cognition, which only logs it. A selected
 `bot.ability.communication.respond` is said through speaking and recorded
 in the conversation. Input addressed to the bot as
 `bot.ability.communication.input` is admitted into the conversation, whose
 updated history is the next turn's stimulus; so is a turn's selected
 `bot.ability.communication.input` (the original's SpeechHeard seed admits heard
-speech this way), which the body routes to itself. The full Contract, Topology, Bindings, and Proof sections come
+speech this way), which names no target, so the body sends it to itself. The full Contract, Topology, Bindings, and Proof sections come
 with the phase's saved live examples.
 
 ## Running
@@ -172,8 +170,8 @@ and `bot.ability.conversation.output`; the body logs `environment.sound`
 with the bot's invoke id and its result. floppy's own
 records, which are not the original events, are labelled `floppy.*`:
 `floppy.output` is the turn's selected events, speaking logs the words as
-`floppy.say`, `floppy.choices` lists each turn's choices (`event` or `event@target`),
-`floppy.route` each routed selection, `floppy.focus` each focus
+`floppy.say`, `floppy.choices` is each turn's choices (JSON, each tagged
+with its offering session's id as `target`), `floppy.focus` each focus
 change, `floppy.deferred` each input deferred during a turn,
 `floppy.degraded` the reason the bot degraded, `floppy.stale` a reply to
 an earlier turn, `floppy.diagnostic` why activation failed, and
@@ -183,8 +181,8 @@ an earlier turn, `floppy.diagnostic` why activation failed, and
 
 - `cargo test -p floppy-tests --test body`: the lifecycle and turn matrix
   against a cognition double (`tests/fixtures/phase4/cognition_double.scx`),
-  and the choices and routing (the offer union, focus grounding, turns failed
-  by a selection that cannot be placed, ignore, the 32 KiB budget).
+  and the choices (the offers tagged with their sessions, focus grounding,
+  the body's guards on its own events, ignore, the 32 KiB budget).
 - `cargo test -p floppy-tests --test listening`: the listening under a
   harness, with the speech service decoding against a fake backend
   (`tests/tests/support/hearing.rs`): decoded speech, labelled non-speech,
@@ -199,7 +197,7 @@ an earlier turn, `floppy.diagnostic` why activation failed, and
   decision and model backends (each path, the tuner, failures, hop timeouts
   and reboot requests, cancels).
 - `cargo test -p floppy-tests --test communication`: the communication
-  path against the cognition double (a routed response said and recorded,
+  path against the cognition double (a sent response said and recorded,
   conversation input as a turn whose stimulus carries the history,
   a blank response, a response deferred behind one in flight and the hop
   timeout, malformed input, a child that cannot start), and one response
@@ -207,15 +205,16 @@ an earlier turn, `floppy.diagnostic` why activation failed, and
   copy reaching the listening before the sound.
 - `cargo test -p floppy-tests --test cognition` also runs the whole text
   path on fake backends: "say hi" escalates to reasoning, whose activate
-  and respond the body routes to the communication, which says it.
+  and respond reasoning sends to the communication, which says it.
 - `cargo test -p floppy-tests --test contracts`: every event reference and
   cross-document send of the body and its abilities.
 - `FLOPPY_LIVE_ENV_FILE=<paths> cargo test -p floppy-tests --test
   floppy_live -- --ignored live_cascade`: one live question turn that
-  escalates to reasoning, whose selection the body routes.
+  escalates to reasoning, which sends its selection to its target.
 - `... -- --ignored live_choices`: one live turn on a bot with a lamp: the
   choices are the body's focus (pinned to the lamp) and the cognition's and
-  communication's offers, and every selection is routed.
+  communication's offers, each tagged with its session id, and every
+  selection is sent to its target.
 - `... -- --ignored live_chat`: one live text turn through
   `bot.ability.communication.input`: the conversation's product is the
   stimulus, the reply is selected as `bot.ability.communication.respond`,

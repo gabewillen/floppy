@@ -31,49 +31,47 @@
   {mean, var, n} comes in as a <param> and goes back in <donedata>, so
   it lives in the cognition across turns. The turn's confidence is the
   minimum of its selections' confidences, each its probability normalized
-  to a whole 0-100 number (the reference selection_confidence,
-  normalize_confidence). <decision:tuner> observes it first, then writes
+  to a whole 0-100 number (<processing:selection_confidence>, the reference
+  selection_confidence and normalize_confidence). <decision:tuner> observes
+  it first, then writes
   the updated threshold (the original's defaults: the floor 35 during the warmup
   of 8 observations, then max(floor / 2, mean - k_sigma * std); EMA alpha
   0.08, variance floor 100) as a probability, and the turn escalates when
   the confidence is below it (the original _tune_confidence, should_escalate).
 
   Classification (the original _classify_activity, its confidence_gate off, the
-  default): a confident product is handled, every selection {event, data}
-  (escalation reason none), which the body routes to the target offering
-  each (the original dispatches each to its single enabler). A low-confidence
-  product (low_confidence), or one holding bot.ability.reasoning.input
-  (deliberative_input), is unhandled and escalates to reasoning, but hands
-  out its environment actions first: its selections less the deliberate
-  handoff and bot.ability.cognition.ignore (the original _environment_actions),
-  as selected in the donedata, which the cognition routes before
-  reasoning's own selections. The decision timer is deciding.after
-  (floppy's own bound; the original's intuition has none).
+  default): a confident product is handled, every selection {event, data,
+  target} (escalation reason none). A low-confidence product
+  (low_confidence), or one holding bot.ability.reasoning.input
+  (deliberative_input), is unhandled and escalates to reasoning. The
+  decision timer is deciding.after (floppy's own bound; the original's
+  intuition has none).
 
   Dispatch (the original _dispatch_selections_activity,
-  cognition.types.dispatch_selected_events): the selections handed out are
-  checked before the stage answers: <bot:verdict> removes ignore
-  selections and applies attention_selection_error with the turn's focus
-  and focus_candidates, then <decision:route> places each on the target
-  offering it in the choices. One that cannot be placed fails the stage
-  with the original's "Selection rejected: <message>". The original first re-asks its
-  processor once with the rejection as feedback (routing_rejection); the
-  decision service takes no such feedback, so that retry is not ported.
+  cognition.types.dispatch_selected_events): either way the stage sends
+  every selection, before it answers, to its target, the session that
+  offers it (the decision service names each selection's only offerer, the
+  original's _single_enabler): an escalating product's are the original's
+  environment actions, which it dispatches before reasoning runs; the
+  ignore goes to the cognition, which only logs it, and the deliberate
+  handoff is never offered. The decision service has checked each
+  selection's data against its event's schema (the pinned focus device
+  among them), so nothing is refused at the send; the original's
+  re-ask with a rejection as feedback (routing_rejection) has nothing to
+  retry.
 
   Output: <donedata>, received by the cognition as done.invoke.intuition:
 
-    {turn, handled: true, selected: [{event, data}], reason: "none", tuner}
-    {turn, handled: false, selected: [{event, data}], reason, tuner}
-                                          (escalate to reasoning)
+    {turn, handled: true, selected: [{event, data, target}], reason: "none", tuner}
+    {turn, handled: false, reason, tuner}  (escalate to reasoning)
     {turn, handled: false, failed: true, reason, tuner}
 
-  A rejected selection,
-  decision.failed, error.*, or no answer within decision_timeout_ms fails
+  A decision.failed, error.*, or no answer within decision_timeout_ms fails
   the stage (the cognition answers the turn with bot.ability.failed); the
   cognition's hop timeout bounds the whole stage too.
 
-  Bindings: the bot namespace package, and the decision namespace and
-  service packages, resolved from their repository URIs; env scopes TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
+  Bindings: the decision and processing namespace packages and the
+  decision service package, resolved from their repository URIs; env scopes TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
   service's <invoke> (without a key it answers decision.failed
   unconfigured). An invoked service's events are not checked against
   event:schema (scxml.rs checks only events between SCXML sessions): the
@@ -82,10 +80,10 @@
   by cond (Object(...) reads a non-object as {}).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="intuition" initial="deciding">
   <datamodel>
     <!-- The turn, from the cognition's <param>s. -->
@@ -107,10 +105,8 @@
     <data id="decision_timer" expr="null"/>
     <data id="result" expr="null"/>
     <data id="failed_code" expr="null"/>
-    <!-- The selection being dispatched, and why it was rejected (null when
-         placed). -->
-    <data id="dispatch_selections" expr="[]"/>
-    <data id="rejection" expr="null"/>
+    <!-- The selection being sent (the <foreach> item). -->
+    <data id="s" expr="null"/>
   </datamodel>
   <script src="intuition.js"/>
 
@@ -135,24 +131,21 @@
          with its own confidence: observe their minimum, then compare it
          with the updated threshold. -->
     <transition event="decision.selected" cond="hasSelections(_event)" target="done">
-      <assign location="confidence" expr="selectionConfidence(_event)"/>
+      <processing:selection_confidence location="confidence" selections="_event.data.selections"/>
       <decision:tuner location="tuner" thresholdlocation="threshold" observe="confidence"/>
       <log label="intuition" expr="tunedLog(_event)"/>
       <if cond="isLowConfidence()">
-        <assign location="result" expr="escalatedResult('low_confidence', _event)"/>
+        <assign location="result" expr="escalatedResult('low_confidence')"/>
       <elseif cond="hasDeliberativeInput(_event)"/>
-        <assign location="result" expr="escalatedResult('deliberative_input', _event)"/>
+        <assign location="result" expr="escalatedResult('deliberative_input')"/>
       <else/>
         <assign location="result" expr="selectionResult(_event)"/>
       </if>
-      <bot:verdict location="dispatch_selections" rejectionlocation="rejection" selections="result.selected"
-                   focus="focus" candidates="focus_candidates"/>
-      <if cond="isAccepted()">
-        <decision:route location="dispatch_selections" rejectionlocation="rejection" selections="dispatch_selections" choices="choices"/>
-      </if>
-      <if cond="isRejected()">
-        <assign location="result" expr="rejectedResult()"/>
-      </if>
+      <foreach array="_event.data.selections" item="s">
+        <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
+          <content expr="s.data"/>
+        </send>
+      </foreach>
     </transition>
     <transition event="decision.abstain" cond="isAbstainReason(_event)" target="done">
       <log label="intuition" expr="abstainedLog(_event)"/>

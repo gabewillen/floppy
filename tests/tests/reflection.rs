@@ -135,7 +135,7 @@ fn answer(target: &str, body: &Json) -> Option<String> {
     let schema = body.pointer("/tools/0/function/name")?.as_str()?;
     match schema {
         "dispatch" => Some(completion(
-            &json!({"events": selection(route)?}).to_string(),
+            &json!({"events": support::with_targets(body, &selection(route)?)}).to_string(),
         )),
         "topology_plan" => Some(completion(PLAN)),
         "scxml_draft" if route == "buildfail" => Some(completion(&draft(&rejected_behavior()))),
@@ -589,7 +589,9 @@ fn a_break_outside_the_inventory_is_refused_on(database: &str) {
     assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }
 
-/// The original's select returns at most one inventory event.
+/// The original's select returns at most one inventory event: the dispatch
+/// tool's `events` admits one (`<processing:send max="1">`), so the
+/// generate service refuses a reply with two before anything is sent.
 #[test]
 fn more_than_one_selection_fails() {
     more_than_one_selection_fails_on(SQLITE);
@@ -610,7 +612,7 @@ fn more_than_one_selection_fails_on(database: &str) {
     drop(run.close(WAIT));
     assert_eq!(
         texts(&records, "harness.failed"),
-        ["Reflection select must return at most one behavior event."]
+        ["Reflection select failed (schema-mismatch)"]
     );
     assert_eq!(json_log(&records, "inventory")[0]["status"], "ACTIVE");
 }

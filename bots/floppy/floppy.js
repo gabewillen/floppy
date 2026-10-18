@@ -79,10 +79,9 @@ function hasFocusedDevice() {
   return focused_device !== null;
 }
 
-// While offering, whether bot.focus_device is among the enabled transitions;
-// while routing, whether it is a routed selection.
+// Whether bot.focus_device applies: the turn has focus candidates.
 function focusDeviceEnabled() {
-  return offering ? focus_candidates.length > 0 : routing_selections;
+  return focus_candidates.length > 0;
 }
 
 // Whether the routed bot.focus_device names a candidate device.
@@ -90,28 +89,10 @@ function isFocusCandidate(_event) {
   return focus_candidates.indexOf(_event.data.device) >= 0 && devices.indexOf(_event.data.device) >= 0;
 }
 
-// While offering, whether bot.clear_focus is among the enabled transitions;
-// while routing, whether it is a routed selection.
-function clearFocusEnabled() {
-  return offering ? hasFocusedDevice() : routing_selections;
-}
-
 // processing
 
 function nextTurn() {
   return turn + 1;
-}
-
-// The abilities' latest offers and, while a device is focused and was
-// read this turn, its events as choices under its reference.
-function turnOffers() {
-  var read = device_snapshots[focused_device];
-  if (!hasFocusedDevice() || read === undefined) {
-    return offers;
-  }
-  var turn = Object.assign({}, offers);
-  turn[focused_device] = read.events.map(function (event) { return {event: event, schema: {type: 'object'}}; });
-  return turn;
 }
 
 function choicesFit() {
@@ -180,39 +161,11 @@ function cancelUnacknowledgedReason() {
   return 'turn ' + turn + ': the cognition did not acknowledge its cancel';
 }
 
-// routing
+// The turn's output
 
-// No selection was rejected (by <bot:verdict> or <decision:route>).
-function isAccepted() {
-  return rejection === null;
-}
-
-// The turn's choices, and bot.ability.communication.input placed on the
-// body itself (the trusted SpeechHeard seed's selection, the original's declared
-// event of the bot), which takes it as outside communication input.
-function routeChoices() {
-  return choices.concat([{event: 'bot.ability.communication.input', schema: {}}]);
-}
-
-// The original: a rejected selection fails the turn (bot.processing.failed).
-function rejectionFailure() {
-  return {message: rejection, turn: turn};
-}
-
-function isBodyRoute(route) {
-  return route.target === null;
-}
-
-function isDeviceRoute(route) {
-  return devices.indexOf(route.target) >= 0;
-}
-
-function bodyRouteLog(route) {
-  return route.event + ' -> bot';
-}
-
-function abilityRouteLog(route) {
-  return route.event + ' -> ' + route.target;
+// A selection that names no target: the trusted seed's, the body's own.
+function hasNoTarget(s) {
+  return typeof s.target !== 'string';
 }
 
 // active (after its states)

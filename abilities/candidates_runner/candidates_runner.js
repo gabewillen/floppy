@@ -34,9 +34,9 @@ function candidateFailedLog(event) {
 
 // dispatching and recorded_failure
 
-// No selection of the handled candidate was rejected.
-function isAccepted() {
-  return rejection === null;
+// A dispatch that failed: the original's dispatch failure, with the error.
+function dispatchFailure(_event) {
+  return 'Autonomy behavior dispatch failed: ' + _event.name;
 }
 
 function isRejected() {

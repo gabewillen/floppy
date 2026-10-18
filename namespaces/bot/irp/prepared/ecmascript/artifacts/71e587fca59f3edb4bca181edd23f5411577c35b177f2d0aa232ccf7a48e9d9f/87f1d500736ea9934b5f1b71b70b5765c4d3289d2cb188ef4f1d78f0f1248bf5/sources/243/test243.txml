@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- bot-4: a text that is neither a string nor null raises error.execution and assigns nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot">
+<datamodel>
+  <data id="heard" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <bot:recognize location="heard" name="'Al'" text="42"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="heard === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

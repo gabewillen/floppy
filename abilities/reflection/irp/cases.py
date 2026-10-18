@@ -42,7 +42,10 @@ def select(*events):
     return chat({"events": list(events)})
 
 
-CREATE = {"event": "bot.behavior.create",
+# The reflection's own session id: its choices are its own transitions, so
+# each selection names it as its target.
+OWN = "session.reflection"
+CREATE = {"event": "bot.behavior.create", "target": OWN,
           "data": {"event": "bot.behavior.create", "name": "GreetOnKnock",
                    "triggers": ["phone.incoming_call", "environment.sound"],
                    "description": "Say hello when a knock sound arrives.",
@@ -51,14 +54,14 @@ CREATE = {"event": "bot.behavior.create",
 
 
 def change(name):
-    return {"event": "bot.behavior.change",
+    return {"event": "bot.behavior.change", "target": OWN,
             "data": {"event": "bot.behavior.change", "name": name, "triggers": ["environment.sound"],
                      "description": "Say hello twice.", "reason": "It should greet warmly.", "source": None},
             "reason": "revise it"}
 
 
 def brk(name):
-    return {"event": "bot.behavior.break",
+    return {"event": "bot.behavior.break", "target": OWN,
             "data": {"event": "bot.behavior.break", "name": name, "reason": "  It greets strangers.  "},
             "reason": "harm outweighs practice"}
 
@@ -98,8 +101,8 @@ def failed_prefix(text):
 
 
 S.statement(1, "Without a database (the `<param>` `database` null, its default) it offers nothing on start and answers each `bot.ability.reflection.input` `{turn, cognition_input, cognition_output}` at once with `bot.ability.reflection.output` (no data), asking no model.")
-S.statement(2, "With a database, `recalling` reads the prior episodes and the behavior inventory in one memory transaction and `processing` asks the generate service (schema `dispatch`) to select at most one of `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break` (a change's and a break's `name` pinned to the inventory's names, and neither offered when the inventory is empty; decision D100); an empty selection goes to `storing`, which stores the turn's episode and answers `bot.ability.reflection.output`.")
-S.statement(3, "More than one selected event fails the turn with `bot.ability.failed` `{message: \"Reflection select must return at most one behavior event.\"}`; a failed select call fails it with `Reflection select failed (<code>)`; a select call whose streamed reply makes no progress for `select_timeout_ms` (its first `generate.progress` arms it, each later one re-arms it) or that runs `select_ceiling_ms` in all fails it with `Reflection child cancellation timed out.` (decision D101).")
+S.statement(2, "With a database, `recalling` reads the prior episodes and the behavior inventory in one memory transaction and `processing` asks the generate service (schema `dispatch`, its `events` at most one) to select at most one of `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break`, each offered by the reflection's own session (a change's and a break's `name` pinned to the inventory's names, and neither offered when the inventory is empty; decision D100); the selection is sent to the reflection's own session, and an empty selection goes to `storing`, which stores the turn's episode and answers `bot.ability.reflection.output`.")
+S.statement(3, "More than one selected event fails the select (the dispatch tool admits one) with `bot.ability.failed` `{message: \"Reflection select failed (schema-mismatch)\"}`; a failed select call fails it with `Reflection select failed (<code>)`; a select call whose streamed reply makes no progress for `select_timeout_ms` (its first `generate.progress` arms it, each later one re-arms it) or that runs `select_ceiling_ms` in all fails it with `Reflection child cancellation timed out.` (decision D101).")
 S.statement(4, "A selected `bot.behavior.break` (`breaking`) marks the named behavior BROKEN with its trimmed reason and keeps the row, then stores the episode and answers `bot.ability.reflection.output`; a break of a name the inventory does not hold is not offered, so a model that selects one fails the select with `Reflection select failed (schema-mismatch)`.")
 S.statement(5, "A selected `bot.behavior.create` (`revising`) stores a DRAFT stub for a new name, invokes the builder bot with a `builder.request`, and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built document, then stores the episode and answers `bot.ability.reflection.output`; a `bot.behavior.change` of a stored name revises it the same way, and a change of a name the inventory does not hold is not offered, so a model that selects one fails the select with `Reflection select failed (schema-mismatch)`.")
 S.statement(6, "A builder that fails with the last draft it rejected (`abandoning`) keeps that draft in the row as DRAFT and fails the turn with `Reflection change abandoned: same diagnostic message after fix:` and the rendered diagnostics (no-progress); a builder that fails with no draft fails the turn with `Reflection revision failed: <reason>: <first diagnostic>`, the create's DRAFT stub kept.")
@@ -116,7 +119,7 @@ S.case(110, 2, "an empty selection stores the episode and answers the output; th
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(), select()], clock="wall")
 
 S.case(120, 3, "two selected events fail the turn.",
-       [send(INPUT, turn(1)), failed("Reflection select must return at most one behavior event.")],
+       [send(INPUT, turn(1)), failed("Reflection select failed (schema-mismatch)")],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE, CREATE)], clock="wall")
 S.case(121, 3, "a select call the backend fails fails the turn with its code.",
        [send(INPUT, turn(1)), failed("Reflection select failed (status)")],

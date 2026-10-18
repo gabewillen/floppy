@@ -11,7 +11,7 @@
 //! `<data id="name">`, which stands in for the invoker's `<param>`.
 //!
 //! The identity logs `identity.name`, `identity.heard`, `identity.offers`
-//! and `identity.adopt.failed`; the body logs each route (`floppy.route`).
+//! and `identity.adopt.failed`.
 //! The body gives the identity its database, in a directory each run is
 //! granted (`support::memory_grant`), so an adopted name outlives the run.
 //!
@@ -146,7 +146,10 @@ fn the_identity_is_ready_with_its_adopt_offer() {
         strings(&["recalled null"])
     );
     assert_eq!(
-        texts(&records, "identity.offers"),
+        texts(&records, "identity.offers")
+            .iter()
+            .map(|text| support::choice_names(text))
+            .collect::<Vec<_>>(),
         strings(&["bot.ability.identity.adopt"])
     );
     close(run, "the_identity_is_ready_with_its_adopt_offer");
@@ -265,10 +268,6 @@ fn an_adopted_name_is_answered_to() {
                 .is_some_and(|text| text.starts_with("adopted"))
     });
     assert_eq!(
-        texts(&records, "floppy.route"),
-        strings(&["bot.ability.identity.adopt -> identity"])
-    );
-    assert_eq!(
         texts(&records, "identity.name"),
         strings(&[r#"adopted "Floppy""#])
     );
@@ -285,7 +284,10 @@ fn an_adopted_name_is_answered_to() {
     assert_eq!(texts(&records, "floppy.say"), strings(&["I am Floppy"]));
     let all = close(run, "an_adopted_name_is_answered_to");
     assert_eq!(
-        texts(&all, "identity.offers"),
+        texts(&all, "identity.offers")
+            .iter()
+            .map(|text| support::choice_names(text))
+            .collect::<Vec<_>>(),
         strings(&["bot.ability.identity.adopt", "bot.ability.identity.adopt"])
     );
 }

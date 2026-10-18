@@ -48,8 +48,9 @@
 
   Adoption: bot.ability.identity.adopt {name, reason?} is offered (as the
   model-callable act of taking a name) on every entry into knowing,
-  through <decision:choice events="bot.ability.identity.adopt">, compacted
-  by <decision:compact> ($schema, title and examples dropped), in
+  through <decision:choice events="bot.ability.identity.adopt">, made
+  model-facing by <processing:model_facing_schema> ($schema, title and
+  examples dropped), in
   bot.ability.offers {ability: "identity", choices}, from knowing's
   onentry (<decision:choice> reads knowing's own transitions there,
   before a child is entered); the first offers are the ability's
@@ -83,13 +84,14 @@
   error.execution in its sender, and input from outside the session that
   does not is refused, so no cond rechecks a payload.
 
-  Bindings: the bot and decision namespace packages and the memory ability's
+  Bindings: the bot, decision and processing namespace packages and the memory ability's
   sql service package (a run grants it its directory: scx run's dir option).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="identity" initial="recalling">
   <datamodel>
     <data id="name" expr="null"/>
@@ -102,7 +104,6 @@
     <!-- The offers. -->
     <data id="offered" expr="[]"/>
     <data id="offers_over" expr="false"/>
-    <data id="offer_names" expr="''"/>
     <!-- Memory: the database file (null: no memory) and the original's
          statements (identity/name.py). The SQL runs on both
          engines (SQLite and Postgres). A memory id is the next row count
@@ -177,12 +178,11 @@
          transitions, since no child is entered yet. -->
     <onentry>
       <decision:choice location="offered" events="bot.ability.identity.adopt"/>
-      <decision:compact location="offered" bound="32768" overlocation="offers_over"/>
+      <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
       <if cond="offers_over">
         <log label="identity.offers.dropped" expr="'the offers are over 32768 bytes'"/>
       </if>
-      <decision:names location="offer_names" choices="offered"/>
-      <log label="identity.offers" expr="offer_names"/>
+      <log label="identity.offers" expr="offered"/>
       <send event="bot.ability.offers" target="#_parent">
         <param name="ability" expr="'identity'"/>
         <param name="choices" expr="offered"/>

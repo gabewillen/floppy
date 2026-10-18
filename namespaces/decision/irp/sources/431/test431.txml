@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- decision-5: pinning to no values removes the event's entries. -->
+<!-- decision-4: pinning to no values removes the event's entries. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision">
 <datamodel>
   <data id="choices" expr='[{"event": "bot.focus_device", "schema": {"type": "object", "properties": {"device": {"type": "string"}}}}, {"event": "bot.say", "schema": {"type": "object"}}]'/>

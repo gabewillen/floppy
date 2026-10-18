@@ -13,14 +13,6 @@
                  stimulus, devices, focus (required): expressions of the
                  stimulus envelope, the configured devices, and the focused
                  device.
-  bot:verdict    location (required): receives the selections without the
-                 bot.ability.cognition.ignore ones (the original
-                 without_ignore_selections).
-                 rejectionlocation (required): receives the message of the
-                 first focus or clear selection the attention policy
-                 refuses (the reference attention_selection_error), else null.
-                 selections, focus, candidates (required): expressions of
-                 the turn's selections, its focus and its focus candidates.
   bot:stimulus   location (required): receives the stimulus envelope
                  {event, data, source, target?, id?}.
                  event, data, source (required), target, id (optional):
@@ -42,15 +34,6 @@
       <xs:attribute name="stimulus" type="xs:string" use="required"/>
       <xs:attribute name="devices" type="xs:string" use="required"/>
       <xs:attribute name="focus" type="xs:string" use="required"/>
-    </xs:complexType>
-  </xs:element>
-  <xs:element name="verdict">
-    <xs:complexType>
-      <xs:attribute name="location" type="xs:string" use="required"/>
-      <xs:attribute name="rejectionlocation" type="xs:string" use="required"/>
-      <xs:attribute name="selections" type="xs:string" use="required"/>
-      <xs:attribute name="focus" type="xs:string" use="required"/>
-      <xs:attribute name="candidates" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="stimulus">

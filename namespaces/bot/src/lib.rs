@@ -1,11 +1,10 @@
-//! The `bot` extension namespace: `<bot:attention>`, `<bot:verdict>`,
-//! `<bot:stimulus>` and `<bot:recognize>` as a
+//! The `bot` extension namespace: `<bot:attention>`, `<bot:stimulus>` and
+//! `<bot:recognize>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! A bot body's per-turn bookkeeping that is synchronous and quick: the
 //! turn's attention bias (the reference `attention_bias_for_turn`, with the body's
-//! `_interrupt_reference` and `_target_device_reference`), the attention
-//! verdict on a turn's selections (the reference `attention_selection_error`), the
+//! `_interrupt_reference` and `_target_device_reference`), the
 //! stimulus envelope the body hands its cognition (`bot.ability.cognition.input`
 //! `stimulus`), and the identity ability's text name recognition.
 //! Documents bind [`NAMESPACE_URI`] (conventionally with the
@@ -16,13 +15,10 @@
 //!               source="_event.invokeid"/>
 //! <bot:attention location="focus_candidates" focuslocation="focus"
 //!                stimulus="stimulus" devices="devices" focus="focused_device"/>
-//! <bot:verdict location="dispatching" rejectionlocation="rejection"
-//!              selections="output" focus="focus" candidates="focus_candidates"/>
 //! <bot:recognize location="addressed" name="name" text="heard"/>
 //! ```
 //!
-//! Every attribute but `location`, `focuslocation` and `rejectionlocation`
-//! is an expression of
+//! Every attribute but `location` and `focuslocation` is an expression of
 //! the document's data model. Each element writes to its locations and
 //! never sends: the document's own `<send>` delivers what it computes.
 //!
@@ -46,40 +42,6 @@
 //! `focuslocation` (optional) receives the focus, then `location`
 //! (required) receives the candidates, a JSON array. Values compare as JSON
 //! values (ECMAScript strict equality on the strings device ids are).
-//!
-//! # `<bot:verdict location="L" rejectionlocation="R" selections="X" focus="F" candidates="C"/>`
-//!
-//! The checks the original's cognition makes on a turn's selections before any is
-//! dispatched (`cognition.types.dispatch_selected_events`). `selections`
-//! evaluates to an array of selections (`{event, data?, target?}`), `focus`
-//! to the turn's focus (a device, or `null`), `candidates` to the turn's
-//! focus candidates (an array; each is a configured device, see
-//! `<bot:attention>`).
-//!
-//! * `location` (required) receives the selections without the
-//!   `bot.ability.cognition.ignore` ones (the original
-//!   `without_ignore_selections`: ignore is the cognition's own terminal
-//!   product, never dispatched), in order, canonical JSON.
-//! * `rejectionlocation` (required) receives the message of the first of
-//!   those selections the attention policy refuses (the original
-//!   `attention_selection_error`), else `null`. A `bot.focus_device` whose
-//!   `target` is neither absent, `null` nor `"bot"`, or whose `device` is
-//!   not one of `candidates`: `Processing selected focus_device outside
-//!   available device candidates.`; one whose data is not the original's
-//!   `FocusDeviceEventData` (a falsy `data` is `{}`): `Processing selected
-//!   invalid focus selection data for event: bot.focus_device: ` and
-//!   pydantic's detail (`device: missing: Field required`, `device:
-//!   string_type: Input should be a valid string`, `device:
-//!   string_too_short: String should have at least 1 character`, or
-//!   `<root>: model_type: Input should be a valid dictionary or instance of
-//!   FocusDeviceEventData`). A `bot.clear_focus` whose `target` is neither
-//!   absent, `null` nor `"bot"`: `Processing selected clear_focus for a
-//!   non-bot target.`; with no `focus` (`null` or empty): `Processing
-//!   selected clear_focus with no focused device.` Any other selection,
-//!   including one that is not an object with a string `event`, passes
-//!   (placing it is `<decision:route>`'s).
-//!
-//! `rejectionlocation` is assigned before `location`.
 //!
 //! # `<bot:stimulus location="L" event="E" data="X" source="S" target="T" id="I"/>`
 //!
@@ -219,7 +181,6 @@ pub fn execute<H: BotHost>(
 ) -> Result<Executed, Failure<H::Error>> {
     match local_name {
         "attention" => attention(attributes, content, host),
-        "verdict" => verdict(attributes, content, host),
         "stimulus" => stimulus(attributes, content, host),
         "recognize" => recognize(attributes, content, host),
         _ => Ok(Executed::NotHandled),
@@ -415,172 +376,6 @@ pub fn attention_bias(
         candidates.push(reference);
     }
     (focus, candidates)
-}
-
-/// Executes `<bot:verdict>`.
-fn verdict<H: BotHost>(
-    attributes: &[Attribute],
-    content: &[Content],
-    host: &mut H,
-) -> Result<Executed, Failure<H::Error>> {
-    let [location, rejection_location, selections, focus, candidates] = attribute_values(
-        attributes,
-        [
-            "location",
-            "rejectionlocation",
-            "selections",
-            "focus",
-            "candidates",
-        ],
-        "bot:verdict takes only the location, rejectionlocation, selections, focus and candidates attributes",
-        "bot:verdict repeats an attribute",
-        "bot:verdict has an empty attribute",
-    )?;
-    let location = location.ok_or(Failure::Execution("bot:verdict requires a location"))?;
-    let rejection_location = rejection_location.ok_or(Failure::Execution(
-        "bot:verdict requires a rejectionlocation",
-    ))?;
-    let selections = selections.ok_or(Failure::Execution("bot:verdict requires selections"))?;
-    let focus = focus.ok_or(Failure::Execution("bot:verdict requires a focus"))?;
-    let candidates = candidates.ok_or(Failure::Execution("bot:verdict requires candidates"))?;
-    no_content(content, "bot:verdict holds no content")?;
-    let Some(Json::Array(selections)) = json_of(&evaluate(
-        host,
-        selections,
-        "bot:verdict selections did not evaluate",
-    )?) else {
-        return Err(Failure::Execution("bot:verdict selections is not an array"));
-    };
-    let focus = json_of(&evaluate(
-        host,
-        focus,
-        "bot:verdict focus did not evaluate",
-    )?)
-    .ok_or(Failure::Execution("bot:verdict focus is not a JSON value"))?;
-    let Some(Json::Array(candidates)) = json_of(&evaluate(
-        host,
-        candidates,
-        "bot:verdict candidates did not evaluate",
-    )?) else {
-        return Err(Failure::Execution("bot:verdict candidates is not an array"));
-    };
-    let (kept, rejection) = selection_verdict(&selections, &focus, &candidates);
-    let rejection = rejection.map_or(Data::Null, Data::String);
-    assign_to(
-        host,
-        rejection_location,
-        &rejection,
-        "bot:verdict could not assign rejectionlocation",
-    )?;
-    assign_to(
-        host,
-        location,
-        &Data::JsonArray(Json::Array(kept).to_string()),
-        "bot:verdict could not assign the selections",
-    )?;
-    Ok(Executed::Handled)
-}
-
-/// The original's cognition ignore event, never dispatched.
-const IGNORE_EVENT: &str = "bot.ability.cognition.ignore";
-/// The reference `FocusDeviceEvent`.
-const FOCUS_DEVICE_EVENT: &str = "bot.focus_device";
-/// The reference `ClearFocusEvent`.
-const CLEAR_FOCUS_EVENT: &str = "bot.clear_focus";
-
-/// The reference `without_ignore_selections` and `attention_selection_error` over
-/// a turn's selections: the selections without the ignore ones, and the
-/// message of the first the attention policy refuses (see the crate
-/// documentation, `<bot:verdict>`).
-#[must_use]
-pub fn selection_verdict(
-    selections: &[Json],
-    focus: &Json,
-    candidates: &[Json],
-) -> (Vec<Json>, Option<String>) {
-    let kept: Vec<Json> = selections
-        .iter()
-        .filter(|selection| selection.get("event").and_then(Json::as_str) != Some(IGNORE_EVENT))
-        .cloned()
-        .collect();
-    let rejection = kept
-        .iter()
-        .find_map(|selection| attention_selection_error(selection, focus, candidates));
-    (kept, rejection)
-}
-
-/// The reference `attention_selection_error` for one selection.
-fn attention_selection_error(
-    selection: &Json,
-    focus: &Json,
-    candidates: &[Json],
-) -> Option<String> {
-    let bot_target = match selection.get("target") {
-        None | Some(Json::Null) => true,
-        Some(target) => target.as_str() == Some("bot"),
-    };
-    match selection.get("event").and_then(Json::as_str) {
-        Some(FOCUS_DEVICE_EVENT) => {
-            const OUTSIDE: &str =
-                "Processing selected focus_device outside available device candidates.";
-            if !bot_target {
-                return Some(OUTSIDE.to_owned());
-            }
-            let detail = match focus_device_data(selection.get("data")) {
-                Ok(device)
-                    if candidates
-                        .iter()
-                        .any(|candidate| candidate.as_str() == Some(device)) =>
-                {
-                    return None;
-                }
-                Ok(_) => return Some(OUTSIDE.to_owned()),
-                Err(detail) => detail,
-            };
-            Some(format!(
-                "Processing selected invalid focus selection data for event: {FOCUS_DEVICE_EVENT}: {detail}"
-            ))
-        }
-        Some(CLEAR_FOCUS_EVENT) => {
-            if !bot_target {
-                return Some("Processing selected clear_focus for a non-bot target.".to_owned());
-            }
-            if focus.is_null() || focus.as_str() == Some("") {
-                return Some("Processing selected clear_focus with no focused device.".to_owned());
-            }
-            None
-        }
-        _ => None,
-    }
-}
-
-/// The reference `FocusDeviceEventData.model_validate(selection.data or {})`: the
-/// device, or pydantic's detail (`<loc>: <type>: <msg>`).
-fn focus_device_data(data: Option<&Json>) -> Result<&str, &'static str> {
-    let falsy = match data {
-        None | Some(Json::Null) => true,
-        Some(Json::Bool(value)) => !value,
-        Some(Json::Number(value)) => value.as_f64() == Some(0.0),
-        Some(Json::String(text)) => text.is_empty(),
-        Some(Json::Array(items)) => items.is_empty(),
-        Some(Json::Object(members)) => members.is_empty(),
-    };
-    if falsy {
-        return Err("device: missing: Field required");
-    }
-    let Some(Json::Object(members)) = data else {
-        return Err(
-            "<root>: model_type: Input should be a valid dictionary or instance of FocusDeviceEventData",
-        );
-    };
-    match members.get("device") {
-        None => Err("device: missing: Field required"),
-        Some(Json::String(device)) if device.is_empty() => {
-            Err("device: string_too_short: String should have at least 1 character")
-        }
-        Some(Json::String(device)) => Ok(device),
-        Some(_) => Err("device: string_type: Input should be a valid string"),
-    }
 }
 
 /// Executes `<bot:stimulus>`.

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- cognition-4: reasoning's repeat of the low-confidence intuition's respond is not carried again: the output holds it once. -->
+<!-- cognition-4: reasoning's repeat of the low-confidence intuition's respond is sent again, after it. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="cognition" type="scxml" src="../../../cognition.scx">
@@ -14,11 +14,17 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.cognition.input" target="#_cognition"><content expr='{"turn": 1, "stimulus": {"event": "bot.input", "data": {"text": "hi"}, "source": "conversation"}, "focus": null, "focus_candidates": [], "choices": [{"event": "bot.ability.cognition.ignore", "schema": {"additionalProperties": false, "description": "Deliberately ignore this stimulus: no device command, no focus change, no speech. Required when no other offered event should run. Do not use a device command, focus, or clear_focus as a stand-in for ignore. Put why on the selection envelope reason field, not on this empty payload.", "properties": {}, "type": "object"}, "target": "cognition"}, {"event": "bot.ability.communication.respond", "schema": {"additionalProperties": false, "description": "A response to communicate aloud. Communication routes the text through its injected Speaking ability; cognition does not select Speaking directly.", "properties": {"text": {"description": "The complete non-blank text to communicate. It is spoken verbatim by the configured Speaking ability after this action is selected.", "examples": ["I am doing well, thank you."], "minLength": 1, "title": "Text", "type": "string"}}, "required": ["text"], "type": "object"}, "target": "communication"}]}'/></send>
+      <send event="bot.ability.cognition.input" target="#_cognition"><content expr='{"turn": 1, "stimulus": {"event": "bot.input", "data": {"text": "hi"}, "source": "conversation"}, "focus": null, "focus_candidates": [], "choices": [{"event": "bot.ability.cognition.ignore", "schema": {"additionalProperties": false, "description": "Deliberately ignore this stimulus: no device command, no focus change, no speech. Required when no other offered event should run. Do not use a device command, focus, or clear_focus as a stand-in for ignore. Put why on the selection envelope reason field, not on this empty payload.", "properties": {}, "type": "object"}, "target": "session.cognition"}, {"event": "bot.ability.communication.respond", "schema": {"additionalProperties": false, "description": "A response to communicate aloud. Communication routes the text through its injected Speaking ability; cognition does not select Speaking directly.", "properties": {"text": {"description": "The complete non-blank text to communicate. It is spoken verbatim by the configured Speaking ability after this action is selected.", "examples": ["I am doing well, thank you."], "minLength": 1, "title": "Text", "type": "string"}}, "required": ["text"], "type": "object"}, "target": "session"}]}'/></send>
     </onentry>
-    <transition event="bot.ability.cognition.output" cond="_event.data.turn === 1 &amp;&amp; _event.data.output.length === 1 &amp;&amp; _event.data.output[0].event === &quot;bot.ability.communication.respond&quot; &amp;&amp; _event.data.output[0].data.text === 'hi' &amp;&amp; _event.data.output[0].target === undefined" target="step2"/>
+    <transition event="bot.ability.communication.respond" cond="_event.data.text === 'hi'" target="step2"/>
   </state>
   <state id="step2">
+    <transition event="bot.ability.communication.respond" cond="_event.data.text === 'hi'" target="step3"/>
+  </state>
+  <state id="step3">
+    <transition event="bot.ability.cognition.output" cond="_event.data.turn === 1 &amp;&amp; _event.data.output.length === 1 &amp;&amp; _event.data.output[0].event === &quot;bot.ability.communication.respond&quot; &amp;&amp; _event.data.output[0].data.text === 'hi' &amp;&amp; _event.data.output[0].target === 'session'" target="step4"/>
+  </state>
+  <state id="step4">
     <transition target="pass"/>
   </state>
   <transition event="bot.ability.offers"/>

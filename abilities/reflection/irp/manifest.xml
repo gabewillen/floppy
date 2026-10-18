@@ -9,13 +9,13 @@
     </test>
   </assert>
   <assert id="reflection-2" specnum="2" specid="#reflection-2">
-    <![CDATA[With a database, `recalling` reads the prior episodes and the behavior inventory in one memory transaction and `processing` asks the generate service (schema `dispatch`) to select at most one of `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break` (a change's and a break's `name` pinned to the inventory's names, and neither offered when the inventory is empty; decision D100); an empty selection goes to `storing`, which stores the turn's episode and answers `bot.ability.reflection.output`.]]>
+    <![CDATA[With a database, `recalling` reads the prior episodes and the behavior inventory in one memory transaction and `processing` asks the generate service (schema `dispatch`, its `events` at most one) to select at most one of `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break`, each offered by the reflection's own session (a change's and a break's `name` pinned to the inventory's names, and neither offered when the inventory is empty; decision D100); the selection is sent to the reflection's own session, and an empty selection goes to `storing`, which stores the turn's episode and answers `bot.ability.reflection.output`.]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
   </assert>
   <assert id="reflection-3" specnum="3" specid="#reflection-3">
-    <![CDATA[More than one selected event fails the turn with `bot.ability.failed` `{message: "Reflection select must return at most one behavior event."}`; a failed select call fails it with `Reflection select failed (<code>)`; a select call whose streamed reply makes no progress for `select_timeout_ms` (its first `generate.progress` arms it, each later one re-arms it) or that runs `select_ceiling_ms` in all fails it with `Reflection child cancellation timed out.` (decision D101).]]>
+    <![CDATA[More than one selected event fails the select (the dispatch tool admits one) with `bot.ability.failed` `{message: "Reflection select failed (schema-mismatch)"}`; a failed select call fails it with `Reflection select failed (<code>)`; a select call whose streamed reply makes no progress for `select_timeout_ms` (its first `generate.progress` arms it, each later one re-arms it) or that runs `select_ceiling_ms` in all fails it with `Reflection child cancellation timed out.` (decision D101).]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
